@@ -2,37 +2,64 @@
 
 use crate::lispobject::LispObj;
 
-pub fn add(lhs: &LispObj, rhs: &LispObj) -> LispObj {
-    let x = lhs.as_fixnum().unwrap_or_else(|| {panic!{"lhs is not a number"}});
-    let y = rhs.as_fixnum().unwrap_or_else(|| {panic!{"rhs is not a number"}});
-    LispObj::from_fixnum(x + y)
+pub fn add(vars: &[LispObj]) -> LispObj {
+    let lhs = &vars.get(0).unwrap();
+    let rhs = &vars.get(1).unwrap();
+    let x = lhs.as_fixnum().expect("lhs is not a number");
+    let y = rhs.as_fixnum().expect("hhs is not a number");
+    LispObj::from(x + y)
 }
 
-pub fn sub(lhs: &LispObj, rhs: &LispObj) -> LispObj {
-    let x = lhs.as_fixnum().unwrap_or_else(|| {panic!{"lhs is not a number"}});
-    let y = rhs.as_fixnum().unwrap_or_else(|| {panic!{"rhs is not a number"}});
-    LispObj::from_fixnum(x - y)
+pub fn sub(vars: &[LispObj]) -> LispObj {
+    let lhs = &vars.get(0).unwrap();
+    let rhs = &vars.get(1).unwrap();
+    let x = lhs.as_fixnum().expect("lhs is not a number");
+    let y = rhs.as_fixnum().expect("rhs is not a number");
+    LispObj::from(x - y)
 }
 
-pub fn mul(lhs: &LispObj, rhs: &LispObj) -> LispObj {
-    let x = lhs.as_fixnum().unwrap_or_else(|| {panic!{"lhs is not a number"}});
-    let y = rhs.as_fixnum().unwrap_or_else(|| {panic!{"rhs is not a number"}});
-    LispObj::from_fixnum(x * y)
+pub fn mul(vars: &[LispObj]) -> LispObj {
+    let lhs = &vars.get(0).unwrap();
+    let rhs = &vars.get(1).unwrap();
+    let x = lhs.as_fixnum().expect("lhs is not a number");
+    let y = rhs.as_fixnum().expect("rhs is not a number");
+    LispObj::from(x * y)
 }
 
-pub fn div(lhs: &LispObj, rhs: &LispObj) -> LispObj {
-    let x = lhs.as_fixnum().unwrap_or_else(|| {panic!{"lhs is not a number"}});
-    let y = rhs.as_fixnum().unwrap_or_else(|| {panic!{"rhs is not a number"}});
-    LispObj::from_fixnum(x / y)
+pub fn div(vars: &[LispObj]) -> LispObj {
+    let lhs = &vars.get(0).unwrap();
+    let rhs = &vars.get(1).unwrap();
+    let x = lhs.as_fixnum().expect("lhs is not a number");
+    let y = rhs.as_fixnum().expect("rhs is not a number");
+    LispObj::from(x / y)
 }
 
-pub fn run() {
-    let x = &LispObj::from(16);
-    let y = &LispObj::from(4);
-    let add = add(x, y);
-    let sub = sub(x, y);
-    let mul = mul(x, y);
-    let div = div(x, y);
+#[cfg(test)]
+mod test {
 
-    println!("{} {} {} {}", add.as_int().unwrap(), sub.as_int().unwrap(), mul.as_int().unwrap(), div.as_int().unwrap());
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        assert_eq!(20, add(&nums).as_int().unwrap());
+    }
+
+    #[test]
+    fn test_sub() {
+        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        assert_eq!(-6, sub(&nums).as_int().unwrap());
+    }
+
+    #[test]
+    fn test_mul() {
+        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        assert_eq!(91, mul(&nums).as_int().unwrap());
+    }
+
+    #[test]
+    fn test_div() {
+        let nums = vec![LispObj::from(12), LispObj::from(5)];
+        assert_eq!(2, div(&nums).as_int().unwrap());
+    }
 }

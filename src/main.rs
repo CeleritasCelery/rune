@@ -4,5 +4,5 @@ mod arith;
 mod byte_code;
 
 fn main() {
-    arith::run();
+    byte_code::run();
 }

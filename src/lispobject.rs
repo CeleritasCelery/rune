@@ -2,6 +2,7 @@
 
 use std::mem::size_of;
 use std::mem::transmute;
+use std::fmt;
 use std::ops;
 
 use std::convert::From;
@@ -15,6 +16,24 @@ impl From<i64> for Fixnum {
 
 impl From<Fixnum> for i64 {
     fn from(f: Fixnum) -> Self {f.0 >> 2}
+}
+
+impl From<Fixnum> for LispObj {
+    fn from(fixnum: Fixnum) -> Self {
+        LispObj{fixnum}
+    }
+}
+
+impl std::cmp::PartialEq for Fixnum {
+    fn eq(&self, rhs: &Fixnum) -> bool {
+        self.0 == rhs.0
+    }
+}
+
+impl fmt::Debug for Fixnum {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", i64::from(*self))
+    }
 }
 
 impl ops::Add<Fixnum> for Fixnum {
@@ -52,13 +71,14 @@ impl From<Cons> for LispObj {
     }
 }
 
+#[derive(Clone)]
 pub struct LispFn {
-    op_codes: Vec<u8>,
-    constants: Vec<LispObj>,
-    rest_args: bool,
-    required_args: u16,
-    optional_args: u16,
-    max_stack_usage: u16,
+    pub op_codes: Vec<u8>,
+    pub constants: Vec<LispObj>,
+    pub rest_args: bool,
+    pub required_args: u16,
+    pub optional_args: u16,
+    pub max_stack_usage: u16,
 }
 
 impl From<LispFn> for LispObj {
@@ -111,18 +131,6 @@ const STRP_TAG: u16 = Tag::LongStr as u16;
 
 const NUM_MASK: u16 = 0b111011;
 const NUM_TAG: u16 = Tag::Float as u16;
-
-trait TryAs<T>: Sized {
-    fn try_as(self) -> Option<T>;
-}
-
-trait TryAsRef<'a, T>: Sized {
-    fn try_as_ref(self) -> Option<&'a T>;
-}
-
-trait TryAsMutRef<'a, T>: Sized {
-    fn try_as_mut_ref(self) -> Option<&'a mut T>;
-}
 
 impl LispObj {
 
@@ -204,13 +212,26 @@ impl From<bool> for LispObj {
     }
 }
 
-pub fn run() {
-    let z = LispObj::from(-1);
-
-
-    if z.is_fixnum() {
-        println!("is int");
+impl fmt::Display for LispObj {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(x) = self.as_int() {
+            return write!(f, "Int: {}", x);
+        }
+        if let Some(x) = self.as_cons() {
+            return write!(f, "Cons: [{}, {}]", x.car, x.cdr);
+        }
+        write!(f, "Unknown Type")
     }
+}
 
-    println!("{}", z.as_int().unwrap())
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn fixnum() {
+        let x = LispObj::from(7);
+        assert_eq!(7, x.as_int().unwrap());
+        assert_eq!(Fixnum::from(7), x.as_fixnum().unwrap());
+    }
 }
