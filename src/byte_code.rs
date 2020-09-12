@@ -12,6 +12,10 @@ enum OpCode {
     StackRef4,
     StackRef5,
     StackRef6,
+    StackRef7,
+    StackRef8,
+    StackRefN,
+    StackRefN2,
     Constant,
     Add,
     Sub,
@@ -51,23 +55,41 @@ impl OpCode {
 
 type Stack = Vec<LispObj>;
 
+trait LispStack {
+    fn push_ref(&mut self, i: usize);
+    fn ref_at(&self, i: usize) -> &LispObj;
+}
+
+impl LispStack for Stack {
+    fn push_ref(&mut self, i: usize) {
+        debug_assert!(i > 0);
+        debug_assert!(i <= self.len());
+        let val = self.get(self.len() - i).unwrap().clone();
+        self.push(val);
+    }
+
+    fn ref_at(&self, i: usize) -> &LispObj {
+        self.get(self.len() - i).unwrap()
+    }
+}
+
 pub fn execute(code: &Vec<u8>, stack: &mut Stack, functions: &Vec<LispFn>) {
     let mut code_iter = code.iter();
 
     use OpCode as op;
     while let Some(op_code) = code_iter.next() {
         match unsafe {op::from_unchecked(op_code)} {
-            op::StackRef1 => {
-                let val = stack.get(stack.len() - 1).unwrap().clone();
-                stack.push(val);
-            }
-            op::StackRef2 => {
-                let val = stack.get(stack.len() - 2).unwrap().clone();
-                stack.push(val);
-            }
-            op::StackRef3 => {
-                let val = stack.get(stack.len() - 3).unwrap().clone();
-                stack.push(val);
+            op::StackRef1 => {stack.push_ref(1);}
+            op::StackRef2 => {stack.push_ref(2);}
+            op::StackRef3 => {stack.push_ref(3);}
+            op::StackRef4 => {stack.push_ref(4);}
+            op::StackRef5 => {stack.push_ref(5);}
+            op::StackRef6 => {stack.push_ref(6);}
+            op::StackRef7 => {stack.push_ref(7);}
+            op::StackRef8 => {stack.push_ref(8);}
+            op::StackRefN => {
+                let index = code_iter.next().unwrap();
+                stack.push_ref(*index as usize);
             }
             op::Add => {
                 let i = stack.len() - 2;
@@ -89,13 +111,11 @@ pub fn execute(code: &Vec<u8>, stack: &mut Stack, functions: &Vec<LispFn>) {
                 stack[i] = arith::div(&stack[i..]);
                 stack.truncate(i + 1);
             }
-            op::Call0 => {
-                let op1 = stack.pop().unwrap();
-                call(op1.as_int().unwrap() as usize, &[], stack, functions);
-            }
-            op::Ret => {
-                return;
-            }
+            op::Call0 => {call(0, stack, functions);}
+            op::Call1 => {call(1, stack, functions);}
+            op::Call2 => {call(2, stack, functions);}
+            op::Call3 => {call(3, stack, functions);}
+            op::Ret => {return;}
             x => {
                 panic!("unknown OpCode {}", x as u8);
             }
@@ -103,10 +123,23 @@ pub fn execute(code: &Vec<u8>, stack: &mut Stack, functions: &Vec<LispFn>) {
     }
 }
 
-fn call(fn_idx: usize, args: &[LispObj], stack: &mut Stack, functions: &Vec<LispFn>) {
-    let func = &functions[fn_idx];
-    if (args.len() as u16) < func.required_args  {
-        panic!("missing required args");
+fn call(arg_cnt: u16, stack: &mut Stack, functions: &Vec<LispFn>) {
+    let idx = stack.pop().unwrap().as_int().unwrap();
+    let func = &functions[idx as usize];
+    if arg_cnt < func.required_args  {
+        panic!("Function {} called with {} arguments which is less then the required {}",
+               func.name,
+               arg_cnt,
+               func.required_args,
+        );
+    }
+    let total_args = func.required_args + func.optional_args;
+    if !func.rest_args && (arg_cnt > total_args) {
+        panic!("Function {} called with {} arguments which is more then the aloud {}",
+               func.name,
+               arg_cnt,
+               total_args,
+        );
     }
     execute(&func.op_codes, stack, functions);
 }
@@ -125,9 +158,10 @@ mod test {
             LispObj::from(7),
             LispObj::from(13),
             LispObj::from(3),
-            LispObj::from(0), // call function
+            LispObj::from(0), // fn index
         ];
         let mut functions = vec![LispFn{
+            name: "Test-Add".into(),
             op_codes: vec![
                 Op::StackRef3.into(),
                 Op::StackRef3.into(),
@@ -141,13 +175,14 @@ mod test {
             ],
             constants: vec![],
             rest_args: false,
-            required_args: 0,
+            required_args: 3,
             optional_args: 0,
             max_stack_usage: 5,
         }];
 
         let code = LispFn{
-            op_codes: vec![Op::Call0.into()],
+            name: "main-loop".into(),
+            op_codes: vec![Op::Call3.into()],
             constants: vec![],
             rest_args: false,
             required_args: 0,
@@ -156,7 +191,12 @@ mod test {
         };
 
         execute(&code.op_codes, &mut stack, &mut functions);
-
         assert_eq!(63, stack.get(0).unwrap().as_int().unwrap());
     }
+
+    // #[test]
+    // #[should_panic]
+    // fn too_few_args() {
+
+    // }
 }

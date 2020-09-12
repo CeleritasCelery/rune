@@ -74,6 +74,7 @@ impl From<Cons> for LispObj {
 #[derive(Clone)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
+    pub name: String,
     pub constants: Vec<LispObj>,
     pub rest_args: bool,
     pub required_args: u16,
