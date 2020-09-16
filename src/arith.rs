@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lispobject::LispObj;
+use crate::lisp_object::LispObj;
 
 pub fn add(vars: &[LispObj]) -> LispObj {
     let lhs = &vars.get(0).unwrap();

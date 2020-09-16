@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lispobject::{LispObj, LispFn};
+use crate::lisp_object::{LispObj, LispFn};
 use std::mem::transmute;
 use crate::arith;
 
@@ -124,7 +124,8 @@ pub fn execute(code: &Vec<u8>, stack: &mut Stack, functions: &Vec<LispFn>) {
 }
 
 fn call(arg_cnt: u16, stack: &mut Stack, functions: &Vec<LispFn>) {
-    let idx = stack.pop().unwrap().as_int().unwrap();
+    let stack_offset = stack.len() - 1 - arg_cnt as usize;
+    let idx = stack.get(stack_offset).unwrap().as_int().unwrap();
     let func = &functions[idx as usize];
     if arg_cnt < func.required_args  {
         panic!("Function {} called with {} arguments which is less then the required {}",
@@ -142,6 +143,9 @@ fn call(arg_cnt: u16, stack: &mut Stack, functions: &Vec<LispFn>) {
         );
     }
     execute(&func.op_codes, stack, functions);
+    let ret_val = stack.pop().unwrap();
+    stack[stack_offset] = ret_val;
+
 }
 
 pub fn run() {}
@@ -155,10 +159,10 @@ mod test {
     #[test]
     fn compute() {
         let mut stack = vec![
+            LispObj::from(0), // fn index
             LispObj::from(7),
             LispObj::from(13),
             LispObj::from(3),
-            LispObj::from(0), // fn index
         ];
         let mut functions = vec![LispFn{
             name: "Test-Add".into(),
