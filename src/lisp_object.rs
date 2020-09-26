@@ -71,6 +71,45 @@ impl From<Cons> for LispObj {
     }
 }
 
+pub struct Symbol {
+    pub name: String,
+    pub func: Option<Box<LispFn>>,
+    pub var: LispObj,
+}
+
+impl Symbol {
+    fn new(name: String) -> Self {
+        Symbol{name, func: None, var: LispObj::void()}
+    }
+}
+
+pub mod symbol_intern {
+    use once_cell::unsync::Lazy;
+    use std::rc::Rc;
+    use std::collections::HashMap;
+    use std::hash::BuildHasherDefault;
+    use fnv::{FnvHashMap, FnvHasher};
+    use super::Symbol;
+
+    type FastHash = Lazy<HashMap<String, Rc<Symbol>, BuildHasherDefault<FnvHasher>>>;
+    static mut INTERNED_SYMBOLS: FastHash = Lazy::new(|| {FnvHashMap::default()});
+
+    pub fn intern(name: &str) ->  Rc<Symbol> {
+        unsafe {
+            match INTERNED_SYMBOLS.get(name) {
+                Some(x) => {
+                    x.clone()
+                }
+                None => {
+                    let sym = Rc::new(Symbol::new(name.to_owned()));
+                    let x = INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(sym);
+                    x.clone()
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
@@ -80,6 +119,20 @@ pub struct LispFn {
     pub required_args: u16,
     pub optional_args: u16,
     pub max_stack_usage: u16,
+}
+
+impl  LispFn {
+    pub fn new(code: u8) -> Self {
+        LispFn {
+            op_codes: vec![code],
+            name: "void".to_owned(),
+            constants: Vec::new(),
+            rest_args: false,
+            required_args: 0,
+            optional_args: 0,
+            max_stack_usage: 0,
+        }
+    }
 }
 
 impl From<LispFn> for LispObj {
@@ -109,6 +162,8 @@ enum Tag {
     Marker   = 0b100110,
     // General Tags
     Fn = 0x00FE,
+    Symbol = 0x01FE,
+    Void = 0x02FE,
 }
 
 impl ops::BitAnd<u16> for Tag {
@@ -158,6 +213,18 @@ impl LispObj {
             bits |= tag as u64;
             LispObj{bits}
         }
+    }
+
+    pub const fn void() -> Self {
+        LispObj{tag: Tag::Void}
+    }
+
+    pub const fn nil() -> Self {
+        LispObj{tag: Tag::Nil}
+    }
+
+    pub const fn t() -> Self {
+        LispObj{tag: Tag::True}
     }
 
     pub fn is_fixnum(&self) -> bool {

@@ -1,5 +1,5 @@
 
-mod lispobject;
+mod lisp_object;
 mod arith;
 mod byte_code;
 
