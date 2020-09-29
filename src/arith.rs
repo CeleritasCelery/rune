@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::lisp_object::LispObj;
 
 pub fn add(vars: &[LispObj]) -> LispObj {

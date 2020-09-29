@@ -7,7 +7,7 @@ use std::ops;
 
 use std::convert::From;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Fixnum(i64);
 
 impl From<i64> for Fixnum {
@@ -30,34 +30,28 @@ impl std::cmp::PartialEq for Fixnum {
     }
 }
 
-impl fmt::Debug for Fixnum {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", i64::from(*self))
-    }
-}
-
 impl ops::Add<Fixnum> for Fixnum {
     type Output = Fixnum;
     // i + j
-    fn add(self, rhs: Fixnum) -> Fixnum {Fixnum(self.0 + rhs.0)}
+    fn add(self, rhs: Self) -> Self {Self(self.0 + rhs.0)}
 }
 
 impl ops::Sub<Fixnum> for Fixnum {
     type Output = Fixnum;
     // i - j
-    fn sub(self, rhs: Fixnum) -> Fixnum {Fixnum(self.0 - rhs.0)}
+    fn sub(self, rhs: Self) -> Self {Self(self.0 - rhs.0)}
 }
 
 impl ops::Mul<Fixnum> for Fixnum {
     type Output = Fixnum;
     // i * (j >> 2)
-    fn mul(self, rhs: Fixnum) -> Fixnum {Fixnum(self.0 * i64::from(rhs))}
+    fn mul(self, rhs: Self) -> Self {Self(self.0 * i64::from(rhs))}
 }
 
 impl ops::Div<Fixnum> for Fixnum {
     type Output = Fixnum;
     // (i/j) << 2
-    fn div(self, rhs: Fixnum) -> Fixnum {(self.0 / rhs.0).into()}
+    fn div(self, rhs: Self) -> Self {(self.0 / rhs.0).into()}
 }
 
 pub struct Cons {
@@ -183,7 +177,7 @@ enum Object<'a> {
 }
 
 impl<'a> Object<'a> {
-    fn create(l: &'a LispObj) -> Self {
+    fn from(l: &'a LispObj) -> Self {
         if let Some(x) = l.as_int() {
             Object::Int(x)
         } else if let Some(x) = l.as_cons() {
@@ -222,11 +216,9 @@ enum Tag {
 
 impl ops::BitAnd<u16> for Tag {
     type Output = u16;
-
     fn bitand(self, rhs: u16) -> u16 {
         self as u16 & rhs
     }
-
 }
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
@@ -244,12 +236,12 @@ const NUM_TAG: u16 = Tag::Float as u16;
 
 impl LispObj {
 
-    fn get_ptr<T>(&self) -> *const T {
-        unsafe {(self.bits >> TAG_SIZE) as *const T}
+    unsafe fn get_ptr<T>(&self) -> *const T {
+        (self.bits >> TAG_SIZE) as *const T
     }
 
-    fn get_mut_ptr<T>(&mut self) -> *mut T {
-        unsafe {(self.bits >> TAG_SIZE) as *mut T}
+    unsafe fn get_mut_ptr<T>(&mut self) -> *mut T {
+        (self.bits >> TAG_SIZE) as *mut T
     }
 
     fn tag_ptr<T>(obj: T, tag: Tag) -> LispObj {
@@ -295,13 +287,11 @@ impl LispObj {
     }
 
     pub fn as_cons(&self) -> Option<&Cons> {
-        if self.is_cons() {unsafe {
-            Some(&*self.get_ptr())
-        }} else {None}
+        if self.is_cons() {Some(unsafe{&*self.get_ptr()})} else {None}
     }
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
-        if self.is_cons() {unsafe {Some(&mut *self.get_mut_ptr())}} else {None}
+        if self.is_cons() {Some(unsafe{&mut *self.get_mut_ptr()})} else {None}
     }
 
     pub fn is_list(&self) -> bool {
@@ -313,11 +303,11 @@ impl LispObj {
     }
 
     pub fn as_str(&self) -> Option<&str> {
-        if self.is_str() {unsafe {Some(*self.get_ptr())}} else {None}
+        if self.is_str() {Some(unsafe{*self.get_ptr()})} else {None}
     }
 
     pub fn as_mut_str(&mut self) -> Option<&mut String> {
-        if self.is_str() {unsafe {Some(&mut *self.get_mut_ptr())}} else {None}
+        if self.is_str() {Some(unsafe{&mut *self.get_mut_ptr()})} else {None}
     }
 
     pub fn is_float(&self) -> bool {
@@ -355,15 +345,15 @@ impl From<String> for LispObj {
 
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Object as O;
-        match Object::create(self) {
-            O::Int(x) => write!(f, "{}", x),
-            O::Cons(x) => write!(f, "{}", x),
-            O::String(x) => write!(f, "\"{}\"", x),
-            O::Void => write!(f, "Void"),
-            O::True => write!(f, "t"),
-            O::Nil => write!(f, "nil"),
-            O::Float(x) => {
+        use Object::*;
+        match Object::from(self) {
+            Int(x) => write!(f, "{}", x),
+            Cons(x) => write!(f, "{}", x),
+            String(x) => write!(f, "\"{}\"", x),
+            Void => write!(f, "Void"),
+            True => write!(f, "t"),
+            Nil => write!(f, "nil"),
+            Float(x) => {
                 if x.fract() == 0.0 {
                     write!(f, "{:.1}", x)
                 } else {
