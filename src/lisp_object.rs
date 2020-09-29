@@ -74,7 +74,7 @@ impl fmt::Display for Cons {
 
 impl From<Cons> for LispObj {
     fn from(cons: Cons) -> Self {
-        LispObj::tag_ptr(cons, Tag::Cons)
+        LispObj::from_tagged_ptr(cons, Tag::Cons)
     }
 }
 
@@ -155,7 +155,7 @@ impl  LispFn {
 
 impl From<LispFn> for LispObj {
     fn from(func: LispFn) -> Self {
-        LispObj::tag_ptr(func, Tag::Fn)
+        LispObj::from_tagged_ptr(func, Tag::Fn)
     }
 }
 
@@ -214,25 +214,9 @@ enum Tag {
     Void = 0x02FE,
 }
 
-impl ops::BitAnd<u16> for Tag {
-    type Output = u16;
-    fn bitand(self, rhs: u16) -> u16 {
-        self as u16 & rhs
-    }
-}
-
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
-
 const FIXNUM_MASK: u16 = 0b11;
-
-const LISTP_MASK: u16 = 0b1011;
-const LISTP_TAG: u16 = Tag::Nil as u16;
-
-const STRP_MASK: u16 = 0b11011;
-const STRP_TAG: u16 = Tag::LongStr as u16;
-
-const NUM_MASK: u16 = 0b111011;
-const NUM_TAG: u16 = Tag::Float as u16;
+const STRING_MASK: u16 = 0b11111;
 
 impl LispObj {
 
@@ -244,10 +228,18 @@ impl LispObj {
         (self.bits >> TAG_SIZE) as *mut T
     }
 
-    fn tag_ptr<T>(obj: T, tag: Tag) -> LispObj {
+    fn from_tagged_ptr<T>(obj: T, tag: Tag) -> LispObj {
         let ptr = Box::into_raw(Box::new(obj));
         let bits = ((ptr as u64) << TAG_SIZE) | tag as u64;
         LispObj{bits}
+    }
+
+    fn tag_eq(&self, tag: Tag) -> bool {
+        unsafe {self.tag == tag}
+    }
+
+    fn tag_masked(&self, tag: Tag, mask: u16) -> bool {
+        unsafe {(self.tag as u16) & mask == (tag as u16)}
     }
 
     pub const fn void() -> Self {
@@ -263,7 +255,7 @@ impl LispObj {
     }
 
     pub fn is_fixnum(&self) -> bool {
-        unsafe {self.tag & FIXNUM_MASK == Tag::Fixnum as u16}
+        self.tag_masked(Tag::Fixnum, FIXNUM_MASK)
     }
 
     pub fn as_fixnum(self) -> Option<Fixnum> {
@@ -275,15 +267,15 @@ impl LispObj {
     }
 
     pub fn is_nil(&self) -> bool {
-        unsafe {self.tag == Tag::Nil}
+        self.tag_eq(Tag::Nil)
     }
 
     pub fn is_true(&self) -> bool {
-        unsafe {self.tag == Tag::True}
+        self.tag_eq(Tag::True)
     }
 
     pub fn is_cons(&self) -> bool {
-        unsafe {self.tag == Tag::Cons}
+        self.tag_eq(Tag::Cons)
     }
 
     pub fn as_cons(&self) -> Option<&Cons> {
@@ -295,11 +287,12 @@ impl LispObj {
     }
 
     pub fn is_list(&self) -> bool {
-        unsafe {self.tag & LISTP_MASK == LISTP_TAG}
+        self.tag_eq(Tag::Cons) || self.tag_eq(Tag::Nil)
     }
 
     pub fn is_str(&self) -> bool {
-        unsafe {self.tag & STRP_MASK == STRP_TAG}
+        self.tag_masked(Tag::ShortStr, STRING_MASK) ||
+        self.tag_masked(Tag::LongStr, STRING_MASK)
     }
 
     pub fn as_str(&self) -> Option<&str> {
@@ -311,7 +304,7 @@ impl LispObj {
     }
 
     pub fn is_float(&self) -> bool {
-        unsafe {self.tag == Tag::Float}
+        self.tag_eq(Tag::Float)
     }
 
     pub fn as_float(&self) -> Option<f64> {
@@ -327,7 +320,7 @@ impl From<i64> for LispObj {
 
 impl From<f64> for LispObj {
     fn from (f: f64) -> Self {
-        LispObj::tag_ptr(f, Tag::Float)
+        LispObj::from_tagged_ptr(f, Tag::Float)
     }
 }
 
@@ -339,7 +332,7 @@ impl From<bool> for LispObj {
 
 impl From<String> for LispObj {
     fn from(s: String) -> Self {
-        LispObj::tag_ptr(s, Tag::LongStr)
+        LispObj::from_tagged_ptr(s, Tag::LongStr)
     }
 }
 
@@ -369,6 +362,13 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn sizes() {
+        assert_eq!(8, std::mem::size_of::<LispObj>());
+        assert_eq!(16, std::mem::size_of::<Cons>());
+        assert_eq!(2, std::mem::size_of::<Tag>());
+    }
 
     #[test]
     fn fixnum() {
