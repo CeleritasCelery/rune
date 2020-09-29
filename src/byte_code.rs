@@ -243,12 +243,15 @@ impl Routine {
 
 
 
-pub fn run() {}
+pub fn run() {
+    println!("{}", std::mem::size_of::<crate::lisp_object::Symbol>());
+}
 
 #[cfg(test)]
 mod test {
 
     use super::*;
+    use crate::lisp_object::symbol_intern;
     use OpCode as Op;
 
     #[test]
@@ -280,12 +283,17 @@ mod test {
             max_stack_usage: 5,
         });
 
+        let test_add = symbol_intern::intern_mut("test-add");
+
+        test_add.func = Some(func.clone());
+
         let mut functions: Vec<Rc<LispFn>> = Vec::new();
 
         let mut routine = Routine::new();
 
         routine.execute(func, &mut functions);
 
+        assert_eq!("Test-Add", symbol_intern::intern("test-add").func.as_ref().unwrap().name);
 
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
     }

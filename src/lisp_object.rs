@@ -2,6 +2,7 @@
 
 use std::mem::size_of;
 use std::mem::transmute;
+use std::rc::Rc;
 use std::fmt;
 use std::ops;
 
@@ -85,28 +86,39 @@ impl Symbol {
 
 pub mod symbol_intern {
     use once_cell::unsync::Lazy;
-    use std::rc::Rc;
     use std::collections::HashMap;
     use std::hash::BuildHasherDefault;
     use fnv::{FnvHashMap, FnvHasher};
     use super::Symbol;
 
-    type FastHash = Lazy<HashMap<String, Rc<Symbol>, BuildHasherDefault<FnvHasher>>>;
+    type FastHash = Lazy<HashMap<String, Symbol, BuildHasherDefault<FnvHasher>>>;
     static mut INTERNED_SYMBOLS: FastHash = Lazy::new(|| {FnvHashMap::default()});
 
-    pub fn intern(name: &str) ->  Rc<Symbol> {
+    pub fn intern(name: &str) -> &Symbol {
         unsafe {
             match INTERNED_SYMBOLS.get(name) {
-                Some(x) => {
-                    x.clone()
-                }
+                Some(x) => {x}
                 None => {
-                    let sym = Rc::new(Symbol::new(name.to_owned()));
+                    let sym = Symbol::new(name.to_owned());
                     let x = INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(sym);
-                    x.clone()
+                    x
                 }
             }
         }
+    }
+
+    pub fn intern_mut(name: &str) -> &mut Symbol {
+        unsafe {
+            match INTERNED_SYMBOLS.get_mut(name) {
+                Some(x) => {x}
+                None => {
+                    let sym = Symbol::new(name.to_owned());
+                    let x = INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(sym);
+                    x
+                }
+            }
+        }
+
     }
 }
 
