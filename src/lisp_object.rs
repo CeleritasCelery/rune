@@ -330,16 +330,21 @@ impl From<String> for LispObj {
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(x) = self.as_int() {
-            write!(f, "Int: {}", x)
+            write!(f, "{}", x)
         }
         else if let Some(x) = self.as_cons() {
             write!(f, "{}", x)
         }
         else if let Some(x) = self.as_float() {
-            write!(f, "Float: {}", x)
+            // Always print floating point with a decimal
+            if x.fract() == 0.0 {
+                write!(f, "{:.1}", x)
+            } else {
+                write!(f, "{}", x)
+            }
         }
         else if let Some(x) = self.as_str() {
-            write!(f, "String: \"{}\"", x)
+            write!(f, "\"{}\"", x)
         } else {
             panic!("Unknown Type")
         }
