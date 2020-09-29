@@ -172,6 +172,36 @@ pub union LispObj {
     fixnum: Fixnum,
 }
 
+enum Object<'a> {
+    Int(i64),
+    True,
+    Nil,
+    Cons(&'a Cons),
+    String(&'a str),
+    Float(f64),
+    Void,
+}
+
+impl<'a> Object<'a> {
+    fn create(l: &'a LispObj) -> Self {
+        if let Some(x) = l.as_int() {
+            Object::Int(x)
+        } else if let Some(x) = l.as_cons() {
+            Object::Cons(x)
+        } else if let Some(x) = l.as_float() {
+            Object::Float(x)
+        } else if let Some(x) = l.as_str() {
+            Object::String(x)
+        } else if l.is_true() {
+            Object::True
+        } else if l.is_nil() {
+            Object::Nil
+        } else {
+            panic!("Unknown Type")
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 #[repr(u16)]
 enum Tag {
@@ -329,24 +359,21 @@ impl From<String> for LispObj {
 
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(x) = self.as_int() {
-            write!(f, "{}", x)
-        }
-        else if let Some(x) = self.as_cons() {
-            write!(f, "{}", x)
-        }
-        else if let Some(x) = self.as_float() {
-            // Always print floating point with a decimal
-            if x.fract() == 0.0 {
-                write!(f, "{:.1}", x)
-            } else {
-                write!(f, "{}", x)
+        use Object as O;
+        match Object::create(self) {
+            O::Int(x) => write!(f, "{}", x),
+            O::Cons(x) => write!(f, "{}", x),
+            O::String(x) => write!(f, "\"{}\"", x),
+            O::Void => write!(f, "Void"),
+            O::True => write!(f, "t"),
+            O::Nil => write!(f, "nil"),
+            O::Float(x) => {
+                if x.fract() == 0.0 {
+                    write!(f, "{:.1}", x)
+                } else {
+                    write!(f, "{}", x)
+                }
             }
-        }
-        else if let Some(x) = self.as_str() {
-            write!(f, "\"{}\"", x)
-        } else {
-            panic!("Unknown Type")
         }
     }
 }
