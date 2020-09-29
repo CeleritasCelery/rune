@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::mem::size_of;
-use std::mem::transmute;
 use std::rc::Rc;
 use std::fmt;
 use std::ops;
@@ -62,19 +61,32 @@ impl ops::Div<Fixnum> for Fixnum {
 }
 
 pub struct Cons {
-    car: LispObj,
-    cdr: LispObj,
+    pub car: LispObj,
+    pub cdr: LispObj,
+}
+
+impl Cons {
+    fn new<T, U>(car: T, cdr: U) -> Cons where
+        T: Into<LispObj>, U: Into<LispObj> {
+        Cons{car: car.into(), cdr: cdr.into()}
+    }
+}
+
+impl fmt::Display for Cons {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.car, self.cdr)
+    }
 }
 
 impl From<Cons> for LispObj {
     fn from(cons: Cons) -> Self {
-        LispObj::tag_ptr(&cons, Tag::Cons)
+        LispObj::tag_ptr(cons, Tag::Cons)
     }
 }
 
 pub struct Symbol {
     pub name: String,
-    pub func: Option<Box<LispFn>>,
+    pub func: Option<Rc<LispFn>>,
     pub var: LispObj,
 }
 
@@ -149,7 +161,7 @@ impl  LispFn {
 
 impl From<LispFn> for LispObj {
     fn from(func: LispFn) -> Self {
-        LispObj::tag_ptr(&func, Tag::Fn)
+        LispObj::tag_ptr(func, Tag::Fn)
     }
 }
 
@@ -203,28 +215,17 @@ const NUM_TAG: u16 = Tag::Float as u16;
 impl LispObj {
 
     fn get_ptr<T>(&self) -> *const T {
-        unsafe {
-            let mut x = self.bits;
-            x >>= TAG_SIZE;
-            transmute::<u64, *const T>(x)
-        }
+        unsafe {(self.bits >> TAG_SIZE) as *const T}
     }
 
-    fn get_mut_ptr<T>(&self) -> *mut T {
-        unsafe {
-            let mut x = self.bits;
-            x >>= TAG_SIZE;
-            transmute::<u64, *mut T>(x)
-        }
+    fn get_mut_ptr<T>(&mut self) -> *mut T {
+        unsafe {(self.bits >> TAG_SIZE) as *mut T}
     }
 
-    fn tag_ptr<T>(ptr: *const T, tag: Tag) -> LispObj {
-        unsafe {
-            let mut bits = transmute::<*const T, u64>(ptr);
-            bits <<= TAG_SIZE;
-            bits |= tag as u64;
-            LispObj{bits}
-        }
+    fn tag_ptr<T>(obj: T, tag: Tag) -> LispObj {
+        let ptr = Box::into_raw(Box::new(obj));
+        let bits = ((ptr as u64) << TAG_SIZE) | tag as u64;
+        LispObj{bits}
     }
 
     pub const fn void() -> Self {
@@ -268,15 +269,37 @@ impl LispObj {
     }
 
     pub fn as_cons(&self) -> Option<&Cons> {
-        if self.is_cons() {unsafe {Some(*self.get_ptr())}} else {None}
+        if self.is_cons() {unsafe {
+            Some(&*self.get_ptr())
+        }} else {None}
     }
 
-    pub fn as_mut_cons(&self) -> Option<&mut Cons> {
+    pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
         if self.is_cons() {unsafe {Some(&mut *self.get_mut_ptr())}} else {None}
     }
 
     pub fn is_list(&self) -> bool {
         unsafe {self.tag & LISTP_MASK == LISTP_TAG}
+    }
+
+    pub fn is_str(&self) -> bool {
+        unsafe {self.tag & STRP_MASK == STRP_TAG}
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        if self.is_str() {unsafe {Some(*self.get_ptr())}} else {None}
+    }
+
+    pub fn as_mut_str(&mut self) -> Option<&mut String> {
+        if self.is_str() {unsafe {Some(&mut *self.get_mut_ptr())}} else {None}
+    }
+
+    pub fn is_float(&self) -> bool {
+        unsafe {self.tag == Tag::Float}
+    }
+
+    pub fn as_float(&self) -> Option<f64> {
+        if self.is_float() {unsafe {Some(*self.get_ptr())}} else {None}
     }
 }
 
@@ -286,23 +309,44 @@ impl From<i64> for LispObj {
     }
 }
 
+impl From<f64> for LispObj {
+    fn from (f: f64) -> Self {
+        LispObj::tag_ptr(f, Tag::Float)
+    }
+}
+
 impl From<bool> for LispObj {
     fn from(b: bool) -> Self {
         LispObj{tag: if b {Tag::True} else {Tag::Nil}}
     }
 }
 
+impl From<String> for LispObj {
+    fn from(s: String) -> Self {
+        LispObj::tag_ptr(s, Tag::LongStr)
+    }
+}
+
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(x) = self.as_int() {
-            return write!(f, "Int: {}", x);
+            write!(f, "Int: {}", x)
         }
-        if let Some(x) = self.as_cons() {
-            return write!(f, "Cons: [{}, {}]", x.car, x.cdr);
+        else if let Some(x) = self.as_cons() {
+            write!(f, "{}", x)
         }
-        write!(f, "Unknown Type")
+        else if let Some(x) = self.as_float() {
+            write!(f, "Float: {}", x)
+        }
+        else if let Some(x) = self.as_str() {
+            write!(f, "String: \"{}\"", x)
+        } else {
+            panic!("Unknown Type")
+        }
     }
 }
+
+pub fn run() {}
 
 #[cfg(test)]
 mod test {
@@ -311,7 +355,52 @@ mod test {
     #[test]
     fn fixnum() {
         let x = LispObj::from(7);
+        assert!(x.is_fixnum());
+        format!("{}", x);
         assert_eq!(7, x.as_int().unwrap());
         assert_eq!(Fixnum::from(7), x.as_fixnum().unwrap());
+    }
+
+    #[test]
+    fn float() {
+        let x = LispObj::from(1.3);
+        assert!(x.is_float());
+        format!("{}", x);
+        assert_eq!(1.3, x.as_float().unwrap());
+    }
+
+    #[test]
+    fn string() {
+        let mut x = LispObj::from("foo".to_owned());
+        assert!(x.is_str());
+        format!("{}", x);
+        let str_ref = x.as_str().unwrap();
+        assert_eq!("foo", str_ref);
+        let mut_str = x.as_mut_str().unwrap();
+        assert_eq!("foo", mut_str);
+        *mut_str = "bar".to_owned();
+        assert_eq!("bar", mut_str);
+        assert_eq!("bar", x.as_str().unwrap());
+    }
+
+    #[test]
+    fn cons() {
+        let cons = Cons::new("start".to_owned(), Cons::new(7, Cons::new(5, 3.3)));
+
+        let mut x = LispObj::from(cons);
+        assert!(x.is_cons());
+        format!("{}", x);
+
+        let cons1 = x.as_mut_cons().unwrap();
+        assert_eq!("start", cons1.car.as_str().unwrap());
+        (*cons1).car = LispObj::from("start2".to_owned());
+        assert_eq!("start2", cons1.car.as_str().unwrap());
+
+        let cons2 = cons1.cdr.as_cons().unwrap();
+        assert_eq!(7, cons2.car.as_int().unwrap());
+
+        let cons3 = cons2.cdr.as_cons().unwrap();
+        assert_eq!(5, cons3.car.as_int().unwrap());
+        assert_eq!(3.3, cons3.cdr.as_float().unwrap());
     }
 }
