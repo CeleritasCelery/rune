@@ -278,10 +278,6 @@ impl LispObj {
         if self.is_fixnum() {Some(unsafe{self.fixnum})} else {None}
     }
 
-    pub fn from_fixnum(fixnum: Fixnum) -> LispObj {
-        LispObj{fixnum}
-    }
-
     pub fn as_int(self) -> Option<i64> {
         if self.is_fixnum() {Some(unsafe{self.fixnum.into()})} else {None}
     }
