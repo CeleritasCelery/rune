@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 
+use crate::symbol::Symbol;
 use std::mem::size_of;
-use std::rc::Rc;
 use std::fmt;
 use std::ops;
-
 use std::convert::From;
 
 #[derive(Copy, Clone, Debug)]
@@ -78,57 +77,8 @@ impl From<Cons> for LispObj {
     }
 }
 
-pub struct Symbol {
-    pub name: String,
-    pub func: Option<Rc<LispFn>>,
-    pub var: LispObj,
-}
 
-impl Symbol {
-    fn new(name: String) -> Self {
-        Symbol{name, func: None, var: LispObj::void()}
-    }
-}
-
-pub mod symbol_intern {
-    use once_cell::unsync::Lazy;
-    use std::collections::HashMap;
-    use std::hash::BuildHasherDefault;
-    use fnv::{FnvHashMap, FnvHasher};
-    use super::Symbol;
-
-    type FastHash = Lazy<HashMap<String, Symbol, BuildHasherDefault<FnvHasher>>>;
-    static mut INTERNED_SYMBOLS: FastHash = Lazy::new(|| {FnvHashMap::default()});
-
-    pub fn intern(name: &str) -> &Symbol {
-        unsafe {
-            match INTERNED_SYMBOLS.get(name) {
-                Some(x) => {x}
-                None => {
-                    let sym = Symbol::new(name.to_owned());
-                    let x = INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(sym);
-                    x
-                }
-            }
-        }
-    }
-
-    pub fn intern_mut(name: &str) -> &mut Symbol {
-        unsafe {
-            match INTERNED_SYMBOLS.get_mut(name) {
-                Some(x) => {x}
-                None => {
-                    let sym = Symbol::new(name.to_owned());
-                    let x = INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(sym);
-                    x
-                }
-            }
-        }
-
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
     pub name: String,
@@ -310,6 +260,14 @@ impl LispObj {
     pub fn as_float(&self) -> Option<f64> {
         if self.is_float() {unsafe {Some(*self.get_ptr())}} else {None}
     }
+
+    pub fn is_symbol(&self) -> bool {
+        self.tag_eq(Tag::Symbol)
+    }
+
+    pub fn as_symbol(&self) -> Option<&Symbol> {
+        if self.is_symbol() {Some(unsafe {&*self.get_ptr()})} else {None}
+    }
 }
 
 impl From<i64> for LispObj {
@@ -336,6 +294,12 @@ impl From<String> for LispObj {
     }
 }
 
+impl From<Symbol> for LispObj {
+    fn from(s: Symbol) -> Self {
+        LispObj::from_tagged_ptr(s, Tag::Symbol)
+    }
+}
+
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Object::*;
@@ -355,6 +319,12 @@ impl fmt::Display for LispObj {
             }
         }
     }
+}
+
+impl fmt::Debug for LispObj {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+   }
 }
 
 pub fn run() {}
