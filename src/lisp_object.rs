@@ -335,9 +335,9 @@ mod test {
 
     #[test]
     fn sizes() {
-        assert_eq!(8, std::mem::size_of::<LispObj>());
-        assert_eq!(16, std::mem::size_of::<Cons>());
-        assert_eq!(2, std::mem::size_of::<Tag>());
+        assert_eq!(8, size_of::<LispObj>());
+        assert_eq!(16, size_of::<Cons>());
+        assert_eq!(2, size_of::<Tag>());
     }
 
     #[test]
