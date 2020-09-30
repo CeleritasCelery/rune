@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn};
+use crate::gc::Gc;
 use std::mem::transmute;
-use std::rc::Rc;
 use crate::arith;
 
 #[derive(Copy, Clone)]
@@ -59,16 +59,16 @@ impl OpCode {
 #[derive(Clone)]
 struct CallFrame {
     pub ip: *const u8,
-    pub func: Rc<LispFn>,
+    pub func: Gc<LispFn>,
 }
 
 impl CallFrame {
-    pub fn new(func: Rc<LispFn>) -> CallFrame {
-        CallFrame{ip: func.op_codes.as_ptr(), func}
+    pub fn new(func: Gc<LispFn>) -> CallFrame {
+        CallFrame{ip: func.as_ref().op_codes.as_ptr(), func: func}
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
-        self.func.constants.get(i).unwrap().clone()
+        self.func.as_ref().constants.get(i).unwrap().clone()
     }
 
     fn next(&mut self) -> u8 {
@@ -132,16 +132,23 @@ pub struct Routine {
 impl Routine {
 
     fn new() -> Routine {
-        let base_fn = Rc::new(LispFn::new(OpCode::End.into()));
+        let base_fn = Gc::new(LispFn::new(OpCode::End.into()));
         Routine{
             stack: Vec::new(),
             call_frames: vec![CallFrame::new(base_fn)],
         }
     }
 
-    fn call(&mut self, arg_cnt: u16, functions: &Vec<Rc<LispFn>>) -> CallFrame {
-        let idx = self.stack.ref_at(arg_cnt as usize).as_int().unwrap();
-        let func = &functions[idx as usize];
+    fn call(&mut self, arg_cnt: u16) -> CallFrame {
+
+        let sym = self.stack.ref_at(arg_cnt as usize).as_symbol().unwrap();
+        let func_ref = match sym.get_func(){
+            Some(x) => x.clone(),
+            None => {
+                panic!("void function {}", sym.get_name())
+            }
+        };
+        let func = func_ref.as_ref();
         if arg_cnt < func.required_args  {
             panic!("Function {} called with {} arguments which is less then the required {}",
                    func.name,
@@ -164,10 +171,10 @@ impl Routine {
             }
         }
 
-        CallFrame::new(func.clone())
+        CallFrame::new(func_ref)
     }
 
-    pub fn execute(&mut self, func: Rc<LispFn>, functions: & Vec<Rc<LispFn>>) {
+    pub fn execute(&mut self, func: Gc<LispFn>) {
         let mut frame = CallFrame::new(func);
         loop {
             use OpCode as op;
@@ -216,19 +223,19 @@ impl Routine {
                 }
                 op::Call0 => {
                     self.call_frames.push(frame);
-                    frame = self.call(0, &functions);
+                    frame = self.call(0);
                 }
                 op::Call1 => {
                     self.call_frames.push(frame);
-                    frame = self.call(1, &functions);
+                    frame = self.call(1);
                 }
                 op::Call2 => {
                     self.call_frames.push(frame);
-                    frame = self.call(2, &functions);
+                    frame = self.call(2);
                 }
                 op::Call3 => {
                     self.call_frames.push(frame);
-                    frame = self.call(3, &functions);
+                    frame = self.call(3);
                 }
                 op::Ret => {
                     frame = self.call_frames.pop().unwrap();
@@ -240,23 +247,16 @@ impl Routine {
     }
 }
 
-
-
-
-pub fn run() {
-    println!("{}", std::mem::size_of::<crate::lisp_object::Symbol>());
-}
+pub fn run() {}
 
 #[cfg(test)]
 mod test {
-
     use super::*;
-    use crate::lisp_object::symbol_intern;
     use OpCode as Op;
 
     #[test]
     fn compute() {
-        let func = Rc::new(LispFn{
+        let func = LispFn{
             name: "Test-Add".into(),
             op_codes: vec![
                 Op::Constant0.into(),
@@ -281,26 +281,12 @@ mod test {
             required_args: 0,
             optional_args: 0,
             max_stack_usage: 5,
-        });
-
-        let test_add = symbol_intern::intern_mut("test-add");
-
-        test_add.func = Some(func.clone());
-
-        let mut functions: Vec<Rc<LispFn>> = Vec::new();
+        };
 
         let mut routine = Routine::new();
 
-        routine.execute(func, &mut functions);
-
-        assert_eq!("Test-Add", symbol_intern::intern("test-add").func.as_ref().unwrap().name);
+        routine.execute(Gc::new(func));
 
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
     }
-
-    // #[test]
-    // #[should_panic]
-    // fn too_few_args() {
-
-    // }
 }
