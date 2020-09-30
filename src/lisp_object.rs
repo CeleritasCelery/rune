@@ -116,33 +116,28 @@ pub union LispObj {
     fixnum: Fixnum,
 }
 
-enum Object<'a> {
+enum LispObjEnum<'a> {
     Int(i64),
     True,
     Nil,
     Cons(&'a Cons),
     String(&'a str),
+    Symbol(&'a Symbol),
     Float(f64),
     Void,
 }
 
-impl<'a> Object<'a> {
+impl<'a> LispObjEnum<'a> {
     fn from(l: &'a LispObj) -> Self {
-        if let Some(x) = l.as_int() {
-            Object::Int(x)
-        } else if let Some(x) = l.as_cons() {
-            Object::Cons(x)
-        } else if let Some(x) = l.as_float() {
-            Object::Float(x)
-        } else if let Some(x) = l.as_str() {
-            Object::String(x)
-        } else if l.is_true() {
-            Object::True
-        } else if l.is_nil() {
-            Object::Nil
-        } else {
-            panic!("Unknown Type")
-        }
+        use LispObjEnum::*;
+        if let Some(x) = l.as_int() {Int(x)}
+        else if let Some(x) = l.as_cons() {Cons(x)}
+        else if let Some(x) = l.as_float() {Float(x)}
+        else if let Some(x) = l.as_str() {String(x)}
+        else if let Some(x) = l.as_symbol() {Symbol(x)}
+        else if l.is_true() {True}
+        else if l.is_nil() {Nil}
+        else {panic!("Unknown Type")}
     }
 }
 
@@ -224,6 +219,10 @@ impl LispObj {
         self.tag_eq(Tag::True)
     }
 
+    pub fn is_void(&self) -> bool {
+        self.tag_eq(Tag::Void)
+    }
+
     pub fn is_cons(&self) -> bool {
         self.tag_eq(Tag::Cons)
     }
@@ -302,11 +301,12 @@ impl From<Symbol> for LispObj {
 
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Object::*;
-        match Object::from(self) {
+        use LispObjEnum::*;
+        match LispObjEnum::from(self) {
             Int(x) => write!(f, "{}", x),
             Cons(x) => write!(f, "{}", x),
             String(x) => write!(f, "\"{}\"", x),
+            Symbol(x) => write!(f, "'{}", x.get_name()),
             Void => write!(f, "Void"),
             True => write!(f, "t"),
             Nil => write!(f, "nil"),
@@ -369,6 +369,20 @@ mod test {
         *mut_str = "bar".to_owned();
         assert_eq!("bar", mut_str);
         assert_eq!("bar", x.as_str().unwrap());
+    }
+
+    #[test]
+    fn other() {
+        let v = LispObj::void();
+        assert!(v.is_void());
+        let t = LispObj::t();
+        assert!(t.is_true());
+        let n = LispObj::nil();
+        assert!(n.is_nil());
+        let bool_true = LispObj::from(true);
+        assert!(bool_true.is_true());
+        let bool_false = LispObj::from(false);
+        assert!(bool_false.is_nil());
     }
 
     #[test]
