@@ -23,9 +23,6 @@ impl Symbol {
     }
 
     fn get_mut(&self) -> &mut InnerSymbol {
-        // in the future the raw pointer to lisp function will be replaced
-        // with a GC container, at which point we can safely update the raw
-        // value without issue. Currently this causes a memory leak.
         unsafe {&mut *self.inner.get()}
     }
 
@@ -94,6 +91,12 @@ pub fn intern_mut(name: &str) -> &mut Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn size() {
+        assert_eq!(40, std::mem::size_of::<InnerSymbol>());
+        assert_eq!(40, std::mem::size_of::<InnerSymbol>());
+    }
 
     #[test]
     fn symbol_func() {

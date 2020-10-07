@@ -1,27 +1,30 @@
 #![allow(dead_code)]
 
 use std::convert::{AsRef, AsMut};
+use core::ptr::NonNull;
 
 #[derive(Debug)]
 pub struct Gc<T> {
-    inner: *mut T
+    inner: NonNull<T>
 }
 
 impl<T> Gc<T> {
     pub fn new(x: T) -> Self {
-        Gc{inner: Box::into_raw(Box::new(x))}
+        unsafe {
+            Gc{inner: NonNull::new_unchecked(Box::into_raw(Box::new(x)))}
+        }
     }
 }
 
 impl<T> AsRef<T> for Gc<T> {
     fn as_ref(&self) -> &T {
-        unsafe {&*self.inner}
+        unsafe {self.inner.as_ref()}
     }
 }
 
 impl<T> AsMut<T> for Gc<T> {
     fn as_mut(&mut self) -> &mut T {
-        unsafe {&mut *self.inner}
+        unsafe {self.inner.as_mut()}
     }
 }
 
@@ -29,7 +32,6 @@ impl<T> PartialEq for Gc<T> {
     fn eq(&self, rhs: &Self) -> bool {
         self.inner == rhs.inner
     }
-
 }
 
 impl<T> Clone for Gc<T> {
