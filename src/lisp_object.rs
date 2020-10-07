@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::symbol::Symbol;
+use crate::gc::Gc;
 use std::mem::size_of;
 use std::fmt;
 use std::ops;
@@ -174,7 +175,7 @@ impl LispObj {
     }
 
     fn from_tagged_ptr<T>(obj: T, tag: Tag) -> LispObj {
-        let ptr = Box::into_raw(Box::new(obj));
+        let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as u64) << TAG_SIZE) | tag as u64;
         LispObj{bits}
     }
