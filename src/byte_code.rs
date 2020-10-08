@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn};
+use crate::symbol;
 use crate::gc::Gc;
 use std::mem::transmute;
 use crate::arith;
@@ -134,14 +135,19 @@ impl Routine {
     fn new() -> Routine {
         let base_fn = Gc::new(LispFn::new(OpCode::End.into()));
         Routine{
-            stack: Vec::new(),
+            stack: vec![LispObj::nil()],
             call_frames: vec![CallFrame::new(base_fn)],
         }
     }
 
-    fn call(&mut self, arg_cnt: u16) -> CallFrame {
+    fn take_top(vars: &[LispObj]) -> LispObj {
+        debug_assert!(vars.len() == 2);
+        vars[1]
+    }
 
-        let sym = self.stack.ref_at(arg_cnt as usize).as_symbol().unwrap();
+    fn call(&mut self, arg_cnt: u16) -> CallFrame {
+        println!("call");
+        let sym = self.stack.ref_at(arg_cnt as usize + 1).as_symbol().unwrap();
         let func_ref = match sym.get_func(){
             Some(x) => x.clone(),
             None => {
@@ -174,19 +180,25 @@ impl Routine {
         CallFrame::new(func_ref)
     }
 
+    fn call_subst(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {
+        let i = self.stack.from_end(args);
+        self.stack[i] = func(self.stack.take_slice(args));
+        self.stack.truncate(i + 1);
+    }
+
     pub fn execute(&mut self, func: Gc<LispFn>) {
         let mut frame = CallFrame::new(func);
         loop {
             use OpCode as op;
             match unsafe {op::from_unchecked(frame.next())} {
-                op::StackRef1 => {self.stack.push_ref(1);}
-                op::StackRef2 => {self.stack.push_ref(2);}
-                op::StackRef3 => {self.stack.push_ref(3);}
-                op::StackRef4 => {self.stack.push_ref(4);}
-                op::StackRef5 => {self.stack.push_ref(5);}
-                op::StackRef6 => {self.stack.push_ref(6);}
-                op::StackRef7 => {self.stack.push_ref(7);}
-                op::StackRef8 => {self.stack.push_ref(8);}
+                op::StackRef1 => {self.stack.push_ref(1)}
+                op::StackRef2 => {self.stack.push_ref(2)}
+                op::StackRef3 => {self.stack.push_ref(3)}
+                op::StackRef4 => {self.stack.push_ref(4)}
+                op::StackRef5 => {self.stack.push_ref(5)}
+                op::StackRef6 => {self.stack.push_ref(6)}
+                op::StackRef7 => {self.stack.push_ref(7)}
+                op::StackRef8 => {self.stack.push_ref(8)}
                 op::StackRefN => {
                     let idx = frame.take_arg();
                     self.stack.push_ref(idx);
@@ -202,24 +214,16 @@ impl Routine {
                 op::Constant4 => {self.stack.push(frame.get_const(4))}
                 op::Constant5 => {self.stack.push(frame.get_const(5))}
                 op::Add => {
-                    let i = self.stack.from_end(2);
-                    self.stack[i] = arith::add(self.stack.take_slice(2));
-                    self.stack.truncate(i + 1);
+                    self.call_subst(arith::add, 2);
                 }
                 op::Sub => {
-                    let i = self.stack.len() - 2;
-                    self.stack[i] = arith::sub(&self.stack[i..]);
-                    self.stack.truncate(i + 1);
+                    self.call_subst(arith::sub, 2);
                 }
                 op::Mul => {
-                    let i = self.stack.len() - 2;
-                    self.stack[i] = arith::mul(&self.stack[i..]);
-                    self.stack.truncate(i + 1);
+                    self.call_subst(arith::mul, 2);
                 }
                 op::Div => {
-                    let i = self.stack.len() - 2;
-                    self.stack[i] = arith::div(&self.stack[i..]);
-                    self.stack.truncate(i + 1);
+                    self.call_subst(arith::div, 2);
                 }
                 op::Call0 => {
                     self.call_frames.push(frame);
@@ -238,6 +242,7 @@ impl Routine {
                     frame = self.call(3);
                 }
                 op::Ret => {
+                    self.call_subst(Self::take_top, 2);
                     frame = self.call_frames.pop().unwrap();
                 }
                 op::End => {return;}
@@ -286,6 +291,65 @@ mod test {
         let mut routine = Routine::new();
 
         routine.execute(Gc::new(func));
+
+        assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
+    }
+
+    #[test]
+    fn call() {
+
+        symbol::clear();
+
+        let func = LispFn{
+            name: "Test-Add".into(),
+            op_codes: vec![
+                Op::Constant0.into(),
+                Op::Constant1.into(),
+                Op::Constant2.into(),
+                Op::StackRef3.into(),
+                Op::StackRef3.into(),
+                Op::StackRef3.into(),
+                Op::Add.into(),
+                Op::Add.into(),
+                Op::Mul.into(),
+                Op::Sub.into(),
+                Op::Sub.into(),
+                Op::Ret.into(),
+            ],
+            constants: vec![
+                LispObj::from(7),
+                LispObj::from(13),
+                LispObj::from(3),
+            ],
+            rest_args: false,
+            required_args: 0,
+            optional_args: 0,
+            max_stack_usage: 5,
+        };
+
+        let sym = symbol::intern("test-add");
+
+        sym.set_func(func);
+
+        let top = LispFn{
+            name: "top".to_owned(),
+            op_codes: vec![
+                Op::Constant0.into(),
+                Op::Call0.into(),
+                Op::Ret.into(),
+            ],
+            constants: vec![
+                LispObj::from(sym)
+            ],
+            rest_args: false,
+            required_args: 0,
+            optional_args: 0,
+            max_stack_usage: 1,
+        };
+
+        let mut routine = Routine::new();
+
+        routine.execute(Gc::new(top));
 
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
     }
