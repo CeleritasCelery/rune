@@ -76,16 +76,11 @@ pub fn intern(name: &str) -> &Symbol {
     }
 }
 
-pub fn intern_mut(name: &str) -> &mut Symbol {
+pub fn clear() {
     unsafe {
-        match INTERNED_SYMBOLS.get_mut(name) {
-            Some(x) => {x}
-            None => {
-                let sym = Symbol::new(name.to_owned());
-                INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(Box::new(sym))
-            }
-        }
+        INTERNED_SYMBOLS.clear();
     }
+
 }
 
 #[cfg(test)]
@@ -122,6 +117,7 @@ mod test {
 
     #[test]
     fn intern() {
+        super::clear();
         let first = super::intern("foo");
         assert_eq!("foo", first.get_name());
         assert_eq!(None, first.get_func());

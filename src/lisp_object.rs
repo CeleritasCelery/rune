@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::symbol::Symbol;
+use crate::symbol;
 use crate::gc::Gc;
 use std::mem::size_of;
 use std::fmt;
@@ -294,9 +295,11 @@ impl From<String> for LispObj {
     }
 }
 
-impl From<Symbol> for LispObj {
-    fn from(s: Symbol) -> Self {
-        LispObj::from_tagged_ptr(s, Tag::Symbol)
+impl From<&Symbol> for LispObj {
+    fn from(s: &Symbol) -> Self {
+        let ptr = s as *const Symbol;
+        let bits = ((ptr as u64) << TAG_SIZE) | Tag::Symbol as u64;
+        LispObj{bits}
     }
 }
 
@@ -384,6 +387,15 @@ mod test {
         assert!(bool_true.is_true());
         let bool_false = LispObj::from(false);
         assert!(bool_false.is_nil());
+    }
+
+    #[test]
+    fn symbol() {
+        symbol::clear();
+        let sym = symbol::intern("foo");
+        let x = LispObj::from(sym);
+        assert!(x.is_symbol());
+        assert_eq!("foo", x.as_symbol().unwrap().get_name());
     }
 
     #[test]
