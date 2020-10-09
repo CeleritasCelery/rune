@@ -98,10 +98,10 @@ mod test {
         let x = Symbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert_eq!(None, x.get_func());
-        x.set_func(LispFn::new(1));
+        x.set_func(LispFn::new(vec![1], vec![], 0, 0, false));
         let before = x.get_func().unwrap();
         assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
-        x.set_func(LispFn::new(7));
+        x.set_func(LispFn::new(vec![7], vec![], 0, 0, false));
         let after = x.get_func().unwrap();
         assert_eq!(after.as_ref().op_codes.get(0).unwrap(), &7);
         assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
@@ -123,7 +123,7 @@ mod test {
         assert_eq!(None, first.get_func());
         assert!(first.get_var().is_void());
         let second = super::intern("foo");
-        second.set_func(LispFn::new(5));
+        second.set_func(LispFn::new(vec![5], vec![], 0, 0, false));
         second.set_var(LispObj::from(7));
         assert_eq!(first.get_func().unwrap().as_ref().op_codes.get(0).unwrap(), &5);
         assert_eq!(7, first.get_var().as_int().unwrap());

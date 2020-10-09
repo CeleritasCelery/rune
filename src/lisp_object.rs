@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use crate::symbol::Symbol;
-use crate::symbol;
 use crate::gc::Gc;
 use std::mem::size_of;
 use std::fmt;
@@ -79,28 +78,27 @@ impl From<Cons> for LispObj {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
-    pub name: String,
     pub constants: Vec<LispObj>,
     pub rest_args: bool,
     pub required_args: u16,
     pub optional_args: u16,
     pub max_stack_usage: u16,
+    pub advice: bool,
 }
 
-impl  LispFn {
-    pub fn new(code: u8) -> Self {
+impl LispFn {
+    pub fn new(op_codes: Vec<u8>, constants: Vec<LispObj>, required_args: u16, optional_args: u16, rest_args: bool) -> Self {
         LispFn {
-            op_codes: vec![code],
-            name: "void".to_owned(),
-            constants: Vec::new(),
-            rest_args: false,
-            required_args: 0,
-            optional_args: 0,
+            op_codes,
+            constants,
+            required_args,
+            optional_args,
+            rest_args,
             max_stack_usage: 0,
+            advice: false,
         }
     }
 }
@@ -336,10 +334,12 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::symbol;
 
     #[test]
     fn sizes() {
         assert_eq!(8, size_of::<LispObj>());
+        assert_eq!(56, size_of::<LispFn>());
         assert_eq!(16, size_of::<Cons>());
         assert_eq!(2, size_of::<Tag>());
     }

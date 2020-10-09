@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn};
-use crate::symbol;
 use crate::gc::Gc;
 use std::mem::transmute;
 use crate::arith;
@@ -133,7 +132,7 @@ pub struct Routine {
 impl Routine {
 
     fn new() -> Routine {
-        let base_fn = Gc::new(LispFn::new(OpCode::End.into()));
+        let base_fn = Gc::new(LispFn::new(vec![OpCode::End.into()], vec![], 0, 0, false));
         Routine{
             stack: vec![LispObj::nil()],
             call_frames: vec![CallFrame::new(base_fn)],
@@ -157,7 +156,7 @@ impl Routine {
         let func = func_ref.as_ref();
         if arg_cnt < func.required_args  {
             panic!("Function {} called with {} arguments which is less then the required {}",
-                   func.name,
+                   sym.get_name(),
                    arg_cnt,
                    func.required_args,
             );
@@ -165,7 +164,7 @@ impl Routine {
         let total_args = func.required_args + func.optional_args;
         if !func.rest_args && (arg_cnt > total_args) {
             panic!("Function {} called with {} arguments which is more then the aloud {}",
-                   func.name,
+                   sym.get_name(),
                    arg_cnt,
                    total_args,
             );
@@ -258,12 +257,13 @@ pub fn run() {}
 mod test {
     use super::*;
     use OpCode as Op;
+    use crate::symbol;
 
     #[test]
     fn compute() {
-        let func = LispFn{
-            name: "Test-Add".into(),
-            op_codes: vec![
+
+        let func = LispFn::new(
+            vec![
                 Op::Constant0.into(),
                 Op::Constant1.into(),
                 Op::Constant2.into(),
@@ -277,16 +277,15 @@ mod test {
                 Op::Sub.into(),
                 Op::Ret.into(),
             ],
-            constants: vec![
+            vec![
                 LispObj::from(7),
                 LispObj::from(13),
                 LispObj::from(3),
             ],
-            rest_args: false,
-            required_args: 0,
-            optional_args: 0,
-            max_stack_usage: 5,
-        };
+            0,
+            0,
+            false,
+        );
 
         let mut routine = Routine::new();
 
@@ -300,9 +299,8 @@ mod test {
 
         symbol::clear();
 
-        let func = LispFn{
-            name: "Test-Add".into(),
-            op_codes: vec![
+        let func = LispFn::new(
+            vec![
                 Op::Constant0.into(),
                 Op::Constant1.into(),
                 Op::Constant2.into(),
@@ -316,36 +314,33 @@ mod test {
                 Op::Sub.into(),
                 Op::Ret.into(),
             ],
-            constants: vec![
+            vec![
                 LispObj::from(7),
                 LispObj::from(13),
                 LispObj::from(3),
             ],
-            rest_args: false,
-            required_args: 0,
-            optional_args: 0,
-            max_stack_usage: 5,
-        };
+            0,
+            0,
+            false,
+        );
 
         let sym = symbol::intern("test-add");
 
         sym.set_func(func);
 
-        let top = LispFn{
-            name: "top".to_owned(),
-            op_codes: vec![
+        let top = LispFn::new(
+            vec![
                 Op::Constant0.into(),
                 Op::Call0.into(),
                 Op::Ret.into(),
             ],
-            constants: vec![
+            vec![
                 LispObj::from(sym)
             ],
-            rest_args: false,
-            required_args: 0,
-            optional_args: 0,
-            max_stack_usage: 1,
-        };
+            0,
+            0,
+            false,
+        );
 
         let mut routine = Routine::new();
 
