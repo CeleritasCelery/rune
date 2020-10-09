@@ -145,7 +145,6 @@ impl Routine {
     }
 
     fn call(&mut self, arg_cnt: u16) -> CallFrame {
-        println!("call");
         let sym = self.stack.ref_at(arg_cnt as usize + 1).as_symbol().unwrap();
         let func_ref = match sym.get_func(){
             Some(x) => x.clone(),
@@ -261,7 +260,6 @@ mod test {
 
     #[test]
     fn compute() {
-
         let func = LispFn::new(
             vec![
                 Op::Constant0.into(),
@@ -281,16 +279,9 @@ mod test {
                 LispObj::from(7),
                 LispObj::from(13),
                 LispObj::from(3),
-            ],
-            0,
-            0,
-            false,
-        );
-
+            ], 0, 0, false,) ;
         let mut routine = Routine::new();
-
         routine.execute(Gc::new(func));
-
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
     }
 
@@ -299,34 +290,39 @@ mod test {
 
         symbol::clear();
 
-        let func = LispFn::new(
+        let codes = vec![
+                Op::StackRef3,
+                Op::StackRef3,
+                Op::StackRef3,
+                Op::Add,
+                Op::Add,
+                Op::Mul,
+                Op::Sub,
+                Op::Sub,
+                Op::Ret,
+            ].into_iter().map(|x| {x.into()}).collect();
+
+        let func = LispFn::new(codes, vec![], 3, 0, false,);
+
+        let test_add = symbol::intern("test-add");
+        test_add.set_func(func);
+        let middle = symbol::intern("middle");
+        middle.set_func(LispFn::new(
             vec![
                 Op::Constant0.into(),
                 Op::Constant1.into(),
                 Op::Constant2.into(),
-                Op::StackRef3.into(),
-                Op::StackRef3.into(),
-                Op::StackRef3.into(),
-                Op::Add.into(),
-                Op::Add.into(),
-                Op::Mul.into(),
-                Op::Sub.into(),
-                Op::Sub.into(),
+                Op::Constant3.into(),
+                Op::Call3.into(),
                 Op::Ret.into(),
             ],
             vec![
+                LispObj::from(test_add),
                 LispObj::from(7),
                 LispObj::from(13),
                 LispObj::from(3),
             ],
-            0,
-            0,
-            false,
-        );
-
-        let sym = symbol::intern("test-add");
-
-        sym.set_func(func);
+            0, 0, false,));
 
         let top = LispFn::new(
             vec![
@@ -334,13 +330,8 @@ mod test {
                 Op::Call0.into(),
                 Op::Ret.into(),
             ],
-            vec![
-                LispObj::from(sym)
-            ],
-            0,
-            0,
-            false,
-        );
+            vec![LispObj::from(middle)],
+            0, 0, false,);
 
         let mut routine = Routine::new();
 
