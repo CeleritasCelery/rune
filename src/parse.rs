@@ -25,29 +25,30 @@ impl PrevIter for str::Chars<'_> {
     }
 }
 
-pub fn parse(sexp: &str) -> Vec<String> {
+pub fn parse<'a>(sexp: &'a str) -> Vec<&'a str> {
     let mut chars = sexp.chars();
-    let mut lexems: Vec<String> = Vec::new();
-    while let Some(char) = chars.next() {
-        match char {
-            '(' | ')' => {
-                lexems.push(char.to_string());
+    let mut lexems: Vec<&str> = Vec::new();
+    while let Some(chr) = chars.next() {
+        match chr {
+            '(' => {
+                lexems.push("(");
             },
+            ')' => {
+                lexems.push(")");
+            }
             ' ' | '\t' => {
-                lexems.push("space".to_string());
+                lexems.push("space");
             }
             '\'' => {
-                lexems.push("quote".to_string());
+                lexems.push("quote");
             }
             _   => {
                 chars.prev();
-                // TODO: unchecked
                 let symbol = parse_symbol(&mut chars);
                 println!("\"{}\"", symbol);
                 lexems.push(symbol);
             }
         }
-        println!("\"{}\"", chars.as_str());
     }
     return lexems;
 }
@@ -62,13 +63,13 @@ fn symbol_char(char: char) -> bool {
     }
 }
 
-unsafe fn string_from_ptrs(beg: *const u8, end: *const u8) -> String {
+unsafe fn string_from_ptrs<'a>(beg: *const u8, end: *const u8) -> &'a str {
     let len = end as usize - beg as usize;
     let slice = std::slice::from_raw_parts(beg, len);
-    str::from_utf8_unchecked(slice).to_owned()
+    str::from_utf8_unchecked(slice)
 }
 
-fn parse_symbol(chars: &mut str::Chars) -> String {
+fn parse_symbol<'a>(chars: &mut str::Chars) -> &'a str {
     let mut escaped = false;
     let beg_str = chars.as_str();
 
@@ -83,7 +84,10 @@ fn parse_symbol(chars: &mut str::Chars) -> String {
             }
         }
     }
-    beg_str.to_owned()
+    unsafe {
+        let slice = std::slice::from_raw_parts(beg_str.as_ptr(), beg_str.len());
+        str::from_utf8_unchecked(slice)
+    }
 }
 
 pub fn run() {
