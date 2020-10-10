@@ -39,6 +39,8 @@ enum OpCode {
     Call5,
     CallN,
     CallN2,
+    Jump,
+    JumpNil,
     Ret,
     End,
     Unknown
@@ -76,6 +78,12 @@ impl CallFrame {
             let x = *self.ip;
             self.ip = self.ip.add(1);
             x
+        }
+    }
+
+    fn jump(&mut self, offset: isize) {
+        unsafe {
+            self.ip = self.ip.offset(offset);
         }
     }
 
@@ -239,6 +247,17 @@ impl Routine {
                     self.call_frames.push(frame);
                     frame = self.call(3);
                 }
+                op::Jump => {
+                    let offset = frame.take_double_arg();
+                    frame.jump(offset as isize);
+                }
+                op::JumpNil => {
+                    let cond = self.stack.pop().unwrap();
+                    let offset = frame.take_double_arg();
+                    if cond.is_nil() {
+                        frame.jump(offset as isize);
+                    }
+                }
                 op::Ret => {
                     self.call_subst(Self::take_top, 2);
                     frame = self.call_frames.pop().unwrap();
@@ -283,6 +302,31 @@ mod test {
         let mut routine = Routine::new();
         routine.execute(Gc::new(func));
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
+    }
+
+    #[test]
+    fn jump() {
+        let func = LispFn::new(
+            vec![
+                Op::Constant1.into(),
+                Op::Constant2.into(),
+                Op::Constant0.into(),
+                Op::JumpNil.into(),
+                0, 2,
+                Op::Constant3.into(),
+                Op::Add.into(),
+                Op::Add.into(),
+                Op::Ret.into(),
+            ],
+            vec![
+                LispObj::nil(),
+                LispObj::from(7),
+                LispObj::from(3),
+                LispObj::from(11),
+            ], 0, 0, false,) ;
+        let mut routine = Routine::new();
+        routine.execute(Gc::new(func));
+        assert_eq!(10, routine.stack.get(0).unwrap().as_int().unwrap());
     }
 
     #[test]
@@ -334,9 +378,47 @@ mod test {
             0, 0, false,);
 
         let mut routine = Routine::new();
-
         routine.execute(Gc::new(top));
-
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
+    }
+
+    #[should_panic]
+    #[test]
+    fn too_few_args() {
+        symbol::clear();
+        let func = LispFn::new(vec![], vec![], 3, 0, false,);
+        let inner = symbol::intern("inner");
+        inner.set_func(func);
+        let top = LispFn::new(
+            vec![
+                Op::Constant0.into(),
+                Op::Call0.into(),
+                Op::Ret.into(),
+            ],
+            vec![LispObj::from(inner)],
+            0, 0, false,);
+
+        let mut routine = Routine::new();
+        routine.execute(Gc::new(top));
+    }
+
+    #[should_panic]
+    #[test]
+    fn too_many_args() {
+        symbol::clear();
+        let func = LispFn::new(vec![], vec![], 0, 0, false,);
+        let inner = symbol::intern("inner");
+        inner.set_func(func);
+        let top = LispFn::new(
+            vec![
+                Op::Constant0.into(),
+                Op::Call1.into(),
+                Op::Ret.into(),
+            ],
+            vec![LispObj::from(inner)],
+            0, 0, false,);
+
+        let mut routine = Routine::new();
+        routine.execute(Gc::new(top));
     }
 }
