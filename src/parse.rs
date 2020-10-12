@@ -4,6 +4,7 @@ use std::str;
 struct Lexer<'a> {
     slice: &'a str,
     line: usize,
+    error: Option<LexerError>
 }
 
 #[derive(PartialEq, Debug)]
@@ -11,14 +12,20 @@ enum Token<'a> {
     Symbol(&'a str),
     String(&'a str),
     Comment(&'a str),
-    Integer(i64),
-    Float(f64),
-    OpenParen,
-    CloseParen,
-    Quote,
-    QuasiQuote,
-    MacroEval,
-    MacroSplice,
+    OpenParen(&'a str),
+    CloseParen(&'a str),
+    Quote(&'a str),
+    QuasiQuote(&'a str),
+    MacroEval(&'a str),
+    MacroSplice(&'a str),
+    Error,
+}
+
+#[derive(Debug)]
+struct LexerError {
+    message: &'static str,
+    line: usize,
+    col: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -26,11 +33,16 @@ impl<'a> Lexer<'a> {
         Lexer {
             slice,
             line: 0,
+            error: None,
         }
     }
 
-    fn clear_slice(&mut self) {
+    fn clear(&mut self) {
         self.slice = &self.slice[self.slice.len()..];
+    }
+
+    fn advance(&mut self, amount: usize) {
+        self.slice = &self.slice[amount..];
     }
 
     fn get_symbol(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
@@ -45,17 +57,43 @@ impl<'a> Lexer<'a> {
         }
         &self.slice[beg..]
     }
+
+    fn get_string(&mut self, beg: usize, mut chars: str::CharIndices) -> Result<&'a str, LexerError> {
+        let mut escaped = false;
+        while let Some((end, chr)) = chars.next() {
+            if escaped || chr == '\\' {
+                escaped = !escaped;
+                chars.next();
+            } else if chr == '"' {
+                return Ok(&self.slice[beg..end+1]);
+            }
+        }
+        Err(LexerError{
+            message: "String missing terminator",
+            line: 0,
+            col: 0})
+    }
+
+    fn get_comment(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
+        // Handle different line endings
+        match chars.find(|x| x.1 == '\n') {
+            None => &self.slice[beg..],
+            Some((end, _)) => &self.slice[beg..end+1],
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
     fn next(&mut self) -> Option<Self::Item> {
+        if self.error.is_some() { return None; }
+
         let mut chars = self.slice.char_indices();
 
         let chr_idx = match chars.find(|x| !x.1.is_whitespace()) {
             Some(x) => x,
             None => {
-                self.clear_slice();
+                self.clear();
                 return None;
             }
         };
@@ -64,34 +102,53 @@ impl<'a> Iterator for Lexer<'a> {
 
         if symbol_char(chr) {
             let symbol = self.get_symbol(idx, chars);
-            self.slice = &self.slice[idx + symbol.len()..];
+            self.advance(idx + symbol.len());
             return Some(Token::Symbol(symbol));
         }
 
-        let token = match chr {
-            '(' => Token::OpenParen,
-            ')' => Token::CloseParen,
-            '`' => Token::QuasiQuote,
-            '\'' => Token::Quote,
-            x => { panic!("unknown token {}", x); }
-        };
+        if chr == '"' {
+            return match self.get_string(idx, chars) {
+                Err(e) => {
+                    self.error = Some(e);
+                    Some(Token::Error)
+                }
+                Ok(string) => {
+                    self.advance(idx + string.len());
+                    Some(Token::String(string))
+                }
+            }
+        }
+
+        if chr == ';' {
+            let comment = self.get_comment(idx, chars);
+            self.advance(idx + comment.len());
+            return Some(Token::Comment(comment));
+        }
+
+        let string = &self.slice[idx..idx+1];
         self.slice = chars.as_str();
-        Some(token)
+        match chr {
+            '(' => Some(Token::OpenParen(string)),
+            ')' => Some(Token::CloseParen(string)),
+            '`' => Some(Token::QuasiQuote(string)),
+            '\'' => Some(Token::Quote(string)),
+            x => { panic!("unknown token {}", x); }
+        }
     }
 }
 
-fn symbol_char(char: char) -> bool {
-    match char {
+fn symbol_char(chr: char) -> bool {
+    match chr {
         '\x00'..=' ' |
         '(' | ')' | '[' | ']' |
         '#' | ',' | '.' | '`' |
-        ';' | '"' | '\'' | '\\' => false,
+        ';' | '"' | '\'' => false,
         _ => true,
     }
 }
 
 pub fn run() {
-    let mut lexer = Lexer::new("(foo (bar) baz 'word) bob");
+    let mut lexer = Lexer::new(r#"(foo (bar) baz 'word) bob "this is a string ; \" with stuff in " ; comment"#);
     while let Some(s) = lexer.next() {
         println!("\"{:?}\"", s);
     }
@@ -101,27 +158,53 @@ pub fn run() {
 mod test {
 
     use super::*;
-    // macro_rules! vec_of_strings {
-    //     ($($x:expr),*) => (vec![$($x.to_string()),*]);
-    // }
+
+    #[test]
+    fn size() {
+        assert_eq!(24, std::mem::size_of::<Token>());
+    }
 
     #[test]
     fn parse() {
         let symbols: Vec<Token> = Lexer::new("(foo (bar) baz 'word) bob").collect();
 
         let golden = vec![
-            Token::OpenParen,
+            Token::OpenParen("("),
             Token::Symbol("foo"),
-            Token::OpenParen,
+            Token::OpenParen("("),
             Token::Symbol("bar"),
-            Token::CloseParen,
+            Token::CloseParen(")"),
             Token::Symbol("baz"),
-            Token::Quote,
+            Token::Quote("'"),
             Token::Symbol("word"),
-            Token::CloseParen,
+            Token::CloseParen(")"),
             Token::Symbol("bob")
         ];
 
         assert_eq!(golden, symbols);
     }
+
+    #[test]
+    fn string() {
+        let symbols: Vec<Token> = Lexer::new(r#"before "string with \" stuff" after"#).collect();
+        let golden = vec![
+            Token::Symbol("before"),
+            Token::String(r#""string with \" stuff""#),
+            Token::Symbol("after"),
+        ];
+
+        assert_eq!(golden, symbols);
+    }
+
+    #[test]
+    fn comments() {
+        let symbols: Vec<Token> = Lexer::new("before ;; comment \n after").collect();
+        let golden = vec![
+            Token::Symbol("before"),
+            Token::Comment(";; comment \n"),
+            Token::Symbol("after"),
+        ];
+        assert_eq!(golden, symbols);
+    }
+
 }
