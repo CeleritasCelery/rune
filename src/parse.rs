@@ -1,56 +1,109 @@
+#![allow(dead_code)]
 use std::str;
-use std::slice;
+use std::fmt;
 
-trait PrevIter {
-    fn prev(&mut self);
+struct Lexer<'a> {
+    slice: &'a str,
+    cursor: usize,
+    line: usize,
 }
 
-impl PrevIter for str::Chars<'_> {
-    fn prev(&mut self) {
-        let orig_str = self.as_str();
-        let orig_ptr = orig_str.as_ptr();
-        let char_len = unsafe {
-            const MAX_UTF8_CHARS: usize = 4;
-            let tmp_ptr = orig_ptr.sub(MAX_UTF8_CHARS);
-            let tmp_slice = slice::from_raw_parts(tmp_ptr, MAX_UTF8_CHARS);
-            let mut iter = str::from_utf8_unchecked(tmp_slice).chars();
-            iter.next_back();
-            MAX_UTF8_CHARS - iter.as_str().len()
-        };
-        *self = unsafe {
-            let new_len = orig_str.len() + char_len;
-            let new_slice = slice::from_raw_parts(orig_ptr.sub(char_len), new_len);
-            str::from_utf8_unchecked(new_slice).chars()
-        };
-    }
+#[derive(PartialEq)]
+enum Token<'a> {
+    Symbol(&'a str),
+    String(&'a str),
+    Comment(&'a str),
+    Integer(i64),
+    Float(f64),
+    OpenParen,
+    CloseParen,
+    Quote,
+    QuasiQuote,
+    MacroEval,
+    MacroSplice,
 }
 
-pub fn parse<'a>(sexp: &'a str) -> Vec<&'a str> {
-    let mut chars = sexp.chars();
-    let mut lexems: Vec<&str> = Vec::new();
-    while let Some(chr) = chars.next() {
-        match chr {
-            '(' => {
-                lexems.push("(");
-            },
-            ')' => {
-                lexems.push(")");
-            }
-            ' ' | '\t' => {
-                lexems.push("space");
-            }
-            '\'' => {
-                lexems.push("quote");
-            }
-            _   => {
-                chars.prev();
-                let symbol = parse_symbol(&mut chars);
-                println!("\"{}\"", symbol);
-                lexems.push(symbol);
-            }
+impl<'a> fmt::Debug for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Token::Symbol(x) => write!(f, "Symbol: {}", x),
+            Token::String(x) => write!(f, "String: \"{}\"", x),
+            Token::Comment(x) => write!(f, "Comment: {}", x),
+            Token::Integer(x) => write!(f, "Int: {}", x),
+            Token::Float(x) => write!(f, "Float: {}", x),
+            Token::OpenParen => write!(f, "("),
+            Token::CloseParen => write!(f, ")"),
+            Token::Quote => write!(f, "'"),
+            Token::QuasiQuote => write!(f, "`"),
+            Token::MacroEval => write!(f, ","),
+            Token::MacroSplice => write!(f, ",@"),
         }
     }
-    return lexems;
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(slice: &'a str) -> Self {
+        Lexer {
+            slice,
+            cursor: 0,
+            line: 0,
+        }
+    }
+
+    fn get_symbol(mut chars: str::Chars) -> *const u8 {
+        let mut prev_ptr = chars.as_str().as_ptr();
+        let mut escaped = false;
+        while let Some(chr) = chars.next() {
+            if escaped || chr == '\\' {
+                escaped = !escaped;
+                chars.next();
+            } else if !symbol_char(chr) {
+                return prev_ptr;
+            }
+            prev_ptr = chars.as_str().as_ptr();
+        }
+        prev_ptr
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut prev_ptr = self.slice.as_ptr();
+        let anchor = prev_ptr as usize;
+        let mut iter = self.slice.chars();
+        while let Some(chr) = iter.next() {
+            match chr {
+                ' ' | '\t' => {}
+                '(' => {
+                    self.slice = iter.as_str();
+                    return Some(Token::OpenParen)
+                }
+                ')' => {
+                    self.slice = iter.as_str();
+                    return Some(Token::CloseParen)
+                }
+                '`' => {
+                    self.slice = iter.as_str();
+                    return Some(Token::QuasiQuote)
+                }
+                '\'' => {
+                    self.slice = iter.as_str();
+                    return Some(Token::Quote)
+                }
+                _ => {
+                    let beg = prev_ptr as usize - anchor;
+                    let end = Self::get_symbol(iter) as usize - anchor;
+                    let slice = &self.slice[beg..end];
+                    self.slice = &self.slice[end..];
+                    return Some(Token::Symbol(slice));
+                }
+            }
+            prev_ptr = iter.as_str().as_ptr();
+        }
+        self.slice = &self.slice[self.slice.len()..];
+        None
+    }
 }
 
 fn symbol_char(char: char) -> bool {
@@ -63,54 +116,36 @@ fn symbol_char(char: char) -> bool {
     }
 }
 
-unsafe fn string_from_ptrs<'a>(beg: *const u8, end: *const u8) -> &'a str {
-    let len = end as usize - beg as usize;
-    let slice = std::slice::from_raw_parts(beg, len);
-    str::from_utf8_unchecked(slice)
-}
-
-fn parse_symbol<'a>(chars: &mut str::Chars) -> &'a str {
-    let mut escaped = false;
-    let beg_str = chars.as_str();
-
-    while let Some(char) = chars.next() {
-        if escaped || char == '\\' {
-            escaped = !escaped;
-        } else if !symbol_char(char) {
-            unsafe {
-                chars.prev();
-                let end = chars.as_str().as_ptr();
-                return string_from_ptrs(beg_str.as_ptr(), end);
-            }
-        }
-    }
-    unsafe {
-        let slice = std::slice::from_raw_parts(beg_str.as_ptr(), beg_str.len());
-        str::from_utf8_unchecked(slice)
-    }
-}
-
 pub fn run() {
-    let symbols = parse("(foo (bar) baz 'word) bob");
-    for s in symbols {
-        println!("\"{}\"", s);
+    let mut lexer = Lexer::new("(foo (bar) baz 'word) bob");
+    while let Some(s) = lexer.next() {
+        println!("\"{:?}\"", s);
     }
 }
 
 #[cfg(test)]
 mod test {
-    macro_rules! vec_of_strings {
-        ($($x:expr),*) => (vec![$($x.to_string()),*]);
-    }
+
+    use super::*;
+    // macro_rules! vec_of_strings {
+    //     ($($x:expr),*) => (vec![$($x.to_string()),*]);
+    // }
 
     #[test]
     fn parse() {
-        let symbols = super::parse("(foo (bar) baz 'word) bob");
+        let symbols: Vec<Token> = Lexer::new("(foo (bar) baz 'word) bob").collect();
 
-        let golden = vec_of_strings![
-            "(", "foo", "space", "(", "bar", ")", "space",
-            "baz", "space", "quote", "word", ")", "space",
-            "bob"
+        let golden = vec![
+            Token::OpenParen,
+            Token::Symbol("foo"),
+            Token::OpenParen,
+            Token::Symbol("bar"),
+            Token::CloseParen,
+            Token::Symbol("baz"),
+            Token::Quote,
+            Token::Symbol("word"),
+            Token::CloseParen,
+            Token::Symbol("bob")
         ];
 
         assert_eq!(golden, symbols);
