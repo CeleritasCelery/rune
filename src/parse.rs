@@ -1,14 +1,12 @@
 #![allow(dead_code)]
 use std::str;
-use std::fmt;
 
 struct Lexer<'a> {
     slice: &'a str,
-    cursor: usize,
     line: usize,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum Token<'a> {
     Symbol(&'a str),
     String(&'a str),
@@ -23,86 +21,62 @@ enum Token<'a> {
     MacroSplice,
 }
 
-impl<'a> fmt::Debug for Token<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Token::Symbol(x) => write!(f, "Symbol: {}", x),
-            Token::String(x) => write!(f, "String: \"{}\"", x),
-            Token::Comment(x) => write!(f, "Comment: {}", x),
-            Token::Integer(x) => write!(f, "Int: {}", x),
-            Token::Float(x) => write!(f, "Float: {}", x),
-            Token::OpenParen => write!(f, "("),
-            Token::CloseParen => write!(f, ")"),
-            Token::Quote => write!(f, "'"),
-            Token::QuasiQuote => write!(f, "`"),
-            Token::MacroEval => write!(f, ","),
-            Token::MacroSplice => write!(f, ",@"),
-        }
-    }
-}
-
 impl<'a> Lexer<'a> {
     pub fn new(slice: &'a str) -> Self {
         Lexer {
             slice,
-            cursor: 0,
             line: 0,
         }
     }
 
-    fn get_symbol(mut chars: str::Chars) -> *const u8 {
-        let mut prev_ptr = chars.as_str().as_ptr();
+    fn clear_slice(&mut self) {
+        self.slice = &self.slice[self.slice.len()..];
+    }
+
+    fn get_symbol(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
         let mut escaped = false;
-        while let Some(chr) = chars.next() {
+        while let Some((end, chr)) = chars.next() {
             if escaped || chr == '\\' {
                 escaped = !escaped;
                 chars.next();
             } else if !symbol_char(chr) {
-                return prev_ptr;
+                return &self.slice[beg..end];
             }
-            prev_ptr = chars.as_str().as_ptr();
         }
-        prev_ptr
+        &self.slice[beg..]
     }
 }
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        let mut prev_ptr = self.slice.as_ptr();
-        let anchor = prev_ptr as usize;
-        let mut iter = self.slice.chars();
-        while let Some(chr) = iter.next() {
-            match chr {
-                ' ' | '\t' => {}
-                '(' => {
-                    self.slice = iter.as_str();
-                    return Some(Token::OpenParen)
-                }
-                ')' => {
-                    self.slice = iter.as_str();
-                    return Some(Token::CloseParen)
-                }
-                '`' => {
-                    self.slice = iter.as_str();
-                    return Some(Token::QuasiQuote)
-                }
-                '\'' => {
-                    self.slice = iter.as_str();
-                    return Some(Token::Quote)
-                }
-                _ => {
-                    let beg = prev_ptr as usize - anchor;
-                    let end = Self::get_symbol(iter) as usize - anchor;
-                    let slice = &self.slice[beg..end];
-                    self.slice = &self.slice[end..];
-                    return Some(Token::Symbol(slice));
-                }
+        let mut chars = self.slice.char_indices();
+
+        let chr_idx = match chars.find(|x| !x.1.is_whitespace()) {
+            Some(x) => x,
+            None => {
+                self.clear_slice();
+                return None;
             }
-            prev_ptr = iter.as_str().as_ptr();
+        };
+
+        let (idx, chr) = chr_idx;
+
+        if symbol_char(chr) {
+            let symbol = self.get_symbol(idx, chars);
+            self.slice = &self.slice[idx + symbol.len()..];
+            return Some(Token::Symbol(symbol));
         }
-        self.slice = &self.slice[self.slice.len()..];
-        None
+
+        let token = match chr {
+            '(' => Token::OpenParen,
+            ')' => Token::CloseParen,
+            '`' => Token::QuasiQuote,
+            '\'' => Token::Quote,
+            x => { panic!("unknown token {}", x); }
+        };
+        self.slice = chars.as_str();
+        Some(token)
     }
 }
 
