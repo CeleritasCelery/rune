@@ -11,14 +11,48 @@ struct Lexer<'a> {
 enum Token<'a> {
     Symbol(&'a str),
     String(&'a str),
+    Integer(&'a str),
+    Float(&'a str),
     Comment(&'a str),
-    OpenParen(&'a str),
-    CloseParen(&'a str),
-    Quote(&'a str),
-    QuasiQuote(&'a str),
-    MacroEval(&'a str),
-    MacroSplice(&'a str),
+    OpenParen(usize),
+    CloseParen(usize),
+    Quote(usize),
+    QuasiQuote(usize),
+    MacroEval(usize),
+    MacroSplice(usize),
     Error,
+}
+
+impl<'a> Token<'a> {
+    pub fn classify(token: &'a str) -> Token<'a> {
+        use Token::*;
+        let mut chars = token.chars();
+        let mut point_found = false;
+        match chars.next() {
+            None => return Symbol(token),
+            Some(chr) => {
+                match chr {
+                    '.' => point_found = true,
+                    '0'..='9' | '+' | '-' => {},
+                    _ => return Symbol(token)
+                }
+            }
+        };
+
+        while let Some(chr) = chars.next() {
+            match chr {
+                '.' if point_found => return Symbol(token),
+                '.' => point_found = true,
+                '0'..='9' => {},
+                _ => return Symbol(token),
+            }
+        }
+        if point_found {
+            Float(token)
+        } else {
+            Integer(token)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -50,6 +84,10 @@ impl<'a> Lexer<'a> {
         self.slice = &self.slice[amount..];
     }
 
+    fn get_abs_pos(&self, idx: usize) -> usize {
+        self.slice.as_ptr() as usize + idx - self.start as usize
+    }
+
     fn get_symbol(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
         let mut escaped = false;
         while let Some((end, chr)) = chars.next() {
@@ -75,12 +113,12 @@ impl<'a> Lexer<'a> {
         }
         Err(LexerError{
             message: "String missing terminator",
-            position: self.slice.as_ptr() as usize + beg - self.start as usize,
+            position: self.get_abs_pos(beg),
         })
     }
 
     fn get_comment(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
-        // Handle different line endings
+        // TODO: Handle different line endings
         match chars.find(|x| x.1 == '\n') {
             None => &self.slice[beg..],
             Some((end, _)) => &self.slice[beg..end+1],
@@ -93,7 +131,7 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut chars = self.slice.char_indices();
 
-        let chr_idx = match chars.find(|x| !x.1.is_whitespace()) {
+        let chr_idx = match chars.find(|x| !x.1.is_ascii_whitespace()) {
             Some(x) => x,
             None => {
                 self.clear();
@@ -106,7 +144,7 @@ impl<'a> Iterator for Lexer<'a> {
         if symbol_char(chr) {
             let symbol = self.get_symbol(idx, chars);
             self.advance(idx + symbol.len());
-            return Some(Token::Symbol(symbol));
+            return Some(Token::classify(symbol));
         }
 
         if chr == '"' {
@@ -129,13 +167,14 @@ impl<'a> Iterator for Lexer<'a> {
             return Some(Token::Comment(comment));
         }
 
-        let string = &self.slice[idx..idx+1];
+        let pos = self.get_abs_pos(idx);
         self.slice = chars.as_str();
+        println!("idx = {}", idx);
         match chr {
-            '(' => Some(Token::OpenParen(string)),
-            ')' => Some(Token::CloseParen(string)),
-            '`' => Some(Token::QuasiQuote(string)),
-            '\'' => Some(Token::Quote(string)),
+            '(' => Some(Token::OpenParen(pos)),
+            ')' => Some(Token::CloseParen(pos)),
+            '`' => Some(Token::QuasiQuote(pos)),
+            '\'' => Some(Token::Quote(pos)),
             x => { panic!("unknown token {}", x); }
         }
     }
@@ -145,14 +184,14 @@ fn symbol_char(chr: char) -> bool {
     match chr {
         '\x00'..=' ' |
         '(' | ')' | '[' | ']' |
-        '#' | ',' | '.' | '`' |
-        ';' | '"' | '\'' => false,
+        '#' | ',' | '`' | ';' |
+        '"' | '\'' => false,
         _ => true,
     }
 }
 
 pub fn run() {
-    let mut lexer = Lexer::new(r#"(foo (bar) baz 'word) bob "this is a string ; \" with stuff in " ; comment"#);
+    let mut lexer = Lexer::new(r#"(foo (bar) -2.3 'word) +1 "this is a string ; \" with stuff in " ; comment"#);
     while let Some(s) = lexer.next() {
         println!("\"{:?}\"", s);
     }
@@ -173,15 +212,15 @@ mod test {
         let symbols: Vec<Token> = Lexer::new("(foo (bar) baz 'word) bob").collect();
 
         let golden = vec![
-            Token::OpenParen("("),
+            Token::OpenParen(0),
             Token::Symbol("foo"),
-            Token::OpenParen("("),
+            Token::OpenParen(5),
             Token::Symbol("bar"),
-            Token::CloseParen(")"),
+            Token::CloseParen(9),
             Token::Symbol("baz"),
-            Token::Quote("'"),
+            Token::Quote(15),
             Token::Symbol("word"),
-            Token::CloseParen(")"),
+            Token::CloseParen(20),
             Token::Symbol("bob")
         ];
 
@@ -222,5 +261,22 @@ mod test {
         let error = lexer.into_error();
         assert!(error.is_some());
         assert_eq!(5, error.unwrap().position);
+    }
+
+    #[test]
+    fn numbers() {
+        let symbols: Vec<Token> = Lexer::new("+1 1+ 8. -1 \\-1 .1 2.0 3.0.0 --1").collect();
+        let golden = vec![
+            Token::Integer("+1"),
+            Token::Symbol("1+"),
+            Token::Float("8."),
+            Token::Integer("-1"),
+            Token::Symbol("\\-1"),
+            Token::Float(".1"),
+            Token::Float("2.0"),
+            Token::Symbol("3.0.0"),
+            Token::Symbol("--1"),
+        ];
+        assert_eq!(golden, symbols);
     }
 }
