@@ -293,8 +293,8 @@ impl From<String> for LispObj {
     }
 }
 
-impl From<&Symbol> for LispObj {
-    fn from(s: &Symbol) -> Self {
+impl From<&'static Symbol> for LispObj {
+    fn from(s: &'static Symbol) -> Self {
         let ptr = s as *const Symbol;
         let bits = ((ptr as u64) << TAG_SIZE) | Tag::Symbol as u64;
         LispObj{bits}
@@ -334,7 +334,7 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol;
+    use crate::symbol::INTERNED_SYMBOLS;
 
     #[test]
     fn sizes() {
@@ -391,8 +391,8 @@ mod test {
 
     #[test]
     fn symbol() {
-        symbol::clear();
-        let sym = symbol::intern("foo");
+        let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
+        let sym = symbol_map.intern("foo");
         let x = LispObj::from(sym);
         assert!(x.is_symbol());
         assert_eq!("foo", x.as_symbol().unwrap().get_name());

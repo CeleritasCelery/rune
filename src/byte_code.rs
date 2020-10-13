@@ -275,7 +275,7 @@ pub fn run() {}
 mod test {
     use super::*;
     use OpCode as Op;
-    use crate::symbol;
+    use crate::symbol::INTERNED_SYMBOLS;
 
     #[test]
     fn compute() {
@@ -331,9 +331,6 @@ mod test {
 
     #[test]
     fn call() {
-
-        symbol::clear();
-
         let codes = vec![
                 Op::StackRef3,
                 Op::StackRef3,
@@ -348,9 +345,10 @@ mod test {
 
         let func = LispFn::new(codes, vec![], 3, 0, false,);
 
-        let test_add = symbol::intern("test-add");
+        let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
+        let test_add = symbol_map.intern("test-add");
         test_add.set_func(func);
-        let middle = symbol::intern("middle");
+        let middle = symbol_map.intern("middle");
         middle.set_func(LispFn::new(
             vec![
                 Op::Constant0.into(),
@@ -380,45 +378,5 @@ mod test {
         let mut routine = Routine::new();
         routine.execute(Gc::new(top));
         assert_eq!(63, routine.stack.get(0).unwrap().as_int().unwrap());
-    }
-
-    #[should_panic]
-    #[test]
-    fn too_few_args() {
-        symbol::clear();
-        let func = LispFn::new(vec![], vec![], 3, 0, false,);
-        let inner = symbol::intern("inner");
-        inner.set_func(func);
-        let top = LispFn::new(
-            vec![
-                Op::Constant0.into(),
-                Op::Call0.into(),
-                Op::Ret.into(),
-            ],
-            vec![LispObj::from(inner)],
-            0, 0, false,);
-
-        let mut routine = Routine::new();
-        routine.execute(Gc::new(top));
-    }
-
-    #[should_panic]
-    #[test]
-    fn too_many_args() {
-        symbol::clear();
-        let func = LispFn::new(vec![], vec![], 0, 0, false,);
-        let inner = symbol::intern("inner");
-        inner.set_func(func);
-        let top = LispFn::new(
-            vec![
-                Op::Constant0.into(),
-                Op::Call1.into(),
-                Op::Ret.into(),
-            ],
-            vec![LispObj::from(inner)],
-            0, 0, false,);
-
-        let mut routine = Routine::new();
-        routine.execute(Gc::new(top));
     }
 }

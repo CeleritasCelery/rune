@@ -1,87 +1,75 @@
 #![allow(dead_code)]
-use crate::lisp_object::{LispObj, LispFn};
+use crate::lisp_object::LispFn;
 use crate::gc::Gc;
-use once_cell::unsync::Lazy;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::cell::UnsafeCell;
 use fnv::{FnvHashMap, FnvHasher};
+use std::mem;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct Symbol {
-    inner: UnsafeCell<InnerSymbol>
-}
-
-struct InnerSymbol {
     name: String,
-    func: Option<Gc<LispFn>>,
-    var: LispObj,
+    func: AtomicU64,
 }
 
 impl Symbol {
-    fn get(&self) -> &InnerSymbol {
-        unsafe {&*self.inner.get()}
-    }
-
-    fn get_mut(&self) -> &mut InnerSymbol {
-        unsafe {&mut *self.inner.get()}
-    }
-
     fn new(name: String) -> Self {
-        Symbol{inner: UnsafeCell::new(InnerSymbol::new(name))}
+        Symbol{name, func: AtomicU64::new(0)}
     }
 
     pub fn set_func(&self, func: LispFn) {
-        self.get_mut().func = Some(Gc::new(func));
+        let ptr: *const LispFn = Gc::new(func).as_ref();
+        self.func.store(ptr as u64, Ordering::Release);
     }
 
     pub fn get_func(&self) -> Option<Gc<LispFn>> {
-        self.get().func.clone()
-    }
-
-    pub fn set_var(&self, var: LispObj) {
-        self.get_mut().var = var;
-    }
-
-    pub fn get_var(&self) -> LispObj {
-        self.get().var
+        let atomic = self.func.load(Ordering::Acquire);
+        unsafe { mem::transmute(atomic) }
     }
 
     pub fn get_name(&self) -> &str {
-        &self.get().name
+        &self.name
     }
 }
 
-impl InnerSymbol {
-    fn new(name: String) -> Self {
-        Self{name, func: None, var: LispObj::void()}
+pub struct SymbolMap(HashMap<String, Box<Symbol>, BuildHasherDefault<FnvHasher>>);
+
+impl SymbolMap {
+    fn new() -> Self {
+        Self(FnvHashMap::default())
     }
 
-    fn unbind_func(&mut self) {
+    pub fn size(&self) -> usize {
+        self.0.keys().len()
     }
 
-}
+    pub fn intern(&mut self, name: &str) -> &'static Symbol {
+        // SAFETY: This is my work around for there being no Entry API that
+        // takes a reference. Instead we have an inner function that returns a
+        // pointer and we cast that to a static reference. We can guarntee that
+        // the reference is static because we have no methods to remove items
+        // from SymbolMap and SymbolMap has a private constructor, so the only
+        // one that exists is the one we create in this module, which is static.
+        // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
+        unsafe { mem::transmute(self.get_symbol(name)) }
+    }
 
-type FastHash = Lazy<HashMap<String, Box<Symbol>, BuildHasherDefault<FnvHasher>>>;
-static mut INTERNED_SYMBOLS: FastHash = Lazy::new(||{FnvHashMap::default()});
-
-pub fn intern(name: &str) -> &Symbol {
-    unsafe {
-        match INTERNED_SYMBOLS.get(name) {
-            Some(x) => {x}
+    fn get_symbol(&mut self, name: &str) -> *const Symbol {
+        match self.0.get(name) {
+            Some(x) => x.as_ref(),
             None => {
-                let sym = Symbol::new(name.to_owned());
-                INTERNED_SYMBOLS.entry(name.to_owned()).or_insert(Box::new(sym))
+                let sym = Box::new(Symbol::new(name.to_owned()));
+                let ptr = sym.as_ref() as *const Symbol;
+                self.0.insert(name.to_owned(), sym);
+                ptr
             }
         }
     }
 }
 
-pub fn clear() {
-    unsafe {
-        INTERNED_SYMBOLS.clear();
-    }
-
-}
+pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(||Mutex::new(SymbolMap::new()));
 
 #[cfg(test)]
 mod test {
@@ -89,8 +77,7 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(40, std::mem::size_of::<InnerSymbol>());
-        assert_eq!(40, std::mem::size_of::<InnerSymbol>());
+        assert_eq!(32, std::mem::size_of::<Symbol>());
     }
 
     #[test]
@@ -108,25 +95,13 @@ mod test {
     }
 
     #[test]
-    fn symbol_var() {
-        let x = Symbol::new("foo".to_owned());
-        assert!(x.get_var().is_void());
-        x.set_var(LispObj::from(7));
-        assert_eq!(7, x.get_var().as_int().unwrap());
-    }
-
-    #[test]
     fn intern() {
-        super::clear();
-        let first = super::intern("foo");
+        let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
+        let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
         assert_eq!(None, first.get_func());
-        assert!(first.get_var().is_void());
-        let second = super::intern("foo");
+        let second = symbol_map.intern("foo");
         second.set_func(LispFn::new(vec![5], vec![], 0, 0, false));
-        second.set_var(LispObj::from(7));
         assert_eq!(first.get_func().unwrap().as_ref().op_codes.get(0).unwrap(), &5);
-        assert_eq!(7, first.get_var().as_int().unwrap());
-
     }
 }
