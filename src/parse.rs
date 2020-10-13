@@ -3,7 +3,7 @@ use std::str;
 
 struct Lexer<'a> {
     slice: &'a str,
-    line: usize,
+    start: *const u8,
     error: Option<LexerError>
 }
 
@@ -24,17 +24,22 @@ enum Token<'a> {
 #[derive(Debug)]
 struct LexerError {
     message: &'static str,
-    line: usize,
-    col: usize,
+    position: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(slice: &'a str) -> Self {
         Lexer {
             slice,
-            line: 0,
+            start: slice.as_ptr(),
             error: None,
         }
+    }
+
+    pub fn into_error(mut self) -> Option<LexerError> {
+        let error = self.error;
+        self.error = None;
+        error
     }
 
     fn clear(&mut self) {
@@ -70,8 +75,8 @@ impl<'a> Lexer<'a> {
         }
         Err(LexerError{
             message: "String missing terminator",
-            line: 0,
-            col: 0})
+            position: self.slice.as_ptr() as usize + beg - self.start as usize,
+        })
     }
 
     fn get_comment(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
@@ -86,8 +91,6 @@ impl<'a> Lexer<'a> {
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.error.is_some() { return None; }
-
         let mut chars = self.slice.char_indices();
 
         let chr_idx = match chars.find(|x| !x.1.is_whitespace()) {
@@ -110,6 +113,7 @@ impl<'a> Iterator for Lexer<'a> {
             return match self.get_string(idx, chars) {
                 Err(e) => {
                     self.error = Some(e);
+                    self.clear();
                     Some(Token::Error)
                 }
                 Ok(string) => {
@@ -207,4 +211,16 @@ mod test {
         assert_eq!(golden, symbols);
     }
 
+    #[test]
+    fn error() {
+        let mut lexer = Lexer::new("this \" never ends");
+
+        assert_eq!(Token::Symbol("this"), lexer.next().unwrap());
+        assert_eq!(Token::Error, lexer.next().unwrap());
+        assert_eq!(None, lexer.next());
+
+        let error = lexer.into_error();
+        assert!(error.is_some());
+        assert_eq!(5, error.unwrap().position);
+    }
 }
