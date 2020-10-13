@@ -24,6 +24,17 @@ enum Token<'a> {
 }
 
 impl<'a> Token<'a> {
+    pub fn len(&self) -> usize {
+        use Token::*;
+        match self {
+            Symbol(x) | String(x) |
+            Integer(x) | Float(x) |
+            Comment(x) => x.len(),
+            Error => 0,
+            _ => 1
+        }
+    }
+
     pub fn classify(token: &'a str) -> Token<'a> {
         use Token::*;
         let mut chars = token.chars();
@@ -140,43 +151,44 @@ impl<'a> Iterator for Lexer<'a> {
         };
 
         let (idx, chr) = chr_idx;
-
-        if symbol_char(chr) {
-            let symbol = self.get_symbol(idx, chars);
-            self.advance(idx + symbol.len());
-            return Some(Token::classify(symbol));
-        }
-
-        if chr == '"' {
-            return match self.get_string(idx, chars) {
-                Err(e) => {
-                    self.error = Some(e);
-                    self.clear();
-                    Some(Token::Error)
-                }
-                Ok(string) => {
-                    self.advance(idx + string.len());
-                    Some(Token::String(string))
+        let token = match chr {
+            c if symbol_char(c) => {
+                let symbol = self.get_symbol(idx, chars);
+                Token::classify(symbol)
+            }
+            '"' => {
+                match self.get_string(idx, chars) {
+                    Ok(string) => Token::String(string),
+                    Err(e) => {
+                        self.error = Some(e);
+                        Token::Error
+                    }
                 }
             }
-        }
+            ';' => {
+                let comment = self.get_comment(idx, chars);
+                Token::Comment(comment)
+            }
+            '(' => Token::OpenParen(self.get_abs_pos(idx)),
+            ')' => Token::CloseParen(self.get_abs_pos(idx)),
+            '`' => Token::QuasiQuote(self.get_abs_pos(idx)),
+            '\'' => Token::Quote(self.get_abs_pos(idx)),
+            _ => {
+                let error = LexerError{
+                    message: "unknown token",
+                    position: self.get_abs_pos(idx)
+                };
+                self.error = Some(error);
+                Token::Error
+            }
+        };
 
-        if chr == ';' {
-            let comment = self.get_comment(idx, chars);
-            self.advance(idx + comment.len());
-            return Some(Token::Comment(comment));
+        if token == Token::Error {
+            self.clear();
+        } else {
+            self.advance(idx + token.len());
         }
-
-        let pos = self.get_abs_pos(idx);
-        self.slice = chars.as_str();
-        println!("idx = {}", idx);
-        match chr {
-            '(' => Some(Token::OpenParen(pos)),
-            ')' => Some(Token::CloseParen(pos)),
-            '`' => Some(Token::QuasiQuote(pos)),
-            '\'' => Some(Token::Quote(pos)),
-            x => { panic!("unknown token {}", x); }
-        }
+        Some(token)
     }
 }
 
