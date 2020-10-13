@@ -175,7 +175,7 @@ impl<'a> Iterator for Lexer<'a> {
             '\'' => Token::Quote(self.get_abs_pos(idx)),
             _ => {
                 let error = LexerError{
-                    message: "unknown token",
+                    message: "Unknown token",
                     position: self.get_abs_pos(idx)
                 };
                 self.error = Some(error);
@@ -220,7 +220,7 @@ mod test {
     }
 
     #[test]
-    fn parse() {
+    fn symbols() {
         let symbols: Vec<Token> = Lexer::new("(foo (bar) baz 'word) bob").collect();
 
         let golden = vec![
