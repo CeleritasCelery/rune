@@ -1,14 +1,13 @@
 #![allow(dead_code)]
 use std::str;
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     slice: &'a str,
     start: *const u8,
-    error: Option<LexerError>
 }
 
 #[derive(PartialEq, Debug)]
-enum Token<'a> {
+pub enum Token<'a> {
     Symbol(&'a str),
     String(&'a str),
     Integer(&'a str),
@@ -20,18 +19,15 @@ enum Token<'a> {
     QuasiQuote(usize),
     MacroEval(usize),
     MacroSplice(usize),
-    Error,
 }
 
 impl<'a> Token<'a> {
     pub fn len(&self) -> usize {
         use Token::*;
         match self {
-            Symbol(x) | String(x) |
-            Integer(x) | Float(x) |
-            Comment(x) => x.len(),
-            Error => 0,
-            _ => 1
+            Symbol(x) | String(x) | Integer(x) | Float(x) | Comment(x) => x.len(),
+            OpenParen(_) | CloseParen(_) | Quote(_) | QuasiQuote(_) | MacroEval(_) => 1,
+            MacroSplice(_) => 2,
         }
     }
 
@@ -66,25 +62,12 @@ impl<'a> Token<'a> {
     }
 }
 
-#[derive(Debug)]
-struct LexerError {
-    message: &'static str,
-    position: usize,
-}
-
 impl<'a> Lexer<'a> {
     pub fn new(slice: &'a str) -> Self {
         Lexer {
             slice,
             start: slice.as_ptr(),
-            error: None,
         }
-    }
-
-    pub fn into_error(mut self) -> Option<LexerError> {
-        let error = self.error;
-        self.error = None;
-        error
     }
 
     fn clear(&mut self) {
@@ -112,20 +95,17 @@ impl<'a> Lexer<'a> {
         &self.slice[beg..]
     }
 
-    fn get_string(&mut self, beg: usize, mut chars: str::CharIndices) -> Result<&'a str, LexerError> {
+    fn get_string(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
         let mut escaped = false;
         while let Some((end, chr)) = chars.next() {
             if escaped || chr == '\\' {
                 escaped = !escaped;
                 chars.next();
             } else if chr == '"' {
-                return Ok(&self.slice[beg..end+1]);
+                return &self.slice[beg..end+1];
             }
         }
-        Err(LexerError{
-            message: "String missing terminator",
-            position: self.get_abs_pos(beg),
-        })
+        &self.slice[beg..]
     }
 
     fn get_comment(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
@@ -142,7 +122,7 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut chars = self.slice.char_indices();
 
-        let chr_idx = match chars.find(|x| !x.1.is_ascii_whitespace()) {
+        let (idx, chr) = match chars.find(|x| !x.1.is_ascii_whitespace()) {
             Some(x) => x,
             None => {
                 self.clear();
@@ -150,44 +130,17 @@ impl<'a> Iterator for Lexer<'a> {
             }
         };
 
-        let (idx, chr) = chr_idx;
         let token = match chr {
-            c if symbol_char(c) => {
-                let symbol = self.get_symbol(idx, chars);
-                Token::classify(symbol)
-            }
-            '"' => {
-                match self.get_string(idx, chars) {
-                    Ok(string) => Token::String(string),
-                    Err(e) => {
-                        self.error = Some(e);
-                        Token::Error
-                    }
-                }
-            }
-            ';' => {
-                let comment = self.get_comment(idx, chars);
-                Token::Comment(comment)
-            }
+            c if symbol_char(c) => Token::classify(self.get_symbol(idx, chars)),
+            '"' => Token::String(self.get_string(idx, chars)),
+            ';' => Token::Comment(self.get_comment(idx, chars)),
             '(' => Token::OpenParen(self.get_abs_pos(idx)),
             ')' => Token::CloseParen(self.get_abs_pos(idx)),
             '`' => Token::QuasiQuote(self.get_abs_pos(idx)),
             '\'' => Token::Quote(self.get_abs_pos(idx)),
-            _ => {
-                let error = LexerError{
-                    message: "Unknown token",
-                    position: self.get_abs_pos(idx)
-                };
-                self.error = Some(error);
-                Token::Error
-            }
+            x => { panic!("unknown token: {}", x); }
         };
-
-        if token == Token::Error {
-            self.clear();
-        } else {
-            self.advance(idx + token.len());
-        }
+        self.advance(idx + token.len());
         Some(token)
     }
 }
@@ -211,7 +164,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
 
     #[test]
@@ -260,19 +212,6 @@ mod test {
             Token::Symbol("after"),
         ];
         assert_eq!(golden, symbols);
-    }
-
-    #[test]
-    fn error() {
-        let mut lexer = Lexer::new("this \" never ends");
-
-        assert_eq!(Token::Symbol("this"), lexer.next().unwrap());
-        assert_eq!(Token::Error, lexer.next().unwrap());
-        assert_eq!(None, lexer.next());
-
-        let error = lexer.into_error();
-        assert!(error.is_some());
-        assert_eq!(5, error.unwrap().position);
     }
 
     #[test]
