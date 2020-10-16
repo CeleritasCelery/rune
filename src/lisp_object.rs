@@ -3,6 +3,7 @@
 use crate::symbol::Symbol;
 use crate::gc::Gc;
 use std::mem::size_of;
+use std::cmp;
 use std::fmt;
 use std::ops;
 use std::convert::From;
@@ -114,6 +115,53 @@ pub union LispObj {
     tag: Tag,
     bits: u64,
     fixnum: Fixnum,
+}
+
+impl cmp::PartialEq for LispObj {
+    fn eq(&self, rhs: &LispObj) -> bool {
+        if let Some(lhs_str) = self.as_str() {
+            match rhs.as_str() {
+                Some(rhs_str) => lhs_str == rhs_str,
+                None => false,
+            }
+        } else if let Some(lhs_float) = self.as_float() {
+            match rhs.as_float() {
+                Some(rhs_float) => lhs_float == rhs_float,
+                None => false,
+            }
+        } else {
+            unsafe {
+                self.bits == rhs.bits
+            }
+        }
+    }
+}
+
+impl cmp::PartialEq<LispObj> for &str {
+    fn eq(&self, rhs: &LispObj) -> bool {
+        match rhs.as_str() {
+            Some(x) => *self == x,
+            None => false,
+        }
+    }
+}
+
+impl cmp::PartialEq<LispObj> for f64 {
+    fn eq(&self, rhs: &LispObj) -> bool {
+        match rhs.as_float() {
+            Some(x) => *self == x,
+            None => false,
+        }
+    }
+}
+
+impl cmp::PartialEq<LispObj> for i64 {
+    fn eq(&self, rhs: &LispObj) -> bool {
+        match rhs.as_int() {
+            Some(x) => *self == x,
+            None => false,
+        }
+    }
 }
 
 enum LispObjEnum<'a> {
@@ -287,9 +335,9 @@ impl From<bool> for LispObj {
     }
 }
 
-impl From<String> for LispObj {
-    fn from(s: String) -> Self {
-        LispObj::from_tagged_ptr(s, Tag::LongStr)
+impl From<&str> for LispObj {
+    fn from(s: &str) -> Self {
+        LispObj::from_tagged_ptr(s.to_owned(), Tag::LongStr)
     }
 }
 
@@ -349,7 +397,7 @@ mod test {
         let x = LispObj::from(7);
         assert!(x.is_fixnum());
         format!("{}", x);
-        assert_eq!(7, x.as_int().unwrap());
+        assert_eq!(7, x);
         assert_eq!(Fixnum::from(7), x.as_fixnum().unwrap());
     }
 
@@ -358,12 +406,12 @@ mod test {
         let x = LispObj::from(1.3);
         assert!(x.is_float());
         format!("{}", x);
-        assert_eq!(1.3, x.as_float().unwrap());
+        assert_eq!(1.3, x);
     }
 
     #[test]
     fn string() {
-        let mut x = LispObj::from("foo".to_owned());
+        let mut x = LispObj::from("foo");
         assert!(x.is_str());
         format!("{}", x);
         let str_ref = x.as_str().unwrap();
@@ -372,7 +420,7 @@ mod test {
         assert_eq!("foo", mut_str);
         *mut_str = "bar".to_owned();
         assert_eq!("bar", mut_str);
-        assert_eq!("bar", x.as_str().unwrap());
+        assert_eq!("bar", x);
     }
 
     #[test]
@@ -400,22 +448,22 @@ mod test {
 
     #[test]
     fn cons() {
-        let cons = Cons::new("start".to_owned(), Cons::new(7, Cons::new(5, 3.3)));
+        let cons = Cons::new("start", Cons::new(7, Cons::new(5, 3.3)));
 
         let mut x = LispObj::from(cons);
         assert!(x.is_cons());
         format!("{}", x);
 
         let cons1 = x.as_mut_cons().unwrap();
-        assert_eq!("start", cons1.car.as_str().unwrap());
-        (*cons1).car = LispObj::from("start2".to_owned());
-        assert_eq!("start2", cons1.car.as_str().unwrap());
+        assert_eq!("start", cons1.car);
+        (*cons1).car = "start2".into();
+        assert_eq!("start2", cons1.car);
 
         let cons2 = cons1.cdr.as_cons().unwrap();
-        assert_eq!(7, cons2.car.as_int().unwrap());
+        assert_eq!(7, cons2.car);
 
         let cons3 = cons2.cdr.as_cons().unwrap();
-        assert_eq!(5, cons3.car.as_int().unwrap());
-        assert_eq!(3.3, cons3.cdr.as_float().unwrap());
+        assert_eq!(5, cons3.car);
+        assert_eq!(3.3, cons3.cdr);
     }
 }
