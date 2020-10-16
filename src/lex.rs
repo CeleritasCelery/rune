@@ -13,25 +13,35 @@ pub enum Token<'a> {
     Integer(&'a str),
     Float(&'a str),
     Comment(&'a str),
-    OpenParen(usize),
-    CloseParen(usize),
-    Quote(usize),
-    QuasiQuote(usize),
-    MacroEval(usize),
-    MacroSplice(usize),
+    OpenParen(&'a str),
+    CloseParen(&'a str),
+    Quote(&'a str),
+    QuasiQuote(&'a str),
+    MacroEval(&'a str),
+    MacroSplice(&'a str),
 }
 
 impl<'a> Token<'a> {
-    pub fn len(&self) -> usize {
+    fn inner(&self) -> &str {
         use Token::*;
         match self {
-            Symbol(x) | String(x) | Integer(x) | Float(x) | Comment(x) => x.len(),
-            OpenParen(_) | CloseParen(_) | Quote(_) | QuasiQuote(_) | MacroEval(_) => 1,
-            MacroSplice(_) => 2,
+            Symbol(x) | String(x) | Integer(x) | Float(x) | Comment(x) |
+            OpenParen(x) | CloseParen(x) | Quote(x) | QuasiQuote(x) |
+            MacroEval(x) | MacroSplice(x) => x
         }
     }
 
-    pub fn classify(token: &'a str) -> Token<'a> {
+    pub fn len(&self) -> usize {
+        self.inner().len()
+    }
+
+    pub fn start(&self) -> *const u8 {
+        self.inner().as_ptr()
+    }
+
+    /// Classifies the identifier as a Symbol, Integer, or Float. Based on
+    /// [this documentation](https://www.gnu.org/software/emacs/manual/html_node/elisp/Symbol-Type.html).
+    fn classify(token: &'a str) -> Token<'a> {
         use Token::*;
         let mut chars = token.chars();
         let mut point_found = false;
@@ -76,10 +86,6 @@ impl<'a> Lexer<'a> {
 
     fn advance(&mut self, amount: usize) {
         self.slice = &self.slice[amount..];
-    }
-
-    fn get_abs_pos(&self, idx: usize) -> usize {
-        self.slice.as_ptr() as usize + idx - self.start as usize
     }
 
     fn get_symbol(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
@@ -134,10 +140,10 @@ impl<'a> Iterator for Lexer<'a> {
             c if symbol_char(c) => Token::classify(self.get_symbol(idx, chars)),
             '"' => Token::String(self.get_string(idx, chars)),
             ';' => Token::Comment(self.get_comment(idx, chars)),
-            '(' => Token::OpenParen(self.get_abs_pos(idx)),
-            ')' => Token::CloseParen(self.get_abs_pos(idx)),
-            '`' => Token::QuasiQuote(self.get_abs_pos(idx)),
-            '\'' => Token::Quote(self.get_abs_pos(idx)),
+            '(' => Token::OpenParen(&self.slice[idx..idx+1]),
+            ')' => Token::CloseParen(&self.slice[idx..idx+1]),
+            '`' => Token::QuasiQuote(&self.slice[idx..idx+1]),
+            '\'' => Token::Quote(&self.slice[idx..idx+1]),
             x => { panic!("unknown token: {}", x); }
         };
         self.advance(idx + token.len());
@@ -176,15 +182,15 @@ mod test {
         let symbols: Vec<Token> = Lexer::new("(foo (bar) baz 'word) bob").collect();
 
         let golden = vec![
-            Token::OpenParen(0),
+            Token::OpenParen("("),
             Token::Symbol("foo"),
-            Token::OpenParen(5),
+            Token::OpenParen("("),
             Token::Symbol("bar"),
-            Token::CloseParen(9),
+            Token::CloseParen(")"),
             Token::Symbol("baz"),
-            Token::Quote(15),
+            Token::Quote("'"),
             Token::Symbol("word"),
-            Token::CloseParen(20),
+            Token::CloseParen(")"),
             Token::Symbol("bob")
         ];
 
