@@ -1,4 +1,6 @@
 
+#[macro_use]
+mod macros;
 mod lisp_object;
 mod lex;
 mod parser;

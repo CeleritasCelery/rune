@@ -228,10 +228,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod test {
-    macro_rules! vec_into {
-        ($($x:expr),*) => (vec![$($x.into()),*]);
-    }
-
     use super::*;
 
     #[test]
@@ -242,14 +238,18 @@ mod test {
         };
         let mut parser = ParserState::new("(func 1 (sub 0 -0.5))");
         let golden = Exp{
-            codes: CodeVec(vec_into![OpCode::Constant0,
-                                     OpCode::Constant1,
-                                     OpCode::Constant2,
-                                     OpCode::Constant3,
-                                     OpCode::Constant4,
-                                     OpCode::Call2,
-                                     OpCode::Call1]),
-            constants: ConstVec(vec_into![func, 1, sub, 0, -0.5])};
+            codes: CodeVec(
+                vec_into![
+                    OpCode::Constant0,
+                    OpCode::Constant1,
+                    OpCode::Constant2,
+                    OpCode::Constant3,
+                    OpCode::Constant4,
+                    OpCode::Call2,
+                    OpCode::Call1,
+                ]),
+            constants: ConstVec(
+                vec_into![func, 1, sub, 0, -0.5])};
 
         assert_eq!(golden, parser.next().unwrap().unwrap());
     }
