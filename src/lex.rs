@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use std::str;
+use std::fmt;
 
 pub struct Lexer<'a> {
     slice: &'a str,
@@ -12,7 +13,6 @@ pub enum Token<'a> {
     String(&'a str),
     Integer(&'a str),
     Float(&'a str),
-    Comment(&'a str),
     OpenParen(&'a str),
     CloseParen(&'a str),
     Quote(&'a str),
@@ -25,9 +25,9 @@ impl<'a> Token<'a> {
     fn inner(&self) -> &str {
         use Token::*;
         match self {
-            Symbol(x) | String(x) | Integer(x) | Float(x) | Comment(x) |
-            OpenParen(x) | CloseParen(x) | Quote(x) | QuasiQuote(x) |
-            MacroEval(x) | MacroSplice(x) => x
+            Symbol(x) | String(x) | Integer(x) | Float(x) |
+            OpenParen(x) | CloseParen(x) | Quote(x) |
+            QuasiQuote(x) | MacroEval(x) | MacroSplice(x) => x
         }
     }
 
@@ -72,6 +72,12 @@ impl<'a> Token<'a> {
     }
 }
 
+impl fmt::Display for Token<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.inner())
+    }
+}
+
 impl<'a> Lexer<'a> {
     pub fn new(slice: &'a str) -> Self {
         Lexer {
@@ -113,33 +119,33 @@ impl<'a> Lexer<'a> {
         }
         &self.slice[beg..]
     }
-
-    fn get_comment(&mut self, beg: usize, mut chars: str::CharIndices) -> &'a str {
-        // TODO: Handle different line endings
-        match chars.find(|x| x.1 == '\n') {
-            None => &self.slice[beg..],
-            Some((end, _)) => &self.slice[beg..end+1],
-        }
-    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         let mut chars = self.slice.char_indices();
+        let mut in_comment = false;
 
-        let (idx, chr) = match chars.find(|x| !x.1.is_ascii_whitespace()) {
-            Some(x) => x,
-            None => {
-                self.clear();
-                return None;
+        let mut symbol_start = |chr: char| {
+            if in_comment {
+                if chr == '\n' { in_comment = false; }
+                false
+            } else if chr.is_ascii_whitespace() {
+                false
+            } else if chr == ';' {
+                in_comment = true;
+                false
+            } else {
+                true
             }
         };
+
+        let (idx, chr) = chars.find(|x| symbol_start(x.1))?;
 
         let token = match chr {
             c if symbol_char(c) => Token::classify(self.get_symbol(idx, chars)),
             '"' => Token::String(self.get_string(idx, chars)),
-            ';' => Token::Comment(self.get_comment(idx, chars)),
             '(' => Token::OpenParen(&self.slice[idx..idx+1]),
             ')' => Token::CloseParen(&self.slice[idx..idx+1]),
             '`' => Token::QuasiQuote(&self.slice[idx..idx+1]),
@@ -214,7 +220,6 @@ mod test {
         let symbols: Vec<Token> = Lexer::new("before ;; comment \n after").collect();
         let golden = vec![
             Token::Symbol("before"),
-            Token::Comment(";; comment \n"),
             Token::Symbol("after"),
         ];
         assert_eq!(golden, symbols);
