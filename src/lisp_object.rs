@@ -55,15 +55,15 @@ impl ops::Div<Fixnum> for Fixnum {
     fn div(self, rhs: Self) -> Self {(self.0 / rhs.0).into()}
 }
 
+#[derive(PartialEq, Debug)]
 pub struct Cons {
     pub car: LispObj,
     pub cdr: LispObj,
 }
 
 impl Cons {
-    fn new<T, U>(car: T, cdr: U) -> Cons where
-        T: Into<LispObj>, U: Into<LispObj> {
-        Cons{car: car.into(), cdr: cdr.into()}
+    pub fn new(car: LispObj, cdr: LispObj) -> Cons {
+        Cons{car, cdr}
     }
 }
 
@@ -131,6 +131,9 @@ impl cmp::PartialEq for LispObj {
             }
         } else {
             unsafe {
+                println!("{}", self);
+                println!("{}", rhs);
+                println!("bits: {} {}", self.bits, rhs.bits);
                 self.bits == rhs.bits
             }
         }
@@ -189,7 +192,7 @@ impl<'a> LispObjEnum<'a> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u16)]
 enum Tag {
     // Special Tags
@@ -221,10 +224,15 @@ impl LispObj {
         (self.bits >> TAG_SIZE) as *mut T
     }
 
-    fn from_tagged_ptr<T>(obj: T, tag: Tag) -> LispObj {
+    fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
         let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as u64) << TAG_SIZE) | tag as u64;
         LispObj{bits}
+    }
+
+    const fn from_tag(tag: Tag) -> Self {
+        // cast to u64 to zero the high bits
+        LispObj{bits: tag as u64}
     }
 
     fn tag_eq(&self, tag: Tag) -> bool {
@@ -236,15 +244,15 @@ impl LispObj {
     }
 
     pub const fn void() -> Self {
-        LispObj{tag: Tag::Void}
+        LispObj::from_tag(Tag::Void)
     }
 
     pub const fn nil() -> Self {
-        LispObj{tag: Tag::Nil}
+        LispObj::from_tag(Tag::Nil)
     }
 
     pub const fn t() -> Self {
-        LispObj{tag: Tag::True}
+        LispObj::from_tag(Tag::True)
     }
 
     pub fn is_fixnum(&self) -> bool {
@@ -331,7 +339,7 @@ impl From<f64> for LispObj {
 
 impl From<bool> for LispObj {
     fn from(b: bool) -> Self {
-        LispObj{tag: if b {Tag::True} else {Tag::Nil}}
+        LispObj::from_tag(if b {Tag::True} else {Tag::Nil})
     }
 }
 
@@ -435,6 +443,7 @@ mod test {
         assert!(bool_true.is_true());
         let bool_false = LispObj::from(false);
         assert!(bool_false.is_nil());
+        assert_eq!(bool_false, LispObj::from(false));
     }
 
     #[test]
@@ -448,7 +457,7 @@ mod test {
 
     #[test]
     fn cons() {
-        let cons = Cons::new("start", Cons::new(7, Cons::new(5, 3.3)));
+        let cons = cons!("start", cons!(7, cons!(5, 3.3)));
 
         let mut x = LispObj::from(cons);
         assert!(x.is_cons());
