@@ -4,7 +4,6 @@ use std::fmt;
 
 pub struct Lexer<'a> {
     slice: &'a str,
-    start: *const u8,
 }
 
 #[derive(PartialEq, Debug)]
@@ -80,10 +79,7 @@ impl fmt::Display for Token<'_> {
 
 impl<'a> Lexer<'a> {
     pub fn new(slice: &'a str) -> Self {
-        Lexer {
-            slice,
-            start: slice.as_ptr(),
-        }
+        Lexer { slice }
     }
 
     fn clear(&mut self) {
