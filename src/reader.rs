@@ -171,48 +171,39 @@ mod test {
         assert_eq!("", stream.slice_till(start2));
     }
 
-    fn read_all(mut stream: Stream) -> Vec<LispObj> {
-        let mut collect: Vec<LispObj> = vec![];
-        while let Some(n) = read(&mut stream) {
-            collect.push(n);
+    macro_rules! check_reader {
+        ($expect:expr, $compare:expr) => {
+            let mut stream = Stream::new($compare);
+            assert_eq!(LispObj::from($expect), read(&mut stream).unwrap())
         }
-        collect
     }
 
     #[test]
     fn test_read_number() {
-        let stream = Stream::new("5 49 -105 1.5 -3.0 +1");
-        let golden: Vec<LispObj> = vec_into![
-            5, 49, -105, 1.5, -3.0, 1
-        ];
-        assert_eq!(golden, read_all(stream));
+        check_reader!(5, "5");
+        check_reader!(49, "49");
+        check_reader!(-105, "-105");
+        check_reader!(1.5, "1.5");
+        check_reader!(-3.0, "-3.0");
+        check_reader!(1, "+1");
     }
 
     #[test]
     fn test_read_symbol() {
-        let stream = Stream::new("foo --1 \\1 3.0.0 1+ \\+1 \\ x \\(*\\ 1\\ 2\\)  +-*/_~!@$%^&=:<>{}");
-        let golden: Vec<LispObj> = vec_into![
-            symbol::intern("foo"),
-            symbol::intern("--1"),
-            symbol::intern("1"),
-            symbol::intern("3.0.0"),
-            symbol::intern("1+"),
-            symbol::intern("+1"),
-            symbol::intern(" x"),
-            symbol::intern("(* 1 2)"),
-            symbol::intern("+-*/_~!@$%^&=:<>{}"),
-        ];
-        assert_eq!(golden, read_all(stream));
+        check_reader!(symbol::intern("foo"), "foo");
+        check_reader!(symbol::intern("--1"), "--1");
+        check_reader!(symbol::intern("1"), "\\1");
+        check_reader!(symbol::intern("3.0.0"), "3.0.0");
+        check_reader!(symbol::intern("1+"), "1+");
+        check_reader!(symbol::intern("+1"), "\\+1");
+        check_reader!(symbol::intern(" x"), "\\ x");
+        check_reader!(symbol::intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)");
+        check_reader!(symbol::intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}");
     }
 
     #[test]
     fn test_read_string() {
-        let stream = Stream::new(r#""foo"  "\"stuff" "foo bar""#);
-        let golden: Vec<LispObj> = vec_into![
-            "foo",
-            r#"\"stuff"#,
-            "foo bar"
-        ];
-        assert_eq!(golden, read_all(stream));
+        check_reader!("foo", r#""foo""#);
+        check_reader!("foo bar", r#""foo bar""#);
     }
 }
