@@ -88,7 +88,14 @@ fn parse_symbol(slice: &str) -> LispObj {
         Err(_) => {
             match slice.parse::<f64>() {
                 Ok(num) => num.into(),
-                Err(_) => symbol::intern(slice).into(),
+                Err(_) => {
+                    if slice.contains("\\") {
+                        let escaped_slice: String = slice.chars().filter(|&c| c != '\\').collect();
+                        symbol::intern(escaped_slice.as_str()).into()
+                    } else {
+                        symbol::intern(slice).into()
+                    }
+                }
             }
         },
     }
@@ -97,7 +104,9 @@ fn parse_symbol(slice: &str) -> LispObj {
 fn read_symbol(stream: &mut Stream) -> LispObj {
     let pos = stream.get_pos();
     while let Some(chr) = stream.next() {
-        if !symbol_char(chr) {
+        if chr == '\\' {
+            stream.next();
+        } else if !symbol_char(chr) {
             stream.back();
             break;
         }
@@ -108,10 +117,8 @@ fn read_symbol(stream: &mut Stream) -> LispObj {
 
 fn read_string(stream: &mut Stream) -> LispObj {
     let pos = stream.get_pos();
-    let mut escaped = false;
     while let Some(chr) = stream.next() {
-        if escaped || chr == '\\' {
-            escaped = !escaped;
+        if  chr == '\\' {
             stream.next();
         } else if chr == '"' {
             break;
@@ -174,22 +181,26 @@ mod test {
 
     #[test]
     fn test_read_number() {
-        let stream = Stream::new("5 49 -105 1.5 -3.0");
+        let stream = Stream::new("5 49 -105 1.5 -3.0 +1");
         let golden: Vec<LispObj> = vec_into![
-            5, 49, -105, 1.5, -3.0,
+            5, 49, -105, 1.5, -3.0, 1
         ];
         assert_eq!(golden, read_all(stream));
     }
 
     #[test]
     fn test_read_symbol() {
-        let stream = Stream::new("foo --1 \\1 3.0.0 1+");
+        let stream = Stream::new("foo --1 \\1 3.0.0 1+ \\+1 \\ x \\(*\\ 1\\ 2\\)  +-*/_~!@$%^&=:<>{}");
         let golden: Vec<LispObj> = vec_into![
             symbol::intern("foo"),
             symbol::intern("--1"),
-            symbol::intern("\\1"),
+            symbol::intern("1"),
             symbol::intern("3.0.0"),
             symbol::intern("1+"),
+            symbol::intern("+1"),
+            symbol::intern(" x"),
+            symbol::intern("(* 1 2)"),
+            symbol::intern("+-*/_~!@$%^&=:<>{}"),
         ];
         assert_eq!(golden, read_all(stream));
     }
