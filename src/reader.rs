@@ -2,8 +2,7 @@
 
 use std::str;
 use crate::lisp_object::LispObj;
-use crate::symbol::INTERNED_SYMBOLS;
-
+use crate::symbol;
 
 pub struct Stream<'a> {
     prev: str::Chars<'a>,
@@ -50,6 +49,15 @@ impl<'a> Stream<'a> {
         }
     }
 
+    pub fn slice_with_end_delimiter(&self, start: StreamStart) -> &str {
+        let ptr = start.get();
+        let size = self.prev.as_str().as_ptr() as usize - (ptr as usize);
+        unsafe {
+            let slice = std::slice::from_raw_parts(ptr, size);
+            str::from_utf8_unchecked(slice)
+        }
+    }
+
     pub fn pos(&self) -> usize {
         self.iter.as_str().as_ptr() as usize
     }
@@ -80,10 +88,7 @@ fn parse_symbol(slice: &str) -> LispObj {
         Err(_) => {
             match slice.parse::<f64>() {
                 Ok(num) => num.into(),
-                Err(_) => {
-                    let mut map = INTERNED_SYMBOLS.lock().unwrap();
-                    map.intern(slice).into()
-                }
+                Err(_) => symbol::intern(slice).into(),
             }
         },
     }
@@ -101,11 +106,28 @@ fn read_symbol(stream: &mut Stream) -> LispObj {
     parse_symbol(slice)
 }
 
+fn read_string(stream: &mut Stream) -> LispObj {
+    let pos = stream.get_pos();
+    let mut escaped = false;
+    while let Some(chr) = stream.next() {
+        if escaped || chr == '\\' {
+            escaped = !escaped;
+            stream.next();
+        } else if chr == '"' {
+            break;
+        }
+    }
+    stream.slice_with_end_delimiter(pos).into()
+}
+
 fn read(stream: &mut Stream) -> Option<LispObj> {
     match stream.find(|x| !x.is_ascii_whitespace())? {
         c if symbol_char(c) => {
             stream.back();
             Some(read_symbol(stream))
+        }
+        '"' => {
+            Some(read_string(stream))
         }
         _ => None
     }
@@ -114,6 +136,7 @@ fn read(stream: &mut Stream) -> Option<LispObj> {
 #[cfg(test)]
 mod test {
     use super::*;
+
     #[test]
     fn stream() {
         let mut stream = Stream::new("fox");
@@ -141,27 +164,44 @@ mod test {
         assert_eq!("", stream.slice_till(start2));
     }
 
+    fn read_all(mut stream: Stream) -> Vec<LispObj> {
+        let mut collect: Vec<LispObj> = vec![];
+        while let Some(n) = read(&mut stream) {
+            collect.push(n);
+        }
+        collect
+    }
+
     #[test]
     fn test_read_number() {
-        let mut stream = Stream::new("5 49 -105 1.5 -3.0");
-        let mut nums: Vec<LispObj> = vec![];
-        while let Some(n) = read(&mut stream) {
-            nums.push(n);
-        }
+        let stream = Stream::new("5 49 -105 1.5 -3.0");
         let golden: Vec<LispObj> = vec_into![
             5, 49, -105, 1.5, -3.0,
         ];
-        assert_eq!(golden, nums);
+        assert_eq!(golden, read_all(stream));
     }
 
     #[test]
     fn test_read_symbol() {
-        let sym = {
-            let mut map = INTERNED_SYMBOLS.lock().unwrap();
-            LispObj::from(map.intern("foo"))
-        };
+        let stream = Stream::new("foo --1 \\1 3.0.0 1+");
+        let golden: Vec<LispObj> = vec_into![
+            symbol::intern("foo"),
+            symbol::intern("--1"),
+            symbol::intern("\\1"),
+            symbol::intern("3.0.0"),
+            symbol::intern("1+"),
+        ];
+        assert_eq!(golden, read_all(stream));
+    }
 
-        let mut stream = Stream::new("foo");
-        assert_eq!(sym, read(&mut stream).unwrap());
+    #[test]
+    fn test_read_string() {
+        let stream = Stream::new(r#""foo"  "\"stuff" "foo bar""#);
+        let golden: Vec<LispObj> = vec_into![
+            "foo",
+            r#"\"stuff"#,
+            "foo bar"
+        ];
+        assert_eq!(golden, read_all(stream));
     }
 }

@@ -48,7 +48,7 @@ impl SymbolMap {
     pub fn intern(&mut self, name: &str) -> &'static Symbol {
         // SAFETY: This is my work around for there being no Entry API that
         // takes a reference. Instead we have an inner function that returns a
-        // pointer and we cast that to a static reference. We can guarntee that
+        // pointer and we cast that to a static reference. We can guarantee that
         // the reference is static because we have no methods to remove items
         // from SymbolMap and SymbolMap has a private constructor, so the only
         // one that exists is the one we create in this module, which is static.
@@ -70,6 +70,10 @@ impl SymbolMap {
 }
 
 pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(||Mutex::new(SymbolMap::new()));
+
+pub fn intern(name: &str) -> &'static Symbol {
+    INTERNED_SYMBOLS.lock().unwrap().intern(name)
+}
 
 #[cfg(test)]
 mod test {
