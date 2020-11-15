@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::str;
-use crate::lisp_object::LispObj;
+use crate::lisp_object::{LispObj, Cons};
 use crate::symbol;
 
 pub struct Stream<'a> {
@@ -9,7 +9,19 @@ pub struct Stream<'a> {
     iter: str::Chars<'a>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug)]
+pub struct ReadError {
+    message: String,
+    pos: StreamStart,
+}
+
+impl ReadError {
+    pub fn new(message: String, stream: &Stream) -> ReadError {
+        ReadError{message, pos: stream.get_pos()}
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct StreamStart(*const u8);
 
 impl StreamStart {
@@ -157,29 +169,58 @@ fn unescape_string(string: &str) -> LispObj {
     }
 }
 
-fn read_string(stream: &mut Stream) -> LispObj {
+fn read_string(stream: &mut Stream) -> Result<LispObj, ReadError> {
     let pos = stream.get_pos();
     while let Some(chr) = stream.next() {
         if  chr == '\\' {
             stream.next();
         } else if chr == '"' {
-            break;
+            let slice = stream.slice_without_end_delimiter(pos);
+            return Ok(unescape_string(slice));
         }
     }
-    let slice = stream.slice_without_end_delimiter(pos);
-    unescape_string(slice)
+    Err(ReadError::new("Missing string close quote".to_string(), stream))
 }
 
-fn read(stream: &mut Stream) -> Option<LispObj> {
-    match stream.find(|x| !x.is_ascii_whitespace())? {
+fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
+    let car = read(stream)?;
+    let dot = read_char(stream);
+    match dot {
+        Some('.') => {
+            let cdr = read(stream)?;
+            match read_char(stream) {
+                Some(')') => {
+                    Ok(cons!(car, cdr).into())
+                }
+                _ => {
+                    Err(ReadError::new("Missing Close paren".into(), stream))
+                }
+            }
+        }
+        Some(')') => {
+            Ok(cons!(car, false).into())
+        }
+        _ => {
+            Err(ReadError::new("Missing Close paren".into(), stream))
+        }
+    }
+}
+
+fn read_char(stream: &mut Stream) -> Option<char> {
+    stream.find(|x| !x.is_ascii_whitespace())
+}
+
+fn read(stream: &mut Stream) -> Result<LispObj, ReadError> {
+    let found = stream.find(|x| !x.is_ascii_whitespace());
+    let chr = found.ok_or(ReadError::new("Empty stream".into(), stream))?;
+    match chr {
         c if symbol_char(c) => {
             stream.back();
-            Some(read_symbol(stream))
+            Ok(read_symbol(stream))
         }
-        '"' => {
-            Some(read_string(stream))
-        }
-        _ => None
+        '"' => read_string(stream),
+        '(' => read_cons(stream),
+        c => Err(ReadError::new(format!("Unexpected character {}", c), stream))
     }
 }
 
@@ -252,5 +293,14 @@ mod test {
         check_reader!("foo\nbar\t\r", r#""foo\nbar\t\r""#);
         check_reader!("foobarbaz", r#""foo\ bar\
 baz""#);
+    }
+
+    #[test]
+    fn test_read_cons() {
+        let expect: LispObj = cons!(1, 2).into();
+        let mut stream = Stream::new("(1 . 2)");
+        let compare = read(&mut stream).unwrap();
+        assert_eq!(expect.as_cons().unwrap().car, compare.as_cons().unwrap().car);
+        assert_eq!(expect.as_cons().unwrap().cdr, compare.as_cons().unwrap().cdr);
     }
 }
