@@ -49,7 +49,7 @@ impl<'a> Stream<'a> {
         }
     }
 
-    pub fn slice_with_end_delimiter(&self, start: StreamStart) -> &str {
+    pub fn slice_without_end_delimiter(&self, start: StreamStart) -> &str {
         let ptr = start.get();
         let size = self.prev.as_str().as_ptr() as usize - (ptr as usize);
         unsafe {
@@ -81,6 +81,26 @@ fn symbol_char(chr: char) -> bool {
     }
 }
 
+fn intern_symbol(symbol: &str) -> LispObj {
+    let mut escaped = false;
+    let is_not_escape = |c: &char| {
+        if escaped {
+            escaped = false;
+            true
+        } else if *c == '\\' {
+            escaped = true;
+            false
+        } else {
+            true
+        }
+    };
+    if symbol.contains("\\") {
+        let escaped_slice: String = symbol.chars().filter(is_not_escape).collect();
+        symbol::intern(escaped_slice.as_str()).into()
+    } else {
+        symbol::intern(symbol).into()
+    }
+}
 
 fn parse_symbol(slice: &str) -> LispObj {
     match slice.parse::<i64>() {
@@ -88,14 +108,7 @@ fn parse_symbol(slice: &str) -> LispObj {
         Err(_) => {
             match slice.parse::<f64>() {
                 Ok(num) => num.into(),
-                Err(_) => {
-                    if slice.contains("\\") {
-                        let escaped_slice: String = slice.chars().filter(|&c| c != '\\').collect();
-                        symbol::intern(escaped_slice.as_str()).into()
-                    } else {
-                        symbol::intern(slice).into()
-                    }
-                }
+                Err(_) => intern_symbol(slice),
             }
         },
     }
@@ -115,6 +128,35 @@ fn read_symbol(stream: &mut Stream) -> LispObj {
     parse_symbol(slice)
 }
 
+// TODO: Handle unicode, hex, and octal escapes
+fn unescape_string(string: &str) -> LispObj {
+    let mut escaped = false;
+    let unescape = |c: char| {
+        if escaped {
+            escaped = false;
+            match c {
+                'n' => Some('\n'),
+                't' => Some('\t'),
+                'r' => Some('\r'),
+                '\n' => None,
+                ' ' => None,
+                _ => Some(c),
+            }
+        } else if c == '\\' {
+            escaped = true;
+            None
+        } else {
+            Some(c)
+        }
+    };
+    if string.contains("\\") {
+        let unescaped_string: String = string.chars().filter_map(unescape).collect();
+        unescaped_string.as_str().into()
+    } else {
+        string.into()
+    }
+}
+
 fn read_string(stream: &mut Stream) -> LispObj {
     let pos = stream.get_pos();
     while let Some(chr) = stream.next() {
@@ -124,7 +166,8 @@ fn read_string(stream: &mut Stream) -> LispObj {
             break;
         }
     }
-    stream.slice_with_end_delimiter(pos).into()
+    let slice = stream.slice_without_end_delimiter(pos);
+    unescape_string(slice)
 }
 
 fn read(stream: &mut Stream) -> Option<LispObj> {
@@ -197,6 +240,7 @@ mod test {
         check_reader!(symbol::intern("1+"), "1+");
         check_reader!(symbol::intern("+1"), "\\+1");
         check_reader!(symbol::intern(" x"), "\\ x");
+        check_reader!(symbol::intern("\\x"), "\\\\x");
         check_reader!(symbol::intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)");
         check_reader!(symbol::intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}");
     }
@@ -205,5 +249,8 @@ mod test {
     fn test_read_string() {
         check_reader!("foo", r#""foo""#);
         check_reader!("foo bar", r#""foo bar""#);
+        check_reader!("foo\nbar\t\r", r#""foo\nbar\t\r""#);
+        check_reader!("foobarbaz", r#""foo\ bar\
+baz""#);
     }
 }
