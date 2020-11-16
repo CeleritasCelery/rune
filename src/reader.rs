@@ -9,16 +9,13 @@ pub struct Stream<'a> {
     iter: str::Chars<'a>,
 }
 
-#[derive(Debug)]
-pub struct ReadError {
-    message: String,
-    pos: StreamStart,
-}
 
-impl ReadError {
-    pub fn new(message: String, stream: &Stream) -> ReadError {
-        ReadError{message, pos: stream.get_pos()}
-    }
+#[derive(Debug)]
+pub enum ReadErr {
+    MissingCloseParen(Option<StreamStart>),
+    MissingStringDel(StreamStart),
+    UnknownChar(char, StreamStart),
+    EndOfStream,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -29,7 +26,7 @@ impl StreamStart {
         StreamStart(ptr)
     }
 
-    pub fn get(&self) -> *const u8 {
+    fn get(&self) -> *const u8 {
         self.0
     }
 }
@@ -50,6 +47,10 @@ impl<'a> Stream<'a> {
 
     pub fn get_pos(&self) -> StreamStart {
         StreamStart::new(self.iter.as_str().as_ptr())
+    }
+
+    pub fn get_prev(&self) -> StreamStart {
+        StreamStart::new(self.prev.as_str().as_ptr())
     }
 
     pub fn slice_till(&self, start: StreamStart) -> &str {
@@ -80,16 +81,6 @@ impl<'a> Iterator for Stream<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.prev = self.iter.clone();
         self.iter.next()
-    }
-}
-
-fn symbol_char(chr: char) -> bool {
-    match chr {
-        '\x00'..=' ' |
-        '(' | ')' | '[' | ']' |
-        '#' | ',' | '`' | ';' |
-        '"' | '\'' => false,
-        _ => true,
     }
 }
 
@@ -126,20 +117,6 @@ fn parse_symbol(slice: &str) -> LispObj {
     }
 }
 
-fn read_symbol(stream: &mut Stream) -> LispObj {
-    let pos = stream.get_pos();
-    while let Some(chr) = stream.next() {
-        if chr == '\\' {
-            stream.next();
-        } else if !symbol_char(chr) {
-            stream.back();
-            break;
-        }
-    }
-    let slice = stream.slice_till(pos);
-    parse_symbol(slice)
-}
-
 // TODO: Handle unicode, hex, and octal escapes
 fn unescape_string(string: &str) -> LispObj {
     let mut escaped = false;
@@ -169,60 +146,108 @@ fn unescape_string(string: &str) -> LispObj {
     }
 }
 
-fn read_string(stream: &mut Stream) -> Result<LispObj, ReadError> {
-    let pos = stream.get_pos();
-    while let Some(chr) = stream.next() {
-        if  chr == '\\' {
-            stream.next();
-        } else if chr == '"' {
-            let slice = stream.slice_without_end_delimiter(pos);
-            return Ok(unescape_string(slice));
-        }
+fn symbol_char(chr: char) -> bool {
+    match chr {
+        '\x00'..=' ' |
+        '(' | ')' | '[' | ']' |
+        '#' | ',' | '`' | ';' |
+        '"' | '\'' => false,
+        _ => true,
     }
-    Err(ReadError::new("Missing string close quote".to_string(), stream))
 }
 
-fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
-    let car = read(stream)?;
-    match read_char(stream) {
-        Some('.') => {
-            let cdr = read(stream)?;
-            match read_char(stream) {
-                Some(')') => Ok(cons!(car, cdr).into()),
-                _ => Err(ReadError::new("Missing Close paren".into(), stream)),
+struct LispReader<'a> {
+    stream: Stream<'a>,
+}
+
+impl<'a> Iterator for LispReader<'a> {
+    type Item = Result<LispObj, ReadErr>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.read() {
+            Err(ReadErr::EndOfStream) => {
+                None
+            }
+            x => Some(x)
+        }
+    }
+}
+
+impl<'a> LispReader<'a> {
+
+    pub fn new(stream: Stream<'a>) -> Self {
+        LispReader{stream}
+    }
+
+    fn read_symbol(&mut self) -> LispObj {
+        let pos = self.stream.get_pos();
+        while let Some(chr) = self.stream.next() {
+            if chr == '\\' {
+                self.stream.next();
+            } else if !symbol_char(chr) {
+                self.stream.back();
+                break;
             }
         }
-        Some(')') => Ok(cons!(car).into()),
-        Some(_) => {
-            stream.back();
-            let rest = read_cons(stream)?;
-            Ok(cons!(car, rest).into())
-        }
-        None => Err(ReadError::new("Missing Close paren".into(), stream)),
+        let slice = self.stream.slice_till(pos);
+        parse_symbol(slice)
     }
-}
 
-fn read_quote(stream: &mut Stream) -> Result<LispObj, ReadError> {
-    let obj = read(stream)?;
-    Ok(list!(symbol::intern("quote"), obj).into())
-}
 
-fn read_char(stream: &mut Stream) -> Option<char> {
-    stream.find(|x| !x.is_ascii_whitespace())
-}
-
-fn read(stream: &mut Stream) -> Result<LispObj, ReadError> {
-    let found = read_char(stream);
-    let chr = found.ok_or(ReadError::new("Empty stream".into(), stream))?;
-    match chr {
-        '"' => read_string(stream),
-        '(' => read_cons(stream),
-        '\'' => read_quote(stream),
-        c if symbol_char(c) => {
-            stream.back();
-            Ok(read_symbol(stream))
+    fn read_string(&mut self) -> Result<LispObj, ReadErr> {
+        let pos = self.stream.get_pos();
+        while let Some(chr) = self.stream.next() {
+            if  chr == '\\' {
+                self.stream.next();
+            } else if chr == '"' {
+                let slice = self.stream.slice_without_end_delimiter(pos);
+                return Ok(unescape_string(slice));
+            }
         }
-        c => Err(ReadError::new(format!("Unexpected character {}", c), stream))
+        Err(ReadErr::MissingStringDel(self.stream.get_pos()))
+    }
+
+    fn read_cons(&mut self) -> Result<LispObj, ReadErr> {
+        let car = self.read()?;
+        match self.read_char() {
+            Some('.') => {
+                let cdr = self.read()?;
+                match self.read_char() {
+                    Some(')') => Ok(cons!(car, cdr).into()),
+                    _ => Err(ReadErr::MissingCloseParen(None)),
+                }
+            }
+            Some(')') => Ok(cons!(car).into()),
+            Some(_) => {
+                self.stream.back();
+                let rest = self.read_cons()?;
+                Ok(cons!(car, rest).into())
+            }
+            None => Err(ReadErr::MissingCloseParen(None)),
+        }
+    }
+
+    fn read_quote(&mut self) -> Result<LispObj, ReadErr> {
+        let obj = self.read()?;
+        Ok(list!(symbol::intern("quote"), obj).into())
+    }
+
+    fn read_char(&mut self) -> Option<char> {
+        self.stream.find(|x| !x.is_ascii_whitespace())
+    }
+
+    fn read(&mut self) -> Result<LispObj, ReadErr> {
+        let found = self.read_char();
+        let chr = found.ok_or(ReadErr::EndOfStream)?;
+        match chr {
+            '"' => self.read_string(),
+            '(' => self.read_cons(),
+            '\'' => self.read_quote(),
+            c if symbol_char(c) => {
+                self.stream.back();
+                Ok(self.read_symbol())
+            }
+            c => Err(ReadErr::UnknownChar(c, self.stream.get_prev()))
+        }
     }
 }
 
@@ -260,8 +285,8 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
-            let mut stream = Stream::new($compare);
-            assert_eq!(LispObj::from($expect), read(&mut stream).unwrap())
+            let mut reader = LispReader::new(Stream::new($compare));
+            assert_eq!(LispObj::from($expect), reader.next().unwrap().unwrap())
         }
     }
 
@@ -319,11 +344,13 @@ baz""#);
 
     #[test]
     fn error() {
-        let mut stream = Stream::new("(1 2");
-        assert!(read(&mut stream).is_err());
-        let mut stream = Stream::new("\"foo");
-        assert!(read(&mut stream).is_err());
-        let mut stream = Stream::new("(1 2 . 3 4)");
-        assert!(read(&mut stream).is_err());
+        let mut reader = LispReader::new(Stream::new("(1 2"));
+        assert!(reader.next().unwrap().is_err());
+        let mut reader = LispReader::new(Stream::new("\"foo"));
+        assert!(reader.next().unwrap().is_err());
+        let mut reader = LispReader::new(Stream::new("(1 2 . 3 4)"));
+        assert!(reader.next().unwrap().is_err());
+        let mut reader = LispReader::new(Stream::new(""));
+        assert!(reader.next().is_none());
     }
 }
