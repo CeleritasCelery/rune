@@ -306,7 +306,20 @@ impl<'a> LispReader<'a> {
     }
 
     fn read_char(&mut self) -> Option<char> {
-        self.stream.find(|x| !x.is_ascii_whitespace())
+        let mut in_comment = false;
+        self.stream.find(|chr: &char| {
+            if in_comment {
+                if *chr == '\n' { in_comment = false; }
+                false
+            } else if chr.is_ascii_whitespace() {
+                false
+            } else if *chr == ';' {
+                in_comment = true;
+                false
+            } else {
+                true
+            }
+        })
     }
 
     fn read(&mut self) -> Result<LispObj, Error> {
@@ -431,5 +444,11 @@ baz""#);
         assert_error(" \"foo", 1, MissingStringDel(null));
         assert_error("(1 2 . 3 4)", 9, UnexpectedChar('4', null));
         assert_error(")", 0, ExtraCloseParen(null));
+    }
+
+    #[test]
+    fn comments() {
+        assert!(LispReader::new(" ; comment ").next().is_none());
+        check_reader!(1, "; comment \n  1");
     }
 }
