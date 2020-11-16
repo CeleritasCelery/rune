@@ -368,6 +368,15 @@ impl From<&'static Symbol> for LispObj {
     }
 }
 
+impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
+    fn from(t: Option<T>) -> Self {
+        match t {
+            Some(x) => x.into(),
+            None => LispObj::nil(),
+        }
+    }
+}
+
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use LispObjEnum::*;
@@ -446,8 +455,10 @@ mod test {
 
     #[test]
     fn other() {
+        // Void
         let v = LispObj::void();
         assert!(v.is_void());
+        // Bool
         let t = LispObj::t();
         assert!(t.is_true());
         let n = LispObj::nil();
@@ -457,6 +468,11 @@ mod test {
         let bool_false = LispObj::from(false);
         assert!(bool_false.is_nil());
         assert_eq!(bool_false, LispObj::from(false));
+        // Option
+        let opt = LispObj::from(Some(1));
+        assert_eq!(opt, 1.into());
+        let none = LispObj::from(None::<LispObj>);
+        assert_eq!(none, LispObj::nil());
     }
 
     #[test]
