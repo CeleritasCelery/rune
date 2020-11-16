@@ -188,25 +188,17 @@ fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
         Some('.') => {
             let cdr = read(stream)?;
             match read_char(stream) {
-                Some(')') => {
-                    Ok(cons!(car, cdr).into())
-                }
-                _ => {
-                    Err(ReadError::new("Missing Close paren".into(), stream))
-                }
+                Some(')') => Ok(cons!(car, cdr).into()),
+                _ => Err(ReadError::new("Missing Close paren".into(), stream)),
             }
         }
-        Some(')') => {
-            Ok(cons!(car).into())
-        }
+        Some(')') => Ok(cons!(car).into()),
         Some(_) => {
             stream.back();
             let rest = read_cons(stream)?;
             Ok(cons!(car, rest).into())
         }
-        None => {
-            Err(ReadError::new("Missing Close paren".into(), stream))
-        }
+        None => Err(ReadError::new("Missing Close paren".into(), stream)),
     }
 }
 
@@ -281,6 +273,7 @@ mod test {
         check_reader!(1.5, "1.5");
         check_reader!(-3.0, "-3.0");
         check_reader!(1, "+1");
+        check_reader!(1, "001");
     }
 
     #[test]
@@ -322,5 +315,15 @@ baz""#);
         check_reader!(list!(quote, symbol::intern("foo")), "(quote foo)");
         check_reader!(list!(quote, symbol::intern("foo")), "'foo");
         check_reader!(list!(quote, list!(1, 2, 3)), "'(1 2 3)");
+    }
+
+    #[test]
+    fn error() {
+        let mut stream = Stream::new("(1 2");
+        assert!(read(&mut stream).is_err());
+        let mut stream = Stream::new("\"foo");
+        assert!(read(&mut stream).is_err());
+        let mut stream = Stream::new("(1 2 . 3 4)");
+        assert!(read(&mut stream).is_err());
     }
 }
