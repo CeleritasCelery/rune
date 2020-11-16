@@ -212,7 +212,7 @@ fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
 
 fn read_quote(stream: &mut Stream) -> Result<LispObj, ReadError> {
     let obj = read(stream)?;
-    Ok(cons!(symbol::intern("quote"), cons!(obj)).into())
+    Ok(list!(symbol::intern("quote"), obj).into())
 }
 
 fn read_char(stream: &mut Stream) -> Option<char> {
@@ -309,17 +309,18 @@ baz""#);
     #[test]
     fn test_read_cons() {
         check_reader!(cons!(1, 2), "(1 . 2)");
-        check_reader!(cons!(1), "(1)");
-        check_reader!(cons!("foo", None::<LispObj>), "(\"foo\")");
+        check_reader!(list!(1), "(1)");
+        check_reader!(list!("foo"), "(\"foo\")");
         check_reader!(cons!(1, cons!(1.5, "foo")), "(1 1.5 . \"foo\")");
-        check_reader!(cons!(1, cons!(1.5)), "(1 1.5)");
-        check_reader!(cons!(1, cons!(1.5, cons!(1))), "(1 1.5 1)");
+        check_reader!(list!(1, 1.5), "(1 1.5)");
+        check_reader!(list!(1, 1.5, -7), "(1 1.5 -7)");
     }
 
     #[test]
     fn read_quote() {
-        let quote = cons!(symbol::intern("quote"), cons!(symbol::intern("foo")));
-        check_reader!(quote.clone(), "(quote foo)");
-        check_reader!(quote, "'foo");
+        let quote = symbol::intern("quote");
+        check_reader!(list!(quote, symbol::intern("foo")), "(quote foo)");
+        check_reader!(list!(quote, symbol::intern("foo")), "'foo");
+        check_reader!(list!(quote, list!(1, 2, 3)), "'(1 2 3)");
     }
 }
