@@ -210,6 +210,11 @@ fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
     }
 }
 
+fn read_quote(stream: &mut Stream) -> Result<LispObj, ReadError> {
+    let obj = read(stream)?;
+    Ok(cons!(symbol::intern("quote"), cons!(obj, false)).into())
+}
+
 fn read_char(stream: &mut Stream) -> Option<char> {
     stream.find(|x| !x.is_ascii_whitespace())
 }
@@ -220,6 +225,7 @@ fn read(stream: &mut Stream) -> Result<LispObj, ReadError> {
     match chr {
         '"' => read_string(stream),
         '(' => read_cons(stream),
+        '\'' => read_quote(stream),
         c if symbol_char(c) => {
             stream.back();
             Ok(read_symbol(stream))
@@ -255,6 +261,7 @@ mod test {
         assert_eq!("fo", stream.slice_till(start));
         stream.next();
         assert_eq!("fox", stream.slice_till(start));
+        assert_eq!("fo", stream.slice_without_end_delimiter(start));
         let start2 = stream.get_pos();
         assert_eq!("", stream.slice_till(start2));
     }
@@ -307,5 +314,12 @@ baz""#);
         check_reader!(cons!(1, cons!(1.5, "foo")), "(1 1.5 . \"foo\")");
         check_reader!(cons!(1, cons!(1.5, false)), "(1 1.5)");
         check_reader!(cons!(1, cons!(1.5, cons!(1, false))), "(1 1.5 1)");
+    }
+
+    #[test]
+    fn read_quote() {
+        let quote = cons!(symbol::intern("quote"), cons!(symbol::intern("foo"), false));
+        check_reader!(quote.clone(), "(quote foo)");
+        check_reader!(quote, "'foo");
     }
 }

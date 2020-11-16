@@ -55,7 +55,7 @@ impl ops::Div<Fixnum> for Fixnum {
     fn div(self, rhs: Self) -> Self {(self.0 / rhs.0).into()}
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Cons {
     pub car: LispObj,
     pub cdr: LispObj,
