@@ -136,9 +136,6 @@ impl cmp::PartialEq for LispObj {
             }
         } else {
             unsafe {
-                println!("{}", self);
-                println!("{}", rhs);
-                println!("bits: {} {}", self.bits, rhs.bits);
                 self.bits == rhs.bits
             }
         }

@@ -184,8 +184,7 @@ fn read_string(stream: &mut Stream) -> Result<LispObj, ReadError> {
 
 fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
     let car = read(stream)?;
-    let dot = read_char(stream);
-    match dot {
+    match read_char(stream) {
         Some('.') => {
             let cdr = read(stream)?;
             match read_char(stream) {
@@ -200,7 +199,12 @@ fn read_cons(stream: &mut Stream) -> Result<LispObj, ReadError> {
         Some(')') => {
             Ok(cons!(car, false).into())
         }
-        _ => {
+        Some(_) => {
+            stream.back();
+            let rest = read_cons(stream)?;
+            Ok(cons!(car, rest).into())
+        }
+        None => {
             Err(ReadError::new("Missing Close paren".into(), stream))
         }
     }
@@ -211,15 +215,15 @@ fn read_char(stream: &mut Stream) -> Option<char> {
 }
 
 fn read(stream: &mut Stream) -> Result<LispObj, ReadError> {
-    let found = stream.find(|x| !x.is_ascii_whitespace());
+    let found = read_char(stream);
     let chr = found.ok_or(ReadError::new("Empty stream".into(), stream))?;
     match chr {
+        '"' => read_string(stream),
+        '(' => read_cons(stream),
         c if symbol_char(c) => {
             stream.back();
             Ok(read_symbol(stream))
         }
-        '"' => read_string(stream),
-        '(' => read_cons(stream),
         c => Err(ReadError::new(format!("Unexpected character {}", c), stream))
     }
 }
@@ -298,5 +302,10 @@ baz""#);
     #[test]
     fn test_read_cons() {
         check_reader!(cons!(1, 2), "(1 . 2)");
+        check_reader!(cons!(1, false), "(1)");
+        check_reader!(cons!("foo", None::<LispObj>), "(\"foo\")");
+        check_reader!(cons!(1, cons!(1.5, "foo")), "(1 1.5 . \"foo\")");
+        check_reader!(cons!(1, cons!(1.5, false)), "(1 1.5)");
+        check_reader!(cons!(1, cons!(1.5, cons!(1, false))), "(1 1.5 1)");
     }
 }
