@@ -354,6 +354,12 @@ impl From<&str> for LispObj {
     }
 }
 
+impl From<String> for LispObj {
+    fn from(s: String) -> Self {
+        LispObj::from_tagged_ptr(s, Tag::LongStr)
+    }
+}
+
 impl From<&'static Symbol> for LispObj {
     fn from(s: &'static Symbol) -> Self {
         let ptr = s as *const Symbol;
@@ -434,6 +440,8 @@ mod test {
         *mut_str = "bar".to_owned();
         assert_eq!("bar", mut_str);
         assert_eq!("bar", x);
+        let string = LispObj::from("foo".to_owned());
+        assert_eq!(string, LispObj::from("foo"));
     }
 
     #[test]
