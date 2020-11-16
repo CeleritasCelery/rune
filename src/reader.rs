@@ -15,6 +15,7 @@ pub enum ReadErr {
     MissingCloseParen(Option<StreamStart>),
     MissingStringDel(StreamStart),
     UnexpectedChar(char, StreamStart),
+    UnbalancedParen(StreamStart),
     EndOfStream,
 }
 
@@ -24,6 +25,7 @@ impl fmt::Display for ReadErr {
         match self {
             MissingCloseParen(_) => write!(f, "Missing close paren"),
             MissingStringDel(_) => write!(f, "Missing closing string quote"),
+            UnbalancedParen(_) => write!(f, "Extra Closing Paren"),
             UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
             EndOfStream => write!(f, "End of Stream"),
         }
@@ -194,26 +196,36 @@ impl<'a> LispReader<'a> {
         let end = stream_end.get() as usize;
         end - self.slice.as_ptr() as usize
     }
+
+    fn convert_error(&self, err: ReadErr) -> LispReaderErr {
+        let message = format!("{}", err);
+        match err {
+            ReadErr::MissingCloseParen(x)  => {
+                LispReaderErr::new(message, self.get_error_pos(x.expect("read should determine open paren position")))
+            }
+            ReadErr::UnbalancedParen(x)  => {
+                LispReaderErr::new(message, self.get_error_pos(x))
+            }
+            ReadErr::MissingStringDel(x)  => {
+                LispReaderErr::new(message, self.get_error_pos(x))
+            }
+            ReadErr::UnexpectedChar(_, x)  => {
+                LispReaderErr::new(message, self.get_error_pos(x))
+            }
+            ReadErr::EndOfStream => {
+                panic!("EndOfStream Should not be converted to a LispReaderErr");
+            }
+        }
+    }
 }
 
 impl<'a> Iterator for LispReader<'a> {
     type Item = Result<LispObj, LispReaderErr>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.read() {
-            Err(ReadErr::EndOfStream) => {
-                None
-            }
-            Err(ReadErr::MissingCloseParen(x))  => {
-                Some(Err(LispReaderErr::new("foo".to_string(),
-                                            self.get_error_pos(x.unwrap()))))
-            }
-            Err(ReadErr::MissingStringDel(x))  => {
-                Some(Err(LispReaderErr::new("foo".to_string(), self.get_error_pos(x))))
-            }
-            Err(ReadErr::UnexpectedChar(c, x))  => {
-                Some(Err(LispReaderErr::new(format!("{}", c), self.get_error_pos(x))))
-            }
-            Ok(x) => Some(Ok(x))
+            Ok(x) => Some(Ok(x)),
+            Err(ReadErr::EndOfStream) => None,
+            Err(e) => Some(Err(self.convert_error(e)))
         }
     }
 }
@@ -233,7 +245,6 @@ impl<'a> LispReader<'a> {
         let slice = self.stream.slice_till(pos);
         parse_symbol(slice)
     }
-
 
     fn read_string(&mut self) -> Result<LispObj, ReadErr> {
         let pos = self.stream.get_pos();
@@ -298,6 +309,7 @@ impl<'a> LispReader<'a> {
                     x => x
                 }
             },
+            ')' => Err(ReadErr::UnbalancedParen(self.stream.get_prev())),
             '\'' => self.read_quote(),
             c if symbol_char(c) => {
                 self.stream.back();
@@ -400,15 +412,19 @@ baz""#);
         check_reader!(list!(quote, list!(1, 2, 3)), "'(1 2 3)");
     }
 
+    fn assert_error(input: &str, pos: usize, error: ReadErr) {
+        let result = LispReader::new(input).next().unwrap().err().unwrap();
+        assert_eq!(result.pos, pos);
+        assert_eq!(result.message, format!("{}", error));
+    }
+
     #[test]
     fn error() {
-        let mut reader = LispReader::new(" (1 2");
-        assert_eq!(reader.next().unwrap().err().unwrap().pos, 1);
-        let mut reader = LispReader::new(" \"foo");
-        assert_eq!(reader.next().unwrap().err().unwrap().pos, 1);
-        let mut reader = LispReader::new("(1 2 . 3 4)");
-        assert_eq!(reader.next().unwrap().err().unwrap().pos, 9);
-        let mut reader = LispReader::new("");
-        assert!(reader.next().is_none());
+        assert!((LispReader::new("").next().is_none()));
+        let null = StreamStart::new(0 as *const u8);
+        assert_error(" (1 2", 1, ReadErr::MissingCloseParen(Some(null)));
+        assert_error(" \"foo", 1, ReadErr::MissingStringDel(null));
+        assert_error("(1 2 . 3 4)", 9, ReadErr::UnexpectedChar('4', null));
+        assert_error(")", 0, ReadErr::UnbalancedParen(null));
     }
 }
