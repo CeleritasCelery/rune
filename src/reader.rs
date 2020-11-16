@@ -297,10 +297,6 @@ baz""#);
 
     #[test]
     fn test_read_cons() {
-        let expect: LispObj = cons!(1, 2).into();
-        let mut stream = Stream::new("(1 . 2)");
-        let compare = read(&mut stream).unwrap();
-        assert_eq!(expect.as_cons().unwrap().car, compare.as_cons().unwrap().car);
-        assert_eq!(expect.as_cons().unwrap().cdr, compare.as_cons().unwrap().cdr);
+        check_reader!(cons!(1, 2), "(1 . 2)");
     }
 }

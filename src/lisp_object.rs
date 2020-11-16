@@ -25,7 +25,7 @@ impl From<Fixnum> for LispObj {
     }
 }
 
-impl std::cmp::PartialEq for Fixnum {
+impl cmp::PartialEq for Fixnum {
     fn eq(&self, rhs: &Fixnum) -> bool {
         self.0 == rhs.0
     }
@@ -127,6 +127,11 @@ impl cmp::PartialEq for LispObj {
         } else if let Some(lhs_float) = self.as_float() {
             match rhs.as_float() {
                 Some(rhs_float) => lhs_float == rhs_float,
+                None => false,
+            }
+        } else if let Some(lhs_cons) = self.as_cons() {
+            match rhs.as_cons() {
+                Some(rhs_cons) => lhs_cons == rhs_cons,
                 None => false,
             }
         } else {
@@ -474,5 +479,13 @@ mod test {
         let cons3 = cons2.cdr.as_cons().unwrap();
         assert_eq!(5, cons3.car);
         assert_eq!(3.3, cons3.cdr);
+    }
+
+    #[test]
+    fn cons_eq() {
+        assert_eq!(cons!(5, "foo"), cons!(5, "foo"));
+        assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
+        assert_eq!(cons!(5, cons!(1, cons!(1.5, "foo"))), cons!(5, cons!(1, cons!(1.5, "foo"))));
+        assert_ne!(cons!(5, cons!(1, cons!(1.5, "foo"))), cons!(5, cons!(1, cons!(1.5, "bar"))));
     }
 }
