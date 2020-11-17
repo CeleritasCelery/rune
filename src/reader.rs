@@ -164,12 +164,7 @@ fn unescape_string(string: &str) -> LispObj {
             Some(c)
         }
     };
-    if string.contains("\\") {
-        let unescaped_string: String = string.chars().filter_map(unescape).collect();
-        unescaped_string.as_str().into()
-    } else {
-        string.into()
-    }
+    string.chars().filter_map(unescape).collect::<String>().into()
 }
 
 fn symbol_char(chr: char) -> bool {
@@ -307,7 +302,7 @@ impl<'a> LispReader<'a> {
 
     fn read_char(&mut self) -> Option<char> {
         let mut in_comment = false;
-        self.stream.find(|chr: &char| {
+        let valid_char = |chr: &char| {
             if in_comment {
                 if *chr == '\n' { in_comment = false; }
                 false
@@ -319,7 +314,8 @@ impl<'a> LispReader<'a> {
             } else {
                 true
             }
-        })
+        };
+        self.stream.find(valid_char)
     }
 
     fn read(&mut self) -> Result<LispObj, Error> {

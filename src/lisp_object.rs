@@ -302,8 +302,8 @@ impl LispObj {
         self.tag_masked(Tag::LongStr, STRING_MASK)
     }
 
-    pub fn as_str(&self) -> Option<&str> {
-        if self.is_str() {Some(unsafe{*self.get_ptr()})} else {None}
+    pub fn as_str(&self) -> Option<&String> {
+        if self.is_str() {Some(unsafe{&*self.get_ptr()})} else {None}
     }
 
     pub fn as_mut_str(&mut self) -> Option<&mut String> {
