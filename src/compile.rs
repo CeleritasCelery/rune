@@ -18,7 +18,6 @@ impl ConstVec {
                 self.0.len() - 1
             }
             Some(x) => x
-
         }
     }
 
@@ -96,47 +95,44 @@ struct Exp {
 }
 
 impl Exp {
-    pub fn new() -> Self {
-        Self{
+    fn add_const(&mut self, obj: LispObj) {
+        let idx = self.constants.insert(obj).unwrap();
+        self.codes.emit_const(idx);
+    }
+
+    fn compile_list(&mut self, obj: &LispObj) -> u16 {
+        if let Some(cons) = obj.as_cons() {
+            if let Some(func) = cons.car.as_cons() {
+                self.compile_form(func);
+            } else {
+                self.add_const(cons.car);
+            }
+            1 + self.compile_list(&cons.cdr)
+        } else {
+            0
+        }
+    }
+
+    fn compile_form(&mut self, cons: &Cons) {
+        if cons.car.is_symbol() {
+            self.add_const(cons.car);
+        }
+        let args = self.compile_list(&cons.cdr);
+        self.codes.emit_call(args);
+    }
+
+    fn compile(obj: LispObj) -> Self {
+        let mut exp = Self{
             codes: CodeVec::new(),
             constants: ConstVec::new(),
-        }
-    }
-}
-
-fn compile_list(obj: &LispObj, exp: &mut Exp) -> u16 {
-    if let Some(cons) = obj.as_cons() {
-        if let Some(func) = cons.car.as_cons() {
-            compile_form(func, exp);
+        };
+        if let Some(cons) = obj.as_cons() {
+            exp.compile_form(cons);
         } else {
-            let idx = exp.constants.insert(cons.car).unwrap();
-            exp.codes.emit_const(idx);
+            exp.add_const(obj);
         }
-        1 + compile_list(&cons.cdr, exp)
-    } else {
-        0
+        exp
     }
-}
-
-fn compile_form(cons: &Cons, exp: &mut Exp) {
-    if cons.car.is_symbol() {
-        let idx = exp.constants.insert(cons.car).unwrap();
-        exp.codes.emit_const(idx);
-    }
-    let args = compile_list(&cons.cdr, exp);
-    exp.codes.emit_call(args);
-}
-
-fn compile(obj: LispObj) -> Exp {
-    let mut exp = Exp::new();
-    if let Some(cons) = obj.as_cons() {
-        compile_form(cons, &mut exp);
-    }
-    else {
-        let idx = exp.constants.insert(obj).unwrap();
-        exp.codes.emit_const(idx);
-    }
-    exp
 }
 
 pub fn run() {}
@@ -149,13 +145,13 @@ mod test {
     use crate::symbol;
 
     #[test]
-    fn test_number() {
+    fn test_basic() {
         let obj = LispReader::new("1").next().unwrap().unwrap();
         let expect = Exp{
             codes: CodeVec(vec_into![OpCode::Constant0]),
             constants: ConstVec(vec_into![1]),
         };
-        assert_eq!(expect, compile(obj));
+        assert_eq!(expect, Exp::compile(obj));
     }
 
     #[test]
@@ -165,7 +161,7 @@ mod test {
             codes: CodeVec(vec_into![OpCode::Constant0, OpCode::Call0]),
             constants: ConstVec(vec_into![symbol::intern("foo")]),
         };
-        assert_eq!(expect, compile(obj));
+        assert_eq!(expect, Exp::compile(obj));
 
         let obj = LispReader::new("(foo 1 2)").next().unwrap().unwrap();
         let expect = Exp{
@@ -173,25 +169,24 @@ mod test {
                 OpCode::Constant0,
                 OpCode::Constant1,
                 OpCode::Constant2,
-                OpCode::Call2]
-            ),
+                OpCode::Call2,
+            ]),
             constants: ConstVec(vec_into![symbol::intern("foo"), 1, 2]),
         };
-        assert_eq!(expect, compile(obj));
+        assert_eq!(expect, Exp::compile(obj));
 
-        let obj = LispReader::new("(foo (bar 1))").next().unwrap().unwrap();
+        let obj = LispReader::new("(foo (bar 1) 2)").next().unwrap().unwrap();
         let expect = Exp{
             codes: CodeVec(vec_into![
                 OpCode::Constant0,
                 OpCode::Constant1,
                 OpCode::Constant2,
                 OpCode::Call1,
-                OpCode::Call1,
-            ]
-            ),
-            constants: ConstVec(vec_into![symbol::intern("foo"), symbol::intern("bar"), 1]),
+                OpCode::Constant3,
+                OpCode::Call2,
+            ]),
+            constants: ConstVec(vec_into![symbol::intern("foo"), symbol::intern("bar"), 1, 2]),
         };
-        assert_eq!(expect, compile(obj));
-
+        assert_eq!(expect, Exp::compile(obj));
     }
 }
