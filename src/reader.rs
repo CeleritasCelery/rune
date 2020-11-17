@@ -177,7 +177,7 @@ fn symbol_char(chr: char) -> bool {
     }
 }
 
-struct LispReader<'a> {
+pub struct LispReader<'a> {
     slice: &'a str,
     stream: Stream<'a>,
 }
