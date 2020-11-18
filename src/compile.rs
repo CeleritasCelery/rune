@@ -92,6 +92,7 @@ impl CodeVec {
 enum Error {
     ConstOverflow,
     ArgOverflow,
+    UnexpectedToken,
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,6 +106,13 @@ impl Exp {
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
         Ok(())
+    }
+
+    fn quote(&mut self, value: LispObj) -> Result<(), Error> {
+        match value.as_cons() {
+            Some(cons) => self.add_const(cons.car),
+            None => Err(Error::UnexpectedToken),
+        }
     }
 
     fn compile_list(&mut self, obj: &LispObj) -> Result<u16, Error> {
@@ -121,12 +129,19 @@ impl Exp {
     }
 
     fn compile_form(&mut self, cons: &Cons) -> Result<(), Error> {
-        if cons.car.is_symbol() {
-            self.add_const(cons.car)?;
+        if let Some(sym) = cons.car.as_symbol() {
+            match sym.get_name() {
+                "quote" => self.quote(cons.cdr),
+                _ => {
+                    self.add_const(cons.car)?;
+                    let args = self.compile_list(&cons.cdr)?;
+                    self.codes.emit_call(args);
+                    Ok(())
+                }
+            }
+        } else {
+            Err(Error::UnexpectedToken)
         }
-        let args = self.compile_list(&cons.cdr)?;
-        self.codes.emit_call(args);
-        Ok(())
     }
 
     fn compile(obj: LispObj) -> Result<Self, Error> {
@@ -158,6 +173,20 @@ mod test {
         let expect = Exp{
             codes: CodeVec(vec_into![OpCode::Constant0]),
             constants: ConstVec(vec_into![1]),
+        };
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("'foo").next().unwrap().unwrap();
+        let expect = Exp{
+            codes: CodeVec(vec_into![OpCode::Constant0]),
+            constants: ConstVec(vec_into![symbol::intern("foo")]),
+        };
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("'(1 2)").next().unwrap().unwrap();
+        let expect = Exp{
+            codes: CodeVec(vec_into![OpCode::Constant0]),
+            constants: ConstVec(vec_into![list!(1, 2)]),
         };
         assert_eq!(expect, Exp::compile(obj).unwrap());
     }
