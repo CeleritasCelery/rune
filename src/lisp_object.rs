@@ -88,6 +88,12 @@ impl<'a> Iterator for ConsIter<'a> {
     }
 }
 
+impl<'a> From<Option<&'a Cons>> for ConsIter<'a> {
+    fn from(cons: Option<&'a Cons>) -> Self {
+        ConsIter{cons}
+    }
+}
+
 impl fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {})", self.car, self.cdr)
@@ -343,7 +349,7 @@ impl LispObj {
         self.tag_eq(Tag::Symbol)
     }
 
-    pub fn as_symbol(&self) -> Option<&Symbol> {
+    pub fn as_symbol(&self) -> Option<&'static Symbol> {
         if self.is_symbol() {Some(unsafe {&*self.get_ptr()})} else {None}
     }
 }

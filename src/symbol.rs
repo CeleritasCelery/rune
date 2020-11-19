@@ -5,13 +5,21 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use fnv::{FnvHashMap, FnvHasher};
+use std::cmp;
 use std::mem;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[derive(Debug)]
 pub struct Symbol {
     name: String,
     func: AtomicU64,
+}
+
+impl cmp::PartialEq for Symbol {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 impl Symbol {
