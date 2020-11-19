@@ -87,12 +87,32 @@ impl CodeVec {
             }
         }
     }
+
+    pub fn emit_stack_ref(&mut self, idx: u16) {
+        match idx {
+            1 => self.push_op(OpCode::StackRef1),
+            2 => self.push_op(OpCode::StackRef2),
+            3 => self.push_op(OpCode::StackRef3),
+            4 => self.push_op(OpCode::StackRef4),
+            5 => self.push_op(OpCode::StackRef5),
+            6 => self.push_op(OpCode::StackRef6),
+            7 => self.push_op(OpCode::StackRef7),
+            8 => self.push_op(OpCode::StackRef8),
+            _ => {
+                match idx.try_into() {
+                    Ok(n) => self.push_op_n(OpCode::StackRefN, n),
+                    Err(_) => self.push_op_n2(OpCode::StackRefN2, idx),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 enum Error {
     ConstOverflow,
     ArgOverflow,
+    StackSizeOverflow,
     UnexpectedToken,
     UnexpectedType,
 }
@@ -142,7 +162,6 @@ impl Exp {
 
     fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
         for binding in into_list(&obj)? {
-            println!("bind = {}", binding);
             if let Some(cons) = binding.as_cons() {
                 let mut list = cons.iter();
                 let var = list.next().unwrap().as_symbol().ok_or(Error::UnexpectedType)?;
@@ -161,12 +180,13 @@ impl Exp {
         Ok(())
     }
 
-    fn compile_list(&mut self, obj: &LispObj) -> Result<u16, Error> {
-        if let Some(cons) = obj.as_cons() {
-            self.compile_form(cons.car)?;
-            Ok(1 + self.compile_list(&cons.cdr)?)
-        } else {
-            Ok(0)
+    fn compile_list(&mut self, obj: LispObj) -> Result<u16, Error> {
+        match obj.as_cons() {
+            Some(cons) => {
+                self.compile_form(cons.car)?;
+                Ok(1 + self.compile_list(cons.cdr)?)
+            }
+            None => Ok(0)
         }
     }
 
@@ -178,10 +198,20 @@ impl Exp {
                 "let" => self.let_form(cons.cdr),
                 _ => {
                     self.add_const(cons.car)?;
-                    let args = self.compile_list(&cons.cdr)?;
+                    let args = self.compile_list(cons.cdr)?;
                     self.codes.emit_call(args);
                     Ok(())
                 }
+            }
+        } else if let Some(sym) = obj.as_symbol() {
+            match self.vars.iter().rposition(|&x| x == sym) {
+                Some(idx) => {
+                    match (self.vars.len() - idx).try_into() {
+                        Ok(x) => Ok(self.codes.emit_stack_ref(x)),
+                        Err(_) => Err(Error::StackSizeOverflow),
+                    }
+                }
+                None => panic!("dynamic variables not implemented"),
             }
         } else {
             self.add_const(obj)
@@ -205,6 +235,7 @@ pub fn run() {}
 mod test {
 
     use super::*;
+    use OpCode::*;
     use crate::reader::LispReader;
     use crate::symbol;
 
@@ -220,21 +251,21 @@ mod test {
     fn test_basic() {
         let obj = LispReader::new("1").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0],
+            vec_into![Constant0],
             vec_into![1],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("'foo").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0],
+            vec_into![Constant0],
             vec_into![symbol::intern("foo")],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("'(1 2)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0],
+            vec_into![Constant0],
             vec_into![list!(1, 2)],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
@@ -243,13 +274,20 @@ mod test {
     #[test]
     fn variable() {
         let obj = LispReader::new("(let (foo))").next().unwrap().unwrap();
-        let expect = create_expect(vec_into![OpCode::Constant0], vec_into![false]);
+        let expect = create_expect(vec_into![Constant0], vec_into![false]);
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("(let ((foo 1)(bar 2)(baz 3)))").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0, OpCode::Constant1, OpCode::Constant2],
+            vec_into![Constant0, Constant1, Constant2],
             vec_into![1, 2, 3]
+        );
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("(let ((foo 1)) foo)").next().unwrap().unwrap();
+        let expect = create_expect(
+            vec_into![Constant0, StackRef1],
+            vec_into![1]
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
@@ -261,14 +299,14 @@ mod test {
     fn function() {
         let obj = LispReader::new("(foo)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0, OpCode::Call0],
+            vec_into![Constant0, Call0],
             vec_into![symbol::intern("foo")],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("(foo 1 2)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0, OpCode::Constant1, OpCode::Constant2, OpCode::Call2],
+            vec_into![Constant0, Constant1, Constant2, Call2],
             vec_into![symbol::intern("foo"), 1, 2],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
@@ -276,12 +314,12 @@ mod test {
         let obj = LispReader::new("(foo (bar 1) 2)").next().unwrap().unwrap();
         let expect = create_expect(
             vec_into![
-                OpCode::Constant0,
-                OpCode::Constant1,
-                OpCode::Constant2,
-                OpCode::Call1,
-                OpCode::Constant3,
-                OpCode::Call2,
+                Constant0,
+                Constant1,
+                Constant2,
+                Call1,
+                Constant3,
+                Call2,
             ],
             vec_into![symbol::intern("foo"), symbol::intern("bar"), 1, 2],
         );
