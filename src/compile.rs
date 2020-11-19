@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons};
+use crate::lisp_object::{LispObj, Cons, ConsIter};
 use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::TryInto;
@@ -102,15 +102,17 @@ struct Exp {
     codes: CodeVec,
     constants: ConstVec,
     vars: Vec<&'static Symbol>,
-    idxs: Vec<u16>,
 }
 
 fn as_cons(obj: &LispObj) -> Result<&Cons, Error> {
     obj.as_cons().ok_or(Error::UnexpectedType)
 }
 
-fn as_symbol(obj: &LispObj) -> Result<&'static Symbol, Error> {
-    obj.as_symbol().ok_or(Error::UnexpectedType)
+fn into_list<'a>(obj: &'a LispObj) -> Result<ConsIter<'a>, Error> {
+    match obj.as_cons() {
+        Some(cons) => Ok(cons.iter()),
+        None => Err(Error::UnexpectedType),
+    }
 }
 
 impl Exp {
@@ -128,21 +130,19 @@ impl Exp {
     }
 
     fn let_form(&mut self, form: LispObj) -> Result<(), Error> {
-        let cons = as_cons(&form)?;
-        let mut list = cons.iter();
         let prev_len = self.vars.len();
+        let mut list = into_list(&form)?;
         self.let_bind(list.next().unwrap())?;
         for sexp in list {
             self.compile_form(sexp)?;
         }
         self.vars.truncate(prev_len);
-        self.idxs.truncate(prev_len);
         Ok(())
     }
 
     fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
-        let list = obj.as_cons().ok_or(Error::UnexpectedType)?;
-        for binding in list.iter() {
+        for binding in into_list(&obj)? {
+            println!("bind = {}", binding);
             if let Some(cons) = binding.as_cons() {
                 let mut list = cons.iter();
                 let var = list.next().unwrap().as_symbol().ok_or(Error::UnexpectedType)?;
@@ -151,11 +151,11 @@ impl Exp {
                     None =>  self.add_const(LispObj::nil())?,
                 };
                 self.vars.push(var);
-                self.idxs.push(0);
             } else if let Some(var) = binding.as_symbol() {
                 self.vars.push(var);
-                self.idxs.push(0);
                 self.add_const(LispObj::nil())?;
+            } else {
+                return Err(Error::UnexpectedType);
             }
         }
         Ok(())
@@ -193,7 +193,6 @@ impl Exp {
             codes: CodeVec::new(),
             constants: ConstVec::new(),
             vars: Vec::new(),
-            idxs: Vec::new(),
         };
         exp.compile_form(obj)?;
         Ok(exp)
@@ -214,7 +213,6 @@ mod test {
             codes: CodeVec(codes),
             constants: ConstVec(constants),
             vars: Vec::new(),
-            idxs: Vec::new(),
         }
     }
 
@@ -245,11 +243,18 @@ mod test {
     #[test]
     fn variable() {
         let obj = LispReader::new("(let (foo))").next().unwrap().unwrap();
+        let expect = create_expect(vec_into![OpCode::Constant0], vec_into![false]);
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("(let ((foo 1)(bar 2)(baz 3)))").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![OpCode::Constant0],
-            vec_into![false],
+            vec_into![OpCode::Constant0, OpCode::Constant1, OpCode::Constant2],
+            vec_into![1, 2, 3]
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("(let (foo 1))").next().unwrap().unwrap();
+        assert!(Exp::compile(obj).is_err());
     }
 
     #[test]
