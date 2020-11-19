@@ -65,6 +65,27 @@ impl Cons {
     pub fn new(car: LispObj, cdr: LispObj) -> Cons {
         Cons{car, cdr}
     }
+
+    pub fn iter(&self) -> ConsIter {
+        ConsIter{cons: Some(self)}
+    }
+}
+
+pub struct ConsIter<'a> {
+    cons: Option<&'a Cons>,
+}
+
+impl<'a> Iterator for ConsIter<'a> {
+    type Item = LispObj;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(cons) = self.cons {
+            let item = cons.car;
+            self.cons = cons.cdr.as_cons();
+            Some(item)
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Display for Cons {
@@ -500,13 +521,21 @@ mod test {
         let cons3 = cons2.cdr.as_cons().unwrap();
         assert_eq!(5, cons3.car);
         assert_eq!(3.3, cons3.cdr);
+
+        assert_eq!(cons!(5, "foo"), cons!(5, "foo"));
+        assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
+        assert_eq!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "foo"]);
+        assert_ne!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "bar"]);
     }
 
     #[test]
-    fn cons_eq() {
-        assert_eq!(cons!(5, "foo"), cons!(5, "foo"));
-        assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
-        assert_eq!(cons!(5, cons!(1, cons!(1.5, "foo"))), cons!(5, cons!(1, cons!(1.5, "foo"))));
-        assert_ne!(cons!(5, cons!(1, cons!(1.5, "foo"))), cons!(5, cons!(1, cons!(1.5, "bar"))));
+    fn cons_iter() {
+        let compare: Vec<LispObj> = list![1, 2, 3, 4].iter().collect();
+        let expect: Vec<LispObj> = vec_into![1, 2, 3, 4];
+        assert_eq!(expect, compare);
+
+        let compare: Vec<LispObj> = cons!(1, cons!(2, 3)).iter().collect();
+        let expect: Vec<LispObj> = vec_into![1, 2];
+        assert_eq!(expect, compare);
     }
 }
