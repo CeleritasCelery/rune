@@ -75,6 +75,12 @@ pub struct ConsIter<'a> {
     cons: Option<&'a Cons>,
 }
 
+impl<'a> ConsIter<'a> {
+    pub fn size(&mut self) -> usize {
+        self.map(|_| 1).sum()
+    }
+}
+
 impl<'a> Iterator for ConsIter<'a> {
     type Item = LispObj;
     fn next(&mut self) -> Option<Self::Item> {
@@ -196,12 +202,13 @@ impl cmp::PartialEq<LispObj> for i64 {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum LispObjEnum<'a> {
     Int(i64),
     True,
     Nil,
     Cons(&'a Cons),
-    String(&'a str),
+    String(&'a String),
     Symbol(&'a Symbol),
     Float(f64),
     Void,
@@ -222,14 +229,16 @@ pub enum Type {
 impl<'a> LispObjEnum<'a> {
     fn from(l: &'a LispObj) -> Self {
         use LispObjEnum::*;
-        if let Some(x) = l.as_int() {Int(x)}
-        else if let Some(x) = l.as_cons() {Cons(x)}
-        else if let Some(x) = l.as_float() {Float(x)}
-        else if let Some(x) = l.as_str() {String(x)}
-        else if let Some(x) = l.as_symbol() {Symbol(x)}
-        else if l.is_true() {True}
-        else if l.is_nil() {Nil}
-        else {panic!("Unknown Type")}
+        match l.get_type() {
+            Type::Symbol => Symbol(l.as_symbol().unwrap()),
+            Type::Cons => Cons(l.as_cons().unwrap()),
+            Type::Int => Int(l.as_int().unwrap()),
+            Type::Float => Float(l.as_float().unwrap()),
+            Type::String => String(l.as_str().unwrap()),
+            Type::Nil => Nil,
+            Type::True => True,
+            Type::Void => Void,
+        }
     }
 }
 
@@ -259,14 +268,19 @@ impl LispObj {
 
     pub fn get_type(&self) -> Type {
         use Type::*;
-        if self.is_nil() {Nil}
-        else if self.is_fixnum() {Int}
-        else if self.is_cons() {Cons}
-        else if self.is_float() {Float}
-        else if self.is_str() {String}
-        else if self.is_symbol() {Symbol}
-        else if self.is_true() {True}
-        else {panic!("Unknown Type")}
+        match unsafe{self.tag} {
+            Tag::Symbol => Symbol,
+            Tag::Float => Float,
+            Tag::Void => Void,
+            Tag::LongStr => String,
+            Tag::Nil => Nil,
+            Tag::True => True,
+            Tag::Cons => Cons,
+            _ => {
+                debug_assert!(self.is_fixnum());
+                Int
+            }
+        }
     }
 
     unsafe fn get_ptr<T>(&self) -> *const T {
@@ -459,10 +473,12 @@ pub fn run() {}
 mod test {
     use super::*;
     use crate::symbol::INTERNED_SYMBOLS;
+    use crate::symbol;
 
     #[test]
     fn sizes() {
         assert_eq!(8, size_of::<LispObj>());
+        assert_eq!(16, size_of::<LispObjEnum>());
         assert_eq!(56, size_of::<LispFn>());
         assert_eq!(16, size_of::<Cons>());
         assert_eq!(2, size_of::<Tag>());
@@ -506,6 +522,7 @@ mod test {
         // Void
         let v = LispObj::void();
         assert!(v.is_void());
+        assert!(v.get_type() == Type::Void);
         // Bool
         let t = LispObj::t();
         assert!(t.is_true());
@@ -567,5 +584,28 @@ mod test {
         let compare: Vec<LispObj> = cons!(1, cons!(2, 3)).iter().collect();
         let expect: Vec<LispObj> = vec_into![1, 2];
         assert_eq!(expect, compare);
+    }
+
+    #[test]
+    fn lisp_type() {
+        assert_eq!(LispObj::from(1).get_type(), Type::Int);
+        assert_eq!(LispObj::from(1.5).get_type(), Type::Float);
+        assert_eq!(LispObj::from("foo").get_type(), Type::String);
+        assert_eq!(LispObj::from(symbol::intern("foo")).get_type(), Type::Symbol);
+        assert_eq!(LispObj::from(cons!(1, 2)).get_type(), Type::Cons);
+        assert_eq!(LispObj::from(None::<LispObj>).get_type(), Type::Nil);
+        assert_eq!(LispObj::from(false).get_type(), Type::Nil);
+        assert_eq!(LispObj::nil().get_type(), Type::Nil);
+        assert_eq!(LispObj::from(true).get_type(), Type::True);
+        assert_eq!(LispObj::t().get_type(), Type::True);
+        assert_eq!(LispObj::void().get_type(), Type::Void);
+    }
+
+    #[test]
+    fn lisp_enum() {
+        let obj = LispObj::from(1);
+        assert!(LispObjEnum::from(&obj) == LispObjEnum::Int(1));
+        let obj = LispObj::from("foo");
+        assert!(LispObjEnum::from(&obj) == LispObjEnum::String(&"foo".to_string()));
     }
 }
