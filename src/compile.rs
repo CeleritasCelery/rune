@@ -125,10 +125,6 @@ struct Exp {
     vars: Vec<&'static Symbol>,
 }
 
-fn as_cons(obj: &LispObj) -> Result<&Cons, Error> {
-    obj.as_cons().ok_or(Error::Type(Type::Cons, obj.get_type()))
-}
-
 fn into_list<'a>(obj: &'a LispObj) -> Result<ConsIter<'a>, Error> {
     match obj.as_cons() {
         Some(cons) => Ok(cons.iter()),
@@ -147,11 +143,18 @@ fn verify_end(obj: LispObj, size: u16) -> Result<(), Error> {
     }
 }
 
+fn type_error(obj: LispObj, obj_type: Type) -> Result<(), Error> {
+    Err(Error::Type(obj_type, obj.get_type()))
+}
+
+fn expect_symbol(obj: &LispObj) -> Result<&'static Symbol, Error> {
+    obj.as_symbol().ok_or(Error::Type(Type::Symbol, obj.get_type()))
+}
+
 impl Exp {
     fn add_const(&mut self, obj: LispObj) -> Result<(), Error> {
         let idx = self.constants.insert(obj)?;
-        self.codes.emit_const(idx);
-        Ok(())
+        Ok(self.codes.emit_const(idx))
     }
 
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
@@ -179,8 +182,7 @@ impl Exp {
         for binding in into_list(&obj)? {
             if let Some(cons) = binding.as_cons() {
                 let mut list = cons.iter();
-                let car = list.next().unwrap();
-                let var = car.as_symbol().ok_or(Error::Type(Type::Symbol, car.get_type()))?;
+                let var = expect_symbol(&list.next().unwrap())?;
                 match list.next() {
                     Some(v) =>  self.add_const(v)?,
                     None =>  self.add_const(LispObj::nil())?,
@@ -190,7 +192,7 @@ impl Exp {
                 self.vars.push(var);
                 self.add_const(LispObj::nil())?;
             } else {
-                return Err(Error::Type(Type::Cons, binding.get_type()));
+                return type_error(binding, Type::Cons);
             }
         }
         Ok(())
@@ -208,8 +210,7 @@ impl Exp {
 
     fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
         if let Some(cons) = obj.as_cons() {
-            let sym = cons.car.as_symbol().ok_or(Error::Type(Type::Symbol, cons.car.get_type()))?;
-            match sym.get_name() {
+            match expect_symbol(&cons.car)?.get_name() {
                 "quote" => self.quote(cons.cdr),
                 "let" => self.let_form(cons.cdr),
                 _ => {
