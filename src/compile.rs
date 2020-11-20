@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, ConsIter};
+use crate::lisp_object::{LispObj, Cons, ConsIter, Type};
 use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::TryInto;
@@ -108,13 +108,14 @@ impl CodeVec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Error {
     ConstOverflow,
     ArgOverflow,
+    ArgCount(u16, u16),
     StackSizeOverflow,
-    UnexpectedToken,
-    UnexpectedType,
+    Token,
+    Type(Type, Type),
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,13 +126,24 @@ struct Exp {
 }
 
 fn as_cons(obj: &LispObj) -> Result<&Cons, Error> {
-    obj.as_cons().ok_or(Error::UnexpectedType)
+    obj.as_cons().ok_or(Error::Type(Type::Cons, obj.get_type()))
 }
 
 fn into_list<'a>(obj: &'a LispObj) -> Result<ConsIter<'a>, Error> {
     match obj.as_cons() {
         Some(cons) => Ok(cons.iter()),
-        None => Err(Error::UnexpectedType),
+        None => Err(Error::Type(Type::Cons, obj.get_type())),
+    }
+}
+
+fn verify_end(obj: LispObj, size: u16) -> Result<(), Error> {
+    if obj.is_nil() {
+        Ok(())
+    } else if let Some(cons) = obj.as_cons() {
+        let len: u16 = cons.iter().map(|_| 1).sum();
+        Err(Error::ArgCount(size, size + len))
+    } else {
+        Err(Error::Type(Type::Cons, obj.get_type()))
     }
 }
 
@@ -144,8 +156,11 @@ impl Exp {
 
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
         match value.as_cons() {
-            Some(cons) => self.add_const(cons.car),
-            None => Err(Error::UnexpectedToken),
+            Some(cons) => {
+                self.add_const(cons.car)?;
+                verify_end(cons.cdr, 1)
+            }
+            None => Err(Error::ArgCount(1, 0)),
         }
     }
 
@@ -164,7 +179,8 @@ impl Exp {
         for binding in into_list(&obj)? {
             if let Some(cons) = binding.as_cons() {
                 let mut list = cons.iter();
-                let var = list.next().unwrap().as_symbol().ok_or(Error::UnexpectedType)?;
+                let car = list.next().unwrap();
+                let var = car.as_symbol().ok_or(Error::Type(Type::Symbol, car.get_type()))?;
                 match list.next() {
                     Some(v) =>  self.add_const(v)?,
                     None =>  self.add_const(LispObj::nil())?,
@@ -174,7 +190,7 @@ impl Exp {
                 self.vars.push(var);
                 self.add_const(LispObj::nil())?;
             } else {
-                return Err(Error::UnexpectedType);
+                return Err(Error::Type(Type::Cons, binding.get_type()));
             }
         }
         Ok(())
@@ -192,7 +208,7 @@ impl Exp {
 
     fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
         if let Some(cons) = obj.as_cons() {
-            let sym = cons.car.as_symbol().ok_or(Error::UnexpectedType)?;
+            let sym = cons.car.as_symbol().ok_or(Error::Type(Type::Symbol, cons.car.get_type()))?;
             match sym.get_name() {
                 "quote" => self.quote(cons.cdr),
                 "let" => self.let_form(cons.cdr),
@@ -324,5 +340,20 @@ mod test {
             vec_into![symbol::intern("foo"), symbol::intern("bar"), 1, 2],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
+    }
+
+    #[test]
+    fn errors() {
+        let obj = LispReader::new("(\"foo\")").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Symbol, Type::String));
+
+        let obj = LispReader::new("(let (1))").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Int));
+
+        let obj = LispReader::new("(quote)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
+
+        let obj = LispReader::new("(quote 1 2)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 2));
     }
 }

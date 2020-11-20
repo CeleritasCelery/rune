@@ -207,6 +207,18 @@ enum LispObjEnum<'a> {
     Void,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Type {
+    Int,
+    True,
+    Nil,
+    Cons,
+    String,
+    Symbol,
+    Float,
+    Void,
+}
+
 impl<'a> LispObjEnum<'a> {
     fn from(l: &'a LispObj) -> Self {
         use LispObjEnum::*;
@@ -244,6 +256,18 @@ const FIXNUM_MASK: u16 = 0b11;
 const STRING_MASK: u16 = 0b11111;
 
 impl LispObj {
+
+    pub fn get_type(&self) -> Type {
+        use Type::*;
+        if self.is_nil() {Nil}
+        else if self.is_fixnum() {Int}
+        else if self.is_cons() {Cons}
+        else if self.is_float() {Float}
+        else if self.is_str() {String}
+        else if self.is_symbol() {Symbol}
+        else if self.is_true() {True}
+        else {panic!("Unknown Type")}
+    }
 
     unsafe fn get_ptr<T>(&self) -> *const T {
         (self.bits >> TAG_SIZE) as *const T
