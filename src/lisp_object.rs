@@ -12,11 +12,11 @@ use std::convert::From;
 pub struct Fixnum(i64);
 
 impl From<i64> for Fixnum {
-    fn from(i: i64) -> Self {Fixnum(i << 2)}
+    fn from(i: i64) -> Self {Fixnum(i << TAG_SIZE)}
 }
 
 impl From<Fixnum> for i64 {
-    fn from(f: Fixnum) -> Self {f.0 >> 2}
+    fn from(f: Fixnum) -> Self {f.0 >> TAG_SIZE}
 }
 
 impl From<Fixnum> for LispObj {
@@ -203,7 +203,7 @@ impl cmp::PartialEq<LispObj> for i64 {
 }
 
 #[derive(Debug, PartialEq)]
-enum LispObjEnum<'a> {
+pub enum Value<'a> {
     Int(i64),
     True,
     Nil,
@@ -226,15 +226,15 @@ pub enum Type {
     Void,
 }
 
-impl<'a> LispObjEnum<'a> {
-    fn from(l: &'a LispObj) -> Self {
-        use LispObjEnum::*;
-        match l.get_type() {
-            Type::Symbol => Symbol(l.as_symbol().unwrap()),
-            Type::Cons => Cons(l.as_cons().unwrap()),
-            Type::Int => Int(l.as_int().unwrap()),
-            Type::Float => Float(l.as_float().unwrap()),
-            Type::String => String(l.as_str().unwrap()),
+impl<'a> Value<'a> {
+    fn from(obj: &'a LispObj) -> Self {
+        use Value::*;
+        match obj.get_type() {
+            Type::Symbol => Symbol(obj.as_symbol().unwrap()),
+            Type::Cons => Cons(obj.as_cons().unwrap()),
+            Type::Int => Int(obj.as_int().unwrap()),
+            Type::Float => Float(obj.as_float().unwrap()),
+            Type::String => String(obj.as_str().unwrap()),
             Type::Nil => Nil,
             Type::True => True,
             Type::Void => Void,
@@ -243,26 +243,22 @@ impl<'a> LispObjEnum<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
-#[repr(u16)]
+#[repr(u8)]
 enum Tag {
-    // Special Tags
-    Fixnum   =     0b00,
-    True     =     0b10,
-    Nil      =   0b1010,
-    Cons     =   0b1110,
-    LongStr  =  0b10010,
-    ShortStr =  0b10110,
-    Float    = 0b100010,
-    Marker   = 0b100110,
-    // General Tags
-    Fn = 0x00FE,
-    Symbol = 0x01FE,
-    Void = 0x02FE,
+    Fixnum = 0,
+    Float,
+    Marker,
+    True,
+    Nil,
+    Cons,
+    Symbol,
+    LongStr = 7,
+    ShortStr = 8,
+    Fn = 15,
+    Void,
 }
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
-const FIXNUM_MASK: u16 = 0b11;
-const STRING_MASK: u16 = 0b11111;
 
 impl LispObj {
 
@@ -273,12 +269,30 @@ impl LispObj {
             Tag::Float => Float,
             Tag::Void => Void,
             Tag::LongStr => String,
+            Tag::ShortStr => String,
             Tag::Nil => Nil,
             Tag::True => True,
             Tag::Cons => Cons,
-            _ => {
-                debug_assert!(self.is_fixnum());
-                Int
+            Tag::Fixnum => Int,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get(&self) -> Value {
+        use Value::*;
+        unsafe {
+            match self.tag {
+                Tag::Symbol => Symbol(&*self.get_ptr()),
+                Tag::Float => Float(*self.get_ptr()),
+                Tag::Void => Void,
+                Tag::LongStr => String(&*self.get_ptr()),
+                Tag::ShortStr => String(&*self.get_ptr()),
+                Tag::Nil => Nil,
+                Tag::True => True,
+                Tag::Cons => Cons(&*self.get_ptr()),
+                Tag::Fixnum => Int(self.fixnum.into()),
+                Tag::Marker => todo!(),
+                Tag::Fn => todo!(),
             }
         }
     }
@@ -323,7 +337,7 @@ impl LispObj {
     }
 
     pub fn is_fixnum(&self) -> bool {
-        self.tag_masked(Tag::Fixnum, FIXNUM_MASK)
+        self.tag_eq(Tag::Fixnum)
     }
 
     pub fn as_fixnum(self) -> Option<Fixnum> {
@@ -363,8 +377,7 @@ impl LispObj {
     }
 
     pub fn is_str(&self) -> bool {
-        self.tag_masked(Tag::ShortStr, STRING_MASK) ||
-        self.tag_masked(Tag::LongStr, STRING_MASK)
+        self.tag_eq(Tag::ShortStr) || self.tag_eq(Tag::LongStr)
     }
 
     pub fn as_str(&self) -> Option<&String> {
@@ -441,8 +454,8 @@ impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
 
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use LispObjEnum::*;
-        match LispObjEnum::from(self) {
+        use Value::*;
+        match Value::from(self) {
             Int(x) => write!(f, "{}", x),
             Cons(x) => write!(f, "{}", x),
             String(x) => write!(f, "\"{}\"", x),
@@ -478,10 +491,10 @@ mod test {
     #[test]
     fn sizes() {
         assert_eq!(8, size_of::<LispObj>());
-        assert_eq!(16, size_of::<LispObjEnum>());
+        assert_eq!(16, size_of::<Value>());
         assert_eq!(56, size_of::<LispFn>());
         assert_eq!(16, size_of::<Cons>());
-        assert_eq!(2, size_of::<Tag>());
+        assert_eq!(1, size_of::<Tag>());
     }
 
     #[test]
@@ -604,8 +617,8 @@ mod test {
     #[test]
     fn lisp_enum() {
         let obj = LispObj::from(1);
-        assert!(LispObjEnum::from(&obj) == LispObjEnum::Int(1));
+        assert!(Value::from(&obj) == Value::Int(1));
         let obj = LispObj::from("foo");
-        assert!(LispObjEnum::from(&obj) == LispObjEnum::String(&"foo".to_string()));
+        assert!(Value::from(&obj) == Value::String(&"foo".to_string()));
     }
 }
