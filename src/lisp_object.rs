@@ -27,7 +27,6 @@ impl From<Fixnum> for LispObj {
 
 impl TryFrom<LispObj> for Fixnum {
     type Error = i64;
-
     fn try_from(value: LispObj) -> Result<Self, Self::Error> {
         if matches!(value.val(), Value::Int(_)) {
             Ok(unsafe{value.fixnum})
@@ -161,7 +160,7 @@ impl From<LispFn> for LispObj {
 #[derive(Copy, Clone)]
 pub union LispObj {
     tag: Tag,
-    bits: u64,
+    bits: i64,
     fixnum: Fixnum,
 }
 
@@ -315,13 +314,13 @@ impl LispObj {
 
     fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
         let ptr = Gc::new(obj).as_ref() as *const T;
-        let bits = ((ptr as u64) << TAG_SIZE) | tag as u64;
+        let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
         LispObj{bits}
     }
 
     const fn from_tag(tag: Tag) -> Self {
-        // cast to u64 to zero the high bits
-        LispObj{bits: tag as u64}
+        // cast to i64 to zero the high bits
+        LispObj{bits: tag as i64}
     }
 
     fn tag_eq(&self, tag: Tag) -> bool {
@@ -385,7 +384,7 @@ impl From<String> for LispObj {
 impl From<&'static Symbol> for LispObj {
     fn from(s: &'static Symbol) -> Self {
         let ptr = s as *const Symbol;
-        let bits = ((ptr as u64) << TAG_SIZE) | Tag::Symbol as u64;
+        let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
         LispObj{bits}
     }
 }
