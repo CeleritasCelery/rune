@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn};
+use crate::lisp_object::{LispObj, LispFn, Value};
 use crate::gc::Gc;
 use std::mem::transmute;
 use crate::arith;
@@ -152,7 +152,11 @@ impl Routine {
     }
 
     fn call(&mut self, arg_cnt: u16) -> CallFrame {
-        let sym = self.stack.ref_at(arg_cnt as usize + 1).as_symbol().unwrap();
+        let fn_idx = arg_cnt as usize + 1;
+        let sym = match self.stack.ref_at(fn_idx).val() {
+            Value::Symbol(x) => x,
+            _ => panic!()
+        };
         let func_ref = match sym.get_func(){
             Some(x) => x.clone(),
             None => {
@@ -253,7 +257,7 @@ impl Routine {
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
                     let offset = frame.take_double_arg();
-                    if cond.is_nil() {
+                    if matches!(cond.val(), Value::Nil) {
                         frame.jump(offset as isize);
                     }
                 }

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, ConsIter, Type};
+use crate::lisp_object::{LispObj, Cons, ConsIter, Type, Value};
 use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::{TryInto, TryFrom};
@@ -127,33 +127,30 @@ struct Exp {
 }
 
 fn into_list<'a>(obj: &'a LispObj) -> Result<ConsIter<'a>, Error> {
-    match obj.as_cons() {
-        Some(cons) => Ok(cons.iter()),
-        None => Err(Error::Type(Type::Cons, obj.get_type())),
+    match obj.val() {
+        Value::Cons(x) => Ok(x.iter()),
+        _ => Err(Error::Type(Type::Cons, obj.get_type())),
     }
 }
 
 fn into_arg_list<'a>(obj: &'a LispObj, min_size: u16) -> Result<ConsIter<'a>, Error> {
-    match obj.as_cons() {
-        Some(cons) => Ok(cons.iter()),
-        None => {
-            if obj.is_nil() {
-                Err(Error::ArgCount(min_size, 0))
-            } else {
-                Err(Error::Type(Type::Cons, obj.get_type()))
-            }
-        }
+    match obj.val() {
+        Value::Cons(x) => Ok(x.iter()),
+        Value::Nil => Err(Error::ArgCount(min_size, 0)),
+        _ => Err(Error::Type(Type::Cons, obj.get_type()))
     }
 }
 
 fn verify_end(obj: LispObj, size: u16) -> Result<(), Error> {
-    if obj.is_nil() {
-        Ok(())
-    } else if let Some(cons) = obj.as_cons() {
-        let len = cons.iter().size() as u16;
-        Err(Error::ArgCount(size, size + len))
-    } else {
-        Err(Error::Type(Type::Cons, obj.get_type()))
+    match obj.val() {
+        Value::Nil => Ok(()),
+        Value::Cons(x) => {
+            let len = x.iter().size() as u16;
+            Err(Error::ArgCount(size, size + len))
+        }
+        _ => {
+            Err(Error::Type(Type::Cons, obj.get_type()))
+        }
     }
 }
 
@@ -164,7 +161,10 @@ fn type_error(obj: LispObj, obj_type: Type) -> Result<(), Error> {
 impl TryFrom<LispObj> for &Symbol {
     type Error = Error;
     fn try_from(value: LispObj) -> Result<Self, Self::Error> {
-        value.as_symbol().ok_or(Error::Type(Type::Symbol, value.get_type()))
+        match value.val() {
+            Value::Symbol(x) => Ok(x),
+            _ => Err(Error::Type(Type::Symbol, value.get_type()))
+        }
     }
 }
 
@@ -175,12 +175,12 @@ impl Exp {
     }
 
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
-        match value.as_cons() {
-            Some(cons) => {
+        match value.val() {
+            Value::Cons(cons) => {
                 self.add_const(cons.car)?;
                 verify_end(cons.cdr, 1)
             }
-            None => Err(Error::ArgCount(1, 0)),
+            _ => Err(Error::ArgCount(1, 0)),
         }
     }
 
@@ -207,7 +207,7 @@ impl Exp {
                     None => self.vars.push(var),
                     Some(_) => return Err(Error::LetValueCount(2 + list.size() as u16)),
                 }
-            } else if let Some(var) = binding.as_symbol() {
+            } else if let Value::Symbol(var) = binding.val() {
                 self.vars.push(var);
                 self.add_const(LispObj::nil())?;
             } else {
@@ -218,40 +218,42 @@ impl Exp {
     }
 
     fn compile_list(&mut self, obj: LispObj) -> Result<u16, Error> {
-        match obj.as_cons() {
-            Some(cons) => {
+        match obj.val() {
+            Value::Cons(cons) => {
                 self.compile_form(cons.car)?;
                 Ok(1 + self.compile_list(cons.cdr)?)
             }
-            None => Ok(0)
+            _ => Ok(0)
         }
     }
 
     fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
-        if let Some(cons) = obj.as_cons() {
-            let sym: &Symbol = cons.car.try_into()?;
-            match sym.get_name() {
-                "quote" => self.quote(cons.cdr),
-                "let" => self.let_form(cons.cdr),
-                _ => {
-                    self.add_const(cons.car)?;
-                    let args = self.compile_list(cons.cdr)?;
-                    self.codes.emit_call(args);
-                    Ok(())
-                }
-            }
-        } else if let Some(sym) = obj.as_symbol() {
-            match self.vars.iter().rposition(|&x| x == sym) {
-                Some(idx) => {
-                    match (self.vars.len() - idx).try_into() {
-                        Ok(x) => Ok(self.codes.emit_stack_ref(x)),
-                        Err(_) => Err(Error::StackSizeOverflow),
+        match obj.val() {
+            Value::Cons(cons) => {
+                let sym: &Symbol = cons.car.try_into()?;
+                match sym.get_name() {
+                    "quote" => self.quote(cons.cdr),
+                    "let" => self.let_form(cons.cdr),
+                    _ => {
+                        self.add_const(cons.car)?;
+                        let args = self.compile_list(cons.cdr)?;
+                        self.codes.emit_call(args);
+                        Ok(())
                     }
                 }
-                None => panic!("dynamic variables not implemented"),
             }
-        } else {
-            self.add_const(obj)
+            Value::Symbol(sym) => {
+                match self.vars.iter().rposition(|&x| x == sym) {
+                    Some(idx) => {
+                        match (self.vars.len() - idx).try_into() {
+                            Ok(x) => Ok(self.codes.emit_stack_ref(x)),
+                            Err(_) => Err(Error::StackSizeOverflow),
+                        }
+                    }
+                    None => panic!("dynamic variables not implemented"),
+                }
+            }
+            _ => self.add_const(obj)
         }
     }
 

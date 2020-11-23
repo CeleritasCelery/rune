@@ -86,7 +86,10 @@ impl<'a> Iterator for ConsIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(cons) = self.cons {
             let item = cons.car;
-            self.cons = cons.cdr.as_cons();
+            self.cons = match (&cons.cdr).into() {
+                Value::Cons(x) => Some(x),
+                _ => None,
+            };
             Some(item)
         } else {
             None
@@ -152,24 +155,27 @@ pub union LispObj {
 
 impl cmp::PartialEq for LispObj {
     fn eq(&self, rhs: &LispObj) -> bool {
-        if let Some(lhs_str) = self.as_str() {
-            match rhs.as_str() {
-                Some(rhs_str) => lhs_str == rhs_str,
-                None => false,
+        match self.val() {
+            Value::String(lhs) => {
+                match rhs.val() {
+                    Value::String(rhs) => lhs == rhs,
+                    _ => false,
+                }
             }
-        } else if let Some(lhs_float) = self.as_float() {
-            match rhs.as_float() {
-                Some(rhs_float) => lhs_float == rhs_float,
-                None => false,
+            Value::Float(lhs) => {
+                match rhs.val() {
+                    Value::Float(rhs) => lhs == rhs,
+                    _ => false,
+                }
             }
-        } else if let Some(lhs_cons) = self.as_cons() {
-            match rhs.as_cons() {
-                Some(rhs_cons) => lhs_cons == rhs_cons,
-                None => false,
+            Value::Cons(lhs) => {
+                match rhs.val() {
+                    Value::Cons(rhs) => lhs == rhs,
+                    _ => false,
+                }
             }
-        } else {
-            unsafe {
-                self.bits == rhs.bits
+            _ => {
+                unsafe {self.bits == rhs.bits}
             }
         }
     }
@@ -177,27 +183,27 @@ impl cmp::PartialEq for LispObj {
 
 impl cmp::PartialEq<LispObj> for &str {
     fn eq(&self, rhs: &LispObj) -> bool {
-        match rhs.as_str() {
-            Some(x) => *self == x,
-            None => false,
+        match rhs.val() {
+            Value::String(x) => *self == x,
+            _ => false,
         }
     }
 }
 
 impl cmp::PartialEq<LispObj> for f64 {
     fn eq(&self, rhs: &LispObj) -> bool {
-        match rhs.as_float() {
-            Some(x) => *self == x,
-            None => false,
+        match rhs.val() {
+            Value::Float(x) => *self == x,
+            _ => false,
         }
     }
 }
 
 impl cmp::PartialEq<LispObj> for i64 {
     fn eq(&self, rhs: &LispObj) -> bool {
-        match rhs.as_int() {
-            Some(x) => *self == x,
-            None => false,
+        match rhs.val() {
+            Value::Int(x) => *self == x,
+            _ => false,
         }
     }
 }
@@ -209,7 +215,7 @@ pub enum Value<'a> {
     Nil,
     Cons(&'a Cons),
     String(&'a String),
-    Symbol(&'a Symbol),
+    Symbol(&'static Symbol),
     Float(f64),
     Void,
 }
@@ -226,19 +232,9 @@ pub enum Type {
     Void,
 }
 
-impl<'a> Value<'a> {
+impl<'a> From<&'a LispObj> for Value<'a> {
     fn from(obj: &'a LispObj) -> Self {
-        use Value::*;
-        match obj.get_type() {
-            Type::Symbol => Symbol(obj.as_symbol().unwrap()),
-            Type::Cons => Cons(obj.as_cons().unwrap()),
-            Type::Int => Int(obj.as_int().unwrap()),
-            Type::Float => Float(obj.as_float().unwrap()),
-            Type::String => String(obj.as_str().unwrap()),
-            Type::Nil => Nil,
-            Type::True => True,
-            Type::Void => Void,
-        }
+        obj.val()
     }
 }
 
@@ -278,7 +274,7 @@ impl LispObj {
         }
     }
 
-    pub fn get(&self) -> Value {
+    pub fn val(&self) -> Value {
         use Value::*;
         unsafe {
             match self.tag {
@@ -344,64 +340,11 @@ impl LispObj {
         if self.is_fixnum() {Some(unsafe{self.fixnum})} else {None}
     }
 
-    pub fn as_int(self) -> Option<i64> {
-        if self.is_fixnum() {Some(unsafe{self.fixnum.into()})} else {None}
-    }
-
-    pub fn is_nil(&self) -> bool {
-        self.tag_eq(Tag::Nil)
-    }
-
-    pub fn is_true(&self) -> bool {
-        self.tag_eq(Tag::True)
-    }
-
-    pub fn is_void(&self) -> bool {
-        self.tag_eq(Tag::Void)
-    }
-
-    pub fn is_cons(&self) -> bool {
-        self.tag_eq(Tag::Cons)
-    }
-
-    pub fn as_cons(&self) -> Option<&Cons> {
-        if self.is_cons() {Some(unsafe{&*self.get_ptr()})} else {None}
-    }
-
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
-        if self.is_cons() {Some(unsafe{&mut *self.get_mut_ptr()})} else {None}
-    }
-
-    pub fn is_list(&self) -> bool {
-        self.tag_eq(Tag::Cons) || self.tag_eq(Tag::Nil)
-    }
-
-    pub fn is_str(&self) -> bool {
-        self.tag_eq(Tag::ShortStr) || self.tag_eq(Tag::LongStr)
-    }
-
-    pub fn as_str(&self) -> Option<&String> {
-        if self.is_str() {Some(unsafe{&*self.get_ptr()})} else {None}
-    }
-
-    pub fn as_mut_str(&mut self) -> Option<&mut String> {
-        if self.is_str() {Some(unsafe{&mut *self.get_mut_ptr()})} else {None}
-    }
-
-    pub fn is_float(&self) -> bool {
-        self.tag_eq(Tag::Float)
-    }
-
-    pub fn as_float(&self) -> Option<f64> {
-        if self.is_float() {unsafe {Some(*self.get_ptr())}} else {None}
-    }
-
-    pub fn is_symbol(&self) -> bool {
-        self.tag_eq(Tag::Symbol)
-    }
-
-    pub fn as_symbol(&self) -> Option<&'static Symbol> {
-        if self.is_symbol() {Some(unsafe {&*self.get_ptr()})} else {None}
+        match self.val() {
+            Value::Cons(_) => Some(unsafe{&mut *self.get_mut_ptr()}),
+            _ => None,
+        }
     }
 }
 
@@ -509,23 +452,20 @@ mod test {
     #[test]
     fn float() {
         let x = LispObj::from(1.3);
-        assert!(x.is_float());
+        assert!(matches!(x.val(), Value::Float(_)));
         format!("{}", x);
         assert_eq!(1.3, x);
     }
 
     #[test]
     fn string() {
-        let mut x = LispObj::from("foo");
-        assert!(x.is_str());
+        let x = LispObj::from("foo");
+        assert!(matches!(x.val(), Value::String(_)));
         format!("{}", x);
-        let str_ref = x.as_str().unwrap();
-        assert_eq!("foo", str_ref);
-        let mut_str = x.as_mut_str().unwrap();
-        assert_eq!("foo", mut_str);
-        *mut_str = "bar".to_owned();
-        assert_eq!("bar", mut_str);
-        assert_eq!("bar", x);
+        match x.val() {
+            Value::String(x) => assert_eq!("foo", x),
+            _ => unreachable!(),
+        };
         let string = LispObj::from("foo".to_owned());
         assert_eq!(string, LispObj::from("foo"));
     }
@@ -534,17 +474,17 @@ mod test {
     fn other() {
         // Void
         let v = LispObj::void();
-        assert!(v.is_void());
+        assert_eq!(v.val(), Value::Void);
         assert!(v.get_type() == Type::Void);
         // Bool
         let t = LispObj::t();
-        assert!(t.is_true());
+        assert_eq!(t.val(), Value::True);
         let n = LispObj::nil();
-        assert!(n.is_nil());
+        assert_eq!(n.val(), Value::Nil);
         let bool_true = LispObj::from(true);
-        assert!(bool_true.is_true());
+        assert_eq!(bool_true.val(), Value::True);
         let bool_false = LispObj::from(false);
-        assert!(bool_false.is_nil());
+        assert_eq!(bool_false.val(), Value::Nil);
         assert_eq!(bool_false, LispObj::from(false));
         // Option
         let opt = LispObj::from(Some(1));
@@ -558,8 +498,11 @@ mod test {
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let sym = symbol_map.intern("foo");
         let x = LispObj::from(sym);
-        assert!(x.is_symbol());
-        assert_eq!("foo", x.as_symbol().unwrap().get_name());
+        assert!(matches!(x.val(), Value::Symbol(_)));
+        match x.val() {
+            Value::Symbol(y) => assert_eq!("foo", y.get_name()),
+            _ => unreachable!(),
+        }
     }
 
     #[test]
@@ -567,7 +510,7 @@ mod test {
         let cons = cons!("start", cons!(7, cons!(5, 3.3)));
 
         let mut x = LispObj::from(cons);
-        assert!(x.is_cons());
+        assert!(matches!(x.val(), Value::Cons(_)));
         format!("{}", x);
 
         let cons1 = x.as_mut_cons().unwrap();
@@ -575,10 +518,16 @@ mod test {
         (*cons1).car = "start2".into();
         assert_eq!("start2", cons1.car);
 
-        let cons2 = cons1.cdr.as_cons().unwrap();
+        let cons2 = match cons1.cdr.val() {
+            Value::Cons(x) => x,
+            _ => unreachable!()
+        };
         assert_eq!(7, cons2.car);
 
-        let cons3 = cons2.cdr.as_cons().unwrap();
+        let cons3 = match cons2.cdr.val() {
+            Value::Cons(x) => x,
+            _ => unreachable!(),
+        };
         assert_eq!(5, cons3.car);
         assert_eq!(3.3, cons3.cdr);
 
