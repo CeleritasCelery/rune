@@ -241,6 +241,8 @@ pub enum Type {
     Symbol,
     Float,
     Void,
+    Marker,
+    Func,
 }
 
 impl<'a> From<&'a LispObj> for Value<'a> {
@@ -253,15 +255,15 @@ impl<'a> From<&'a LispObj> for Value<'a> {
 #[repr(u8)]
 enum Tag {
     Fixnum = 0,
-    Float,
-    Marker,
-    True,
-    Nil,
-    Cons,
-    Symbol,
+    Float = 1,
+    Marker = 2,
+    True = 3,
+    Nil = 4,
+    Cons = 5,
+    Symbol = 6,
     LongStr = 7,
     ShortStr = 8,
-    Fn = 15,
+    Fn = 16,
     Void,
 }
 
@@ -281,7 +283,8 @@ impl LispObj {
             Tag::True => True,
             Tag::Cons => Cons,
             Tag::Fixnum => Int,
-            _ => unreachable!(),
+            Tag::Marker => Marker,
+            Tag::Fn => Func,
         }
     }
 
