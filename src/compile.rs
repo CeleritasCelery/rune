@@ -227,32 +227,36 @@ impl Exp {
         }
     }
 
+    fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
+        let sym: &Symbol = cons.car.try_into()?;
+        match sym.get_name() {
+            "quote" => self.quote(cons.cdr),
+            "let" => self.let_form(cons.cdr),
+            _ => {
+                self.add_const(cons.car)?;
+                let args = self.compile_list(cons.cdr)?;
+                self.codes.emit_call(args);
+                Ok(())
+            }
+        }
+    }
+
+    fn compile_variable_reference(&mut self, sym: &Symbol) -> Result<(), Error> {
+        match self.vars.iter().rposition(|&x| x == sym) {
+            Some(idx) => {
+                match (self.vars.len() - idx).try_into() {
+                    Ok(x) => Ok(self.codes.emit_stack_ref(x)),
+                    Err(_) => Err(Error::StackSizeOverflow),
+                }
+            }
+            None => panic!("dynamic variables not implemented"),
+        }
+    }
+
     fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
         match obj.val() {
-            Value::Cons(cons) => {
-                let sym: &Symbol = cons.car.try_into()?;
-                match sym.get_name() {
-                    "quote" => self.quote(cons.cdr),
-                    "let" => self.let_form(cons.cdr),
-                    _ => {
-                        self.add_const(cons.car)?;
-                        let args = self.compile_list(cons.cdr)?;
-                        self.codes.emit_call(args);
-                        Ok(())
-                    }
-                }
-            }
-            Value::Symbol(sym) => {
-                match self.vars.iter().rposition(|&x| x == sym) {
-                    Some(idx) => {
-                        match (self.vars.len() - idx).try_into() {
-                            Ok(x) => Ok(self.codes.emit_stack_ref(x)),
-                            Err(_) => Err(Error::StackSizeOverflow),
-                        }
-                    }
-                    None => panic!("dynamic variables not implemented"),
-                }
-            }
+            Value::Cons(cons) => self.dispatch_special_form(cons),
+            Value::Symbol(sym) => self.compile_variable_reference(sym),
             _ => self.add_const(obj)
         }
     }

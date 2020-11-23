@@ -6,7 +6,7 @@ use std::mem::size_of;
 use std::cmp;
 use std::fmt;
 use std::ops;
-use std::convert::From;
+use std::convert::{From, TryFrom};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Fixnum(i64);
@@ -22,6 +22,18 @@ impl From<Fixnum> for i64 {
 impl From<Fixnum> for LispObj {
     fn from(fixnum: Fixnum) -> Self {
         LispObj{fixnum}
+    }
+}
+
+impl TryFrom<LispObj> for Fixnum {
+    type Error = i64;
+
+    fn try_from(value: LispObj) -> Result<Self, Self::Error> {
+        if matches!(value.val(), Value::Int(_)) {
+            Ok(unsafe{value.fixnum})
+        } else {
+            Err(0)
+        }
     }
 }
 
@@ -332,14 +344,6 @@ impl LispObj {
         LispObj::from_tag(Tag::True)
     }
 
-    pub fn is_fixnum(&self) -> bool {
-        self.tag_eq(Tag::Fixnum)
-    }
-
-    pub fn as_fixnum(self) -> Option<Fixnum> {
-        if self.is_fixnum() {Some(unsafe{self.fixnum})} else {None}
-    }
-
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
         match self.val() {
             Value::Cons(_) => Some(unsafe{&mut *self.get_mut_ptr()}),
@@ -398,7 +402,7 @@ impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Value::*;
-        match Value::from(self) {
+        match self.val() {
             Int(x) => write!(f, "{}", x),
             Cons(x) => write!(f, "{}", x),
             String(x) => write!(f, "\"{}\"", x),
@@ -443,10 +447,10 @@ mod test {
     #[test]
     fn fixnum() {
         let x = LispObj::from(7);
-        assert!(x.is_fixnum());
+        assert!(Fixnum::try_from(x).is_ok());
         format!("{}", x);
         assert_eq!(7, x);
-        assert_eq!(Fixnum::from(7), x.as_fixnum().unwrap());
+        assert_eq!(Fixnum::from(7), Fixnum::try_from(x).unwrap());
     }
 
     #[test]

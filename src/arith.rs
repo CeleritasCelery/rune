@@ -1,34 +1,35 @@
-use crate::lisp_object::LispObj;
+use crate::lisp_object::{LispObj, Fixnum};
+use std::convert::TryInto;
 
 pub fn add(vars: &[LispObj]) -> LispObj {
-    let lhs = &vars.get(0).unwrap();
-    let rhs = &vars.get(1).unwrap();
-    let x = lhs.as_fixnum().expect("lhs is not a number");
-    let y = rhs.as_fixnum().expect("hhs is not a number");
+    let lhs = *vars.get(0).unwrap();
+    let rhs = *vars.get(1).unwrap();
+    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
+    let y: Fixnum = rhs.try_into().expect("hhs is not a number");
     LispObj::from(x + y)
 }
 
 pub fn sub(vars: &[LispObj]) -> LispObj {
-    let lhs = &vars.get(0).unwrap();
-    let rhs = &vars.get(1).unwrap();
-    let x = lhs.as_fixnum().expect("lhs is not a number");
-    let y = rhs.as_fixnum().expect("rhs is not a number");
+    let lhs = *vars.get(0).unwrap();
+    let rhs = *vars.get(1).unwrap();
+    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
+    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x - y)
 }
 
 pub fn mul(vars: &[LispObj]) -> LispObj {
-    let lhs = &vars.get(0).unwrap();
-    let rhs = &vars.get(1).unwrap();
-    let x = lhs.as_fixnum().expect("lhs is not a number");
-    let y = rhs.as_fixnum().expect("rhs is not a number");
+    let lhs = *vars.get(0).unwrap();
+    let rhs = *vars.get(1).unwrap();
+    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
+    let y = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x * y)
 }
 
 pub fn div(vars: &[LispObj]) -> LispObj {
-    let lhs = &vars.get(0).unwrap();
-    let rhs = &vars.get(1).unwrap();
-    let x = lhs.as_fixnum().expect("lhs is not a number");
-    let y = rhs.as_fixnum().expect("rhs is not a number");
+    let lhs = *vars.get(0).unwrap();
+    let rhs = *vars.get(1).unwrap();
+    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
+    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x / y)
 }
 
