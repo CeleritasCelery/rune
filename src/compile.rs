@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, ConsIter, Type, Value};
+use crate::lisp_object::{LispObj, Cons, Type, Value};
 use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::{TryInto, TryFrom};
@@ -115,7 +115,6 @@ pub enum Error {
     ArgCount(u16, u16),
     LetValueCount(u16),
     StackSizeOverflow,
-    Token,
     Type(Type, Type),
 }
 
@@ -126,36 +125,45 @@ struct Exp {
     vars: Vec<&'static Symbol>,
 }
 
-fn into_list<'a>(obj: &'a LispObj) -> Result<ConsIter<'a>, Error> {
+fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     match obj.val() {
-        Value::Cons(x) => Ok(x.iter()),
+        Value::Cons(mut cons) => {
+            let mut vec: Vec<LispObj> = vec![cons.car];
+
+            while let Value::Cons(next) = cons.cdr.val() {
+                vec.push(next.car);
+                cons = next;
+            }
+            match cons.cdr.val() {
+                Value::Nil => Ok(vec),
+                _ => {
+                    Err(Error::Type(Type::Nil, cons.cdr.get_type()))
+                }
+            }
+        },
         _ => Err(Error::Type(Type::Cons, obj.get_type())),
     }
 }
 
-fn into_arg_list<'a>(obj: &'a LispObj, min_size: u16) -> Result<ConsIter<'a>, Error> {
+fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     match obj.val() {
-        Value::Cons(x) => Ok(x.iter()),
-        Value::Nil => Err(Error::ArgCount(min_size, 0)),
-        _ => Err(Error::Type(Type::Cons, obj.get_type()))
-    }
-}
-
-fn verify_end(obj: LispObj, size: u16) -> Result<(), Error> {
-    match obj.val() {
-        Value::Nil => Ok(()),
-        Value::Cons(x) => {
-            let len = x.iter().size() as u16;
-            Err(Error::ArgCount(size, size + len))
-        }
-        _ => {
-            Err(Error::Type(Type::Cons, obj.get_type()))
-        }
+        Value::Nil => Ok(vec![]),
+        _ => into_list(obj),
     }
 }
 
 fn type_error(obj: LispObj, obj_type: Type) -> Result<(), Error> {
     Err(Error::Type(obj_type, obj.get_type()))
+}
+
+impl TryFrom<&LispObj> for &Symbol {
+    type Error = Error;
+    fn try_from(value: &LispObj) -> Result<Self, Self::Error> {
+        match value.val() {
+            Value::Symbol(x) => Ok(x),
+            _ => Err(Error::Type(Type::Symbol, value.get_type()))
+        }
+    }
 }
 
 impl TryFrom<LispObj> for &Symbol {
@@ -175,43 +183,51 @@ impl Exp {
     }
 
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
-        match value.val() {
-            Value::Cons(cons) => {
-                self.add_const(cons.car)?;
-                verify_end(cons.cdr, 1)
-            }
-            _ => Err(Error::ArgCount(1, 0)),
+        let list = into_arg_list(value)?;
+        match list.len() {
+            1 => self.add_const(list[0]),
+            x => Err(Error::ArgCount(1, x as u16)),
         }
     }
 
     fn let_form(&mut self, form: LispObj) -> Result<(), Error> {
         let prev_len = self.vars.len();
-        let mut list = into_arg_list(&form, 1)?;
-        self.let_bind(list.next().unwrap())?;
-        for sexp in list {
-            self.compile_form(sexp)?;
+        let list = into_arg_list(form)?;
+        let mut iter = list.iter();
+        match iter.next() {
+            Some(x) => self.let_bind(*x),
+            None => Err(Error::ArgCount(1, 0)),
+        }?;
+        for sexp in iter {
+            self.compile_form(*sexp)?;
         }
         self.vars.truncate(prev_len);
         Ok(())
     }
 
     fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
-        for binding in into_list(&obj)? {
-            if let Ok(mut list) = into_list(&binding) {
-                let var = list.next().unwrap().try_into()?;
-                match list.next() {
-                    Some(v) => self.add_const(v)?,
-                    None => self.add_const(LispObj::nil())?,
-                };
-                match list.next() {
-                    None => self.vars.push(var),
-                    Some(_) => return Err(Error::LetValueCount(2 + list.size() as u16)),
+        for binding in into_list(obj)? {
+            match binding.val() {
+                Value::Cons(cons) => {
+                    let var = cons.car.try_into()?;
+                    let list = into_list(cons.cdr)?;
+                    let mut iter = list.iter();
+                    match iter.next() {
+                        Some(v) => self.add_const(*v)?,
+                        None => self.add_const(LispObj::nil())?,
+                    };
+                    match iter.next() {
+                        None => self.vars.push(var),
+                        Some(_) => return Err(Error::LetValueCount(list.len() as u16)),
+                    }
                 }
-            } else if let Value::Symbol(var) = binding.val() {
-                self.vars.push(var);
-                self.add_const(LispObj::nil())?;
-            } else {
-                return type_error(binding, Type::Cons);
+                Value::Symbol(var) => {
+                    self.vars.push(var);
+                    self.add_const(LispObj::nil())?;
+                }
+                _ => {
+                    return type_error(binding, Type::Cons);
+                }
             }
         }
         Ok(())
@@ -379,6 +395,12 @@ mod test {
 
         let obj = LispReader::new("(let ((foo 1 2)))").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::LetValueCount(2));
+
+        let obj = LispReader::new("(let ((foo . 1)))").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Int));
+
+        let obj = LispReader::new("(let ((foo 1 . 2)))").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Nil, Type::Int));
 
         let obj = LispReader::new("(let (()))").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Nil));
