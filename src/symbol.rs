@@ -18,7 +18,7 @@ pub struct Symbol {
 
 impl cmp::PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        (&*self as *const Symbol) == (&*other as *const Symbol)
     }
 }
 
@@ -107,7 +107,7 @@ mod test {
     }
 
     #[test]
-    fn intern() {
+    fn test_intern() {
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
@@ -115,5 +115,6 @@ mod test {
         let second = symbol_map.intern("foo");
         second.set_func(LispFn::new(vec![5], vec![], 0, 0, false));
         assert_eq!(first.get_func().unwrap().as_ref().op_codes.get(0).unwrap(), &5);
+        assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
 }
