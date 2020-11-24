@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::str;
 use std::fmt;
 use crate::lisp_object::{LispObj, Cons};
@@ -63,10 +61,6 @@ impl<'a> Stream<'a> {
         Stream{iter: chars.clone(), prev: chars}
     }
 
-    pub fn peek(&mut self) -> Option<char> {
-        self.iter.clone().next()
-    }
-
     pub fn back(&mut self) {
         self.iter = self.prev.clone();
     }
@@ -95,10 +89,6 @@ impl<'a> Stream<'a> {
             let slice = std::slice::from_raw_parts(ptr, size);
             str::from_utf8_unchecked(slice)
         }
-    }
-
-    pub fn pos(&self) -> usize {
-        self.iter.as_str().as_ptr() as usize
     }
 }
 
@@ -341,7 +331,6 @@ mod test {
     fn stream() {
         let mut stream = Stream::new("fox");
         assert_eq!('f', stream.next().unwrap());
-        assert_eq!('o', stream.peek().unwrap());
         assert_eq!('o', stream.next().unwrap());
         assert_eq!('x', stream.next().unwrap());
         stream.back();
