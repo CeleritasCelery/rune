@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Type, Value};
+use crate::lisp_object::{LispObj, Cons, Value};
 use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::{TryInto, TryFrom};
@@ -119,6 +119,40 @@ pub enum Error {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum Type {
+    Int,
+    True,
+    Nil,
+    Cons,
+    String,
+    Symbol,
+    Float,
+    Void,
+    Marker,
+    Func,
+    Number,
+    List,
+}
+
+fn get_type(obj: LispObj) -> Type {
+    use Type::*;
+    match obj.val() {
+        Value::Symbol(_) => Symbol,
+        Value::Float(_) => Float,
+        Value::Void => Void,
+        Value::String(_) => String,
+        Value::Nil => Nil,
+        Value::True => True,
+        Value::Cons(_) => Cons,
+        Value::Int(_) => Int,
+    }
+}
+
+fn expect_type(exp_type: Type, obj: LispObj) -> Error {
+    Error::Type(exp_type, get_type(obj))
+}
+
+#[derive(Debug, PartialEq)]
 struct Exp {
     codes: CodeVec,
     constants: ConstVec,
@@ -136,24 +170,19 @@ fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
             }
             match cons.cdr.val() {
                 Value::Nil => Ok(vec),
-                _ => {
-                    Err(Error::Type(Type::Nil, cons.cdr.get_type()))
-                }
+                _ => Err(expect_type(Type::List, cons.cdr)),
             }
         },
-        _ => Err(Error::Type(Type::Cons, obj.get_type())),
+        _ => Err(expect_type(Type::Cons, obj)),
     }
 }
 
 fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     match obj.val() {
         Value::Nil => Ok(vec![]),
-        _ => into_list(obj),
+        Value::Cons(_) => into_list(obj),
+        _ => Err(expect_type(Type::List, obj))
     }
-}
-
-fn type_error(obj: LispObj, obj_type: Type) -> Result<(), Error> {
-    Err(Error::Type(obj_type, obj.get_type()))
 }
 
 impl TryFrom<&LispObj> for &Symbol {
@@ -161,7 +190,7 @@ impl TryFrom<&LispObj> for &Symbol {
     fn try_from(value: &LispObj) -> Result<Self, Self::Error> {
         match value.val() {
             Value::Symbol(x) => Ok(x),
-            _ => Err(Error::Type(Type::Symbol, value.get_type()))
+            _ => Err(expect_type(Type::Symbol, *value)),
         }
     }
 }
@@ -171,7 +200,7 @@ impl TryFrom<LispObj> for &Symbol {
     fn try_from(value: LispObj) -> Result<Self, Self::Error> {
         match value.val() {
             Value::Symbol(x) => Ok(x),
-            _ => Err(Error::Type(Type::Symbol, value.get_type()))
+            _ => Err(expect_type(Type::Symbol, value)),
         }
     }
 }
@@ -210,7 +239,7 @@ impl Exp {
             match binding.val() {
                 Value::Cons(cons) => {
                     let var = cons.car.try_into()?;
-                    let list = into_list(cons.cdr)?;
+                    let list = into_arg_list(cons.cdr)?;
                     let mut iter = list.iter();
                     match iter.next() {
                         Some(v) => self.add_const(*v)?,
@@ -226,7 +255,7 @@ impl Exp {
                     self.add_const(LispObj::nil())?;
                 }
                 _ => {
-                    return type_error(binding, Type::Cons);
+                    return Err(expect_type(Type::Cons, binding));
                 }
             }
         }
@@ -397,10 +426,10 @@ mod test {
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::LetValueCount(2));
 
         let obj = LispReader::new("(let ((foo . 1)))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Int));
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
 
         let obj = LispReader::new("(let ((foo 1 . 2)))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Nil, Type::Int));
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
 
         let obj = LispReader::new("(let (()))").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Nil));

@@ -26,12 +26,12 @@ impl From<Fixnum> for LispObj {
 }
 
 impl TryFrom<LispObj> for Fixnum {
-    type Error = i64;
+    type Error = ();
     fn try_from(value: LispObj) -> Result<Self, Self::Error> {
         if matches!(value.val(), Value::Int(_)) {
             Ok(unsafe{value.fixnum})
         } else {
-            Err(0)
+            Err(())
         }
     }
 }
@@ -195,20 +195,6 @@ pub enum Value<'a> {
     Void,
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Type {
-    Int,
-    True,
-    Nil,
-    Cons,
-    String,
-    Symbol,
-    Float,
-    Void,
-    Marker,
-    Func,
-}
-
 impl<'a> From<&'a LispObj> for Value<'a> {
     fn from(obj: &'a LispObj) -> Self {
         obj.val()
@@ -234,23 +220,6 @@ enum Tag {
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
 impl LispObj {
-
-    pub fn get_type(&self) -> Type {
-        use Type::*;
-        match unsafe{self.tag} {
-            Tag::Symbol => Symbol,
-            Tag::Float => Float,
-            Tag::Void => Void,
-            Tag::LongStr => String,
-            Tag::ShortStr => String,
-            Tag::Nil => Nil,
-            Tag::True => True,
-            Tag::Cons => Cons,
-            Tag::Fixnum => Int,
-            Tag::Marker => Marker,
-            Tag::Fn => Func,
-        }
-    }
 
     pub fn val(&self) -> Value {
         use Value::*;
@@ -445,7 +414,6 @@ mod test {
         // Void
         let v = LispObj::void();
         assert_eq!(v.val(), Value::Void);
-        assert!(v.get_type() == Type::Void);
         // Bool
         let t = LispObj::t();
         assert_eq!(t.val(), Value::True);
@@ -509,24 +477,16 @@ mod test {
 
     #[test]
     fn lisp_type() {
-        assert_eq!(LispObj::from(1).get_type(), Type::Int);
-        assert_eq!(LispObj::from(1.5).get_type(), Type::Float);
-        assert_eq!(LispObj::from("foo").get_type(), Type::String);
-        assert_eq!(LispObj::from(symbol::intern("foo")).get_type(), Type::Symbol);
-        assert_eq!(LispObj::from(cons!(1, 2)).get_type(), Type::Cons);
-        assert_eq!(LispObj::from(None::<LispObj>).get_type(), Type::Nil);
-        assert_eq!(LispObj::from(false).get_type(), Type::Nil);
-        assert_eq!(LispObj::nil().get_type(), Type::Nil);
-        assert_eq!(LispObj::from(true).get_type(), Type::True);
-        assert_eq!(LispObj::t().get_type(), Type::True);
-        assert_eq!(LispObj::void().get_type(), Type::Void);
-    }
-
-    #[test]
-    fn lisp_enum() {
-        let obj = LispObj::from(1);
-        assert!(Value::from(&obj) == Value::Int(1));
-        let obj = LispObj::from("foo");
-        assert!(Value::from(&obj) == Value::String(&"foo".to_string()));
+        assert!(matches!(LispObj::from(1).val(), Value::Int(_)));
+        assert!(matches!(LispObj::from(1.5).val(), Value::Float(_)));
+        assert!(matches!(LispObj::from("foo").val(), Value::String(_)));
+        assert!(matches!(LispObj::from(symbol::intern("foo")).val(), Value::Symbol(_)));
+        assert!(matches!(LispObj::from(cons!(1, 2)).val(), Value::Cons(_)));
+        assert!(matches!(LispObj::from(None::<LispObj>).val(), Value::Nil));
+        assert!(matches!(LispObj::from(false).val(), Value::Nil));
+        assert!(matches!(LispObj::nil().val(), Value::Nil));
+        assert!(matches!(LispObj::from(true).val(), Value::True));
+        assert!(matches!(LispObj::t().val(), Value::True));
+        assert!(matches!(LispObj::void().val(), Value::Void));
     }
 }
