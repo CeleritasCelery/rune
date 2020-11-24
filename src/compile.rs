@@ -234,29 +234,31 @@ impl Exp {
         Ok(())
     }
 
+    fn let_bind_call(&mut self, cons: &Cons) -> Result<(), Error> {
+        let var = cons.car.try_into()?;
+        let list = into_arg_list(cons.cdr)?;
+        let mut iter = list.iter();
+        match iter.next() {
+            Some(v) => self.add_const(*v)?,
+            None => self.add_const(LispObj::nil())?,
+        };
+        match iter.next() {
+            None => Ok(self.vars.push(var)),
+            Some(_) => Err(Error::LetValueCount(list.len() as u16)),
+        }
+    }
+
+    fn let_bind_nil(&mut self, sym: &'static Symbol) -> Result<(), Error> {
+        self.vars.push(sym);
+        self.add_const(LispObj::nil())
+    }
+
     fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
         for binding in into_list(obj)? {
             match binding.val() {
-                Value::Cons(cons) => {
-                    let var = cons.car.try_into()?;
-                    let list = into_arg_list(cons.cdr)?;
-                    let mut iter = list.iter();
-                    match iter.next() {
-                        Some(v) => self.add_const(*v)?,
-                        None => self.add_const(LispObj::nil())?,
-                    };
-                    match iter.next() {
-                        None => self.vars.push(var),
-                        Some(_) => return Err(Error::LetValueCount(list.len() as u16)),
-                    }
-                }
-                Value::Symbol(var) => {
-                    self.vars.push(var);
-                    self.add_const(LispObj::nil())?;
-                }
-                _ => {
-                    return Err(expect_type(Type::Cons, binding));
-                }
+                Value::Cons(cons) => self.let_bind_call(cons)?,
+                Value::Symbol(sym) => self.let_bind_nil(sym)?,
+                _ => return Err(expect_type(Type::Cons, binding)),
             }
         }
         Ok(())
