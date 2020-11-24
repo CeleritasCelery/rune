@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Value};
+use crate::lisp_object::{LispObj, Cons, Value, LispFn};
 use crate::symbol::Symbol;
 use std::convert::{TryInto, TryFrom};
 
@@ -54,6 +54,8 @@ struct ConstVec(Vec<LispObj>);
 impl ConstVec {
     pub fn new() -> Self {ConstVec(Vec::new())}
 
+    pub fn into_vec(self) -> Vec<LispObj> { self.0 }
+
     // TODO: Don't use rust equal because it will compare an entire list
     fn insert_or_get(&mut self, obj: LispObj) -> usize {
         match self.0.iter().position(|&x| obj == x) {
@@ -80,6 +82,8 @@ struct CodeVec(Vec<u8>);
 impl CodeVec {
     pub fn new() -> Self {CodeVec(Vec::new())}
 
+    pub fn into_vec(self) -> Vec<u8> { self.0 }
+
     pub fn push_op(&mut self, op: OpCode) {
         self.0.push(op.into());
     }
@@ -95,7 +99,7 @@ impl CodeVec {
         self.0.push(arg as u8);
     }
 
-    pub fn emit_const(&mut self, idx: u16) {
+    fn emit_const(&mut self, idx: u16) {
         match idx {
             0 => self.push_op(OpCode::Constant0),
             1 => self.push_op(OpCode::Constant1),
@@ -113,7 +117,7 @@ impl CodeVec {
         }
     }
 
-    pub fn emit_call(&mut self, idx: u16) {
+    fn emit_call(&mut self, idx: u16) {
         match idx {
             0 => self.push_op(OpCode::Call0),
             1 => self.push_op(OpCode::Call1),
@@ -238,6 +242,12 @@ pub struct Exp {
     vars: Vec<Symbol>,
 }
 
+impl std::convert::From<Exp> for LispFn {
+    fn from(exp: Exp) -> Self {
+        LispFn::new(exp.codes.0 , exp.constants.0 , 0, 0, false)
+    }
+}
+
 impl Exp {
     fn add_const(&mut self, obj: LispObj) -> Result<(), Error> {
         let idx = self.constants.insert(obj)?;
@@ -307,11 +317,28 @@ impl Exp {
         Ok(())
     }
 
+    fn compile_operator(&mut self, obj: LispObj, op: OpCode) -> Result<(), Error> {
+        let list = into_arg_list(obj)?;
+        match list.len() {
+            2 => {
+                self.compile_form(list[0])?;
+                self.compile_form(list[1])?;
+                self.codes.push_op(op);
+                Ok(())
+            }
+            len => Err(Error::ArgCount(2, len as u16))
+        }
+    }
+
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
         let sym: Symbol = cons.car.try_into()?;
         match sym.get_name() {
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
+            "+" => self.compile_operator(cons.cdr, OpCode::Add),
+            "*" => self.compile_operator(cons.cdr, OpCode::Mul),
+            "/" => self.compile_operator(cons.cdr, OpCode::Div),
+            "-" => self.compile_operator(cons.cdr, OpCode::Sub),
             _ => self.compile_funcall(cons),
         }
     }
@@ -336,13 +363,14 @@ impl Exp {
         }
     }
 
-    fn compile(obj: LispObj) -> Result<Self, Error> {
+    pub fn compile(obj: LispObj) -> Result<Self, Error> {
         let mut exp = Self{
             codes: CodeVec::new(),
             constants: ConstVec::new(),
             vars: Vec::new(),
         };
         exp.compile_form(obj)?;
+        exp.codes.push_op(OpCode::Ret);
         Ok(exp)
     }
 }
@@ -369,21 +397,21 @@ mod test {
     fn test_basic() {
         let obj = LispReader::new("1").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0],
+            vec_into![Constant0, Ret],
             vec_into![1],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("'foo").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0],
+            vec_into![Constant0, Ret],
             vec_into![symbol::intern("foo")],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("'(1 2)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0],
+            vec_into![Constant0, Ret],
             vec_into![list!(1, 2)],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
@@ -392,19 +420,19 @@ mod test {
     #[test]
     fn variable() {
         let obj = LispReader::new("(let (foo))").next().unwrap().unwrap();
-        let expect = create_expect(vec_into![Constant0], vec_into![false]);
+        let expect = create_expect(vec_into![Constant0, Ret], vec_into![false]);
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("(let ((foo 1)(bar 2)(baz 3)))").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0, Constant1, Constant2],
+            vec_into![Constant0, Constant1, Constant2, Ret],
             vec_into![1, 2, 3]
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("(let ((foo 1)) foo)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0, StackRef1],
+            vec_into![Constant0, StackRef1, Ret],
             vec_into![1]
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
@@ -417,14 +445,14 @@ mod test {
     fn function() {
         let obj = LispReader::new("(foo)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0, Call0],
+            vec_into![Constant0, Call0, Ret],
             vec_into![symbol::intern("foo")],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
 
         let obj = LispReader::new("(foo 1 2)").next().unwrap().unwrap();
         let expect = create_expect(
-            vec_into![Constant0, Constant1, Constant2, Call2],
+            vec_into![Constant0, Constant1, Constant2, Call2, Ret],
             vec_into![symbol::intern("foo"), 1, 2],
         );
         assert_eq!(expect, Exp::compile(obj).unwrap());
@@ -438,6 +466,7 @@ mod test {
                 Call1,
                 Constant3,
                 Call2,
+                Ret,
             ],
             vec_into![symbol::intern("foo"), symbol::intern("bar"), 1, 2],
         );

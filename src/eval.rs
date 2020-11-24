@@ -234,29 +234,12 @@ mod test {
     use super::*;
     use OpCode as Op;
     use crate::symbol::INTERNED_SYMBOLS;
+    use crate::reader::LispReader;
 
     #[test]
     fn compute() {
-        let func = LispFn::new(
-            vec_into![
-                Op::Constant0,
-                Op::Constant1,
-                Op::Constant2,
-                Op::StackRef3,
-                Op::StackRef3,
-                Op::StackRef3,
-                Op::Add,
-                Op::Add,
-                Op::Mul,
-                Op::Sub,
-                Op::Sub,
-                Op::Ret
-            ],
-            vec_into![
-                7,
-                13,
-                3
-            ], 0, 0, false,) ;
+        let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         routine.execute(Gc::new(func));
         assert_eq!(63, *routine.stack.get(0).unwrap());
