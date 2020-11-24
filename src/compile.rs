@@ -262,14 +262,14 @@ impl Exp {
         Ok(())
     }
 
-    fn compile_list(&mut self, obj: LispObj) -> Result<u16, Error> {
-        match obj.val() {
-            Value::Cons(cons) => {
-                self.compile_form(cons.car)?;
-                Ok(1 + self.compile_list(cons.cdr)?)
-            }
-            _ => Ok(0)
+    fn compile_funcall(&mut self, cons: &Cons) -> Result<(), Error> {
+        self.add_const(cons.car)?;
+        let list = into_arg_list(cons.cdr)?;
+        for form in list.iter() {
+            self.compile_form(*form)?;
         }
+        self.codes.emit_call(list.len() as u16);
+        Ok(())
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
@@ -277,12 +277,7 @@ impl Exp {
         match sym.get_name() {
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
-            _ => {
-                self.add_const(cons.car)?;
-                let args = self.compile_list(cons.cdr)?;
-                self.codes.emit_call(args);
-                Ok(())
-            }
+            _ => self.compile_funcall(cons),
         }
     }
 
@@ -419,6 +414,21 @@ mod test {
         let obj = LispReader::new("(\"foo\")").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Symbol, Type::String));
 
+        let obj = LispReader::new("(foo . 1)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
+    }
+
+    #[test]
+    fn quote_errors() {
+        let obj = LispReader::new("(quote)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
+
+        let obj = LispReader::new("(quote 1 2)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 2));
+    }
+
+    #[test]
+    fn let_errors() {
         let obj = LispReader::new("(let (1))").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Int));
 
@@ -439,11 +449,5 @@ mod test {
 
         let obj = LispReader::new("(let)").next().unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
-
-        let obj = LispReader::new("(quote)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
-
-        let obj = LispReader::new("(quote 1 2)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 2));
     }
 }
