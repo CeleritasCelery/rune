@@ -11,20 +11,20 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]
-pub struct Symbol {
+pub struct InnerSymbol {
     name: String,
     func: AtomicU64,
 }
 
-impl cmp::PartialEq for Symbol {
+impl cmp::PartialEq for InnerSymbol {
     fn eq(&self, other: &Self) -> bool {
-        (&*self as *const Symbol) == (&*other as *const Symbol)
+        (&*self as *const InnerSymbol) == (&*other as *const InnerSymbol)
     }
 }
 
-impl Symbol {
+impl InnerSymbol {
     fn new(name: String) -> Self {
-        Symbol{name, func: AtomicU64::new(0)}
+        InnerSymbol{name, func: AtomicU64::new(0)}
     }
 
     pub fn set_func(&self, func: LispFn) {
@@ -42,7 +42,7 @@ impl Symbol {
     }
 }
 
-pub struct SymbolMap(HashMap<String, Box<Symbol>, BuildHasherDefault<FnvHasher>>);
+pub struct SymbolMap(HashMap<String, Box<InnerSymbol>, BuildHasherDefault<FnvHasher>>);
 
 impl SymbolMap {
     fn new() -> Self {
@@ -53,7 +53,7 @@ impl SymbolMap {
         self.0.keys().len()
     }
 
-    pub fn intern(&mut self, name: &str) -> &'static Symbol {
+    pub fn intern(&mut self, name: &str) -> &'static InnerSymbol {
         // SAFETY: This is my work around for there being no Entry API that
         // takes a reference. Instead we have an inner function that returns a
         // pointer and we cast that to a static reference. We can guarantee that
@@ -64,12 +64,12 @@ impl SymbolMap {
         unsafe { mem::transmute(self.get_symbol(name)) }
     }
 
-    fn get_symbol(&mut self, name: &str) -> *const Symbol {
+    fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {
         match self.0.get(name) {
             Some(x) => x.as_ref(),
             None => {
-                let sym = Box::new(Symbol::new(name.to_owned()));
-                let ptr = sym.as_ref() as *const Symbol;
+                let sym = Box::new(InnerSymbol::new(name.to_owned()));
+                let ptr = sym.as_ref() as *const InnerSymbol;
                 self.0.insert(name.to_owned(), sym);
                 ptr
             }
@@ -79,7 +79,9 @@ impl SymbolMap {
 
 pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(||Mutex::new(SymbolMap::new()));
 
-pub fn intern(name: &str) -> &'static Symbol {
+pub type Symbol = &'static InnerSymbol;
+
+pub fn intern(name: &str) -> &'static InnerSymbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
 }
 
@@ -89,12 +91,12 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(32, std::mem::size_of::<Symbol>());
+        assert_eq!(32, std::mem::size_of::<InnerSymbol>());
     }
 
     #[test]
     fn symbol_func() {
-        let x = Symbol::new("foo".to_owned());
+        let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert_eq!(None, x.get_func());
         x.set_func(LispFn::new(vec![1], vec![], 0, 0, false));

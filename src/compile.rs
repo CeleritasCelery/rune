@@ -156,7 +156,7 @@ fn expect_type(exp_type: Type, obj: LispObj) -> Error {
 struct Exp {
     codes: CodeVec,
     constants: ConstVec,
-    vars: Vec<&'static Symbol>,
+    vars: Vec<Symbol>,
 }
 
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
@@ -185,17 +185,7 @@ fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     }
 }
 
-impl TryFrom<&LispObj> for &Symbol {
-    type Error = Error;
-    fn try_from(value: &LispObj) -> Result<Self, Self::Error> {
-        match value.val() {
-            Value::Symbol(x) => Ok(x),
-            _ => Err(expect_type(Type::Symbol, *value)),
-        }
-    }
-}
-
-impl TryFrom<LispObj> for &Symbol {
+impl TryFrom<LispObj> for Symbol {
     type Error = Error;
     fn try_from(value: LispObj) -> Result<Self, Self::Error> {
         match value.val() {
@@ -248,7 +238,7 @@ impl Exp {
         }
     }
 
-    fn let_bind_nil(&mut self, sym: &'static Symbol) -> Result<(), Error> {
+    fn let_bind_nil(&mut self, sym: Symbol) -> Result<(), Error> {
         self.vars.push(sym);
         self.add_const(LispObj::nil())
     }
@@ -275,7 +265,7 @@ impl Exp {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
-        let sym: &Symbol = cons.car.try_into()?;
+        let sym: Symbol = cons.car.try_into()?;
         match sym.get_name() {
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
@@ -283,7 +273,7 @@ impl Exp {
         }
     }
 
-    fn compile_variable_reference(&mut self, sym: &Symbol) -> Result<(), Error> {
+    fn compile_variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
         match self.vars.iter().rposition(|&x| x == sym) {
             Some(idx) => {
                 match (self.vars.len() - idx).try_into() {

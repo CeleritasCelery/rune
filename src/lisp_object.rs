@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::symbol::Symbol;
+use crate::symbol::{Symbol, InnerSymbol};
 use crate::gc::Gc;
 use std::mem::size_of;
 use std::cmp;
@@ -190,7 +190,7 @@ pub enum Value<'a> {
     Nil,
     Cons(&'a Cons),
     String(&'a String),
-    Symbol(&'static Symbol),
+    Symbol(Symbol),
     Float(f64),
     Void,
 }
@@ -317,9 +317,9 @@ impl From<String> for LispObj {
     }
 }
 
-impl From<&'static Symbol> for LispObj {
-    fn from(s: &'static Symbol) -> Self {
-        let ptr = s as *const Symbol;
+impl From<Symbol> for LispObj {
+    fn from(s: Symbol) -> Self {
+        let ptr = s as *const InnerSymbol;
         let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
         LispObj{bits}
     }
