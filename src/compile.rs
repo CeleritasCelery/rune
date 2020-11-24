@@ -1,9 +1,52 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, Cons, Value};
-use crate::byte_code::OpCode;
 use crate::symbol::Symbol;
 use std::convert::{TryInto, TryFrom};
+
+#[derive(Copy, Clone)]
+#[repr(u8)]
+pub enum OpCode {
+    StackRef1 = 0,
+    StackRef2,
+    StackRef3,
+    StackRef4,
+    StackRef5,
+    StackRef6,
+    StackRef7,
+    StackRef8,
+    StackRefN,
+    StackRefN2,
+    Constant0,
+    Constant1,
+    Constant2,
+    Constant3,
+    Constant4,
+    Constant5,
+    ConstantN,
+    ConstantN2,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Call0,
+    Call1,
+    Call2,
+    Call3,
+    Call4,
+    Call5,
+    CallN,
+    CallN2,
+    Jump,
+    JumpNil,
+    Ret,
+    End,
+    Unknown
+}
+
+impl From<OpCode> for u8 {
+    fn from(x: OpCode) -> u8 { x as u8 }
+}
 
 #[derive(Debug, PartialEq)]
 struct ConstVec(Vec<LispObj>);
@@ -152,13 +195,6 @@ fn expect_type(exp_type: Type, obj: LispObj) -> Error {
     Error::Type(exp_type, get_type(obj))
 }
 
-#[derive(Debug, PartialEq)]
-struct Exp {
-    codes: CodeVec,
-    constants: ConstVec,
-    vars: Vec<Symbol>,
-}
-
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     match obj.val() {
         Value::Cons(mut cons) => {
@@ -193,6 +229,13 @@ impl TryFrom<LispObj> for Symbol {
             _ => Err(expect_type(Type::Symbol, value)),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Exp {
+    codes: CodeVec,
+    constants: ConstVec,
+    vars: Vec<Symbol>,
 }
 
 impl Exp {

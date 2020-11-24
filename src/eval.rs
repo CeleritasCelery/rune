@@ -1,55 +1,10 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn, Value};
+use crate::compile::{OpCode, Exp};
 use crate::gc::Gc;
 use std::mem::transmute;
 use crate::arith;
-
-#[derive(Copy, Clone)]
-#[repr(u8)]
-pub enum OpCode {
-    StackRef1 = 0,
-    StackRef2,
-    StackRef3,
-    StackRef4,
-    StackRef5,
-    StackRef6,
-    StackRef7,
-    StackRef8,
-    StackRefN,
-    StackRefN2,
-    Constant0,
-    Constant1,
-    Constant2,
-    Constant3,
-    Constant4,
-    Constant5,
-    ConstantN,
-    ConstantN2,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Call0,
-    Call1,
-    Call2,
-    Call3,
-    Call4,
-    Call5,
-    CallN,
-    CallN2,
-    Jump,
-    JumpNil,
-    Ret,
-    End,
-    Unknown
-}
-
-impl Into<u8> for OpCode {
-    fn into(self: Self) -> u8 {
-        self as u8
-    }
-}
 
 impl OpCode {
     unsafe fn from_unchecked(x: u8) -> Self {

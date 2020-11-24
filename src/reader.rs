@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::str;
 use std::fmt;
 use crate::lisp_object::{LispObj, Cons};
