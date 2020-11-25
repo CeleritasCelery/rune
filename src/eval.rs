@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn, Value};
-use crate::compile::{OpCode, Exp};
+use crate::compile::{OpCode, Error};
 use crate::gc::Gc;
 use std::mem::transmute;
 use crate::arith;
@@ -14,21 +14,27 @@ impl OpCode {
 
 #[derive(Clone)]
 struct CallFrame {
-    pub ip: *const u8,
-    pub func: Gc<LispFn>,
+    ip: IP,
+    func: Gc<LispFn>,
 }
 
-impl CallFrame {
-    pub fn new(func: Gc<LispFn>) -> CallFrame {
-        CallFrame{ip: func.as_ref().op_codes.as_ptr(), func}
-    }
+#[derive(Clone)]
+struct IP {
+    range: std::ops::Range<*const u8>,
+    ip: *const u8,
+}
 
-    pub fn get_const(&self, i: usize) -> LispObj {
-        self.func.as_ref().constants.get(i).unwrap().clone()
+impl IP {
+    fn new(vec: &Vec<u8>) -> Self {
+        IP {
+            range: vec.as_ptr_range(),
+            ip: vec.as_ptr(),
+        }
     }
 
     fn next(&mut self) -> u8 {
         unsafe {
+            debug_assert!(self.range.contains(&self.ip));
             let x = *self.ip;
             self.ip = self.ip.add(1);
             x
@@ -38,6 +44,7 @@ impl CallFrame {
     fn jump(&mut self, offset: isize) {
         unsafe {
             self.ip = self.ip.offset(offset);
+            debug_assert!(self.range.contains(&self.ip));
         }
     }
 
@@ -49,6 +56,16 @@ impl CallFrame {
         let upper = self.next();
         let lower = self.next();
         (upper as usize) << 8 | lower as usize
+    }
+}
+
+impl CallFrame {
+    pub fn new(func: Gc<LispFn>) -> CallFrame {
+        CallFrame{ip: IP::new(&func.as_ref().op_codes), func}
+    }
+
+    pub fn get_const(&self, i: usize) -> LispObj {
+        self.func.as_ref().constants.get(i).unwrap().clone()
     }
 }
 
@@ -94,10 +111,9 @@ pub struct Routine {
 impl Routine {
 
     fn new() -> Routine {
-        let base_fn = Gc::new(LispFn::new(vec![OpCode::End.into()], vec![], 0, 0, false));
         Routine{
-            stack: vec![LispObj::nil()],
-            call_frames: vec![CallFrame::new(base_fn)],
+            stack: vec![],
+            call_frames: vec![],
         }
     }
 
@@ -150,11 +166,11 @@ impl Routine {
         self.stack.truncate(i + 1);
     }
 
-    pub fn execute(&mut self, func: Gc<LispFn>) {
+    pub fn execute(&mut self, func: Gc<LispFn>) -> Result<LispObj, Error> {
         let mut frame = CallFrame::new(func);
         loop {
             use OpCode as op;
-            match unsafe {op::from_unchecked(frame.next())} {
+            match unsafe {op::from_unchecked(frame.ip.next())} {
                 op::StackRef1 => {self.stack.push_ref(1)}
                 op::StackRef2 => {self.stack.push_ref(2)}
                 op::StackRef3 => {self.stack.push_ref(3)}
@@ -164,11 +180,11 @@ impl Routine {
                 op::StackRef7 => {self.stack.push_ref(7)}
                 op::StackRef8 => {self.stack.push_ref(8)}
                 op::StackRefN => {
-                    let idx = frame.take_arg();
+                    let idx = frame.ip.take_arg();
                     self.stack.push_ref(idx);
                 }
                 op::StackRefN2 => {
-                    let idx = frame.take_double_arg();
+                    let idx = frame.ip.take_double_arg();
                     self.stack.push_ref(idx);
                 }
                 op::Constant0 => {self.stack.push(frame.get_const(0))}
@@ -206,21 +222,24 @@ impl Routine {
                     frame = self.call(3);
                 }
                 op::Jump => {
-                    let offset = frame.take_double_arg();
-                    frame.jump(offset as isize);
+                    let offset = frame.ip.take_double_arg();
+                    frame.ip.jump(offset as isize);
                 }
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
-                    let offset = frame.take_double_arg();
+                    let offset = frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        frame.jump(offset as isize);
+                        frame.ip.jump(offset as isize);
                     }
                 }
                 op::Ret => {
-                    self.call_subst(Self::take_top, 2);
-                    frame = self.call_frames.pop().unwrap();
+                    if self.call_frames.len() == 0 {
+                        return Ok(self.stack.pop().unwrap());
+                    } else {
+                        self.call_subst(Self::take_top, 2);
+                        frame = self.call_frames.pop().unwrap();
+                    }
                 }
-                op::End => {return;}
                 x => {panic!("unknown OpCode {}", x as u8);}
             }
         }
@@ -235,14 +254,15 @@ mod test {
     use OpCode as Op;
     use crate::symbol::INTERNED_SYMBOLS;
     use crate::reader::LispReader;
+    use crate::compile::Exp;
 
     #[test]
     fn compute() {
         let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
-        routine.execute(Gc::new(func));
-        assert_eq!(63, *routine.stack.get(0).unwrap());
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(63, val.unwrap());
     }
 
     #[test]
@@ -262,8 +282,8 @@ mod test {
             vec_into![false, 7, 3, 11],
             0, 0, false,) ;
         let mut routine = Routine::new();
-        routine.execute(Gc::new(func));
-        assert_eq!(10, *routine.stack.get(0).unwrap());
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(10, val.unwrap());
     }
 
     #[test]
@@ -313,7 +333,7 @@ mod test {
             0, 0, false);
 
         let mut routine = Routine::new();
-        routine.execute(Gc::new(top));
-        assert_eq!(63, *routine.stack.get(0).unwrap());
+        let val = routine.execute(Gc::new(top));
+        assert_eq!(63, val.unwrap());
     }
 }
