@@ -347,7 +347,10 @@ impl Exp {
         match self.vars.iter().rposition(|&x| x == sym) {
             Some(idx) => {
                 match (self.vars.len() - idx).try_into() {
-                    Ok(x) => Ok(self.codes.emit_stack_ref(x)),
+                    Ok(x) => {
+                        self.vars.push(sym);
+                        Ok(self.codes.emit_stack_ref(x))
+                    }
                     Err(_) => Err(Error::StackSizeOverflow),
                 }
             }

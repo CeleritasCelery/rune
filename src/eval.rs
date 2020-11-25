@@ -266,6 +266,15 @@ mod test {
     }
 
     #[test]
+    fn let_form() {
+        let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ foo bar))").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(13, val.unwrap());
+    }
+
+    #[test]
     fn jump() {
         let func = LispFn::new(
             vec_into![
@@ -321,7 +330,7 @@ mod test {
                 13,
                 3,
             ],
-            0, 0, false,));
+            0, 0, false));
 
         let top = LispFn::new(
             vec_into![
