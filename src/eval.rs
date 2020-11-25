@@ -272,6 +272,12 @@ mod test {
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
         assert_eq!(13, val.unwrap());
+
+        let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ 1 bar))").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(9, val.unwrap());
     }
 
     #[test]

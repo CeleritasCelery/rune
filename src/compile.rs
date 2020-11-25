@@ -239,7 +239,7 @@ impl TryFrom<LispObj> for Symbol {
 pub struct Exp {
     codes: CodeVec,
     constants: ConstVec,
-    vars: Vec<Symbol>,
+    vars: Vec<Option<Symbol>>,
 }
 
 impl std::convert::From<Exp> for LispFn {
@@ -249,15 +249,26 @@ impl std::convert::From<Exp> for LispFn {
 }
 
 impl Exp {
-    fn add_const(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn add_const(&mut self, obj: LispObj, var_ref: Option<Symbol>) -> Result<(), Error> {
+        self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
         Ok(self.codes.emit_const(idx))
+    }
+
+    fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<(), Error> {
+        match (self.vars.len() - idx).try_into() {
+            Ok(x) => {
+                self.vars.push(Some(var_ref));
+                Ok(self.codes.emit_stack_ref(x))
+            }
+            Err(_) => Err(Error::StackSizeOverflow),
+        }
     }
 
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
         let list = into_arg_list(value)?;
         match list.len() {
-            1 => self.add_const(list[0]),
+            1 => self.add_const(list[0], None),
             x => Err(Error::ArgCount(1, x as u16)),
         }
     }
@@ -282,18 +293,17 @@ impl Exp {
         let list = into_arg_list(cons.cdr)?;
         let mut iter = list.iter();
         match iter.next() {
-            Some(v) => self.add_const(*v)?,
-            None => self.add_const(LispObj::nil())?,
+            Some(v) => self.add_const(*v, Some(var))?,
+            None => self.add_const(LispObj::nil(), Some(var))?,
         };
         match iter.next() {
-            None => Ok(self.vars.push(var)),
+            None => Ok(()),
             Some(_) => Err(Error::LetValueCount(list.len() as u16)),
         }
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<(), Error> {
-        self.vars.push(sym);
-        self.add_const(LispObj::nil())
+        self.add_const(LispObj::nil(), Some(sym))
     }
 
     fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
@@ -308,7 +318,7 @@ impl Exp {
     }
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<(), Error> {
-        self.add_const(cons.car)?;
+        self.add_const(cons.car, None)?;
         let list = into_arg_list(cons.cdr)?;
         for form in list.iter() {
             self.compile_form(*form)?;
@@ -344,16 +354,8 @@ impl Exp {
     }
 
     fn compile_variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
-        match self.vars.iter().rposition(|&x| x == sym) {
-            Some(idx) => {
-                match (self.vars.len() - idx).try_into() {
-                    Ok(x) => {
-                        self.vars.push(sym);
-                        Ok(self.codes.emit_stack_ref(x))
-                    }
-                    Err(_) => Err(Error::StackSizeOverflow),
-                }
-            }
+        match self.vars.iter().rposition(|&x| x == Some(sym)) {
+            Some(idx) => self.stack_ref(idx, sym),
             None => panic!("dynamic variables not implemented"),
         }
     }
@@ -362,7 +364,7 @@ impl Exp {
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.compile_variable_reference(sym),
-            _ => self.add_const(obj)
+            _ => self.add_const(obj, None)
         }
     }
 
@@ -374,6 +376,7 @@ impl Exp {
         };
         exp.compile_form(obj)?;
         exp.codes.push_op(OpCode::Ret);
+        exp.vars.truncate(0);
         Ok(exp)
     }
 }
