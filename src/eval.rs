@@ -160,7 +160,7 @@ impl Routine {
         CallFrame::new(func_ref)
     }
 
-    fn call_subst(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {
+    fn call_subr(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {
         let i = self.stack.from_end(args);
         self.stack[i] = func(self.stack.take_slice(args));
         self.stack.truncate(i + 1);
@@ -194,16 +194,16 @@ impl Routine {
                 op::Constant4 => {self.stack.push(frame.get_const(4))}
                 op::Constant5 => {self.stack.push(frame.get_const(5))}
                 op::Add => {
-                    self.call_subst(arith::add, 2);
+                    self.call_subr(arith::add, 2);
                 }
                 op::Sub => {
-                    self.call_subst(arith::sub, 2);
+                    self.call_subr(arith::sub, 2);
                 }
                 op::Mul => {
-                    self.call_subst(arith::mul, 2);
+                    self.call_subr(arith::mul, 2);
                 }
                 op::Div => {
-                    self.call_subst(arith::div, 2);
+                    self.call_subr(arith::div, 2);
                 }
                 op::Call0 => {
                     self.call_frames.push(frame);
@@ -245,7 +245,7 @@ impl Routine {
                     if self.call_frames.len() == 0 {
                         return Ok(self.stack.pop().unwrap());
                     } else {
-                        self.call_subst(Self::take_top, 2);
+                        self.call_subr(Self::take_top, 2);
                         frame = self.call_frames.pop().unwrap();
                     }
                 }
