@@ -128,7 +128,13 @@ fn parse_symbol(slice: &str) -> LispObj {
         Err(_) => {
             match slice.parse::<f64>() {
                 Ok(num) => num.into(),
-                Err(_) => intern_symbol(slice),
+                Err(_) => {
+                    match slice {
+                        "nil" => LispObj::nil(),
+                        "t" => LispObj::t(),
+                        _ => intern_symbol(slice),
+                    }
+                }
             }
         },
     }
@@ -374,17 +380,25 @@ mod test {
     }
 
     #[test]
+    fn read_bool() {
+        check_reader!(false, "nil");
+        check_reader!(false, "()");
+        check_reader!(true, "t");
+    }
+
+    #[test]
     fn test_read_symbol() {
-        check_reader!(symbol::intern("foo"), "foo");
-        check_reader!(symbol::intern("--1"), "--1");
-        check_reader!(symbol::intern("1"), "\\1");
-        check_reader!(symbol::intern("3.0.0"), "3.0.0");
-        check_reader!(symbol::intern("1+"), "1+");
-        check_reader!(symbol::intern("+1"), "\\+1");
-        check_reader!(symbol::intern(" x"), "\\ x");
-        check_reader!(symbol::intern("\\x"), "\\\\x");
-        check_reader!(symbol::intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)");
-        check_reader!(symbol::intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}");
+        use symbol::intern;
+        check_reader!(intern("foo"), "foo");
+        check_reader!(intern("--1"), "--1");
+        check_reader!(intern("1"), "\\1");
+        check_reader!(intern("3.0.0"), "3.0.0");
+        check_reader!(intern("1+"), "1+");
+        check_reader!(intern("+1"), "\\+1");
+        check_reader!(intern(" x"), "\\ x");
+        check_reader!(intern("\\x"), "\\\\x");
+        check_reader!(intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)");
+        check_reader!(intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}");
     }
 
     #[test]
@@ -409,9 +423,10 @@ baz""#);
 
     #[test]
     fn read_quote() {
-        let quote = symbol::intern("quote");
-        check_reader!(list!(quote, symbol::intern("foo")), "(quote foo)");
-        check_reader!(list!(quote, symbol::intern("foo")), "'foo");
+        use symbol::intern;
+        let quote = intern("quote");
+        check_reader!(list!(quote, intern("foo")), "(quote foo)");
+        check_reader!(list!(quote, intern("foo")), "'foo");
         check_reader!(list!(quote, list!(1, 2, 3)), "'(1 2 3)");
     }
 
