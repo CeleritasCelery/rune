@@ -252,7 +252,7 @@ pub fn run() {}
 mod test {
     use super::*;
     use OpCode as Op;
-    use crate::symbol::INTERNED_SYMBOLS;
+    use crate::symbol;
     use crate::reader::LispReader;
     use crate::compile::Exp;
 
@@ -263,6 +263,12 @@ mod test {
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
         assert_eq!(63, val.unwrap());
+
+        let obj = LispReader::new("7").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(7, val.unwrap());
     }
 
     #[test]
@@ -317,10 +323,9 @@ mod test {
 
         let func = LispFn::new(codes, vec![], 3, 0, false,);
 
-        let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
-        let test_add = symbol_map.intern("test-add");
+        let test_add = symbol::intern("test-add");
         test_add.set_func(func);
-        let middle = symbol_map.intern("middle");
+        let middle = symbol::intern("middle");
         middle.set_func(LispFn::new(
             vec_into![
                 Op::Constant0,
