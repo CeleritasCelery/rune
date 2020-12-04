@@ -99,6 +99,19 @@ impl CodeVec {
         self.0.push(arg as u8);
     }
 
+    fn push_jump_placeholder(&mut self) -> usize {
+        let idx = self.0.len();
+        self.0.push(0);
+        self.0.push(0);
+        idx
+    }
+
+    fn set_jump_placeholder(&mut self, index: usize) {
+        let offset = self.0.len() - index - 2;
+        self.0[index] = (offset >> 8) as u8;
+        self.0[index+1] = offset as u8;
+    }
+
     fn emit_const(&mut self, idx: u16) {
         match idx {
             0 => self.push_op(OpCode::Constant0),
@@ -340,11 +353,41 @@ impl Exp {
         }
     }
 
+    fn compile_conditional(&mut self, obj: LispObj) -> Result<(), Error> {
+        let list = into_arg_list(obj)?;
+        match list.len() {
+            3 => {
+                self.compile_form(list[0])?;
+                self.codes.push_op(OpCode::JumpNil);
+                let place = self.codes.push_jump_placeholder();
+                self.compile_form(list[1])?;
+                self.codes.push_op(OpCode::Jump);
+                let place2 = self.codes.push_jump_placeholder();
+                self.codes.set_jump_placeholder(place);
+                self.compile_form(list[2])?;
+                self.codes.set_jump_placeholder(place2);
+                Ok(())
+            }
+            2 => {
+                self.compile_form(list[0])?;
+                self.codes.push_op(OpCode::JumpNil);
+                let place = self.codes.push_jump_placeholder();
+                self.compile_form(list[1])?;
+                self.codes.set_jump_placeholder(place);
+                Ok(())
+            }
+            len => {
+                Err(Error::ArgCount(2, len as u16))
+            }
+        }
+    }
+
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
         let sym: Symbol = cons.car.try_into()?;
         match sym.get_name() {
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
+            "if" => self.compile_conditional(cons.cdr),
             "+" => self.compile_operator(cons.cdr, OpCode::Add),
             "*" => self.compile_operator(cons.cdr, OpCode::Mul),
             "/" => self.compile_operator(cons.cdr, OpCode::Div),
@@ -445,6 +488,26 @@ mod test {
 
         let obj = LispReader::new("(let (foo 1))").next().unwrap().unwrap();
         assert!(Exp::compile(obj).is_err());
+    }
+
+    #[test]
+    fn conditional() {
+        let obj = LispReader::new("(if nil 1 2)").next().unwrap().unwrap();
+        let expect = create_expect(
+            vec_into![Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
+            vec_into![LispObj::nil(), 1, 2],
+        );
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("(if t 2)").next().unwrap().unwrap();
+        let expect = create_expect(
+            vec_into![Constant0, JumpNil, 0, 1, Constant1, Ret],
+            vec_into![LispObj::t(), 2],
+        );
+        assert_eq!(expect, Exp::compile(obj).unwrap());
+
+        let obj = LispReader::new("(if 1)").next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(2, 1));
     }
 
     #[test]
