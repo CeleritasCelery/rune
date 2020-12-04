@@ -90,6 +90,18 @@ impl From<Cons> for LispObj {
     }
 }
 
+#[macro_export]
+macro_rules! cons {
+    ($car:expr, $cdr:expr) => (Cons::new($car.into(), $cdr.into()));
+    ($car:expr) => (Cons::new($car.into(), false.into()));
+}
+
+#[macro_export]
+macro_rules! list {
+    ($x:expr) => (cons!($x));
+    ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
+}
+
 #[derive(Clone, Debug)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
