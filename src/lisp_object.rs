@@ -102,7 +102,7 @@ macro_rules! list {
     ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LispFn {
     pub op_codes: Vec<u8>,
     pub constants: Vec<LispObj>,
@@ -114,7 +114,11 @@ pub struct LispFn {
 }
 
 impl LispFn {
-    pub fn new(op_codes: Vec<u8>, constants: Vec<LispObj>, required_args: u16, optional_args: u16, rest_args: bool) -> Self {
+    pub fn new(op_codes: Vec<u8>,
+               constants: Vec<LispObj>,
+               required_args: u16,
+               optional_args: u16,
+               rest_args: bool) -> Self {
         LispFn {
             op_codes,
             constants,
@@ -142,29 +146,7 @@ pub union LispObj {
 
 impl cmp::PartialEq for LispObj {
     fn eq(&self, rhs: &LispObj) -> bool {
-        match self.val() {
-            Value::String(lhs) => {
-                match rhs.val() {
-                    Value::String(rhs) => lhs == rhs,
-                    _ => false,
-                }
-            }
-            Value::Float(lhs) => {
-                match rhs.val() {
-                    Value::Float(rhs) => lhs == rhs,
-                    _ => false,
-                }
-            }
-            Value::Cons(lhs) => {
-                match rhs.val() {
-                    Value::Cons(rhs) => lhs == rhs,
-                    _ => false,
-                }
-            }
-            _ => {
-                unsafe {self.bits == rhs.bits}
-            }
-        }
+        self.val() == rhs.val()
     }
 }
 
@@ -214,6 +196,7 @@ pub enum Value<'a> {
     String(&'a String),
     Symbol(Symbol),
     Float(f64),
+    Function(&'a LispFn),
     Void,
 }
 
@@ -252,12 +235,12 @@ impl LispObj {
                 Tag::Void => Void,
                 Tag::LongStr => String(&*self.get_ptr()),
                 Tag::ShortStr => String(&*self.get_ptr()),
+                Tag::Fn => Function(&*self.get_ptr()),
                 Tag::Nil => Nil,
                 Tag::True => True,
                 Tag::Cons => Cons(&*self.get_ptr()),
                 Tag::Fixnum => Int(self.fixnum.into()),
                 Tag::Marker => todo!(),
-                Tag::Fn => todo!(),
             }
         }
     }
@@ -364,6 +347,7 @@ impl fmt::Display for LispObj {
             Cons(x) => write!(f, "{}", x),
             String(x) => write!(f, "\"{}\"", x),
             Symbol(x) => write!(f, "'{}", x.get_name()),
+            Function(x) => write!(f, "(lambda {:?})", x),
             Void => write!(f, "Void"),
             True => write!(f, "t"),
             Nil => write!(f, "nil"),
@@ -495,6 +479,22 @@ mod test {
         assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
         assert_eq!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "foo"]);
         assert_ne!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "bar"]);
+    }
+
+    #[test]
+    fn function() {
+        let x: LispObj = LispFn::new(vec_into![0, 1, 2], vec_into![1], 0, 0, false).into();
+        assert!(matches!(x.val(), Value::Function(_)));
+        format!("{}", x);
+        let func = match x.val() {
+            Value::Function(x) => x,
+            _ => unreachable!(),
+        };
+        assert_eq!(func.op_codes, [0, 1, 2]);
+        assert_eq!(func.constants, vec_into![1]);
+        assert_eq!(func.required_args, 0);
+        assert_eq!(func.optional_args, 0);
+        assert_eq!(func.rest_args, false);
     }
 
     #[test]

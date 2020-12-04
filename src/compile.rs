@@ -49,6 +49,20 @@ impl From<OpCode> for u8 {
     fn from(x: OpCode) -> u8 { x as u8 }
 }
 
+impl Default for LispFn {
+    fn default() -> Self {
+        LispFn {
+            op_codes: vec_into![OpCode::Constant0, OpCode::Ret],
+            constants: vec![LispObj::nil()],
+            required_args: 0,
+            optional_args: 0,
+            rest_args: false,
+            max_stack_usage: 0,
+            advice: false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct ConstVec(Vec<LispObj>);
 
@@ -207,6 +221,7 @@ fn get_type(obj: LispObj) -> Type {
         Value::True => True,
         Value::Cons(_) => Cons,
         Value::Int(_) => Int,
+        Value::Function(_) => Func,
     }
 }
 
@@ -384,9 +399,36 @@ impl Exp {
         }
     }
 
+    fn compile_lambda(&mut self, obj: LispObj) -> Result<(), Error> {
+        let list = into_arg_list(obj)?;
+        let mut iter = list.iter();
+        let mut vars: Vec<Option<Symbol>> = vec![];
+        match iter.next() {
+            None => return self.add_const(LispFn::default().into(), None),
+            Some(bindings) => {
+                for binding in into_arg_list(*bindings)?.iter() {
+                    match binding.val() {
+                        Value::Symbol(x) => vars.push(Some(x)),
+                        _ => return Err(Error::Type(Type::Symbol, get_type(*binding))),
+                    }
+                }
+            }
+        };
+        match iter.next() {
+            None => self.add_const(LispFn::default().into(), None),
+            Some(x) => {
+                let len = vars.len();
+                let mut func: LispFn = Self::compile_func_body(*x, vars)?.into();
+                func.required_args = len as u16;
+                self.add_const(func.into(), None)
+            }
+        }
+    }
+
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
         let sym: Symbol = cons.car.try_into()?;
         match sym.get_name() {
+            "lambda" => self.compile_lambda(cons.cdr),
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
             "if" => self.compile_conditional(cons.cdr),
@@ -413,16 +455,20 @@ impl Exp {
         }
     }
 
-    pub fn compile(obj: LispObj) -> Result<Self, Error> {
+    fn compile_func_body(obj: LispObj, vars: Vec<Option<Symbol>>) -> Result<Self, Error> {
         let mut exp = Self{
             codes: CodeVec::new(),
             constants: ConstVec::new(),
-            vars: Vec::new(),
+            vars,
         };
         exp.compile_form(obj)?;
         exp.codes.push_op(OpCode::Ret);
         exp.vars.truncate(0);
         Ok(exp)
+    }
+
+    pub fn compile(obj: LispObj) -> Result<Self, Error> {
+        Self::compile_func_body(obj, vec![])
     }
 }
 
@@ -487,6 +533,24 @@ mod test {
                         [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
                         [symbol::intern("foo"), symbol::intern("bar"), 1, 2]);
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
+    }
+
+    #[test]
+    fn lambda() {
+        check_compiler!("(lambda)", [Constant0, Ret], [LispFn::default()]);
+        check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
+        check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
+
+        let func = LispFn::new(vec_into![Constant0, Ret], vec_into![1], 0, 0, false);
+        check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
+
+        let func = LispFn::new(vec_into![StackRef1, Ret], vec![], 1, 0, false);
+        check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
+
+        let func = LispFn::new(vec_into![StackRef2, StackRef2, Add, Ret], vec![], 2, 0, false);
+        check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
+
+        check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));
     }
 
     #[test]

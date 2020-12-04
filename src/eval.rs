@@ -260,7 +260,6 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use OpCode as Op;
     use crate::symbol;
     use crate::reader::LispReader;
     use crate::compile::Exp;
@@ -324,51 +323,28 @@ mod test {
 
     #[test]
     fn call() {
-        let codes = vec_into![
-                Op::StackRef3,
-                Op::StackRef3,
-                Op::StackRef3,
-                Op::Add,
-                Op::Add,
-                Op::Mul,
-                Op::Sub,
-                Op::Sub,
-                Op::Ret,
-            ];
-
-        let func = LispFn::new(codes, vec![], 3, 0, false,);
-
         let test_add = symbol::intern("test-add");
+        let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
+        let exp: LispFn = Exp::compile(obj).unwrap().into();
+        let func = match exp.constants[0].val() {
+            Value::Function(x) => x.clone(),
+            _ => unreachable!(),
+        };
         test_add.set_func(func);
+
         let middle = symbol::intern("middle");
-        middle.set_func(LispFn::new(
-            vec_into![
-                Op::Constant0,
-                Op::Constant1,
-                Op::Constant2,
-                Op::Constant3,
-                Op::Call3,
-                Op::Ret,
-            ],
-            vec_into![
-                test_add,
-                7,
-                13,
-                3,
-            ],
-            0, 0, false));
+        let obj = LispReader::new("(lambda () (test-add 7 13 3))").next().unwrap().unwrap();
+        let exp: LispFn = Exp::compile(obj).unwrap().into();
+        let func = match exp.constants[0].val() {
+            Value::Function(x) => x.clone(),
+            _ => unreachable!(),
+        };
+        middle.set_func(func);
 
-        let top = LispFn::new(
-            vec_into![
-                Op::Constant0,
-                Op::Call0,
-                Op::Ret,
-            ],
-            vec_into![middle],
-            0, 0, false);
-
+        let obj = LispReader::new("(middle)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(top));
-        assert_eq!(63, val.unwrap());
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(112, val.unwrap());
     }
 }
