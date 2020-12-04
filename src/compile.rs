@@ -434,153 +434,74 @@ mod test {
     use crate::reader::LispReader;
     use crate::symbol;
 
-    fn create_expect(codes: Vec<u8>, constants: Vec<LispObj>) -> Exp {
-        Exp{
-            codes: CodeVec(codes),
-            constants: ConstVec(constants),
-            vars: Vec::new(),
+    fn check_error(compare: &str, expect: Error) {
+        let obj = LispReader::new(compare).next().unwrap().unwrap();
+        assert_eq!(Exp::compile(obj).err().unwrap(), expect);
+    }
+
+    macro_rules! check_compiler {
+        ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
+            let obj = LispReader::new($compare).next().unwrap().unwrap();
+            let expect = Exp{
+                codes: CodeVec(vec_into![$($op),+]),
+                constants: ConstVec(vec_into![$($const),+]),
+                vars: Vec::new(),
+            };
+            assert_eq!(Exp::compile(obj).unwrap(), expect);
         }
     }
 
     #[test]
     fn test_basic() {
-        let obj = LispReader::new("1").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Ret],
-            vec_into![1],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("'foo").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Ret],
-            vec_into![symbol::intern("foo")],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("'(1 2)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Ret],
-            vec_into![list!(1, 2)],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
+        check_compiler!("1", [Constant0, Ret], [1]);
+        check_compiler!("'foo", [Constant0, Ret], [symbol::intern("foo")]);
+        check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2)]);
     }
 
     #[test]
     fn variable() {
-        let obj = LispReader::new("(let (foo))").next().unwrap().unwrap();
-        let expect = create_expect(vec_into![Constant0, Ret], vec_into![false]);
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(let ((foo 1)(bar 2)(baz 3)))").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Constant1, Constant2, Ret],
-            vec_into![1, 2, 3]
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(let ((foo 1)) foo)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, StackRef1, Ret],
-            vec_into![1]
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(let (foo 1))").next().unwrap().unwrap();
-        assert!(Exp::compile(obj).is_err());
+        check_compiler!("(let (foo))", [Constant0, Ret], [false]);
+        check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
+        check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef1, Ret], [1]);
+        check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
     #[test]
     fn conditional() {
-        let obj = LispReader::new("(if nil 1 2)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
-            vec_into![LispObj::nil(), 1, 2],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(if t 2)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, JumpNil, 0, 1, Constant1, Ret],
-            vec_into![LispObj::t(), 2],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(if 1)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(2, 1));
+        check_compiler!("(if nil 1 2)",
+                        [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
+                        [LispObj::nil(), 1, 2]);
+        check_compiler!("(if t 2)", [Constant0, JumpNil, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
+        check_error("(if 1)", Error::ArgCount(2, 1));
     }
 
     #[test]
     fn function() {
-        let obj = LispReader::new("(foo)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Call0, Ret],
-            vec_into![symbol::intern("foo")],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(foo 1 2)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![Constant0, Constant1, Constant2, Call2, Ret],
-            vec_into![symbol::intern("foo"), 1, 2],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
-
-        let obj = LispReader::new("(foo (bar 1) 2)").next().unwrap().unwrap();
-        let expect = create_expect(
-            vec_into![
-                Constant0,
-                Constant1,
-                Constant2,
-                Call1,
-                Constant3,
-                Call2,
-                Ret,
-            ],
-            vec_into![symbol::intern("foo"), symbol::intern("bar"), 1, 2],
-        );
-        assert_eq!(expect, Exp::compile(obj).unwrap());
+        check_compiler!("(foo)", [Constant0, Call0, Ret], [symbol::intern("foo")]);
+        check_compiler!("(foo 1 2)",
+                        [Constant0, Constant1, Constant2, Call2, Ret],
+                        [symbol::intern("foo"), 1, 2]);
+        check_compiler!("(foo (bar 1) 2)",
+                        [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
+                        [symbol::intern("foo"), symbol::intern("bar"), 1, 2]);
+        check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
     #[test]
     fn errors() {
-        let obj = LispReader::new("(\"foo\")").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Symbol, Type::String));
-
-        let obj = LispReader::new("(foo . 1)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
-    }
-
-    #[test]
-    fn quote_errors() {
-        let obj = LispReader::new("(quote)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
-
-        let obj = LispReader::new("(quote 1 2)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 2));
+        check_error("(\"foo\")", Error::Type(Type::Symbol, Type::String));
+        check_error("(quote)", Error::ArgCount(1, 0));
+        check_error("(quote 1 2)", Error::ArgCount(1, 2))
     }
 
     #[test]
     fn let_errors() {
-        let obj = LispReader::new("(let (1))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Int));
-
-        let obj = LispReader::new("(let ((foo 1 2)))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::LetValueCount(2));
-
-        let obj = LispReader::new("(let ((foo . 1)))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
-
-        let obj = LispReader::new("(let ((foo 1 . 2)))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::List, Type::Int));
-
-        let obj = LispReader::new("(let (()))").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Nil));
-
-        let obj = LispReader::new("(let ())").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::Type(Type::Cons, Type::Nil));
-
-        let obj = LispReader::new("(let)").next().unwrap().unwrap();
-        assert_eq!(Exp::compile(obj).err().unwrap(), Error::ArgCount(1, 0));
+        check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
+        check_error("(let ((foo 1 2)))", Error::LetValueCount(2));
+        check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
+        check_error("(let ((foo 1 . 2)))", Error::Type(Type::List, Type::Int));
+        check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));
+        check_error("(let ())", Error::Type(Type::Cons, Type::Nil));
+        check_error("(let)", Error::ArgCount(1, 0));
     }
 }
