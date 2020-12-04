@@ -39,6 +39,7 @@ pub enum OpCode {
     CallN2,
     Jump,
     JumpNil,
+    JumpNilElsePop,
     Ret,
     End,
     Unknown
@@ -176,6 +177,7 @@ pub enum Error {
     LetValueCount(u16),
     StackSizeOverflow,
     Type(Type, Type),
+    UnknownOpcode(u8),
 }
 
 #[derive(Debug, PartialEq)]
@@ -370,7 +372,7 @@ impl Exp {
             }
             2 => {
                 self.compile_form(list[0])?;
-                self.codes.push_op(OpCode::JumpNil);
+                self.codes.push_op(OpCode::JumpNilElsePop);
                 let place = self.codes.push_jump_placeholder();
                 self.compile_form(list[1])?;
                 self.codes.set_jump_placeholder(place);
@@ -471,7 +473,7 @@ mod test {
         check_compiler!("(if nil 1 2)",
                         [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
                         [LispObj::nil(), 1, 2]);
-        check_compiler!("(if t 2)", [Constant0, JumpNil, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
+        check_compiler!("(if t 2)", [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 

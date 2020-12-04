@@ -232,6 +232,15 @@ impl Routine {
                         frame.ip.jump(offset as isize);
                     }
                 }
+                op::JumpNilElsePop => {
+                    let cond = self.stack.get(self.stack.len() - 1).unwrap();
+                    let offset = frame.ip.take_double_arg();
+                    if matches!(cond.val(), Value::Nil) {
+                        frame.ip.jump(offset as isize);
+                    } else {
+                        self.stack.pop();
+                    }
+                }
                 op::Ret => {
                     if self.call_frames.len() == 0 {
                         return Ok(self.stack.pop().unwrap());
@@ -240,7 +249,7 @@ impl Routine {
                         frame = self.call_frames.pop().unwrap();
                     }
                 }
-                x => {panic!("unknown OpCode {}", x as u8);}
+                x => return Err(Error::UnknownOpcode(x as u8))
             }
         }
     }
@@ -288,23 +297,29 @@ mod test {
 
     #[test]
     fn jump() {
-        let func = LispFn::new(
-            vec_into![
-                Op::Constant1,
-                Op::Constant2,
-                Op::Constant0,
-                Op::JumpNil,
-                0, 2,
-                Op::Constant3,
-                Op::Add,
-                Op::Add,
-                Op::Ret,
-            ],
-            vec_into![false, 7, 3, 11],
-            0, 0, false,) ;
+        let obj = LispReader::new("(+ 7 (if nil 11 3))").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
         assert_eq!(10, val.unwrap());
+
+        let obj = LispReader::new("(+ 7 (if t 11 3))").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(18, val.unwrap());
+
+        let obj = LispReader::new("(if nil 11)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(false, val.unwrap());
+
+        let obj = LispReader::new("(if t 11)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(11, val.unwrap());
     }
 
     #[test]

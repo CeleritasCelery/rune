@@ -195,6 +195,16 @@ impl cmp::PartialEq<LispObj> for i64 {
     }
 }
 
+impl cmp::PartialEq<LispObj> for bool {
+    fn eq(&self, rhs: &LispObj) -> bool {
+        match rhs.val() {
+            Value::Nil => *self == false,
+            Value::True => *self == true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Value<'a> {
     Int(i64),
