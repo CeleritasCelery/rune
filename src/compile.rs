@@ -217,6 +217,7 @@ fn get_type(obj: LispObj) -> Type {
         Value::Cons(_) => Cons,
         Value::Int(_) => Int,
         Value::Function(_) => Func,
+        Value::Subr(_) => Func,
     }
 }
 

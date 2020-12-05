@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::lisp_object::LispFn;
+use crate::lisp_object::{LispFn, LispObj, Value};
 use crate::gc::Gc;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -8,12 +8,12 @@ use fnv::{FnvHashMap, FnvHasher};
 use std::cmp;
 use std::mem;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct InnerSymbol {
     name: String,
-    func: AtomicU64,
+    func: AtomicI64,
 }
 
 impl cmp::PartialEq for InnerSymbol {
@@ -24,17 +24,21 @@ impl cmp::PartialEq for InnerSymbol {
 
 impl InnerSymbol {
     fn new(name: String) -> Self {
-        InnerSymbol{name, func: AtomicU64::new(0)}
+        InnerSymbol{name, func: AtomicI64::new(0)}
     }
 
     pub fn set_func(&self, func: LispFn) {
-        let ptr: *const LispFn = Gc::new(func).as_ref();
-        self.func.store(ptr as u64, Ordering::Release);
+        self.func.store(LispObj::from(func).into_raw(), Ordering::Release);
     }
 
     pub fn get_func(&self) -> Option<Gc<LispFn>> {
-        let atomic = self.func.load(Ordering::Acquire);
-        unsafe { mem::transmute(atomic) }
+        let bits = self.func.load(Ordering::Acquire);
+        unsafe {
+            match LispObj::from_raw(bits).val() {
+                Value::Function(x) => Some(mem::transmute(x)),
+                _ => None,
+            }
+        }
     }
 
     pub fn get_name(&self) -> &str {

@@ -103,19 +103,19 @@ macro_rules! list {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LispFn {
-    pub op_codes: Vec<u8>,
-    pub constants: Vec<LispObj>,
-    pub args: FnArgs,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct FnArgs {
     pub rest: bool,
     pub required: u16,
     pub optional: u16,
     pub max_stack_usage: u16,
     pub advice: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LispFn {
+    pub op_codes: Vec<u8>,
+    pub constants: Vec<LispObj>,
+    pub args: FnArgs,
 }
 
 impl LispFn {
@@ -140,7 +140,33 @@ impl LispFn {
 
 impl From<LispFn> for LispObj {
     fn from(func: LispFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::Fn)
+        LispObj::from_tagged_ptr(func, Tag::LispFn)
+    }
+}
+
+type BuiltInFn = fn(&[LispObj]) -> LispObj;
+
+#[derive(Clone)]
+pub struct CoreFn {
+    pub subr: BuiltInFn,
+    pub args: FnArgs,
+}
+
+impl std::fmt::Debug for CoreFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Core Fn ({:p} -> {:?})", &self.subr, self.args)
+    }
+}
+
+impl std::cmp::PartialEq for CoreFn {
+    fn eq(&self, other: &Self) -> bool {
+        &self.subr as *const BuiltInFn == &other.subr as *const BuiltInFn
+    }
+}
+
+impl From<CoreFn> for LispObj {
+    fn from(func: CoreFn) -> Self {
+        LispObj::from_tagged_ptr(func, Tag::LispFn)
     }
 }
 
@@ -204,6 +230,7 @@ pub enum Value<'a> {
     Symbol(Symbol),
     Float(f64),
     Function(&'a LispFn),
+    Subr(&'a CoreFn),
     Void,
 }
 
@@ -225,7 +252,8 @@ enum Tag {
     Symbol = 6,
     LongStr = 7,
     ShortStr = 8,
-    Fn = 16,
+    LispFn = 16,
+    CoreFn,
     Void,
 }
 
@@ -242,7 +270,8 @@ impl LispObj {
                 Tag::Void => Void,
                 Tag::LongStr => String(&*self.get_ptr()),
                 Tag::ShortStr => String(&*self.get_ptr()),
-                Tag::Fn => Function(&*self.get_ptr()),
+                Tag::LispFn => Function(&*self.get_ptr()),
+                Tag::CoreFn => Subr(&*self.get_ptr()),
                 Tag::Nil => Nil,
                 Tag::True => True,
                 Tag::Cons => Cons(&*self.get_ptr()),
@@ -250,6 +279,14 @@ impl LispObj {
                 Tag::Marker => todo!(),
             }
         }
+    }
+
+    pub fn into_raw(self) -> i64 {
+        unsafe{self.bits}
+    }
+
+    pub unsafe fn from_raw(bits: i64) -> Self {
+        Self{bits}
     }
 
     unsafe fn get_ptr<T>(&self) -> *const T {
@@ -355,6 +392,7 @@ impl fmt::Display for LispObj {
             String(x) => write!(f, "\"{}\"", x),
             Symbol(x) => write!(f, "'{}", x.get_name()),
             Function(x) => write!(f, "(lambda {:?})", x),
+            Subr(x) => write!(f, "Built-In {:?}", x),
             Void => write!(f, "Void"),
             True => write!(f, "t"),
             Nil => write!(f, "nil"),
