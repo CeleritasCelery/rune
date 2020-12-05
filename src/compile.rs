@@ -51,15 +51,10 @@ impl From<OpCode> for u8 {
 
 impl Default for LispFn {
     fn default() -> Self {
-        LispFn {
-            op_codes: vec_into![OpCode::Constant0, OpCode::Ret],
-            constants: vec![LispObj::nil()],
-            required_args: 0,
-            optional_args: 0,
-            rest_args: false,
-            max_stack_usage: 0,
-            advice: false,
-        }
+        LispFn::new(
+            vec_into![OpCode::Constant0, OpCode::Ret],
+            vec![LispObj::nil()],
+            0, 0, false)
     }
 }
 
@@ -419,7 +414,7 @@ impl Exp {
             Some(x) => {
                 let len = vars.len();
                 let mut func: LispFn = Self::compile_func_body(*x, vars)?.into();
-                func.required_args = len as u16;
+                func.args.required = len as u16;
                 self.add_const(func.into(), None)
             }
         }

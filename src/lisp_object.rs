@@ -106,9 +106,14 @@ macro_rules! list {
 pub struct LispFn {
     pub op_codes: Vec<u8>,
     pub constants: Vec<LispObj>,
-    pub rest_args: bool,
-    pub required_args: u16,
-    pub optional_args: u16,
+    pub args: FnArgs,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FnArgs {
+    pub rest: bool,
+    pub required: u16,
+    pub optional: u16,
     pub max_stack_usage: u16,
     pub advice: bool,
 }
@@ -116,17 +121,19 @@ pub struct LispFn {
 impl LispFn {
     pub fn new(op_codes: Vec<u8>,
                constants: Vec<LispObj>,
-               required_args: u16,
-               optional_args: u16,
-               rest_args: bool) -> Self {
+               required: u16,
+               optional: u16,
+               rest: bool) -> Self {
         LispFn {
             op_codes,
             constants,
-            required_args,
-            optional_args,
-            rest_args,
-            max_stack_usage: 0,
-            advice: false,
+            args: FnArgs {
+                required,
+                optional,
+                rest,
+                max_stack_usage: 0,
+                advice: false,
+            }
         }
     }
 }
@@ -492,9 +499,9 @@ mod test {
         };
         assert_eq!(func.op_codes, [0, 1, 2]);
         assert_eq!(func.constants, vec_into![1]);
-        assert_eq!(func.required_args, 0);
-        assert_eq!(func.optional_args, 0);
-        assert_eq!(func.rest_args, false);
+        assert_eq!(func.args.required, 0);
+        assert_eq!(func.args.optional, 0);
+        assert_eq!(func.args.rest, false);
     }
 
     #[test]

@@ -135,22 +135,22 @@ impl Routine {
             }
         };
         let func = func_ref.as_ref();
-        if arg_cnt < func.required_args  {
+        if arg_cnt < func.args.required  {
             panic!("Function {} called with {} arguments which is less then the required {}",
                    sym.get_name(),
                    arg_cnt,
-                   func.required_args,
+                   func.args.required,
             );
         }
-        let total_args = func.required_args + func.optional_args;
-        if !func.rest_args && (arg_cnt > total_args) {
+        let total_args = func.args.required + func.args.optional;
+        if !func.args.rest && (arg_cnt > total_args) {
             panic!("Function {} called with {} arguments which is more then the aloud {}",
                    sym.get_name(),
                    arg_cnt,
                    total_args,
             );
         }
-        let fill_args = total_args + if func.rest_args {1} else {0} - arg_cnt;
+        let fill_args = total_args + if func.args.rest {1} else {0} - arg_cnt;
         if fill_args > 0 {
             for _ in 0..fill_args {
                 self.stack.push(LispObj::nil());
