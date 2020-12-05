@@ -331,19 +331,19 @@ mod test {
         let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
-            Value::Function(x) => x.clone(),
+            Value::LispFunc(x) => x.clone(),
             _ => unreachable!(),
         };
-        test_add.set_func(func);
+        test_add.set_lisp_func(func);
 
         let middle = symbol::intern("middle");
         let obj = LispReader::new("(lambda () (test-add 7 13 3))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
-            Value::Function(x) => x.clone(),
+            Value::LispFunc(x) => x.clone(),
             _ => unreachable!(),
         };
-        middle.set_func(func);
+        middle.set_lisp_func(func);
 
         let obj = LispReader::new("(middle)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();

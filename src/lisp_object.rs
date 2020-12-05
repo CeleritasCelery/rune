@@ -244,8 +244,8 @@ pub enum Value<'a> {
     String(&'a String),
     Symbol(Symbol),
     Float(f64),
-    Function(&'a LispFn),
-    Subr(&'a CoreFn),
+    LispFunc(&'a LispFn),
+    CoreFunc(&'a CoreFn),
     Void,
 }
 
@@ -275,23 +275,21 @@ enum Tag {
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
 impl LispObj {
-
     pub fn val(&self) -> Value {
-        use Value::*;
         unsafe {
             match self.tag {
-                Tag::Symbol => Symbol(&*self.get_ptr()),
-                Tag::Float => Float(*self.get_ptr()),
-                Tag::Void => Void,
-                Tag::LongStr => String(&*self.get_ptr()),
-                Tag::ShortStr => String(&*self.get_ptr()),
-                Tag::LispFn => Function(&*self.get_ptr()),
-                Tag::CoreFn => Subr(&*self.get_ptr()),
-                Tag::Nil => Nil,
-                Tag::True => True,
-                Tag::Cons => Cons(&*self.get_ptr()),
-                Tag::Fixnum => Int(self.fixnum.into()),
-                Tag::Marker => todo!(),
+                Tag::Symbol   => Value::Symbol(&*self.get_ptr()),
+                Tag::Float    => Value::Float(*self.get_ptr()),
+                Tag::Void     => Value::Void,
+                Tag::LongStr  => Value::String(&*self.get_ptr()),
+                Tag::ShortStr => Value::String(&*self.get_ptr()),
+                Tag::LispFn   => Value::LispFunc(&*self.get_ptr()),
+                Tag::CoreFn   => Value::CoreFunc(&*self.get_ptr()),
+                Tag::Nil      => Value::Nil,
+                Tag::True     => Value::True,
+                Tag::Cons     => Value::Cons(&*self.get_ptr()),
+                Tag::Fixnum   => Value::Int(self.fixnum.into()),
+                Tag::Marker   => todo!(),
             }
         }
     }
@@ -400,18 +398,17 @@ impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
 
 impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Value::*;
         match self.val() {
-            Int(x) => write!(f, "{}", x),
-            Cons(x) => write!(f, "{}", x),
-            String(x) => write!(f, "\"{}\"", x),
-            Symbol(x) => write!(f, "'{}", x.get_name()),
-            Function(x) => write!(f, "(lambda {:?})", x),
-            Subr(x) => write!(f, "Built-In {:?}", x),
-            Void => write!(f, "Void"),
-            True => write!(f, "t"),
-            Nil => write!(f, "nil"),
-            Float(x) => {
+            Value::Int(x) => write!(f, "{}", x),
+            Value::Cons(x) => write!(f, "{}", x),
+            Value::String(x) => write!(f, "\"{}\"", x),
+            Value::Symbol(x) => write!(f, "'{}", x.get_name()),
+            Value::LispFunc(x) => write!(f, "(lambda {:?})", x),
+            Value::CoreFunc(x) => write!(f, "Built-In {:?}", x),
+            Value::Void => write!(f, "Void"),
+            Value::True => write!(f, "t"),
+            Value::Nil => write!(f, "nil"),
+            Value::Float(x) => {
                 if x.fract() == 0.0 {
                     write!(f, "{:.1}", x)
                 } else {
@@ -544,10 +541,10 @@ mod test {
     #[test]
     fn function() {
         let x: LispObj = LispFn::new(vec_into![0, 1, 2], vec_into![1], 0, 0, false).into();
-        assert!(matches!(x.val(), Value::Function(_)));
+        assert!(matches!(x.val(), Value::LispFunc(_)));
         format!("{}", x);
         let func = match x.val() {
-            Value::Function(x) => x,
+            Value::LispFunc(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(func.op_codes, [0, 1, 2]);
