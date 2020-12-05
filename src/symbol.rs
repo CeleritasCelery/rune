@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::lisp_object::{LispFn, LispObj, Value};
+use crate::lisp_object::{LispFn, CoreFn, LispObj};
 use crate::gc::Gc;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -13,7 +13,42 @@ use std::sync::atomic::{AtomicI64, Ordering};
 #[derive(Debug)]
 pub struct InnerSymbol {
     name: String,
-    func: AtomicI64,
+    func: FnCell,
+}
+
+#[derive(Debug)]
+struct FnCell(AtomicI64);
+
+const LISP_FN_TAG: i64 = 0x1;
+const SUBR_FN_TAG: i64 = 0x2;
+const FN_MASK: i64 = 0b11;
+
+impl FnCell {
+    fn new() -> Self { Self(AtomicI64::new(0)) }
+
+    fn set_func(&self, func: LispFn) {
+        let ptr: *const LispFn = Gc::new(func).as_ref();
+        let value = ptr as i64 | LISP_FN_TAG;
+        self.0.store(value, Ordering::Release);
+    }
+
+    fn set_subr(&self, func: CoreFn) {
+        let ptr: *const CoreFn = Gc::new(func).as_ref();
+        let value = ptr as i64 | SUBR_FN_TAG;
+        self.0.store(value, Ordering::Release);
+    }
+
+    fn remove_tag(bits: i64) -> i64 { bits >> 2 << 2 }
+
+    fn get(&self) -> Function {
+        let bits = self.0.load(Ordering::Acquire);
+        let ptr = Self::remove_tag(bits);
+        match bits & FN_MASK {
+            LISP_FN_TAG => unsafe { Function::Lisp(mem::transmute(ptr)) }
+            SUBR_FN_TAG => unsafe { Function::Subr(mem::transmute(ptr)) }
+            _ => Function::None,
+        }
+    }
 }
 
 impl cmp::PartialEq for InnerSymbol {
@@ -24,26 +59,31 @@ impl cmp::PartialEq for InnerSymbol {
 
 impl InnerSymbol {
     fn new(name: String) -> Self {
-        InnerSymbol{name, func: AtomicI64::new(0)}
+        InnerSymbol{name, func: FnCell::new()}
     }
 
     pub fn set_func(&self, func: LispFn) {
-        self.func.store(LispObj::from(func).into_raw(), Ordering::Release);
+        self.func.set_func(func);
     }
 
-    pub fn get_func(&self) -> Option<Gc<LispFn>> {
-        let bits = self.func.load(Ordering::Acquire);
-        unsafe {
-            match LispObj::from_raw(bits).val() {
-                Value::Function(x) => Some(mem::transmute(x)),
-                _ => None,
-            }
-        }
+    pub fn set_subr(&self, func: CoreFn) {
+        self.func.set_subr(func);
+    }
+
+    pub fn get_func(&self) -> Function {
+        self.func.get()
     }
 
     pub fn get_name(&self) -> &str {
         &self.name
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Function {
+    Lisp(Gc<LispFn>),
+    Subr(Gc<CoreFn>),
+    None,
 }
 
 pub struct SymbolMap(HashMap<String, Box<InnerSymbol>, BuildHasherDefault<FnvHasher>>);
@@ -102,14 +142,37 @@ mod test {
     fn symbol_func() {
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
-        assert_eq!(None, x.get_func());
+        assert_eq!(Function::None, x.get_func());
         x.set_func(LispFn::new(vec![1], vec![], 0, 0, false));
-        let before = x.get_func().unwrap();
+        let before = match x.get_func() {
+            Function::Lisp(x) => x,
+            _ => unreachable!(),
+        };
         assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
         x.set_func(LispFn::new(vec![7], vec![], 0, 0, false));
-        let after = x.get_func().unwrap();
+        let after = match x.get_func() {
+            Function::Lisp(x) => x,
+            _ => unreachable!(),
+        };
         assert_eq!(after.as_ref().op_codes.get(0).unwrap(), &7);
         assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
+    }
+
+    #[test]
+    fn subr() {
+        let func = |x: &[LispObj]| -> LispObj {
+            x[0]
+        };
+
+        let sym = InnerSymbol::new("bar".to_owned());
+        let core_func = CoreFn::new(func, 0, 0, false);
+        sym.set_subr(core_func);
+        match sym.get_func() {
+            Function::Subr(x) => {
+                assert_eq!(*x.as_ref(), CoreFn::new(func, 0, 0, false));
+            }
+            _ => unreachable!(),
+        }
     }
 
     #[test]
@@ -117,10 +180,14 @@ mod test {
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
-        assert_eq!(None, first.get_func());
+        assert_eq!(Function::None, first.get_func());
         let second = symbol_map.intern("foo");
         second.set_func(LispFn::new(vec![5], vec![], 0, 0, false));
-        assert_eq!(first.get_func().unwrap().as_ref().op_codes.get(0).unwrap(), &5);
+        let func = match first.get_func() {
+            Function::Lisp(x) => x,
+            _ => unreachable!(),
+        };
+        assert_eq!(func.as_ref().op_codes.get(0).unwrap(), &5);
         assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
 }

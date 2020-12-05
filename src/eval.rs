@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value};
+use crate::lisp_object::{LispObj, LispFn, Value, FnArgs};
+use crate::symbol::{Symbol, Function};
 use crate::compile::{OpCode, Error};
 use crate::gc::Gc;
 use std::mem::transmute;
@@ -122,42 +123,45 @@ impl Routine {
         vars[1]
     }
 
-    fn call(&mut self, arg_cnt: u16) -> CallFrame {
-        let fn_idx = arg_cnt as usize + 1;
-        let sym = match self.stack.ref_at(fn_idx).val() {
-            Value::Symbol(x) => x,
-            _ => panic!()
-        };
-        let func_ref = match sym.get_func(){
-            Some(x) => x.clone(),
-            None => {
-                panic!("void function {}", sym.get_name())
-            }
-        };
-        let func = func_ref.as_ref();
-        if arg_cnt < func.args.required  {
+    fn process_args(&mut self, count: u16, args: FnArgs, sym: Symbol) {
+        if count < args.required  {
             panic!("Function {} called with {} arguments which is less then the required {}",
                    sym.get_name(),
-                   arg_cnt,
-                   func.args.required,
+                   count,
+                   args.required,
             );
         }
-        let total_args = func.args.required + func.args.optional;
-        if !func.args.rest && (arg_cnt > total_args) {
+        let total_args = args.required + args.optional;
+        if !args.rest && (count > total_args) {
             panic!("Function {} called with {} arguments which is more then the aloud {}",
                    sym.get_name(),
-                   arg_cnt,
+                   count,
                    total_args,
             );
         }
-        let fill_args = total_args + if func.args.rest {1} else {0} - arg_cnt;
+        let fill_args = total_args + if args.rest {1} else {0} - count;
         if fill_args > 0 {
             for _ in 0..fill_args {
                 self.stack.push(LispObj::nil());
             }
         }
+    }
 
-        CallFrame::new(func_ref)
+    fn call(&mut self, arg_cnt: u16) -> CallFrame {
+        let fn_idx = arg_cnt as usize + 1;
+        let sym = match self.stack.ref_at(fn_idx).val() {
+            Value::Symbol(x) => x,
+            _ => panic!("Expected symbol for call")
+        };
+        match sym.get_func(){
+            Function::Lisp(x) => {
+                self.process_args(arg_cnt, x.as_ref().args, sym);
+                CallFrame::new(x)
+            }
+            Function::None => panic!("void function"),
+            _ => panic!("subr not implemented"),
+
+        }
     }
 
     fn call_subr(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {

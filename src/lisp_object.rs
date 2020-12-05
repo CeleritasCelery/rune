@@ -102,7 +102,7 @@ macro_rules! list {
     ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FnArgs {
     pub rest: bool,
     pub required: u16,
@@ -152,6 +152,21 @@ pub struct CoreFn {
     pub args: FnArgs,
 }
 
+impl CoreFn {
+    pub fn new(subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {
+        Self {
+            subr,
+            args: FnArgs {
+                required,
+                optional,
+                rest,
+                max_stack_usage: 0,
+                advice: false,
+            }
+        }
+    }
+}
+
 impl std::fmt::Debug for CoreFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Core Fn ({:p} -> {:?})", &self.subr, self.args)
@@ -160,13 +175,13 @@ impl std::fmt::Debug for CoreFn {
 
 impl std::cmp::PartialEq for CoreFn {
     fn eq(&self, other: &Self) -> bool {
-        &self.subr as *const BuiltInFn == &other.subr as *const BuiltInFn
+        self.subr as fn(&'static _) -> _ == other.subr
     }
 }
 
 impl From<CoreFn> for LispObj {
     fn from(func: CoreFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::LispFn)
+        LispObj::from_tagged_ptr(func, Tag::CoreFn)
     }
 }
 
