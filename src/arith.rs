@@ -40,25 +40,25 @@ mod test {
 
     #[test]
     fn test_add() {
-        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        let nums = vec_into![7, 13];
         assert_eq!(20, add(&nums));
     }
 
     #[test]
     fn test_sub() {
-        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        let nums = vec_into![7, 13];
         assert_eq!(-6, sub(&nums));
     }
 
     #[test]
     fn test_mul() {
-        let nums = vec![LispObj::from(7), LispObj::from(13)];
+        let nums = vec_into![7, 13];
         assert_eq!(91, mul(&nums));
     }
 
     #[test]
     fn test_div() {
-        let nums = vec![LispObj::from(12), LispObj::from(5)];
+        let nums = vec_into![12, 5];
         assert_eq!(2, div(&nums));
     }
 }
