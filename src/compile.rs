@@ -25,10 +25,6 @@ pub enum OpCode {
     Constant5,
     ConstantN,
     ConstantN2,
-    Add,
-    Sub,
-    Mul,
-    Div,
     Call0,
     Call1,
     Call2,
@@ -428,10 +424,6 @@ impl Exp {
             "quote" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
             "if" => self.compile_conditional(cons.cdr),
-            "+" => self.compile_operator(cons.cdr, OpCode::Add),
-            "*" => self.compile_operator(cons.cdr, OpCode::Mul),
-            "/" => self.compile_operator(cons.cdr, OpCode::Div),
-            "-" => self.compile_operator(cons.cdr, OpCode::Sub),
             _ => self.compile_funcall(cons),
         }
     }
@@ -543,7 +535,8 @@ mod test {
         let func = LispFn::new(vec_into![StackRef1, Ret], vec![], 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef2, StackRef2, Add, Ret], vec![], 2, 0, false);
+        let func = LispFn::new(vec_into![Constant0, StackRef3, StackRef3, Call2, Ret],
+                               vec_into![symbol::intern("+")], 2, 0, false);
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
         check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));

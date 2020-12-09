@@ -5,7 +5,6 @@ use crate::symbol::{Symbol, Function};
 use crate::compile::{OpCode, Error};
 use crate::gc::Gc;
 use std::mem::transmute;
-use crate::arith;
 
 impl OpCode {
     unsafe fn from_unchecked(x: u8) -> Self {
@@ -147,25 +146,30 @@ impl Routine {
         }
     }
 
-    fn call(&mut self, arg_cnt: u16) -> CallFrame {
+    fn call(&mut self, frame: CallFrame, arg_cnt: u16) -> CallFrame {
         let fn_idx = arg_cnt as usize + 1;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
             _ => panic!("Expected symbol for call")
         };
         match sym.get_func(){
-            Function::Lisp(x) => {
-                self.process_args(arg_cnt, x.as_ref().args, sym);
-                CallFrame::new(x)
+            Function::Lisp(func) => {
+                self.process_args(arg_cnt, func.as_ref().args, sym);
+                self.call_frames.push(frame);
+                CallFrame::new(func)
             }
+            Function::Subr(func) => {
+                self.process_args(arg_cnt, func.as_ref().args, sym);
+                self.call_subr(func.as_ref().subr, arg_cnt as usize);
+                frame
+            },
             Function::None => panic!("void function"),
-            _ => panic!("subr not implemented"),
 
         }
     }
 
     fn call_subr(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {
-        let i = self.stack.from_end(args);
+        let i = self.stack.from_end(args) - 1;
         self.stack[i] = func(self.stack.take_slice(args));
         self.stack.truncate(i + 1);
     }
@@ -197,34 +201,10 @@ impl Routine {
                 op::Constant3 => {self.stack.push(frame.get_const(3))}
                 op::Constant4 => {self.stack.push(frame.get_const(4))}
                 op::Constant5 => {self.stack.push(frame.get_const(5))}
-                op::Add => {
-                    self.call_subr(arith::add, 2);
-                }
-                op::Sub => {
-                    self.call_subr(arith::sub, 2);
-                }
-                op::Mul => {
-                    self.call_subr(arith::mul, 2);
-                }
-                op::Div => {
-                    self.call_subr(arith::div, 2);
-                }
-                op::Call0 => {
-                    self.call_frames.push(frame);
-                    frame = self.call(0);
-                }
-                op::Call1 => {
-                    self.call_frames.push(frame);
-                    frame = self.call(1);
-                }
-                op::Call2 => {
-                    self.call_frames.push(frame);
-                    frame = self.call(2);
-                }
-                op::Call3 => {
-                    self.call_frames.push(frame);
-                    frame = self.call(3);
-                }
+                op::Call0 => { frame = self.call(frame, 0); }
+                op::Call1 => { frame = self.call(frame, 1); }
+                op::Call2 => { frame = self.call(frame, 2); }
+                op::Call3 => { frame = self.call(frame, 3); }
                 op::Jump => {
                     let offset = frame.ip.take_double_arg();
                     frame.ip.jump(offset as isize);
@@ -249,7 +229,9 @@ impl Routine {
                     if self.call_frames.len() == 0 {
                         return Ok(self.stack.pop().unwrap());
                     } else {
-                        self.call_subr(Self::take_top, 2);
+                        let var = self.stack.pop().unwrap();
+                        let i = self.stack.from_end(1);
+                        self.stack[i] = var;
                         frame = self.call_frames.pop().unwrap();
                     }
                 }
@@ -267,9 +249,17 @@ mod test {
     use crate::symbol;
     use crate::reader::LispReader;
     use crate::compile::Exp;
+    use crate::lisp_object::CoreFn;
+    use crate::arith;
 
     #[test]
     fn compute() {
+        let add = symbol::intern("+");
+        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
+        let sub = symbol::intern("-");
+        sub.set_core_func(CoreFn::new(arith::sub, 2, 0, false));
+        let mul = symbol::intern("*");
+        mul.set_core_func(CoreFn::new(arith::mul, 2, 0, false));
         let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -285,6 +275,8 @@ mod test {
 
     #[test]
     fn let_form() {
+        let add = symbol::intern("+");
+        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
         let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ foo bar))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -300,6 +292,8 @@ mod test {
 
     #[test]
     fn jump() {
+        let add = symbol::intern("+");
+        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
         let obj = LispReader::new("(+ 7 (if nil 11 3))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -327,6 +321,10 @@ mod test {
 
     #[test]
     fn call() {
+        let add = symbol::intern("+");
+        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
+        let mul = symbol::intern("*");
+        mul.set_core_func(CoreFn::new(arith::mul, 2, 0, false));
         let test_add = symbol::intern("test-add");
         let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
@@ -337,7 +335,7 @@ mod test {
         test_add.set_lisp_func(func);
 
         let middle = symbol::intern("middle");
-        let obj = LispReader::new("(lambda () (test-add 7 13 3))").next().unwrap().unwrap();
+        let obj = LispReader::new("(lambda (x y z) (test-add x z y))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
             Value::LispFunc(x) => x.clone(),
@@ -345,7 +343,7 @@ mod test {
         };
         middle.set_lisp_func(func);
 
-        let obj = LispReader::new("(middle)").next().unwrap().unwrap();
+        let obj = LispReader::new("(middle 7 3 13)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
