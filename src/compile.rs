@@ -341,11 +341,13 @@ impl Exp {
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<(), Error> {
         self.add_const(cons.car, None)?;
+        let prev_len = self.vars.len();
         let list = into_arg_list(cons.cdr)?;
         for form in list.iter() {
             self.compile_form(*form)?;
         }
         self.codes.emit_call(list.len() as u16);
+        self.vars.truncate(prev_len);
         Ok(())
     }
 
@@ -520,6 +522,9 @@ mod test {
         check_compiler!("(foo (bar 1) 2)",
                         [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
                         [symbol::intern("foo"), symbol::intern("bar"), 1, 2]);
+        check_compiler!("(foo (bar 1) (baz 1))",
+                        [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
+                        [symbol::intern("foo"), symbol::intern("bar"), 1, symbol::intern("baz")]);
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 

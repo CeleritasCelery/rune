@@ -16,6 +16,7 @@ impl OpCode {
 struct CallFrame {
     ip: IP,
     func: Gc<LispFn>,
+    start: usize,
 }
 
 #[derive(Clone)]
@@ -60,8 +61,8 @@ impl IP {
 }
 
 impl CallFrame {
-    pub fn new(func: Gc<LispFn>) -> CallFrame {
-        CallFrame{ip: IP::new(&func.as_ref().op_codes), func}
+    pub fn new(func: Gc<LispFn>, frame_start: usize) -> CallFrame {
+        CallFrame{ip: IP::new(&func.as_ref().op_codes), func, start: frame_start}
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
@@ -117,11 +118,6 @@ impl Routine {
         }
     }
 
-    fn take_top(vars: &[LispObj]) -> LispObj {
-        debug_assert!(vars.len() == 2);
-        vars[1]
-    }
-
     fn process_args(&mut self, count: u16, args: FnArgs, sym: Symbol) {
         if count < args.required  {
             panic!("Function {} called with {} arguments which is less then the required {}",
@@ -156,7 +152,7 @@ impl Routine {
             Function::Lisp(func) => {
                 self.process_args(arg_cnt, func.as_ref().args, sym);
                 self.call_frames.push(frame);
-                CallFrame::new(func)
+                CallFrame::new(func, self.stack.from_end(fn_idx))
             }
             Function::Subr(func) => {
                 self.process_args(arg_cnt, func.as_ref().args, sym);
@@ -175,7 +171,7 @@ impl Routine {
     }
 
     pub fn execute(&mut self, func: Gc<LispFn>) -> Result<LispObj, Error> {
-        let mut frame = CallFrame::new(func);
+        let mut frame = CallFrame::new(func, 0);
         loop {
             use OpCode as op;
             match unsafe {op::from_unchecked(frame.ip.next())} {
@@ -230,8 +226,8 @@ impl Routine {
                         return Ok(self.stack.pop().unwrap());
                     } else {
                         let var = self.stack.pop().unwrap();
-                        let i = self.stack.from_end(1);
-                        self.stack[i] = var;
+                        self.stack[frame.start] = var;
+                        self.stack.truncate(frame.start + 1);
                         frame = self.call_frames.pop().unwrap();
                     }
                 }
@@ -335,7 +331,7 @@ mod test {
         test_add.set_lisp_func(func);
 
         let middle = symbol::intern("middle");
-        let obj = LispReader::new("(lambda (x y z) (test-add x z y))").next().unwrap().unwrap();
+        let obj = LispReader::new("(lambda (x y z) (+ (test-add x z y) (test-add x z y)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
             Value::LispFunc(x) => x.clone(),
@@ -347,6 +343,6 @@ mod test {
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
-        assert_eq!(112, val.unwrap());
+        assert_eq!(224, val.unwrap());
     }
 }
