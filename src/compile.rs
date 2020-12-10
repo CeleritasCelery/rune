@@ -183,6 +183,7 @@ pub enum Error {
     StackSizeOverflow,
     Type(Type, Type),
     UnknownOpcode(u8),
+    VoidFunction,
 }
 
 #[derive(Debug, PartialEq)]

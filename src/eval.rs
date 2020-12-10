@@ -118,49 +118,39 @@ impl Routine {
         }
     }
 
-    fn process_args(&mut self, count: u16, args: FnArgs, sym: Symbol) {
+    fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<(), Error> {
         if count < args.required  {
-            panic!("Function {} called with {} arguments which is less then the required {}",
-                   sym.get_name(),
-                   count,
-                   args.required,
-            );
+            return Err(Error::ArgCount(args.required, count));
         }
         let total_args = args.required + args.optional;
         if !args.rest && (count > total_args) {
-            panic!("Function {} called with {} arguments which is more then the aloud {}",
-                   sym.get_name(),
-                   count,
-                   total_args,
-            );
+            return Err(Error::ArgCount(total_args, count));
         }
         let fill_args = total_args + if args.rest {1} else {0} - count;
-        if fill_args > 0 {
-            for _ in 0..fill_args {
-                self.stack.push(LispObj::nil());
-            }
+        for _ in 0..fill_args {
+            self.stack.push(LispObj::nil());
         }
+        Ok(())
     }
 
-    fn call(&mut self, frame: CallFrame, arg_cnt: u16) -> CallFrame {
+    fn call(&mut self, frame: CallFrame, arg_cnt: u16) -> Result<CallFrame, Error> {
         let fn_idx = arg_cnt as usize + 1;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
-            _ => panic!("Expected symbol for call")
+            x => panic!("Expected symbol for call found {:?}", x),
         };
         match sym.get_func(){
             Function::Lisp(func) => {
-                self.process_args(arg_cnt, func.as_ref().args, sym);
+                self.process_args(arg_cnt, func.as_ref().args, sym)?;
                 self.call_frames.push(frame);
-                CallFrame::new(func, self.stack.from_end(fn_idx))
+                Ok(CallFrame::new(func, self.stack.from_end(fn_idx)))
             }
             Function::Subr(func) => {
-                self.process_args(arg_cnt, func.as_ref().args, sym);
+                self.process_args(arg_cnt, func.as_ref().args, sym)?;
                 self.call_subr(func.as_ref().subr, arg_cnt as usize);
-                frame
+                Ok(frame)
             },
-            Function::None => panic!("void function"),
-
+            Function::None => Err(Error::VoidFunction),
         }
     }
 
@@ -197,10 +187,10 @@ impl Routine {
                 op::Constant3 => {self.stack.push(frame.get_const(3))}
                 op::Constant4 => {self.stack.push(frame.get_const(4))}
                 op::Constant5 => {self.stack.push(frame.get_const(5))}
-                op::Call0 => { frame = self.call(frame, 0); }
-                op::Call1 => { frame = self.call(frame, 1); }
-                op::Call2 => { frame = self.call(frame, 2); }
-                op::Call3 => { frame = self.call(frame, 3); }
+                op::Call0 => { frame = self.call(frame, 0)?; }
+                op::Call1 => { frame = self.call(frame, 1)?; }
+                op::Call2 => { frame = self.call(frame, 2)?; }
+                op::Call3 => { frame = self.call(frame, 3)?; }
                 op::Jump => {
                     let offset = frame.ip.take_double_arg();
                     frame.ip.jump(offset as isize);
@@ -328,5 +318,26 @@ mod test {
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
         assert_eq!(224, val.unwrap());
+    }
+
+    #[test]
+    fn errors() {
+        let obj = LispReader::new("(bad-function-name)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(val.err().unwrap(), Error::VoidFunction);
+
+        let obj = LispReader::new("(+ 1 2 3)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(val.err().unwrap(), Error::ArgCount(2, 3));
+
+        let obj = LispReader::new("(+ 1)").next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new();
+        let val = routine.execute(Gc::new(func));
+        assert_eq!(val.err().unwrap(), Error::ArgCount(2, 1));
     }
 }
