@@ -245,17 +245,9 @@ mod test {
     use crate::symbol;
     use crate::reader::LispReader;
     use crate::compile::Exp;
-    use crate::lisp_object::CoreFn;
-    use crate::arith;
 
     #[test]
     fn compute() {
-        let add = symbol::intern("+");
-        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
-        let sub = symbol::intern("-");
-        sub.set_core_func(CoreFn::new(arith::sub, 2, 0, false));
-        let mul = symbol::intern("*");
-        mul.set_core_func(CoreFn::new(arith::mul, 2, 0, false));
         let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -271,8 +263,6 @@ mod test {
 
     #[test]
     fn let_form() {
-        let add = symbol::intern("+");
-        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
         let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ foo bar))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -288,8 +278,6 @@ mod test {
 
     #[test]
     fn jump() {
-        let add = symbol::intern("+");
-        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
         let obj = LispReader::new("(+ 7 (if nil 11 3))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
@@ -317,10 +305,6 @@ mod test {
 
     #[test]
     fn call() {
-        let add = symbol::intern("+");
-        add.set_core_func(CoreFn::new(arith::add, 2, 0, false));
-        let mul = symbol::intern("*");
-        mul.set_core_func(CoreFn::new(arith::mul, 2, 0, false));
         let test_add = symbol::intern("test-add");
         let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();

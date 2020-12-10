@@ -1,11 +1,11 @@
-use crate::lisp_object::{LispObj, Fixnum};
+use crate::lisp_object::{LispObj, Fixnum, CoreFn};
 use std::convert::TryInto;
 
 pub fn add(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
-    let y: Fixnum = rhs.try_into().expect("hhs is not a number");
+    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x + y)
 }
 
@@ -31,6 +31,15 @@ pub fn div(vars: &[LispObj]) -> LispObj {
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x / y)
+}
+
+pub fn define_builtin() -> ([(&'static str, CoreFn); 4]) {
+    [
+        ("+", CoreFn::new(add, 2, 0, false)),
+        ("-", CoreFn::new(sub, 2, 0, false)),
+        ("*", CoreFn::new(mul, 2, 0, false)),
+        ("/", CoreFn::new(div, 2, 0, false)),
+    ]
 }
 
 #[cfg(test)]
