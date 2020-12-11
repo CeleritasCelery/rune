@@ -1,91 +1,11 @@
 #![allow(dead_code)]
-#[allow(unused_imports)]
-use crate::lisp_object::{LispFn, CoreFn, LispObj};
-use crate::gc::Gc;
+use crate::lisp_object::{InnerSymbol, Symbol};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use fnv::{FnvHashMap, FnvHasher};
-use std::cmp;
 use std::mem;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicI64, Ordering};
-
-#[derive(Debug)]
-pub struct InnerSymbol {
-    name: String,
-    func: FnCell,
-}
-
-#[derive(Debug)]
-struct FnCell(AtomicI64);
-
-const LISP_FN_TAG: i64 = 0x1;
-const CORE_FN_TAG: i64 = 0x2;
-const FN_MASK: i64 = 0b11;
-
-impl FnCell {
-    fn new() -> Self { Self(AtomicI64::new(0)) }
-
-    fn set_lisp(&self, func: LispFn) {
-        let ptr: *const LispFn = Gc::new(func).as_ref();
-        let value = ptr as i64 | LISP_FN_TAG;
-        self.0.store(value, Ordering::Release);
-    }
-
-    fn set_core(&self, func: CoreFn) {
-        let ptr: *const CoreFn = Gc::new(func).as_ref();
-        let value = ptr as i64 | CORE_FN_TAG;
-        self.0.store(value, Ordering::Release);
-    }
-
-    fn remove_tag(bits: i64) -> i64 { bits >> 2 << 2 }
-
-    fn get(&self) -> Function {
-        let bits = self.0.load(Ordering::Acquire);
-        let ptr = Self::remove_tag(bits);
-        match bits & FN_MASK {
-            LISP_FN_TAG => unsafe { Function::Lisp(mem::transmute(ptr)) }
-            CORE_FN_TAG => unsafe { Function::Subr(mem::transmute(ptr)) }
-            _ => Function::None,
-        }
-    }
-}
-
-impl cmp::PartialEq for InnerSymbol {
-    fn eq(&self, other: &Self) -> bool {
-        (&*self as *const InnerSymbol) == (&*other as *const InnerSymbol)
-    }
-}
-
-impl InnerSymbol {
-    fn new(name: String) -> Self {
-        InnerSymbol{name, func: FnCell::new()}
-    }
-
-    pub fn set_lisp_func(&self, func: LispFn) {
-        self.func.set_lisp(func);
-    }
-
-    pub fn set_core_func(&self, func: CoreFn) {
-        self.func.set_core(func);
-    }
-
-    pub fn get_func(&self) -> Function {
-        self.func.get()
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Function {
-    Lisp(Gc<LispFn>),
-    Subr(Gc<CoreFn>),
-    None,
-}
 
 pub struct SymbolMap(HashMap<String, Box<InnerSymbol>, BuildHasherDefault<FnvHasher>>);
 
@@ -98,7 +18,7 @@ impl SymbolMap {
         self.0.keys().len()
     }
 
-    pub fn intern(&mut self, name: &str) -> &'static InnerSymbol {
+    pub fn intern(&mut self, name: &str) -> Symbol {
         // SAFETY: This is my work around for there being no Entry API that
         // takes a reference. Instead we have an inner function that returns a
         // pointer and we cast that to a static reference. We can guarantee that
@@ -123,64 +43,22 @@ impl SymbolMap {
 }
 
 pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(|| {
+    use crate::*;
     let mut map = SymbolMap::new();
-    for (sym, func) in crate::arith::define_builtin().iter() {
+    for (sym, func) in arith::define_builtin().iter() {
         map.intern(sym).set_core_func(func.clone());
     }
     Mutex::new(map)
 });
 
-pub type Symbol = &'static InnerSymbol;
-
-pub fn intern(name: &str) -> &'static InnerSymbol {
+pub fn intern(name: &str) -> Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn size() {
-        assert_eq!(32, std::mem::size_of::<InnerSymbol>());
-    }
-
-    #[test]
-    fn symbol_func() {
-        let x = InnerSymbol::new("foo".to_owned());
-        assert_eq!("foo", x.get_name());
-        assert_eq!(Function::None, x.get_func());
-        x.set_lisp_func(LispFn::new(vec![1], vec![], 0, 0, false));
-        let before = match x.get_func() {
-            Function::Lisp(x) => x,
-            _ => unreachable!(),
-        };
-        assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        x.set_lisp_func(LispFn::new(vec![7], vec![], 0, 0, false));
-        let after = match x.get_func() {
-            Function::Lisp(x) => x,
-            _ => unreachable!(),
-        };
-        assert_eq!(after.op_codes.get(0).unwrap(), &7);
-        assert_eq!(before.op_codes.get(0).unwrap(), &1);
-    }
-
-    #[test]
-    fn subr() {
-        let func = |x: &[LispObj]| -> LispObj {
-            x[0]
-        };
-
-        let sym = InnerSymbol::new("bar".to_owned());
-        let core_func = CoreFn::new(func, 0, 0, false);
-        sym.set_core_func(core_func);
-        match sym.get_func() {
-            Function::Subr(x) => {
-                assert_eq!(*x, CoreFn::new(func, 0, 0, false));
-            }
-            _ => unreachable!(),
-        }
-    }
+    use crate::lisp_object::{Function, LispFn};
 
     #[test]
     fn test_intern() {

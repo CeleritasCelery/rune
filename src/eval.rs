@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value, FnArgs};
-use crate::symbol::{Symbol, Function};
+use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function};
 use crate::compile::{OpCode, Error};
 use crate::gc::Gc;
 use std::mem::transmute;
@@ -232,7 +231,7 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol;
+    use crate::symbol::intern;
     use crate::reader::LispReader;
     use crate::compile::Exp;
 
@@ -295,7 +294,7 @@ mod test {
 
     #[test]
     fn call() {
-        let test_add = symbol::intern("test-add");
+        let test_add = intern("test-add");
         let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
@@ -304,7 +303,7 @@ mod test {
         };
         test_add.set_lisp_func(func);
 
-        let middle = symbol::intern("middle");
+        let middle = intern("middle");
         let obj = LispReader::new("(lambda (x y z) (+ (test-add x z y) (test-add x z y)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {

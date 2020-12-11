@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Value, LispFn};
-use crate::symbol::Symbol;
+use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
 use std::convert::{TryInto, TryFrom};
 
 #[derive(Copy, Clone)]
@@ -471,7 +470,7 @@ mod test {
     use super::*;
     use OpCode::*;
     use crate::reader::LispReader;
-    use crate::symbol;
+    use crate::symbol::intern;
 
     fn check_error(compare: &str, expect: Error) {
         let obj = LispReader::new(compare).next().unwrap().unwrap();
@@ -493,7 +492,7 @@ mod test {
     #[test]
     fn test_basic() {
         check_compiler!("1", [Constant0, Ret], [1]);
-        check_compiler!("'foo", [Constant0, Ret], [symbol::intern("foo")]);
+        check_compiler!("'foo", [Constant0, Ret], [intern("foo")]);
         check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2)]);
     }
 
@@ -516,16 +515,16 @@ mod test {
 
     #[test]
     fn function() {
-        check_compiler!("(foo)", [Constant0, Call0, Ret], [symbol::intern("foo")]);
+        check_compiler!("(foo)", [Constant0, Call0, Ret], [intern("foo")]);
         check_compiler!("(foo 1 2)",
                         [Constant0, Constant1, Constant2, Call2, Ret],
-                        [symbol::intern("foo"), 1, 2]);
+                        [intern("foo"), 1, 2]);
         check_compiler!("(foo (bar 1) 2)",
                         [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
-                        [symbol::intern("foo"), symbol::intern("bar"), 1, 2]);
+                        [intern("foo"), intern("bar"), 1, 2]);
         check_compiler!("(foo (bar 1) (baz 1))",
                         [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
-                        [symbol::intern("foo"), symbol::intern("bar"), 1, symbol::intern("baz")]);
+                        [intern("foo"), intern("bar"), 1, intern("baz")]);
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
@@ -542,7 +541,7 @@ mod test {
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(vec_into![Constant0, StackRef3, StackRef3, Call2, Ret],
-                               vec_into![symbol::intern("+")], 2, 0, false);
+                               vec_into![intern("+")], 2, 0, false);
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
         check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));

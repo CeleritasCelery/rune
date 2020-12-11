@@ -2,7 +2,7 @@
 use std::str;
 use std::fmt;
 use crate::lisp_object::{LispObj, Cons};
-use crate::symbol;
+use crate::symbol::intern;
 
 pub struct Stream<'a> {
     prev: str::Chars<'a>,
@@ -116,9 +116,9 @@ fn intern_symbol(symbol: &str) -> LispObj {
     };
     if symbol.contains("\\") {
         let escaped_slice: String = symbol.chars().filter(is_not_escape).collect();
-        symbol::intern(escaped_slice.as_str()).into()
+        intern(escaped_slice.as_str()).into()
     } else {
-        symbol::intern(symbol).into()
+        intern(symbol).into()
     }
 }
 
@@ -294,7 +294,7 @@ impl<'a> LispReader<'a> {
 
     fn read_quote(&mut self) -> Result<LispObj, Error> {
         let obj = self.read()?;
-        Ok(list!(symbol::intern("quote"), obj).into())
+        Ok(list!(intern("quote"), obj).into())
     }
 
     fn read_char(&mut self) -> Option<char> {
@@ -388,7 +388,6 @@ mod test {
 
     #[test]
     fn test_read_symbol() {
-        use symbol::intern;
         check_reader!(intern("foo"), "foo");
         check_reader!(intern("--1"), "--1");
         check_reader!(intern("1"), "\\1");
@@ -423,7 +422,6 @@ baz""#);
 
     #[test]
     fn read_quote() {
-        use symbol::intern;
         let quote = intern("quote");
         check_reader!(list!(quote, intern("foo")), "(quote foo)");
         check_reader!(list!(quote, intern("foo")), "'foo");

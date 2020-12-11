@@ -7,8 +7,9 @@ pub mod cons;
 pub use cons::Cons;
 pub mod func;
 pub use func::{LispFn, CoreFn, FnArgs};
+pub mod sym;
+pub use sym::{Symbol, Function, InnerSymbol};
 
-use crate::symbol::{Symbol, InnerSymbol};
 use crate::gc::Gc;
 use std::mem::size_of;
 use std::cmp;
@@ -205,14 +206,6 @@ impl From<&str> for LispObj {
 impl From<String> for LispObj {
     fn from(s: String) -> Self {
         LispObj::from_tagged_ptr(s, Tag::LongStr)
-    }
-}
-
-impl From<Symbol> for LispObj {
-    fn from(s: Symbol) -> Self {
-        let ptr = s as *const InnerSymbol;
-        let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
-        LispObj{bits}
     }
 }
 
