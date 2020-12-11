@@ -1,4 +1,4 @@
-use crate::lisp_object::{LispObj, Fixnum, CoreFn};
+use crate::lisp_object::{LispObj, Fixnum, BuiltInFn};
 use std::convert::TryInto;
 
 pub fn add(vars: &[LispObj]) -> LispObj {
@@ -33,12 +33,12 @@ pub fn div(vars: &[LispObj]) -> LispObj {
     LispObj::from(x / y)
 }
 
-pub fn define_builtin() -> ([(&'static str, CoreFn); 4]) {
+pub fn define_builtin() -> ([(&'static str, BuiltInFn); 4]) {
     [
-        ("+", CoreFn::new(add, 2, 0, false)),
-        ("-", CoreFn::new(sub, 2, 0, false)),
-        ("*", CoreFn::new(mul, 2, 0, false)),
-        ("/", CoreFn::new(div, 2, 0, false)),
+        ("+", BuiltInFn::new(add, 2, 0, false)),
+        ("-", BuiltInFn::new(sub, 2, 0, false)),
+        ("*", BuiltInFn::new(mul, 2, 0, false)),
+        ("/", BuiltInFn::new(div, 2, 0, false)),
     ]
 }
 

@@ -43,16 +43,16 @@ impl From<LispFn> for LispObj {
     }
 }
 
-type BuiltInFn = fn(&[LispObj]) -> LispObj;
+type SubrFn = fn(&[LispObj]) -> LispObj;
 
 #[derive(Clone)]
-pub struct CoreFn {
-    pub subr: BuiltInFn,
+pub struct BuiltInFn {
+    pub subr: SubrFn,
     pub args: FnArgs,
 }
 
-impl CoreFn {
-    pub fn new(subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {
+impl BuiltInFn {
+    pub fn new(subr: SubrFn, required: u16, optional: u16, rest: bool) -> Self {
         Self {
             subr,
             args: FnArgs {
@@ -66,21 +66,21 @@ impl CoreFn {
     }
 }
 
-impl std::fmt::Debug for CoreFn {
+impl std::fmt::Debug for BuiltInFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Core Fn ({:p} -> {:?})", &self.subr, self.args)
+        write!(f, "Built-in Function ({:p} -> {:?})", &self.subr, self.args)
     }
 }
 
-impl std::cmp::PartialEq for CoreFn {
+impl std::cmp::PartialEq for BuiltInFn {
     fn eq(&self, other: &Self) -> bool {
         self.subr as fn(&'static _) -> _ == other.subr
     }
 }
 
-impl From<CoreFn> for LispObj {
-    fn from(func: CoreFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::CoreFn)
+impl From<BuiltInFn> for LispObj {
+    fn from(func: BuiltInFn) -> Self {
+        LispObj::from_tagged_ptr(func, Tag::SubrFn)
     }
 }
 

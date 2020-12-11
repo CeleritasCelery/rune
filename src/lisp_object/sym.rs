@@ -1,4 +1,4 @@
-use crate::lisp_object::{LispObj, LispFn, CoreFn, TAG_SIZE, Tag};
+use crate::lisp_object::{LispObj, LispFn, BuiltInFn, TAG_SIZE, Tag};
 use crate::gc::Gc;
 use std::cmp;
 use std::mem;
@@ -28,8 +28,8 @@ impl FnCell {
         self.0.store(value, Ordering::Release);
     }
 
-    fn set_core(&self, func: CoreFn) {
-        let ptr: *const CoreFn = Gc::new(func).as_ref();
+    fn set_core(&self, func: BuiltInFn) {
+        let ptr: *const BuiltInFn = Gc::new(func).as_ref();
         let value = ptr as i64 | CORE_FN_TAG;
         self.0.store(value, Ordering::Release);
     }
@@ -62,7 +62,7 @@ impl InnerSymbol {
         self.func.set_lisp(func);
     }
 
-    pub fn set_core_func(&self, func: CoreFn) {
+    pub fn set_core_func(&self, func: BuiltInFn) {
         self.func.set_core(func);
     }
 
@@ -86,7 +86,7 @@ impl From<Symbol> for LispObj {
 #[derive(Debug, PartialEq)]
 pub enum Function {
     Lisp(Gc<LispFn>),
-    Subr(Gc<CoreFn>),
+    Subr(Gc<BuiltInFn>),
     None,
 }
 
@@ -127,11 +127,11 @@ mod test {
         };
 
         let sym = InnerSymbol::new("bar".to_owned());
-        let core_func = CoreFn::new(func, 0, 0, false);
+        let core_func = BuiltInFn::new(func, 0, 0, false);
         sym.set_core_func(core_func);
         match sym.get_func() {
             Function::Subr(x) => {
-                assert_eq!(*x, CoreFn::new(func, 0, 0, false));
+                assert_eq!(*x, BuiltInFn::new(func, 0, 0, false));
             }
             _ => unreachable!(),
         }

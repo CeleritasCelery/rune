@@ -6,7 +6,7 @@ pub use fixnum::Fixnum;
 pub mod cons;
 pub use cons::Cons;
 pub mod func;
-pub use func::{LispFn, CoreFn, FnArgs};
+pub use func::{LispFn, BuiltInFn, FnArgs};
 pub mod sym;
 pub use sym::{Symbol, Function, InnerSymbol};
 
@@ -75,7 +75,7 @@ pub enum Value<'a> {
     Symbol(Symbol),
     Float(f64),
     LispFunc(&'a LispFn),
-    CoreFunc(&'a CoreFn),
+    SubrFunc(&'a BuiltInFn),
     Void,
 }
 
@@ -98,7 +98,7 @@ enum Tag {
     LongStr = 7,
     ShortStr = 8,
     LispFn = 16,
-    CoreFn,
+    SubrFn,
     Void,
 }
 
@@ -114,7 +114,7 @@ impl LispObj {
                 Tag::LongStr  => Value::String(&*self.get_ptr()),
                 Tag::ShortStr => Value::String(&*self.get_ptr()),
                 Tag::LispFn   => Value::LispFunc(&*self.get_ptr()),
-                Tag::CoreFn   => Value::CoreFunc(&*self.get_ptr()),
+                Tag::SubrFn   => Value::SubrFunc(&*self.get_ptr()),
                 Tag::Nil      => Value::Nil,
                 Tag::True     => Value::True,
                 Tag::Cons     => Value::Cons(&*self.get_ptr()),
@@ -226,7 +226,7 @@ impl fmt::Display for LispObj {
             Value::String(x) => write!(f, "\"{}\"", x),
             Value::Symbol(x) => write!(f, "'{}", x.get_name()),
             Value::LispFunc(x) => write!(f, "(lambda {:?})", x),
-            Value::CoreFunc(x) => write!(f, "Built-In {:?}", x),
+            Value::SubrFunc(x) => write!(f, "{:?}", x),
             Value::Void => write!(f, "Void"),
             Value::True => write!(f, "t"),
             Value::Nil => write!(f, "nil"),
@@ -252,8 +252,7 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol::INTERNED_SYMBOLS;
-    use crate::symbol;
+    use crate::symbol::intern;
 
     #[test]
     fn sizes() {
@@ -307,9 +306,7 @@ mod test {
 
     #[test]
     fn symbol() {
-        let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
-        let sym = symbol_map.intern("foo");
-        let x = LispObj::from(sym);
+        let x = LispObj::from(intern("foo"));
         assert!(matches!(x.val(), Value::Symbol(_)));
         match x.val() {
             Value::Symbol(y) => assert_eq!("foo", y.get_name()),
@@ -322,7 +319,7 @@ mod test {
         assert!(matches!(LispObj::from(1).val(), Value::Int(_)));
         assert!(matches!(LispObj::from(1.5).val(), Value::Float(_)));
         assert!(matches!(LispObj::from("foo").val(), Value::String(_)));
-        assert!(matches!(LispObj::from(symbol::intern("foo")).val(), Value::Symbol(_)));
+        assert!(matches!(LispObj::from(intern("foo")).val(), Value::Symbol(_)));
         assert!(matches!(LispObj::from(cons!(1, 2)).val(), Value::Cons(_)));
         assert!(matches!(LispObj::from(None::<LispObj>).val(), Value::Nil));
         assert!(matches!(LispObj::from(false).val(), Value::Nil));
