@@ -1,189 +1,18 @@
 #![allow(dead_code)]
 
+pub mod fixnum;
+pub use fixnum::Fixnum;
+#[macro_use]
+pub mod cons;
+pub use cons::Cons;
+pub mod func;
+pub use func::{LispFn, CoreFn, FnArgs};
+
 use crate::symbol::{Symbol, InnerSymbol};
 use crate::gc::Gc;
 use std::mem::size_of;
 use std::cmp;
 use std::fmt;
-use std::ops;
-use std::convert::{From, TryFrom};
-
-#[derive(Copy, Clone, Debug)]
-pub struct Fixnum(i64);
-
-impl From<i64> for Fixnum {
-    fn from(i: i64) -> Self {Fixnum(i << TAG_SIZE)}
-}
-
-impl From<Fixnum> for i64 {
-    fn from(f: Fixnum) -> Self {f.0 >> TAG_SIZE}
-}
-
-impl From<Fixnum> for LispObj {
-    fn from(fixnum: Fixnum) -> Self {
-        LispObj{fixnum}
-    }
-}
-
-impl TryFrom<LispObj> for Fixnum {
-    type Error = ();
-    fn try_from(value: LispObj) -> Result<Self, Self::Error> {
-        if matches!(value.val(), Value::Int(_)) {
-            Ok(unsafe{value.fixnum})
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl cmp::PartialEq for Fixnum {
-    fn eq(&self, rhs: &Fixnum) -> bool {
-        self.0 == rhs.0
-    }
-}
-
-impl ops::Add<Fixnum> for Fixnum {
-    type Output = Fixnum;
-    // i + j
-    fn add(self, rhs: Self) -> Self {Self(self.0 + rhs.0)}
-}
-
-impl ops::Sub<Fixnum> for Fixnum {
-    type Output = Fixnum;
-    // i - j
-    fn sub(self, rhs: Self) -> Self {Self(self.0 - rhs.0)}
-}
-
-impl ops::Mul<Fixnum> for Fixnum {
-    type Output = Fixnum;
-    // i * (j >> 2)
-    fn mul(self, rhs: Self) -> Self {Self(self.0 * i64::from(rhs))}
-}
-
-impl ops::Div<Fixnum> for Fixnum {
-    type Output = Fixnum;
-    // (i/j) << 2
-    fn div(self, rhs: Self) -> Self {(self.0 / rhs.0).into()}
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct Cons {
-    pub car: LispObj,
-    pub cdr: LispObj,
-}
-
-impl Cons {
-    pub fn new(car: LispObj, cdr: LispObj) -> Cons {
-        Cons{car, cdr}
-    }
-}
-
-impl fmt::Display for Cons {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.car, self.cdr)
-    }
-}
-
-impl From<Cons> for LispObj {
-    fn from(cons: Cons) -> Self {
-        LispObj::from_tagged_ptr(cons, Tag::Cons)
-    }
-}
-
-#[macro_export]
-macro_rules! cons {
-    ($car:expr, $cdr:expr) => (Cons::new($car.into(), $cdr.into()));
-    ($car:expr) => (Cons::new($car.into(), false.into()));
-}
-
-#[macro_export]
-macro_rules! list {
-    ($x:expr) => (cons!($x));
-    ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct FnArgs {
-    pub rest: bool,
-    pub required: u16,
-    pub optional: u16,
-    pub max_stack_usage: u16,
-    pub advice: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct LispFn {
-    pub op_codes: Vec<u8>,
-    pub constants: Vec<LispObj>,
-    pub args: FnArgs,
-}
-
-impl LispFn {
-    pub fn new(op_codes: Vec<u8>,
-               constants: Vec<LispObj>,
-               required: u16,
-               optional: u16,
-               rest: bool) -> Self {
-        LispFn {
-            op_codes,
-            constants,
-            args: FnArgs {
-                required,
-                optional,
-                rest,
-                max_stack_usage: 0,
-                advice: false,
-            }
-        }
-    }
-}
-
-impl From<LispFn> for LispObj {
-    fn from(func: LispFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::LispFn)
-    }
-}
-
-type BuiltInFn = fn(&[LispObj]) -> LispObj;
-
-#[derive(Clone)]
-pub struct CoreFn {
-    pub subr: BuiltInFn,
-    pub args: FnArgs,
-}
-
-impl CoreFn {
-    pub fn new(subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {
-        Self {
-            subr,
-            args: FnArgs {
-                required,
-                optional,
-                rest,
-                max_stack_usage: 0,
-                advice: false,
-            }
-        }
-    }
-}
-
-impl std::fmt::Debug for CoreFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Core Fn ({:p} -> {:?})", &self.subr, self.args)
-    }
-}
-
-impl std::cmp::PartialEq for CoreFn {
-    fn eq(&self, other: &Self) -> bool {
-        self.subr as fn(&'static _) -> _ == other.subr
-    }
-}
-
-impl From<CoreFn> for LispObj {
-    fn from(func: CoreFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::CoreFn)
-    }
-}
 
 #[derive(Copy, Clone)]
 pub union LispObj {
@@ -437,18 +266,7 @@ mod test {
     fn sizes() {
         assert_eq!(8, size_of::<LispObj>());
         assert_eq!(16, size_of::<Value>());
-        assert_eq!(56, size_of::<LispFn>());
-        assert_eq!(16, size_of::<Cons>());
         assert_eq!(1, size_of::<Tag>());
-    }
-
-    #[test]
-    fn fixnum() {
-        let x = LispObj::from(7);
-        assert!(Fixnum::try_from(x).is_ok());
-        format!("{}", x);
-        assert_eq!(7, x);
-        assert_eq!(Fixnum::from(7), Fixnum::try_from(x).unwrap());
     }
 
     #[test]
@@ -504,54 +322,6 @@ mod test {
             Value::Symbol(y) => assert_eq!("foo", y.get_name()),
             _ => unreachable!(),
         }
-    }
-
-    #[test]
-    fn cons() {
-        let cons = cons!("start", cons!(7, cons!(5, 3.3)));
-
-        let mut x = LispObj::from(cons);
-        assert!(matches!(x.val(), Value::Cons(_)));
-        format!("{}", x);
-
-        let cons1 = x.as_mut_cons().unwrap();
-        assert_eq!("start", cons1.car);
-        (*cons1).car = "start2".into();
-        assert_eq!("start2", cons1.car);
-
-        let cons2 = match cons1.cdr.val() {
-            Value::Cons(x) => x,
-            _ => unreachable!()
-        };
-        assert_eq!(7, cons2.car);
-
-        let cons3 = match cons2.cdr.val() {
-            Value::Cons(x) => x,
-            _ => unreachable!(),
-        };
-        assert_eq!(5, cons3.car);
-        assert_eq!(3.3, cons3.cdr);
-
-        assert_eq!(cons!(5, "foo"), cons!(5, "foo"));
-        assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
-        assert_eq!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "foo"]);
-        assert_ne!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "bar"]);
-    }
-
-    #[test]
-    fn function() {
-        let x: LispObj = LispFn::new(vec_into![0, 1, 2], vec_into![1], 0, 0, false).into();
-        assert!(matches!(x.val(), Value::LispFunc(_)));
-        format!("{}", x);
-        let func = match x.val() {
-            Value::LispFunc(x) => x,
-            _ => unreachable!(),
-        };
-        assert_eq!(func.op_codes, [0, 1, 2]);
-        assert_eq!(func.constants, vec_into![1]);
-        assert_eq!(func.args.required, 0);
-        assert_eq!(func.args.optional, 0);
-        assert_eq!(func.args.rest, false);
     }
 
     #[test]
