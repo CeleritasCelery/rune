@@ -45,15 +45,17 @@ impl From<LispFn> for LispObj {
 
 type SubrFn = fn(&[LispObj]) -> LispObj;
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct BuiltInFn {
     pub subr: SubrFn,
     pub args: FnArgs,
+    pub name: &'static str,
 }
 
 impl BuiltInFn {
-    pub fn new(subr: SubrFn, required: u16, optional: u16, rest: bool) -> Self {
+    pub fn new(name: &'static str, subr: SubrFn, required: u16, optional: u16, rest: bool) -> Self {
         Self {
+            name,
             subr,
             args: FnArgs {
                 required,

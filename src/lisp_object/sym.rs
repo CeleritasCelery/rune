@@ -127,11 +127,11 @@ mod test {
         };
 
         let sym = InnerSymbol::new("bar".to_owned());
-        let core_func = BuiltInFn::new(func, 0, 0, false);
+        let core_func = BuiltInFn::new("bar", func, 0, 0, false);
         sym.set_core_func(core_func);
         match sym.get_func() {
             Function::Subr(x) => {
-                assert_eq!(*x, BuiltInFn::new(func, 0, 0, false));
+                assert_eq!(*x, BuiltInFn::new("bar", func, 0, 0, false));
             }
             _ => unreachable!(),
         }

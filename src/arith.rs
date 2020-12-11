@@ -1,5 +1,6 @@
 use crate::lisp_object::{LispObj, Fixnum, BuiltInFn};
 use std::convert::TryInto;
+use once_cell::sync::Lazy;
 
 pub fn add(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
@@ -9,6 +10,11 @@ pub fn add(vars: &[LispObj]) -> LispObj {
     LispObj::from(x + y)
 }
 
+#[allow(non_upper_case_globals)]
+static Sadd: Lazy<BuiltInFn> = Lazy::new(|| {
+    BuiltInFn::new("+", add, 2, 0, false)
+});
+
 pub fn sub(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -16,6 +22,11 @@ pub fn sub(vars: &[LispObj]) -> LispObj {
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x - y)
 }
+
+#[allow(non_upper_case_globals)]
+static Ssub: Lazy<BuiltInFn> = Lazy::new(|| {
+    BuiltInFn::new("-", sub, 2, 0, false)
+});
 
 pub fn mul(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
@@ -25,6 +36,11 @@ pub fn mul(vars: &[LispObj]) -> LispObj {
     LispObj::from(x * y)
 }
 
+#[allow(non_upper_case_globals)]
+static Smul: Lazy<BuiltInFn> = Lazy::new(|| {
+    BuiltInFn::new("*", mul, 2, 0, false)
+});
+
 pub fn div(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -33,14 +49,12 @@ pub fn div(vars: &[LispObj]) -> LispObj {
     LispObj::from(x / y)
 }
 
-pub fn define_builtin() -> ([(&'static str, BuiltInFn); 4]) {
-    [
-        ("+", BuiltInFn::new(add, 2, 0, false)),
-        ("-", BuiltInFn::new(sub, 2, 0, false)),
-        ("*", BuiltInFn::new(mul, 2, 0, false)),
-        ("/", BuiltInFn::new(div, 2, 0, false)),
-    ]
-}
+#[allow(non_upper_case_globals)]
+static Sdiv: Lazy<BuiltInFn> = Lazy::new(|| {
+    BuiltInFn::new("/", div, 2, 0, false)
+});
+
+defsubr!(Sadd, Ssub, Smul, Sdiv);
 
 #[cfg(test)]
 mod test {

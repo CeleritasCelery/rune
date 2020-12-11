@@ -45,8 +45,8 @@ impl SymbolMap {
 pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(|| {
     use crate::*;
     let mut map = SymbolMap::new();
-    for (sym, func) in arith::define_builtin().iter() {
-        map.intern(sym).set_core_func(func.clone());
+    for func in arith::defsubr().iter() {
+        map.intern(func.name).set_core_func(func.clone());
     }
     Mutex::new(map)
 });
