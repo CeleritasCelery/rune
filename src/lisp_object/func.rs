@@ -70,7 +70,7 @@ impl BuiltInFn {
 
 impl std::fmt::Debug for BuiltInFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Built-in Function ({:p} -> {:?})", &self.subr, self.args)
+        write!(f, "({} -> {:?})", &self.name, self.args)
     }
 }
 

@@ -10,7 +10,7 @@ macro_rules! count {
 
 #[macro_export]
 macro_rules! defsubr {
-    ($($x:ident),+ $(,)?) => (pub fn defsubr() -> [BuiltInFn; count!($($x)+)] {
-        [$(*$x),+]
+    ($($x:ident),+ $(,)?) => (pub const fn defsubr() -> [BuiltInFn; count!($($x)+)] {
+        [$($x),+]
     });
 }

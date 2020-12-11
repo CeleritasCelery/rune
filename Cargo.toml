@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 fnv = "1.0.3"
-once_cell = "1.4.1"
+lazy_static = "1.4.0"

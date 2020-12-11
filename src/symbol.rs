@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 use crate::lisp_object::{InnerSymbol, Symbol};
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use fnv::{FnvHashMap, FnvHasher};
 use std::mem;
 use std::sync::Mutex;
+use lazy_static::lazy_static;
 
 pub struct SymbolMap(HashMap<String, Box<InnerSymbol>, BuildHasherDefault<FnvHasher>>);
 
@@ -42,14 +42,16 @@ impl SymbolMap {
     }
 }
 
-pub static INTERNED_SYMBOLS: Lazy<Mutex<SymbolMap>> = Lazy::new(|| {
-    use crate::*;
-    let mut map = SymbolMap::new();
-    for func in arith::defsubr().iter() {
-        map.intern(func.name).set_core_func(func.clone());
-    }
-    Mutex::new(map)
-});
+lazy_static!{
+    pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
+        use crate::*;
+        let mut map = SymbolMap::new();
+        for func in arith::defsubr().iter() {
+            map.intern(func.name).set_core_func(func.clone());
+        }
+        map
+    });
+}
 
 pub fn intern(name: &str) -> Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
