@@ -2,8 +2,9 @@
 
 use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
 use std::convert::{TryInto, TryFrom};
+use std::fmt;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum OpCode {
     StackRef1 = 0,
@@ -38,6 +39,12 @@ pub enum OpCode {
     Ret,
     End,
     Unknown
+}
+
+impl OpCode {
+    pub unsafe fn from_unchecked(x: u8) -> Self {
+        std::mem::transmute(x)
+    }
 }
 
 impl From<OpCode> for u8 {
@@ -81,7 +88,7 @@ impl ConstVec {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 struct CodeVec(Vec<u8>);
 
 impl CodeVec {
@@ -172,6 +179,31 @@ impl CodeVec {
         }
     }
 }
+
+impl fmt::Debug for CodeVec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut display: Vec<String> = vec![];
+        let mut iter = self.0.iter();
+        while let Some(i) = iter.next() {
+            let op = unsafe {OpCode::from_unchecked(*i)};
+            display.push(format!("{:?}", op));
+            match op {
+                OpCode::StackRefN | OpCode::ConstantN | OpCode::CallN => {
+                    display.push(format!("{:?}", iter.next()));
+                }
+                OpCode::StackRefN2 | OpCode::ConstantN2 | OpCode::CallN2 |
+                OpCode::JumpNil | OpCode::Jump | OpCode::JumpNilElsePop => {
+                    display.push(format!("{:?}", iter.next()));
+                    display.push(format!("{:?}", iter.next()));
+                }
+                _ => {},
+            }
+        }
+        write!(f, "{:?}", display)
+   }
+}
+
+
 
 #[derive(Debug, PartialEq)]
 pub enum Error {

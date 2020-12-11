@@ -3,13 +3,6 @@
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function};
 use crate::compile::{OpCode, Error};
 use crate::gc::Gc;
-use std::mem::transmute;
-
-impl OpCode {
-    unsafe fn from_unchecked(x: u8) -> Self {
-        transmute(x)
-    }
-}
 
 #[derive(Clone)]
 struct CallFrame {
