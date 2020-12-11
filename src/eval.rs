@@ -62,11 +62,11 @@ impl IP {
 
 impl CallFrame {
     pub fn new(func: Gc<LispFn>, frame_start: usize) -> CallFrame {
-        CallFrame{ip: IP::new(&func.as_ref().op_codes), func, start: frame_start}
+        CallFrame{ip: IP::new(&func.op_codes), func, start: frame_start}
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
-        self.func.as_ref().constants.get(i).unwrap().clone()
+        self.func.constants.get(i).unwrap().clone()
     }
 }
 
@@ -141,13 +141,13 @@ impl Routine {
         };
         match sym.get_func(){
             Function::Lisp(func) => {
-                self.process_args(arg_cnt, func.as_ref().args, sym)?;
+                self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(frame);
                 Ok(CallFrame::new(func, self.stack.from_end(fn_idx)))
             }
             Function::Subr(func) => {
-                self.process_args(arg_cnt, func.as_ref().args, sym)?;
-                self.call_subr(func.as_ref().subr, arg_cnt as usize);
+                self.process_args(arg_cnt, func.args, sym)?;
+                self.call_subr(func.subr, arg_cnt as usize);
                 Ok(frame)
             },
             Function::None => Err(Error::VoidFunction),

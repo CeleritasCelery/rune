@@ -2,6 +2,7 @@
 
 use std::convert::{AsRef, AsMut};
 use core::ptr::NonNull;
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct Gc<T> {
@@ -44,5 +45,13 @@ impl<T> Drop for Gc<T> {
     fn drop(&mut self) {
         // don't do anything here because we will let the garbage collector
         // handle dropping this memory
+    }
+}
+
+impl<T> Deref for Gc<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe{self.pointer.as_ref()}
     }
 }

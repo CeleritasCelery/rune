@@ -155,14 +155,14 @@ mod test {
             Function::Lisp(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
+        assert_eq!(before.op_codes.get(0).unwrap(), &1);
         x.set_lisp_func(LispFn::new(vec![7], vec![], 0, 0, false));
         let after = match x.get_func() {
             Function::Lisp(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(after.as_ref().op_codes.get(0).unwrap(), &7);
-        assert_eq!(before.as_ref().op_codes.get(0).unwrap(), &1);
+        assert_eq!(after.op_codes.get(0).unwrap(), &7);
+        assert_eq!(before.op_codes.get(0).unwrap(), &1);
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod test {
         sym.set_core_func(core_func);
         match sym.get_func() {
             Function::Subr(x) => {
-                assert_eq!(*x.as_ref(), CoreFn::new(func, 0, 0, false));
+                assert_eq!(*x, CoreFn::new(func, 0, 0, false));
             }
             _ => unreachable!(),
         }
@@ -194,7 +194,7 @@ mod test {
             Function::Lisp(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(func.as_ref().op_codes.get(0).unwrap(), &5);
+        assert_eq!(func.op_codes.get(0).unwrap(), &5);
         assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
 }
