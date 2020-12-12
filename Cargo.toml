@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 fnv = "1.0.3"
 lazy_static = "1.4.0"
+paste = "1.0.4"

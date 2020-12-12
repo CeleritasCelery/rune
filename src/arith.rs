@@ -85,7 +85,7 @@ const Sdiv: BuiltInFn = BuiltInFn{
     }
 };
 
-defsubr!(Sadd, Ssub, Smul, Sdiv);
+defsubr!(add, sub, mul, div);
 
 #[cfg(test)]
 mod test {

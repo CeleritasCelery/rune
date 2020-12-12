@@ -247,8 +247,6 @@ impl fmt::Debug for LispObj {
    }
 }
 
-pub fn run() {}
-
 #[cfg(test)]
 mod test {
     use super::*;

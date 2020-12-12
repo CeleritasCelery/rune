@@ -11,6 +11,6 @@ macro_rules! count {
 #[macro_export]
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (pub const fn defsubr() -> [BuiltInFn; count!($($x)+)] {
-        [$($x),+]
+        [$(paste::paste!{[<S $x>]}),+]
     });
 }
