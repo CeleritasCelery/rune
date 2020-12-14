@@ -4,98 +4,66 @@ use syn;
 
 #[proc_macro_attribute]
 pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
-    // let fn_item = syn::parse(fn_ts.clone()).unwrap();
-    // let attr = syn::parse_macro_input!(attr_ts as syn::AttributeArgs);
-    // let lisp_fn_name = parse_attr(attr).unwrap();
-    // let function = parse_fn(&fn_item).unwrap();
+    let spec = syn::parse_macro_input!(attr_ts as Spec);
+    let function = syn::parse_macro_input!(fn_ts as Function);
 
-    // let tokens = quote! {
-    //     let x = 5;
-    // };
+    let body = function.body;
+    let subr = function.name;
+    let struct_name = concat_idents("S", &subr.to_string());
+    let name = match spec.name {
+        Some(x) => x,
+        None => subr.to_string(),
+    };
+    let tokens = quote!{
+        #[allow(non_upper_case_globals)]
+        const #struct_name: BuiltInFn = BuiltInFn{
+            name: #name,
+            subr: #subr,
+            args: FnArgs {
+                required: 2,
+                optional: 0,
+                rest: false,
+                max_stack_usage: 0,
+                advice: false,
+            }
+        };
 
-    fn_ts
-    // let mut cargs = proc_macro2::TokenStream::new();
-    // let mut rargs = proc_macro2::TokenStream::new();
-    // let mut body = proc_macro2::TokenStream::new();
-
-    // let cname = lisp_fn_args.c_name;
-    // let sname = concat_idents("S", &cname);
-    // let fname = concat_idents("F", &cname);
-    // let rname = function.name;
-    // let min_args = lisp_fn_args.min;
-    // let mut windows_header = quote! {};
-
-    // let max_args = if lisp_fn_args.unevalled {
-    //     quote! { -1 }
-    // } else {
-    //     match function.fntype {
-    //         function::LispFnType::Normal(_) => quote! { #max_args },
-    //         function::LispFnType::Many => quote! { crate::lisp::MANY  },
-    //     }
-    // };
-    // let symbol_name = CByteLiteral(&lisp_fn_args.name);
-
-    // if cfg!(windows) {
-    //     windows_header = quote! {
-    //         | (std::mem::size_of::<crate::remacs_sys::Lisp_Subr>()
-    //            / std::mem::size_of::<crate::remacs_sys::EmacsInt>()) as libc::ptrdiff_t
-    //     };
-    // }
-
-    // let tokens = quote! {
-    //     #[no_mangle]
-    //     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    //     #[allow(clippy::transmute_ptr_to_ptr)]
-    //     #[allow(clippy::diverging_sub_expression)]
-    //     pub extern "C" fn #fname(#cargs) -> crate::lisp::LispObject {
-    //         #body
-
-    //         let ret = #rname(#rargs);
-    //         #[allow(unreachable_code)]
-    //         crate::lisp::LispObject::from(ret)
-    //     }
-    // };
-
-    // // we could put #fn_item into the quoted code above, but doing so
-    // // drops all of the line numbers on the floor and causes the
-    // // compiler to attribute any errors in the function to the macro
-    // // invocation instead.
-    // let tokens: TokenStream = tokens.into();
-    // tokens.into_iter().chain(fn_ts.into_iter()).collect()
+        #body
+    };
+    tokens.into()
 }
 
-// struct CByteLiteral<'a>(&'a str);
+fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
+    syn::Ident::new(
+        format!("{}{}", lhs, rhs).as_str(),
+        proc_macro2::Span::call_site(),
+    )
+}
 
-// impl<'a> quote::ToTokens for CByteLiteral<'a> {
-//     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-//         let s = RE.replace_all(self.0, |caps: &regex::Captures| {
-//             format!("\\x{:x}", u32::from(caps[0].chars().next().unwrap()))
-//         });
-//         let identifier = format!(r#"b"{}\0""#, s);
-//         let expr = syn::parse_str::<syn::Expr>(&identifier).unwrap();
-//         tokens.extend(quote! { #expr });
-//     }
-// }
-
-// fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
-//     syn::Ident::new(
-//         format!("{}{}", lhs, rhs).as_str(),
-//         quote::__rt::Span::call_site(),
-//     )
-// }
-
-fn parse_fn(item: &syn::Item) -> Result<&syn::Ident, &'static str> {
+fn parse_fn(item: syn::Item) -> Result<Function, syn::Error> {
     match item {
         syn::Item::Fn(syn::ItemFn {ref sig, ..}) => {
             if sig.unsafety.is_some() {
-                Err("lisp functions cannot be `unsafe`")
+                Err(syn::Error::new_spanned(sig, "lisp functions cannot be `unsafe`"))
             } else if sig.constness.is_some() {
-                Err("lisp functions cannot be `const`")
+                Err(syn::Error::new_spanned(sig, "lisp functions cannot be `const`"))
             } else {
-                Ok(&sig.ident)
+                Ok(Function{name: sig.ident.clone(), body: item})
             }
         }
-        _ => Err("`lisp_fn` attribute can only be used on functions"),
+        _ => Err(syn::Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions"))
+    }
+}
+
+struct Function {
+    name: syn::Ident,
+    body: syn::Item,
+}
+
+impl<'a> syn::parse::Parse for Function {
+    fn parse(input: syn::parse::ParseStream) -> Result<Self, syn::Error> {
+        let item: syn::Item = input.parse()?;
+        parse_fn(item)
     }
 }
 
@@ -144,7 +112,10 @@ impl Spec {
 impl syn::parse::Parse for Spec {
     fn parse(input: syn::parse::ParseStream) -> Result<Self, syn::Error> {
         let attr = input.call(syn::Attribute::parse_outer)?;
-        parse_attr(&attr[0])
+        match &attr.get(0) {
+            Some(x) => parse_attr(x),
+            None => Ok(Spec::default()),
+        }
     }
 }
 
@@ -184,9 +155,8 @@ mod test {
     #[test]
     fn test() {
         let stream: proc_macro2::TokenStream = quote!{fn foo() {}}.into();
-        let item: syn::Item = syn::parse2(stream).unwrap();
-        println!("{}", parse_fn(&item).unwrap());
-        assert!(parse_fn(&item).is_ok());
+        let function: Function = syn::parse2(stream).unwrap();
+        assert_eq!("foo", function.name.to_string());
     }
 
     #[test]
