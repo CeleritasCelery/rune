@@ -48,7 +48,7 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         pub fn #func_name(args: &[crate::lisp_object::LispObj]) ->
             crate::lisp_object::LispObj {
-            #subr(#(args[#indices]),* #slice)
+            #subr(#(args[#indices]),* #slice).into()
         }
 
         #body
