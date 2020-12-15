@@ -33,10 +33,10 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
     let indices: Vec<usize> = (0..args).collect();
     let tokens = quote!{
         #[allow(non_upper_case_globals)]
-        const #struct_name: BuiltInFn = BuiltInFn{
+        const #struct_name: crate::lisp_object::BuiltInFn = crate::lisp_object::BuiltInFn{
             name: #name,
             subr: #func_name,
-            args: FnArgs {
+            args: crate::lisp_object::FnArgs {
                 required: #required,
                 optional: #optional,
                 rest: #rest,
@@ -46,7 +46,8 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
         };
 
         #[allow(non_snake_case)]
-        pub fn #func_name(args: &[LispObj]) -> LispObj {
+        pub fn #func_name(args: &[crate::lisp_object::LispObj]) ->
+            crate::lisp_object::LispObj {
             #subr(#(args[#indices]),* #slice)
         }
 

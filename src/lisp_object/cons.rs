@@ -27,8 +27,8 @@ impl From<Cons> for LispObj {
 
 #[macro_export]
 macro_rules! cons {
-    ($car:expr, $cdr:expr) => (Cons::new($car.into(), $cdr.into()));
-    ($car:expr) => (Cons::new($car.into(), false.into()));
+    ($car:expr, $cdr:expr) => (crate::lisp_object::Cons::new($car.into(), $cdr.into()));
+    ($car:expr) => (crate::lisp_object::Cons::new($car.into(), false.into()));
 }
 
 #[macro_export]

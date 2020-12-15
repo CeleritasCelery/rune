@@ -1,4 +1,4 @@
-use crate::lisp_object::{LispObj, Fixnum, BuiltInFn, FnArgs};
+use crate::lisp_object::{LispObj, Fixnum};
 use std::convert::TryInto;
 use fn_macros::lisp_fn;
 
