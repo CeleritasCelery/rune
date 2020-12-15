@@ -1,0 +1,10 @@
+#+title: Next steps for Remac
+* implement LispNumber
+Current the arithitic function only support integers. Expand this to take a
+LispNumber, which is an enum of int and float.
+* Implement defalias
+* Implement setq
+* implement dynamic variables
+* add lisp_fn macro
+* Add reader macro hooks
+* define benchmarks
