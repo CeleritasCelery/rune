@@ -118,7 +118,7 @@ impl LispObj {
                 Tag::Nil      => Value::Nil,
                 Tag::True     => Value::True,
                 Tag::Cons     => Value::Cons(&*self.get_ptr()),
-                Tag::Fixnum   => Value::Int(self.fixnum.into()),
+                Tag::Fixnum   => Value::Int(self.fixnum >> TAG_SIZE),
                 Tag::Marker   => todo!(),
             }
         }
@@ -179,9 +179,9 @@ impl LispObj {
     }
 }
 
-impl From<i64> for LispObj {
+impl From<Fixnum> for LispObj {
     fn from(i: i64) -> Self {
-        LispObj {fixnum: i.into()}
+        LispObj {fixnum: i << TAG_SIZE}
     }
 }
 
