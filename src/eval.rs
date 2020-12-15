@@ -118,9 +118,10 @@ impl Routine {
         if !args.rest && (count > total_args) {
             return Err(Error::ArgCount(total_args, count));
         }
-        let fill_args = total_args + if args.rest {1} else {0} - count;
-        for _ in 0..fill_args {
-            self.stack.push(LispObj::nil());
+        if total_args > count {
+            for _ in 0..(total_args - count) {
+                self.stack.push(LispObj::nil());
+            }
         }
         Ok(())
     }

@@ -17,7 +17,9 @@ pub fn sub(lhs: LispObj, rhs: LispObj) -> LispObj {
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul(lhs: LispObj, rhs: LispObj) -> LispObj {
+pub fn mul(vars: &[LispObj]) -> LispObj {
+    let lhs = *vars.get(0).unwrap();
+    let rhs = *vars.get(1).unwrap();
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x * y)
@@ -49,7 +51,10 @@ mod test {
 
     #[test]
     fn test_mul() {
-        assert_eq!(91, mul(7.into(), 13.into()));
+        let args = vec_into![7, 13];
+        assert_eq!(91, mul(&args));
+        assert_eq!(Smul.args.required, 0);
+        assert!(Smul.args.rest);
     }
 
     #[test]
