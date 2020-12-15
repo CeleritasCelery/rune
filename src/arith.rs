@@ -1,6 +1,8 @@
 use crate::lisp_object::{LispObj, Fixnum, BuiltInFn, FnArgs};
 use std::convert::TryInto;
+use fn_macros::lisp_fn;
 
+#[lisp_fn(name = "+")]
 pub fn add(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -9,6 +11,7 @@ pub fn add(vars: &[LispObj]) -> LispObj {
     LispObj::from(x + y)
 }
 
+#[lisp_fn(name = "-")]
 pub fn sub(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -17,6 +20,7 @@ pub fn sub(vars: &[LispObj]) -> LispObj {
     LispObj::from(x - y)
 }
 
+#[lisp_fn(name = "*")]
 pub fn mul(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -25,6 +29,7 @@ pub fn mul(vars: &[LispObj]) -> LispObj {
     LispObj::from(x * y)
 }
 
+#[lisp_fn(name = "/")]
 pub fn div(vars: &[LispObj]) -> LispObj {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
@@ -32,58 +37,6 @@ pub fn div(vars: &[LispObj]) -> LispObj {
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x / y)
 }
-
-#[allow(non_upper_case_globals)]
-const Sadd: BuiltInFn = BuiltInFn{
-    name: "+",
-    subr: add,
-    args: FnArgs {
-        required: 2,
-        optional: 0,
-        rest: false,
-        max_stack_usage: 0,
-        advice: false,
-    }
-};
-
-#[allow(non_upper_case_globals)]
-const Ssub: BuiltInFn = BuiltInFn{
-    name: "-",
-    subr: sub,
-    args: FnArgs {
-        required: 2,
-        optional: 0,
-        rest: false,
-        max_stack_usage: 0,
-        advice: false,
-    }
-};
-
-#[allow(non_upper_case_globals)]
-const Smul: BuiltInFn = BuiltInFn{
-    name: "*",
-    subr: mul,
-    args: FnArgs {
-        required: 2,
-        optional: 0,
-        rest: false,
-        max_stack_usage: 0,
-        advice: false,
-    }
-};
-
-#[allow(non_upper_case_globals)]
-const Sdiv: BuiltInFn = BuiltInFn{
-    name: "/",
-    subr: div,
-    args: FnArgs {
-        required: 2,
-        optional: 0,
-        rest: false,
-        max_stack_usage: 0,
-        advice: false,
-    }
-};
 
 defsubr!(add, sub, mul, div);
 
