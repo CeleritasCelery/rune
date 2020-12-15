@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use darling::FromMeta;
-use quote::quote;
+use quote::{quote, format_ident};
 use syn;
 
 #[proc_macro_attribute]
@@ -15,18 +15,22 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
 
     let body = function.body;
     let subr = function.name;
-    let struct_name = concat_idents("S", &subr.to_string());
+    let subr_name = subr.to_string();
+    let struct_name = format_ident!("S{}", &subr_name);
+    let func_name = format_ident!("F{}", &subr_name);
+    let arg_count = function.args.len() as u16;
     let name = match spec.name {
         Some(x) => x,
-        None => subr.to_string(),
+        None => subr_name,
     };
+    let indices: Vec<usize> = (0..arg_count as usize).collect();
     let tokens = quote!{
         #[allow(non_upper_case_globals)]
         const #struct_name: BuiltInFn = BuiltInFn{
             name: #name,
-            subr: #subr,
+            subr: #func_name,
             args: FnArgs {
-                required: 2,
+                required: #arg_count,
                 optional: 0,
                 rest: false,
                 max_stack_usage: 0,
@@ -34,16 +38,27 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
             }
         };
 
+        #[allow(non_snake_case)]
+        pub fn #func_name(args: &[LispObj]) -> LispObj {
+            #subr(#(*args.get(#indices).unwrap()),*)
+        }
+
         #body
     };
     tokens.into()
 }
 
-fn concat_idents(lhs: &str, rhs: &str) -> syn::Ident {
-    syn::Ident::new(
-        format!("{}{}", lhs, rhs).as_str(),
-        proc_macro2::Span::call_site(),
-    )
+struct Function {
+    name: syn::Ident,
+    body: syn::Item,
+    args: Vec<syn::FnArg>,
+}
+
+impl<'a> syn::parse::Parse for Function {
+    fn parse(input: syn::parse::ParseStream) -> Result<Self, syn::Error> {
+        let item: syn::Item = input.parse()?;
+        parse_fn(item)
+    }
 }
 
 fn parse_fn(item: syn::Item) -> Result<Function, syn::Error> {
@@ -54,22 +69,11 @@ fn parse_fn(item: syn::Item) -> Result<Function, syn::Error> {
             } else if sig.constness.is_some() {
                 Err(syn::Error::new_spanned(sig, "lisp functions cannot be `const`"))
             } else {
-                Ok(Function{name: sig.ident.clone(), body: item})
+                let args = sig.inputs.iter().map(|x| x.clone()).collect();
+                Ok(Function{name: sig.ident.clone(), body: item, args})
             }
         }
         _ => Err(syn::Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions"))
-    }
-}
-
-struct Function {
-    name: syn::Ident,
-    body: syn::Item,
-}
-
-impl<'a> syn::parse::Parse for Function {
-    fn parse(input: syn::parse::ParseStream) -> Result<Self, syn::Error> {
-        let item: syn::Item = input.parse()?;
-        parse_fn(item)
     }
 }
 

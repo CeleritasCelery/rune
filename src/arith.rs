@@ -3,36 +3,28 @@ use std::convert::TryInto;
 use fn_macros::lisp_fn;
 
 #[lisp_fn(name = "+")]
-pub fn add(vars: &[LispObj]) -> LispObj {
-    let lhs = *vars.get(0).unwrap();
-    let rhs = *vars.get(1).unwrap();
+pub fn add(lhs: LispObj, rhs: LispObj) -> LispObj {
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x + y)
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(vars: &[LispObj]) -> LispObj {
-    let lhs = *vars.get(0).unwrap();
-    let rhs = *vars.get(1).unwrap();
+pub fn sub(lhs: LispObj, rhs: LispObj) -> LispObj {
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x - y)
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul(vars: &[LispObj]) -> LispObj {
-    let lhs = *vars.get(0).unwrap();
-    let rhs = *vars.get(1).unwrap();
+pub fn mul(lhs: LispObj, rhs: LispObj) -> LispObj {
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x * y)
 }
 
 #[lisp_fn(name = "/")]
-pub fn div(vars: &[LispObj]) -> LispObj {
-    let lhs = *vars.get(0).unwrap();
-    let rhs = *vars.get(1).unwrap();
+pub fn div(lhs: LispObj, rhs: LispObj) -> LispObj {
     let x: Fixnum = lhs.try_into().expect("lhs is not a number");
     let y: Fixnum = rhs.try_into().expect("rhs is not a number");
     LispObj::from(x / y)
@@ -47,25 +39,21 @@ mod test {
 
     #[test]
     fn test_add() {
-        let nums = vec_into![7, 13];
-        assert_eq!(20, add(&nums));
+        assert_eq!(20, add(7.into(), 13.into()));
     }
 
     #[test]
     fn test_sub() {
-        let nums = vec_into![7, 13];
-        assert_eq!(-6, sub(&nums));
+        assert_eq!(-6, sub(7.into(), 13.into()));
     }
 
     #[test]
     fn test_mul() {
-        let nums = vec_into![7, 13];
-        assert_eq!(91, mul(&nums));
+        assert_eq!(91, mul(7.into(), 13.into()));
     }
 
     #[test]
     fn test_div() {
-        let nums = vec_into![12, 5];
-        assert_eq!(2, div(&nums));
+        assert_eq!(2, div(12.into(), 5.into()));
     }
 }
