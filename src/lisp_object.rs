@@ -9,6 +9,8 @@ pub mod func;
 pub use func::{LispFn, BuiltInFn, FnArgs};
 pub mod sym;
 pub use sym::{Symbol, Function, InnerSymbol};
+pub mod convert;
+pub use convert::get_type;
 
 use crate::gc::Gc;
 use std::mem::size_of;

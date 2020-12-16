@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function};
-use crate::compile::{OpCode, Error};
+use crate::compile::OpCode;
+use crate::error::Error;
 use crate::gc::Gc;
 
 #[derive(Clone)]

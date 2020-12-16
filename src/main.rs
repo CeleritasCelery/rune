@@ -9,6 +9,7 @@ mod arith;
 mod eval;
 mod symbol;
 mod gc;
+mod error;
 
 fn main() {
     compile::run();

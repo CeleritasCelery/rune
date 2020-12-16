@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
-use std::convert::{TryInto, TryFrom};
+use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol, get_type};
+use crate::error::{Error, Type};
+use std::convert::TryInto;
 use std::fmt;
 
 #[derive(Copy, Clone, Debug)]
@@ -203,52 +204,6 @@ impl fmt::Debug for CodeVec {
    }
 }
 
-
-
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    ConstOverflow,
-    ArgOverflow,
-    ArgCount(u16, u16),
-    LetValueCount(u16),
-    StackSizeOverflow,
-    Type(Type, Type),
-    UnknownOpcode(u8),
-    VoidFunction,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Type {
-    Int,
-    True,
-    Nil,
-    Cons,
-    String,
-    Symbol,
-    Float,
-    Void,
-    Marker,
-    Func,
-    Number,
-    List,
-}
-
-fn get_type(obj: LispObj) -> Type {
-    use Type::*;
-    match obj.val() {
-        Value::Symbol(_) => Symbol,
-        Value::Float(_) => Float,
-        Value::Void => Void,
-        Value::String(_) => String,
-        Value::Nil => Nil,
-        Value::True => True,
-        Value::Cons(_) => Cons,
-        Value::Int(_) => Int,
-        Value::LispFunc(_) => Func,
-        Value::SubrFunc(_) => Func,
-    }
-}
-
 fn expect_type(exp_type: Type, obj: LispObj) -> Error {
     Error::Type(exp_type, get_type(obj))
 }
@@ -276,16 +231,6 @@ fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
         Value::Nil => Ok(vec![]),
         Value::Cons(_) => into_list(obj),
         _ => Err(expect_type(Type::List, obj))
-    }
-}
-
-impl TryFrom<LispObj> for Symbol {
-    type Error = Error;
-    fn try_from(value: LispObj) -> Result<Self, Self::Error> {
-        match value.val() {
-            Value::Symbol(x) => Ok(x),
-            _ => Err(expect_type(Type::Symbol, value)),
-        }
     }
 }
 
