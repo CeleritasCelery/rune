@@ -122,8 +122,8 @@ mod test {
 
     #[test]
     fn subr() {
-        let func = |x: &[LispObj]| -> LispObj {
-            x[0]
+        let func = |x: &[LispObj]| -> Result<LispObj, crate::error::Error> {
+            Ok(x[0])
         };
 
         let sym = InnerSymbol::new("bar".to_owned());

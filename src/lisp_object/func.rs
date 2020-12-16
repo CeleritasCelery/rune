@@ -1,4 +1,5 @@
 use crate::lisp_object::{LispObj, Tag};
+use crate::error::Error;
 use std::fmt;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -43,7 +44,7 @@ impl From<LispFn> for LispObj {
     }
 }
 
-type SubrFn = fn(&[LispObj]) -> LispObj;
+pub type SubrFn = fn(&[LispObj]) -> Result<LispObj, Error>;
 
 #[derive(Copy, Clone)]
 pub struct BuiltInFn {

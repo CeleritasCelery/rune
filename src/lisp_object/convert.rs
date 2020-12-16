@@ -22,7 +22,6 @@ fn expect_type(exp_type: Type, obj: LispObj) -> Error {
     Error::Type(exp_type, get_type(obj))
 }
 
-
 impl TryFrom<LispObj> for Symbol {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
@@ -187,7 +186,7 @@ mod test {
     use std::convert::TryInto;
 
     fn wrapper(args: &[LispObj]) -> Result<i64, Error> {
-        Ok(inner(args[0].try_into()?, (&args[1]).try_into()?))
+        Ok(inner(std::convert::TryFrom::try_from(args[0])?, std::convert::TryFrom::try_from(&args[1])?))
     }
 
     fn inner(arg0: Option<Fixnum>, arg1: &Cons) -> i64 {

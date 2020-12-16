@@ -3,17 +3,13 @@ use std::convert::TryInto;
 use fn_macros::lisp_fn;
 
 #[lisp_fn(name = "+")]
-pub fn add(lhs: LispObj, rhs: LispObj) -> Fixnum {
-    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
-    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
-    x + y
+pub fn add(lhs: Fixnum, rhs: Fixnum) -> Fixnum {
+    lhs + rhs
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(lhs: LispObj, rhs: LispObj) -> Fixnum {
-    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
-    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
-    x - y
+pub fn sub(lhs: Fixnum, rhs: Fixnum) -> Fixnum {
+    lhs - rhs
 }
 
 #[lisp_fn(name = "*")]

@@ -6,7 +6,7 @@ pub use fixnum::Fixnum;
 pub mod cons;
 pub use cons::Cons;
 pub mod func;
-pub use func::{LispFn, BuiltInFn, FnArgs};
+pub use func::{LispFn, BuiltInFn, FnArgs, SubrFn};
 pub mod sym;
 pub use sym::{Symbol, Function, InnerSymbol};
 pub mod convert;

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function};
+use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function, SubrFn};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
@@ -141,17 +141,18 @@ impl Routine {
             }
             Function::Subr(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
-                self.call_subr(func.subr, arg_cnt as usize);
+                self.call_subr(func.subr, arg_cnt as usize)?;
                 Ok(frame)
             },
             Function::None => Err(Error::VoidFunction),
         }
     }
 
-    fn call_subr(&mut self, func: fn(&[LispObj]) -> LispObj, args: usize) {
+    fn call_subr(&mut self, func: SubrFn, args: usize) -> Result<(), Error> {
         let i = self.stack.from_end(args) - 1;
-        self.stack[i] = func(self.stack.take_slice(args));
+        self.stack[i] = func(self.stack.take_slice(args))?;
         self.stack.truncate(i + 1);
+        Ok(())
     }
 
     pub fn execute(&mut self, func: Gc<LispFn>) -> Result<LispObj, Error> {
