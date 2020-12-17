@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function, SubrFn};
+use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function, BuiltInFn};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
@@ -148,7 +148,7 @@ impl Routine {
         }
     }
 
-    fn call_subr(&mut self, func: SubrFn, args: usize) -> Result<(), Error> {
+    fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<(), Error> {
         let i = self.stack.from_end(args) - 1;
         self.stack[i] = func(self.stack.take_slice(args))?;
         self.stack.truncate(i + 1);
@@ -294,7 +294,7 @@ mod test {
         let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
-            Value::LispFunc(x) => x.clone(),
+            Value::LispFn(x) => x.clone(),
             _ => unreachable!(),
         };
         test_add.set_lisp_func(func);
@@ -303,7 +303,7 @@ mod test {
         let obj = LispReader::new("(lambda (x y z) (+ (test-add x z y) (test-add x z y)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
-            Value::LispFunc(x) => x.clone(),
+            Value::LispFn(x) => x.clone(),
             _ => unreachable!(),
         };
         middle.set_lisp_func(func);

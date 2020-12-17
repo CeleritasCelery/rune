@@ -36,7 +36,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let arg_conversion = get_arg_conversion(function.args);
     let tokens = quote!{
         #[allow(non_upper_case_globals)]
-        const #struct_name: crate::lisp_object::BuiltInFn = crate::lisp_object::BuiltInFn{
+        const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn{
             name: #name,
             subr: #func_name,
             args: crate::lisp_object::FnArgs {

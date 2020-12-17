@@ -44,17 +44,17 @@ impl From<LispFn> for LispObj {
     }
 }
 
-pub type SubrFn = fn(&[LispObj]) -> Result<LispObj, Error>;
+pub type BuiltInFn = fn(&[LispObj]) -> Result<LispObj, Error>;
 
 #[derive(Copy, Clone)]
-pub struct BuiltInFn {
-    pub subr: SubrFn,
+pub struct SubrFn {
+    pub subr: BuiltInFn,
     pub args: FnArgs,
     pub name: &'static str,
 }
 
-impl BuiltInFn {
-    pub fn new(name: &'static str, subr: SubrFn, required: u16, optional: u16, rest: bool) -> Self {
+impl SubrFn {
+    pub fn new(name: &'static str, subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {
         Self {
             name,
             subr,
@@ -69,20 +69,20 @@ impl BuiltInFn {
     }
 }
 
-impl std::fmt::Debug for BuiltInFn {
+impl std::fmt::Debug for SubrFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} -> {:?})", &self.name, self.args)
     }
 }
 
-impl std::cmp::PartialEq for BuiltInFn {
+impl std::cmp::PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
         self.subr as fn(&'static _) -> _ == other.subr
     }
 }
 
-impl From<BuiltInFn> for LispObj {
-    fn from(func: BuiltInFn) -> Self {
+impl From<SubrFn> for LispObj {
+    fn from(func: SubrFn) -> Self {
         LispObj::from_tagged_ptr(func, Tag::SubrFn)
     }
 }
@@ -96,10 +96,10 @@ mod test {
     fn function() {
         assert_eq!(56, size_of::<LispFn>());
         let x: LispObj = LispFn::new(vec_into![0, 1, 2], vec_into![1], 0, 0, false).into();
-        assert!(matches!(x.val(), Value::LispFunc(_)));
+        assert!(matches!(x.val(), Value::LispFn(_)));
         format!("{}", x);
         let func = match x.val() {
-            Value::LispFunc(x) => x,
+            Value::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(func.op_codes, [0, 1, 2]);

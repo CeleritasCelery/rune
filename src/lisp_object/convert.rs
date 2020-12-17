@@ -13,8 +13,8 @@ pub fn get_type(obj: LispObj) -> Type {
         Value::True => True,
         Value::Cons(_) => Cons,
         Value::Int(_) => Int,
-        Value::LispFunc(_) => Func,
-        Value::SubrFunc(_) => Func,
+        Value::LispFn(_) => Func,
+        Value::SubrFn(_) => Func,
     }
 }
 
@@ -142,7 +142,7 @@ impl<'a> TryFrom<&'a LispObj> for &'a LispFn {
     type Error = Error;
     fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::LispFunc(x) => Ok(x),
+            Value::LispFn(x) => Ok(x),
             _ => Err(expect_type(Type::Func, *obj))
         }
     }
@@ -152,28 +152,28 @@ impl<'a> TryFrom<&'a LispObj> for Option<&'a LispFn> {
     type Error = Error;
     fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::LispFunc(x) => Ok(Some(x)),
+            Value::LispFn(x) => Ok(Some(x)),
             Value::Nil => Ok(None),
             _ => Err(expect_type(Type::Func, *obj))
         }
     }
 }
 
-impl<'a> TryFrom<&'a LispObj> for &'a BuiltInFn {
+impl<'a> TryFrom<&'a LispObj> for &'a SubrFn {
     type Error = Error;
     fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::SubrFunc(x) => Ok(x),
+            Value::SubrFn(x) => Ok(x),
             _ => Err(expect_type(Type::Func, *obj))
         }
     }
 }
 
-impl<'a> TryFrom<&'a LispObj> for Option<&'a BuiltInFn> {
+impl<'a> TryFrom<&'a LispObj> for Option<&'a SubrFn> {
     type Error = Error;
     fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::SubrFunc(x) => Ok(Some(x)),
+            Value::SubrFn(x) => Ok(Some(x)),
             Value::Nil => Ok(None),
             _ => Err(expect_type(Type::Func, *obj))
         }

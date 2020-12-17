@@ -6,7 +6,7 @@ pub use fixnum::Fixnum;
 pub mod cons;
 pub use cons::Cons;
 pub mod func;
-pub use func::{LispFn, BuiltInFn, FnArgs, SubrFn};
+pub use func::{LispFn, SubrFn, FnArgs, BuiltInFn};
 pub mod sym;
 pub use sym::{Symbol, Function, InnerSymbol};
 pub mod convert;
@@ -76,8 +76,8 @@ pub enum Value<'a> {
     String(&'a String),
     Symbol(Symbol),
     Float(f64),
-    LispFunc(&'a LispFn),
-    SubrFunc(&'a BuiltInFn),
+    LispFn(&'a LispFn),
+    SubrFn(&'a SubrFn),
     Void,
 }
 
@@ -115,8 +115,8 @@ impl LispObj {
                 Tag::Void     => Value::Void,
                 Tag::LongStr  => Value::String(&*self.get_ptr()),
                 Tag::ShortStr => Value::String(&*self.get_ptr()),
-                Tag::LispFn   => Value::LispFunc(&*self.get_ptr()),
-                Tag::SubrFn   => Value::SubrFunc(&*self.get_ptr()),
+                Tag::LispFn   => Value::LispFn(&*self.get_ptr()),
+                Tag::SubrFn   => Value::SubrFn(&*self.get_ptr()),
                 Tag::Nil      => Value::Nil,
                 Tag::True     => Value::True,
                 Tag::Cons     => Value::Cons(&*self.get_ptr()),
@@ -227,8 +227,8 @@ impl fmt::Display for LispObj {
             Value::Cons(x) => write!(f, "{}", x),
             Value::String(x) => write!(f, "\"{}\"", x),
             Value::Symbol(x) => write!(f, "'{}", x.get_name()),
-            Value::LispFunc(x) => write!(f, "(lambda {:?})", x),
-            Value::SubrFunc(x) => write!(f, "{:?}", x),
+            Value::LispFn(x) => write!(f, "(lambda {:?})", x),
+            Value::SubrFn(x) => write!(f, "{:?}", x),
             Value::Void => write!(f, "Void"),
             Value::True => write!(f, "t"),
             Value::Nil => write!(f, "nil"),
