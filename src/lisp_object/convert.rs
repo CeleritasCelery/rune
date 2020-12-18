@@ -1,6 +1,7 @@
 use crate::lisp_object::*;
 use crate::error::{Error, Type};
 use std::convert::TryFrom;
+use std::mem::transmute;
 
 pub fn get_type(obj: LispObj) -> Type {
     use Type::*;
@@ -20,6 +21,42 @@ pub fn get_type(obj: LispObj) -> Type {
 
 fn expect_type(exp_type: Type, obj: LispObj) -> Error {
     Error::Type(exp_type, get_type(obj))
+}
+
+impl TryFrom<LispObj> for Function {
+    type Error = Error;
+    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::LispFn(_) | Value::SubrFn(_) => {
+              Ok(unsafe {transmute(obj)})
+            }
+            _ => Err(expect_type(Type::Func, obj))
+        }
+    }
+}
+
+impl TryFrom<LispObj> for Number {
+    type Error = Error;
+    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::Int(_) | Value::Float(_) => {
+              Ok(unsafe {transmute(obj)})
+            }
+            _ => Err(expect_type(Type::Number, obj))
+        }
+    }
+}
+
+impl TryFrom<LispObj> for List {
+    type Error = Error;
+    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::Cons(_) | Value::Nil => {
+              Ok(unsafe {transmute(obj)})
+            }
+            _ => Err(expect_type(Type::List, obj))
+        }
+    }
 }
 
 impl TryFrom<LispObj> for Symbol {

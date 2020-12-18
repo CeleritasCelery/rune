@@ -1,5 +1,4 @@
-use crate::lisp_object::{LispObj, LispFn, SubrFn, TAG_SIZE, Tag};
-use crate::gc::Gc;
+use crate::lisp_object::{LispObj, LispFn, SubrFn, TAG_SIZE, Tag, Function};
 use std::cmp;
 use std::mem;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -15,34 +14,19 @@ pub type Symbol = &'static InnerSymbol;
 #[derive(Debug)]
 struct FnCell(AtomicI64);
 
-const LISP_FN_TAG: i64 = 0x1;
-const CORE_FN_TAG: i64 = 0x2;
-const FN_MASK: i64 = 0b11;
-
 impl FnCell {
     fn new() -> Self { Self(AtomicI64::new(0)) }
 
-    fn set_lisp(&self, func: LispFn) {
-        let ptr: *const LispFn = Gc::new(func).as_ref();
-        let value = ptr as i64 | LISP_FN_TAG;
+    fn set(&self, func: Function) {
+        let value = unsafe {mem::transmute(func)};
         self.0.store(value, Ordering::Release);
     }
 
-    fn set_core(&self, func: SubrFn) {
-        let ptr: *const SubrFn = Gc::new(func).as_ref();
-        let value = ptr as i64 | CORE_FN_TAG;
-        self.0.store(value, Ordering::Release);
-    }
-
-    fn remove_tag(bits: i64) -> i64 { bits >> 2 << 2 }
-
-    fn get(&self) -> Function {
+    fn get(&self) -> Option<Function> {
         let bits = self.0.load(Ordering::Acquire);
-        let ptr = Self::remove_tag(bits);
-        match bits & FN_MASK {
-            LISP_FN_TAG => unsafe { Function::Lisp(mem::transmute(ptr)) }
-            CORE_FN_TAG => unsafe { Function::Subr(mem::transmute(ptr)) }
-            _ => Function::None,
+        match bits {
+            0 => None,
+            _ => Some(unsafe {mem::transmute(bits)})
         }
     }
 }
@@ -59,14 +43,14 @@ impl InnerSymbol {
     }
 
     pub fn set_lisp_func(&self, func: LispFn) {
-        self.func.set_lisp(func);
+        self.func.set(func.into());
     }
 
     pub fn set_core_func(&self, func: SubrFn) {
-        self.func.set_core(func);
+        self.func.set(func.into());
     }
 
-    pub fn get_func(&self) -> Function {
+    pub fn get_func(&self) -> Option<Function> {
         self.func.get()
     }
 
@@ -83,17 +67,10 @@ impl From<Symbol> for LispObj {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Function {
-    Lisp(Gc<LispFn>),
-    Subr(Gc<SubrFn>),
-    None,
-}
-
 #[cfg(test)]
 mod test {
-        use super::*;
-    use crate::lisp_object::Function;
+    use crate::lisp_object::FunctionValue;
+    use super::*;
 
     #[test]
     fn size() {
@@ -104,16 +81,18 @@ mod test {
     fn symbol_func() {
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
-        assert_eq!(Function::None, x.get_func());
+        assert!(x.get_func().is_none());
         x.set_lisp_func(LispFn::new(vec![1], vec![], 0, 0, false));
-        let before = match x.get_func() {
-            Function::Lisp(x) => x,
+        let cell = x.get_func().unwrap();
+        let before = match cell.val() {
+            FunctionValue::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
         x.set_lisp_func(LispFn::new(vec![7], vec![], 0, 0, false));
-        let after = match x.get_func() {
-            Function::Lisp(x) => x,
+        let cell = x.get_func().unwrap();
+        let after = match cell.val() {
+            FunctionValue::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(after.op_codes.get(0).unwrap(), &7);
@@ -129,11 +108,12 @@ mod test {
         let sym = InnerSymbol::new("bar".to_owned());
         let core_func = SubrFn::new("bar", func, 0, 0, false);
         sym.set_core_func(core_func);
-        match sym.get_func() {
-            Function::Subr(x) => {
+
+        match sym.get_func().unwrap().val() {
+            FunctionValue::SubrFn(x) => {
                 assert_eq!(*x, SubrFn::new("bar", func, 0, 0, false));
             }
             _ => unreachable!(),
-        }
+        };
     }
 }

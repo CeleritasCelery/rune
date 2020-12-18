@@ -60,18 +60,19 @@ pub fn intern(name: &str) -> Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::lisp_object::{Function, LispFn};
+    use crate::lisp_object::{LispFn, FunctionValue};
 
     #[test]
     fn test_intern() {
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
-        assert_eq!(Function::None, first.get_func());
+        assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
         second.set_lisp_func(LispFn::new(vec![5], vec![], 0, 0, false));
-        let func = match first.get_func() {
-            Function::Lisp(x) => x,
+        let func_cell = first.get_func().unwrap();
+        let func = match func_cell.val() {
+            FunctionValue::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(func.op_codes.get(0).unwrap(), &5);

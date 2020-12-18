@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, Function, BuiltInFn};
+use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
@@ -133,18 +133,17 @@ impl Routine {
             Value::Symbol(x) => x,
             x => panic!("Expected symbol for call found {:?}", x),
         };
-        match sym.get_func(){
-            Function::Lisp(func) => {
+        match sym.get_func().ok_or(Error::VoidFunction)?.val() {
+            FunctionValue::LispFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(frame);
-                Ok(CallFrame::new(func, self.stack.from_end(fn_idx)))
+                Ok(CallFrame::new(unsafe {std::mem::transmute(func)}, self.stack.from_end(fn_idx)))
             }
-            Function::Subr(func) => {
+            FunctionValue::SubrFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_subr(func.subr, arg_cnt as usize)?;
                 Ok(frame)
-            },
-            Function::None => Err(Error::VoidFunction),
+            }
         }
     }
 
