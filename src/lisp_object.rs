@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 pub mod fixnum;
-pub use fixnum::Fixnum;
 #[macro_use]
 pub mod cons;
 pub use cons::Cons;
@@ -21,7 +20,6 @@ use std::fmt;
 pub union LispObj {
     tag: Tag,
     bits: i64,
-    fixnum: Fixnum,
 }
 
 
@@ -92,7 +90,7 @@ impl<'a> From<&'a LispObj> for Value<'a> {
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 enum Tag {
-    Fixnum = 0,
+    Int = 0,
     Float = 1,
     Marker = 2,
     True = 3,
@@ -122,7 +120,7 @@ impl<'a> LispObj {
                 Tag::Nil      => Value::Nil,
                 Tag::True     => Value::True,
                 Tag::Cons     => Value::Cons(&*self.get_ptr()),
-                Tag::Fixnum   => Value::Int(self.fixnum >> TAG_SIZE),
+                Tag::Int      => Value::Int(self.bits >> TAG_SIZE),
                 Tag::Marker   => todo!(),
             }
         }
@@ -261,9 +259,9 @@ impl<'a> List {
     }
 }
 
-impl From<Fixnum> for LispObj {
+impl From<i64> for LispObj {
     fn from(i: i64) -> Self {
-        LispObj {fixnum: i << TAG_SIZE}
+        LispObj {bits: i << TAG_SIZE}
     }
 }
 

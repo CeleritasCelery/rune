@@ -1,30 +1,30 @@
-use crate::lisp_object::{LispObj, Fixnum};
+use crate::lisp_object::LispObj;
 use std::convert::TryInto;
 use fn_macros::lisp_fn;
 
 #[lisp_fn(name = "+")]
-pub fn add(lhs: Fixnum, rhs: Fixnum) -> Fixnum {
+pub fn add(lhs: i64, rhs: i64) -> i64 {
     lhs + rhs
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(lhs: Fixnum, rhs: Fixnum) -> Fixnum {
+pub fn sub(lhs: i64, rhs: i64) -> i64 {
     lhs - rhs
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul(vars: &[LispObj]) -> Fixnum {
+pub fn mul(vars: &[LispObj]) -> i64 {
     let lhs = *vars.get(0).unwrap();
     let rhs = *vars.get(1).unwrap();
-    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
-    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
+    let x: i64 = lhs.try_into().expect("lhs is not a number");
+    let y: i64 = rhs.try_into().expect("rhs is not a number");
     x * y
 }
 
 #[lisp_fn(name = "/")]
-pub fn div(lhs: LispObj, rhs: LispObj) -> Fixnum {
-    let x: Fixnum = lhs.try_into().expect("lhs is not a number");
-    let y: Fixnum = rhs.try_into().expect("rhs is not a number");
+pub fn div(lhs: LispObj, rhs: LispObj) -> i64 {
+    let x: i64 = lhs.try_into().expect("lhs is not a number");
+    let y: i64 = rhs.try_into().expect("rhs is not a number");
     x / y
 }
 

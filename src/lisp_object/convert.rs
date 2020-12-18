@@ -81,7 +81,7 @@ impl TryFrom<LispObj> for Option<Symbol> {
 }
 
 
-impl TryFrom<LispObj> for Fixnum {
+impl TryFrom<LispObj> for i64 {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -91,7 +91,7 @@ impl TryFrom<LispObj> for Fixnum {
     }
 }
 
-impl TryFrom<LispObj> for Option<Fixnum> {
+impl TryFrom<LispObj> for Option<i64> {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -226,8 +226,8 @@ mod test {
         Ok(inner(std::convert::TryFrom::try_from(args[0])?, std::convert::TryFrom::try_from(&args[1])?))
     }
 
-    fn inner(arg0: Option<Fixnum>, arg1: &Cons) -> i64 {
-        let x: Fixnum = arg1.car.try_into().unwrap();
+    fn inner(arg0: Option<i64>, arg1: &Cons) -> i64 {
+        let x: i64 = arg1.car.try_into().unwrap();
         arg0.unwrap() + x
     }
 
