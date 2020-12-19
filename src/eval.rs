@@ -322,16 +322,16 @@ mod test {
         let val = routine.execute(Gc::new(func));
         assert_eq!(val.err().unwrap(), Error::VoidFunction);
 
-        let obj = LispReader::new("(+ 1 2 3)").next().unwrap().unwrap();
+        let obj = LispReader::new("(1+ 1 2)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
-        assert_eq!(val.err().unwrap(), Error::ArgCount(2, 3));
+        assert_eq!(val.err().unwrap(), Error::ArgCount(1, 2));
 
-        let obj = LispReader::new("(+ 1)").next().unwrap().unwrap();
+        let obj = LispReader::new("(/)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new();
         let val = routine.execute(Gc::new(func));
-        assert_eq!(val.err().unwrap(), Error::ArgCount(2, 1));
+        assert_eq!(val.err().unwrap(), Error::ArgCount(1, 0));
     }
 }

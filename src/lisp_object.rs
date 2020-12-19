@@ -1,15 +1,16 @@
 #![allow(dead_code)]
 
-pub mod fixnum;
 #[macro_use]
 pub mod cons;
 pub use cons::Cons;
+pub mod sub_type;
+pub use sub_type::*;
 pub mod func;
-pub use func::{LispFn, SubrFn, FnArgs, BuiltInFn};
+pub use func::*;
 pub mod sym;
-pub use sym::{Symbol, InnerSymbol};
+pub use sym::*;
 pub mod convert;
-pub use convert::get_type;
+pub use convert::*;
 
 use crate::gc::Gc;
 use std::mem::size_of;
@@ -21,8 +22,6 @@ pub union LispObj {
     tag: Tag,
     bits: i64,
 }
-
-
 
 impl cmp::PartialEq for LispObj {
     fn eq(&self, rhs: &LispObj) -> bool {
@@ -177,123 +176,6 @@ impl<'a> LispObj {
         match self.val() {
             Value::Cons(_) => Some(unsafe{&mut *self.get_mut_ptr()}),
             _ => None,
-        }
-    }
-}
-
-/// Lisp object sub types
-#[derive(Copy, Clone)]
-pub struct Function(i64);
-
-#[derive(Debug, PartialEq)]
-pub enum FunctionValue<'a> {
-    LispFn(&'a LispFn),
-    SubrFn(&'a SubrFn),
-}
-
-impl<'a> Function {
-    fn into_obj_ref(&'a self) -> &'a LispObj {
-        unsafe {std::mem::transmute::<&Function, &LispObj>(self)}
-    }
-
-    pub fn val(&'a self) -> FunctionValue<'a> {
-        match self.into_obj_ref().val() {
-            Value::LispFn(x) => FunctionValue::LispFn(x),
-            Value::SubrFn(x) => FunctionValue::SubrFn(x),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl From<LispFn> for Function {
-    fn from(x: LispFn) -> Self {
-        Function(LispObj::from(x).into_raw())
-    }
-}
-
-impl From<SubrFn> for Function {
-    fn from(x: SubrFn) -> Self {
-        Function(LispObj::from(x).into_raw())
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Number(i64);
-
-#[derive(Debug, PartialEq)]
-pub enum NumberValue {
-    Int(i64),
-    Float(f64),
-}
-
-impl Number {
-    pub fn val(&self) -> NumberValue {
-        match unsafe {LispObj::from_raw(self.0).val()} {
-            Value::Int(x) => NumberValue::Int(x),
-            Value::Float(x) => NumberValue::Float(x),
-            _ => unreachable!(),
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct List(i64);
-
-#[derive(Debug, PartialEq)]
-pub enum ListValue<'a> {
-    Cons(&'a Cons),
-    Nil,
-}
-
-impl<'a> List {
-    fn into_obj_ref(&'a self) -> &'a LispObj {
-        unsafe {std::mem::transmute::<&Self, &LispObj>(self)}
-    }
-
-    pub fn val(&self) -> ListValue {
-        match self.into_obj_ref().val() {
-            Value::Cons(x) => ListValue::Cons(x),
-            Value::Nil => ListValue::Nil,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl From<i64> for LispObj {
-    fn from(i: i64) -> Self {
-        LispObj {bits: i << TAG_SIZE}
-    }
-}
-
-impl From<f64> for LispObj {
-    fn from (f: f64) -> Self {
-        LispObj::from_tagged_ptr(f, Tag::Float)
-    }
-}
-
-impl From<bool> for LispObj {
-    fn from(b: bool) -> Self {
-        LispObj::from_tag(if b {Tag::True} else {Tag::Nil})
-    }
-}
-
-impl From<&str> for LispObj {
-    fn from(s: &str) -> Self {
-        LispObj::from_tagged_ptr(s.to_owned(), Tag::LongStr)
-    }
-}
-
-impl From<String> for LispObj {
-    fn from(s: String) -> Self {
-        LispObj::from_tagged_ptr(s, Tag::LongStr)
-    }
-}
-
-impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
-    fn from(t: Option<T>) -> Self {
-        match t {
-            Some(x) => x.into(),
-            None => LispObj::nil(),
         }
     }
 }

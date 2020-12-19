@@ -47,6 +47,19 @@ impl TryFrom<LispObj> for Number {
     }
 }
 
+impl TryFrom<LispObj> for Option<Number> {
+    type Error = Error;
+    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::Int(_) | Value::Float(_) => {
+              Ok(Some(unsafe {transmute(obj)}))
+            }
+            Value::Nil => Ok(None),
+            _ => Err(expect_type(Type::Number, obj))
+        }
+    }
+}
+
 impl TryFrom<LispObj> for List {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
@@ -217,6 +230,58 @@ impl<'a> TryFrom<&'a LispObj> for Option<&'a SubrFn> {
     }
 }
 
+pub fn try_from_slice<T>(slice: &[LispObj]) ->
+    Result<&[T], Error> where T: TryFrom<LispObj, Error = Error>
+{
+    debug_assert_eq!(size_of::<LispObj>(), size_of::<T>());
+    for x in slice.iter() {
+        let _: T = TryFrom::try_from(*x)?;
+    }
+    let ptr = slice.as_ptr() as *const T;
+    let len = slice.len();
+    Ok(unsafe {std::slice::from_raw_parts(ptr, len)})
+}
+
+impl From<i64> for LispObj {
+    fn from(i: i64) -> Self {
+        LispObj {bits: i << TAG_SIZE}
+    }
+}
+
+impl From<f64> for LispObj {
+    fn from (f: f64) -> Self {
+        LispObj::from_tagged_ptr(f, Tag::Float)
+    }
+}
+
+impl From<bool> for LispObj {
+    fn from(b: bool) -> Self {
+        LispObj::from_tag(if b {Tag::True} else {Tag::Nil})
+    }
+}
+
+impl From<&str> for LispObj {
+    fn from(s: &str) -> Self {
+        LispObj::from_tagged_ptr(s.to_owned(), Tag::LongStr)
+    }
+}
+
+impl From<String> for LispObj {
+    fn from(s: String) -> Self {
+        LispObj::from_tagged_ptr(s, Tag::LongStr)
+    }
+}
+
+impl<T> From<Option<T>> for LispObj where T: Into<LispObj>  {
+    fn from(t: Option<T>) -> Self {
+        match t {
+            Some(x) => x.into(),
+            None => LispObj::nil(),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -238,7 +303,5 @@ mod test {
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());
-
-
     }
 }

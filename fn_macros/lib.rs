@@ -69,7 +69,11 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
     args.iter().enumerate().map(|(idx, ty)| {
         let call = get_call(idx, ty);
         if convert_type(ty) {
-            quote! {std::convert::TryFrom::try_from(#call)?}
+            if is_slice(ty) {
+                quote! {crate::lisp_object::try_from_slice(#call)?}
+            } else {
+                quote! {std::convert::TryFrom::try_from(#call)?}
+            }
         } else {
             quote! {#call}
         }
@@ -90,6 +94,7 @@ fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
 fn convert_type(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => convert_type(refer.elem.as_ref()),
+        syn::Type::Slice(slice) => convert_type(slice.elem.as_ref()),
         syn::Type::Path(path) => "LispObj" != get_path_ident_name(path),
         _ => false,
     }
@@ -102,7 +107,7 @@ fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16
     };
 
     let rest = match args.last() {
-        Some(syn::Type::Reference(x)) => is_slice(x),
+        Some(x) => is_slice(x),
         _ => false
     };
 
@@ -110,7 +115,7 @@ fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16
         let last_req = args.iter().rposition(|x| {
             match x {
                 syn::Type::Path(path) => "Option" != get_path_ident_name(path),
-                syn::Type::Reference(x) => !is_slice(x),
+                syn::Type::Reference(_) => !is_slice(x),
                 _ => false,
             }
         });
@@ -128,8 +133,11 @@ fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16
     (required as u16, optional as u16, rest)
 }
 
-fn is_slice(arg: &syn::TypeReference) -> bool {
-    matches!(arg.elem.as_ref(), syn::Type::Slice(_))
+fn is_slice(arg: &syn::Type) -> bool {
+    match arg {
+        syn::Type::Reference(x) => matches!(x.elem.as_ref(), syn::Type::Slice(_)),
+        _ => false,
+    }
 }
 
 fn get_path_ident_name(type_path: &syn::TypePath) -> String {
