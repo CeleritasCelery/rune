@@ -100,14 +100,16 @@ impl LispStack for Vec<LispObj> {
 pub struct Routine {
     stack: Vec<LispObj>,
     call_frames: Vec<CallFrame>,
+    frame: CallFrame,
 }
 
 impl Routine {
 
-    fn new() -> Routine {
+    fn new(func: Gc<LispFn>) -> Routine {
         Routine{
             stack: vec![],
             call_frames: vec![],
+            frame: CallFrame::new(func, 0),
         }
     }
 
@@ -127,7 +129,7 @@ impl Routine {
         Ok(())
     }
 
-    fn call(&mut self, frame: CallFrame, arg_cnt: u16) -> Result<CallFrame, Error> {
+    fn call(&mut self, arg_cnt: u16) -> Result<(), Error> {
         let fn_idx = arg_cnt as usize + 1;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
@@ -136,15 +138,16 @@ impl Routine {
         match sym.get_func().ok_or(Error::VoidFunction)?.val() {
             FunctionValue::LispFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
-                self.call_frames.push(frame);
-                Ok(CallFrame::new(unsafe {std::mem::transmute(func)}, self.stack.from_end(fn_idx)))
+                self.call_frames.push(self.frame.clone());
+                self.frame = CallFrame::new(unsafe {std::mem::transmute(func)},
+                                            self.stack.from_end(fn_idx));
             }
             FunctionValue::SubrFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_subr(func.subr, arg_cnt as usize)?;
-                Ok(frame)
             }
-        }
+        };
+        Ok(())
     }
 
     fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<(), Error> {
@@ -154,11 +157,10 @@ impl Routine {
         Ok(())
     }
 
-    pub fn execute(&mut self, func: Gc<LispFn>) -> Result<LispObj, Error> {
-        let mut frame = CallFrame::new(func, 0);
+    pub fn execute(&mut self) -> Result<LispObj, Error> {
         loop {
             use OpCode as op;
-            match unsafe {op::from_unchecked(frame.ip.next())} {
+            match unsafe {op::from_unchecked(self.frame.ip.next())} {
                 op::StackRef1 => {self.stack.push_ref(1)}
                 op::StackRef2 => {self.stack.push_ref(2)}
                 op::StackRef3 => {self.stack.push_ref(3)}
@@ -168,39 +170,39 @@ impl Routine {
                 op::StackRef7 => {self.stack.push_ref(7)}
                 op::StackRef8 => {self.stack.push_ref(8)}
                 op::StackRefN => {
-                    let idx = frame.ip.take_arg();
+                    let idx = self.frame.ip.take_arg();
                     self.stack.push_ref(idx);
                 }
                 op::StackRefN2 => {
-                    let idx = frame.ip.take_double_arg();
+                    let idx = self.frame.ip.take_double_arg();
                     self.stack.push_ref(idx);
                 }
-                op::Constant0 => {self.stack.push(frame.get_const(0))}
-                op::Constant1 => {self.stack.push(frame.get_const(1))}
-                op::Constant2 => {self.stack.push(frame.get_const(2))}
-                op::Constant3 => {self.stack.push(frame.get_const(3))}
-                op::Constant4 => {self.stack.push(frame.get_const(4))}
-                op::Constant5 => {self.stack.push(frame.get_const(5))}
-                op::Call0 => { frame = self.call(frame, 0)?; }
-                op::Call1 => { frame = self.call(frame, 1)?; }
-                op::Call2 => { frame = self.call(frame, 2)?; }
-                op::Call3 => { frame = self.call(frame, 3)?; }
+                op::Constant0 => {self.stack.push(self.frame.get_const(0))}
+                op::Constant1 => {self.stack.push(self.frame.get_const(1))}
+                op::Constant2 => {self.stack.push(self.frame.get_const(2))}
+                op::Constant3 => {self.stack.push(self.frame.get_const(3))}
+                op::Constant4 => {self.stack.push(self.frame.get_const(4))}
+                op::Constant5 => {self.stack.push(self.frame.get_const(5))}
+                op::Call0 => {self.call(0)?}
+                op::Call1 => {self.call(1)?}
+                op::Call2 => {self.call(2)?}
+                op::Call3 => {self.call(3)?}
                 op::Jump => {
-                    let offset = frame.ip.take_double_arg();
-                    frame.ip.jump(offset as isize);
+                    let offset = self.frame.ip.take_double_arg();
+                    self.frame.ip.jump(offset as isize);
                 }
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
-                    let offset = frame.ip.take_double_arg();
+                    let offset = self.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        frame.ip.jump(offset as isize);
+                        self.frame.ip.jump(offset as isize);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = self.stack.get(self.stack.len() - 1).unwrap();
-                    let offset = frame.ip.take_double_arg();
+                    let offset = self.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        frame.ip.jump(offset as isize);
+                        self.frame.ip.jump(offset as isize);
                     } else {
                         self.stack.pop();
                     }
@@ -210,9 +212,9 @@ impl Routine {
                         return Ok(self.stack.pop().unwrap());
                     } else {
                         let var = self.stack.pop().unwrap();
-                        self.stack[frame.start] = var;
-                        self.stack.truncate(frame.start + 1);
-                        frame = self.call_frames.pop().unwrap();
+                        self.stack[self.frame.start] = var;
+                        self.stack.truncate(self.frame.start + 1);
+                        self.frame = self.call_frames.pop().unwrap();
                     }
                 }
                 x => return Err(Error::UnknownOpcode(x as u8))
@@ -234,14 +236,14 @@ mod test {
     fn compute() {
         let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(63, val.unwrap());
 
         let obj = LispReader::new("7").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(7, val.unwrap());
     }
 
@@ -249,14 +251,14 @@ mod test {
     fn let_form() {
         let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ foo bar))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(13, val.unwrap());
 
         let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ 1 bar))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(9, val.unwrap());
     }
 
@@ -264,26 +266,26 @@ mod test {
     fn jump() {
         let obj = LispReader::new("(+ 7 (if nil 11 3))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(10, val.unwrap());
 
         let obj = LispReader::new("(+ 7 (if t 11 3))").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(18, val.unwrap());
 
         let obj = LispReader::new("(if nil 11)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(false, val.unwrap());
 
         let obj = LispReader::new("(if t 11)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(11, val.unwrap());
     }
 
@@ -309,8 +311,8 @@ mod test {
 
         let obj = LispReader::new("(middle 7 3 13)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(224, val.unwrap());
     }
 
@@ -318,20 +320,20 @@ mod test {
     fn errors() {
         let obj = LispReader::new("(bad-function-name)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(val.err().unwrap(), Error::VoidFunction);
 
         let obj = LispReader::new("(1+ 1 2)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(val.err().unwrap(), Error::ArgCount(1, 2));
 
         let obj = LispReader::new("(/)").next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new();
-        let val = routine.execute(Gc::new(func));
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
         assert_eq!(val.err().unwrap(), Error::ArgCount(1, 0));
     }
 }
