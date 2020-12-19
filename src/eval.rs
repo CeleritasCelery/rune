@@ -183,6 +183,14 @@ impl Routine {
                 op::Constant3 => {self.stack.push(self.frame.get_const(3))}
                 op::Constant4 => {self.stack.push(self.frame.get_const(4))}
                 op::Constant5 => {self.stack.push(self.frame.get_const(5))}
+                op::ConstantN => {
+                    let idx = self.frame.ip.take_arg();
+                    self.stack.push(self.frame.get_const(idx))
+                }
+                op::ConstantN2 => {
+                    let idx = self.frame.ip.take_double_arg();
+                    self.stack.push(self.frame.get_const(idx))
+                }
                 op::Call0 => {self.call(0)?}
                 op::Call1 => {self.call(1)?}
                 op::Call2 => {self.call(2)?}
@@ -232,61 +240,32 @@ mod test {
     use crate::reader::LispReader;
     use crate::compile::Exp;
 
+    fn test_eval(sexp: &str, expect: LispObj) {
+        let obj = LispReader::new(sexp).next().unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        let mut routine = Routine::new(Gc::new(func));
+        let val = routine.execute();
+        assert_eq!(expect, val.unwrap());
+    }
+
     #[test]
     fn compute() {
-        let obj = LispReader::new("(- 7 (- 13 (* 3 (+ 7 (+ 13 3)))))").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(63, val.unwrap());
-
-        let obj = LispReader::new("7").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(7, val.unwrap());
+        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63.into());
+        test_eval("7", 7.into());
     }
 
     #[test]
     fn let_form() {
-        let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ foo bar))").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(13, val.unwrap());
-
-        let obj = LispReader::new("(let ((foo 5) (bar 8)) (+ 1 bar))").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(9, val.unwrap());
+        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", 13.into());
+        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", 9.into());
     }
 
     #[test]
     fn jump() {
-        let obj = LispReader::new("(+ 7 (if nil 11 3))").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(10, val.unwrap());
-
-        let obj = LispReader::new("(+ 7 (if t 11 3))").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(18, val.unwrap());
-
-        let obj = LispReader::new("(if nil 11)").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(false, val.unwrap());
-
-        let obj = LispReader::new("(if t 11)").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(11, val.unwrap());
+        test_eval("(+ 7 (if nil 11 3))", 10.into());
+        test_eval("(+ 7 (if t 11 3))", 18.into());
+        test_eval("(if nil 11)", false.into());
+        test_eval("(if t 11)", 11.into());
     }
 
     #[test]
@@ -309,31 +288,21 @@ mod test {
         };
         middle.set_lisp_func(func);
 
-        let obj = LispReader::new("(middle 7 3 13)").next().unwrap().unwrap();
+        test_eval("(middle 7 3 13)", 224.into());
+    }
+
+    fn test_eval_error(sexp: &str, error: Error) {
+        let obj = LispReader::new(sexp).next().unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new(Gc::new(func));
         let val = routine.execute();
-        assert_eq!(224, val.unwrap());
+        assert_eq!(val.err().unwrap(), error);
     }
 
     #[test]
     fn errors() {
-        let obj = LispReader::new("(bad-function-name)").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(val.err().unwrap(), Error::VoidFunction);
-
-        let obj = LispReader::new("(1+ 1 2)").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(val.err().unwrap(), Error::ArgCount(1, 2));
-
-        let obj = LispReader::new("(/)").next().unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
-        let val = routine.execute();
-        assert_eq!(val.err().unwrap(), Error::ArgCount(1, 0));
+        test_eval_error("(bad-function-name)", Error::VoidFunction);
+        test_eval_error("(1+ 1 2)", Error::ArgCount(1, 2));
+        test_eval_error("(/)", Error::ArgCount(1, 0));
     }
 }
