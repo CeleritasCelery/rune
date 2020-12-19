@@ -23,17 +23,23 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
-    let args = function.args.len() - if function.rest {1} else {0};
     let name = match spec.name {
         Some(x) => x,
         None => subr_name,
     };
-    let (required, optional) = match spec.required {
-        None => (args as u16, 0),
-        Some(req) => (req, args as u16 - req),
-    };
-    let rest = function.rest;
+    let (required, optional, rest) = get_call_signature(&function.args, spec.required);
     let arg_conversion = get_arg_conversion(function.args);
+    let returns_result = match function.output {
+        syn::Type::Path(path) => "Result" == get_path_ident_name(&path),
+        _ => false,
+    };
+
+    let subr_call = if returns_result {
+        quote! {Ok(#subr(#(#arg_conversion),*)?.into())}
+    } else {
+        quote! {Ok(#subr(#(#arg_conversion),*).into())}
+    };
+
     let tokens = quote!{
         #[allow(non_upper_case_globals)]
         const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn{
@@ -49,8 +55,9 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         };
 
         #[allow(non_snake_case)]
-        pub fn #func_name(args: &[crate::lisp_object::LispObj]) -> Result<crate::lisp_object::LispObj, crate::error::Error> {
-            Ok(#subr(#(#arg_conversion),*).into())
+        pub fn #func_name(args: &[crate::lisp_object::LispObj]) ->
+            Result<crate::lisp_object::LispObj, crate::error::Error> {
+            #subr_call
         }
 
         #body
@@ -83,18 +90,57 @@ fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
 fn convert_type(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => convert_type(refer.elem.as_ref()),
-        syn::Type::Path(path) => {
-            "LispObj" != path.path.segments.last().unwrap().ident.to_string().as_str()
-        }
+        syn::Type::Path(path) => "LispObj" != get_path_ident_name(path),
         _ => false,
     }
+}
+
+fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16, bool) {
+    let min = match spec_min {
+        Some(x) => x as usize,
+        None => 0,
+    };
+
+    let rest = match args.last() {
+        Some(syn::Type::Reference(x)) => is_slice(x),
+        _ => false
+    };
+
+    let required = {
+        let last_req = args.iter().rposition(|x| {
+            match x {
+                syn::Type::Path(path) => "Option" != get_path_ident_name(path),
+                syn::Type::Reference(x) => !is_slice(x),
+                _ => false,
+            }
+        });
+        match last_req {
+            Some(x) => std::cmp::max(x + 1, min),
+            None => 0,
+        }
+    };
+
+    let len = args.len() - rest as usize;
+    if min > len { panic!("`min` is larger then arguments provided"); }
+
+    let optional = len - required;
+
+    (required as u16, optional as u16, rest)
+}
+
+fn is_slice(arg: &syn::TypeReference) -> bool {
+    matches!(arg.elem.as_ref(), syn::Type::Slice(_))
+}
+
+fn get_path_ident_name(type_path: &syn::TypePath) -> String {
+    type_path.path.segments.last().unwrap().ident.to_string()
 }
 
 struct Function {
     name: syn::Ident,
     body: syn::Item,
     args: Vec<syn::Type>,
-    rest: bool,
+    output: syn::Type,
 }
 
 impl<'a> syn::parse::Parse for Function {
@@ -112,35 +158,29 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
             } else if sig.constness.is_some() {
                 Err(Error::new_spanned(sig, "lisp functions cannot be `const`"))
             } else {
-                let (args, rest) = parse_signature(sig)?;
-                Ok(Function{name: sig.ident.clone(), body: item, args, rest})
+                let (args, output) = parse_signature(sig)?;
+                Ok(Function{name: sig.ident.clone(), body: item, args, output})
             }
         }
         _ => Err(Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions"))
     }
 }
 
-fn parse_signature(sig: &syn::Signature) -> Result<(Vec<syn::Type>, bool), Error> {
+fn parse_signature(sig: &syn::Signature) -> Result<(Vec<syn::Type>, syn::Type), Error> {
     let mut args: Vec<syn::Type> = vec![];
-    let mut rest = false;
     for input in sig.inputs.iter() {
         match input {
             syn::FnArg::Receiver(x) => return Err(Error::new_spanned(x, "Self is not valid in lisp functions")),
-            syn::FnArg::Typed(pat_type) => {
-                if is_slice(pat_type) {
-                    rest = true;
-                }
-                args.push(pat_type.ty.as_ref().clone());
-            }
+            syn::FnArg::Typed(pat_type) => args.push(pat_type.ty.as_ref().clone()),
         }
     }
-    Ok((args, rest))
+    Ok((args, get_signature_return_type(&sig.output)?))
 }
 
-fn is_slice(arg: &syn::PatType) -> bool {
-    match arg.ty.as_ref() {
-        syn::Type::Reference(x) => matches!(x.elem.as_ref(), syn::Type::Slice(_)),
-        _ => false
+fn get_signature_return_type(output: &syn::ReturnType) -> Result<syn::Type, Error> {
+    match output {
+        syn::ReturnType::Type(_, ty) => Ok(ty.as_ref().clone()),
+        syn::ReturnType::Default => Err(Error::new_spanned(output, "Lisp Function must return a value")),
     }
 }
 
@@ -176,24 +216,20 @@ fn concat_ident_impl(lhs: syn::Ident, rhs: syn::Ident) -> syn::Ident {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn test_sig(stream: proc_macro2::TokenStream, min: Option<u16>, expect: (u16, u16, bool)) {
+        let function: Function = syn::parse2(stream).unwrap();
+        assert_eq!(expect, get_call_signature(&function.args, min));
+    }
+
     #[test]
-    fn test() {
-        let stream = quote!{fn foo() {}}.into();
-        let function: Function = syn::parse2(stream).unwrap();
-        assert_eq!("foo", function.name.to_string());
-
-        let stream = quote! {pub fn foo(vars: &[u8]) -> u8 {0}}.into();
-        let function: Function = syn::parse2(stream).unwrap();
-        assert!(function.rest);
-
-        let stream = quote! {pub fn foo(var: u8) -> u8 {0}}.into();
-        let function: Function = syn::parse2(stream).unwrap();
-        assert!(!function.rest);
-
-        let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into();
-        let function: Function = syn::parse2(stream).unwrap();
-        assert!(function.rest);
-        assert_eq!(function.args.len(), 3);
+    fn sig() {
+        test_sig(quote!{fn foo() -> u8 {}}.into(), None, (0, 0, false));
+        test_sig(quote!{fn foo(vars: &[u8]) -> u8 {0}}.into(), None, (0,0,true));
+        test_sig(quote!{fn foo(var: u8) -> u8 {0}}.into(), None, (1,0,false));
+        test_sig(quote!{fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into(), None, (2, 0, true));
+        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}}.into(), None, (1,1,true));
+        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}}.into(), Some(2), (2,1,false));
     }
 
     #[test]
@@ -208,7 +244,6 @@ mod test {
 
     #[test]
     fn test_expand() {
-        // let stream = quote! {pub fn foo(var0: u8, var1: &u8) -> u8 {0}}.into();
         let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into();
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
