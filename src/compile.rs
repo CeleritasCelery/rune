@@ -92,6 +92,26 @@ impl ConstVec {
 #[derive(PartialEq)]
 struct CodeVec(Vec<u8>);
 
+macro_rules! emit_op {
+    ($self:ident, $op:ident, $idx:ident) => {
+        match $idx {
+            0 => $self.push_op(paste::paste!{[<$op 0>]}),
+            1 => $self.push_op(paste::paste!{[<$op 1>]}),
+            2 => $self.push_op(paste::paste!{[<$op 2>]}),
+            3 => $self.push_op(paste::paste!{[<$op 3>]}),
+            4 => $self.push_op(paste::paste!{[<$op 4>]}),
+            5 => $self.push_op(paste::paste!{[<$op 5>]}),
+            _ => {
+                // TODO: look at the asm for this
+                match $idx.try_into() {
+                    Ok(n) => $self.push_op_n(paste::paste!{[<$op N>]}, n),
+                    Err(_) => $self.push_op_n2(paste::paste!{[<$op N2>]}, $idx),
+                }
+            }
+        }
+    }
+}
+
 impl CodeVec {
     pub fn new() -> Self {CodeVec(Vec::new())}
 
@@ -126,58 +146,23 @@ impl CodeVec {
     }
 
     fn emit_const(&mut self, idx: u16) {
-        match idx {
-            0 => self.push_op(OpCode::Constant0),
-            1 => self.push_op(OpCode::Constant1),
-            2 => self.push_op(OpCode::Constant2),
-            3 => self.push_op(OpCode::Constant3),
-            4 => self.push_op(OpCode::Constant4),
-            5 => self.push_op(OpCode::Constant5),
-            _ => {
-                // TODO: look at the asm for this
-                match idx.try_into() {
-                    Ok(n) => self.push_op_n(OpCode::ConstantN, n),
-                    Err(_) => self.push_op_n2(OpCode::ConstantN2, idx),
-                }
-            }
-        }
+        use OpCode::*;
+        emit_op!(self, Constant, idx)
+    }
+
+    fn emit_varref(&mut self, idx: u16) {
+        use OpCode::*;
+        emit_op!(self, VarRef, idx)
     }
 
     fn emit_call(&mut self, idx: u16) {
-        match idx {
-            0 => self.push_op(OpCode::Call0),
-            1 => self.push_op(OpCode::Call1),
-            2 => self.push_op(OpCode::Call2),
-            3 => self.push_op(OpCode::Call3),
-            4 => self.push_op(OpCode::Call4),
-            5 => self.push_op(OpCode::Call5),
-            _ => {
-                // TODO: look at the asm for this
-                match idx.try_into() {
-                    Ok(n) => self.push_op_n(OpCode::CallN, n),
-                    Err(_) => self.push_op_n2(OpCode::CallN2, idx),
-                }
-            }
-        }
+        use OpCode::*;
+        emit_op!(self, Call, idx)
     }
 
-    pub fn emit_stack_ref(&mut self, idx: u16) {
-        match idx {
-            1 => self.push_op(OpCode::StackRef1),
-            2 => self.push_op(OpCode::StackRef2),
-            3 => self.push_op(OpCode::StackRef3),
-            4 => self.push_op(OpCode::StackRef4),
-            5 => self.push_op(OpCode::StackRef5),
-            6 => self.push_op(OpCode::StackRef6),
-            7 => self.push_op(OpCode::StackRef7),
-            8 => self.push_op(OpCode::StackRef8),
-            _ => {
-                match idx.try_into() {
-                    Ok(n) => self.push_op_n(OpCode::StackRefN, n),
-                    Err(_) => self.push_op_n2(OpCode::StackRefN2, idx),
-                }
-            }
-        }
+    fn emit_stack_ref(&mut self, idx: u16) {
+        use OpCode::*;
+        emit_op!(self, StackRef, idx)
     }
 }
 

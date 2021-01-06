@@ -10,3 +10,4 @@ edition = "2018"
 fn_macros = { version = "0.1.0", path = "fn_macros" }
 fnv = "1.0.3"
 lazy_static = "1.4.0"
+paste = "1.0.4"

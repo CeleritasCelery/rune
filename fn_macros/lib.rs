@@ -202,25 +202,6 @@ struct Spec {
     intspec: Option<String>,
 }
 
-#[proc_macro]
-pub fn concat_ident(input: TokenStream) -> TokenStream {
-    let ident = {
-        let mut iter = input.into_iter();
-        let lhs: TokenStream = iter.next().unwrap().into();
-        let rhs: TokenStream = iter.next().unwrap().into();
-        concat_ident_impl(
-            parse_macro_input!(lhs),
-            parse_macro_input!(rhs),
-        )
-    };
-    let result = quote!{#ident};
-    result.into()
-}
-
-fn concat_ident_impl(lhs: syn::Ident, rhs: syn::Ident) -> syn::Ident {
-    format_ident!("{}{}", lhs, rhs)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -238,16 +219,6 @@ mod test {
         test_sig(quote!{fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into(), None, (2, 0, true));
         test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}}.into(), None, (1,1,true));
         test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}}.into(), Some(2), (2,1,false));
-    }
-
-    #[test]
-    fn concat() {
-        let stream: proc_macro2::TokenStream = quote!{S add}.into();
-        let mut iter = stream.into_iter();
-        let lhs = syn::parse2(iter.next().unwrap().into()).unwrap();
-        let rhs = syn::parse2(iter.next().unwrap().into()).unwrap();
-        let ident = concat_ident_impl(lhs, rhs);
-        assert_eq!("Sadd", ident.to_string());
     }
 
     #[test]
