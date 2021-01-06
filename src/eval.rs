@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+use fnv::{FnvHashMap, FnvHasher};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
@@ -67,7 +70,6 @@ type Stack = Vec<LispObj>;
 
 trait LispStack {
     fn from_end(&self, i: usize) -> usize;
-    fn shrink(&mut self, i: usize);
     fn push_ref(&mut self, i: usize);
     fn ref_at(&self, i: usize) -> &LispObj;
     fn take_slice(&self, i: usize) -> &[LispObj];
@@ -75,9 +77,8 @@ trait LispStack {
 
 impl LispStack for Vec<LispObj> {
     fn from_end(&self, i: usize) -> usize {
-        debug_assert!(i > 0);
-        debug_assert!(i <= self.len());
-        self.len() - i
+        debug_assert!(i < self.len());
+        self.len() - (i + 1)
     }
 
     fn push_ref(&mut self, i: usize) {
@@ -88,17 +89,14 @@ impl LispStack for Vec<LispObj> {
         self.get(self.from_end(i)).unwrap()
     }
 
-    fn shrink(&mut self, i: usize) {
-        self.truncate(self.from_end(i));
-    }
-
     fn take_slice(&self, i: usize) -> &[LispObj] {
-        &self[self.from_end(i)..]
+        &self[self.from_end(i-1)..]
     }
 }
 
 pub struct Routine {
     stack: Vec<LispObj>,
+    vars: HashMap<Symbol, LispObj, BuildHasherDefault<FnvHasher>>,
     call_frames: Vec<CallFrame>,
     frame: CallFrame,
 }
@@ -108,6 +106,7 @@ impl Routine {
     fn new(func: Gc<LispFn>) -> Routine {
         Routine{
             stack: vec![],
+            vars: FnvHashMap::default(),
             call_frames: vec![],
             frame: CallFrame::new(func, 0),
         }
@@ -130,7 +129,7 @@ impl Routine {
     }
 
     fn call(&mut self, arg_cnt: u16) -> Result<(), Error> {
-        let fn_idx = arg_cnt as usize + 1;
+        let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
             x => panic!("Expected symbol for call found {:?}", x),
@@ -151,7 +150,7 @@ impl Routine {
     }
 
     fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<(), Error> {
-        let i = self.stack.from_end(args) - 1;
+        let i = self.stack.from_end(args);
         self.stack[i] = func(self.stack.take_slice(args))?;
         self.stack.truncate(i + 1);
         Ok(())
@@ -161,14 +160,12 @@ impl Routine {
         loop {
             use OpCode as op;
             match unsafe {op::from_unchecked(self.frame.ip.next())} {
+                op::StackRef0 => {self.stack.push_ref(0)}
                 op::StackRef1 => {self.stack.push_ref(1)}
                 op::StackRef2 => {self.stack.push_ref(2)}
                 op::StackRef3 => {self.stack.push_ref(3)}
                 op::StackRef4 => {self.stack.push_ref(4)}
                 op::StackRef5 => {self.stack.push_ref(5)}
-                op::StackRef6 => {self.stack.push_ref(6)}
-                op::StackRef7 => {self.stack.push_ref(7)}
-                op::StackRef8 => {self.stack.push_ref(8)}
                 op::StackRefN => {
                     let idx = self.frame.ip.take_arg();
                     self.stack.push_ref(idx);

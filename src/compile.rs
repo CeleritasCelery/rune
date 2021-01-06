@@ -8,16 +8,30 @@ use std::fmt;
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum OpCode {
-    StackRef1 = 0,
+    StackRef0 = 0,
+    StackRef1,
     StackRef2,
     StackRef3,
     StackRef4,
     StackRef5,
-    StackRef6,
-    StackRef7,
-    StackRef8,
     StackRefN,
     StackRefN2,
+    VarRef0,
+    VarRef1,
+    VarRef2,
+    VarRef3,
+    VarRef4,
+    VarRef5,
+    VarRefN,
+    VarRefN2,
+    VarSet0,
+    VarSet1,
+    VarSet2,
+    VarSet3,
+    VarSet4,
+    VarSet5,
+    VarSetN,
+    VarSetN2,
     Constant0,
     Constant1,
     Constant2,
@@ -168,17 +182,20 @@ impl CodeVec {
 
 impl fmt::Debug for CodeVec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use OpCode::*;
         let mut display: Vec<String> = vec![];
         let mut iter = self.0.iter();
         while let Some(i) = iter.next() {
             let op = unsafe {OpCode::from_unchecked(*i)};
             display.push(format!("{:?}", op));
             match op {
-                OpCode::StackRefN | OpCode::ConstantN | OpCode::CallN => {
+                StackRefN | ConstantN | CallN |
+                VarRefN | VarSetN => {
                     display.push(format!("{:?}", iter.next()));
                 }
-                OpCode::StackRefN2 | OpCode::ConstantN2 | OpCode::CallN2 |
-                OpCode::JumpNil | OpCode::Jump | OpCode::JumpNilElsePop => {
+                StackRefN2 | ConstantN2 | CallN2 |
+                JumpNil | Jump | JumpNilElsePop |
+                VarRefN2 | VarSetN2 => {
                     display.push(format!("{:?}", iter.next()));
                     display.push(format!("{:?}", iter.next()));
                 }
@@ -240,7 +257,7 @@ impl Exp {
     }
 
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<(), Error> {
-        match (self.vars.len() - idx).try_into() {
+        match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.push(Some(var_ref));
                 Ok(self.codes.emit_stack_ref(x))
@@ -386,6 +403,7 @@ impl Exp {
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr),
             "quote" => self.quote(cons.cdr),
+            "set" => self.quote(cons.cdr),
             "let" => self.let_form(cons.cdr),
             "if" => self.compile_conditional(cons.cdr),
             _ => self.compile_funcall(cons),
@@ -395,7 +413,11 @@ impl Exp {
     fn compile_variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
         match self.vars.iter().rposition(|&x| x == Some(sym)) {
             Some(idx) => self.stack_ref(idx, sym),
-            None => panic!("dynamic variables not implemented"),
+            None => {
+                let idx = self.constants.insert(sym.into())?;
+                self.codes.emit_varref(idx);
+                Ok(())
+            },
         }
     }
 
@@ -462,7 +484,9 @@ mod test {
     fn variable() {
         check_compiler!("(let (foo))", [Constant0, Ret], [false]);
         check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
-        check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef1, Ret], [1]);
+        check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
+        check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
+        // check_compiler!("(set 'foo 1)", [Constant0, VarSet1, Ret], [1, intern("foo")]);
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
@@ -499,10 +523,10 @@ mod test {
         let func = LispFn::new(vec_into![Constant0, Ret], vec_into![1], 0, 0, false);
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef1, Ret], vec![], 1, 0, false);
+        let func = LispFn::new(vec_into![StackRef0, Ret], vec![], 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![Constant0, StackRef3, StackRef3, Call2, Ret],
+        let func = LispFn::new(vec_into![Constant0, StackRef2, StackRef2, Call2, Ret],
                                vec_into![intern("+")], 2, 0, false);
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
