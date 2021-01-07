@@ -1,17 +1,14 @@
 #![allow(dead_code)]
 use crate::lisp_object::{InnerSymbol, Symbol};
-use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
-use fnv::{FnvHashMap, FnvHasher};
-use std::mem;
+use crate::hashmap::HashMap;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 
-pub struct SymbolMap(HashMap<String, Box<InnerSymbol>, BuildHasherDefault<FnvHasher>>);
+pub struct SymbolMap(HashMap<String, Box<InnerSymbol>>);
 
 impl SymbolMap {
     fn new() -> Self {
-        Self(FnvHashMap::default())
+        Self(HashMap::default())
     }
 
     pub fn size(&self) -> usize {
@@ -26,7 +23,7 @@ impl SymbolMap {
         // from SymbolMap and SymbolMap has a private constructor, so the only
         // one that exists is the one we create in this module, which is static.
         // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
-        unsafe { mem::transmute(self.get_symbol(name)) }
+        unsafe { Symbol::from_raw(self.get_symbol(name)) }
     }
 
     fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {

@@ -109,7 +109,7 @@ impl<'a> LispObj {
     pub fn val(&'a self) -> Value<'a> {
         unsafe {
             match self.tag {
-                Tag::Symbol   => Value::Symbol(&*self.get_ptr()),
+                Tag::Symbol   => Value::Symbol(Symbol::from_raw(self.get_ptr())),
                 Tag::Float    => Value::Float(*self.get_ptr()),
                 Tag::Void     => Value::Void,
                 Tag::LongStr  => Value::String(&*self.get_ptr()),

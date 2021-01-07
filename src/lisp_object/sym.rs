@@ -9,8 +9,6 @@ pub struct InnerSymbol {
     func: FnCell,
 }
 
-pub type Symbol = &'static InnerSymbol;
-
 #[derive(Debug)]
 struct FnCell(AtomicI64);
 
@@ -59,11 +57,43 @@ impl InnerSymbol {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Symbol(&'static InnerSymbol);
+
+impl Symbol {
+    pub unsafe fn from_raw(ptr: *const InnerSymbol) -> Symbol {
+        Symbol(std::mem::transmute(ptr))
+    }
+}
+
+impl std::ops::Deref for Symbol {
+    type Target = InnerSymbol;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
 impl From<Symbol> for LispObj {
     fn from(s: Symbol) -> Self {
-        let ptr = s as *const InnerSymbol;
+        let ptr = s.0 as *const _;
         let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
         LispObj{bits}
+    }
+}
+
+impl std::cmp::PartialEq for Symbol {
+    fn eq(&self, other: &Self) -> bool {
+       self.0 as *const _ == other.0 as *const _
+    }
+}
+
+impl std::cmp::Eq for Symbol {}
+
+impl std::hash::Hash for Symbol {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let bits = (self.0 as *const _) as u64;
+        bits.hash(state);
     }
 }
 
@@ -75,6 +105,7 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(32, std::mem::size_of::<InnerSymbol>());
+        assert_eq!(8, std::mem::size_of::<Symbol>());
     }
 
     #[test]
@@ -101,7 +132,7 @@ mod test {
 
     #[test]
     fn subr() {
-        let func = |x: &[LispObj]| -> Result<LispObj, crate::error::Error> {
+        let func = |x: &[_], _: &mut _| -> _ {
             Ok(x[0])
         };
 

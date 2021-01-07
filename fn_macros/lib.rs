@@ -34,11 +34,8 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         _ => false,
     };
 
-    let subr_call = if returns_result {
-        quote! {Ok(#subr(#(#arg_conversion),*)?.into())}
-    } else {
-        quote! {Ok(#subr(#(#arg_conversion),*).into())}
-    };
+    let err = if returns_result {quote! {?}} else { quote! {}};
+    let subr_call = quote! {Ok(#subr(#(#arg_conversion),*)#err.into())};
 
     let tokens = quote!{
         #[allow(non_upper_case_globals)]
@@ -55,7 +52,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         };
 
         #[allow(non_snake_case)]
-        pub fn #func_name(args: &[crate::lisp_object::LispObj]) ->
+        pub fn #func_name(args: &[crate::lisp_object::LispObj], vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol, crate::lisp_object::LispObj>) ->
             Result<crate::lisp_object::LispObj, crate::error::Error> {
             #subr_call
         }
@@ -67,17 +64,35 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 
 fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
     args.iter().enumerate().map(|(idx, ty)| {
-        let call = get_call(idx, ty);
-        if convert_type(ty) {
-            if is_slice(ty) {
-                quote! {crate::lisp_object::try_from_slice(#call)?}
-            } else {
-                quote! {std::convert::TryFrom::try_from(#call)?}
-            }
+        if is_var_hashmap(ty) {
+            quote! {vars}
         } else {
-            quote! {#call}
+            let call = get_call(idx, ty);
+            if convert_type(ty) {
+                if is_slice(ty) {
+                    quote! {crate::lisp_object::try_from_slice(#call)?}
+                } else {
+                    quote! {std::convert::TryFrom::try_from(#call)?}
+                }
+            } else {
+                quote! {#call}
+            }
         }
     }).collect()
+}
+
+fn is_var_hashmap(ty: &syn::Type) -> bool {
+    match ty {
+        syn::Type::Reference(refer) => {
+            match refer.elem.as_ref() {
+                syn::Type::Path(path) => {
+                    get_path_ident_name(path) == "HashMap"
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
 }
 
 fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
@@ -224,6 +239,12 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into();
+        let function: Function = syn::parse2(stream).unwrap();
+        let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
+        let result = expand(function, spec);
+        println!("{}", result.to_string());
+
+        let stream = quote! {pub fn foo(var0: u8, vars: &mut HashMap<Symbol, LispObj>) -> u8 {0}}.into();
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
         let result = expand(function, spec);

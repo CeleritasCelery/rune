@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
-use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
-use fnv::{FnvHashMap, FnvHasher};
+use crate::hashmap::{HashMap, HashMapDefault};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
@@ -96,7 +94,7 @@ impl LispStack for Vec<LispObj> {
 
 pub struct Routine {
     stack: Vec<LispObj>,
-    vars: HashMap<Symbol, LispObj, BuildHasherDefault<FnvHasher>>,
+    vars: HashMap<Symbol, LispObj>,
     call_frames: Vec<CallFrame>,
     frame: CallFrame,
 }
@@ -106,7 +104,7 @@ impl Routine {
     fn new(func: Gc<LispFn>) -> Routine {
         Routine{
             stack: vec![],
-            vars: FnvHashMap::default(),
+            vars: HashMap::create(),
             call_frames: vec![],
             frame: CallFrame::new(func, 0),
         }
@@ -151,7 +149,7 @@ impl Routine {
 
     fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<(), Error> {
         let i = self.stack.from_end(args);
-        self.stack[i] = func(self.stack.take_slice(args))?;
+        self.stack[i] = func(self.stack.take_slice(args), &mut self.vars)?;
         self.stack.truncate(i + 1);
         Ok(())
     }

@@ -1,4 +1,5 @@
-use crate::lisp_object::{LispObj, Tag};
+use crate::lisp_object::{LispObj, Symbol, Tag};
+use crate::hashmap::HashMap;
 use crate::error::Error;
 use std::fmt;
 
@@ -44,7 +45,7 @@ impl From<LispFn> for LispObj {
     }
 }
 
-pub type BuiltInFn = fn(&[LispObj]) -> Result<LispObj, Error>;
+pub type BuiltInFn = fn(&[LispObj], &mut HashMap<Symbol, LispObj>) -> Result<LispObj, Error>;
 
 #[derive(Copy, Clone)]
 pub struct SubrFn {
@@ -77,7 +78,7 @@ impl std::fmt::Debug for SubrFn {
 
 impl std::cmp::PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
-        self.subr as fn(&'static _) -> _ == other.subr
+        self.subr as fn(&'static _, &'static mut _) -> _ == other.subr
     }
 }
 

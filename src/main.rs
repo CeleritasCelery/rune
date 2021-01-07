@@ -8,6 +8,7 @@ mod compile;
 mod arith;
 mod eval;
 mod symbol;
+mod hashmap;
 mod gc;
 mod error;
 
