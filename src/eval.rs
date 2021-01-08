@@ -99,6 +99,16 @@ pub struct Routine {
     frame: CallFrame,
 }
 
+use fn_macros::lisp_fn;
+#[lisp_fn]
+pub fn set(place: Symbol, newlet: LispObj, vars: &mut HashMap<Symbol, LispObj>) -> LispObj {
+    println!("foobar");
+    vars.insert(place, newlet);
+    newlet
+}
+
+defsubr!(set);
+
 impl Routine {
 
     fn new(func: Gc<LispFn>) -> Routine {
@@ -124,6 +134,20 @@ impl Routine {
             }
         }
         Ok(())
+    }
+
+    fn varref(&mut self, idx: usize) -> Result<(), Error> {
+        let symbol = self.frame.get_const(idx);
+        if let Value::Symbol(sym) = symbol.val() {
+            let value = match self.vars.get(&sym) {
+                Some(x) => x,
+                None => return Err(Error::VoidVariable),
+            };
+            self.stack.push(*value);
+            Ok(())
+        } else {
+            panic!("Varref was not a symbol: {:?}", symbol);
+        }
     }
 
     fn call(&mut self, arg_cnt: u16) -> Result<(), Error> {
@@ -185,6 +209,20 @@ impl Routine {
                 op::ConstantN2 => {
                     let idx = self.frame.ip.take_double_arg();
                     self.stack.push(self.frame.get_const(idx))
+                }
+                op::VarRef0 => {self.varref(0)?}
+                op::VarRef1 => {self.varref(1)?}
+                op::VarRef2 => {self.varref(2)?}
+                op::VarRef3 => {self.varref(3)?}
+                op::VarRef4 => {self.varref(4)?}
+                op::VarRef5 => {self.varref(5)?}
+                op::VarRefN => {
+                    let idx = self.frame.ip.take_arg();
+                    self.varref(idx)?
+                }
+                op::VarRefN2 => {
+                    let idx = self.frame.ip.take_double_arg();
+                    self.varref(idx)?
                 }
                 op::Call0 => {self.call(0)?}
                 op::Call1 => {self.call(1)?}
@@ -261,6 +299,11 @@ mod test {
         test_eval("(+ 7 (if t 11 3))", 18.into());
         test_eval("(if nil 11)", false.into());
         test_eval("(if t 11)", 11.into());
+    }
+
+    #[test]
+    fn variables() {
+        test_eval("(progn (set 'foo 5) foo)", 5.into());
     }
 
     #[test]

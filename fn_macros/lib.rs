@@ -121,6 +121,8 @@ fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16
         None => 0,
     };
 
+    let args: Vec<&syn::Type> = args.iter().filter(|x| !is_var_hashmap(x)).collect();
+
     let rest = match args.last() {
         Some(x) => is_slice(x),
         _ => false

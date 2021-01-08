@@ -46,6 +46,9 @@ lazy_static!{
         for func in arith::defsubr().iter() {
             map.intern(func.name).set_core_func(func.clone());
         }
+        for func in eval::defsubr().iter() {
+            map.intern(func.name).set_core_func(func.clone());
+        }
         map
     });
 }

@@ -8,6 +8,7 @@ pub enum Error {
     Type(Type, Type),
     UnknownOpcode(u8),
     VoidFunction,
+    VoidVariable,
 }
 
 #[derive(Debug, PartialEq)]

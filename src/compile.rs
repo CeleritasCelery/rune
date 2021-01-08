@@ -289,6 +289,13 @@ impl Exp {
         Ok(())
     }
 
+    fn progn(&mut self, forms: LispObj) -> Result<(), Error> {
+        for form in into_arg_list(forms)?.iter() {
+            self.compile_form(*form)?
+        }
+        Ok(())
+    }
+
     fn let_bind_call(&mut self, cons: &Cons) -> Result<(), Error> {
         let var = cons.car.try_into()?;
         let list = into_arg_list(cons.cdr)?;
@@ -346,18 +353,7 @@ impl Exp {
     fn compile_conditional(&mut self, obj: LispObj) -> Result<(), Error> {
         let list = into_arg_list(obj)?;
         match list.len() {
-            3 => {
-                self.compile_form(list[0])?;
-                self.codes.push_op(OpCode::JumpNil);
-                let place = self.codes.push_jump_placeholder();
-                self.compile_form(list[1])?;
-                self.codes.push_op(OpCode::Jump);
-                let place2 = self.codes.push_jump_placeholder();
-                self.codes.set_jump_placeholder(place);
-                self.compile_form(list[2])?;
-                self.codes.set_jump_placeholder(place2);
-                Ok(())
-            }
+            len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
             2 => {
                 self.compile_form(list[0])?;
                 self.codes.push_op(OpCode::JumpNilElsePop);
@@ -366,8 +362,20 @@ impl Exp {
                 self.codes.set_jump_placeholder(place);
                 Ok(())
             }
-            len => {
-                Err(Error::ArgCount(2, len as u16))
+            _ => {
+                let mut forms = list.iter();
+                self.compile_form(*forms.next().unwrap())?;
+                self.codes.push_op(OpCode::JumpNil);
+                let place = self.codes.push_jump_placeholder();
+                self.compile_form(*forms.next().unwrap())?;
+                self.codes.push_op(OpCode::Jump);
+                let place2 = self.codes.push_jump_placeholder();
+                self.codes.set_jump_placeholder(place);
+                for form in forms {
+                    self.compile_form(*form)?;
+                }
+                self.codes.set_jump_placeholder(place2);
+                Ok(())
             }
         }
     }
@@ -403,7 +411,7 @@ impl Exp {
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr),
             "quote" => self.quote(cons.cdr),
-            "set" => self.quote(cons.cdr),
+            "progn" => self.progn(cons.cdr),
             "let" => self.let_form(cons.cdr),
             "if" => self.compile_conditional(cons.cdr),
             _ => self.compile_funcall(cons),
@@ -486,7 +494,6 @@ mod test {
         check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
         check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
-        // check_compiler!("(set 'foo 1)", [Constant0, VarSet1, Ret], [1, intern("foo")]);
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
@@ -497,6 +504,11 @@ mod test {
                         [LispObj::nil(), 1, 2]);
         check_compiler!("(if t 2)", [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
         check_error("(if 1)", Error::ArgCount(2, 1));
+
+        // let obj = LispReader::new("(progn (set 'foo 5) foo)").next().unwrap().unwrap();
+        // let exp = Exp::compile(obj).unwrap();
+        // println!("{:?}", exp);
+        // assert!(false);
     }
 
     #[test]
