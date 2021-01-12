@@ -1,6 +1,5 @@
 #+title: Next steps for Remac
 * Implement defalias
 * Implement setq
-* implement dynamic variables
 * Add reader macro hooks
 * define benchmarks

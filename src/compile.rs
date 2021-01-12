@@ -16,6 +16,14 @@ pub enum OpCode {
     StackRef5,
     StackRefN,
     StackRefN2,
+    StackSet0,
+    StackSet1,
+    StackSet2,
+    StackSet3,
+    StackSet4,
+    StackSet5,
+    StackSetN,
+    StackSetN2,
     VarRef0,
     VarRef1,
     VarRef2,
@@ -169,6 +177,11 @@ impl CodeVec {
         emit_op!(self, VarRef, idx)
     }
 
+    fn emit_varset(&mut self, idx: u16) {
+        use OpCode::*;
+        emit_op!(self, VarSet, idx)
+    }
+
     fn emit_call(&mut self, idx: u16) {
         use OpCode::*;
         emit_op!(self, Call, idx)
@@ -177,6 +190,11 @@ impl CodeVec {
     fn emit_stack_ref(&mut self, idx: u16) {
         use OpCode::*;
         emit_op!(self, StackRef, idx)
+    }
+
+    fn emit_stack_set(&mut self, idx: u16) {
+        use OpCode::*;
+        emit_op!(self, StackSet, idx)
     }
 }
 
@@ -266,6 +284,16 @@ impl Exp {
         }
     }
 
+    fn stack_set(&mut self, idx: usize) -> Result<(), Error> {
+        match (self.vars.len() - idx - 1).try_into() {
+            Ok(x) => {
+                self.vars.pop();
+                Ok(self.codes.emit_stack_set(x))
+            }
+            Err(_) => Err(Error::StackSizeOverflow),
+        }
+    }
+
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
         let list = into_arg_list(value)?;
         match list.len() {
@@ -323,6 +351,32 @@ impl Exp {
             }
         }
         Ok(())
+    }
+
+    fn setq(&mut self, obj: LispObj) -> Result<(), Error> {
+        let list = into_arg_list(obj)?;
+        let pairs = list.chunks_exact(2);
+        let is_even = pairs.remainder().is_empty();
+        for pair in pairs {
+            let sym: Symbol = pair[0].try_into()?;
+            let val = pair[1];
+
+            self.compile_form(val)?;
+
+            match self.vars.iter().rposition(|&x| x == Some(sym)) {
+                Some(idx) => self.stack_set(idx)?,
+                None => {
+                    let idx = self.constants.insert(sym.into())?;
+                    self.codes.emit_varset(idx);
+                }
+            };
+        }
+        if is_even {
+            Ok(())
+        } else {
+            let len = list.len() as u16;
+            Err(Error::ArgCount(len-1, len))
+        }
     }
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<(), Error> {
@@ -412,13 +466,14 @@ impl Exp {
             "lambda" => self.compile_lambda(cons.cdr),
             "quote" => self.quote(cons.cdr),
             "progn" => self.progn(cons.cdr),
+            "setq" => self.setq(cons.cdr),
             "let" => self.let_form(cons.cdr),
             "if" => self.compile_conditional(cons.cdr),
             _ => self.compile_funcall(cons),
         }
     }
 
-    fn compile_variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
+    fn variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
         match self.vars.iter().rposition(|&x| x == Some(sym)) {
             Some(idx) => self.stack_ref(idx, sym),
             None => {
@@ -432,7 +487,7 @@ impl Exp {
     fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
-            Value::Symbol(sym) => self.compile_variable_reference(sym),
+            Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.add_const(obj, None)
         }
     }
@@ -494,6 +549,9 @@ mod test {
         check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
         check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
+        check_compiler!("(progn (set 'foo 5) foo)", [Constant0, Constant1, Constant2, Call2, VarRef1, Ret], [intern("set"), intern("foo"), 5]);
+        check_compiler!("(let ((foo 1)) (setq foo 2) foo)", [Constant0, Constant1, StackSet1, StackRef0, Ret], [1, 2]);
+        check_compiler!("(progn (setq foo 2) foo)", [Constant0, VarSet1, VarRef1, Ret], [2, intern("foo")]);
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
@@ -504,11 +562,6 @@ mod test {
                         [LispObj::nil(), 1, 2]);
         check_compiler!("(if t 2)", [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
         check_error("(if 1)", Error::ArgCount(2, 1));
-
-        // let obj = LispReader::new("(progn (set 'foo 5) foo)").next().unwrap().unwrap();
-        // let exp = Exp::compile(obj).unwrap();
-        // println!("{:?}", exp);
-        // assert!(false);
     }
 
     #[test]
