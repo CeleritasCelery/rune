@@ -5,6 +5,7 @@ use crate::hashmap::{HashMap, HashMapDefault};
 use crate::compile::OpCode;
 use crate::error::Error;
 use crate::gc::Gc;
+use std::convert::TryInto;
 
 #[derive(Clone)]
 struct CallFrame {
@@ -69,6 +70,7 @@ type Stack = Vec<LispObj>;
 trait LispStack {
     fn from_end(&self, i: usize) -> usize;
     fn push_ref(&mut self, i: usize);
+    fn set_ref(&mut self, i: usize);
     fn ref_at(&self, i: usize) -> &LispObj;
     fn take_slice(&self, i: usize) -> &[LispObj];
 }
@@ -81,6 +83,10 @@ impl LispStack for Vec<LispObj> {
 
     fn push_ref(&mut self, i: usize) {
         self.push(self.ref_at(i).clone());
+    }
+
+    fn set_ref(&mut self, i: usize) {
+        self.swap_remove(self.from_end(i));
     }
 
     fn ref_at(&self, i: usize) -> &LispObj {
@@ -102,7 +108,6 @@ pub struct Routine {
 use fn_macros::lisp_fn;
 #[lisp_fn]
 pub fn set(place: Symbol, newlet: LispObj, vars: &mut HashMap<Symbol, LispObj>) -> LispObj {
-    println!("foobar");
     vars.insert(place, newlet);
     newlet
 }
@@ -148,6 +153,13 @@ impl Routine {
         } else {
             panic!("Varref was not a symbol: {:?}", symbol);
         }
+    }
+
+    fn varset(&mut self, idx: usize) -> Result<(), Error> {
+        let symbol: Symbol = self.frame.get_const(idx).try_into()?;
+        let value = self.stack.pop().unwrap();
+        set(symbol, value, &mut self.vars);
+        Ok(())
     }
 
     fn call(&mut self, arg_cnt: u16) -> Result<(), Error> {
@@ -196,6 +208,20 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.stack.push_ref(idx);
                 }
+                op::StackSet0 => {self.stack.set_ref(0)}
+                op::StackSet1 => {self.stack.set_ref(1)}
+                op::StackSet2 => {self.stack.set_ref(2)}
+                op::StackSet3 => {self.stack.set_ref(3)}
+                op::StackSet4 => {self.stack.set_ref(4)}
+                op::StackSet5 => {self.stack.set_ref(5)}
+                op::StackSetN => {
+                    let idx = self.frame.ip.take_arg();
+                    self.stack.set_ref(idx);
+                }
+                op::StackSetN2 => {
+                    let idx = self.frame.ip.take_double_arg();
+                    self.stack.set_ref(idx);
+                }
                 op::Constant0 => {self.stack.push(self.frame.get_const(0))}
                 op::Constant1 => {self.stack.push(self.frame.get_const(1))}
                 op::Constant2 => {self.stack.push(self.frame.get_const(2))}
@@ -223,6 +249,20 @@ impl Routine {
                 op::VarRefN2 => {
                     let idx = self.frame.ip.take_double_arg();
                     self.varref(idx)?
+                }
+                op::VarSet0 => {self.varset(0)?}
+                op::VarSet1 => {self.varset(1)?}
+                op::VarSet2 => {self.varset(2)?}
+                op::VarSet3 => {self.varset(3)?}
+                op::VarSet4 => {self.varset(4)?}
+                op::VarSet5 => {self.varset(5)?}
+                op::VarSetN => {
+                    let idx = self.frame.ip.take_arg();
+                    self.varset(idx)?
+                }
+                op::VarSetN2 => {
+                    let idx = self.frame.ip.take_double_arg();
+                    self.varset(idx)?
                 }
                 op::Call0 => {self.call(0)?}
                 op::Call1 => {self.call(1)?}
@@ -304,6 +344,8 @@ mod test {
     #[test]
     fn variables() {
         test_eval("(progn (set 'foo 5) foo)", 5.into());
+        test_eval("(let ((foo 1)) (setq foo 2) foo)", 2.into());
+        test_eval("(progn (setq foo 2) foo)", 2.into());
     }
 
     #[test]
