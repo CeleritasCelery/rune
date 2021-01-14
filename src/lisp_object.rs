@@ -7,8 +7,8 @@ pub mod sub_type;
 pub use sub_type::*;
 pub mod func;
 pub use func::*;
-pub mod sym;
-pub use sym::*;
+pub mod symbol;
+pub use symbol::*;
 pub mod convert;
 pub use convert::*;
 
@@ -212,7 +212,7 @@ impl fmt::Debug for LispObj {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol::intern;
+    use crate::intern::intern;
 
     #[test]
     fn sizes() {

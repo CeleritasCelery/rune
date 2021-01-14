@@ -7,7 +7,7 @@ mod reader;
 mod compile;
 mod arith;
 mod eval;
-mod symbol;
+mod intern;
 mod hashmap;
 mod gc;
 mod error;

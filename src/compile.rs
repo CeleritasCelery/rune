@@ -545,7 +545,7 @@ mod test {
     use super::*;
     use OpCode::*;
     use crate::reader::LispReader;
-    use crate::symbol::intern;
+    use crate::intern::intern;
 
     fn check_error(compare: &str, expect: Error) {
         let obj = LispReader::new(compare).next().unwrap().unwrap();

@@ -315,7 +315,7 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol::intern;
+    use crate::intern::intern;
     use crate::reader::LispReader;
     use crate::compile::Exp;
 

@@ -2,7 +2,7 @@
 use std::str;
 use std::fmt;
 use crate::lisp_object::LispObj;
-use crate::symbol::intern;
+use crate::intern::intern;
 
 pub struct Stream<'a> {
     prev: str::Chars<'a>,
