@@ -57,6 +57,7 @@ pub enum OpCode {
     CallN,
     CallN2,
     Discard,
+    Duplicate,
     Jump,
     JumpNil,
     JumpNilElsePop,
@@ -300,6 +301,11 @@ impl Exp {
         self.vars.pop();
     }
 
+    fn duplicate(&mut self) {
+        self.codes.push_op(OpCode::Duplicate);
+        self.vars.push(None);
+    }
+
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
         let list = into_arg_list(value)?;
         match list.len() {
@@ -316,9 +322,7 @@ impl Exp {
             Some(x) => self.let_bind(*x),
             None => Err(Error::ArgCount(1, 0)),
         }?;
-        for sexp in iter {
-            self.compile_form(*sexp)?;
-        }
+        self.implicit_progn(iter.as_slice())?;
         self.vars.truncate(prev_len);
         Ok(())
     }
@@ -328,15 +332,19 @@ impl Exp {
     }
 
     fn implicit_progn(&mut self, forms: &[LispObj]) -> Result<(), Error> {
-        // Use take and skip to ensure that the last form does not discard
-        for form in forms.iter().take(1) {
-            self.compile_form(*form)?;
+        if forms.is_empty() {
+            self.add_const(LispObj::nil(), None)
+        } else {
+            // Use take and skip to ensure that the last form does not discard
+            for form in forms.iter().take(1) {
+                self.compile_form(*form)?;
+            }
+            for form in forms.iter().skip(1) {
+                self.discard();
+                self.compile_form(*form)?;
+            }
+            Ok(())
         }
-        for form in forms.iter().skip(1) {
-            self.discard();
-            self.compile_form(*form)?;
-        }
-        Ok(())
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<(), Error> {
@@ -370,19 +378,25 @@ impl Exp {
 
     fn setq(&mut self, obj: LispObj) -> Result<(), Error> {
         let list = into_arg_list(obj)?;
+        let last = (list.len() / 2) - 1;
         let pairs = list.chunks_exact(2);
         let is_even = pairs.remainder().is_empty();
-        for pair in pairs {
+        for (idx, pair) in pairs.enumerate() {
             let sym: Symbol = pair[0].try_into()?;
             let val = pair[1];
 
             self.compile_form(val)?;
 
+            // Duplicate the last value to be the return value of the setq
+            // expression
+            if idx == last {
+                self.duplicate();
+            }
+
             match self.vars.iter().rposition(|&x| x == Some(sym)) {
                 Some(idx) => self.stack_set(idx)?,
                 None => {
                     let idx = self.constants.insert(sym.into())?;
-                    self.codes.push_op(OpCode::StackRef0);
                     self.codes.emit_varset(idx);
                 }
             };
@@ -559,13 +573,14 @@ mod test {
 
     #[test]
     fn variable() {
-        check_compiler!("(let (foo))", [Constant0, Ret], [false]);
-        check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
+        check_compiler!("(let (foo))", [Constant0, Constant0, Ret], [false]);
+        check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Constant3, Ret], [1, 2, 3, false]);
         check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
+        check_compiler!("(progn)", [Constant0, Ret], [false]);
         check_compiler!("(progn (set 'foo 5) foo)", [Constant0, Constant1, Constant2, Call2, Discard, VarRef1, Ret], [intern("set"), intern("foo"), 5]);
-        check_compiler!("(let ((foo 1)) (setq foo 2) foo)", [Constant0, Constant1, StackSet1, StackRef0, Ret], [1, 2]);
-        check_compiler!("(progn (setq foo 2) foo)", [Constant0, StackRef0, VarSet1, Discard, VarRef1, Ret], [2, intern("foo")]);
+        check_compiler!("(let ((foo 1)) (setq foo 2) foo)", [Constant0, Constant1, Duplicate, StackSet2, Discard, StackRef0, Ret], [1, 2]);
+        check_compiler!("(progn (setq foo 2) foo)", [Constant0, Duplicate, VarSet1, Discard, VarRef1, Ret], [2, intern("foo")]);
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 

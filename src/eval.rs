@@ -270,6 +270,10 @@ impl Routine {
                 op::Call2 => {self.call(2)?}
                 op::Call3 => {self.call(3)?}
                 op::Discard => {self.stack.pop();}
+                op::Duplicate => {
+                    let value = self.stack.last().unwrap().clone();
+                    self.stack.push(value);
+                }
                 op::Jump => {
                     let offset = self.frame.ip.take_double_arg();
                     self.frame.ip.jump(offset as isize);
