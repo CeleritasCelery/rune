@@ -26,3 +26,5 @@ pub enum Type {
     Number,
     List,
 }
+
+pub type Result<T> = std::result::Result<T, Error>;

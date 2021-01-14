@@ -53,7 +53,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 
         #[allow(non_snake_case)]
         pub fn #func_name(args: &[crate::lisp_object::LispObj], vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol, crate::lisp_object::LispObj>) ->
-            Result<crate::lisp_object::LispObj, crate::error::Error> {
+            crate::error::Result<crate::lisp_object::LispObj> {
             #subr_call
         }
 

@@ -3,7 +3,7 @@
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
 use crate::hashmap::{HashMap, HashMapDefault};
 use crate::compile::OpCode;
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::gc::Gc;
 use std::convert::TryInto;
 
@@ -125,7 +125,7 @@ impl Routine {
         }
     }
 
-    fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<(), Error> {
+    fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
         if count < args.required  {
             return Err(Error::ArgCount(args.required, count));
         }
@@ -141,7 +141,7 @@ impl Routine {
         Ok(())
     }
 
-    fn varref(&mut self, idx: usize) -> Result<(), Error> {
+    fn varref(&mut self, idx: usize) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
             let value = match self.vars.get(&sym) {
@@ -155,14 +155,14 @@ impl Routine {
         }
     }
 
-    fn varset(&mut self, idx: usize) -> Result<(), Error> {
+    fn varset(&mut self, idx: usize) -> Result<()> {
         let symbol: Symbol = self.frame.get_const(idx).try_into()?;
         let value = self.stack.pop().unwrap();
         set(symbol, value, &mut self.vars);
         Ok(())
     }
 
-    fn call(&mut self, arg_cnt: u16) -> Result<(), Error> {
+    fn call(&mut self, arg_cnt: u16) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
@@ -183,14 +183,14 @@ impl Routine {
         Ok(())
     }
 
-    fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<(), Error> {
+    fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<()> {
         let i = self.stack.from_end(args);
         self.stack[i] = func(self.stack.take_slice(args), &mut self.vars)?;
         self.stack.truncate(i + 1);
         Ok(())
     }
 
-    pub fn execute(&mut self) -> Result<LispObj, Error> {
+    pub fn execute(&mut self) -> Result<LispObj> {
         loop {
             // println!("{:?}", self.stack);
             use OpCode as op;

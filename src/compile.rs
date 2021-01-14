@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol, get_type};
-use crate::error::{Error, Type};
+use crate::error::{Error, Type, Result};
 use std::convert::TryInto;
 use std::fmt;
 
@@ -104,7 +104,7 @@ impl ConstVec {
         }
     }
 
-    fn insert(&mut self, obj: LispObj) -> Result<u16, Error> {
+    fn insert(&mut self, obj: LispObj) -> Result<u16> {
         let idx = self.insert_or_get(obj);
         match idx.try_into() {
             Ok(x) => Ok(x),
@@ -230,7 +230,7 @@ fn expect_type(exp_type: Type, obj: LispObj) -> Error {
     Error::Type(exp_type, get_type(obj))
 }
 
-fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
+fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
         Value::Cons(mut cons) => {
             let mut vec: Vec<LispObj> = vec![cons.car];
@@ -248,7 +248,7 @@ fn into_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
     }
 }
 
-fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>, Error> {
+fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
         Value::Nil => Ok(vec![]),
         Value::Cons(_) => into_list(obj),
@@ -270,13 +270,13 @@ impl std::convert::From<Exp> for LispFn {
 }
 
 impl Exp {
-    fn add_const(&mut self, obj: LispObj, var_ref: Option<Symbol>) -> Result<(), Error> {
+    fn add_const(&mut self, obj: LispObj, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
         Ok(self.codes.emit_const(idx))
     }
 
-    fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<(), Error> {
+    fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.push(Some(var_ref));
@@ -286,7 +286,7 @@ impl Exp {
         }
     }
 
-    fn stack_set(&mut self, idx: usize) -> Result<(), Error> {
+    fn stack_set(&mut self, idx: usize) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.pop();
@@ -306,7 +306,7 @@ impl Exp {
         self.vars.push(None);
     }
 
-    fn quote(&mut self, value: LispObj) -> Result<(), Error> {
+    fn quote(&mut self, value: LispObj) -> Result<()> {
         let list = into_arg_list(value)?;
         match list.len() {
             1 => self.add_const(list[0], None),
@@ -314,7 +314,7 @@ impl Exp {
         }
     }
 
-    fn let_form(&mut self, form: LispObj) -> Result<(), Error> {
+    fn let_form(&mut self, form: LispObj) -> Result<()> {
         let prev_len = self.vars.len();
         let list = into_arg_list(form)?;
         let mut iter = list.iter();
@@ -327,11 +327,11 @@ impl Exp {
         Ok(())
     }
 
-    fn progn(&mut self, forms: LispObj) -> Result<(), Error> {
+    fn progn(&mut self, forms: LispObj) -> Result<()> {
         self.implicit_progn(into_arg_list(forms)?.as_ref())
     }
 
-    fn implicit_progn(&mut self, forms: &[LispObj]) -> Result<(), Error> {
+    fn implicit_progn(&mut self, forms: &[LispObj]) -> Result<()> {
         if forms.is_empty() {
             self.add_const(LispObj::nil(), None)
         } else {
@@ -347,7 +347,7 @@ impl Exp {
         }
     }
 
-    fn let_bind_call(&mut self, cons: &Cons) -> Result<(), Error> {
+    fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
         let var = cons.car.try_into()?;
         let list = into_arg_list(cons.cdr)?;
         let mut iter = list.iter();
@@ -361,11 +361,11 @@ impl Exp {
         }
     }
 
-    fn let_bind_nil(&mut self, sym: Symbol) -> Result<(), Error> {
+    fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
         self.add_const(LispObj::nil(), Some(sym))
     }
 
-    fn let_bind(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn let_bind(&mut self, obj: LispObj) -> Result<()> {
         for binding in into_list(obj)? {
             match binding.val() {
                 Value::Cons(cons) => self.let_bind_call(cons)?,
@@ -376,7 +376,7 @@ impl Exp {
         Ok(())
     }
 
-    fn setq(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn setq(&mut self, obj: LispObj) -> Result<()> {
         let list = into_arg_list(obj)?;
         let last = (list.len() / 2) - 1;
         let pairs = list.chunks_exact(2);
@@ -409,7 +409,7 @@ impl Exp {
         }
     }
 
-    fn compile_funcall(&mut self, cons: &Cons) -> Result<(), Error> {
+    fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
         self.add_const(cons.car, None)?;
         let prev_len = self.vars.len();
         let list = into_arg_list(cons.cdr)?;
@@ -421,7 +421,7 @@ impl Exp {
         Ok(())
     }
 
-    fn compile_operator(&mut self, obj: LispObj, op: OpCode) -> Result<(), Error> {
+    fn compile_operator(&mut self, obj: LispObj, op: OpCode) -> Result<()> {
         let list = into_arg_list(obj)?;
         match list.len() {
             2 => {
@@ -434,7 +434,7 @@ impl Exp {
         }
     }
 
-    fn compile_conditional(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn compile_conditional(&mut self, obj: LispObj) -> Result<()> {
         let list = into_arg_list(obj)?;
         match list.len() {
             len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
@@ -462,7 +462,7 @@ impl Exp {
         }
     }
 
-    fn compile_lambda(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn compile_lambda(&mut self, obj: LispObj) -> Result<()> {
         let list = into_arg_list(obj)?;
         let mut iter = list.iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
@@ -488,7 +488,7 @@ impl Exp {
         }
     }
 
-    fn dispatch_special_form(&mut self, cons: &Cons) -> Result<(), Error> {
+    fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         let sym: Symbol = cons.car.try_into()?;
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr),
@@ -501,7 +501,7 @@ impl Exp {
         }
     }
 
-    fn variable_reference(&mut self, sym: Symbol) -> Result<(), Error> {
+    fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
         match self.vars.iter().rposition(|&x| x == Some(sym)) {
             Some(idx) => self.stack_ref(idx, sym),
             None => {
@@ -512,7 +512,7 @@ impl Exp {
         }
     }
 
-    fn compile_form(&mut self, obj: LispObj) -> Result<(), Error> {
+    fn compile_form(&mut self, obj: LispObj) -> Result<()> {
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
@@ -520,7 +520,7 @@ impl Exp {
         }
     }
 
-    fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self, Error> {
+    fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self> {
         let mut exp = Self{
             codes: CodeVec::new(),
             constants: ConstVec::new(),
@@ -532,7 +532,7 @@ impl Exp {
         Ok(exp)
     }
 
-    pub fn compile(obj: LispObj) -> Result<Self, Error> {
+    pub fn compile(obj: LispObj) -> Result<Self> {
         Self::compile_func_body(&[obj], vec![])
     }
 }
