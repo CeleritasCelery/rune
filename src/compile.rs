@@ -56,6 +56,7 @@ pub enum OpCode {
     Call5,
     CallN,
     CallN2,
+    Discard,
     Jump,
     JumpNil,
     JumpNilElsePop,
@@ -294,6 +295,11 @@ impl Exp {
         }
     }
 
+    fn discard(&mut self) {
+        self.codes.push_op(OpCode::Discard);
+        self.vars.pop();
+    }
+
     fn quote(&mut self, value: LispObj) -> Result<(), Error> {
         let list = into_arg_list(value)?;
         match list.len() {
@@ -318,8 +324,17 @@ impl Exp {
     }
 
     fn progn(&mut self, forms: LispObj) -> Result<(), Error> {
-        for form in into_arg_list(forms)?.iter() {
-            self.compile_form(*form)?
+        self.implicit_progn(into_arg_list(forms)?.as_ref())
+    }
+
+    fn implicit_progn(&mut self, forms: &[LispObj]) -> Result<(), Error> {
+        // Use take and skip to ensure that the last form does not discard
+        for form in forms.iter().take(1) {
+            self.compile_form(*form)?;
+        }
+        for form in forms.iter().skip(1) {
+            self.discard();
+            self.compile_form(*form)?;
         }
         Ok(())
     }
@@ -367,6 +382,7 @@ impl Exp {
                 Some(idx) => self.stack_set(idx)?,
                 None => {
                     let idx = self.constants.insert(sym.into())?;
+                    self.codes.push_op(OpCode::StackRef0);
                     self.codes.emit_varset(idx);
                 }
             };
@@ -425,9 +441,7 @@ impl Exp {
                 self.codes.push_op(OpCode::Jump);
                 let place2 = self.codes.push_jump_placeholder();
                 self.codes.set_jump_placeholder(place);
-                for form in forms {
-                    self.compile_form(*form)?;
-                }
+                self.implicit_progn(forms.as_slice())?;
                 self.codes.set_jump_placeholder(place2);
                 Ok(())
             }
@@ -449,14 +463,14 @@ impl Exp {
                 }
             }
         };
-        match iter.next() {
-            None => self.add_const(LispFn::default().into(), None),
-            Some(x) => {
-                let len = vars.len();
-                let mut func: LispFn = Self::compile_func_body(*x, vars)?.into();
-                func.args.required = len as u16;
-                self.add_const(func.into(), None)
-            }
+        let body = iter.as_slice();
+        if body.is_empty() {
+            self.add_const(LispFn::default().into(), None)
+        } else {
+            let len = vars.len();
+            let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
+            func.args.required = len as u16;
+            self.add_const(func.into(), None)
         }
     }
 
@@ -492,20 +506,20 @@ impl Exp {
         }
     }
 
-    fn compile_func_body(obj: LispObj, vars: Vec<Option<Symbol>>) -> Result<Self, Error> {
+    fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self, Error> {
         let mut exp = Self{
             codes: CodeVec::new(),
             constants: ConstVec::new(),
             vars,
         };
-        exp.compile_form(obj)?;
+        exp.implicit_progn(obj)?;
         exp.codes.push_op(OpCode::Ret);
         exp.vars.truncate(0);
         Ok(exp)
     }
 
     pub fn compile(obj: LispObj) -> Result<Self, Error> {
-        Self::compile_func_body(obj, vec![])
+        Self::compile_func_body(&[obj], vec![])
     }
 }
 
@@ -549,9 +563,9 @@ mod test {
         check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Ret], [1, 2, 3]);
         check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
-        check_compiler!("(progn (set 'foo 5) foo)", [Constant0, Constant1, Constant2, Call2, VarRef1, Ret], [intern("set"), intern("foo"), 5]);
+        check_compiler!("(progn (set 'foo 5) foo)", [Constant0, Constant1, Constant2, Call2, Discard, VarRef1, Ret], [intern("set"), intern("foo"), 5]);
         check_compiler!("(let ((foo 1)) (setq foo 2) foo)", [Constant0, Constant1, StackSet1, StackRef0, Ret], [1, 2]);
-        check_compiler!("(progn (setq foo 2) foo)", [Constant0, VarSet1, VarRef1, Ret], [2, intern("foo")]);
+        check_compiler!("(progn (setq foo 2) foo)", [Constant0, StackRef0, VarSet1, Discard, VarRef1, Ret], [2, intern("foo")]);
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 

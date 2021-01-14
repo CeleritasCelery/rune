@@ -192,6 +192,7 @@ impl Routine {
 
     pub fn execute(&mut self) -> Result<LispObj, Error> {
         loop {
+            // println!("{:?}", self.stack);
             use OpCode as op;
             match unsafe {op::from_unchecked(self.frame.ip.next())} {
                 op::StackRef0 => {self.stack.push_ref(0)}
@@ -268,6 +269,7 @@ impl Routine {
                 op::Call1 => {self.call(1)?}
                 op::Call2 => {self.call(2)?}
                 op::Call3 => {self.call(3)?}
+                op::Discard => {self.stack.pop();}
                 op::Jump => {
                     let offset = self.frame.ip.take_double_arg();
                     self.frame.ip.jump(offset as isize);
@@ -350,8 +352,8 @@ mod test {
 
     #[test]
     fn call() {
-        let test_add = intern("test-add");
-        let obj = LispReader::new("(lambda (x y z) (* x (+ y z)))").next().unwrap().unwrap();
+        let test_add = intern("bottom");
+        let obj = LispReader::new("(lambda (x y z) (+ x z) (* x (+ y z)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
             Value::LispFn(x) => x.clone(),
@@ -360,7 +362,7 @@ mod test {
         test_add.set_lisp_func(func);
 
         let middle = intern("middle");
-        let obj = LispReader::new("(lambda (x y z) (+ (test-add x z y) (test-add x z y)))").next().unwrap().unwrap();
+        let obj = LispReader::new("(lambda (x y z) (+ (bottom x z y) (bottom x z y)))").next().unwrap().unwrap();
         let exp: LispFn = Exp::compile(obj).unwrap().into();
         let func = match exp.constants[0].val() {
             Value::LispFn(x) => x.clone(),
