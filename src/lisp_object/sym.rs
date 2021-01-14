@@ -1,6 +1,7 @@
 use crate::lisp_object::{LispObj, LispFn, SubrFn, TAG_SIZE, Tag, Function};
 use std::cmp;
 use std::mem;
+use std::fmt;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
@@ -57,12 +58,24 @@ impl InnerSymbol {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct Symbol(&'static InnerSymbol);
 
 impl Symbol {
     pub unsafe fn from_raw(ptr: *const InnerSymbol) -> Symbol {
         Symbol(std::mem::transmute(ptr))
+    }
+}
+
+impl fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "'{}", &self.0.name)
     }
 }
 

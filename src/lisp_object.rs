@@ -186,7 +186,7 @@ impl fmt::Display for LispObj {
             Value::Int(x) => write!(f, "{}", x),
             Value::Cons(x) => write!(f, "{}", x),
             Value::String(x) => write!(f, "\"{}\"", x),
-            Value::Symbol(x) => write!(f, "'{}", x.get_name()),
+            Value::Symbol(x) => write!(f, "{}", x),
             Value::LispFn(x) => write!(f, "(lambda {:?})", x),
             Value::SubrFn(x) => write!(f, "{:?}", x),
             Value::Void => write!(f, "Void"),
