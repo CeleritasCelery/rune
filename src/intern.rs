@@ -7,8 +7,9 @@ use lazy_static::lazy_static;
 pub struct SymbolMap(HashMap<String, Box<InnerSymbol>>);
 
 impl SymbolMap {
-    fn new() -> Self {
-        Self(HashMap::default())
+    fn with_capacity(cap: usize) -> Self {
+        use crate::hashmap::HashMapDefault;
+        Self(HashMap::with_capacity(cap))
     }
 
     pub fn size(&self) -> usize {
@@ -39,19 +40,25 @@ impl SymbolMap {
     }
 }
 
+macro_rules! create_symbolmap {
+    ($($arr:expr),+ $(,)?) => ({
+        const SIZE: usize = 0usize $(+ $arr.len())+;
+        let mut map = SymbolMap::with_capacity(SIZE);
+        $(for func in $arr.iter() {
+            map.intern(func.name).set_core_func(func.clone());
+        })+;
+        map
+    })
+}
+
 lazy_static!{
     pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
-        let mut map = SymbolMap::new();
-        let set_subrs = |map: &mut SymbolMap, x: &[lisp_object::SubrFn]| {
-            for func in x.iter() {
-                map.intern(func.name).set_core_func(func.clone());
-            }
-        };
-        set_subrs(&mut map, &arith::defsubr());
-        set_subrs(&mut map, &eval::defsubr());
-        set_subrs(&mut map, &lisp_object::defsubr());
-        map
+        create_symbolmap!(
+            arith::defsubr(),
+            eval::defsubr(),
+            lisp_object::defsubr(),
+        )
     });
 }
 

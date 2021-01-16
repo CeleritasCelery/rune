@@ -10,7 +10,9 @@ macro_rules! count {
 
 #[macro_export]
 macro_rules! defsubr {
-    ($($x:ident),+ $(,)?) => (pub const fn defsubr() -> [crate::lisp_object::SubrFn; count!($($x)+)] {
-        [$(paste::paste!{[<S $x>]}),+]
-    });
+    ($($x:ident),+ $(,)?) => (
+        pub const fn defsubr() -> [crate::lisp_object::SubrFn; count!($($x)+)] {
+            [$(paste::paste!{[<S $x>]}),+]
+        }
+    );
 }
