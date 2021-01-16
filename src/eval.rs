@@ -6,6 +6,7 @@ use crate::compile::OpCode;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use std::convert::TryInto;
+use fn_macros::lisp_fn;
 
 #[derive(Clone)]
 struct CallFrame {
@@ -105,7 +106,6 @@ pub struct Routine {
     frame: CallFrame,
 }
 
-use fn_macros::lisp_fn;
 #[lisp_fn]
 pub fn set(place: Symbol, newlet: LispObj, vars: &mut HashMap<Symbol, LispObj>) -> LispObj {
     vars.insert(place, newlet);

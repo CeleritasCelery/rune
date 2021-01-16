@@ -3,6 +3,7 @@ use std::cmp;
 use std::mem;
 use std::fmt;
 use std::sync::atomic::{AtomicI64, Ordering};
+use fn_macros::lisp_fn;
 
 #[derive(Debug)]
 pub struct InnerSymbol {
@@ -109,6 +110,14 @@ impl std::hash::Hash for Symbol {
         bits.hash(state);
     }
 }
+
+#[lisp_fn]
+pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {
+    symbol.func.set(definition);
+    symbol
+}
+
+defsubr!(defalias);
 
 #[cfg(test)]
 mod test {

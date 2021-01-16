@@ -43,12 +43,14 @@ lazy_static!{
     pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
         let mut map = SymbolMap::new();
-        for func in arith::defsubr().iter() {
-            map.intern(func.name).set_core_func(func.clone());
-        }
-        for func in eval::defsubr().iter() {
-            map.intern(func.name).set_core_func(func.clone());
-        }
+        let set_subrs = |map: &mut SymbolMap, x: &[lisp_object::SubrFn]| {
+            for func in x.iter() {
+                map.intern(func.name).set_core_func(func.clone());
+            }
+        };
+        set_subrs(&mut map, &arith::defsubr());
+        set_subrs(&mut map, &eval::defsubr());
+        set_subrs(&mut map, &lisp_object::defsubr());
         map
     });
 }
