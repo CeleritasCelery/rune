@@ -6,6 +6,7 @@ pub struct Cons {
     pub car: LispObj,
     pub cdr: LispObj,
 }
+define_unbox_ref!(Cons);
 
 impl Cons {
     pub fn new(car: LispObj, cdr: LispObj) -> Cons {

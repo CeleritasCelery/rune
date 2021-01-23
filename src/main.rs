@@ -11,6 +11,8 @@ mod intern;
 mod hashmap;
 mod gc;
 mod error;
+#[macro_use]
+extern crate fn_macros;
 
 fn main() {
     compile::run();

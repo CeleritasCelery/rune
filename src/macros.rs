@@ -16,3 +16,61 @@ macro_rules! defsubr {
         }
     );
 }
+
+#[macro_use]
+macro_rules! define_unbox {
+    ($ident:ident) => (
+        define_unbox!($ident, $ident);
+    );
+    ($ident:ident, $ty:ident) => (
+        impl std::convert::TryFrom<crate::lisp_object::LispObj> for $ident {
+            type Error = crate::error::Error;
+            fn try_from(obj: crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+                match obj.val() {
+                    crate::lisp_object::Value::$ident(x) => Ok(x),
+                    x => Err(crate::error::Error::Type(crate::error::Type::$ty, x.get_type()))
+                }
+            }
+        }
+        impl std::convert::TryFrom<crate::lisp_object::LispObj> for Option<$ident> {
+            type Error = crate::error::Error;
+            fn try_from(obj: crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+                match obj.val() {
+                    crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
+                    crate::lisp_object::Value::Nil => Ok(None),
+                    x => Err(crate::error::Error::Type(crate::error::Type::$ty, x.get_type()))
+                }
+            }
+        }
+    );
+}
+
+
+#[macro_use]
+macro_rules! define_unbox_ref {
+    ($ident:ident) => (
+        define_unbox_ref!($ident, $ident);
+    );
+    ($ident:ident, $ty:ident) => (
+        impl<'a> std::convert::TryFrom<&'a crate::lisp_object::LispObj> for &'a $ident {
+            type Error = crate::error::Error;
+            fn try_from(obj: &'a crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+                match obj.val() {
+                    crate::lisp_object::Value::$ident(x) => Ok(x),
+                    x => Err(crate::error::Error::Type(crate::error::Type::$ty, x.get_type()))
+                }
+            }
+        }
+        impl<'a> std::convert::TryFrom<&'a crate::lisp_object::LispObj> for Option<&'a $ident> {
+            type Error = crate::error::Error;
+            fn try_from(obj: &'a crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+                match obj.val() {
+                    crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
+                    crate::lisp_object::Value::Nil => Ok(None),
+                    x => Err(crate::error::Error::Type(crate::error::Type::$ty, x.get_type()))
+                }
+            }
+        }
+    );
+}
+

@@ -18,6 +18,7 @@ pub struct LispFn {
     pub constants: Vec<LispObj>,
     pub args: FnArgs,
 }
+define_unbox_ref!(LispFn, Func);
 
 impl LispFn {
     pub fn new(op_codes: Vec<u8>,
@@ -53,6 +54,7 @@ pub struct SubrFn {
     pub args: FnArgs,
     pub name: &'static str,
 }
+define_unbox_ref!(SubrFn, Func);
 
 impl SubrFn {
     pub fn new(name: &'static str, subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {

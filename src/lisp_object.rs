@@ -86,6 +86,24 @@ impl<'a> From<&'a LispObj> for Value<'a> {
     }
 }
 
+impl<'a> Value<'a> {
+    pub fn get_type(&self) -> crate::error::Type {
+        use crate::error::Type::*;
+        match self {
+            Value::Symbol(_) => Symbol,
+            Value::Float(_) => Float,
+            Value::Void => Void,
+            Value::String(_) => String,
+            Value::Nil => Nil,
+            Value::True => True,
+            Value::Cons(_) => Cons,
+            Value::Int(_) => Int,
+            Value::LispFn(_) => Func,
+            Value::SubrFn(_) => Func,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 enum Tag {

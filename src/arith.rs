@@ -1,5 +1,4 @@
 use crate::lisp_object::{Number, NumberValue};
-use fn_macros::lisp_fn;
 
 enum NumberFold {
     Int(i64),

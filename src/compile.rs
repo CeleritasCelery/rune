@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol, get_type};
+use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
 use crate::error::{Error, Type, Result};
 use std::convert::TryInto;
 use std::fmt;
@@ -226,10 +226,6 @@ impl fmt::Debug for CodeVec {
    }
 }
 
-fn expect_type(exp_type: Type, obj: LispObj) -> Error {
-    Error::Type(exp_type, get_type(obj))
-}
-
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
         Value::Cons(mut cons) => {
@@ -241,10 +237,10 @@ fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
             }
             match cons.cdr.val() {
                 Value::Nil => Ok(vec),
-                _ => Err(expect_type(Type::List, cons.cdr)),
+                x => Err(Error::Type(Type::List, x.get_type())),
             }
-        },
-        _ => Err(expect_type(Type::Cons, obj)),
+        }
+        x => Err(Error::Type(Type::Cons, x.get_type())),
     }
 }
 
@@ -252,7 +248,7 @@ fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
         Value::Nil => Ok(vec![]),
         Value::Cons(_) => into_list(obj),
-        _ => Err(expect_type(Type::List, obj))
+        x => Err(Error::Type(Type::List, x.get_type())),
     }
 }
 
@@ -370,7 +366,7 @@ impl Exp {
             match binding.val() {
                 Value::Cons(cons) => self.let_bind_call(cons)?,
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
-                _ => return Err(expect_type(Type::Cons, binding)),
+                x => return Err(Error::Type(Type::Cons, x.get_type())),
             }
         }
         Ok(())
@@ -472,7 +468,7 @@ impl Exp {
                 for binding in into_arg_list(*bindings)?.iter() {
                     match binding.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
-                        _ => return Err(Error::Type(Type::Symbol, get_type(*binding))),
+                        x => return Err(Error::Type(Type::Symbol, x.get_type())),
                     }
                 }
             }

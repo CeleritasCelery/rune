@@ -3,26 +3,6 @@ use crate::error::{Error, Type};
 use std::convert::TryFrom;
 use std::mem::transmute;
 
-pub fn get_type(obj: LispObj) -> Type {
-    use Type::*;
-    match obj.val() {
-        Value::Symbol(_) => Symbol,
-        Value::Float(_) => Float,
-        Value::Void => Void,
-        Value::String(_) => String,
-        Value::Nil => Nil,
-        Value::True => True,
-        Value::Cons(_) => Cons,
-        Value::Int(_) => Int,
-        Value::LispFn(_) => Func,
-        Value::SubrFn(_) => Func,
-    }
-}
-
-fn expect_type(exp_type: Type, obj: LispObj) -> Error {
-    Error::Type(exp_type, get_type(obj))
-}
-
 impl TryFrom<LispObj> for Function {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
@@ -30,7 +10,7 @@ impl TryFrom<LispObj> for Function {
             Value::LispFn(_) | Value::SubrFn(_) => {
               Ok(unsafe {transmute(obj)})
             }
-            _ => Err(expect_type(Type::Func, obj))
+            x => Err(Error::Type(Type::Func, x.get_type()))
         }
     }
 }
@@ -42,7 +22,7 @@ impl TryFrom<LispObj> for Number {
             Value::Int(_) | Value::Float(_) => {
               Ok(unsafe {transmute(obj)})
             }
-            _ => Err(expect_type(Type::Number, obj))
+            x => Err(Error::Type(Type::Number, x.get_type()))
         }
     }
 }
@@ -55,7 +35,7 @@ impl TryFrom<LispObj> for Option<Number> {
               Ok(Some(unsafe {transmute(obj)}))
             }
             Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Number, obj))
+            x => Err(Error::Type(Type::Number, x.get_type()))
         }
     }
 }
@@ -67,71 +47,7 @@ impl TryFrom<LispObj> for List {
             Value::Cons(_) | Value::Nil => {
               Ok(unsafe {transmute(obj)})
             }
-            _ => Err(expect_type(Type::List, obj))
-        }
-    }
-}
-
-impl TryFrom<LispObj> for Symbol {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Symbol(x) => Ok(x),
-            _ => Err(expect_type(Type::Symbol, obj)),
-        }
-    }
-}
-
-impl TryFrom<LispObj> for Option<Symbol> {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Symbol(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Symbol, obj)),
-        }
-    }
-}
-
-
-impl TryFrom<LispObj> for i64 {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Int(x) => Ok(x),
-            _ => Err(expect_type(Type::Int, obj))
-        }
-    }
-}
-
-impl TryFrom<LispObj> for Option<i64> {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Int(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Int, obj))
-        }
-    }
-}
-
-impl TryFrom<LispObj> for f64 {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Float(x) => Ok(x),
-            _ => Err(expect_type(Type::Float, obj))
-        }
-    }
-}
-
-impl TryFrom<LispObj> for Option<f64> {
-    type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Float(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Float, obj))
+            x => Err(Error::Type(Type::List, x.get_type()))
         }
     }
 }
@@ -142,90 +58,6 @@ impl TryFrom<LispObj> for bool {
         match obj.val() {
             Value::Nil => Ok(false),
             _ => Ok(true)
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for &'a String {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::String(x) => Ok(x),
-            _ => Err(expect_type(Type::String, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for Option<&'a String> {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::String(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::String, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for &'a Cons {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(x) => Ok(x),
-            _ => Err(expect_type(Type::Int, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for Option<&'a Cons> {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Int, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for &'a LispFn {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::LispFn(x) => Ok(x),
-            _ => Err(expect_type(Type::Func, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for Option<&'a LispFn> {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::LispFn(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Func, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for &'a SubrFn {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::SubrFn(x) => Ok(x),
-            _ => Err(expect_type(Type::Func, *obj))
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a LispObj> for Option<&'a SubrFn> {
-    type Error = Error;
-    fn try_from(obj: &'a LispObj) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::SubrFn(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            _ => Err(expect_type(Type::Func, *obj))
         }
     }
 }
@@ -242,14 +74,20 @@ pub fn try_from_slice<T>(slice: &[LispObj]) ->
     Ok(unsafe {std::slice::from_raw_parts(ptr, len)})
 }
 
-impl From<i64> for LispObj {
-    fn from(i: i64) -> Self {
+type Int = i64;
+define_unbox!(Int);
+
+impl From<Int> for LispObj {
+    fn from(i: Int) -> Self {
         LispObj {bits: i << TAG_SIZE}
     }
 }
 
-impl From<f64> for LispObj {
-    fn from (f: f64) -> Self {
+type Float = f64;
+define_unbox!(Float);
+
+impl From<Float> for LispObj {
+    fn from (f: Float) -> Self {
         LispObj::from_tagged_ptr(f, Tag::Float)
     }
 }
@@ -266,6 +104,7 @@ impl From<&str> for LispObj {
     }
 }
 
+define_unbox_ref!(String);
 impl From<String> for LispObj {
     fn from(s: String) -> Self {
         LispObj::from_tagged_ptr(s, Tag::LongStr)
@@ -287,12 +126,12 @@ mod test {
     use super::*;
     use std::convert::TryInto;
 
-    fn wrapper(args: &[LispObj]) -> Result<i64, Error> {
+    fn wrapper(args: &[LispObj]) -> Result<Int, Error> {
         Ok(inner(std::convert::TryFrom::try_from(args[0])?, std::convert::TryFrom::try_from(&args[1])?))
     }
 
-    fn inner(arg0: Option<i64>, arg1: &Cons) -> i64 {
-        let x: i64 = arg1.car.try_into().unwrap();
+    fn inner(arg0: Option<Int>, arg1: &Cons) -> Int {
+        let x: Int = arg1.car.try_into().unwrap();
         arg0.unwrap() + x
     }
 

@@ -6,7 +6,6 @@ use crate::compile::OpCode;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use std::convert::TryInto;
-use fn_macros::lisp_fn;
 
 #[derive(Clone)]
 struct CallFrame {

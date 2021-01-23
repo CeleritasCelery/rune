@@ -3,7 +3,6 @@ use std::cmp;
 use std::mem;
 use std::fmt;
 use std::sync::atomic::{AtomicI64, Ordering};
-use fn_macros::lisp_fn;
 
 #[derive(Debug)]
 pub struct InnerSymbol {
@@ -61,6 +60,7 @@ impl InnerSymbol {
 
 #[derive(Copy, Clone)]
 pub struct Symbol(&'static InnerSymbol);
+define_unbox!(Symbol);
 
 impl Symbol {
     pub unsafe fn from_raw(ptr: *const InnerSymbol) -> Symbol {
