@@ -1,6 +1,4 @@
 #+title: Next steps for Remac
-* Implement defalias
-* Make a proc macro for try_into conversion
 * add a CodeVec printer to functions
 * Add reader macro hooks
 * define benchmarks
