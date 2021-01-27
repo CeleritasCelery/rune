@@ -2,69 +2,8 @@
 
 use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
 use crate::error::{Error, Type, Result};
+use crate::opcode::{OpCode, CodeVec};
 use std::convert::TryInto;
-use std::fmt;
-
-#[derive(Copy, Clone, Debug)]
-#[repr(u8)]
-pub enum OpCode {
-    StackRef0 = 0,
-    StackRef1,
-    StackRef2,
-    StackRef3,
-    StackRef4,
-    StackRef5,
-    StackRefN,
-    StackRefN2,
-    StackSet0,
-    StackSet1,
-    StackSet2,
-    StackSet3,
-    StackSet4,
-    StackSet5,
-    StackSetN,
-    StackSetN2,
-    VarRef0,
-    VarRef1,
-    VarRef2,
-    VarRef3,
-    VarRef4,
-    VarRef5,
-    VarRefN,
-    VarRefN2,
-    VarSet0,
-    VarSet1,
-    VarSet2,
-    VarSet3,
-    VarSet4,
-    VarSet5,
-    VarSetN,
-    VarSetN2,
-    Constant0,
-    Constant1,
-    Constant2,
-    Constant3,
-    Constant4,
-    Constant5,
-    ConstantN,
-    ConstantN2,
-    Call0,
-    Call1,
-    Call2,
-    Call3,
-    Call4,
-    Call5,
-    CallN,
-    CallN2,
-    Discard,
-    Duplicate,
-    Jump,
-    JumpNil,
-    JumpNilElsePop,
-    Ret,
-    End,
-    Unknown
-}
 
 impl OpCode {
     pub unsafe fn from_unchecked(x: u8) -> Self {
@@ -113,9 +52,6 @@ impl ConstVec {
     }
 }
 
-#[derive(PartialEq)]
-struct CodeVec(Vec<u8>);
-
 macro_rules! emit_op {
     ($self:ident, $op:ident, $idx:ident) => {
         match $idx {
@@ -137,36 +73,32 @@ macro_rules! emit_op {
 }
 
 impl CodeVec {
-    pub fn new() -> Self {CodeVec(Vec::new())}
-
-    pub fn into_vec(self) -> Vec<u8> { self.0 }
-
     pub fn push_op(&mut self, op: OpCode) {
-        self.0.push(op.into());
+        self.push(op.into());
     }
 
     fn push_op_n(&mut self, op: OpCode, arg: u8) {
         self.push_op(op);
-        self.0.push(arg);
+        self.push(arg);
     }
 
     fn push_op_n2(&mut self, op: OpCode, arg: u16) {
         self.push_op(op);
-        self.0.push((arg >> 8) as u8);
-        self.0.push(arg as u8);
+        self.push((arg >> 8) as u8);
+        self.push(arg as u8);
     }
 
     fn push_jump_placeholder(&mut self) -> usize {
-        let idx = self.0.len();
-        self.0.push(0);
-        self.0.push(0);
+        let idx = self.len();
+        self.push(0);
+        self.push(0);
         idx
     }
 
     fn set_jump_placeholder(&mut self, index: usize) {
-        let offset = self.0.len() - index - 2;
-        self.0[index] = (offset >> 8) as u8;
-        self.0[index+1] = offset as u8;
+        let offset = self.len() - index - 2;
+        self[index] = (offset >> 8) as u8;
+        self[index+1] = offset as u8;
     }
 
     fn emit_const(&mut self, idx: u16) {
@@ -200,31 +132,6 @@ impl CodeVec {
     }
 }
 
-impl fmt::Debug for CodeVec {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use OpCode::*;
-        let mut display: Vec<String> = vec![];
-        let mut iter = self.0.iter();
-        while let Some(i) = iter.next() {
-            let op = unsafe {OpCode::from_unchecked(*i)};
-            display.push(format!("{:?}", op));
-            match op {
-                StackRefN | ConstantN | CallN |
-                VarRefN | VarSetN => {
-                    display.push(format!("{:?}", iter.next()));
-                }
-                StackRefN2 | ConstantN2 | CallN2 |
-                JumpNil | Jump | JumpNilElsePop |
-                VarRefN2 | VarSetN2 => {
-                    display.push(format!("{:?}", iter.next()));
-                    display.push(format!("{:?}", iter.next()));
-                }
-                _ => {},
-            }
-        }
-        write!(f, "{:?}", display)
-   }
-}
 
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
@@ -261,7 +168,7 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        LispFn::new(exp.codes.0 , exp.constants.0 , 0, 0, false)
+        LispFn::new(exp.codes.to_vec(), exp.constants.0, 0, 0, false)
     }
 }
 
@@ -552,7 +459,7 @@ mod test {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
             let obj = LispReader::new($compare).next().unwrap().unwrap();
             let expect = Exp{
-                codes: CodeVec(vec_into![$($op),+]),
+                codes:vec_into![$($op),+].into(),
                 constants: ConstVec(vec_into![$($const),+]),
                 vars: Vec::new(),
             };

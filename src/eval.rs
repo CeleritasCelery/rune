@@ -2,7 +2,7 @@
 
 use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
 use crate::hashmap::{HashMap, HashMapDefault};
-use crate::compile::OpCode;
+use crate::opcode::OpCode;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use std::convert::TryInto;

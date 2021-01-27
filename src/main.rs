@@ -12,6 +12,7 @@ mod hashmap;
 mod gc;
 mod error;
 mod func;
+mod opcode;
 #[macro_use]
 extern crate fn_macros;
 
