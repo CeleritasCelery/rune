@@ -45,7 +45,7 @@ macro_rules! create_symbolmap {
         const SIZE: usize = 0usize $(+ $arr.len())+;
         let mut map = SymbolMap::with_capacity(SIZE);
         $(for func in $arr.iter() {
-            map.intern(func.name).set_core_func(func.clone());
+            map.intern(func.name).set_func(func.clone());
         })+;
         map
     })
@@ -57,7 +57,7 @@ lazy_static!{
         create_symbolmap!(
             arith::defsubr(),
             eval::defsubr(),
-            lisp_object::defsubr(),
+            func::defsubr(),
         )
     });
 }
@@ -78,7 +78,7 @@ mod test {
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
-        second.set_lisp_func(LispFn::new(vec![5], vec![], 0, 0, false));
+        second.set_func(LispFn::new(vec![5], vec![], 0, 0, false));
         let func_cell = first.get_func().unwrap();
         let func = match func_cell.val() {
             FunctionValue::LispFn(x) => x,

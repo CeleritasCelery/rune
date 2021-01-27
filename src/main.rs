@@ -11,6 +11,7 @@ mod intern;
 mod hashmap;
 mod gc;
 mod error;
+mod func;
 #[macro_use]
 extern crate fn_macros;
 

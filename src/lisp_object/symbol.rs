@@ -1,4 +1,4 @@
-use crate::lisp_object::{LispObj, LispFn, SubrFn, TAG_SIZE, Tag, Function};
+use crate::lisp_object::{LispObj, TAG_SIZE, Tag, Function};
 use std::cmp;
 use std::mem;
 use std::fmt;
@@ -41,11 +41,7 @@ impl InnerSymbol {
         InnerSymbol{name, func: FnCell::new()}
     }
 
-    pub fn set_lisp_func(&self, func: LispFn) {
-        self.func.set(func.into());
-    }
-
-    pub fn set_core_func(&self, func: SubrFn) {
+    pub fn set_func<T>(&self, func: T) where T: Into<Function> {
         self.func.set(func.into());
     }
 
@@ -111,17 +107,9 @@ impl std::hash::Hash for Symbol {
     }
 }
 
-#[lisp_fn]
-pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {
-    symbol.func.set(definition);
-    symbol
-}
-
-defsubr!(defalias);
-
 #[cfg(test)]
 mod test {
-    use crate::lisp_object::FunctionValue;
+    use crate::lisp_object::{LispFn, SubrFn, FunctionValue};
     use super::*;
 
     #[test]
@@ -135,14 +123,14 @@ mod test {
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
-        x.set_lisp_func(LispFn::new(vec![1], vec![], 0, 0, false));
+        x.set_func(LispFn::new(vec![1], vec![], 0, 0, false));
         let cell = x.get_func().unwrap();
         let before = match cell.val() {
             FunctionValue::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        x.set_lisp_func(LispFn::new(vec![7], vec![], 0, 0, false));
+        x.set_func(LispFn::new(vec![7], vec![], 0, 0, false));
         let cell = x.get_func().unwrap();
         let after = match cell.val() {
             FunctionValue::LispFn(x) => x,
@@ -160,7 +148,7 @@ mod test {
 
         let sym = InnerSymbol::new("bar".to_owned());
         let core_func = SubrFn::new("bar", func, 0, 0, false);
-        sym.set_core_func(core_func);
+        sym.set_func(core_func);
 
         match sym.get_func().unwrap().val() {
             FunctionValue::SubrFn(x) => {
