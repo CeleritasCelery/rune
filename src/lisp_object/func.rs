@@ -1,6 +1,7 @@
 use crate::lisp_object::{LispObj, Symbol, Tag};
 use crate::hashmap::HashMap;
 use crate::error::Error;
+use crate::opcode::CodeVec;
 use std::fmt;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -14,14 +15,14 @@ pub struct FnArgs {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LispFn {
-    pub op_codes: Vec<u8>,
+    pub op_codes: CodeVec,
     pub constants: Vec<LispObj>,
     pub args: FnArgs,
 }
 define_unbox_ref!(LispFn, Func);
 
 impl LispFn {
-    pub fn new(op_codes: Vec<u8>,
+    pub fn new(op_codes: CodeVec,
                constants: Vec<LispObj>,
                required: u16,
                optional: u16,
@@ -98,14 +99,14 @@ mod test {
     #[test]
     fn function() {
         assert_eq!(56, size_of::<LispFn>());
-        let x: LispObj = LispFn::new(vec_into![0, 1, 2], vec_into![1], 0, 0, false).into();
+        let x: LispObj = LispFn::new(vec_into![0, 1, 2].into(), vec_into![1], 0, 0, false).into();
         assert!(matches!(x.val(), Value::LispFn(_)));
         format!("{}", x);
         let func = match x.val() {
             Value::LispFn(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(func.op_codes, [0, 1, 2]);
+        assert_eq!(func.op_codes, vec_into![0, 1, 2].into());
         assert_eq!(func.constants, vec_into![1]);
         assert_eq!(func.args.required, 0);
         assert_eq!(func.args.optional, 0);

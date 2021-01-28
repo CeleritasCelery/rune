@@ -18,7 +18,7 @@ impl From<OpCode> for u8 {
 impl Default for LispFn {
     fn default() -> Self {
         LispFn::new(
-            vec_into![OpCode::Constant0, OpCode::Ret],
+            vec_into![OpCode::Constant0, OpCode::Ret].into(),
             vec![LispObj::nil()],
             0, 0, false)
     }
@@ -168,7 +168,7 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        LispFn::new(exp.codes.to_vec(), exp.constants.0, 0, 0, false)
+        LispFn::new(exp.codes, exp.constants.0, 0, 0, false)
     }
 }
 
@@ -517,13 +517,13 @@ mod test {
         check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
 
-        let func = LispFn::new(vec_into![Constant0, Ret], vec_into![1], 0, 0, false);
+        let func = LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], 0, 0, false);
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef0, Ret], vec![], 1, 0, false);
+        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![Constant0, StackRef2, StackRef2, Call2, Ret],
+        let func = LispFn::new(vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
                                vec_into![intern("+")], 2, 0, false);
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 

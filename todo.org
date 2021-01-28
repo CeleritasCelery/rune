@@ -1,4 +1,3 @@
 #+title: Next steps for Remac
-* add a CodeVec printer to functions
 * Add reader macro hooks
 * define benchmarks

@@ -62,7 +62,7 @@ pub enum OpCode {
 }
 
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct CodeVec(Vec<u8>);
 
 impl CodeVec {
