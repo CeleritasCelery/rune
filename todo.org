@@ -1,3 +1,4 @@
 #+title: Next steps for Remac
-* Add reader macro hooks
+* build REPL
 * define benchmarks
+* Add reader macro hooks
