@@ -1,4 +1,11 @@
 #+title: Next steps for Remac
 * build REPL
+* change error type to box dyn
+This will reduce coupling in the system by allowing different modules to define their own errors
+* make the lisp object non-GC
+Gc should be a special wrapper around normal lisp objects
+* implement while loop
+* define sexp macro
+Not sure if this can be done with just a regular macro or would require a proc macro. But this would let us decouple our tests from the reader in a clean way.
 * define benchmarks
 * Add reader macro hooks
