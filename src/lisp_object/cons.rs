@@ -10,7 +10,7 @@ define_unbox_ref!(Cons);
 
 impl Cons {
     pub fn new(car: LispObj, cdr: LispObj) -> Cons {
-        Cons{car, cdr}
+        Cons { car, cdr }
     }
 }
 
@@ -28,8 +28,12 @@ impl From<Cons> for LispObj {
 
 #[macro_export]
 macro_rules! cons {
-    ($car:expr, $cdr:expr) => (crate::lisp_object::Cons::new($car.into(), $cdr.into()));
-    ($car:expr) => (crate::lisp_object::Cons::new($car.into(), false.into()));
+    ($car:expr, $cdr:expr) => {
+        crate::lisp_object::Cons::new($car.into(), $cdr.into())
+    };
+    ($car:expr) => {
+        crate::lisp_object::Cons::new($car.into(), false.into())
+    };
 }
 
 #[macro_export]
@@ -37,7 +41,6 @@ macro_rules! list {
     ($x:expr) => (cons!($x));
     ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
 }
-
 
 #[cfg(test)]
 mod test {
@@ -60,7 +63,7 @@ mod test {
 
         let cons2 = match cons1.cdr.val() {
             Value::Cons(x) => x,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         assert_eq!(7, cons2.car);
 
@@ -76,5 +79,4 @@ mod test {
         assert_eq!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "foo"]);
         assert_ne!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "bar"]);
     }
-
 }

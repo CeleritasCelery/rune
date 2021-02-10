@@ -1,5 +1,5 @@
-use std::hash::BuildHasherDefault;
 use fnv::{FnvHashMap, FnvHasher};
+use std::hash::BuildHasherDefault;
 
 pub type HashMap<T, U> = std::collections::HashMap<T, U, BuildHasherDefault<FnvHasher>>;
 
@@ -14,6 +14,6 @@ impl<T, U> HashMapDefault for HashMap<T, U> {
     }
 
     fn with_capacity(cap: usize) -> Self {
-        FnvHashMap::with_capacity_and_hasher(cap , Default::default())
+        FnvHashMap::with_capacity_and_hasher(cap, Default::default())
     }
 }

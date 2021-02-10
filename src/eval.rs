@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, LispFn, Value, FnArgs, Symbol, FunctionValue, BuiltInFn};
-use crate::hashmap::{HashMap, HashMapDefault};
-use crate::opcode::OpCode;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
+use crate::hashmap::{HashMap, HashMapDefault};
+use crate::lisp_object::{BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Symbol, Value};
+use crate::opcode::OpCode;
 use std::convert::TryInto;
 
 #[derive(Clone)]
@@ -57,7 +57,11 @@ impl IP {
 
 impl CallFrame {
     pub fn new(func: Gc<LispFn>, frame_start: usize) -> CallFrame {
-        CallFrame{ip: IP::new(&func.op_codes), func, start: frame_start}
+        CallFrame {
+            ip: IP::new(&func.op_codes),
+            func,
+            start: frame_start,
+        }
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
@@ -94,7 +98,7 @@ impl LispStack for Vec<LispObj> {
     }
 
     fn take_slice(&self, i: usize) -> &[LispObj] {
-        &self[self.from_end(i-1)..]
+        &self[self.from_end(i - 1)..]
     }
 }
 
@@ -114,9 +118,8 @@ pub fn set(place: Symbol, newlet: LispObj, vars: &mut HashMap<Symbol, LispObj>) 
 defsubr!(set);
 
 impl Routine {
-
     fn new(func: Gc<LispFn>) -> Routine {
-        Routine{
+        Routine {
             stack: vec![],
             vars: HashMap::create(),
             call_frames: vec![],
@@ -125,7 +128,7 @@ impl Routine {
     }
 
     fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
-        if count < args.required  {
+        if count < args.required {
             return Err(Error::ArgCount(args.required, count));
         }
         let total_args = args.required + args.optional;
@@ -171,8 +174,10 @@ impl Routine {
             FunctionValue::LispFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(self.frame.clone());
-                self.frame = CallFrame::new(unsafe {std::mem::transmute(func)},
-                                            self.stack.from_end(fn_idx));
+                self.frame = CallFrame::new(
+                    unsafe { std::mem::transmute(func) },
+                    self.stack.from_end(fn_idx),
+                );
             }
             FunctionValue::SubrFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
@@ -193,13 +198,13 @@ impl Routine {
         loop {
             // println!("{:?}", self.stack);
             use OpCode as op;
-            match unsafe {op::from_unchecked(self.frame.ip.next())} {
-                op::StackRef0 => {self.stack.push_ref(0)}
-                op::StackRef1 => {self.stack.push_ref(1)}
-                op::StackRef2 => {self.stack.push_ref(2)}
-                op::StackRef3 => {self.stack.push_ref(3)}
-                op::StackRef4 => {self.stack.push_ref(4)}
-                op::StackRef5 => {self.stack.push_ref(5)}
+            match unsafe { op::from_unchecked(self.frame.ip.next()) } {
+                op::StackRef0 => self.stack.push_ref(0),
+                op::StackRef1 => self.stack.push_ref(1),
+                op::StackRef2 => self.stack.push_ref(2),
+                op::StackRef3 => self.stack.push_ref(3),
+                op::StackRef4 => self.stack.push_ref(4),
+                op::StackRef5 => self.stack.push_ref(5),
                 op::StackRefN => {
                     let idx = self.frame.ip.take_arg();
                     self.stack.push_ref(idx);
@@ -208,12 +213,12 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.stack.push_ref(idx);
                 }
-                op::StackSet0 => {self.stack.set_ref(0)}
-                op::StackSet1 => {self.stack.set_ref(1)}
-                op::StackSet2 => {self.stack.set_ref(2)}
-                op::StackSet3 => {self.stack.set_ref(3)}
-                op::StackSet4 => {self.stack.set_ref(4)}
-                op::StackSet5 => {self.stack.set_ref(5)}
+                op::StackSet0 => self.stack.set_ref(0),
+                op::StackSet1 => self.stack.set_ref(1),
+                op::StackSet2 => self.stack.set_ref(2),
+                op::StackSet3 => self.stack.set_ref(3),
+                op::StackSet4 => self.stack.set_ref(4),
+                op::StackSet5 => self.stack.set_ref(5),
                 op::StackSetN => {
                     let idx = self.frame.ip.take_arg();
                     self.stack.set_ref(idx);
@@ -222,12 +227,12 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.stack.set_ref(idx);
                 }
-                op::Constant0 => {self.stack.push(self.frame.get_const(0))}
-                op::Constant1 => {self.stack.push(self.frame.get_const(1))}
-                op::Constant2 => {self.stack.push(self.frame.get_const(2))}
-                op::Constant3 => {self.stack.push(self.frame.get_const(3))}
-                op::Constant4 => {self.stack.push(self.frame.get_const(4))}
-                op::Constant5 => {self.stack.push(self.frame.get_const(5))}
+                op::Constant0 => self.stack.push(self.frame.get_const(0)),
+                op::Constant1 => self.stack.push(self.frame.get_const(1)),
+                op::Constant2 => self.stack.push(self.frame.get_const(2)),
+                op::Constant3 => self.stack.push(self.frame.get_const(3)),
+                op::Constant4 => self.stack.push(self.frame.get_const(4)),
+                op::Constant5 => self.stack.push(self.frame.get_const(5)),
                 op::ConstantN => {
                     let idx = self.frame.ip.take_arg();
                     self.stack.push(self.frame.get_const(idx))
@@ -236,12 +241,12 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.stack.push(self.frame.get_const(idx))
                 }
-                op::VarRef0 => {self.varref(0)?}
-                op::VarRef1 => {self.varref(1)?}
-                op::VarRef2 => {self.varref(2)?}
-                op::VarRef3 => {self.varref(3)?}
-                op::VarRef4 => {self.varref(4)?}
-                op::VarRef5 => {self.varref(5)?}
+                op::VarRef0 => self.varref(0)?,
+                op::VarRef1 => self.varref(1)?,
+                op::VarRef2 => self.varref(2)?,
+                op::VarRef3 => self.varref(3)?,
+                op::VarRef4 => self.varref(4)?,
+                op::VarRef5 => self.varref(5)?,
                 op::VarRefN => {
                     let idx = self.frame.ip.take_arg();
                     self.varref(idx)?
@@ -250,12 +255,12 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.varref(idx)?
                 }
-                op::VarSet0 => {self.varset(0)?}
-                op::VarSet1 => {self.varset(1)?}
-                op::VarSet2 => {self.varset(2)?}
-                op::VarSet3 => {self.varset(3)?}
-                op::VarSet4 => {self.varset(4)?}
-                op::VarSet5 => {self.varset(5)?}
+                op::VarSet0 => self.varset(0)?,
+                op::VarSet1 => self.varset(1)?,
+                op::VarSet2 => self.varset(2)?,
+                op::VarSet3 => self.varset(3)?,
+                op::VarSet4 => self.varset(4)?,
+                op::VarSet5 => self.varset(5)?,
                 op::VarSetN => {
                     let idx = self.frame.ip.take_arg();
                     self.varset(idx)?
@@ -264,11 +269,13 @@ impl Routine {
                     let idx = self.frame.ip.take_double_arg();
                     self.varset(idx)?
                 }
-                op::Call0 => {self.call(0)?}
-                op::Call1 => {self.call(1)?}
-                op::Call2 => {self.call(2)?}
-                op::Call3 => {self.call(3)?}
-                op::Discard => {self.stack.pop();}
+                op::Call0 => self.call(0)?,
+                op::Call1 => self.call(1)?,
+                op::Call2 => self.call(2)?,
+                op::Call3 => self.call(3)?,
+                op::Discard => {
+                    self.stack.pop();
+                }
                 op::Duplicate => {
                     let value = *self.stack.last().unwrap();
                     self.stack.push(value);
@@ -303,7 +310,7 @@ impl Routine {
                         self.frame = self.call_frames.pop().unwrap();
                     }
                 }
-                x => return Err(Error::UnknownOpcode(x as u8))
+                x => return Err(Error::UnknownOpcode(x as u8)),
             }
         }
     }
@@ -314,8 +321,8 @@ pub fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::reader::LispReader;
     use crate::compile::Exp;
+    use crate::reader::LispReader;
 
     fn test_eval(sexp: &str, expect: LispObj) {
         let obj = LispReader::new(sexp).next().unwrap().unwrap();
@@ -354,10 +361,13 @@ mod test {
 
     #[test]
     fn call() {
-        test_eval("(progn
+        test_eval(
+            "(progn
 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
-(middle 7 3 13))", 224.into());
+(middle 7 3 13))",
+            224.into(),
+        );
     }
 
     fn test_eval_error(sexp: &str, error: Error) {

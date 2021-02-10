@@ -1,6 +1,6 @@
-use proc_macro::TokenStream;
 use darling::FromMeta;
-use quote::{quote, format_ident};
+use proc_macro::TokenStream;
+use quote::{format_ident, quote};
 use syn::{parse_macro_input, Error};
 
 #[proc_macro_attribute]
@@ -10,7 +10,9 @@ pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
 
     let spec = match Spec::from_list(&attr_args) {
         Ok(v) => v,
-        Err(e) => { return TokenStream::from(e.write_errors()); }
+        Err(e) => {
+            return TokenStream::from(e.write_errors());
+        }
     };
 
     expand(function, spec).into()
@@ -33,10 +35,14 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         _ => false,
     };
 
-    let err = if returns_result {quote! {?}} else { quote! {}};
+    let err = if returns_result {
+        quote! {?}
+    } else {
+        quote! {}
+    };
     let subr_call = quote! {Ok(#subr(#(#arg_conversion),*)#err.into())};
 
-    quote!{
+    quote! {
         #[allow(non_upper_case_globals)]
         const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn {
             name: #name,
@@ -64,34 +70,33 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 }
 
 fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
-    args.iter().enumerate().map(|(idx, ty)| {
-        if is_var_hashmap(ty) {
-            quote! {vars}
-        } else {
-            let call = get_call(idx, ty);
-            if convert_type(ty) {
-                if is_slice(ty) {
-                    quote! {crate::lisp_object::try_from_slice(#call)?}
-                } else {
-                    quote! {std::convert::TryFrom::try_from(#call)?}
-                }
+    args.iter()
+        .enumerate()
+        .map(|(idx, ty)| {
+            if is_var_hashmap(ty) {
+                quote! {vars}
             } else {
-                quote! {#call}
+                let call = get_call(idx, ty);
+                if convert_type(ty) {
+                    if is_slice(ty) {
+                        quote! {crate::lisp_object::try_from_slice(#call)?}
+                    } else {
+                        quote! {std::convert::TryFrom::try_from(#call)?}
+                    }
+                } else {
+                    quote! {#call}
+                }
             }
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 fn is_var_hashmap(ty: &syn::Type) -> bool {
     match ty {
-        syn::Type::Reference(refer) => {
-            match refer.elem.as_ref() {
-                syn::Type::Path(path) => {
-                    get_path_ident_name(path) == "HashMap"
-                }
-                _ => false,
-            }
-        }
+        syn::Type::Reference(refer) => match refer.elem.as_ref() {
+            syn::Type::Path(path) => get_path_ident_name(path) == "HashMap",
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -103,7 +108,7 @@ fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
             quote! {&#elem}
         }
         syn::Type::Slice(_) => quote! {args[#idx..]},
-        _ => quote! {args[#idx]}
+        _ => quote! {args[#idx]},
     }
 }
 
@@ -126,16 +131,14 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
 
     let rest = match args.last() {
         Some(x) => is_slice(x),
-        _ => false
+        _ => false,
     };
 
     let required = {
-        let last_req = args.iter().rposition(|x| {
-            match x {
-                syn::Type::Path(path) => "Option" != get_path_ident_name(path),
-                syn::Type::Reference(_) => !is_slice(x),
-                _ => false,
-            }
+        let last_req = args.iter().rposition(|x| match x {
+            syn::Type::Path(path) => "Option" != get_path_ident_name(path),
+            syn::Type::Reference(_) => !is_slice(x),
+            _ => false,
         });
         match last_req {
             Some(x) => std::cmp::max(x + 1, min),
@@ -144,7 +147,9 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
     };
 
     let len = args.len() - rest as usize;
-    if min > len { panic!("`min` is larger then arguments provided"); }
+    if min > len {
+        panic!("`min` is larger then arguments provided");
+    }
 
     let optional = len - required;
 
@@ -178,17 +183,25 @@ impl<'a> syn::parse::Parse for Function {
 
 fn parse_fn(item: syn::Item) -> Result<Function, Error> {
     match item {
-        syn::Item::Fn(syn::ItemFn {ref sig, ..}) => {
+        syn::Item::Fn(syn::ItemFn { ref sig, .. }) => {
             if sig.unsafety.is_some() {
                 Err(Error::new_spanned(sig, "lisp functions cannot be `unsafe`"))
             } else if sig.constness.is_some() {
                 Err(Error::new_spanned(sig, "lisp functions cannot be `const`"))
             } else {
                 let (args, output) = parse_signature(sig)?;
-                Ok(Function{name: sig.ident.clone(), body: item, args, output})
+                Ok(Function {
+                    name: sig.ident.clone(),
+                    body: item,
+                    args,
+                    output,
+                })
             }
         }
-        _ => Err(Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions"))
+        _ => Err(Error::new_spanned(
+            item,
+            "`lisp_fn` attribute can only be used on functions",
+        )),
     }
 }
 
@@ -196,7 +209,9 @@ fn parse_signature(sig: &syn::Signature) -> Result<(Vec<syn::Type>, syn::Type), 
     let mut args: Vec<syn::Type> = vec![];
     for input in sig.inputs.iter() {
         match input {
-            syn::FnArg::Receiver(x) => return Err(Error::new_spanned(x, "Self is not valid in lisp functions")),
+            syn::FnArg::Receiver(x) => {
+                return Err(Error::new_spanned(x, "Self is not valid in lisp functions"))
+            }
             syn::FnArg::Typed(pat_type) => args.push(pat_type.ty.as_ref().clone()),
         }
     }
@@ -206,7 +221,10 @@ fn parse_signature(sig: &syn::Signature) -> Result<(Vec<syn::Type>, syn::Type), 
 fn get_signature_return_type(output: &syn::ReturnType) -> Result<syn::Type, Error> {
     match output {
         syn::ReturnType::Type(_, ty) => Ok(ty.as_ref().clone()),
-        syn::ReturnType::Default => Err(Error::new_spanned(output, "Lisp Function must return a value")),
+        syn::ReturnType::Default => Err(Error::new_spanned(
+            output,
+            "Lisp Function must return a value",
+        )),
     }
 }
 
@@ -231,25 +249,45 @@ mod test {
 
     #[test]
     fn sig() {
-        test_sig(quote!{fn foo() -> u8 {}}, None, (0, 0, false));
-        test_sig(quote!{fn foo(vars: &[u8]) -> u8 {0}}, None, (0,0,true));
-        test_sig(quote!{fn foo(var: u8) -> u8 {0}}, None, (1,0,false));
-        test_sig(quote!{fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}, None, (2, 0, true));
-        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}}, None, (1,1,true));
-        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}}, Some(2), (2,1,false));
+        test_sig(quote! {fn foo() -> u8 {}}, None, (0, 0, false));
+        test_sig(quote! {fn foo(vars: &[u8]) -> u8 {0}}, None, (0, 0, true));
+        test_sig(quote! {fn foo(var: u8) -> u8 {0}}, None, (1, 0, false));
+        test_sig(
+            quote! {fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}},
+            None,
+            (2, 0, true),
+        );
+        test_sig(
+            quote! {fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}},
+            None,
+            (1, 1, true),
+        );
+        test_sig(
+            quote! {fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}},
+            Some(2),
+            (2, 1, false),
+        );
     }
 
     #[test]
     fn test_expand() {
         let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
-        let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
+        let spec = Spec {
+            name: Some("bar".into()),
+            required: Some(1),
+            intspec: None,
+        };
         let result = expand(function, spec);
         println!("{}", result.to_string());
 
         let stream = quote! {pub fn foo(var0: u8, vars: &mut HashMap<Symbol, LispObj>) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
-        let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
+        let spec = Spec {
+            name: Some("bar".into()),
+            required: Some(1),
+            intspec: None,
+        };
         let result = expand(function, spec);
         println!("{}", result.to_string());
     }

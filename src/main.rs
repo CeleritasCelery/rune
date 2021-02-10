@@ -1,18 +1,17 @@
-
 #[macro_use]
 mod macros;
 #[macro_use]
 mod lisp_object;
-mod reader;
-mod compile;
 mod arith;
-mod eval;
-mod intern;
-mod hashmap;
-mod gc;
+mod compile;
 mod error;
+mod eval;
 mod func;
+mod gc;
+mod hashmap;
+mod intern;
 mod opcode;
+mod reader;
 #[macro_use]
 extern crate fn_macros;
 

@@ -1,7 +1,7 @@
-use crate::lisp_object::{LispObj, TAG_SIZE, Tag, Function};
+use crate::lisp_object::{Function, LispObj, Tag, TAG_SIZE};
 use std::cmp;
-use std::mem;
 use std::fmt;
+use std::mem;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
@@ -14,10 +14,12 @@ pub struct InnerSymbol {
 struct FnCell(AtomicI64);
 
 impl FnCell {
-    fn new() -> Self { Self(AtomicI64::new(0)) }
+    fn new() -> Self {
+        Self(AtomicI64::new(0))
+    }
 
     fn set(&self, func: Function) {
-        let value = unsafe {mem::transmute(func)};
+        let value = unsafe { mem::transmute(func) };
         self.0.store(value, Ordering::Release);
     }
 
@@ -25,7 +27,7 @@ impl FnCell {
         let bits = self.0.load(Ordering::Acquire);
         match bits {
             0 => None,
-            _ => Some(unsafe {mem::transmute(bits)})
+            _ => Some(unsafe { mem::transmute(bits) }),
         }
     }
 }
@@ -38,10 +40,16 @@ impl cmp::PartialEq for InnerSymbol {
 
 impl InnerSymbol {
     pub fn new(name: String) -> Self {
-        InnerSymbol{name, func: FnCell::new()}
+        InnerSymbol {
+            name,
+            func: FnCell::new(),
+        }
     }
 
-    pub fn set_func<T>(&self, func: T) where T: Into<Function> {
+    pub fn set_func<T>(&self, func: T)
+    where
+        T: Into<Function>,
+    {
         self.func.set(func.into());
     }
 
@@ -88,13 +96,13 @@ impl From<Symbol> for LispObj {
     fn from(s: Symbol) -> Self {
         let ptr = s.0 as *const _;
         let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
-        LispObj{bits}
+        LispObj { bits }
     }
 }
 
 impl std::cmp::PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
-       self.0 as *const _ == other.0 as *const _
+        self.0 as *const _ == other.0 as *const _
     }
 }
 
@@ -109,8 +117,8 @@ impl std::hash::Hash for Symbol {
 
 #[cfg(test)]
 mod test {
-    use crate::lisp_object::{LispFn, SubrFn, FunctionValue};
     use super::*;
+    use crate::lisp_object::{FunctionValue, LispFn, SubrFn};
 
     #[test]
     fn size() {
@@ -142,9 +150,7 @@ mod test {
 
     #[test]
     fn subr() {
-        let func = |x: &[_], _: &mut _| -> _ {
-            Ok(x[0])
-        };
+        let func = |x: &[_], _: &mut _| -> _ { Ok(x[0]) };
 
         let sym = InnerSymbol::new("bar".to_owned());
         let core_func = SubrFn::new("bar", func, 0, 0, false);

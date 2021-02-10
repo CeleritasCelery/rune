@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use crate::lisp_object::{LispObj, Cons, Value, LispFn, Symbol};
-use crate::error::{Error, Type, Result};
-use crate::opcode::{OpCode, CodeVec};
+use crate::error::{Error, Result, Type};
+use crate::lisp_object::{Cons, LispFn, LispObj, Symbol, Value};
+use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 
 impl OpCode {
@@ -12,7 +12,9 @@ impl OpCode {
 }
 
 impl From<OpCode> for u8 {
-    fn from(x: OpCode) -> u8 { x as u8 }
+    fn from(x: OpCode) -> u8 {
+        x as u8
+    }
 }
 
 impl Default for LispFn {
@@ -20,7 +22,10 @@ impl Default for LispFn {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
             vec![LispObj::nil()],
-            0, 0, false)
+            0,
+            0,
+            false,
+        )
     }
 }
 
@@ -28,9 +33,13 @@ impl Default for LispFn {
 struct ConstVec(Vec<LispObj>);
 
 impl ConstVec {
-    pub fn new() -> Self {ConstVec(Vec::new())}
+    pub fn new() -> Self {
+        ConstVec(Vec::new())
+    }
 
-    pub fn into_vec(self) -> Vec<LispObj> { self.0 }
+    pub fn into_vec(self) -> Vec<LispObj> {
+        self.0
+    }
 
     // TODO: Don't use rust equal because it will compare an entire list
     fn insert_or_get(&mut self, obj: LispObj) -> usize {
@@ -39,7 +48,7 @@ impl ConstVec {
                 self.0.push(obj);
                 self.0.len() - 1
             }
-            Some(x) => x
+            Some(x) => x,
         }
     }
 
@@ -55,21 +64,21 @@ impl ConstVec {
 macro_rules! emit_op {
     ($self:ident, $op:ident, $idx:ident) => {
         match $idx {
-            0 => $self.push_op(paste::paste!{[<$op 0>]}),
-            1 => $self.push_op(paste::paste!{[<$op 1>]}),
-            2 => $self.push_op(paste::paste!{[<$op 2>]}),
-            3 => $self.push_op(paste::paste!{[<$op 3>]}),
-            4 => $self.push_op(paste::paste!{[<$op 4>]}),
-            5 => $self.push_op(paste::paste!{[<$op 5>]}),
+            0 => $self.push_op(paste::paste! {[<$op 0>]}),
+            1 => $self.push_op(paste::paste! {[<$op 1>]}),
+            2 => $self.push_op(paste::paste! {[<$op 2>]}),
+            3 => $self.push_op(paste::paste! {[<$op 3>]}),
+            4 => $self.push_op(paste::paste! {[<$op 4>]}),
+            5 => $self.push_op(paste::paste! {[<$op 5>]}),
             _ => {
                 // TODO: look at the asm for this
                 match $idx.try_into() {
-                    Ok(n) => $self.push_op_n(paste::paste!{[<$op N>]}, n),
-                    Err(_) => $self.push_op_n2(paste::paste!{[<$op N2>]}, $idx),
+                    Ok(n) => $self.push_op_n(paste::paste! {[<$op N>]}, n),
+                    Err(_) => $self.push_op_n2(paste::paste! {[<$op N2>]}, $idx),
                 }
             }
         }
-    }
+    };
 }
 
 impl CodeVec {
@@ -98,7 +107,7 @@ impl CodeVec {
     fn set_jump_placeholder(&mut self, index: usize) {
         let offset = self.len() - index - 2;
         self[index] = (offset >> 8) as u8;
-        self[index+1] = offset as u8;
+        self[index + 1] = offset as u8;
     }
 
     fn emit_const(&mut self, idx: u16) {
@@ -131,7 +140,6 @@ impl CodeVec {
         emit_op!(self, StackSet, idx)
     }
 }
-
 
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
@@ -311,7 +319,7 @@ impl Exp {
             Ok(())
         } else {
             let len = list.len() as u16;
-            Err(Error::ArgCount(len-1, len))
+            Err(Error::ArgCount(len - 1, len))
         }
     }
 
@@ -336,7 +344,7 @@ impl Exp {
                 self.codes.push_op(op);
                 Ok(())
             }
-            len => Err(Error::ArgCount(2, len as u16))
+            len => Err(Error::ArgCount(2, len as u16)),
         }
     }
 
@@ -414,7 +422,7 @@ impl Exp {
                 let idx = self.constants.insert(sym.into())?;
                 self.codes.emit_varref(idx);
                 Ok(())
-            },
+            }
         }
     }
 
@@ -422,12 +430,12 @@ impl Exp {
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
-            _ => self.add_const(obj, None)
+            _ => self.add_const(obj, None),
         }
     }
 
     fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self> {
-        let mut exp = Self{
+        let mut exp = Self {
             codes: CodeVec::default(),
             constants: ConstVec::new(),
             vars,
@@ -449,9 +457,9 @@ pub fn run() {}
 mod test {
 
     use super::*;
-    use OpCode::*;
-    use crate::reader::LispReader;
     use crate::intern::intern;
+    use crate::reader::LispReader;
+    use OpCode::*;
 
     fn check_error(compare: &str, expect: Error) {
         let obj = LispReader::new(compare).next().unwrap().unwrap();
@@ -480,37 +488,65 @@ mod test {
     #[test]
     fn variable() {
         check_compiler!("(let (foo))", [Constant0, Constant0, Ret], [false]);
-        check_compiler!("(let ((foo 1)(bar 2)(baz 3)))", [Constant0, Constant1, Constant2, Constant3, Ret], [1, 2, 3, false]);
+        check_compiler!(
+            "(let ((foo 1)(bar 2)(baz 3)))",
+            [Constant0, Constant1, Constant2, Constant3, Ret],
+            [1, 2, 3, false]
+        );
         check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
         check_compiler!("(progn)", [Constant0, Ret], [false]);
-        check_compiler!("(progn (set 'foo 5) foo)", [Constant0, Constant1, Constant2, Call2, Discard, VarRef1, Ret], [intern("set"), intern("foo"), 5]);
-        check_compiler!("(let ((foo 1)) (setq foo 2) foo)", [Constant0, Constant1, Duplicate, StackSet2, Discard, StackRef0, Ret], [1, 2]);
-        check_compiler!("(progn (setq foo 2) foo)", [Constant0, Duplicate, VarSet1, Discard, VarRef1, Ret], [2, intern("foo")]);
+        check_compiler!(
+            "(progn (set 'foo 5) foo)",
+            [Constant0, Constant1, Constant2, Call2, Discard, VarRef1, Ret],
+            [intern("set"), intern("foo"), 5]
+        );
+        check_compiler!(
+            "(let ((foo 1)) (setq foo 2) foo)",
+            [Constant0, Constant1, Duplicate, StackSet2, Discard, StackRef0, Ret],
+            [1, 2]
+        );
+        check_compiler!(
+            "(progn (setq foo 2) foo)",
+            [Constant0, Duplicate, VarSet1, Discard, VarRef1, Ret],
+            [2, intern("foo")]
+        );
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
     #[test]
     fn conditional() {
-        check_compiler!("(if nil 1 2)",
-                        [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
-                        [LispObj::nil(), 1, 2]);
-        check_compiler!("(if t 2)", [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret], [LispObj::t(), 2]);
+        check_compiler!(
+            "(if nil 1 2)",
+            [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
+            [LispObj::nil(), 1, 2]
+        );
+        check_compiler!(
+            "(if t 2)",
+            [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
+            [LispObj::t(), 2]
+        );
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 
     #[test]
     fn function() {
         check_compiler!("(foo)", [Constant0, Call0, Ret], [intern("foo")]);
-        check_compiler!("(foo 1 2)",
-                        [Constant0, Constant1, Constant2, Call2, Ret],
-                        [intern("foo"), 1, 2]);
-        check_compiler!("(foo (bar 1) 2)",
-                        [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
-                        [intern("foo"), intern("bar"), 1, 2]);
-        check_compiler!("(foo (bar 1) (baz 1))",
-                        [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
-                        [intern("foo"), intern("bar"), 1, intern("baz")]);
+        check_compiler!(
+            "(foo 1 2)",
+            [Constant0, Constant1, Constant2, Call2, Ret],
+            [intern("foo"), 1, 2]
+        );
+        check_compiler!(
+            "(foo (bar 1) 2)",
+            [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
+            [intern("foo"), intern("bar"), 1, 2]
+        );
+        check_compiler!(
+            "(foo (bar 1) (baz 1))",
+            [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
+            [intern("foo"), intern("bar"), 1, intern("baz")]
+        );
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
@@ -526,8 +562,13 @@ mod test {
         let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
-                               vec_into![intern("+")], 2, 0, false);
+        let func = LispFn::new(
+            vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
+            vec_into![intern("+")],
+            2,
+            0,
+            false,
+        );
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
         check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));

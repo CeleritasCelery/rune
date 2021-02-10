@@ -1,6 +1,6 @@
-use crate::lisp_object::{LispObj, Symbol, Tag};
-use crate::hashmap::HashMap;
 use crate::error::Error;
+use crate::hashmap::HashMap;
+use crate::lisp_object::{LispObj, Symbol, Tag};
 use crate::opcode::CodeVec;
 use std::fmt;
 
@@ -22,11 +22,13 @@ pub struct LispFn {
 define_unbox_ref!(LispFn, Func);
 
 impl LispFn {
-    pub fn new(op_codes: CodeVec,
-               constants: Vec<LispObj>,
-               required: u16,
-               optional: u16,
-               rest: bool) -> Self {
+    pub fn new(
+        op_codes: CodeVec,
+        constants: Vec<LispObj>,
+        required: u16,
+        optional: u16,
+        rest: bool,
+    ) -> Self {
         LispFn {
             op_codes,
             constants,
@@ -36,7 +38,7 @@ impl LispFn {
                 rest,
                 max_stack_usage: 0,
                 advice: false,
-            }
+            },
         }
     }
 }
@@ -58,7 +60,13 @@ pub struct SubrFn {
 define_unbox_ref!(SubrFn, Func);
 
 impl SubrFn {
-    pub fn new(name: &'static str, subr: BuiltInFn, required: u16, optional: u16, rest: bool) -> Self {
+    pub fn new(
+        name: &'static str,
+        subr: BuiltInFn,
+        required: u16,
+        optional: u16,
+        rest: bool,
+    ) -> Self {
         Self {
             name,
             subr,
@@ -68,7 +76,7 @@ impl SubrFn {
                 rest,
                 max_stack_usage: 0,
                 advice: false,
-            }
+            },
         }
     }
 }

@@ -1,6 +1,6 @@
-use crate::lisp_object::{LispObj, LispFn, SubrFn, Value, Cons};
+use crate::lisp_object::{Cons, LispFn, LispObj, SubrFn, Value};
 
-pub struct Function (i64);
+pub struct Function(i64);
 
 impl From<LispFn> for Function {
     fn from(x: LispFn) -> Self {
@@ -48,7 +48,7 @@ impl From<f64> for Number {
 
 impl From<Number> for LispObj {
     fn from(x: Number) -> Self {
-        unsafe {LispObj::from_raw(x.0)}
+        unsafe { LispObj::from_raw(x.0) }
     }
 }
 
@@ -59,7 +59,7 @@ pub enum NumberValue {
 
 impl Number {
     pub fn val(&self) -> NumberValue {
-        match unsafe {LispObj::from_raw(self.0).val()} {
+        match unsafe { LispObj::from_raw(self.0).val() } {
             Value::Int(x) => NumberValue::Int(x),
             Value::Float(x) => NumberValue::Float(x),
             _ => unreachable!("Number was invalid type"),
@@ -76,9 +76,9 @@ pub enum ListValue<'a> {
 
 impl List {
     pub fn val(&self) -> ListValue {
-        match unsafe {LispObj::from_raw(self.0).val()} {
+        match unsafe { LispObj::from_raw(self.0).val() } {
             Value::Nil => ListValue::Nil,
-            Value::Cons(x) => ListValue::Cons(unsafe {std::mem::transmute(x)}),
+            Value::Cons(x) => ListValue::Cons(unsafe { std::mem::transmute(x) }),
             _ => unreachable!("Number was invalid type"),
         }
     }
@@ -86,6 +86,6 @@ impl List {
 
 impl From<List> for LispObj {
     fn from(x: List) -> Self {
-        unsafe {LispObj::from_raw(x.0)}
+        unsafe { LispObj::from_raw(x.0) }
     }
 }

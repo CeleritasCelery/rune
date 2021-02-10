@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-use crate::lisp_object::{InnerSymbol, Symbol};
 use crate::hashmap::HashMap;
-use std::sync::Mutex;
+use crate::lisp_object::{InnerSymbol, Symbol};
 use lazy_static::lazy_static;
+use std::sync::Mutex;
 
 pub struct SymbolMap(HashMap<String, Box<InnerSymbol>>);
 
@@ -51,14 +51,10 @@ macro_rules! create_symbolmap {
     })
 }
 
-lazy_static!{
+lazy_static! {
     pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
-        create_symbolmap!(
-            arith::defsubr(),
-            eval::defsubr(),
-            func::defsubr(),
-        )
+        create_symbolmap!(arith::defsubr(), eval::defsubr(), func::defsubr(),)
     });
 }
 
@@ -69,7 +65,7 @@ pub fn intern(name: &str) -> Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::lisp_object::{LispFn, FunctionValue};
+    use crate::lisp_object::{FunctionValue, LispFn};
 
     #[test]
     fn test_intern() {

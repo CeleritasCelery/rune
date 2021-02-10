@@ -13,9 +13,9 @@ pub mod convert;
 pub use convert::*;
 
 use crate::gc::Gc;
-use std::mem::size_of;
 use std::cmp;
 use std::fmt;
+use std::mem::size_of;
 
 #[derive(Copy, Clone)]
 pub union LispObj {
@@ -127,28 +127,28 @@ impl<'a> LispObj {
     pub fn val(&'a self) -> Value<'a> {
         unsafe {
             match self.tag {
-                Tag::Symbol   => Value::Symbol(Symbol::from_raw(self.get_ptr())),
-                Tag::Float    => Value::Float(*self.get_ptr()),
-                Tag::Void     => Value::Void,
-                Tag::LongStr  => Value::String(&*self.get_ptr()),
+                Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
+                Tag::Float => Value::Float(*self.get_ptr()),
+                Tag::Void => Value::Void,
+                Tag::LongStr => Value::String(&*self.get_ptr()),
                 Tag::ShortStr => Value::String(&*self.get_ptr()),
-                Tag::LispFn   => Value::LispFn(&*self.get_ptr()),
-                Tag::SubrFn   => Value::SubrFn(&*self.get_ptr()),
-                Tag::Nil      => Value::Nil,
-                Tag::True     => Value::True,
-                Tag::Cons     => Value::Cons(&*self.get_ptr()),
-                Tag::Int      => Value::Int(self.bits >> TAG_SIZE),
-                Tag::Marker   => todo!(),
+                Tag::LispFn => Value::LispFn(&*self.get_ptr()),
+                Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
+                Tag::Nil => Value::Nil,
+                Tag::True => Value::True,
+                Tag::Cons => Value::Cons(&*self.get_ptr()),
+                Tag::Int => Value::Int(self.bits >> TAG_SIZE),
+                Tag::Marker => todo!(),
             }
         }
     }
 
     pub fn into_raw(self) -> i64 {
-        unsafe{self.bits}
+        unsafe { self.bits }
     }
 
     pub unsafe fn from_raw(bits: i64) -> Self {
-        Self{bits}
+        Self { bits }
     }
 
     unsafe fn get_ptr<T>(&self) -> *const T {
@@ -162,20 +162,20 @@ impl<'a> LispObj {
     fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
         let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
-        LispObj{bits}
+        LispObj { bits }
     }
 
     const fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
-        LispObj{bits: tag as i64}
+        LispObj { bits: tag as i64 }
     }
 
     fn tag_eq(&self, tag: Tag) -> bool {
-        unsafe {self.tag == tag}
+        unsafe { self.tag == tag }
     }
 
     fn tag_masked(&self, tag: Tag, mask: u16) -> bool {
-        unsafe {(self.tag as u16) & mask == (tag as u16)}
+        unsafe { (self.tag as u16) & mask == (tag as u16) }
     }
 
     pub const fn void() -> Self {
@@ -192,7 +192,7 @@ impl<'a> LispObj {
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
         match self.val() {
-            Value::Cons(_) => Some(unsafe{&mut *self.get_mut_ptr()}),
+            Value::Cons(_) => Some(unsafe { &mut *self.get_mut_ptr() }),
             _ => None,
         }
     }
@@ -224,7 +224,7 @@ impl fmt::Display for LispObj {
 impl fmt::Debug for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
-   }
+    }
 }
 
 #[cfg(test)]
@@ -298,7 +298,10 @@ mod test {
         assert!(matches!(LispObj::from(1).val(), Value::Int(_)));
         assert!(matches!(LispObj::from(1.5).val(), Value::Float(_)));
         assert!(matches!(LispObj::from("foo").val(), Value::String(_)));
-        assert!(matches!(LispObj::from(intern("foo")).val(), Value::Symbol(_)));
+        assert!(matches!(
+            LispObj::from(intern("foo")).val(),
+            Value::Symbol(_)
+        ));
         assert!(matches!(LispObj::from(cons!(1, 2)).val(), Value::Cons(_)));
         assert!(matches!(LispObj::from(None::<LispObj>).val(), Value::Nil));
         assert!(matches!(LispObj::from(false).val(), Value::Nil));

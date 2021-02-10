@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-use std::str;
-use std::fmt;
-use crate::lisp_object::LispObj;
 use crate::intern::intern;
+use crate::lisp_object::LispObj;
+use std::fmt;
+use std::str;
 
 pub struct Stream<'a> {
     prev: str::Chars<'a>,
@@ -39,7 +39,7 @@ pub struct LispReaderErr {
 
 impl LispReaderErr {
     fn new(message: String, pos: usize) -> Self {
-        Self{message, pos}
+        Self { message, pos }
     }
 }
 
@@ -59,7 +59,10 @@ impl StreamStart {
 impl<'a> Stream<'a> {
     pub fn new(slice: &str) -> Stream {
         let chars = slice.chars();
-        Stream{iter: chars.clone(), prev: chars}
+        Stream {
+            iter: chars.clone(),
+            prev: chars,
+        }
     }
 
     pub fn back(&mut self) {
@@ -125,17 +128,13 @@ fn intern_symbol(symbol: &str) -> LispObj {
 fn parse_symbol(slice: &str) -> LispObj {
     match slice.parse::<i64>() {
         Ok(num) => num.into(),
-        Err(_) => {
-            match slice.parse::<f64>() {
-                Ok(num) => num.into(),
-                Err(_) => {
-                    match slice {
-                        "nil" => LispObj::nil(),
-                        "t" => LispObj::t(),
-                        _ => intern_symbol(slice),
-                    }
-                }
-            }
+        Err(_) => match slice.parse::<f64>() {
+            Ok(num) => num.into(),
+            Err(_) => match slice {
+                "nil" => LispObj::nil(),
+                "t" => LispObj::t(),
+                _ => intern_symbol(slice),
+            },
         },
     }
 }
@@ -161,14 +160,18 @@ fn unescape_string(string: &str) -> LispObj {
             Some(c)
         }
     };
-    string.chars().filter_map(unescape).collect::<String>().into()
+    string
+        .chars()
+        .filter_map(unescape)
+        .collect::<String>()
+        .into()
 }
 
 fn symbol_char(chr: char) -> bool {
-    !matches!(chr, '\x00'..=' ' |
-              '(' | ')' | '[' | ']' |
-              '#' | ',' | '`' | ';' |
-              '"' | '\'')
+    !matches!(
+        chr,
+        '\x00'..=' ' | '(' | ')' | '[' | ']' | '#' | ',' | '`' | ';' | '"' | '\''
+    )
 }
 
 pub struct LispReader<'a> {
@@ -178,7 +181,10 @@ pub struct LispReader<'a> {
 
 impl<'a> LispReader<'a> {
     pub fn new(slice: &'a str) -> Self {
-        LispReader{slice, stream: Stream::new(slice)}
+        LispReader {
+            slice,
+            stream: Stream::new(slice),
+        }
     }
 
     fn get_error_pos(&self, stream_end: StreamStart) -> usize {
@@ -189,19 +195,13 @@ impl<'a> LispReader<'a> {
     fn convert_error(&self, err: Error) -> LispReaderErr {
         let message = format!("{}", err);
         match err {
-            Error::MissingCloseParen(x)  => {
-                LispReaderErr::new(message, self.get_error_pos(x.expect(
-                    "read should determine open paren position")))
-            }
-            Error::ExtraCloseParen(x)  => {
-                LispReaderErr::new(message, self.get_error_pos(x))
-            }
-            Error::MissingStringDel(x)  => {
-                LispReaderErr::new(message, self.get_error_pos(x))
-            }
-            Error::UnexpectedChar(_, x)  => {
-                LispReaderErr::new(message, self.get_error_pos(x))
-            }
+            Error::MissingCloseParen(x) => LispReaderErr::new(
+                message,
+                self.get_error_pos(x.expect("read should determine open paren position")),
+            ),
+            Error::ExtraCloseParen(x) => LispReaderErr::new(message, self.get_error_pos(x)),
+            Error::MissingStringDel(x) => LispReaderErr::new(message, self.get_error_pos(x)),
+            Error::UnexpectedChar(_, x) => LispReaderErr::new(message, self.get_error_pos(x)),
             Error::EndOfStream => {
                 panic!("EndOfStream Should not be converted to a LispReaderErr");
             }
@@ -215,13 +215,12 @@ impl<'a> Iterator for LispReader<'a> {
         match self.read() {
             Ok(x) => Some(Ok(x)),
             Err(Error::EndOfStream) => None,
-            Err(e) => Some(Err(self.convert_error(e)))
+            Err(e) => Some(Err(self.convert_error(e))),
         }
     }
 }
 
 impl<'a> LispReader<'a> {
-
     fn char_pos(&self) -> StreamStart {
         self.stream.get_prev_pos()
     }
@@ -243,7 +242,7 @@ impl<'a> LispReader<'a> {
         let pos = self.stream.get_pos();
         let open_delim_pos = self.char_pos();
         while let Some(chr) = self.stream.next() {
-            if  chr == '\\' {
+            if chr == '\\' {
                 self.stream.next();
             } else if chr == '"' {
                 let slice = self.stream.slice_without_end_delimiter(pos);
@@ -255,7 +254,7 @@ impl<'a> LispReader<'a> {
 
     fn read_cons(&mut self) -> Result<LispObj, Error> {
         if self.read_char() == Some(')') {
-            return Ok(LispObj::nil())
+            return Ok(LispObj::nil());
         } else {
             self.stream.back();
         }
@@ -282,10 +281,8 @@ impl<'a> LispReader<'a> {
     fn read_list(&mut self) -> Result<LispObj, Error> {
         let pos = self.char_pos();
         match self.read_cons() {
-            Err(Error::MissingCloseParen(None)) => {
-                Err(Error::MissingCloseParen(Some(pos)))
-            }
-            x => x
+            Err(Error::MissingCloseParen(None)) => Err(Error::MissingCloseParen(Some(pos))),
+            x => x,
         }
     }
 
@@ -298,7 +295,9 @@ impl<'a> LispReader<'a> {
         let mut in_comment = false;
         let valid_char = |chr: &char| {
             if in_comment {
-                if *chr == '\n' { in_comment = false; }
+                if *chr == '\n' {
+                    in_comment = false;
+                }
                 false
             } else if chr.is_ascii_whitespace() {
                 false
@@ -322,7 +321,7 @@ impl<'a> LispReader<'a> {
                 self.stream.back();
                 Ok(self.read_symbol())
             }
-            c => Err(Error::UnexpectedChar(c, self.char_pos()))
+            c => Err(Error::UnexpectedChar(c, self.char_pos())),
         }
     }
 }
@@ -362,7 +361,7 @@ mod test {
         ($expect:expr, $compare:expr) => {
             let mut reader = LispReader::new($compare);
             assert_eq!(LispObj::from($expect), reader.next().unwrap().unwrap())
-        }
+        };
     }
 
     #[test]
@@ -402,8 +401,11 @@ mod test {
         check_reader!("foo", r#""foo""#);
         check_reader!("foo bar", r#""foo bar""#);
         check_reader!("foo\nbar\t\r", r#""foo\nbar\t\r""#);
-        check_reader!("foobarbaz", r#""foo\ bar\
-baz""#);
+        check_reader!(
+            "foobarbaz",
+            r#""foo\ bar\
+baz""#
+        );
     }
 
     #[test]

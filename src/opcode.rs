@@ -61,7 +61,6 @@ pub enum OpCode {
     Unknown,
 }
 
-
 #[derive(PartialEq, Clone)]
 pub struct CodeVec(Vec<u8>);
 
@@ -97,22 +96,20 @@ impl fmt::Debug for CodeVec {
         let mut display: Vec<String> = vec![];
         let mut iter = self.0.iter();
         while let Some(i) = iter.next() {
-            let op = unsafe {OpCode::from_unchecked(*i)};
+            let op = unsafe { OpCode::from_unchecked(*i) };
             display.push(format!("{:?}", op));
             match op {
-                StackRefN | ConstantN | CallN |
-                VarRefN | VarSetN => {
+                StackRefN | ConstantN | CallN | VarRefN | VarSetN => {
                     display.push(format!("{:?}", iter.next()));
                 }
-                StackRefN2 | ConstantN2 | CallN2 |
-                JumpNil | Jump | JumpNilElsePop |
-                VarRefN2 | VarSetN2 => {
+                StackRefN2 | ConstantN2 | CallN2 | JumpNil | Jump | JumpNilElsePop | VarRefN2
+                | VarSetN2 => {
                     display.push(format!("{:?}", iter.next()));
                     display.push(format!("{:?}", iter.next()));
                 }
-                _ => {},
+                _ => {}
             }
         }
         write!(f, "{:?}", display)
-   }
+    }
 }

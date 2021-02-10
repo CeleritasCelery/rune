@@ -7,24 +7,21 @@ enum NumberFold {
 
 impl NumberFold {
     fn acc(
-        cur: Self, next: &Number,
+        cur: Self,
+        next: &Number,
         int_fn: fn(i64, i64) -> i64,
-        float_fn: fn(f64, f64) -> f64
+        float_fn: fn(f64, f64) -> f64,
     ) -> NumberFold {
-        use NumberValue::{Int, Float};
+        use NumberValue::{Float, Int};
         match cur {
-            NumberFold::Float(cur) => {
-                match next.val() {
-                    Float(next) => float_fn(cur, next).into(),
-                    Int(next) => float_fn(cur, next as f64).into(),
-                }
-            }
-            NumberFold::Int(cur) => {
-                match next.val() {
-                    Float(next) => float_fn(cur as f64, next).into(),
-                    Int(next) => int_fn(cur, next).into(),
-                }
-            }
+            NumberFold::Float(cur) => match next.val() {
+                Float(next) => float_fn(cur, next).into(),
+                Int(next) => float_fn(cur, next as f64).into(),
+            },
+            NumberFold::Int(cur) => match next.val() {
+                Float(next) => float_fn(cur as f64, next).into(),
+                Int(next) => int_fn(cur, next).into(),
+            },
         }
     }
 }
@@ -62,9 +59,11 @@ impl From<i64> for NumberFold {
 #[lisp_fn(name = "+")]
 pub fn add(vars: &[Number]) -> Number {
     use std::ops::Add;
-    vars.iter().fold(0.into(), |acc, x| {
-        NumberFold::acc(acc, x, Add::add, Add::add)
-    }).into()
+    vars.iter()
+        .fold(0.into(), |acc, x| {
+            NumberFold::acc(acc, x, Add::add, Add::add)
+        })
+        .into()
 }
 
 #[lisp_fn(name = "-")]
@@ -81,34 +80,41 @@ pub fn sub(number: Option<Number>, numbers: &[Number]) -> Number {
             NumberFold::Float(x) => (-x).into(),
         }
     } else {
-        numbers.iter().fold(num, |acc, x| {
-            NumberFold::acc(acc, x, Sub::sub, Sub::sub)
-        }).into()
+        numbers
+            .iter()
+            .fold(num, |acc, x| NumberFold::acc(acc, x, Sub::sub, Sub::sub))
+            .into()
     }
 }
 
 #[lisp_fn(name = "*")]
 pub fn mul(numbers: &[Number]) -> Number {
     use std::ops::Mul;
-    numbers.iter().fold(1.into(), |acc, x| {
-        NumberFold::acc(acc, x, Mul::mul, Mul::mul)
-    }).into()
+    numbers
+        .iter()
+        .fold(1.into(), |acc, x| {
+            NumberFold::acc(acc, x, Mul::mul, Mul::mul)
+        })
+        .into()
 }
 
 #[lisp_fn(name = "/")]
 pub fn div(number: Number, divisors: &[Number]) -> Number {
     use std::ops::Div;
-    divisors.iter().fold(number.into(), |acc, x| {
-        NumberFold::acc(acc, x, Div::div, Div::div)
-    }).into()
+    divisors
+        .iter()
+        .fold(number.into(), |acc, x| {
+            NumberFold::acc(acc, x, Div::div, Div::div)
+        })
+        .into()
 }
 
 #[lisp_fn(name = "1+")]
 pub fn plus_one(number: Number) -> Number {
     use NumberValue::*;
     match number.val() {
-        Int(x) => (x+1).into(),
-        Float(x) => (x+1.0).into(),
+        Int(x) => (x + 1).into(),
+        Float(x) => (x + 1.0).into(),
     }
 }
 
@@ -116,8 +122,8 @@ pub fn plus_one(number: Number) -> Number {
 pub fn minus_one(number: Number) -> Number {
     use NumberValue::*;
     match number.val() {
-        Int(x) => (x-1).into(),
-        Float(x) => (x-1.0).into(),
+        Int(x) => (x - 1).into(),
+        Float(x) => (x - 1.0).into(),
     }
 }
 
@@ -127,7 +133,7 @@ defsubr!(add, sub, mul, div, plus_one, minus_one);
 mod test {
 
     use super::*;
-    use crate::lisp_object::NumberValue::{Int, Float};
+    use crate::lisp_object::NumberValue::{Float, Int};
 
     #[test]
     #[allow(clippy::float_cmp)]
