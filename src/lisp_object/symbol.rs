@@ -60,7 +60,7 @@ define_unbox!(Symbol);
 
 impl Symbol {
     pub unsafe fn from_raw(ptr: *const InnerSymbol) -> Symbol {
-        Symbol(std::mem::transmute(ptr))
+        Symbol(&*ptr)
     }
 }
 

@@ -176,14 +176,16 @@ impl Exp {
     fn add_const(&mut self, obj: LispObj, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
-        Ok(self.codes.emit_const(idx))
+        self.codes.emit_const(idx);
+        Ok(())
     }
 
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.push(Some(var_ref));
-                Ok(self.codes.emit_stack_ref(x))
+                self.codes.emit_stack_ref(x);
+                Ok(())
             }
             Err(_) => Err(Error::StackSizeOverflow),
         }
@@ -193,7 +195,8 @@ impl Exp {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.pop();
-                Ok(self.codes.emit_stack_set(x))
+                self.codes.emit_stack_set(x);
+                Ok(())
             }
             Err(_) => Err(Error::StackSizeOverflow),
         }
@@ -425,7 +428,7 @@ impl Exp {
 
     fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self> {
         let mut exp = Self{
-            codes: CodeVec::new(),
+            codes: CodeVec::default(),
             constants: ConstVec::new(),
             vars,
         };

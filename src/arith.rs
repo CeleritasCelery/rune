@@ -130,6 +130,7 @@ mod test {
     use crate::lisp_object::NumberValue::{Int, Float};
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_add() {
         match add(&[]).val() {
             Int(x) => assert_eq!(0, x),
@@ -183,6 +184,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_div() {
         match div(12.0.into(), &[]).val() {
             Float(x) => assert_eq!(12.0, x),

@@ -21,7 +21,7 @@ struct IP {
 }
 
 impl IP {
-    fn new(vec: &Vec<u8>) -> Self {
+    fn new(vec: &[u8]) -> Self {
         IP {
             range: vec.as_ptr_range(),
             ip: vec.as_ptr(),
@@ -61,7 +61,7 @@ impl CallFrame {
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
-        self.func.constants.get(i).unwrap().clone()
+        *self.func.constants.get(i).unwrap()
     }
 }
 
@@ -82,7 +82,7 @@ impl LispStack for Vec<LispObj> {
     }
 
     fn push_ref(&mut self, i: usize) {
-        self.push(self.ref_at(i).clone());
+        self.push(*self.ref_at(i));
     }
 
     fn set_ref(&mut self, i: usize) {
@@ -270,7 +270,7 @@ impl Routine {
                 op::Call3 => {self.call(3)?}
                 op::Discard => {self.stack.pop();}
                 op::Duplicate => {
-                    let value = self.stack.last().unwrap().clone();
+                    let value = *self.stack.last().unwrap();
                     self.stack.push(value);
                 }
                 op::Jump => {
@@ -285,7 +285,7 @@ impl Routine {
                     }
                 }
                 op::JumpNilElsePop => {
-                    let cond = self.stack.get(self.stack.len() - 1).unwrap();
+                    let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
                         self.frame.ip.jump(offset as isize);
@@ -294,7 +294,7 @@ impl Routine {
                     }
                 }
                 op::Ret => {
-                    if self.call_frames.len() == 0 {
+                    if self.call_frames.is_empty() {
                         return Ok(self.stack.pop().unwrap());
                     } else {
                         let var = self.stack.pop().unwrap();

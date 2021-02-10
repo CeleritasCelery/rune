@@ -47,7 +47,7 @@ mod test {
     #[test]
     fn cons() {
         assert_eq!(16, size_of::<Cons>());
-        let cons = cons!("start", cons!(7, cons!(5, 3.3)));
+        let cons = cons!("start", cons!(7, cons!(5, 9)));
 
         let mut x = LispObj::from(cons);
         assert!(matches!(x.val(), Value::Cons(_)));
@@ -69,7 +69,7 @@ mod test {
             _ => unreachable!(),
         };
         assert_eq!(5, cons3.car);
-        assert_eq!(3.3, cons3.cdr);
+        assert_eq!(9, cons3.cdr);
 
         assert_eq!(cons!(5, "foo"), cons!(5, "foo"));
         assert_ne!(cons!(5, "foo"), cons!(5, "bar"));

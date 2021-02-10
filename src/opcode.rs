@@ -65,9 +65,10 @@ pub enum OpCode {
 #[derive(PartialEq, Clone)]
 pub struct CodeVec(Vec<u8>);
 
-impl CodeVec {
-    pub fn new() -> Self {CodeVec(Vec::new())}
-
+impl Default for CodeVec {
+    fn default() -> Self {
+        CodeVec(Vec::new())
+    }
 }
 
 impl From<Vec<u8>> for CodeVec {

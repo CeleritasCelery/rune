@@ -114,7 +114,7 @@ fn intern_symbol(symbol: &str) -> LispObj {
             true
         }
     };
-    if symbol.contains("\\") {
+    if symbol.contains('\\') {
         let escaped_slice: String = symbol.chars().filter(is_not_escape).collect();
         intern(escaped_slice.as_str()).into()
     } else {
@@ -165,13 +165,10 @@ fn unescape_string(string: &str) -> LispObj {
 }
 
 fn symbol_char(chr: char) -> bool {
-    match chr {
-        '\x00'..=' ' |
-        '(' | ')' | '[' | ']' |
-        '#' | ',' | '`' | ';' |
-        '"' | '\'' => false,
-        _ => true,
-    }
+    !matches!(chr, '\x00'..=' ' |
+              '(' | ')' | '[' | ']' |
+              '#' | ',' | '`' | ';' |
+              '"' | '\'')
 }
 
 pub struct LispReader<'a> {
@@ -438,7 +435,7 @@ baz""#);
     fn error() {
         use Error::*;
         assert!((LispReader::new("").next().is_none()));
-        let null = StreamStart::new(0 as *const u8);
+        let null = StreamStart::new(std::ptr::null());
         assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
         assert_error(" \"foo", 1, MissingStringDel(null));
         assert_error("(1 2 . 3 4)", 9, UnexpectedChar('4', null));

@@ -59,8 +59,8 @@ impl cmp::PartialEq<LispObj> for i64 {
 impl cmp::PartialEq<LispObj> for bool {
     fn eq(&self, rhs: &LispObj) -> bool {
         match rhs.val() {
-            Value::Nil => *self == false,
-            Value::True => *self == true,
+            Value::Nil => !*self,
+            Value::True => *self,
             _ => false,
         }
     }
@@ -240,6 +240,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn float() {
         let x = LispObj::from(1.3);
         assert!(matches!(x.val(), Value::Float(_)));
