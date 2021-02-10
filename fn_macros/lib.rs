@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
 use darling::FromMeta;
 use quote::{quote, format_ident};
-use syn;
 use syn::{parse_macro_input, Error};
 
 #[proc_macro_attribute]
@@ -37,9 +36,9 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let err = if returns_result {quote! {?}} else { quote! {}};
     let subr_call = quote! {Ok(#subr(#(#arg_conversion),*)#err.into())};
 
-    let tokens = quote!{
+    quote!{
         #[allow(non_upper_case_globals)]
-        const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn{
+        const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn {
             name: #name,
             subr: #func_name,
             args: crate::lisp_object::FnArgs {
@@ -52,14 +51,16 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         };
 
         #[allow(non_snake_case)]
-        pub fn #func_name(args: &[crate::lisp_object::LispObj], vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol, crate::lisp_object::LispObj>) ->
-            crate::error::Result<crate::lisp_object::LispObj> {
+        pub fn #func_name(
+            args: &[crate::lisp_object::LispObj],
+            vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol,
+            crate::lisp_object::LispObj>
+        ) -> crate::error::Result<crate::lisp_object::LispObj> {
             #subr_call
         }
 
         #body
-    };
-    tokens.into()
+    }
 }
 
 fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
@@ -115,7 +116,7 @@ fn convert_type(ty: &syn::Type) -> bool {
     }
 }
 
-fn get_call_signature(args: &Vec<syn::Type>, spec_min: Option<u16>) -> (u16, u16, bool) {
+fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, bool) {
     let min = match spec_min {
         Some(x) => x as usize,
         None => 0,
@@ -230,23 +231,23 @@ mod test {
 
     #[test]
     fn sig() {
-        test_sig(quote!{fn foo() -> u8 {}}.into(), None, (0, 0, false));
-        test_sig(quote!{fn foo(vars: &[u8]) -> u8 {0}}.into(), None, (0,0,true));
-        test_sig(quote!{fn foo(var: u8) -> u8 {0}}.into(), None, (1,0,false));
-        test_sig(quote!{fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into(), None, (2, 0, true));
-        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}}.into(), None, (1,1,true));
-        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}}.into(), Some(2), (2,1,false));
+        test_sig(quote!{fn foo() -> u8 {}}, None, (0, 0, false));
+        test_sig(quote!{fn foo(vars: &[u8]) -> u8 {0}}, None, (0,0,true));
+        test_sig(quote!{fn foo(var: u8) -> u8 {0}}, None, (1,0,false));
+        test_sig(quote!{fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}, None, (2, 0, true));
+        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}}, None, (1,1,true));
+        test_sig(quote!{fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) -> u8 {0}}, Some(2), (2,1,false));
     }
 
     #[test]
     fn test_expand() {
-        let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}.into();
+        let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
         let result = expand(function, spec);
         println!("{}", result.to_string());
 
-        let stream = quote! {pub fn foo(var0: u8, vars: &mut HashMap<Symbol, LispObj>) -> u8 {0}}.into();
+        let stream = quote! {pub fn foo(var0: u8, vars: &mut HashMap<Symbol, LispObj>) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec{name: Some("bar".into()), required: Some(1), intspec: None};
         let result = expand(function, spec);
