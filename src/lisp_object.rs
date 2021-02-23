@@ -130,8 +130,7 @@ impl<'a> LispObj {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
                 Tag::Float => Value::Float(*self.get_ptr()),
                 Tag::Void => Value::Void,
-                Tag::LongStr => Value::String(&*self.get_ptr()),
-                Tag::ShortStr => Value::String(&*self.get_ptr()),
+                Tag::LongStr | Tag::ShortStr => Value::String(&*self.get_ptr()),
                 Tag::LispFn => Value::LispFn(&*self.get_ptr()),
                 Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
                 Tag::Nil => Value::Nil,
@@ -151,7 +150,7 @@ impl<'a> LispObj {
         Self { bits }
     }
 
-    unsafe fn get_ptr<T>(&self) -> *const T {
+    unsafe fn get_ptr<T>(self) -> *const T {
         (self.bits >> TAG_SIZE) as *const T
     }
 
@@ -170,11 +169,11 @@ impl<'a> LispObj {
         LispObj { bits: tag as i64 }
     }
 
-    fn tag_eq(&self, tag: Tag) -> bool {
+    fn tag_eq(self, tag: Tag) -> bool {
         unsafe { self.tag == tag }
     }
 
-    fn tag_masked(&self, tag: Tag, mask: u16) -> bool {
+    fn tag_masked(self, tag: Tag, mask: u16) -> bool {
         unsafe { (self.tag as u16) & mask == (tag as u16) }
     }
 

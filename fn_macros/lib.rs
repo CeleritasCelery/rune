@@ -51,7 +51,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
                 required: #required,
                 optional: #optional,
                 rest: #rest,
-                max_stack_usage: 0,
+                max_stack_usage: 0_u16,
                 advice: false,
             }
         };

@@ -1,3 +1,8 @@
+#![warn(
+    clippy::trivially_copy_pass_by_ref,
+    clippy::explicit_iter_loop,
+    clippy::inefficient_to_string
+)]
 #[macro_use]
 mod macros;
 #[macro_use]

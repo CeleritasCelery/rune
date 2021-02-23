@@ -327,7 +327,7 @@ impl Exp {
         self.add_const(cons.car, None)?;
         let prev_len = self.vars.len();
         let list = into_arg_list(cons.cdr)?;
-        for form in list.iter() {
+        for form in &list {
             self.compile_form(*form)?;
         }
         self.codes.emit_call(list.len() as u16);
@@ -383,7 +383,7 @@ impl Exp {
         match iter.next() {
             None => return self.add_const(LispFn::default().into(), None),
             Some(bindings) => {
-                for binding in into_arg_list(*bindings)?.iter() {
+                for binding in &into_arg_list(*bindings)? {
                     match binding.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
                         x => return Err(Error::Type(Type::Symbol, x.get_type())),

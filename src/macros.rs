@@ -5,7 +5,7 @@ macro_rules! vec_into {
 
 macro_rules! count {
     (@replace_expr $_t:tt $sub:expr) => {$sub};
-    ($($x:expr)+) => {0usize $(+ count!(@replace_expr $x 1usize))*};
+    ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};
 }
 
 #[macro_export]

@@ -20,13 +20,12 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
         match self {
-            MissingCloseParen(_) => write!(f, "Missing close paren"),
-            MissingStringDel(_) => write!(f, "Missing closing string quote"),
-            ExtraCloseParen(_) => write!(f, "Extra Closing Paren"),
-            UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
-            EndOfStream => write!(f, "End of Stream"),
+            Error::MissingCloseParen(_) => write!(f, "Missing close paren"),
+            Error::MissingStringDel(_) => write!(f, "Missing closing string quote"),
+            Error::ExtraCloseParen(_) => write!(f, "Extra Closing Paren"),
+            Error::UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
+            Error::EndOfStream => write!(f, "End of Stream"),
         }
     }
 }
@@ -51,7 +50,7 @@ impl StreamStart {
         StreamStart(ptr)
     }
 
-    fn get(&self) -> *const u8 {
+    fn get(self) -> *const u8 {
         self.0
     }
 }
@@ -149,8 +148,7 @@ fn unescape_string(string: &str) -> LispObj {
                 'n' => Some('\n'),
                 't' => Some('\t'),
                 'r' => Some('\r'),
-                '\n' => None,
-                ' ' => None,
+                '\n' | ' ' => None,
                 _ => Some(c),
             }
         } else if c == '\\' {
@@ -199,9 +197,9 @@ impl<'a> LispReader<'a> {
                 message,
                 self.get_error_pos(x.expect("read should determine open paren position")),
             ),
-            Error::ExtraCloseParen(x) => LispReaderErr::new(message, self.get_error_pos(x)),
-            Error::MissingStringDel(x) => LispReaderErr::new(message, self.get_error_pos(x)),
-            Error::UnexpectedChar(_, x) => LispReaderErr::new(message, self.get_error_pos(x)),
+            Error::ExtraCloseParen(x)
+            | Error::MissingStringDel(x)
+            | Error::UnexpectedChar(_, x) => LispReaderErr::new(message, self.get_error_pos(x)),
             Error::EndOfStream => {
                 panic!("EndOfStream Should not be converted to a LispReaderErr");
             }
