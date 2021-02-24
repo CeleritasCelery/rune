@@ -21,6 +21,7 @@ struct IP {
 }
 
 impl IP {
+    #[allow(clippy::missing_const_for_fn)]
     fn new(vec: &[u8]) -> Self {
         IP {
             range: vec.as_ptr_range(),
@@ -316,7 +317,7 @@ impl Routine {
     }
 }
 
-pub fn run() {}
+pub const fn run() {}
 
 #[cfg(test)]
 mod test {

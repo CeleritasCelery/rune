@@ -87,7 +87,7 @@ impl<'a> From<&'a LispObj> for Value<'a> {
 }
 
 impl<'a> Value<'a> {
-    pub fn get_type(&self) -> crate::error::Type {
+    pub const fn get_type(&self) -> crate::error::Type {
         use crate::error::Type::*;
         match self {
             Value::Symbol(_) => Symbol,

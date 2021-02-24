@@ -9,8 +9,8 @@ pub struct Cons {
 define_unbox_ref!(Cons);
 
 impl Cons {
-    pub fn new(car: LispObj, cdr: LispObj) -> Cons {
-        Cons { car, cdr }
+    pub const fn new(car: LispObj, cdr: LispObj) -> Self {
+        Self { car, cdr }
     }
 }
 

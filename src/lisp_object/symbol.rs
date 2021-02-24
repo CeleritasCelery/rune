@@ -14,7 +14,7 @@ pub struct InnerSymbol {
 struct FnCell(AtomicI64);
 
 impl FnCell {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self(AtomicI64::new(0))
     }
 
@@ -39,7 +39,7 @@ impl cmp::PartialEq for InnerSymbol {
 }
 
 impl InnerSymbol {
-    pub fn new(name: String) -> Self {
+    pub const fn new(name: String) -> Self {
         InnerSymbol {
             name,
             func: FnCell::new(),
@@ -67,6 +67,7 @@ pub struct Symbol(&'static InnerSymbol);
 define_unbox!(Symbol);
 
 impl Symbol {
+    #[allow(clippy::missing_const_for_fn)]
     pub unsafe fn from_raw(ptr: *const InnerSymbol) -> Symbol {
         Symbol(&*ptr)
     }

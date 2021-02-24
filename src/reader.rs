@@ -37,7 +37,7 @@ pub struct LispReaderErr {
 }
 
 impl LispReaderErr {
-    fn new(message: String, pos: usize) -> Self {
+    const fn new(message: String, pos: usize) -> Self {
         Self { message, pos }
     }
 }
@@ -46,11 +46,11 @@ impl LispReaderErr {
 pub struct StreamStart(*const u8);
 
 impl StreamStart {
-    fn new(ptr: *const u8) -> Self {
+    const fn new(ptr: *const u8) -> Self {
         StreamStart(ptr)
     }
 
-    fn get(self) -> *const u8 {
+    const fn get(self) -> *const u8 {
         self.0
     }
 }
@@ -165,7 +165,7 @@ fn unescape_string(string: &str) -> LispObj {
         .into()
 }
 
-fn symbol_char(chr: char) -> bool {
+const fn symbol_char(chr: char) -> bool {
     !matches!(
         chr,
         '\x00'..=' ' | '(' | ')' | '[' | ']' | '#' | ',' | '`' | ';' | '"' | '\''

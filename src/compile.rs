@@ -33,10 +33,11 @@ impl Default for LispFn {
 struct ConstVec(Vec<LispObj>);
 
 impl ConstVec {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         ConstVec(Vec::new())
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     pub fn into_vec(self) -> Vec<LispObj> {
         self.0
     }
@@ -450,8 +451,6 @@ impl Exp {
         Self::compile_func_body(&[obj], vec![])
     }
 }
-
-pub fn run() {}
 
 #[cfg(test)]
 mod test {
