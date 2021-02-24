@@ -131,7 +131,7 @@ mod test {
     }
 
     fn inner(arg0: Option<Int>, arg1: &Cons) -> Int {
-        let x: Int = arg1.car.try_into().unwrap();
+        let x: Int = arg1.car().try_into().unwrap();
         arg0.unwrap() + x
     }
 

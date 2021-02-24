@@ -3,14 +3,22 @@ use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Cons {
-    pub car: LispObj,
-    pub cdr: LispObj,
+    car: LispObj,
+    cdr: LispObj,
 }
 define_unbox_ref!(Cons);
 
 impl Cons {
     pub const fn new(car: LispObj, cdr: LispObj) -> Self {
         Self { car, cdr }
+    }
+
+    pub const fn car(&self) -> LispObj {
+        self.car
+    }
+
+    pub const fn cdr(&self) -> LispObj {
+        self.cdr
     }
 }
 

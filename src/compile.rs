@@ -142,16 +142,18 @@ impl CodeVec {
     }
 }
 
+/// converts cons cells into a non-empty vector or errors
 fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
-        Value::Cons(mut cons) => {
-            let mut vec: Vec<LispObj> = vec![cons.car];
+        Value::Cons(cons) => {
+            let mut cons = cons.clone();
+            let mut vec: Vec<LispObj> = vec![cons.car()];
 
-            while let Value::Cons(next) = cons.cdr.val() {
-                vec.push(next.car);
-                cons = next;
+            while let Value::Cons(next) = cons.cdr().val() {
+                vec.push(next.car());
+                cons = next.clone();
             }
-            match cons.cdr.val() {
+            match cons.cdr().val() {
                 Value::Nil => Ok(vec),
                 x => Err(Error::Type(Type::List, x.get_type())),
             }
@@ -160,6 +162,7 @@ fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
     }
 }
 
+/// Given a cons cell or nil, convert to a vector
 fn into_arg_list(obj: LispObj) -> Result<Vec<LispObj>> {
     match obj.val() {
         Value::Nil => Ok(vec![]),
@@ -263,8 +266,8 @@ impl Exp {
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
-        let var = cons.car.try_into()?;
-        let list = into_arg_list(cons.cdr)?;
+        let var = cons.car().try_into()?;
+        let list = into_arg_list(cons.cdr())?;
         let mut iter = list.iter();
         match iter.next() {
             Some(v) => self.add_const(*v, Some(var))?,
@@ -325,9 +328,9 @@ impl Exp {
     }
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
-        self.add_const(cons.car, None)?;
+        self.add_const(cons.car(), None)?;
         let prev_len = self.vars.len();
-        let list = into_arg_list(cons.cdr)?;
+        let list = into_arg_list(cons.cdr())?;
         for form in &list {
             self.compile_form(*form)?;
         }
@@ -404,14 +407,14 @@ impl Exp {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
-        let sym: Symbol = cons.car.try_into()?;
+        let sym: Symbol = cons.car().try_into()?;
         match sym.get_name() {
-            "lambda" => self.compile_lambda(cons.cdr),
-            "quote" => self.quote(cons.cdr),
-            "progn" => self.progn(cons.cdr),
-            "setq" => self.setq(cons.cdr),
-            "let" => self.let_form(cons.cdr),
-            "if" => self.compile_conditional(cons.cdr),
+            "lambda" => self.compile_lambda(cons.cdr()),
+            "quote" => self.quote(cons.cdr()),
+            "progn" => self.progn(cons.cdr()),
+            "setq" => self.setq(cons.cdr()),
+            "let" => self.let_form(cons.cdr()),
+            "if" => self.compile_conditional(cons.cdr()),
             _ => self.compile_funcall(cons),
         }
     }
