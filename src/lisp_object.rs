@@ -2,7 +2,7 @@
 
 #[macro_use]
 pub mod cons;
-pub use cons::Cons;
+pub use cons::{Cons, ConsX};
 pub mod sub_type;
 pub use sub_type::*;
 pub mod func;
@@ -13,8 +13,10 @@ pub mod convert;
 pub use convert::*;
 
 use crate::gc::Gc;
+use crate::arena::Arena;
 use std::cmp;
 use std::fmt;
+use std::marker::PhantomData;
 use std::mem::size_of;
 
 #[derive(Copy, Clone)]
@@ -23,9 +25,21 @@ pub union LispObj {
     bits: i64,
 }
 
+#[derive(Clone)]
+pub struct Object<'a> {
+    data: LispObj,
+    marker: PhantomData<&'a ()>,
+}
+
 impl cmp::PartialEq for LispObj {
     fn eq(&self, rhs: &LispObj) -> bool {
         self.val() == rhs.val()
+    }
+}
+
+impl<'a> cmp::PartialEq for Object<'a> {
+    fn eq(&self, rhs: &Object) -> bool {
+        self == rhs
     }
 }
 
@@ -77,7 +91,6 @@ pub enum Value<'a> {
     Float(f64),
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),
-    Void,
 }
 
 impl<'a> From<&'a LispObj> for Value<'a> {
@@ -92,7 +105,6 @@ impl<'a> Value<'a> {
         match self {
             Value::Symbol(_) => Symbol,
             Value::Float(_) => Float,
-            Value::Void => Void,
             Value::String(_) => String,
             Value::Nil => Nil,
             Value::True => True,
@@ -118,10 +130,69 @@ enum Tag {
     ShortStr = 8,
     LispFn = 16,
     SubrFn,
-    Void,
 }
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
+
+pub trait IntoObject<'obj> {
+    fn into_object(self, alloc: &'obj Arena) -> (Object<'obj>, bool);
+}
+
+
+impl<'a> Object<'a> {
+    unsafe fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
+        let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
+        Object {
+            data: LispObj { bits },
+            marker: PhantomData,
+        }
+    }
+
+    const fn from_tag(tag: Tag) -> (Self, bool) {
+        // cast to i64 to zero the high bits
+        let obj = Object {
+            data: LispObj { bits: tag as i64 },
+            marker: PhantomData,
+        };
+        (obj, false)
+    }
+
+    fn from_type<T: IntoObject<'a>>(arena: &Arena, obj: T, tag: Tag) -> (Self, bool) {
+        let ptr = arena.alloc(obj);
+        unsafe { (Object::from_ptr(ptr, tag), true) }
+    }
+
+    pub fn val(&self) -> Value<'a> {
+        let data = self.data;
+        unsafe {
+            match data.tag {
+                Tag::Symbol => Value::Symbol(Symbol::from_raw(data.get_ptr())),
+                Tag::Float => Value::Float(*data.get_ptr()),
+                Tag::LongStr | Tag::ShortStr => Value::String(&*data.get_ptr()),
+                Tag::LispFn => Value::LispFn(&*data.get_ptr()),
+                Tag::SubrFn => Value::SubrFn(&*data.get_ptr()),
+                Tag::Nil => Value::Nil,
+                Tag::True => Value::True,
+                Tag::Cons => Value::Cons(&*data.get_ptr()),
+                Tag::Int => Value::Int(data.bits >> TAG_SIZE),
+                Tag::Marker => todo!(),
+            }
+        }
+    }
+
+    pub const fn nil() -> Self {
+        Object::from_tag(Tag::Nil).0
+    }
+
+    pub const fn t() -> Self {
+        Object::from_tag(Tag::True).0
+    }
+
+    pub fn inner(self) -> LispObj {
+        self.data
+    }
+
+}
 
 impl<'a> LispObj {
     pub fn val(&'a self) -> Value<'a> {
@@ -129,7 +200,6 @@ impl<'a> LispObj {
             match self.tag {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
                 Tag::Float => Value::Float(*self.get_ptr()),
-                Tag::Void => Value::Void,
                 Tag::LongStr | Tag::ShortStr => Value::String(&*self.get_ptr()),
                 Tag::LispFn => Value::LispFn(&*self.get_ptr()),
                 Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
@@ -177,10 +247,6 @@ impl<'a> LispObj {
         unsafe { (self.tag as u16) & mask == (tag as u16) }
     }
 
-    pub const fn void() -> Self {
-        LispObj::from_tag(Tag::Void)
-    }
-
     pub const fn nil() -> Self {
         LispObj::from_tag(Tag::Nil)
     }
@@ -195,6 +261,30 @@ impl<'a> LispObj {
             _ => None,
         }
     }
+
+    pub unsafe fn dealloc(mut self) {
+        match self.tag {
+            Tag::Symbol => { },
+            Tag::Float => {
+                let x: *mut f64 = self.get_mut_ptr();
+                Box::from_raw(x);
+            },
+            Tag::LongStr | Tag::ShortStr => {
+                let x: *mut String = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::LispFn => {},
+            Tag::SubrFn => {},
+            Tag::Nil => {},
+            Tag::True => {},
+            Tag::Cons => {
+                let x: *mut Cons = self.get_mut_ptr();
+                Box::from_raw(x);
+            },
+            Tag::Int => {},
+            Tag::Marker => todo!(),
+        }
+    }
 }
 
 impl fmt::Display for LispObj {
@@ -206,7 +296,6 @@ impl fmt::Display for LispObj {
             Value::Symbol(x) => write!(f, "{}", x),
             Value::LispFn(x) => write!(f, "(lambda {:?})", x),
             Value::SubrFn(x) => write!(f, "{:?}", x),
-            Value::Void => write!(f, "Void"),
             Value::True => write!(f, "t"),
             Value::Nil => write!(f, "nil"),
             Value::Float(x) => {
@@ -220,6 +309,13 @@ impl fmt::Display for LispObj {
     }
 }
 
+impl<'a> fmt::Display for Object<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.data.fmt(f)
+    }
+}
+
+
 impl fmt::Debug for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
@@ -229,84 +325,69 @@ impl fmt::Debug for LispObj {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::arena::Arena;
     use crate::intern::intern;
 
     #[test]
     fn sizes() {
-        assert_eq!(8, size_of::<LispObj>());
+        assert_eq!(8, size_of::<Object>());
         assert_eq!(16, size_of::<Value>());
         assert_eq!(1, size_of::<Tag>());
     }
 
     #[test]
-    #[allow(clippy::float_cmp)]
+    fn integer() {
+        let arena = Arena::new();
+        let int = arena.insert(3);
+        assert!(matches!(int.val(), Value::Int(_)));
+        assert_eq!(int.val(), Value::Int(3));
+    }
+
+    #[test]
     fn float() {
-        let x = LispObj::from(1.3);
+        let arena = Arena::new();
+        let x = arena.insert(1.3);
         assert!(matches!(x.val(), Value::Float(_)));
-        format!("{}", x);
-        assert_eq!(1.3, x);
+        assert_eq!(x.val(), Value::Float(1.3));
     }
 
     #[test]
     fn string() {
-        let x = LispObj::from("foo");
+        let arena = Arena::new();
+        let x = arena.insert("foo");
         assert!(matches!(x.val(), Value::String(_)));
-        format!("{}", x);
-        match x.val() {
-            Value::String(x) => assert_eq!("foo", x),
-            _ => unreachable!(),
-        };
-        let string = LispObj::from("foo".to_owned());
-        assert_eq!(string, LispObj::from("foo"));
+        assert_eq!(x.val(), Value::String(&"foo".to_owned()));
+
+        let x = arena.insert("bar".to_owned());
+        assert!(matches!(x.val(), Value::String(_)));
+        assert_eq!(x.val(), Value::String(&"bar".to_owned()));
     }
 
     #[test]
     fn other() {
-        // Void
-        let v = LispObj::void();
-        assert_eq!(v.val(), Value::Void);
-        // Bool
-        let t = LispObj::t();
+        let t = Object::t();
         assert_eq!(t.val(), Value::True);
-        let n = LispObj::nil();
+        let n = Object::nil();
         assert_eq!(n.val(), Value::Nil);
-        let bool_true = LispObj::from(true);
+
+        let arena = Arena::new();
+        let bool_true = arena.insert(true);
         assert_eq!(bool_true.val(), Value::True);
-        let bool_false = LispObj::from(false);
+        let bool_false = arena.insert(false);
         assert_eq!(bool_false.val(), Value::Nil);
-        assert_eq!(bool_false, LispObj::from(false));
+
         // Option
-        let opt = LispObj::from(Some(1));
-        assert_eq!(opt, 1.into());
-        let none = LispObj::from(None::<LispObj>);
-        assert_eq!(none, LispObj::nil());
+        let opt = arena.insert(Some(3));
+        assert_eq!(opt.val(), Value::Int(3));
+        let none = arena.insert(None::<bool>);
+        assert_eq!(none.val(), Value::Nil);
     }
 
     #[test]
     fn symbol() {
-        let x = LispObj::from(intern("foo"));
+        let arena = Arena::new();
+        let x = arena.insert(intern("foo"));
         assert!(matches!(x.val(), Value::Symbol(_)));
-        match x.val() {
-            Value::Symbol(y) => assert_eq!("foo", y.get_name()),
-            _ => unreachable!(),
-        }
-    }
-
-    #[test]
-    fn lisp_type() {
-        assert!(matches!(LispObj::from(1).val(), Value::Int(_)));
-        assert!(matches!(LispObj::from(1.5).val(), Value::Float(_)));
-        assert!(matches!(LispObj::from("foo").val(), Value::String(_)));
-        assert!(matches!(
-            LispObj::from(intern("foo")).val(),
-            Value::Symbol(_)
-        ));
-        assert!(matches!(LispObj::from(cons!(1, 2)).val(), Value::Cons(_)));
-        assert!(matches!(LispObj::from(None::<LispObj>).val(), Value::Nil));
-        assert!(matches!(LispObj::from(false).val(), Value::Nil));
-        assert!(matches!(LispObj::nil().val(), Value::Nil));
-        assert!(matches!(LispObj::from(true).val(), Value::True));
-        assert!(matches!(LispObj::t().val(), Value::True));
-        assert!(matches!(LispObj::void().val(), Value::Void));
+        assert_eq!(x.val(), Value::Symbol(intern("foo")));
     }
 }

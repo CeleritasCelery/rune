@@ -1,4 +1,5 @@
-use crate::lisp_object::{Function, LispObj, Tag, TAG_SIZE};
+use crate::lisp_object::{Function, LispObj, Tag, TAG_SIZE, IntoObject, Object};
+use crate::arena::Arena;
 use std::cmp;
 use std::fmt;
 use std::mem;
@@ -34,7 +35,7 @@ impl FnCell {
 
 impl cmp::PartialEq for InnerSymbol {
     fn eq(&self, other: &Self) -> bool {
-        (&*self as *const InnerSymbol) == (&*other as *const InnerSymbol)
+        std::ptr::eq(&*self, &*other)
     }
 }
 
@@ -101,9 +102,18 @@ impl From<Symbol> for LispObj {
     }
 }
 
+impl<'obj> IntoObject<'obj> for Symbol {
+    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
+        let ptr = self.0 as *const _;
+        unsafe {
+            (Object::from_ptr(ptr as *mut u8, Tag::Symbol), false)
+        }
+    }
+}
+
 impl std::cmp::PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
-        self.0 as *const _ == other.0 as *const _
+        std::ptr::eq(&*self.0, &*other.0)
     }
 }
 

@@ -324,9 +324,11 @@ mod test {
     use super::*;
     use crate::compile::Exp;
     use crate::reader::LispReader;
+    use crate::arena::Arena;
 
     fn test_eval(sexp: &str, expect: LispObj) {
-        let obj = LispReader::new(sexp).next().unwrap().unwrap();
+        let arena = Arena::new();
+        let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new(Gc::new(func));
         let val = routine.execute();
@@ -372,7 +374,8 @@ mod test {
     }
 
     fn test_eval_error(sexp: &str, error: Error) {
-        let obj = LispReader::new(sexp).next().unwrap().unwrap();
+        let arena = Arena::new();
+        let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new(Gc::new(func));
         let val = routine.execute();

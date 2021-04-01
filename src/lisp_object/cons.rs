@@ -1,4 +1,5 @@
-use crate::lisp_object::{LispObj, Tag};
+use crate::lisp_object::{LispObj, Object, IntoObject, Tag};
+use crate::arena::Arena;
 use std::fmt;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -7,6 +8,26 @@ pub struct Cons {
     cdr: LispObj,
 }
 define_unbox_ref!(Cons);
+
+#[derive(PartialEq, Clone)]
+pub struct ConsX<'a> {
+    car: Object<'a>,
+    cdr: Object<'a>,
+}
+
+impl<'a> ConsX<'a> {
+    pub const fn new(car: Object<'a>, cdr: Object<'a>) -> Self {
+        Self { car, cdr }
+    }
+
+    // pub const fn car(&self) -> Object {
+    //     self.car
+    // }
+
+    // pub const fn cdr(&self) -> Object {
+    //     self.cdr
+    // }
+}
 
 impl Cons {
     pub const fn new(car: LispObj, cdr: LispObj) -> Self {
@@ -34,6 +55,18 @@ impl From<Cons> for LispObj {
     }
 }
 
+impl<'obj> IntoObject<'obj> for Cons {
+    fn into_object(self, alloc: &Arena) -> (Object, bool) {
+        Object::from_type(alloc, self, Tag::Cons)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for ConsX<'obj> {
+    fn into_object(self, alloc: &'obj Arena) -> (Object, bool) {
+        Object::from_type(alloc, self, Tag::Cons)
+    }
+}
+
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr) => {
@@ -50,6 +83,22 @@ macro_rules! list {
     ($x:expr, $($y:expr),+ $(,)?) => (cons!($x, list!($($y),+)));
 }
 
+#[macro_export]
+macro_rules! cons_x {
+    ($car:expr, $cdr:expr; $alloc:expr) => {
+        crate::lisp_object::ConsX::new($alloc.insert($car), $alloc.insert($cdr))
+    };
+    ($car:expr; $alloc:expr) => {
+        crate::lisp_object::ConsX::new($alloc.insert($car), crate::lisp_object::Object::nil())
+    };
+}
+
+#[macro_export]
+macro_rules! list_x {
+    ($x:expr; $alloc:expr) => (cons_x!($x; $alloc));
+    ($x:expr, $($y:expr),+ $(,)? ; $alloc:expr) => (cons_x!($x, list_x!($($y),+ ; $alloc) ; $alloc));
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -62,7 +111,6 @@ mod test {
 
         let mut x = LispObj::from(cons);
         assert!(matches!(x.val(), Value::Cons(_)));
-        format!("{}", x);
 
         let cons1 = x.as_mut_cons().unwrap();
         assert_eq!("start", cons1.car);
@@ -86,5 +134,38 @@ mod test {
         assert_ne!(cons!(5, "foo"), cons!(5, "bar"));
         assert_eq!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "foo"]);
         assert_ne!(list![5, 1, 1.5, "foo"], list![5, 1, 1.5, "bar"]);
+    }
+
+    #[test]
+    fn arena_cons() {
+        let arena = Arena::new();
+        let x = Cons::new(5.into(), 4.into());
+        let y = Cons::new("foo".into(), 1.5.into());
+        let x_obj = arena.insert(x);
+        let y_obj = arena.insert(y);
+
+        if let Value::Cons(cons) = x_obj.val() {
+            assert_eq!(cons!(5, 4), *cons);
+        } else {
+            panic!("not a cons cell");
+        }
+
+        if let Value::Cons(cons) = y_obj.val() {
+            assert_eq!(cons!("foo", 1.5), *cons);
+        } else {
+            panic!("not a cons cell");
+        }
+
+        let long = Arena::new();
+        let x = long.insert(5);
+        {
+            let short = Arena::new();
+            let y = short.insert(1.3);
+
+            let cons = ConsX::new(x, y);
+        }
+
+        let cons = cons_x!(1, "foo"; long);
+        let list = list_x!(1, 5, 1.5, "bar"; long);
     }
 }

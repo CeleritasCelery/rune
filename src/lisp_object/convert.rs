@@ -3,6 +3,7 @@ use crate::lisp_object::*;
 use std::convert::TryFrom;
 use std::mem::transmute;
 
+
 impl TryFrom<LispObj> for Function {
     type Error = Error;
     fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
@@ -78,12 +79,28 @@ impl From<Int> for LispObj {
     }
 }
 
+impl<'obj> IntoObject<'obj> for i64 {
+    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
+        let obj = Object {
+            data: LispObj { bits: self << TAG_SIZE },
+            marker: std::marker::PhantomData,
+        };
+        (obj, false)
+    }
+}
+
 type Float = f64;
 define_unbox!(Float);
 
-impl From<Float> for LispObj {
-    fn from(f: Float) -> Self {
+impl From<f64> for LispObj {
+    fn from(f: f64) -> Self {
         LispObj::from_tagged_ptr(f, Tag::Float)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for f64 {
+    fn into_object(self, alloc: &Arena) -> (Object, bool) {
+        Object::from_type(alloc, self, Tag::Float)
     }
 }
 
@@ -93,9 +110,21 @@ impl From<bool> for LispObj {
     }
 }
 
+impl<'obj> IntoObject<'obj> for bool {
+    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
+        Object::from_tag(if self { Tag::True } else { Tag::Nil })
+    }
+}
+
 impl From<&str> for LispObj {
     fn from(s: &str) -> Self {
         LispObj::from_tagged_ptr(s.to_owned(), Tag::LongStr)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for &str {
+    fn into_object(self, alloc: &Arena) -> (Object, bool) {
+        Object::from_type(alloc, self.to_owned(), Tag::LongStr)
     }
 }
 
@@ -103,6 +132,18 @@ define_unbox_ref!(String);
 impl From<String> for LispObj {
     fn from(s: String) -> Self {
         LispObj::from_tagged_ptr(s, Tag::LongStr)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for String {
+    fn into_object(self, alloc: &Arena) -> (Object, bool) {
+        Object::from_type(alloc, self, Tag::LongStr)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for Object<'obj> {
+    fn into_object(self, _arena: &'obj Arena) -> (Object<'obj>, bool) {
+        (self, false)
     }
 }
 
@@ -114,6 +155,15 @@ where
         match t {
             Some(x) => x.into(),
             None => LispObj::nil(),
+        }
+    }
+}
+
+impl<'obj, T: IntoObject<'obj>> IntoObject<'obj> for Option<T> {
+    fn into_object(self, alloc: &'obj Arena) -> (Object, bool) {
+        match self {
+            Some(x) => x.into_object(alloc),
+            None => (Object::nil(), false),
         }
     }
 }

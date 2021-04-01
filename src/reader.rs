@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::intern::intern;
-use crate::lisp_object::LispObj;
+use crate::lisp_object::{LispObj, Object, Symbol};
+use crate::arena::Arena;
 use std::fmt;
 use std::str;
 
@@ -103,7 +104,7 @@ impl<'a> Iterator for Stream<'a> {
     }
 }
 
-fn intern_symbol(symbol: &str) -> LispObj {
+fn intern_symbol(symbol: &str) -> Symbol {
     let mut escaped = false;
     let is_not_escape = |c: &char| {
         if escaped {
@@ -118,28 +119,28 @@ fn intern_symbol(symbol: &str) -> LispObj {
     };
     if symbol.contains('\\') {
         let escaped_slice: String = symbol.chars().filter(is_not_escape).collect();
-        intern(escaped_slice.as_str()).into()
+        intern(escaped_slice.as_str())
     } else {
-        intern(symbol).into()
+        intern(symbol)
     }
 }
 
-fn parse_symbol(slice: &str) -> LispObj {
+fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
     match slice.parse::<i64>() {
-        Ok(num) => num.into(),
+        Ok(num) => arena.insert(num),
         Err(_) => match slice.parse::<f64>() {
-            Ok(num) => num.into(),
+            Ok(num) => arena.insert(num),
             Err(_) => match slice {
-                "nil" => LispObj::nil(),
-                "t" => LispObj::t(),
-                _ => intern_symbol(slice),
+                "nil" => Object::nil(),
+                "t" => Object::t(),
+                _ => arena.insert(intern_symbol(slice)),
             },
         },
     }
 }
 
 // TODO: Handle unicode, hex, and octal escapes
-fn unescape_string(string: &str) -> LispObj {
+fn unescape_string(string: &str) -> String {
     let mut escaped = false;
     let unescape = |c: char| {
         if escaped {
@@ -162,7 +163,6 @@ fn unescape_string(string: &str) -> LispObj {
         .chars()
         .filter_map(unescape)
         .collect::<String>()
-        .into()
 }
 
 const fn symbol_char(chr: char) -> bool {
@@ -207,23 +207,12 @@ impl<'a> LispReader<'a> {
     }
 }
 
-impl<'a> Iterator for LispReader<'a> {
-    type Item = Result<LispObj, LispReaderErr>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.read() {
-            Ok(x) => Some(Ok(x)),
-            Err(Error::EndOfStream) => None,
-            Err(e) => Some(Err(self.convert_error(e))),
-        }
-    }
-}
-
-impl<'a> LispReader<'a> {
+impl<'a, 'obj> LispReader<'a> {
     fn char_pos(&self) -> StreamStart {
         self.stream.get_prev_pos()
     }
 
-    fn read_symbol(&mut self) -> LispObj {
+    fn read_symbol(&mut self, arena: &'obj Arena) -> Object<'obj> {
         let pos = self.stream.get_pos();
         while let Some(chr) = self.stream.next() {
             if chr == '\\' {
@@ -233,10 +222,10 @@ impl<'a> LispReader<'a> {
                 break;
             }
         }
-        parse_symbol(self.stream.slice(pos))
+        parse_symbol(self.stream.slice(pos), arena)
     }
 
-    fn read_string(&mut self) -> Result<LispObj, Error> {
+    fn read_string(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         let pos = self.stream.get_pos();
         let open_delim_pos = self.char_pos();
         while let Some(chr) = self.stream.next() {
@@ -244,49 +233,51 @@ impl<'a> LispReader<'a> {
                 self.stream.next();
             } else if chr == '"' {
                 let slice = self.stream.slice_without_end_delimiter(pos);
-                return Ok(unescape_string(slice));
+                let string = unescape_string(slice);
+                return Ok(arena.insert(string));
             }
         }
         Err(Error::MissingStringDel(open_delim_pos))
     }
 
-    fn read_cons(&mut self) -> Result<LispObj, Error> {
+    fn read_cons(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         if self.read_char() == Some(')') {
-            return Ok(LispObj::nil());
+            return Ok(Object::nil());
         } else {
             self.stream.back();
         }
-        let car = self.read()?;
+        let car = self.read(arena)?;
         match self.read_char() {
             Some('.') => {
-                let cdr = self.read()?;
+                let cdr = self.read(arena)?;
                 match self.read_char() {
                     None => Err(Error::MissingCloseParen(None)),
-                    Some(')') => Ok(cons!(car, cdr).into()),
+                    Some(')') => Ok(arena.insert(cons_x!(car, cdr; arena))),
                     Some(c) => Err(Error::UnexpectedChar(c, self.char_pos())),
                 }
             }
-            Some(')') => Ok(cons!(car).into()),
+            Some(')') => Ok(arena.insert(arena.insert(cons_x!(car; arena)))),
             Some(_) => {
                 self.stream.back();
-                let rest = self.read_cons()?;
-                Ok(cons!(car, rest).into())
+                let rest = self.read_cons(arena)?;
+                Ok(arena.insert(cons_x!(car, rest; arena)))
             }
             None => Err(Error::MissingCloseParen(None)),
         }
     }
 
-    fn read_list(&mut self) -> Result<LispObj, Error> {
+    fn read_list(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         let pos = self.char_pos();
-        match self.read_cons() {
+        match self.read_cons(arena) {
             Err(Error::MissingCloseParen(None)) => Err(Error::MissingCloseParen(Some(pos))),
             x => x,
         }
     }
 
-    fn read_quote(&mut self) -> Result<LispObj, Error> {
-        let obj = self.read()?;
-        Ok(list!(intern("quote"), obj).into())
+    fn read_quote(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        let obj = self.read(arena)?;
+        let quoted = list_x!(intern("quote"), obj; arena);
+        Ok(arena.insert(quoted))
     }
 
     fn read_char(&mut self) -> Option<char> {
@@ -309,17 +300,25 @@ impl<'a> LispReader<'a> {
         self.stream.find(valid_char)
     }
 
-    fn read(&mut self) -> Result<LispObj, Error> {
+    pub fn read(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         match self.read_char().ok_or(Error::EndOfStream)? {
-            '"' => self.read_string(),
-            '(' => self.read_list(),
-            '\'' => self.read_quote(),
+            '"' => self.read_string(arena),
+            '(' => self.read_list(arena),
+            '\'' => self.read_quote(arena),
             ')' => Err(Error::ExtraCloseParen(self.char_pos())),
             c if symbol_char(c) => {
                 self.stream.back();
-                Ok(self.read_symbol())
+                Ok(self.read_symbol(arena))
             }
             c => Err(Error::UnexpectedChar(c, self.char_pos())),
+        }
+    }
+
+    pub fn read_from(&mut self, arena: &'obj Arena) -> Option<Result<LispObj, LispReaderErr>> {
+        match self.read(arena) {
+            Ok(x) => Some(Ok(x.inner())),
+            Err(Error::EndOfStream) => None,
+            Err(e) => Some(Err(self.convert_error(e))),
         }
     }
 }
@@ -357,8 +356,9 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
+            let arena = Arena::new();
             let mut reader = LispReader::new($compare);
-            assert_eq!(LispObj::from($expect), reader.next().unwrap().unwrap())
+            assert_eq!(LispObj::from($expect), reader.read_from(&arena).unwrap().unwrap())
         };
     }
 
@@ -426,7 +426,8 @@ baz""#
     }
 
     fn assert_error(input: &str, pos: usize, error: Error) {
-        let result = LispReader::new(input).next().unwrap().err().unwrap();
+        let arena = Arena::new();
+        let result = LispReader::new(input).read_from(&arena).unwrap().err().unwrap();
         assert_eq!(result.pos, pos);
         assert_eq!(result.message, format!("{}", error));
     }
@@ -434,7 +435,8 @@ baz""#
     #[test]
     fn error() {
         use Error::*;
-        assert!((LispReader::new("").next().is_none()));
+        let arena = Arena::new();
+        assert!((LispReader::new("").read_from(&arena).is_none()));
         let null = StreamStart::new(std::ptr::null());
         assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
         assert_error(" \"foo", 1, MissingStringDel(null));
@@ -444,7 +446,8 @@ baz""#
 
     #[test]
     fn comments() {
-        assert!(LispReader::new(" ; comment ").next().is_none());
+        let arena = Arena::new();
+        assert!(LispReader::new(" ; comment ").read_from(&arena).is_none());
         check_reader!(1, "; comment \n  1");
     }
 }

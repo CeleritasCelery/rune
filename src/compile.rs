@@ -447,16 +447,19 @@ mod test {
     use super::*;
     use crate::intern::intern;
     use crate::reader::LispReader;
+    use crate::arena::Arena;
     use OpCode::*;
 
     fn check_error(compare: &str, expect: Error) {
-        let obj = LispReader::new(compare).next().unwrap().unwrap();
+        let arena = Arena::new();
+        let obj = LispReader::new(compare).read_from(&arena).unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), expect);
     }
 
     macro_rules! check_compiler {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
-            let obj = LispReader::new($compare).next().unwrap().unwrap();
+            let arena = Arena::new();
+            let obj = LispReader::new($compare).read_from(&arena).unwrap().unwrap();
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
                 constants: ConstVec(vec_into![$($const),+]),

@@ -15,6 +15,7 @@ mod compile;
 mod error;
 mod eval;
 mod func;
+mod arena;
 mod gc;
 mod hashmap;
 mod intern;
