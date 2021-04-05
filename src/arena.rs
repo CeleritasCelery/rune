@@ -1,6 +1,7 @@
 use crate::lisp_object::{Object, LispObj, IntoObject};
 use std::cell::RefCell;
 
+#[derive(Debug, PartialEq)]
 pub struct Arena {
     objects: RefCell<Vec<LispObj>>,
 }
@@ -12,7 +13,7 @@ impl<'obj> Arena {
     {
         let (obj, allocated) = obj.into_object(self);
         if allocated {
-            self.objects.borrow_mut().push(obj.clone().inner());
+            self.objects.borrow_mut().push(obj.inner());
         }
         obj
     }

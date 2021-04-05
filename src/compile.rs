@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, LispObj, Symbol, Value};
+use crate::lisp_object::{Cons, LispFn, LispObj, Symbol, Value, Object, ConsX, ValueX};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
+use std::cell::RefCell;
+use crate::arena::Arena;
 
 impl OpCode {
     pub unsafe fn from_unchecked(x: u8) -> Self {
@@ -29,31 +31,48 @@ impl Default for LispFn {
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct ConstVec(Vec<LispObj>);
+#[derive(Debug)]
+struct ConstVec {
+    consts: RefCell<Vec<LispObj>>,
+    arena: Arena,
+}
+
+impl From<Vec<LispObj>> for ConstVec {
+    fn from(vec: Vec<LispObj>) -> Self {
+        ConstVec {
+            consts: RefCell::new(vec),
+            arena: Arena::new(),
+        }
+    }
+}
+
+impl std::cmp::PartialEq for ConstVec {
+    fn eq(&self, other: &Self) -> bool {
+       self.consts == other.consts
+    }
+}
 
 impl ConstVec {
     pub const fn new() -> Self {
-        ConstVec(Vec::new())
+        ConstVec{
+            consts: RefCell::new(Vec::new()),
+            arena: Arena::new(),
+        }
     }
 
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn into_vec(self) -> Vec<LispObj> {
-        self.0
-    }
-
-    // TODO: Don't use rust equal because it will compare an entire list
-    fn insert_or_get(&mut self, obj: LispObj) -> usize {
-        match self.0.iter().position(|&x| obj == x) {
+    fn insert_or_get(&self, obj: Object) -> usize {
+        let mut consts = self.consts.borrow_mut();
+        match consts.iter().position(|&x| obj.inner() == x) {
             None => {
-                self.0.push(obj);
-                self.0.len() - 1
+                let new_obj = obj.clone_in(&self.arena).inner();
+                consts.push(new_obj);
+                consts.len() - 1
             }
             Some(x) => x,
         }
     }
 
-    fn insert(&mut self, obj: LispObj) -> Result<u16> {
+    fn insert(&self, obj: Object) -> Result<u16> {
         let idx = self.insert_or_get(obj);
         match idx.try_into() {
             Ok(x) => Ok(x),
@@ -142,10 +161,10 @@ impl CodeVec {
     }
 }
 
-fn push_cons(obj: LispObj, mut vec: Vec<LispObj>) -> Result<Vec<LispObj>> {
-    match obj.val() {
-        Value::Nil => Ok(vec),
-        Value::Cons(cons) => {
+fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<Object<'obj>>> {
+    match obj.val_x() {
+        ValueX::Nil => Ok(vec),
+        ValueX::Cons(cons) => {
             vec.push(cons.car());
             push_cons(cons.cdr(), vec)
         }
@@ -153,7 +172,7 @@ fn push_cons(obj: LispObj, mut vec: Vec<LispObj>) -> Result<Vec<LispObj>> {
     }
 }
 
-fn into_list(obj: LispObj) -> Result<Vec<LispObj>> {
+fn into_list(obj: Object) -> Result<Vec<Object>> {
     push_cons(obj, vec![])
 }
 
@@ -166,17 +185,29 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        LispFn::new(exp.codes, exp.constants.0, 0, 0, false)
+        // TODO; into_object
+        // let inner = exp.constants.consts.borrow().into_iter().map(|x| x).collect();
+        let inner = exp.constants.consts.into_inner();
+        std::mem::ManuallyDrop::new(exp.constants.arena);
+        LispFn::new(exp.codes, inner, 0, 0, false)
     }
 }
 
-impl Exp {
-    fn add_const(&mut self, obj: LispObj, var_ref: Option<Symbol>) -> Result<()> {
+impl<'obj> Exp {
+    fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
+        // let new_obj = obj.clone_in(&self.constants.arena);
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
         Ok(())
     }
+
+    // // TODO: fix allocating every time
+    // fn add_const_from(&'exp mut self, obj: impl IntoObject<'obj>, var_ref: Option<Symbol>) -> Result<()> {
+    //     let arena = Arena::new();
+    //     let new_obj = arena.insert(obj);
+    //     self.add_const(new_obj, var_ref)
+    // }
 
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
@@ -210,7 +241,7 @@ impl Exp {
         self.vars.push(None);
     }
 
-    fn quote(&mut self, value: LispObj) -> Result<()> {
+    fn quote(&mut self, value: Object<'obj>) -> Result<()> {
         let list = into_list(value)?;
         match list.len() {
             1 => self.add_const(list[0], None),
@@ -218,7 +249,7 @@ impl Exp {
         }
     }
 
-    fn let_form(&mut self, form: LispObj) -> Result<()> {
+    fn let_form(&mut self, form: Object) -> Result<()> {
         let prev_len = self.vars.len();
         let list = into_list(form)?;
         let mut iter = list.iter();
@@ -231,13 +262,13 @@ impl Exp {
         Ok(())
     }
 
-    fn progn(&mut self, forms: LispObj) -> Result<()> {
+    fn progn(&mut self, forms: Object) -> Result<()> {
         self.implicit_progn(into_list(forms)?.as_ref())
     }
 
-    fn implicit_progn(&mut self, forms: &[LispObj]) -> Result<()> {
+    fn implicit_progn(&mut self, forms: &[Object]) -> Result<()> {
         if forms.is_empty() {
-            self.add_const(LispObj::nil(), None)
+            self.add_const(Object::nil(), None)
         } else {
             // Use take and skip to ensure that the last form does not discard
             for form in forms.iter().take(1) {
@@ -253,11 +284,14 @@ impl Exp {
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
         let var = cons.car().try_into()?;
+        // TODO: into_object
+        // remove
+        let cons = ConsX::from_cons(cons);
         let list = into_list(cons.cdr())?;
         let mut iter = list.iter();
         match iter.next() {
             Some(v) => self.add_const(*v, Some(var))?,
-            None => self.add_const(LispObj::nil(), Some(var))?,
+            None => self.add_const(Object::nil(), Some(var))?,
         };
         match iter.next() {
             None => Ok(()),
@@ -266,10 +300,10 @@ impl Exp {
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
-        self.add_const(LispObj::nil(), Some(sym))
+        self.add_const(Object::nil(), Some(sym))
     }
 
-    fn let_bind(&mut self, obj: LispObj) -> Result<()> {
+    fn let_bind(&mut self, obj: Object) -> Result<()> {
         for binding in into_list(obj)? {
             match binding.val() {
                 Value::Cons(cons) => self.let_bind_call(cons)?,
@@ -280,13 +314,14 @@ impl Exp {
         Ok(())
     }
 
-    fn setq(&mut self, obj: LispObj) -> Result<()> {
+    fn setq(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         let last = (list.len() / 2) - 1;
         let pairs = list.chunks_exact(2);
         let is_even = pairs.remainder().is_empty();
         for (idx, pair) in pairs.enumerate() {
-            let sym: Symbol = pair[0].try_into()?;
+            let inner = pair[0].inner();
+            let sym: Symbol = inner.try_into()?;
             let val = pair[1];
 
             self.compile_form(val)?;
@@ -313,7 +348,7 @@ impl Exp {
         }
     }
 
-    fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
+    fn compile_funcall(&mut self, cons: &ConsX) -> Result<()> {
         self.add_const(cons.car(), None)?;
         let prev_len = self.vars.len();
         let list = into_list(cons.cdr())?;
@@ -325,7 +360,7 @@ impl Exp {
         Ok(())
     }
 
-    fn compile_operator(&mut self, obj: LispObj, op: OpCode) -> Result<()> {
+    fn compile_operator(&mut self, obj: Object, op: OpCode) -> Result<()> {
         let list = into_list(obj)?;
         match list.len() {
             2 => {
@@ -338,7 +373,7 @@ impl Exp {
         }
     }
 
-    fn compile_conditional(&mut self, obj: LispObj) -> Result<()> {
+    fn compile_conditional(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         match list.len() {
             len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
@@ -366,12 +401,15 @@ impl Exp {
         }
     }
 
-    fn compile_lambda(&mut self, obj: LispObj) -> Result<()> {
+    fn compile_lambda(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         let mut iter = list.iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
+        let arena = Arena::new();
         match iter.next() {
-            None => return self.add_const(LispFn::default().into(), None),
+            None => {
+                return self.add_const(arena.insert(LispFn::default()), None);
+            }
             Some(bindings) => {
                 for binding in &into_list(*bindings)? {
                     match binding.val() {
@@ -383,17 +421,18 @@ impl Exp {
         };
         let body = iter.as_slice();
         if body.is_empty() {
-            self.add_const(LispFn::default().into(), None)
+            self.add_const(arena.insert(LispFn::default()), None)
         } else {
             let len = vars.len();
             let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
             func.args.required = len as u16;
-            self.add_const(func.into(), None)
+            self.add_const(arena.insert(func), None)
         }
     }
 
-    fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
-        let sym: Symbol = cons.car().try_into()?;
+    fn dispatch_special_form(&mut self, cons: &ConsX) -> Result<()> {
+        let inner = cons.car().inner();
+        let sym: Symbol = inner.try_into()?;
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
             "quote" => self.quote(cons.cdr()),
@@ -416,15 +455,15 @@ impl Exp {
         }
     }
 
-    fn compile_form(&mut self, obj: LispObj) -> Result<()> {
+    fn compile_form(&mut self, obj: Object<'obj>) -> Result<()> {
         match obj.val() {
-            Value::Cons(cons) => self.dispatch_special_form(cons),
+            Value::Cons(cons) => self.dispatch_special_form(&ConsX::from_cons(cons)),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.add_const(obj, None),
         }
     }
 
-    fn compile_func_body(obj: &[LispObj], vars: Vec<Option<Symbol>>) -> Result<Self> {
+    fn compile_func_body(obj: &[Object], vars: Vec<Option<Symbol>>) -> Result<Self> {
         let mut exp = Self {
             codes: CodeVec::default(),
             constants: ConstVec::new(),
@@ -436,7 +475,7 @@ impl Exp {
         Ok(exp)
     }
 
-    pub fn compile(obj: LispObj) -> Result<Self> {
+    pub fn compile(obj: Object) -> Result<Self> {
         Self::compile_func_body(&[obj], vec![])
     }
 }
@@ -462,7 +501,7 @@ mod test {
             let obj = LispReader::new($compare).read_from(&arena).unwrap().unwrap();
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
-                constants: ConstVec(vec_into![$($const),+]),
+                constants: ConstVec::from(vec_into![$($const),+]),
                 vars: Vec::new(),
             };
             assert_eq!(Exp::compile(obj).unwrap(), expect);

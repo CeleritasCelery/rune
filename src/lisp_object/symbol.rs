@@ -102,12 +102,18 @@ impl From<Symbol> for LispObj {
     }
 }
 
+impl<'obj> From<Symbol> for Object<'obj> {
+    fn from(s: Symbol) -> Self {
+        let ptr = s.0 as *const _;
+        unsafe {
+            Object::from_ptr(ptr as *mut u8, Tag::Symbol)
+        }
+    }
+}
+
 impl<'obj> IntoObject<'obj> for Symbol {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        let ptr = self.0 as *const _;
-        unsafe {
-            (Object::from_ptr(ptr as *mut u8, Tag::Symbol), false)
-        }
+        (self.into(), false)
     }
 }
 

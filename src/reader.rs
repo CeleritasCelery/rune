@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::intern::intern;
-use crate::lisp_object::{LispObj, Object, Symbol};
+use crate::lisp_object::{Object, Symbol};
 use crate::arena::Arena;
 use std::fmt;
 use std::str;
@@ -314,9 +314,9 @@ impl<'a, 'obj> LispReader<'a> {
         }
     }
 
-    pub fn read_from(&mut self, arena: &'obj Arena) -> Option<Result<LispObj, LispReaderErr>> {
+    pub fn read_from(&mut self, arena: &'obj Arena) -> Option<Result<Object<'obj>, LispReaderErr>> {
         match self.read(arena) {
-            Ok(x) => Some(Ok(x.inner())),
+            Ok(x) => Some(Ok(x)),
             Err(Error::EndOfStream) => None,
             Err(e) => Some(Err(self.convert_error(e))),
         }
@@ -358,7 +358,7 @@ mod test {
         ($expect:expr, $compare:expr) => {
             let arena = Arena::new();
             let mut reader = LispReader::new($compare);
-            assert_eq!(LispObj::from($expect), reader.read_from(&arena).unwrap().unwrap())
+            assert_eq!(arena.insert($expect), reader.read_from(&arena).unwrap().unwrap())
         };
     }
 

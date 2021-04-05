@@ -9,7 +9,7 @@ pub struct Cons {
 }
 define_unbox_ref!(Cons);
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Debug)]
 pub struct ConsX<'a> {
     car: Object<'a>,
     cdr: Object<'a>,
@@ -20,13 +20,28 @@ impl<'a> ConsX<'a> {
         Self { car, cdr }
     }
 
-    // pub const fn car(&self) -> Object {
-    //     self.car
-    // }
+    pub const fn car(&self) -> Object {
+        self.car
+    }
 
-    // pub const fn cdr(&self) -> Object {
-    //     self.cdr
-    // }
+    pub const fn cdr(&self) -> Object {
+        self.cdr
+    }
+
+    // TODO: into_object
+    // remove this
+    pub fn from_cons(cons: &'a Cons) -> ConsX<'a> {
+        let car = Object {
+            data: cons.car,
+            marker: std::marker::PhantomData,
+        };
+
+        let cdr = Object {
+            data: cons.cdr,
+            marker: std::marker::PhantomData,
+        };
+        Self {car, cdr}
+    }
 }
 
 impl Cons {

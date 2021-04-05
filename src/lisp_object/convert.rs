@@ -79,13 +79,19 @@ impl From<Int> for LispObj {
     }
 }
 
+impl<'obj> From<Int> for Object<'obj> {
+    fn from(i: Int) -> Self {
+        unsafe {
+            Object::from_ptr(i as *const i64, Tag::Int)
+        }
+    }
+}
+
 impl<'obj> IntoObject<'obj> for i64 {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        let obj = Object {
-            data: LispObj { bits: self << TAG_SIZE },
-            marker: std::marker::PhantomData,
-        };
-        (obj, false)
+        unsafe {
+            (Object::from_ptr(self as *const i64, Tag::Int), false)
+        }
     }
 }
 

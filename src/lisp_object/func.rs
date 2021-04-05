@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::hashmap::HashMap;
-use crate::lisp_object::{LispObj, Symbol, Tag};
+use crate::lisp_object::{LispObj, Symbol, Tag, IntoObject, Object};
 use crate::opcode::CodeVec;
 use std::fmt;
 
@@ -46,6 +46,12 @@ impl LispFn {
 impl From<LispFn> for LispObj {
     fn from(func: LispFn) -> Self {
         LispObj::from_tagged_ptr(func, Tag::LispFn)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for LispFn {
+    fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
+        Object::from_type(arena, self, Tag::LispFn)
     }
 }
 
@@ -96,6 +102,12 @@ impl std::cmp::PartialEq for SubrFn {
 impl From<SubrFn> for LispObj {
     fn from(func: SubrFn) -> Self {
         LispObj::from_tagged_ptr(func, Tag::SubrFn)
+    }
+}
+
+impl<'obj> IntoObject<'obj> for SubrFn {
+    fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
+        Object::from_type(arena, self, Tag::SubrFn)
     }
 }
 
