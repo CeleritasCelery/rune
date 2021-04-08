@@ -183,13 +183,12 @@ impl<'a> Object<'a> {
         }
     }
 
-    const fn from_tag(tag: Tag) -> (Self, bool) {
+    const fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
-        let obj = Object {
+        Object {
             data: LispObj { bits: tag as i64 },
             marker: PhantomData,
-        };
-        (obj, false)
+        }
     }
 
     fn from_type<T: IntoObject<'a>>(arena: &Arena, obj: T, tag: Tag) -> (Self, bool) {
@@ -197,7 +196,7 @@ impl<'a> Object<'a> {
         unsafe { (Object::from_ptr(ptr, tag), true) }
     }
 
-    pub fn val(&self) -> Value<'a> {
+    pub fn val(self) -> Value<'a> {
         let data = self.data;
         unsafe {
             match data.tag {
@@ -215,7 +214,7 @@ impl<'a> Object<'a> {
         }
     }
 
-    pub fn val_x(&self) -> ValueX<'a> {
+    pub fn val_x(self) -> ValueX<'a> {
         let data = self.data;
         unsafe {
             match data.tag {
@@ -235,11 +234,11 @@ impl<'a> Object<'a> {
 
 
     pub const fn nil() -> Self {
-        Object::from_tag(Tag::Nil).0
+        Object::from_tag(Tag::Nil)
     }
 
     pub const fn t() -> Self {
-        Object::from_tag(Tag::True).0
+        Object::from_tag(Tag::True)
     }
 
     pub const fn inner(self) -> LispObj {
@@ -272,7 +271,7 @@ impl<'a> LispObj {
             Value::String(x) => arena.insert(x.clone()),
             Value::Symbol(x) => arena.insert(x),
             Value::LispFn(x) => arena.insert(x.clone()),
-            Value::SubrFn(x) => arena.insert(x.clone()),
+            Value::SubrFn(x) => arena.insert(*x),
             Value::True => Object::t(),
             Value::Nil => Object::nil(),
             Value::Float(x) => arena.insert(x),

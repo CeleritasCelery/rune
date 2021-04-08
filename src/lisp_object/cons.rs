@@ -30,7 +30,7 @@ impl<'a> ConsX<'a> {
 
     // TODO: into_object
     // remove this
-    pub fn from_cons(cons: &'a Cons) -> ConsX<'a> {
+    pub const fn from_cons(cons: &'a Cons) -> ConsX<'a> {
         let car = Object {
             data: cons.car,
             marker: std::marker::PhantomData,

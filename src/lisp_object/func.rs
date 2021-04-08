@@ -120,9 +120,15 @@ mod test {
     use super::*;
     use crate::lisp_object::Value;
     use std::mem::size_of;
+
+    #[test]
+    fn size() {
+        assert_eq!(88, size_of::<LispFn>());
+        assert_eq!(32, size_of::<SubrFn>());
+    }
+
     #[test]
     fn function() {
-        assert_eq!(88, size_of::<LispFn>());
         let x: LispObj = LispFn::new(
             vec_into![0, 1, 2].into(),
             vec_into![1],

@@ -118,7 +118,7 @@ impl From<bool> for LispObj {
 
 impl<'obj> IntoObject<'obj> for bool {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        Object::from_tag(if self { Tag::True } else { Tag::Nil })
+        (Object::from_tag(if self { Tag::True } else { Tag::Nil }), false)
     }
 }
 
