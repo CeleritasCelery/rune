@@ -66,6 +66,7 @@ pub fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
     use crate::lisp_object::{FunctionValue, LispFn};
+    use crate::arena::Arena;
 
     #[test]
     fn test_intern() {
@@ -74,7 +75,7 @@ mod test {
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
-        second.set_func(LispFn::new(vec![5].into(), vec![], 0, 0, false));
+        second.set_func(LispFn::new(vec![5].into(), vec![], Arena::new(), 0, 0, false));
         let func_cell = first.get_func().unwrap();
         let func = match func_cell.val() {
             FunctionValue::LispFn(x) => x,

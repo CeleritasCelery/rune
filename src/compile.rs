@@ -24,6 +24,7 @@ impl Default for LispFn {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
             vec![LispObj::nil()],
+            Arena::new(),
             0,
             0,
             false,
@@ -185,29 +186,19 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        // TODO; into_object
-        // let inner = exp.constants.consts.borrow().into_iter().map(|x| x).collect();
         let inner = exp.constants.consts.into_inner();
-        std::mem::ManuallyDrop::new(exp.constants.arena);
-        LispFn::new(exp.codes, inner, 0, 0, false)
+        let arena = exp.constants.arena;
+        LispFn::new(exp.codes, inner, arena, 0, 0, false)
     }
 }
 
 impl<'obj> Exp {
     fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
-        // let new_obj = obj.clone_in(&self.constants.arena);
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
         Ok(())
     }
-
-    // // TODO: fix allocating every time
-    // fn add_const_from(&'exp mut self, obj: impl IntoObject<'obj>, var_ref: Option<Symbol>) -> Result<()> {
-    //     let arena = Arena::new();
-    //     let new_obj = arena.insert(obj);
-    //     self.add_const(new_obj, var_ref)
-    // }
 
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
@@ -587,15 +578,16 @@ mod test {
         check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
 
-        let func = LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], 0, 0, false);
+        let func = LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], Arena::new(), 0, 0, false);
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
+        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], Arena::new(), 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(
             vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
             vec_into![intern("+")],
+            Arena::new(),
             2,
             0,
             false,

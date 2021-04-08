@@ -33,6 +33,16 @@ impl std::ops::Drop for Arena {
     }
 }
 
+impl std::clone::Clone for Arena {
+    fn clone(&self) -> Self {
+        let new = Arena::new();
+        for old in self.objects.borrow().iter() {
+            old.clone_in(&new);
+        }
+        new
+    }
+}
+
 impl Arena {
     pub const fn new() -> Self {
         Arena {

@@ -170,17 +170,7 @@ pub trait IntoObject<'obj> {
 
 impl<'old, 'new> Object<'old> {
     pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
-        match self.val() {
-            Value::Int(x) => arena.insert(x),
-            Value::Cons(x) => arena.insert(x.clone()),
-            Value::String(x) => arena.insert(x.clone()),
-            Value::Symbol(x) => arena.insert(x),
-            Value::LispFn(x) => arena.insert(x.clone()),
-            Value::SubrFn(x) => arena.insert(x.clone()),
-            Value::True => Object::t(),
-            Value::Nil => Object::nil(),
-            Value::Float(x) => arena.insert(x),
-        }
+        self.inner().clone_in(arena)
     }
 }
 
@@ -243,6 +233,7 @@ impl<'a> Object<'a> {
         }
     }
 
+
     pub const fn nil() -> Self {
         Object::from_tag(Tag::Nil).0
     }
@@ -251,10 +242,9 @@ impl<'a> Object<'a> {
         Object::from_tag(Tag::True).0
     }
 
-    pub fn inner(self) -> LispObj {
+    pub const fn inner(self) -> LispObj {
         self.data
     }
-
 }
 
 impl<'a> LispObj {
@@ -272,6 +262,20 @@ impl<'a> LispObj {
                 Tag::Int => Value::Int(self.bits >> TAG_SIZE),
                 Tag::Marker => todo!(),
             }
+        }
+    }
+
+    pub fn clone_in(self, arena: &'a Arena) -> Object<'a> {
+        match self.val() {
+            Value::Int(x) => arena.insert(x),
+            Value::Cons(x) => arena.insert(x.clone()),
+            Value::String(x) => arena.insert(x.clone()),
+            Value::Symbol(x) => arena.insert(x),
+            Value::LispFn(x) => arena.insert(x.clone()),
+            Value::SubrFn(x) => arena.insert(x.clone()),
+            Value::True => Object::t(),
+            Value::Nil => Object::nil(),
+            Value::Float(x) => arena.insert(x),
         }
     }
 
@@ -336,8 +340,14 @@ impl<'a> LispObj {
                 let x: *mut String = self.get_mut_ptr();
                 Box::from_raw(x);
             }
-            Tag::LispFn => {},
-            Tag::SubrFn => {},
+            Tag::LispFn => {
+                let x: *mut LispFn = self.get_mut_ptr();
+                Box::from_raw(x);
+            },
+            Tag::SubrFn => {
+                let x: *mut SubrFn = self.get_mut_ptr();
+                Box::from_raw(x);
+            },
             Tag::Nil => {},
             Tag::True => {},
             Tag::Cons => {

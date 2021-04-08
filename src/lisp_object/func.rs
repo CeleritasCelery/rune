@@ -1,6 +1,7 @@
 use crate::error::Error;
 use crate::hashmap::HashMap;
 use crate::lisp_object::{LispObj, Symbol, Tag, IntoObject, Object};
+use crate::arena::Arena;
 use crate::opcode::CodeVec;
 use std::fmt;
 
@@ -18,6 +19,7 @@ pub struct LispFn {
     pub op_codes: CodeVec,
     pub constants: Vec<LispObj>,
     pub args: FnArgs,
+    arena: Arena,
 }
 define_unbox_ref!(LispFn, Func);
 
@@ -25,6 +27,7 @@ impl LispFn {
     pub fn new(
         op_codes: CodeVec,
         constants: Vec<LispObj>,
+        arena: Arena,
         required: u16,
         optional: u16,
         rest: bool,
@@ -32,6 +35,7 @@ impl LispFn {
         LispFn {
             op_codes,
             constants,
+            arena,
             args: FnArgs {
                 required,
                 optional,
@@ -118,8 +122,14 @@ mod test {
     use std::mem::size_of;
     #[test]
     fn function() {
-        assert_eq!(56, size_of::<LispFn>());
-        let x: LispObj = LispFn::new(vec_into![0, 1, 2].into(), vec_into![1], 0, 0, false).into();
+        assert_eq!(88, size_of::<LispFn>());
+        let x: LispObj = LispFn::new(
+            vec_into![0, 1, 2].into(),
+            vec_into![1],
+            Arena::new(),
+            0,
+            0,
+            false).into();
         assert!(matches!(x.val(), Value::LispFn(_)));
         format!("{}", x);
         let func = match x.val() {
