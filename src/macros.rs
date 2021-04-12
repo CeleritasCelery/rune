@@ -3,6 +3,11 @@ macro_rules! vec_into {
     ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
 }
 
+#[macro_export]
+macro_rules! vec_into_object {
+    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$($arena.insert($x)),+]};
+}
+
 macro_rules! count {
     (@replace_expr $_t:tt $sub:expr) => {$sub};
     ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};

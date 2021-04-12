@@ -244,6 +244,10 @@ impl<'a> Object<'a> {
     pub const fn inner(self) -> LispObj {
         self.data
     }
+
+    pub unsafe fn into_gc(self) -> Object<'static> {
+        std::mem::transmute(self)
+    }
 }
 
 impl<'a> LispObj {

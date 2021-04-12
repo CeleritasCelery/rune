@@ -66,7 +66,7 @@ impl CallFrame {
     }
 
     pub fn get_const(&self, i: usize) -> LispObj {
-        *self.func.constants.get(i).unwrap()
+        (*self.func.constants.get(i).unwrap()).inner()
     }
 }
 

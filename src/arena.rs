@@ -7,6 +7,12 @@ pub struct Arena {
 }
 
 impl<'obj> Arena {
+    pub const fn new() -> Self {
+        Arena {
+            objects: RefCell::new(Vec::new()),
+        }
+    }
+
     pub fn insert<T>(&'obj self, obj: T) -> Object
     where
         T: IntoObject<'obj>,
@@ -21,6 +27,8 @@ impl<'obj> Arena {
     pub fn alloc<T>(&self, obj: T) -> *const T {
         Box::into_raw(Box::new(obj))
     }
+
+    // pub unsafe fn new_gc_arena() -> Self
 }
 
 impl std::ops::Drop for Arena {
@@ -40,13 +48,5 @@ impl std::clone::Clone for Arena {
             old.clone_in(&new);
         }
         new
-    }
-}
-
-impl Arena {
-    pub const fn new() -> Self {
-        Arena {
-            objects: RefCell::new(Vec::new()),
-        }
     }
 }

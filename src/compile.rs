@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, LispObj, Symbol, Value, Object, ConsX, ValueX};
+use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object, ConsX, ValueX};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 use std::cell::RefCell;
@@ -23,7 +23,7 @@ impl Default for LispFn {
     fn default() -> Self {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![LispObj::nil()],
+            vec![Object::nil()],
             Arena::new(),
             0,
             0,
@@ -33,13 +33,13 @@ impl Default for LispFn {
 }
 
 #[derive(Debug)]
-struct ConstVec {
-    consts: RefCell<Vec<LispObj>>,
+struct ConstVec<'consts> {
+    consts: RefCell<Vec<Object<'consts>>>,
     arena: Arena,
 }
 
-impl From<Vec<LispObj>> for ConstVec {
-    fn from(vec: Vec<LispObj>) -> Self {
+impl<'consts> From<Vec<Object<'consts>>> for ConstVec<'consts> {
+    fn from(vec: Vec<Object<'consts>>) -> Self {
         ConstVec {
             consts: RefCell::new(vec),
             arena: Arena::new(),
@@ -47,13 +47,13 @@ impl From<Vec<LispObj>> for ConstVec {
     }
 }
 
-impl std::cmp::PartialEq for ConstVec {
+impl<'obj> std::cmp::PartialEq for ConstVec<'obj> {
     fn eq(&self, other: &Self) -> bool {
        self.consts == other.consts
     }
 }
 
-impl ConstVec {
+impl<'obj> ConstVec<'obj> {
     pub const fn new() -> Self {
         ConstVec{
             consts: RefCell::new(Vec::new()),
@@ -63,9 +63,11 @@ impl ConstVec {
 
     fn insert_or_get(&self, obj: Object) -> usize {
         let mut consts = self.consts.borrow_mut();
-        match consts.iter().position(|&x| obj.inner() == x) {
+        match consts.iter().position(|&x| obj == x) {
             None => {
-                let new_obj = obj.clone_in(&self.arena).inner();
+                let new_obj = unsafe {
+                     obj.clone_in(&self.arena).into_gc()
+                };
                 consts.push(new_obj);
                 consts.len() - 1
             }
@@ -178,21 +180,21 @@ fn into_list(obj: Object) -> Result<Vec<Object>> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Exp {
+pub struct Exp<'consts> {
     codes: CodeVec,
-    constants: ConstVec,
+    constants: ConstVec<'consts>,
     vars: Vec<Option<Symbol>>,
 }
 
-impl std::convert::From<Exp> for LispFn {
+impl<'consts> std::convert::From<Exp<'consts>> for LispFn {
     fn from(exp: Exp) -> Self {
-        let inner = exp.constants.consts.into_inner();
+        let inner = exp.constants.consts.into_inner().into_iter().map(|x| unsafe {x.into_gc()}).collect();
         let arena = exp.constants.arena;
         LispFn::new(exp.codes, inner, arena, 0, 0, false)
     }
 }
 
-impl<'obj> Exp {
+impl<'obj, 'consts> Exp<'consts> {
     fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
@@ -492,7 +494,7 @@ mod test {
             let obj = LispReader::new($compare).read_from(&arena).unwrap().unwrap();
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
-                constants: ConstVec::from(vec_into![$($const),+]),
+                constants: ConstVec::from(vec_into_object![$($const),+; arena]),
                 vars: Vec::new(),
             };
             assert_eq!(Exp::compile(obj).unwrap(), expect);
@@ -541,12 +543,12 @@ mod test {
         check_compiler!(
             "(if nil 1 2)",
             [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
-            [LispObj::nil(), 1, 2]
+            [Object::nil(), 1, 2]
         );
         check_compiler!(
             "(if t 2)",
             [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
-            [LispObj::t(), 2]
+            [Object::t(), 2]
         );
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
