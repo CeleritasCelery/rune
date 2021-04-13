@@ -4,7 +4,6 @@ use crate::error::{Error, Result, Type};
 use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object, ConsX, ValueX};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
-use std::cell::RefCell;
 use crate::arena::Arena;
 
 impl OpCode {
@@ -34,14 +33,14 @@ impl Default for LispFn {
 
 #[derive(Debug)]
 struct ConstVec<'consts> {
-    consts: RefCell<Vec<Object<'consts>>>,
+    consts: Vec<Object<'consts>>,
     arena: Arena,
 }
 
 impl<'consts> From<Vec<Object<'consts>>> for ConstVec<'consts> {
     fn from(vec: Vec<Object<'consts>>) -> Self {
         ConstVec {
-            consts: RefCell::new(vec),
+            consts: vec,
             arena: Arena::new(),
         }
     }
@@ -56,26 +55,25 @@ impl<'obj> std::cmp::PartialEq for ConstVec<'obj> {
 impl<'obj> ConstVec<'obj> {
     pub const fn new() -> Self {
         ConstVec{
-            consts: RefCell::new(Vec::new()),
+            consts: Vec::new(),
             arena: Arena::new(),
         }
     }
 
-    fn insert_or_get(&self, obj: Object) -> usize {
-        let mut consts = self.consts.borrow_mut();
-        match consts.iter().position(|&x| obj == x) {
+    fn insert_or_get(&mut self, obj: Object) -> usize {
+        match self.consts.iter().position(|&x| obj == x) {
             None => {
                 let new_obj = unsafe {
                      obj.clone_in(&self.arena).into_gc()
                 };
-                consts.push(new_obj);
-                consts.len() - 1
+                self.consts.push(new_obj);
+                self.consts.len() - 1
             }
             Some(x) => x,
         }
     }
 
-    fn insert(&self, obj: Object) -> Result<u16> {
+    fn insert(&mut self, obj: Object) -> Result<u16> {
         let idx = self.insert_or_get(obj);
         match idx.try_into() {
             Ok(x) => Ok(x),
@@ -188,7 +186,7 @@ pub struct Exp<'consts> {
 
 impl<'consts> std::convert::From<Exp<'consts>> for LispFn {
     fn from(exp: Exp) -> Self {
-        let inner = exp.constants.consts.into_inner().into_iter().map(|x| unsafe {x.into_gc()}).collect();
+        let inner = exp.constants.consts.into_iter().map(|x| unsafe {x.into_gc()}).collect();
         let arena = exp.constants.arena;
         LispFn::new(exp.codes, inner, arena, 0, 0, false)
     }
