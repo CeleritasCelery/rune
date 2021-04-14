@@ -1,4 +1,4 @@
-use crate::lisp_object::{Function, LispObj, Tag, TAG_SIZE, IntoObject, Object};
+use crate::lisp_object::{Function, Tag, IntoObject, Object};
 use crate::arena::Arena;
 use std::cmp;
 use std::fmt;
@@ -91,14 +91,6 @@ impl std::ops::Deref for Symbol {
 
     fn deref(&self) -> &Self::Target {
         self.0
-    }
-}
-
-impl From<Symbol> for LispObj {
-    fn from(s: Symbol) -> Self {
-        let ptr = s.0 as *const _;
-        let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
-        LispObj::from_bits(bits)
     }
 }
 

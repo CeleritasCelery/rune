@@ -19,12 +19,6 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-#[derive(Copy, Clone, Debug)]
-pub struct LispObj {
-    data: InnerObject,
-    marker: PhantomData<&'static ()>,
-}
-
 #[derive(Copy, Clone)]
 pub union InnerObject {
     tag: Tag,
@@ -36,12 +30,7 @@ pub struct Object<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
-
-impl cmp::PartialEq for LispObj {
-    fn eq(&self, rhs: &LispObj) -> bool {
-        self.val() == rhs.val()
-    }
-}
+pub type LispObj = Object<'static>;
 
 impl<'a> cmp::PartialEq for Object<'a> {
     fn eq(&self, rhs: &Object) -> bool {
@@ -174,7 +163,17 @@ pub trait IntoObject<'obj> {
 
 impl<'old, 'new> Object<'old> {
     pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
-        self.inner().clone_in(arena)
+        match self.val() {
+            Value::Int(x) => arena.insert(x),
+            Value::Cons(x) => arena.insert(x.clone()),
+            Value::String(x) => arena.insert(x.clone()),
+            Value::Symbol(x) => arena.insert(x),
+            Value::LispFn(x) => arena.insert(x.clone()),
+            Value::SubrFn(x) => arena.insert(*x),
+            Value::True => Object::t(),
+            Value::Nil => Object::nil(),
+            Value::Float(x) => arena.insert(x),
+        }
     }
 }
 
@@ -201,20 +200,7 @@ impl<'a> Object<'a> {
     }
 
     pub fn val(self) -> Value<'a> {
-        let data = self.data;
-        unsafe {
-            match data.tag {
-                Tag::Symbol => Value::Symbol(Symbol::from_raw(data.get_ptr())),
-                Tag::Float => Value::Float(*data.get_ptr()),
-                Tag::String => Value::String(&*data.get_ptr()),
-                Tag::LispFn => Value::LispFn(&*data.get_ptr()),
-                Tag::SubrFn => Value::SubrFn(&*data.get_ptr()),
-                Tag::Nil => Value::Nil,
-                Tag::True => Value::True,
-                Tag::Cons => Value::Cons(&*data.get_ptr()),
-                Tag::Int => Value::Int(data.bits >> TAG_SIZE),
-            }
-        }
+        self.data.val()
     }
 
     pub fn val_x(self) -> ValueX<'a> {
@@ -256,24 +242,6 @@ impl<'a> Object<'a> {
 }
 
 impl<'a> LispObj {
-    pub fn val(&'a self) -> Value<'a> {
-        self.data.val()
-    }
-
-    pub fn clone_in(self, arena: &'a Arena) -> Object<'a> {
-        match self.val() {
-            Value::Int(x) => arena.insert(x),
-            Value::Cons(x) => arena.insert(x.clone()),
-            Value::String(x) => arena.insert(x.clone()),
-            Value::Symbol(x) => arena.insert(x),
-            Value::LispFn(x) => arena.insert(x.clone()),
-            Value::SubrFn(x) => arena.insert(*x),
-            Value::True => Object::t(),
-            Value::Nil => Object::nil(),
-            Value::Float(x) => arena.insert(x),
-        }
-    }
-
     pub fn into_raw(self) -> i64 {
         unsafe { self.data.bits }
     }
@@ -291,25 +259,12 @@ impl<'a> LispObj {
         Self::from_bits(bits)
     }
 
-    const fn from_tag(tag: Tag) -> Self {
-        // cast to i64 to zero the high bits
-        Self::from_bits(tag as i64)
-    }
-
     fn tag_eq(self, tag: Tag) -> bool {
         unsafe { self.data.tag == tag }
     }
 
     fn tag_masked(self, tag: Tag, mask: u16) -> bool {
         unsafe { (self.data.tag as u16) & mask == (tag as u16) }
-    }
-
-    pub const fn nil() -> Self {
-        LispObj::from_tag(Tag::Nil)
-    }
-
-    pub const fn t() -> Self {
-        LispObj::from_tag(Tag::True)
     }
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
@@ -403,13 +358,6 @@ impl<'a> fmt::Display for Object<'a> {
         self.data.fmt(f)
     }
 }
-
-impl fmt::Display for LispObj {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.data.fmt(f)
-    }
-}
-
 
 impl fmt::Debug for InnerObject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

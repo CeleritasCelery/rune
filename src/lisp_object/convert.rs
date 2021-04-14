@@ -71,12 +71,6 @@ where
 type Int = i64;
 define_unbox!(Int);
 
-impl From<Int> for LispObj {
-    fn from(i: Int) -> Self {
-        LispObj::from_bits(i << TAG_SIZE)
-    }
-}
-
 impl<'obj> From<Int> for Object<'obj> {
     fn from(i: Int) -> Self {
         unsafe {
