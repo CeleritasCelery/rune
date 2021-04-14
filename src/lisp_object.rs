@@ -151,7 +151,6 @@ impl<'a> ValueX<'a> {
 enum Tag {
     Int = 0,
     Float = 1,
-    Marker = 2,
     True = 3,
     Nil = 4,
     Cons = 5,
@@ -208,7 +207,6 @@ impl<'a> Object<'a> {
                 Tag::True => Value::True,
                 Tag::Cons => Value::Cons(&*data.get_ptr()),
                 Tag::Int => Value::Int(data.bits >> TAG_SIZE),
-                Tag::Marker => todo!(),
             }
         }
     }
@@ -226,7 +224,6 @@ impl<'a> Object<'a> {
                 Tag::True => ValueX::True,
                 Tag::Cons => ValueX::Cons(&*data.get_ptr()),
                 Tag::Int => ValueX::Int(data.bits >> TAG_SIZE),
-                Tag::Marker => todo!(),
             }
         }
     }
@@ -262,7 +259,6 @@ impl<'a> LispObj {
                 Tag::True => Value::True,
                 Tag::Cons => Value::Cons(&*self.get_ptr()),
                 Tag::Int => Value::Int(self.bits >> TAG_SIZE),
-                Tag::Marker => todo!(),
             }
         }
     }
@@ -357,7 +353,6 @@ impl<'a> LispObj {
                 Box::from_raw(x);
             },
             Tag::Int => {},
-            Tag::Marker => todo!(),
         }
     }
 }

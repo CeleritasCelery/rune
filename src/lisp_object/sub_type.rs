@@ -20,7 +20,7 @@ pub enum FunctionValue<'a> {
 }
 
 impl<'a> Function {
-    pub fn val(&'a self) -> FunctionValue<'a> {
+    pub fn val(self) -> FunctionValue<'a> {
         use std::mem::transmute;
         unsafe {
             match LispObj::from_raw(self.0).val() {
