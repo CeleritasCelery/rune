@@ -156,9 +156,8 @@ enum Tag {
     Nil = 4,
     Cons = 5,
     Symbol = 6,
-    LongStr = 7,
-    ShortStr = 8,
-    LispFn = 16,
+    String = 7,
+    LispFn = 8,
     SubrFn,
 }
 
@@ -202,7 +201,7 @@ impl<'a> Object<'a> {
             match data.tag {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(data.get_ptr())),
                 Tag::Float => Value::Float(*data.get_ptr()),
-                Tag::LongStr | Tag::ShortStr => Value::String(&*data.get_ptr()),
+                Tag::String => Value::String(&*data.get_ptr()),
                 Tag::LispFn => Value::LispFn(&*data.get_ptr()),
                 Tag::SubrFn => Value::SubrFn(&*data.get_ptr()),
                 Tag::Nil => Value::Nil,
@@ -220,7 +219,7 @@ impl<'a> Object<'a> {
             match data.tag {
                 Tag::Symbol => ValueX::Symbol(Symbol::from_raw(data.get_ptr())),
                 Tag::Float => ValueX::Float(*data.get_ptr()),
-                Tag::LongStr | Tag::ShortStr => ValueX::String(&*data.get_ptr()),
+                Tag::String => ValueX::String(&*data.get_ptr()),
                 Tag::LispFn => ValueX::LispFn(&*data.get_ptr()),
                 Tag::SubrFn => ValueX::SubrFn(&*data.get_ptr()),
                 Tag::Nil => ValueX::Nil,
@@ -256,7 +255,7 @@ impl<'a> LispObj {
             match self.tag {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
                 Tag::Float => Value::Float(*self.get_ptr()),
-                Tag::LongStr | Tag::ShortStr => Value::String(&*self.get_ptr()),
+                Tag::String => Value::String(&*self.get_ptr()),
                 Tag::LispFn => Value::LispFn(&*self.get_ptr()),
                 Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
                 Tag::Nil => Value::Nil,
@@ -339,7 +338,7 @@ impl<'a> LispObj {
                 let x: *mut f64 = self.get_mut_ptr();
                 Box::from_raw(x);
             },
-            Tag::LongStr | Tag::ShortStr => {
+            Tag::String => {
                 let x: *mut String = self.get_mut_ptr();
                 Box::from_raw(x);
             }

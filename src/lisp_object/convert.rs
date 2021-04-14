@@ -105,8 +105,8 @@ impl From<f64> for LispObj {
 }
 
 impl<'obj> IntoObject<'obj> for f64 {
-    fn into_object(self, alloc: &Arena) -> (Object, bool) {
-        Object::from_type(alloc, self, Tag::Float)
+    fn into_object(self, arena: &Arena) -> (Object, bool) {
+        Object::from_type(arena, self, Tag::Float)
     }
 }
 
@@ -124,26 +124,26 @@ impl<'obj> IntoObject<'obj> for bool {
 
 impl From<&str> for LispObj {
     fn from(s: &str) -> Self {
-        LispObj::from_tagged_ptr(s.to_owned(), Tag::LongStr)
+        LispObj::from_tagged_ptr(s.to_owned(), Tag::String)
     }
 }
 
 impl<'obj> IntoObject<'obj> for &str {
-    fn into_object(self, alloc: &Arena) -> (Object, bool) {
-        Object::from_type(alloc, self.to_owned(), Tag::LongStr)
+    fn into_object(self, arena: &Arena) -> (Object, bool) {
+        Object::from_type(arena, self.to_owned(), Tag::String)
     }
 }
 
 define_unbox_ref!(String);
 impl From<String> for LispObj {
     fn from(s: String) -> Self {
-        LispObj::from_tagged_ptr(s, Tag::LongStr)
+        LispObj::from_tagged_ptr(s, Tag::String)
     }
 }
 
 impl<'obj> IntoObject<'obj> for String {
-    fn into_object(self, alloc: &Arena) -> (Object, bool) {
-        Object::from_type(alloc, self, Tag::LongStr)
+    fn into_object(self, arena: &Arena) -> (Object, bool) {
+        Object::from_type(arena, self, Tag::String)
     }
 }
 
@@ -166,9 +166,9 @@ where
 }
 
 impl<'obj, T: IntoObject<'obj>> IntoObject<'obj> for Option<T> {
-    fn into_object(self, alloc: &'obj Arena) -> (Object, bool) {
+    fn into_object(self, arena: &'obj Arena) -> (Object, bool) {
         match self {
-            Some(x) => x.into_object(alloc),
+            Some(x) => x.into_object(arena),
             None => (Object::nil(), false),
         }
     }
