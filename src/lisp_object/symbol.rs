@@ -98,7 +98,7 @@ impl From<Symbol> for LispObj {
     fn from(s: Symbol) -> Self {
         let ptr = s.0 as *const _;
         let bits = ((ptr as i64) << TAG_SIZE) | Tag::Symbol as i64;
-        LispObj { bits }
+        LispObj::from_bits(bits)
     }
 }
 

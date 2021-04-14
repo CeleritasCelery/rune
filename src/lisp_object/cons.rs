@@ -32,12 +32,12 @@ impl<'a> ConsX<'a> {
     // remove this
     pub const fn from_cons(cons: &'a Cons) -> ConsX<'a> {
         let car = Object {
-            data: cons.car,
+            data: cons.car.data,
             marker: std::marker::PhantomData,
         };
 
         let cdr = Object {
-            data: cons.cdr,
+            data: cons.cdr.data,
             marker: std::marker::PhantomData,
         };
         Self {car, cdr}

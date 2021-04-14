@@ -19,15 +19,21 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
 
+#[derive(Copy, Clone, Debug)]
+pub struct LispObj {
+    data: InnerObject,
+    marker: PhantomData<&'static ()>,
+}
+
 #[derive(Copy, Clone)]
-pub union LispObj {
+pub union InnerObject {
     tag: Tag,
     bits: i64,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Object<'a> {
-    data: LispObj,
+    data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
 
@@ -176,7 +182,7 @@ impl<'a> Object<'a> {
     unsafe fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
         let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
         Object {
-            data: LispObj { bits },
+            data: InnerObject { bits },
             marker: PhantomData,
         }
     }
@@ -184,7 +190,7 @@ impl<'a> Object<'a> {
     const fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
         Object {
-            data: LispObj { bits: tag as i64 },
+            data: InnerObject { bits: tag as i64 },
             marker: PhantomData,
         }
     }
@@ -238,7 +244,10 @@ impl<'a> Object<'a> {
     }
 
     pub const fn inner(self) -> LispObj {
-        self.data
+        LispObj {
+            data: self.data,
+            marker: PhantomData,
+        }
     }
 
     pub unsafe fn into_gc(self) -> Object<'static> {
@@ -248,19 +257,7 @@ impl<'a> Object<'a> {
 
 impl<'a> LispObj {
     pub fn val(&'a self) -> Value<'a> {
-        unsafe {
-            match self.tag {
-                Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
-                Tag::Float => Value::Float(*self.get_ptr()),
-                Tag::String => Value::String(&*self.get_ptr()),
-                Tag::LispFn => Value::LispFn(&*self.get_ptr()),
-                Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
-                Tag::Nil => Value::Nil,
-                Tag::True => Value::True,
-                Tag::Cons => Value::Cons(&*self.get_ptr()),
-                Tag::Int => Value::Int(self.bits >> TAG_SIZE),
-            }
-        }
+        self.data.val()
     }
 
     pub fn clone_in(self, arena: &'a Arena) -> Object<'a> {
@@ -278,38 +275,33 @@ impl<'a> LispObj {
     }
 
     pub fn into_raw(self) -> i64 {
-        unsafe { self.bits }
+        unsafe { self.data.bits }
     }
 
-    pub unsafe fn from_raw(bits: i64) -> Self {
-        Self { bits }
-    }
-
-    unsafe fn get_ptr<T>(self) -> *const T {
-        (self.bits >> TAG_SIZE) as *const T
-    }
-
-    unsafe fn get_mut_ptr<T>(&mut self) -> *mut T {
-        (self.bits >> TAG_SIZE) as *mut T
+    const fn from_bits(bits: i64) -> Self {
+        Self {
+            data: InnerObject {bits},
+            marker: PhantomData,
+        }
     }
 
     fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
         let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
-        LispObj { bits }
+        Self::from_bits(bits)
     }
 
     const fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
-        LispObj { bits: tag as i64 }
+        Self::from_bits(tag as i64)
     }
 
     fn tag_eq(self, tag: Tag) -> bool {
-        unsafe { self.tag == tag }
+        unsafe { self.data.tag == tag }
     }
 
     fn tag_masked(self, tag: Tag, mask: u16) -> bool {
-        unsafe { (self.tag as u16) & mask == (tag as u16) }
+        unsafe { (self.data.tag as u16) & mask == (tag as u16) }
     }
 
     pub const fn nil() -> Self {
@@ -322,34 +314,34 @@ impl<'a> LispObj {
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
         match self.val() {
-            Value::Cons(_) => Some(unsafe { &mut *self.get_mut_ptr() }),
+            Value::Cons(_) => Some(unsafe { &mut *self.data.get_mut_ptr() }),
             _ => None,
         }
     }
 
     pub unsafe fn dealloc(mut self) {
-        match self.tag {
+        match self.data.tag {
             Tag::Symbol => { },
             Tag::Float => {
-                let x: *mut f64 = self.get_mut_ptr();
+                let x: *mut f64 = self.data.get_mut_ptr();
                 Box::from_raw(x);
             },
             Tag::String => {
-                let x: *mut String = self.get_mut_ptr();
+                let x: *mut String = self.data.get_mut_ptr();
                 Box::from_raw(x);
             }
             Tag::LispFn => {
-                let x: *mut LispFn = self.get_mut_ptr();
+                let x: *mut LispFn = self.data.get_mut_ptr();
                 Box::from_raw(x);
             },
             Tag::SubrFn => {
-                let x: *mut SubrFn = self.get_mut_ptr();
+                let x: *mut SubrFn = self.data.get_mut_ptr();
                 Box::from_raw(x);
             },
             Tag::Nil => {},
             Tag::True => {},
             Tag::Cons => {
-                let x: *mut Cons = self.get_mut_ptr();
+                let x: *mut Cons = self.data.get_mut_ptr();
                 Box::from_raw(x);
             },
             Tag::Int => {},
@@ -357,7 +349,34 @@ impl<'a> LispObj {
     }
 }
 
-impl fmt::Display for LispObj {
+impl InnerObject {
+    unsafe fn get_ptr<T>(self) -> *const T {
+        (self.bits >> TAG_SIZE) as *const T
+    }
+
+    unsafe fn get_mut_ptr<T>(&mut self) -> *mut T {
+        (self.bits >> TAG_SIZE) as *mut T
+    }
+
+    pub fn val<'a>(self) -> Value<'a> {
+        unsafe {
+            match self.tag {
+                Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
+                Tag::Float => Value::Float(*self.get_ptr()),
+                Tag::String => Value::String(&*self.get_ptr()),
+                Tag::LispFn => Value::LispFn(&*self.get_ptr()),
+                Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
+                Tag::Nil => Value::Nil,
+                Tag::True => Value::True,
+                Tag::Cons => Value::Cons(&*self.get_ptr()),
+                Tag::Int => Value::Int(self.bits >> TAG_SIZE),
+            }
+        }
+    }
+}
+
+
+impl fmt::Display for InnerObject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.val() {
             Value::Int(x) => write!(f, "{}", x),
@@ -385,16 +404,16 @@ impl<'a> fmt::Display for Object<'a> {
     }
 }
 
-
-impl fmt::Debug for LispObj {
+impl fmt::Display for LispObj {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
+        self.data.fmt(f)
     }
 }
 
-impl<'a> fmt::Debug for Object<'a> {
+
+impl fmt::Debug for InnerObject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.data, f)
+        fmt::Display::fmt(self, f)
     }
 }
 

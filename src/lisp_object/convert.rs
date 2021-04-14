@@ -73,9 +73,7 @@ define_unbox!(Int);
 
 impl From<Int> for LispObj {
     fn from(i: Int) -> Self {
-        LispObj {
-            bits: i << TAG_SIZE,
-        }
+        LispObj::from_bits(i << TAG_SIZE)
     }
 }
 
