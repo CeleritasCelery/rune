@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[macro_use]
 pub mod cons;
 pub use cons::{Cons, ConsX};
@@ -38,8 +36,8 @@ impl<'a> cmp::PartialEq for Object<'a> {
     }
 }
 
-impl cmp::PartialEq<LispObj> for &str {
-    fn eq(&self, rhs: &LispObj) -> bool {
+impl<'obj> cmp::PartialEq<Object<'obj>> for &str {
+    fn eq(&self, rhs: &Object) -> bool {
         match rhs.val() {
             Value::String(x) => *self == x,
             _ => false,
@@ -47,8 +45,8 @@ impl cmp::PartialEq<LispObj> for &str {
     }
 }
 
-impl cmp::PartialEq<LispObj> for f64 {
-    fn eq(&self, rhs: &LispObj) -> bool {
+impl<'obj> cmp::PartialEq<Object<'obj>> for f64 {
+    fn eq(&self, rhs: &Object) -> bool {
         match rhs.val() {
             Value::Float(x) => *self == x,
             _ => false,
@@ -56,8 +54,8 @@ impl cmp::PartialEq<LispObj> for f64 {
     }
 }
 
-impl cmp::PartialEq<LispObj> for i64 {
-    fn eq(&self, rhs: &LispObj) -> bool {
+impl<'obj> cmp::PartialEq<Object<'obj>> for i64 {
+    fn eq(&self, rhs: &Object) -> bool {
         match rhs.val() {
             Value::Int(x) => *self == x,
             _ => false,
@@ -65,8 +63,8 @@ impl cmp::PartialEq<LispObj> for i64 {
     }
 }
 
-impl cmp::PartialEq<LispObj> for bool {
-    fn eq(&self, rhs: &LispObj) -> bool {
+impl<'obj> cmp::PartialEq<Object<'obj>> for bool {
+    fn eq(&self, rhs: &Object) -> bool {
         match rhs.val() {
             Value::Nil => !*self,
             Value::True => *self,
@@ -99,12 +97,6 @@ pub enum ValueX<'a> {
     Float(f64),
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),
-}
-
-impl<'a> From<&'a LispObj> for Value<'a> {
-    fn from(obj: &'a LispObj) -> Self {
-        obj.val()
-    }
 }
 
 impl<'a> Value<'a> {
@@ -241,7 +233,7 @@ impl<'a> Object<'a> {
     }
 }
 
-impl<'a> LispObj {
+impl<'obj> Object<'obj> {
     pub fn into_raw(self) -> i64 {
         unsafe { self.data.bits }
     }
@@ -257,14 +249,6 @@ impl<'a> LispObj {
         let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
         Self::from_bits(bits)
-    }
-
-    fn tag_eq(self, tag: Tag) -> bool {
-        unsafe { self.data.tag == tag }
-    }
-
-    fn tag_masked(self, tag: Tag, mask: u16) -> bool {
-        unsafe { (self.data.tag as u16) & mask == (tag as u16) }
     }
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {

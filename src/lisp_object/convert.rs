@@ -4,9 +4,9 @@ use std::convert::TryFrom;
 use std::mem::transmute;
 
 
-impl TryFrom<LispObj> for Function {
+impl<'obj> TryFrom<Object<'obj>> for Function {
     type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::LispFn(_) | Value::SubrFn(_) => Ok(unsafe { transmute(obj) }),
             x => Err(Error::Type(Type::Func, x.get_type())),
