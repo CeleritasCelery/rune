@@ -21,13 +21,10 @@ pub enum FunctionValue<'a> {
 
 impl<'a> Function {
     pub fn val(self) -> FunctionValue<'a> {
-        use std::mem::transmute;
-        unsafe {
-            match LispObj::from_bits(self.0).val() {
-                Value::LispFn(x) => FunctionValue::LispFn(transmute(x)), // transmute to fix lifetimes
-                Value::SubrFn(x) => FunctionValue::SubrFn(transmute(x)),
-                _ => unreachable!("Function was invalid type"),
-            }
+        match LispObj::from_bits(self.0).val() {
+            Value::LispFn(x) => FunctionValue::LispFn(x),
+            Value::SubrFn(x) => FunctionValue::SubrFn(x),
+            _ => unreachable!("Function was invalid type"),
         }
     }
 }
@@ -78,7 +75,7 @@ impl List {
     pub fn val(&self) -> ListValue {
         match LispObj::from_bits(self.0).val()  {
             Value::Nil => ListValue::Nil,
-            Value::Cons(x) => ListValue::Cons(unsafe { std::mem::transmute(x) }),
+            Value::Cons(x) => ListValue::Cons(x),
             _ => unreachable!("Number was invalid type"),
         }
     }

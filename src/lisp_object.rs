@@ -161,7 +161,7 @@ impl<'a> Object<'a> {
         unsafe { (Object::from_ptr(ptr, tag), true) }
     }
 
-    pub fn val(self) -> Value<'a> {
+    pub fn val<'b: 'a>(self) -> Value<'b> {
         self.data.val()
     }
 
