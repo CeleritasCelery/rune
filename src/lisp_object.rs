@@ -211,7 +211,7 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub unsafe fn dealloc(mut self) {
+    pub unsafe fn drop(mut self) {
         match self.data.tag {
             Tag::Symbol => { },
             Tag::Float => {
@@ -242,12 +242,12 @@ impl<'obj> Object<'obj> {
 }
 
 impl InnerObject {
-    unsafe fn get_ptr<T>(self) -> *const T {
-        (self.bits >> TAG_SIZE) as *const T
+    fn get_ptr<T>(self) -> *const T {
+        (unsafe {self.bits} >> TAG_SIZE) as *const T
     }
 
-    unsafe fn get_mut_ptr<T>(&mut self) -> *mut T {
-        (self.bits >> TAG_SIZE) as *mut T
+    fn get_mut_ptr<T>(&mut self) -> *mut T {
+        (unsafe {self.bits} >> TAG_SIZE) as *mut T
     }
 
     pub fn val<'a>(self) -> Value<'a> {

@@ -33,7 +33,7 @@ impl std::ops::Drop for Arena {
     fn drop(&mut self) {
         for obj in self.objects.get_mut() {
             unsafe {
-                obj.dealloc();
+                obj.drop();
             }
         }
     }
