@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object};
+use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object, LispObj};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 use crate::arena::Arena;
@@ -32,27 +32,31 @@ impl Default for LispFn {
 }
 
 #[derive(Debug)]
-struct ConstVec<'consts> {
-    consts: Vec<Object<'consts>>,
+struct ConstVec {
+    consts: Vec<LispObj>,
     arena: Arena,
 }
 
-impl<'consts> From<Vec<Object<'consts>>> for ConstVec<'consts> {
-    fn from(vec: Vec<Object<'consts>>) -> Self {
-        ConstVec {
-            consts: vec,
+impl<'obj> From<Vec<Object<'obj>>> for ConstVec {
+    fn from(vec: Vec<Object<'obj>>) -> Self {
+        let mut consts = ConstVec {
+            consts: Vec::new(),
             arena: Arena::new(),
+        };
+        for x in vec.into_iter() {
+            consts.insert_or_get(x);
         }
+        consts
     }
 }
 
-impl<'obj> std::cmp::PartialEq for ConstVec<'obj> {
+impl std::cmp::PartialEq for ConstVec {
     fn eq(&self, other: &Self) -> bool {
        self.consts == other.consts
     }
 }
 
-impl<'obj> ConstVec<'obj> {
+impl ConstVec {
     pub const fn new() -> Self {
         ConstVec{
             consts: Vec::new(),
@@ -178,13 +182,13 @@ fn into_list(obj: Object) -> Result<Vec<Object>> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Exp<'consts> {
+pub struct Exp {
     codes: CodeVec,
-    constants: ConstVec<'consts>,
+    constants: ConstVec,
     vars: Vec<Option<Symbol>>,
 }
 
-impl<'consts> std::convert::From<Exp<'consts>> for LispFn {
+impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
         let inner = exp.constants.consts.into_iter().map(|x| unsafe {x.into_gc()}).collect();
         let arena = exp.constants.arena;
@@ -192,7 +196,7 @@ impl<'consts> std::convert::From<Exp<'consts>> for LispFn {
     }
 }
 
-impl<'obj, 'consts> Exp<'consts> {
+impl<'obj> Exp {
     fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
@@ -445,7 +449,7 @@ impl<'obj, 'consts> Exp<'consts> {
 
     fn compile_form(&mut self, obj: Object<'obj>) -> Result<()> {
         match obj.val() {
-            Value::Cons(cons) => self.dispatch_special_form(&cons),
+            Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.add_const(obj, None),
         }
