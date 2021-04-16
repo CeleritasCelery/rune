@@ -1,6 +1,6 @@
 #[macro_use]
 pub mod cons;
-pub use cons::{Cons, ConsX};
+pub use cons::Cons;
 pub mod sub_type;
 pub use sub_type::*;
 pub mod func;
@@ -78,20 +78,7 @@ pub enum Value<'a> {
     Int(i64),
     True,
     Nil,
-    Cons(&'a Cons),
-    String(&'a String),
-    Symbol(Symbol),
-    Float(f64),
-    LispFn(&'a LispFn),
-    SubrFn(&'a SubrFn),
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum ValueX<'a> {
-    Int(i64),
-    True,
-    Nil,
-    Cons(&'a ConsX<'a>),
+    Cons(&'a Cons<'a>),
     String(&'a String),
     Symbol(Symbol),
     Float(f64),
@@ -112,23 +99,6 @@ impl<'a> Value<'a> {
             Value::Int(_) => Int,
             Value::LispFn(_) => Func,
             Value::SubrFn(_) => Func,
-        }
-    }
-}
-
-impl<'a> ValueX<'a> {
-    pub const fn get_type(&self) -> crate::error::Type {
-        use crate::error::Type::*;
-        match self {
-            ValueX::Symbol(_) => Symbol,
-            ValueX::Float(_) => Float,
-            ValueX::String(_) => String,
-            ValueX::Nil => Nil,
-            ValueX::True => True,
-            ValueX::Cons(_) => Cons,
-            ValueX::Int(_) => Int,
-            ValueX::LispFn(_) => Func,
-            ValueX::SubrFn(_) => Func,
         }
     }
 }
@@ -157,7 +127,7 @@ impl<'old, 'new> Object<'old> {
     pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self.val() {
             Value::Int(x) => arena.insert(x),
-            Value::Cons(x) => arena.insert(x.clone()),
+            Value::Cons(x) => arena.insert(x.clone_in(arena)),
             Value::String(x) => arena.insert(x.clone()),
             Value::Symbol(x) => arena.insert(x),
             Value::LispFn(x) => arena.insert(x.clone()),
@@ -195,24 +165,6 @@ impl<'a> Object<'a> {
         self.data.val()
     }
 
-    pub fn val_x(self) -> ValueX<'a> {
-        let data = self.data;
-        unsafe {
-            match data.tag {
-                Tag::Symbol => ValueX::Symbol(Symbol::from_raw(data.get_ptr())),
-                Tag::Float => ValueX::Float(*data.get_ptr()),
-                Tag::String => ValueX::String(&*data.get_ptr()),
-                Tag::LispFn => ValueX::LispFn(&*data.get_ptr()),
-                Tag::SubrFn => ValueX::SubrFn(&*data.get_ptr()),
-                Tag::Nil => ValueX::Nil,
-                Tag::True => ValueX::True,
-                Tag::Cons => ValueX::Cons(&*data.get_ptr()),
-                Tag::Int => ValueX::Int(data.bits >> TAG_SIZE),
-            }
-        }
-    }
-
-
     pub const fn nil() -> Self {
         Object::from_tag(Tag::Nil)
     }
@@ -245,6 +197,7 @@ impl<'obj> Object<'obj> {
         }
     }
 
+    // TODO: remove this
     fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
         let ptr = Gc::new(obj).as_ref() as *const T;
         let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;

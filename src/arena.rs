@@ -27,8 +27,6 @@ impl<'obj> Arena {
     pub fn alloc<T>(&self, obj: T) -> *const T {
         Box::into_raw(Box::new(obj))
     }
-
-    // pub unsafe fn new_gc_arena() -> Self
 }
 
 impl std::ops::Drop for Arena {

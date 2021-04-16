@@ -28,9 +28,9 @@ macro_rules! define_unbox {
         define_unbox!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl std::convert::TryFrom<crate::lisp_object::LispObj> for $ident {
+        impl<'obj> std::convert::TryFrom<crate::lisp_object::Object<'obj>> for $ident {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::lisp_object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::lisp_object::Value::$ident(x) => Ok(x),
                     x => Err(crate::error::Error::Type(
@@ -40,9 +40,9 @@ macro_rules! define_unbox {
                 }
             }
         }
-        impl std::convert::TryFrom<crate::lisp_object::LispObj> for Option<$ident> {
+        impl<'obj> std::convert::TryFrom<crate::lisp_object::Object<'obj>> for Option<$ident> {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::lisp_object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
                     crate::lisp_object::Value::Nil => Ok(None),
@@ -62,9 +62,9 @@ macro_rules! define_unbox_ref {
         define_unbox_ref!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl<'a> std::convert::TryFrom<&'a crate::lisp_object::LispObj> for &'a $ident {
+        impl<'a> std::convert::TryFrom<crate::lisp_object::Object<'a>> for &'a $ident {
             type Error = crate::error::Error;
-            fn try_from(obj: &'a crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::lisp_object::Object<'a>) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::lisp_object::Value::$ident(x) => Ok(x),
                     x => Err(crate::error::Error::Type(
@@ -74,9 +74,9 @@ macro_rules! define_unbox_ref {
                 }
             }
         }
-        impl<'a> std::convert::TryFrom<&'a crate::lisp_object::LispObj> for Option<&'a $ident> {
+        impl<'a> std::convert::TryFrom<crate::lisp_object::Object<'a>> for Option<&'a $ident> {
             type Error = crate::error::Error;
-            fn try_from(obj: &'a crate::lisp_object::LispObj) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::lisp_object::Object<'a>) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
                     crate::lisp_object::Value::Nil => Ok(None),

@@ -1,4 +1,4 @@
-use crate::lisp_object::{Function, LispObj, Symbol};
+use crate::lisp_object::{Function, LispObj, Object, Symbol};
 
 #[lisp_fn]
 pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {
@@ -6,8 +6,9 @@ pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {
     symbol
 }
 
+
 #[lisp_fn]
-pub fn progn(forms: &[LispObj]) -> LispObj {
+pub fn progn<'obj>(forms: &[Object<'obj>]) -> Object<'obj> {
     match forms.last() {
         Some(form) => *form,
         None => LispObj::nil(),

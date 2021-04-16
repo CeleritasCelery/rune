@@ -71,7 +71,7 @@ pub struct List(i64);
 
 pub enum ListValue<'a> {
     Nil,
-    Cons(&'a Cons),
+    Cons(&'a Cons<'a>),
 }
 
 impl List {

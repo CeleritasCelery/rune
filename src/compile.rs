@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object, ConsX, ValueX};
+use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 use crate::arena::Arena;
@@ -163,9 +163,9 @@ impl CodeVec {
 }
 
 fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<Object<'obj>>> {
-    match obj.val_x() {
-        ValueX::Nil => Ok(vec),
-        ValueX::Cons(cons) => {
+    match obj.val() {
+        Value::Nil => Ok(vec),
+        Value::Cons(cons) => {
             vec.push(cons.car());
             push_cons(cons.cdr(), vec)
         }
@@ -275,9 +275,6 @@ impl<'obj, 'consts> Exp<'consts> {
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
         let var = cons.car().try_into()?;
-        // TODO: into_object
-        // remove
-        let cons = ConsX::from_cons(cons);
         let list = into_list(cons.cdr())?;
         let mut iter = list.iter();
         match iter.next() {
@@ -339,7 +336,7 @@ impl<'obj, 'consts> Exp<'consts> {
         }
     }
 
-    fn compile_funcall(&mut self, cons: &ConsX) -> Result<()> {
+    fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
         self.add_const(cons.car(), None)?;
         let prev_len = self.vars.len();
         let list = into_list(cons.cdr())?;
@@ -421,7 +418,7 @@ impl<'obj, 'consts> Exp<'consts> {
         }
     }
 
-    fn dispatch_special_form(&mut self, cons: &ConsX) -> Result<()> {
+    fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         let inner = cons.car().inner();
         let sym: Symbol = inner.try_into()?;
         match sym.get_name() {
@@ -448,7 +445,7 @@ impl<'obj, 'consts> Exp<'consts> {
 
     fn compile_form(&mut self, obj: Object<'obj>) -> Result<()> {
         match obj.val() {
-            Value::Cons(cons) => self.dispatch_special_form(&ConsX::from_cons(cons)),
+            Value::Cons(cons) => self.dispatch_special_form(&cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.add_const(obj, None),
         }
@@ -501,9 +498,10 @@ mod test {
 
     #[test]
     fn test_basic() {
+        let arena = Arena::new();
         check_compiler!("1", [Constant0, Ret], [1]);
         check_compiler!("'foo", [Constant0, Ret], [intern("foo")]);
-        check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2)]);
+        check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2; arena)]);
     }
 
     #[test]

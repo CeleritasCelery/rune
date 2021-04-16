@@ -14,7 +14,7 @@ mod arith;
 mod compile;
 mod error;
 mod eval;
-mod func;
+mod forms;
 mod arena;
 mod gc;
 mod hashmap;

@@ -14,9 +14,9 @@ impl<'obj> TryFrom<Object<'obj>> for Function {
     }
 }
 
-impl TryFrom<LispObj> for Number {
+impl<'obj> TryFrom<Object<'obj>> for Number {
     type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Int(_) | Value::Float(_) => Ok(unsafe { transmute(obj) }),
             x => Err(Error::Type(Type::Number, x.get_type())),
@@ -24,9 +24,9 @@ impl TryFrom<LispObj> for Number {
     }
 }
 
-impl TryFrom<LispObj> for Option<Number> {
+impl<'obj> TryFrom<Object<'obj>> for Option<Number> {
     type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Int(_) | Value::Float(_) => Ok(Some(unsafe { transmute(obj) })),
             Value::Nil => Ok(None),
@@ -35,9 +35,9 @@ impl TryFrom<LispObj> for Option<Number> {
     }
 }
 
-impl TryFrom<LispObj> for List {
+impl<'obj> TryFrom<Object<'obj>> for List {
     type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(_) | Value::Nil => Ok(unsafe { transmute(obj) }),
             x => Err(Error::Type(Type::List, x.get_type())),
@@ -45,9 +45,9 @@ impl TryFrom<LispObj> for List {
     }
 }
 
-impl TryFrom<LispObj> for bool {
+impl<'obj> TryFrom<Object<'obj>> for bool {
     type Error = Error;
-    fn try_from(obj: LispObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Nil => Ok(false),
             _ => Ok(true),
@@ -55,11 +55,11 @@ impl TryFrom<LispObj> for bool {
     }
 }
 
-pub fn try_from_slice<T>(slice: &[LispObj]) -> Result<&[T], Error>
+pub fn try_from_slice<'obj, T>(slice: &[Object<'obj>]) -> Result<&'obj [T], Error>
 where
-    T: TryFrom<LispObj, Error = Error>,
+    T: TryFrom<Object<'obj>, Error = Error>,
 {
-    debug_assert_eq!(size_of::<LispObj>(), size_of::<T>());
+    debug_assert_eq!(size_of::<Object>(), size_of::<T>());
     for x in slice.iter() {
         let _: T = TryFrom::try_from(*x)?;
     }
@@ -90,9 +90,9 @@ impl<'obj> IntoObject<'obj> for i64 {
 type Float = f64;
 define_unbox!(Float);
 
-impl From<f64> for LispObj {
+impl<'obj> From<f64> for Object<'obj> {
     fn from(f: f64) -> Self {
-        LispObj::from_tagged_ptr(f, Tag::Float)
+        Object::from_tagged_ptr(f, Tag::Float)
     }
 }
 
@@ -102,9 +102,9 @@ impl<'obj> IntoObject<'obj> for f64 {
     }
 }
 
-impl From<bool> for LispObj {
+impl<'obj> From<bool> for Object<'obj> {
     fn from(b: bool) -> Self {
-        LispObj::from_tag(if b { Tag::True } else { Tag::Nil })
+        Object::from_tag(if b { Tag::True } else { Tag::Nil })
     }
 }
 
@@ -114,9 +114,9 @@ impl<'obj> IntoObject<'obj> for bool {
     }
 }
 
-impl From<&str> for LispObj {
+impl<'obj> From<&str> for Object<'obj> {
     fn from(s: &str) -> Self {
-        LispObj::from_tagged_ptr(s.to_owned(), Tag::String)
+        Object::from_tagged_ptr(s.to_owned(), Tag::String)
     }
 }
 
@@ -127,9 +127,9 @@ impl<'obj> IntoObject<'obj> for &str {
 }
 
 define_unbox_ref!(String);
-impl From<String> for LispObj {
+impl<'obj> From<String> for Object<'obj> {
     fn from(s: String) -> Self {
-        LispObj::from_tagged_ptr(s, Tag::String)
+        Object::from_tagged_ptr(s, Tag::String)
     }
 }
 
@@ -145,14 +145,14 @@ impl<'obj> IntoObject<'obj> for Object<'obj> {
     }
 }
 
-impl<T> From<Option<T>> for LispObj
+impl<'obj, T> From<Option<T>> for Object<'obj>
 where
-    T: Into<LispObj>,
+    T: Into<Object<'obj>>,
 {
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => LispObj::nil(),
+            None => Object::nil(),
         }
     }
 }
@@ -171,10 +171,10 @@ mod test {
     use super::*;
     use std::convert::TryInto;
 
-    fn wrapper(args: &[LispObj]) -> Result<Int, Error> {
+    fn wrapper(args: &[Object]) -> Result<Int, Error> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
-            std::convert::TryFrom::try_from(&args[1])?,
+            std::convert::TryFrom::try_from(args[1])?,
         ))
     }
 
@@ -185,8 +185,9 @@ mod test {
 
     #[test]
     fn test() {
+        let arena = Arena::new();
         let obj0 = LispObj::from(5);
-        let obj1 = LispObj::from(cons!(1, 2));
+        let obj1 = LispObj::from(cons!(1, 2; arena));
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

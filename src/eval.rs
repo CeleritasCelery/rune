@@ -3,7 +3,7 @@
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
-use crate::lisp_object::{BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Symbol, Value};
+use crate::lisp_object::{BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Symbol, Value, Object};
 use crate::opcode::OpCode;
 use std::convert::TryInto;
 
@@ -111,8 +111,8 @@ pub struct Routine {
 }
 
 #[lisp_fn]
-pub fn set(place: Symbol, newlet: LispObj, vars: &mut HashMap<Symbol, LispObj>) -> LispObj {
-    vars.insert(place, newlet);
+pub fn set<'obj>(place: Symbol, newlet: Object<'obj>, vars: &mut HashMap<Symbol, LispObj>) -> Object<'obj> {
+    vars.insert(place, unsafe {newlet.into_gc()});
     newlet
 }
 

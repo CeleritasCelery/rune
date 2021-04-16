@@ -252,15 +252,15 @@ impl<'a, 'obj> LispReader<'a> {
                 let cdr = self.read(arena)?;
                 match self.read_char() {
                     None => Err(Error::MissingCloseParen(None)),
-                    Some(')') => Ok(arena.insert(cons_x!(car, cdr; arena))),
+                    Some(')') => Ok(arena.insert(cons!(car, cdr; arena))),
                     Some(c) => Err(Error::UnexpectedChar(c, self.char_pos())),
                 }
             }
-            Some(')') => Ok(arena.insert(arena.insert(cons_x!(car; arena)))),
+            Some(')') => Ok(arena.insert(arena.insert(cons!(car; arena)))),
             Some(_) => {
                 self.stream.back();
                 let rest = self.read_cons(arena)?;
-                Ok(arena.insert(cons_x!(car, rest; arena)))
+                Ok(arena.insert(cons!(car, rest; arena)))
             }
             None => Err(Error::MissingCloseParen(None)),
         }
@@ -276,7 +276,7 @@ impl<'a, 'obj> LispReader<'a> {
 
     fn read_quote(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         let obj = self.read(arena)?;
-        let quoted = list_x!(intern("quote"), obj; arena);
+        let quoted = list!(intern("quote"), obj; arena);
         Ok(arena.insert(quoted))
     }
 
@@ -408,21 +408,23 @@ baz""#
 
     #[test]
     fn test_read_cons() {
+        let arena = Arena::new();
         check_reader!(false, "()");
-        check_reader!(cons!(1, 2), "(1 . 2)");
-        check_reader!(list!(1), "(1)");
-        check_reader!(list!("foo"), "(\"foo\")");
-        check_reader!(cons!(1, cons!(1.5, "foo")), "(1 1.5 . \"foo\")");
-        check_reader!(list!(1, 1.5), "(1 1.5)");
-        check_reader!(list!(1, 1.5, -7), "(1 1.5 -7)");
+        check_reader!(cons!(1, 2; arena), "(1 . 2)");
+        check_reader!(list!(1; arena), "(1)");
+        check_reader!(list!("foo"; arena), "(\"foo\")");
+        check_reader!(cons!(1, cons!(1.5, "foo"; arena); arena), "(1 1.5 . \"foo\")");
+        check_reader!(list!(1, 1.5; arena), "(1 1.5)");
+        check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)");
     }
 
     #[test]
     fn read_quote() {
+        let arena = Arena::new();
         let quote = intern("quote");
-        check_reader!(list!(quote, intern("foo")), "(quote foo)");
-        check_reader!(list!(quote, intern("foo")), "'foo");
-        check_reader!(list!(quote, list!(1, 2, 3)), "'(1 2 3)");
+        check_reader!(list!(quote, intern("foo"); arena), "(quote foo)");
+        check_reader!(list!(quote, intern("foo"); arena), "'foo");
+        check_reader!(list!(quote, list!(1, 2, 3; arena); arena), "'(1 2 3)");
     }
 
     fn assert_error(input: &str, pos: usize, error: Error) {

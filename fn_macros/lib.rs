@@ -57,11 +57,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         };
 
         #[allow(non_snake_case)]
-        pub fn #func_name(
-            args: &[crate::lisp_object::LispObj],
+        pub fn #func_name<'obj>(
+            args: &[crate::lisp_object::Object<'obj>],
             vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol,
             crate::lisp_object::LispObj>
-        ) -> crate::error::Result<crate::lisp_object::LispObj> {
+        ) -> crate::error::Result<crate::lisp_object::Object<'obj>> {
             #subr_call
         }
 
@@ -116,7 +116,7 @@ fn convert_type(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => convert_type(refer.elem.as_ref()),
         syn::Type::Slice(slice) => convert_type(slice.elem.as_ref()),
-        syn::Type::Path(path) => "LispObj" != get_path_ident_name(path),
+        syn::Type::Path(path) => "Object" != get_path_ident_name(path),
         _ => false,
     }
 }
@@ -272,16 +272,6 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}};
-        let function: Function = syn::parse2(stream).unwrap();
-        let spec = Spec {
-            name: Some("bar".into()),
-            required: Some(1),
-            intspec: None,
-        };
-        let result = expand(function, spec);
-        println!("{}", result.to_string());
-
-        let stream = quote! {pub fn foo(var0: u8, vars: &mut HashMap<Symbol, LispObj>) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec {
             name: Some("bar".into()),
