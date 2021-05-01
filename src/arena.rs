@@ -1,4 +1,4 @@
-use crate::lisp_object::{Object, LispObj, IntoObject};
+use crate::lisp_object::{LispObj, IntoTagObject, RefObject, TaggedObject};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -13,15 +13,17 @@ impl<'obj> Arena {
         }
     }
 
-    pub fn insert<T>(&'obj self, obj: T) -> Object
+    pub fn insert<T, U, V>(&'obj self, obj: T) -> U
     where
-        T: IntoObject<'obj>,
+        T: IntoTagObject<V>,
+        U: RefObject<'obj>,
+        V: TaggedObject + Into<U> + Copy,
     {
-        let (obj, allocated) = obj.into_object(self);
-        if allocated {
-            self.objects.borrow_mut().push(obj.inner());
+        let obj = obj.into_object(self);
+        if obj.is_boxed() {
+            self.objects.borrow_mut().push(obj.into_gc());
         }
-        obj
+        obj.into()
     }
 
     pub fn alloc<T>(&self, obj: T) -> *const T {

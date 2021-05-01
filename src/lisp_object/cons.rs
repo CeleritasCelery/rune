@@ -1,4 +1,4 @@
-use crate::lisp_object::{LispObj, Object, IntoObject, Tag, Value};
+use crate::lisp_object::*;
 use crate::arena::Arena;
 use crate::error::{Error, Type};
 use std::convert::TryFrom;
@@ -75,6 +75,13 @@ impl<'obj> From<Cons<'obj>> for LispObj {
 impl<'obj> IntoObject<'obj> for Cons<'obj> {
     fn into_object(self, alloc: &Arena) -> (Object<'obj>, bool) {
         Object::from_type(alloc, self, Tag::Cons)
+    }
+}
+
+impl<'obj> IntoTagObject<ConsObject> for Cons<'obj> {
+    fn into_object(self, arena: &Arena) -> ConsObject {
+        let ptr = arena.alloc(self);
+        ConsObject(ConsObject::new_tagged(ptr as i64))
     }
 }
 

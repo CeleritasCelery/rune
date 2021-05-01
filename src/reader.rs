@@ -256,7 +256,7 @@ impl<'a, 'obj> LispReader<'a> {
                     Some(c) => Err(Error::UnexpectedChar(c, self.char_pos())),
                 }
             }
-            Some(')') => Ok(arena.insert(arena.insert(cons!(car; arena)))),
+            Some(')') => Ok(arena.insert(cons!(car; arena))),
             Some(_) => {
                 self.stream.back();
                 let rest = self.read_cons(arena)?;
@@ -358,7 +358,8 @@ mod test {
         ($expect:expr, $compare:expr) => {
             let arena = Arena::new();
             let mut reader = LispReader::new($compare);
-            assert_eq!(arena.insert($expect), reader.read_from(&arena).unwrap().unwrap())
+            let obj: Object = arena.insert($expect);
+            assert_eq!(obj, reader.read_from(&arena).unwrap().unwrap())
         };
     }
 

@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::hashmap::HashMap;
-use crate::lisp_object::{LispObj, Symbol, Tag, IntoObject, Object};
+use crate::lisp_object::*;
 use crate::arena::Arena;
 use crate::opcode::CodeVec;
 use std::fmt;
@@ -59,6 +59,13 @@ impl<'obj> IntoObject<'obj> for LispFn {
     }
 }
 
+impl<'obj> IntoTagObject<LispFnObject> for LispFn {
+    fn into_object(self, arena: &Arena) -> LispFnObject {
+        let ptr = arena.alloc(self);
+        LispFnObject(LispFnObject::new_tagged(ptr as i64))
+    }
+}
+
 pub type BuiltInFn = fn(&[LispObj], &mut HashMap<Symbol, LispObj>) -> Result<LispObj, Error>;
 
 #[derive(Copy, Clone)]
@@ -112,6 +119,13 @@ impl From<SubrFn> for LispObj {
 impl<'obj> IntoObject<'obj> for SubrFn {
     fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
         Object::from_type(arena, self, Tag::SubrFn)
+    }
+}
+
+impl<'obj> IntoTagObject<SubrFnObject> for SubrFn {
+    fn into_object(self, arena: &Arena) -> SubrFnObject {
+        let ptr = arena.alloc(self);
+        SubrFnObject(SubrFnObject::new_tagged(ptr as i64))
     }
 }
 

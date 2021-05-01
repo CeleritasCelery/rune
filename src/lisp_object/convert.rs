@@ -87,6 +87,12 @@ impl<'obj> IntoObject<'obj> for i64 {
     }
 }
 
+impl IntoTagObject<IntObject> for i64 {
+    fn into_object(self, _arena: &Arena) -> IntObject {
+        IntObject(IntObject::new_tagged(self))
+    }
+}
+
 type Float = f64;
 define_unbox!(Float);
 
@@ -102,6 +108,13 @@ impl<'obj> IntoObject<'obj> for f64 {
     }
 }
 
+impl IntoTagObject<FloatObject> for f64 {
+    fn into_object(self, arena: &Arena) -> FloatObject {
+        let ptr = arena.alloc(self);
+        FloatObject(FloatObject::new_tagged(ptr as i64))
+    }
+}
+
 impl<'obj> From<bool> for Object<'obj> {
     fn from(b: bool) -> Self {
         Object::from_tag(if b { Tag::True } else { Tag::Nil })
@@ -114,6 +127,16 @@ impl<'obj> IntoObject<'obj> for bool {
     }
 }
 
+impl IntoTagObject<BoolObject> for bool {
+    fn into_object(self, _arena: &Arena) -> BoolObject {
+        if self {
+            TrueObject(TrueObject::new_tagged(0)).into()
+        } else {
+            NilObject(NilObject::new_tagged(0)).into()
+        }
+    }
+}
+
 impl<'obj> From<&str> for Object<'obj> {
     fn from(s: &str) -> Self {
         Object::from_tagged_ptr(s.to_owned(), Tag::String)
@@ -123,6 +146,13 @@ impl<'obj> From<&str> for Object<'obj> {
 impl<'obj> IntoObject<'obj> for &str {
     fn into_object(self, arena: &Arena) -> (Object, bool) {
         Object::from_type(arena, self.to_owned(), Tag::String)
+    }
+}
+
+impl IntoTagObject<StringObject> for &str {
+    fn into_object(self, arena: &Arena) -> StringObject {
+        let ptr = arena.alloc(self.to_owned());
+        StringObject(StringObject::new_tagged(ptr as i64))
     }
 }
 
@@ -139,9 +169,22 @@ impl<'obj> IntoObject<'obj> for String {
     }
 }
 
+impl IntoTagObject<StringObject> for String {
+    fn into_object(self, arena: &Arena) -> StringObject {
+        let ptr = arena.alloc(self);
+        StringObject(StringObject::new_tagged(ptr as i64))
+    }
+}
+
 impl<'obj> IntoObject<'obj> for Object<'obj> {
     fn into_object(self, _arena: &'obj Arena) -> (Object<'obj>, bool) {
         (self, false)
+    }
+}
+
+impl<'obj> IntoTagObject<Object<'obj>> for Object<'obj> {
+    fn into_object(self, _arena: &Arena) -> Object<'obj> {
+        self
     }
 }
 
