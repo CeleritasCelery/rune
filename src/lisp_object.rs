@@ -415,6 +415,10 @@ impl InnerObject {
             }
         }
     }
+
+    fn into_raw(self) -> i64 {
+        unsafe {self.bits}
+    }
 }
 
 

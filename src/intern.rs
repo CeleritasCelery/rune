@@ -1,19 +1,26 @@
 #![allow(dead_code)]
 use crate::hashmap::HashMap;
-use crate::lisp_object::{InnerSymbol, Symbol};
+use crate::lisp_object::{InnerSymbol, Symbol, Function};
+use crate::arena::Arena;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
-pub struct SymbolMap(HashMap<String, Box<InnerSymbol>>);
+pub struct SymbolMap{
+    map: HashMap<String, Box<InnerSymbol>>,
+    arena: Arena,
+}
 
 impl SymbolMap {
     fn with_capacity(cap: usize) -> Self {
         use crate::hashmap::HashMapDefault;
-        Self(HashMap::with_capacity(cap))
+        Self {
+            map: HashMap::with_capacity(cap),
+            arena: Arena::new(),
+        }
     }
 
     pub fn size(&self) -> usize {
-        self.0.keys().len()
+        self.map.keys().len()
     }
 
     pub fn intern(&mut self, name: &str) -> Symbol {
@@ -28,12 +35,12 @@ impl SymbolMap {
     }
 
     fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {
-        match self.0.get(name) {
+        match self.map.get(name) {
             Some(x) => x.as_ref(),
             None => {
                 let sym = Box::new(InnerSymbol::new(name.to_owned()));
                 let ptr = sym.as_ref() as *const InnerSymbol;
-                self.0.insert(name.to_owned(), sym);
+                self.map.insert(name.to_owned(), sym);
                 ptr
             }
         }
@@ -45,7 +52,11 @@ macro_rules! create_symbolmap {
         const SIZE: usize = 0usize $(+ $arr.len())+;
         let mut map = SymbolMap::with_capacity(SIZE);
         $(for func in $arr.iter() {
-            map.intern(func.name).set_func(func.clone());
+            let func_obj = unsafe {
+                let tmp: Function = map.arena.insert(func.clone());
+                std::mem::transmute(tmp)
+            };
+            map.intern(func.name).set_func(func_obj);
         })+;
         map
     })
@@ -70,12 +81,14 @@ mod test {
 
     #[test]
     fn test_intern() {
+        let arena = Arena::new();
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
-        second.set_func(LispFn::new(vec![5].into(), vec![], Arena::new(), 0, 0, false));
+        let func = LispFn::new(vec![5].into(), vec![], Arena::new(), 0, 0, false);
+        second.set_func(arena.insert(func));
         let func_cell = first.get_func().unwrap();
         let func = match func_cell.val() {
             FunctionValue::LispFn(x) => x,

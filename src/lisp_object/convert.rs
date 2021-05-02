@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::mem::transmute;
 
 
-impl<'obj> TryFrom<Object<'obj>> for Function {
+impl<'obj> TryFrom<Object<'obj>> for Function<'obj> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -14,7 +14,7 @@ impl<'obj> TryFrom<Object<'obj>> for Function {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for Number {
+impl<'obj> TryFrom<Object<'obj>> for Number<'obj> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -24,23 +24,13 @@ impl<'obj> TryFrom<Object<'obj>> for Number {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for Option<Number> {
+impl<'obj> TryFrom<Object<'obj>> for Option<Number<'obj>> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Int(_) | Value::Float(_) => Ok(Some(unsafe { transmute(obj) })),
             Value::Nil => Ok(None),
             x => Err(Error::Type(Type::Number, x.get_type())),
-        }
-    }
-}
-
-impl<'obj> TryFrom<Object<'obj>> for List {
-    type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(_) | Value::Nil => Ok(unsafe { transmute(obj) }),
-            x => Err(Error::Type(Type::List, x.get_type())),
         }
     }
 }

@@ -26,7 +26,7 @@ impl NumberFold {
     }
 }
 
-impl From<Number> for NumberFold {
+impl<'obj> From<Number<'obj>> for NumberFold {
     fn from(num: Number) -> Self {
         match num.val() {
             NumberValue::Int(x) => x.into(),
@@ -35,7 +35,7 @@ impl From<Number> for NumberFold {
     }
 }
 
-impl From<NumberFold> for Number {
+impl<'obj> From<NumberFold> for Number<'obj> {
     fn from(num: NumberFold) -> Self {
         match num {
             NumberFold::Int(x) => x.into(),
@@ -57,7 +57,7 @@ impl From<i64> for NumberFold {
 }
 
 #[lisp_fn(name = "+")]
-pub fn add(vars: &[Number]) -> Number {
+pub fn add<'obj>(vars: &[Number]) -> Number<'obj> {
     use std::ops::Add;
     vars.iter()
         .fold(0.into(), |acc, x| {
@@ -67,7 +67,7 @@ pub fn add(vars: &[Number]) -> Number {
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(number: Option<Number>, numbers: &[Number]) -> Number {
+pub fn sub<'obj>(number: Option<Number>, numbers: &[Number]) -> Number<'obj> {
     use std::ops::Sub;
     let num = match number {
         Some(x) => x.into(),
@@ -88,7 +88,7 @@ pub fn sub(number: Option<Number>, numbers: &[Number]) -> Number {
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul(numbers: &[Number]) -> Number {
+pub fn mul<'obj>(numbers: &[Number]) -> Number<'obj> {
     use std::ops::Mul;
     numbers
         .iter()
@@ -99,7 +99,7 @@ pub fn mul(numbers: &[Number]) -> Number {
 }
 
 #[lisp_fn(name = "/")]
-pub fn div(number: Number, divisors: &[Number]) -> Number {
+pub fn div<'obj>(number: Number, divisors: &[Number]) -> Number<'obj> {
     use std::ops::Div;
     divisors
         .iter()

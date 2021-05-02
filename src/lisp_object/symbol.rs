@@ -47,11 +47,9 @@ impl InnerSymbol {
         }
     }
 
-    pub fn set_func<T>(&self, func: T)
-    where
-        T: Into<Function>,
+    pub fn set_func(&self, func: Function)
     {
-        self.func.set(func.into());
+        self.func.set(func);
     }
 
     pub fn get_func(&self) -> Option<Function> {
@@ -144,17 +142,20 @@ mod test {
 
     #[test]
     fn symbol_func() {
+        let arena = Arena::new();
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
-        x.set_func(LispFn::new(vec![1].into(), vec![], Arena::new(), 0, 0, false));
+        let func = LispFn::new(vec![1].into(), vec![], Arena::new(), 0, 0, false);
+        x.set_func(arena.insert(func));
         let cell = x.get_func().unwrap();
         let before = match cell.val() {
             FunctionValue::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        x.set_func(LispFn::new(vec![7].into(), vec![], Arena::new(), 0, 0, false));
+        let func = LispFn::new(vec![7].into(), vec![], Arena::new(), 0, 0, false);
+        x.set_func(arena.insert(func));
         let cell = x.get_func().unwrap();
         let after = match cell.val() {
             FunctionValue::LispFn(x) => x,
@@ -166,11 +167,12 @@ mod test {
 
     #[test]
     fn subr() {
+        let arena = Arena::new();
         let func = |x: &[_], _: &mut _| -> _ { Ok(x[0]) };
 
         let sym = InnerSymbol::new("bar".to_owned());
         let core_func = SubrFn::new("bar", func, 0, 0, false);
-        sym.set_func(core_func);
+        sym.set_func(arena.insert(core_func));
 
         match sym.get_func().unwrap().val() {
             FunctionValue::SubrFn(x) => {

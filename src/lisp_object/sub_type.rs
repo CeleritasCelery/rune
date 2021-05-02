@@ -1,17 +1,33 @@
-use crate::lisp_object::{Cons, LispFn, LispObj, SubrFn, Value};
+use crate::lisp_object::*;
 
-pub struct Function(i64);
+pub struct Function<'a>{
+    data: InnerObject,
+    marker: PhantomData<&'a ()>,
+}
 
-impl From<LispFn> for Function {
-    fn from(x: LispFn) -> Self {
-        Self(LispObj::from(x).into_raw())
+impl<'a> Function<'a> {
+    fn from_bits(bits: i64) -> Self {
+        Self {
+            data: InnerObject {bits},
+            marker: PhantomData,
+        }
     }
 }
 
-impl From<SubrFn> for Function {
-    fn from(x: SubrFn) -> Self {
-        Self(LispObj::from(x).into_raw())
+impl<'obj> From<Function<'obj>> for Object<'obj> {
+    fn from(x: Function<'obj>) -> Self {
+        Object::from_bits(x.data.into_raw())
     }
+}
+
+impl<'a> RefObject<'a> for Function<'a> {}
+
+impl<'a> From<LispFnObject> for Function<'a> {
+    fn from(x: LispFnObject) -> Self { Self::from_bits(x.0) }
+}
+
+impl<'a> From<SubrFnObject> for Function<'a> {
+    fn from(x: SubrFnObject) -> Self { Self::from_bits(x.0) }
 }
 
 pub enum FunctionValue<'a> {
@@ -19,9 +35,9 @@ pub enum FunctionValue<'a> {
     SubrFn(&'a SubrFn),
 }
 
-impl<'a> Function {
+impl<'a> Function<'a> {
     pub fn val(self) -> FunctionValue<'a> {
-        match LispObj::from_bits(self.0).val() {
+        match self.data.val() {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
             _ => unreachable!("Function was invalid type"),
@@ -29,23 +45,46 @@ impl<'a> Function {
     }
 }
 
-pub struct Number(i64);
+pub struct Number<'a>{
+    data: InnerObject,
+    marker: PhantomData<&'a ()>,
+}
 
-impl From<i64> for Number {
+impl<'a> Number<'a> {
+    fn from_bits(bits: i64) -> Self {
+        Self {
+            data: InnerObject {bits},
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a> RefObject<'a> for Number<'a> {}
+
+impl<'a> From<IntObject> for Number<'a> {
+    fn from(x: IntObject) -> Self { Self::from_bits(x.0) }
+}
+
+impl<'a> From<FloatObject> for Number<'a> {
+    fn from(x: FloatObject) -> Self { Self::from_bits(x.0) }
+}
+
+// TODO remove
+impl<'obj> From<i64> for Number<'obj> {
     fn from(x: i64) -> Self {
-        Self(LispObj::from(x).into_raw())
+        Self::from_bits(LispObj::from(x).into_raw())
     }
 }
 
-impl From<f64> for Number {
+impl<'obj> From<f64> for Number<'obj> {
     fn from(x: f64) -> Self {
-        Self(LispObj::from(x).into_raw())
+        Self::from_bits(LispObj::from(x).into_raw())
     }
 }
 
-impl From<Number> for LispObj {
+impl<'obj> From<Number<'obj>> for Object<'obj> {
     fn from(x: Number) -> Self {
-         LispObj::from_bits(x.0)
+        Object::from_bits(x.data.into_raw())
     }
 }
 
@@ -54,35 +93,12 @@ pub enum NumberValue {
     Float(f64),
 }
 
-impl Number {
+impl<'obj> Number<'obj> {
     pub fn val(&self) -> NumberValue {
-        match LispObj::from_bits(self.0).val()  {
+        match self.data.val()  {
             Value::Int(x) => NumberValue::Int(x),
             Value::Float(x) => NumberValue::Float(x),
             _ => unreachable!("Number was invalid type"),
         }
-    }
-}
-
-pub struct List(i64);
-
-pub enum ListValue<'a> {
-    Nil,
-    Cons(&'a Cons<'a>),
-}
-
-impl List {
-    pub fn val(&self) -> ListValue {
-        match LispObj::from_bits(self.0).val()  {
-            Value::Nil => ListValue::Nil,
-            Value::Cons(x) => ListValue::Cons(x),
-            _ => unreachable!("Number was invalid type"),
-        }
-    }
-}
-
-impl From<List> for LispObj {
-    fn from(x: List) -> Self {
-         LispObj::from_bits(x.0)
     }
 }
