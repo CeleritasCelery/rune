@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
 use crate::lisp_object::{
-    BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Object, Symbol, Value,
+    BuiltInFn, FnArgs, FunctionValue, LispFn, GcObject, Object, Symbol, Value,
 };
 use crate::opcode::OpCode;
 use std::convert::TryInto;
@@ -68,22 +68,22 @@ impl CallFrame {
         }
     }
 
-    pub fn get_const(&self, i: usize) -> LispObj {
+    pub fn get_const(&self, i: usize) -> GcObject {
         (*self.func.constants.get(i).unwrap()).inner()
     }
 }
 
-type Stack = Vec<LispObj>;
+type Stack = Vec<GcObject>;
 
 trait LispStack {
     fn from_end(&self, i: usize) -> usize;
     fn push_ref(&mut self, i: usize);
     fn set_ref(&mut self, i: usize);
-    fn ref_at(&self, i: usize) -> &LispObj;
-    fn take_slice(&self, i: usize) -> &[LispObj];
+    fn ref_at(&self, i: usize) -> &GcObject;
+    fn take_slice(&self, i: usize) -> &[GcObject];
 }
 
-impl LispStack for Vec<LispObj> {
+impl LispStack for Vec<GcObject> {
     fn from_end(&self, i: usize) -> usize {
         debug_assert!(i < self.len());
         self.len() - (i + 1)
@@ -97,18 +97,18 @@ impl LispStack for Vec<LispObj> {
         self.swap_remove(self.from_end(i));
     }
 
-    fn ref_at(&self, i: usize) -> &LispObj {
+    fn ref_at(&self, i: usize) -> &GcObject {
         self.get(self.from_end(i)).unwrap()
     }
 
-    fn take_slice(&self, i: usize) -> &[LispObj] {
+    fn take_slice(&self, i: usize) -> &[GcObject] {
         &self[self.from_end(i - 1)..]
     }
 }
 
 pub struct Routine {
-    stack: Vec<LispObj>,
-    vars: HashMap<Symbol, LispObj>,
+    stack: Vec<GcObject>,
+    vars: HashMap<Symbol, GcObject>,
     call_frames: Vec<CallFrame>,
     frame: CallFrame,
     arena: Arena,
@@ -147,7 +147,7 @@ impl Routine {
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
-                self.stack.push(LispObj::nil());
+                self.stack.push(GcObject::nil());
             }
         }
         Ok(())
@@ -209,7 +209,7 @@ impl Routine {
         Ok(())
     }
 
-    pub fn execute(&mut self) -> Result<LispObj> {
+    pub fn execute(&mut self) -> Result<GcObject> {
         loop {
             // println!("{:?}", self.stack);
             use OpCode as op;

@@ -17,7 +17,7 @@ pub struct FnArgs {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LispFn {
     pub op_codes: CodeVec,
-    pub constants: Vec<LispObj>,
+    pub constants: Vec<GcObject>,
     pub args: FnArgs,
 }
 define_unbox_ref!(LispFn, Func);
@@ -25,7 +25,7 @@ define_unbox_ref!(LispFn, Func);
 impl LispFn {
     pub fn new(
         op_codes: CodeVec,
-        constants: Vec<LispObj>,
+        constants: Vec<GcObject>,
         required: u16,
         optional: u16,
         rest: bool,

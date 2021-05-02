@@ -1,9 +1,9 @@
-use crate::lisp_object::{IntoObject, LispObj, RefObject, TaggedObject};
+use crate::lisp_object::{IntoObject, GcObject, RefObject, TaggedObject};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
 pub struct Arena {
-    objects: RefCell<Vec<LispObj>>,
+    objects: RefCell<Vec<GcObject>>,
 }
 
 impl<'obj> Arena {

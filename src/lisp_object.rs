@@ -27,7 +27,7 @@ pub struct Object<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
-pub type LispObj = Object<'static>;
+pub type GcObject = Object<'static>;
 
 impl<'a> cmp::PartialEq for Object<'a> {
     fn eq(&self, rhs: &Object) -> bool {
@@ -123,7 +123,7 @@ pub trait TaggedObject {
     }
     #[allow(clippy::wrong_self_convention)]
     fn is_boxed(self) -> bool;
-    fn into_gc(self) -> LispObj;
+    fn into_gc(self) -> GcObject;
 }
 
 #[derive(Copy, Clone)]
@@ -133,8 +133,8 @@ impl TaggedObject for IntObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<IntObject> for Object<'a> {
@@ -150,8 +150,8 @@ impl TaggedObject for FloatObject {
     fn is_boxed(self) -> bool {
         true
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<FloatObject> for Object<'a> {
@@ -167,8 +167,8 @@ impl TaggedObject for TrueObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 
@@ -179,8 +179,8 @@ impl TaggedObject for NilObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 
@@ -194,8 +194,8 @@ impl TaggedObject for BoolObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<BoolObject> for Object<'a> {
@@ -222,8 +222,8 @@ impl TaggedObject for OptionObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<OptionObject> for Object<'a> {
@@ -239,8 +239,8 @@ impl TaggedObject for ConsObject {
     fn is_boxed(self) -> bool {
         true
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<ConsObject> for Object<'a> {
@@ -256,8 +256,8 @@ impl TaggedObject for SymbolObject {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<SymbolObject> for Object<'a> {
@@ -273,8 +273,8 @@ impl TaggedObject for StringObject {
     fn is_boxed(self) -> bool {
         true
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<StringObject> for Object<'a> {
@@ -290,8 +290,8 @@ impl TaggedObject for LispFnObject {
     fn is_boxed(self) -> bool {
         true
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<LispFnObject> for Object<'a> {
@@ -308,8 +308,8 @@ impl TaggedObject for SubrFnObject {
     fn is_boxed(self) -> bool {
         true
     }
-    fn into_gc(self) -> LispObj {
-        LispObj::from_bits(self.0)
+    fn into_gc(self) -> GcObject {
+        GcObject::from_bits(self.0)
     }
 }
 impl<'a> From<SubrFnObject> for Object<'a> {
@@ -323,7 +323,7 @@ impl<'obj> TaggedObject for Object<'obj> {
     fn is_boxed(self) -> bool {
         false
     }
-    fn into_gc(self) -> LispObj {
+    fn into_gc(self) -> GcObject {
         unsafe { self.into_gc() }
     }
 }
@@ -383,8 +383,8 @@ impl<'a> Object<'a> {
         Object::from_tag(Tag::True)
     }
 
-    pub const fn inner(self) -> LispObj {
-        LispObj {
+    pub const fn inner(self) -> GcObject {
+        GcObject {
             data: self.data,
             marker: PhantomData,
         }

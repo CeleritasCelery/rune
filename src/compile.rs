@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, LispObj, Object, Symbol, Value};
+use crate::lisp_object::{Cons, LispFn, GcObject, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 
@@ -32,7 +32,7 @@ impl Default for LispFn {
 
 #[derive(Debug)]
 struct ConstVec {
-    consts: Vec<LispObj>,
+    consts: Vec<GcObject>,
     arena: Arena,
 }
 
