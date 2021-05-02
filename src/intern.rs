@@ -2,28 +2,25 @@
 use crate::hashmap::HashMap;
 use crate::lisp_object::{InnerSymbol, Symbol, Function};
 use crate::arena::Arena;
+use crate::hashmap::HashMapDefault;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
-pub struct SymbolMap{
-    map: HashMap<String, Box<InnerSymbol>>,
+pub struct SymbolMap {
+    map: InnerSymbolMap,
     arena: Arena,
 }
 
-impl SymbolMap {
+struct InnerSymbolMap {
+    map: HashMap<String, Box<InnerSymbol>>,
+}
+
+impl InnerSymbolMap {
     fn with_capacity(cap: usize) -> Self {
-        use crate::hashmap::HashMapDefault;
-        Self {
-            map: HashMap::with_capacity(cap),
-            arena: Arena::new(),
-        }
+        Self { map: HashMap::with_capacity(cap) }
     }
 
-    pub fn size(&self) -> usize {
-        self.map.keys().len()
-    }
-
-    pub fn intern(&mut self, name: &str) -> Symbol {
+    fn intern(&mut self, name: &str) -> Symbol {
         // SAFETY: This is my work around for there being no Entry API that
         // takes a reference. Instead we have an inner function that returns a
         // pointer and we cast that to a static reference. We can guarantee that
@@ -47,18 +44,22 @@ impl SymbolMap {
     }
 }
 
+impl SymbolMap {
+    pub fn intern(&mut self, name: &str) -> Symbol {
+        self.map.intern(name)
+    }
+}
+
 macro_rules! create_symbolmap {
     ($($arr:expr),+ $(,)?) => ({
         const SIZE: usize = 0usize $(+ $arr.len())+;
-        let mut map = SymbolMap::with_capacity(SIZE);
+        let mut map = InnerSymbolMap::with_capacity(SIZE);
+        let arena = Arena::new();
         $(for func in $arr.iter() {
-            let func_obj = unsafe {
-                let tmp: Function = map.arena.insert(func.clone());
-                std::mem::transmute(tmp)
-            };
+            let func_obj: Function = arena.insert(func.clone());
             map.intern(func.name).set_func(func_obj);
         })+;
-        map
+        SymbolMap{ map, arena }
     })
 }
 
