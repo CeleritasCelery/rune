@@ -187,12 +187,7 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        let inner = exp
-            .constants
-            .consts
-            .into_iter()
-            .map(|x| unsafe { x.into_gc() })
-            .collect();
+        let inner = exp.constants.consts;
         std::mem::forget(exp.constants.arena);
         LispFn::new(exp.codes, inner, 0, 0, false)
     }
