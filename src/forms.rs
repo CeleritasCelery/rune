@@ -6,7 +6,6 @@ pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {
     symbol
 }
 
-
 #[lisp_fn]
 pub fn progn<'obj>(forms: &[Object<'obj>]) -> Object<'obj> {
     match forms.last() {

@@ -3,7 +3,6 @@ use crate::lisp_object::*;
 use std::convert::TryFrom;
 use std::mem::transmute;
 
-
 impl<'obj> TryFrom<Object<'obj>> for Function<'obj> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
@@ -63,17 +62,13 @@ define_unbox!(Int);
 
 impl<'obj> From<Int> for Object<'obj> {
     fn from(i: Int) -> Self {
-        unsafe {
-            Object::from_ptr(i as *const i64, Tag::Int)
-        }
+        unsafe { Object::from_ptr(i as *const i64, Tag::Int) }
     }
 }
 
 impl<'obj> IntoObject<'obj> for i64 {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        unsafe {
-            (Object::from_ptr(self as *const i64, Tag::Int), false)
-        }
+        unsafe { (Object::from_ptr(self as *const i64, Tag::Int), false) }
     }
 }
 
@@ -113,7 +108,10 @@ impl<'obj> From<bool> for Object<'obj> {
 
 impl<'obj> IntoObject<'obj> for bool {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        (Object::from_tag(if self { Tag::True } else { Tag::Nil }), false)
+        (
+            Object::from_tag(if self { Tag::True } else { Tag::Nil }),
+            false,
+        )
     }
 }
 

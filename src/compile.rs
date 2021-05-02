@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
+use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, Symbol, Value, Object, LispObj};
+use crate::lisp_object::{Cons, LispFn, LispObj, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
-use crate::arena::Arena;
 
 impl OpCode {
     pub unsafe fn from_unchecked(x: u8) -> Self {
@@ -52,13 +52,13 @@ impl<'obj> From<Vec<Object<'obj>>> for ConstVec {
 
 impl std::cmp::PartialEq for ConstVec {
     fn eq(&self, other: &Self) -> bool {
-       self.consts == other.consts
+        self.consts == other.consts
     }
 }
 
 impl ConstVec {
     pub const fn new() -> Self {
-        ConstVec{
+        ConstVec {
             consts: Vec::new(),
             arena: Arena::new(),
         }
@@ -67,9 +67,7 @@ impl ConstVec {
     fn insert_or_get(&mut self, obj: Object) -> usize {
         match self.consts.iter().position(|&x| obj == x) {
             None => {
-                let new_obj = unsafe {
-                     obj.clone_in(&self.arena).into_gc()
-                };
+                let new_obj = unsafe { obj.clone_in(&self.arena).into_gc() };
                 self.consts.push(new_obj);
                 self.consts.len() - 1
             }
@@ -190,7 +188,12 @@ pub struct Exp {
 
 impl std::convert::From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
-        let inner = exp.constants.consts.into_iter().map(|x| unsafe {x.into_gc()}).collect();
+        let inner = exp
+            .constants
+            .consts
+            .into_iter()
+            .map(|x| unsafe { x.into_gc() })
+            .collect();
         let arena = exp.constants.arena;
         LispFn::new(exp.codes, inner, arena, 0, 0, false)
     }
@@ -476,9 +479,9 @@ impl<'obj> Exp {
 mod test {
 
     use super::*;
+    use crate::arena::Arena;
     use crate::intern::intern;
     use crate::reader::LispReader;
-    use crate::arena::Arena;
     use OpCode::*;
 
     fn check_error(compare: &str, expect: Error) {
@@ -580,10 +583,24 @@ mod test {
         check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
 
-        let func = LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], Arena::new(), 0, 0, false);
+        let func = LispFn::new(
+            vec_into![Constant0, Ret].into(),
+            vec_into![1],
+            Arena::new(),
+            0,
+            0,
+            false,
+        );
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], Arena::new(), 1, 0, false);
+        let func = LispFn::new(
+            vec_into![StackRef0, Ret].into(),
+            vec![],
+            Arena::new(),
+            1,
+            0,
+            false,
+        );
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(

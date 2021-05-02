@@ -1,5 +1,5 @@
-use crate::lisp_object::*;
 use crate::arena::Arena;
+use crate::lisp_object::*;
 use std::cmp;
 use std::fmt;
 use std::mem;
@@ -47,8 +47,7 @@ impl InnerSymbol {
         }
     }
 
-    pub fn set_func(&self, func: Function)
-    {
+    pub fn set_func(&self, func: Function) {
         self.func.set(func);
     }
 
@@ -95,9 +94,7 @@ impl std::ops::Deref for Symbol {
 impl<'obj> From<Symbol> for Object<'obj> {
     fn from(s: Symbol) -> Self {
         let ptr = s.0 as *const _;
-        unsafe {
-            Object::from_ptr(ptr as *mut u8, Tag::Symbol)
-        }
+        unsafe { Object::from_ptr(ptr as *mut u8, Tag::Symbol) }
     }
 }
 
@@ -132,6 +129,8 @@ impl std::hash::Hash for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::error::Error;
+    use crate::hashmap::HashMap;
     use crate::lisp_object::{FunctionValue, LispFn, SubrFn};
 
     #[test]
@@ -165,18 +164,26 @@ mod test {
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
     }
 
+    #[allow(clippy::clippy::unnecessary_wraps)]
+    fn dummy<'obj>(
+        vars: &[Object<'obj>],
+        _map: &mut HashMap<Symbol, Object<'obj>>,
+        _arena: &'obj Arena,
+    ) -> Result<Object<'obj>, Error> {
+        Ok(vars[0])
+    }
+
     #[test]
     fn subr() {
         let arena = Arena::new();
-        let func = |x: &[_], _: &mut _| -> _ { Ok(x[0]) };
 
         let sym = InnerSymbol::new("bar".to_owned());
-        let core_func = SubrFn::new("bar", func, 0, 0, false);
+        let core_func = SubrFn::new("bar", dummy, 0, 0, false);
         sym.set_func(arena.insert(core_func));
 
         match sym.get_func().unwrap().val() {
             FunctionValue::SubrFn(x) => {
-                assert_eq!(*x, SubrFn::new("bar", func, 0, 0, false));
+                assert_eq!(*x, SubrFn::new("bar", dummy, 0, 0, false));
             }
             _ => unreachable!(),
         };

@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 
+use crate::arena::Arena;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
-use crate::lisp_object::{BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Symbol, Value, Object};
+use crate::lisp_object::{
+    BuiltInFn, FnArgs, FunctionValue, LispFn, LispObj, Object, Symbol, Value,
+};
 use crate::opcode::OpCode;
 use std::convert::TryInto;
 
@@ -108,11 +111,16 @@ pub struct Routine {
     vars: HashMap<Symbol, LispObj>,
     call_frames: Vec<CallFrame>,
     frame: CallFrame,
+    arena: Arena,
 }
 
 #[lisp_fn]
-pub fn set<'obj>(place: Symbol, newlet: Object<'obj>, vars: &mut HashMap<Symbol, LispObj>) -> Object<'obj> {
-    vars.insert(place, unsafe {newlet.into_gc()});
+pub fn set<'obj>(
+    place: Symbol,
+    newlet: Object<'obj>,
+    vars: &mut HashMap<Symbol, Object<'obj>>,
+) -> Object<'obj> {
+    vars.insert(place, unsafe { newlet.into_gc() });
     newlet
 }
 
@@ -125,6 +133,7 @@ impl Routine {
             vars: HashMap::create(),
             call_frames: vec![],
             frame: CallFrame::new(func, 0),
+            arena: Arena::new(),
         }
     }
 
@@ -188,9 +197,14 @@ impl Routine {
         Ok(())
     }
 
+    fn fix_lifetime<'old, 'unbound>(x: &'old Arena) -> &'unbound Arena {
+        unsafe { std::mem::transmute(x) }
+    }
+
     fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<()> {
         let i = self.stack.from_end(args);
-        self.stack[i] = func(self.stack.take_slice(args), &mut self.vars)?;
+        let slice = self.stack.take_slice(args);
+        self.stack[i] = func(slice, &mut self.vars, Self::fix_lifetime(&self.arena))?;
         self.stack.truncate(i + 1);
         Ok(())
     }
@@ -322,9 +336,9 @@ pub const fn run() {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::arena::Arena;
     use crate::compile::Exp;
     use crate::reader::LispReader;
-    use crate::arena::Arena;
 
     fn test_eval(sexp: &str, expect: LispObj) {
         let arena = Arena::new();

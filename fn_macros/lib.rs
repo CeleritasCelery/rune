@@ -60,7 +60,8 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         pub fn #func_name<'obj>(
             args: &[crate::lisp_object::Object<'obj>],
             vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol,
-            crate::lisp_object::LispObj>
+                                               crate::lisp_object::Object<'obj>>,
+            arena: &'obj crate::arena::Arena,
         ) -> crate::error::Result<crate::lisp_object::Object<'obj>> {
             #subr_call
         }
@@ -75,6 +76,8 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
         .map(|(idx, ty)| {
             if is_var_hashmap(ty) {
                 quote! {vars}
+            } else if is_arena(ty) {
+                quote! {arena}
             } else {
                 let call = get_call(idx, ty);
                 if convert_type(ty) {
@@ -95,6 +98,16 @@ fn is_var_hashmap(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => match refer.elem.as_ref() {
             syn::Type::Path(path) => get_path_ident_name(path) == "HashMap",
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn is_arena(ty: &syn::Type) -> bool {
+    match ty {
+        syn::Type::Reference(refer) => match refer.elem.as_ref() {
+            syn::Type::Path(path) => get_path_ident_name(path) == "Arena",
             _ => false,
         },
         _ => false,
@@ -127,7 +140,10 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
         None => 0,
     };
 
-    let args: Vec<&syn::Type> = args.iter().filter(|x| !is_var_hashmap(x)).collect();
+    let args: Vec<&syn::Type> = args
+        .iter()
+        .filter(|x| !(is_var_hashmap(x) || is_arena(x)))
+        .collect();
 
     let rest = match args.last() {
         Some(x) => is_slice(x),
@@ -271,14 +287,24 @@ mod test {
 
     #[test]
     fn test_expand() {
-        let stream = quote! {pub fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}};
+        let stream = quote! {
+            pub fn add<'obj>(vars: &[Number], arena: &'obj Arena) -> Number<'obj> {
+                use std::ops::Add;
+                vars.iter()
+                    .fold(0.into(), |acc, x| {
+                        NumberFold::acc(acc, x, Add::add, Add::add)
+                    })
+                    .into_number(arena)
+            }
+        };
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec {
-            name: Some("bar".into()),
-            required: Some(1),
+            name: Some("+".into()),
+            required: None,
             intspec: None,
         };
         let result = expand(function, spec);
         println!("{}", result.to_string());
+        panic!();
     }
 }

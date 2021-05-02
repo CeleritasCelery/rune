@@ -1,7 +1,7 @@
+use crate::arena::Arena;
 use crate::error::Error;
 use crate::hashmap::HashMap;
 use crate::lisp_object::*;
-use crate::arena::Arena;
 use crate::opcode::CodeVec;
 use std::fmt;
 
@@ -66,7 +66,11 @@ impl<'obj> IntoTagObject<LispFnObject> for LispFn {
     }
 }
 
-pub type BuiltInFn = fn(&[LispObj], &mut HashMap<Symbol, LispObj>) -> Result<LispObj, Error>;
+pub type BuiltInFn = for<'obj> fn(
+    &[Object<'obj>],
+    &mut HashMap<Symbol, Object<'obj>>,
+    &'obj Arena,
+) -> Result<Object<'obj>, Error>;
 
 #[derive(Copy, Clone)]
 pub struct SubrFn {
@@ -106,7 +110,7 @@ impl std::fmt::Debug for SubrFn {
 
 impl std::cmp::PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
-        self.subr as fn(&'static _, &'static mut _) -> _ == other.subr
+        self.subr as fn(&'static _, &'static mut _, &'static _) -> _ == other.subr
     }
 }
 
@@ -149,7 +153,9 @@ mod test {
             Arena::new(),
             0,
             0,
-            false).into();
+            false,
+        )
+        .into();
         assert!(matches!(x.val(), Value::LispFn(_)));
         format!("{}", x);
         let func = match x.val() {

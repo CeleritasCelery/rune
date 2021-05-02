@@ -10,8 +10,8 @@ pub use symbol::*;
 pub mod convert;
 pub use convert::*;
 
-use crate::gc::Gc;
 use crate::arena::Arena;
+use crate::gc::Gc;
 use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
@@ -131,38 +131,58 @@ pub trait TaggedObject {
 pub struct IntObject(i64);
 impl TaggedObject for IntObject {
     const TAG: Tag = Tag::Int;
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<IntObject> for Object<'a> {
-    fn from(x: IntObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: IntObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct FloatObject(i64);
 impl TaggedObject for FloatObject {
     const TAG: Tag = Tag::Float;
-    fn is_boxed(self) -> bool { true }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        true
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<FloatObject> for Object<'a> {
-    fn from(x: FloatObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: FloatObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct TrueObject(i64);
 impl TaggedObject for TrueObject {
     const TAG: Tag = Tag::True;
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct NilObject(i64);
 impl TaggedObject for NilObject {
     const TAG: Tag = Tag::Nil;
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -172,17 +192,27 @@ impl TaggedObject for BoolObject {
     fn new_tagged(_bits: i64) -> i64 {
         panic!("should not be calling bool object this directly");
     }
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<BoolObject> for Object<'a> {
-    fn from(x: BoolObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: BoolObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 impl From<TrueObject> for BoolObject {
-    fn from(x: TrueObject) -> Self { Self(x.0) }
+    fn from(x: TrueObject) -> Self {
+        Self(x.0)
+    }
 }
 impl From<NilObject> for BoolObject {
-    fn from(x: NilObject) -> Self { Self(x.0) }
+    fn from(x: NilObject) -> Self {
+        Self(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -190,55 +220,85 @@ pub struct OptionObject(i64);
 impl TaggedObject for OptionObject {
     const TAG: Tag = Tag::Nil;
     // TODO: add correct implementation
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<OptionObject> for Object<'a> {
-    fn from(x: OptionObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: OptionObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct ConsObject(i64);
 impl TaggedObject for ConsObject {
     const TAG: Tag = Tag::Cons;
-    fn is_boxed(self) -> bool { true }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        true
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<ConsObject> for Object<'a> {
-    fn from(x: ConsObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: ConsObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct SymbolObject(i64);
 impl TaggedObject for SymbolObject {
     const TAG: Tag = Tag::Symbol;
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<SymbolObject> for Object<'a> {
-    fn from(x: SymbolObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: SymbolObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct StringObject(i64);
 impl TaggedObject for StringObject {
     const TAG: Tag = Tag::String;
-    fn is_boxed(self) -> bool { true }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        true
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<StringObject> for Object<'a> {
-    fn from(x: StringObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: StringObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct LispFnObject(i64);
 impl TaggedObject for LispFnObject {
     const TAG: Tag = Tag::LispFn;
-    fn is_boxed(self) -> bool { true }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        true
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<LispFnObject> for Object<'a> {
-    fn from(x: LispFnObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: LispFnObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -246,20 +306,30 @@ pub struct SubrFnObject(i64);
 impl TaggedObject for SubrFnObject {
     const TAG: Tag = Tag::SubrFn;
     #[inline]
-    fn is_boxed(self) -> bool { true }
-    fn into_gc(self) -> LispObj {LispObj::from_bits(self.0)}
+    fn is_boxed(self) -> bool {
+        true
+    }
+    fn into_gc(self) -> LispObj {
+        LispObj::from_bits(self.0)
+    }
 }
 impl<'a> From<SubrFnObject> for Object<'a> {
-    fn from(x: SubrFnObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: SubrFnObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 impl<'obj> TaggedObject for Object<'obj> {
     const TAG: Tag = Tag::Nil;
-    fn is_boxed(self) -> bool { false }
-    fn into_gc(self) -> LispObj {unsafe {self.into_gc()}}
+    fn is_boxed(self) -> bool {
+        false
+    }
+    fn into_gc(self) -> LispObj {
+        unsafe { self.into_gc() }
+    }
 }
 
-pub trait RefObject<'a> { }
+pub trait RefObject<'a> {}
 
 impl<'a> RefObject<'a> for Object<'a> {}
 
@@ -342,7 +412,7 @@ impl<'obj> Object<'obj> {
 
     const fn from_bits(bits: i64) -> Self {
         Self {
-            data: InnerObject {bits},
+            data: InnerObject { bits },
             marker: PhantomData,
         }
     }
@@ -363,11 +433,11 @@ impl<'obj> Object<'obj> {
 
     pub unsafe fn drop(mut self) {
         match self.data.tag {
-            Tag::Symbol => { },
+            Tag::Symbol => {}
             Tag::Float => {
                 let x: *mut f64 = self.data.get_mut_ptr();
                 Box::from_raw(x);
-            },
+            }
             Tag::String => {
                 let x: *mut String = self.data.get_mut_ptr();
                 Box::from_raw(x);
@@ -375,29 +445,29 @@ impl<'obj> Object<'obj> {
             Tag::LispFn => {
                 let x: *mut LispFn = self.data.get_mut_ptr();
                 Box::from_raw(x);
-            },
+            }
             Tag::SubrFn => {
                 let x: *mut SubrFn = self.data.get_mut_ptr();
                 Box::from_raw(x);
-            },
-            Tag::Nil => {},
-            Tag::True => {},
+            }
+            Tag::Nil => {}
+            Tag::True => {}
             Tag::Cons => {
                 let x: *mut Cons = self.data.get_mut_ptr();
                 Box::from_raw(x);
-            },
-            Tag::Int => {},
+            }
+            Tag::Int => {}
         }
     }
 }
 
 impl InnerObject {
     fn get_ptr<T>(self) -> *const T {
-        (unsafe {self.bits} >> TAG_SIZE) as *const T
+        (unsafe { self.bits } >> TAG_SIZE) as *const T
     }
 
     fn get_mut_ptr<T>(&mut self) -> *mut T {
-        (unsafe {self.bits} >> TAG_SIZE) as *mut T
+        (unsafe { self.bits } >> TAG_SIZE) as *mut T
     }
 
     pub fn val<'a>(self) -> Value<'a> {
@@ -417,10 +487,9 @@ impl InnerObject {
     }
 
     fn into_raw(self) -> i64 {
-        unsafe {self.bits}
+        unsafe { self.bits }
     }
 }
-
 
 impl fmt::Display for InnerObject {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
+use crate::arena::Arena;
 use crate::intern::intern;
 use crate::lisp_object::{Object, Symbol};
-use crate::arena::Arena;
 use std::fmt;
 use std::str;
 
@@ -159,10 +159,7 @@ fn unescape_string(string: &str) -> String {
             Some(c)
         }
     };
-    string
-        .chars()
-        .filter_map(unescape)
-        .collect::<String>()
+    string.chars().filter_map(unescape).collect::<String>()
 }
 
 const fn symbol_char(chr: char) -> bool {
@@ -414,7 +411,10 @@ baz""#
         check_reader!(cons!(1, 2; arena), "(1 . 2)");
         check_reader!(list!(1; arena), "(1)");
         check_reader!(list!("foo"; arena), "(\"foo\")");
-        check_reader!(cons!(1, cons!(1.5, "foo"; arena); arena), "(1 1.5 . \"foo\")");
+        check_reader!(
+            cons!(1, cons!(1.5, "foo"; arena); arena),
+            "(1 1.5 . \"foo\")"
+        );
         check_reader!(list!(1, 1.5; arena), "(1 1.5)");
         check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)");
     }
@@ -430,7 +430,11 @@ baz""#
 
     fn assert_error(input: &str, pos: usize, error: Error) {
         let arena = Arena::new();
-        let result = LispReader::new(input).read_from(&arena).unwrap().err().unwrap();
+        let result = LispReader::new(input)
+            .read_from(&arena)
+            .unwrap()
+            .err()
+            .unwrap();
         assert_eq!(result.pos, pos);
         assert_eq!(result.message, format!("{}", error));
     }

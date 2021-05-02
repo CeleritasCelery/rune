@@ -1,3 +1,4 @@
+use crate::arena::Arena;
 use crate::lisp_object::{Number, NumberValue};
 
 enum NumberFold {
@@ -44,6 +45,15 @@ impl<'obj> From<NumberFold> for Number<'obj> {
     }
 }
 
+impl NumberFold {
+    fn into_number(self, arena: &Arena) -> Number {
+        match self {
+            NumberFold::Int(x) => arena.insert(x),
+            NumberFold::Float(x) => arena.insert(x),
+        }
+    }
+}
+
 impl From<f64> for NumberFold {
     fn from(x: f64) -> Self {
         NumberFold::Float(x)
@@ -57,17 +67,17 @@ impl From<i64> for NumberFold {
 }
 
 #[lisp_fn(name = "+")]
-pub fn add<'obj>(vars: &[Number]) -> Number<'obj> {
+pub fn add<'obj>(vars: &[Number], arena: &'obj Arena) -> Number<'obj> {
     use std::ops::Add;
     vars.iter()
         .fold(0.into(), |acc, x| {
             NumberFold::acc(acc, x, Add::add, Add::add)
         })
-        .into()
+        .into_number(arena)
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub<'obj>(number: Option<Number>, numbers: &[Number]) -> Number<'obj> {
+pub fn sub<'obj>(number: Option<Number>, numbers: &[Number], arena: &'obj Arena) -> Number<'obj> {
     use std::ops::Sub;
     let num = match number {
         Some(x) => x.into(),
@@ -76,37 +86,37 @@ pub fn sub<'obj>(number: Option<Number>, numbers: &[Number]) -> Number<'obj> {
     // If one argument given, negate it
     if numbers.is_empty() {
         match num {
-            NumberFold::Int(x) => (-x).into(),
-            NumberFold::Float(x) => (-x).into(),
+            NumberFold::Int(x) => arena.insert(-x),
+            NumberFold::Float(x) => arena.insert(-x),
         }
     } else {
         numbers
             .iter()
             .fold(num, |acc, x| NumberFold::acc(acc, x, Sub::sub, Sub::sub))
-            .into()
+            .into_number(arena)
     }
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul<'obj>(numbers: &[Number]) -> Number<'obj> {
+pub fn mul<'obj>(numbers: &[Number], arena: &'obj Arena) -> Number<'obj> {
     use std::ops::Mul;
     numbers
         .iter()
         .fold(1.into(), |acc, x| {
             NumberFold::acc(acc, x, Mul::mul, Mul::mul)
         })
-        .into()
+        .into_number(arena)
 }
 
 #[lisp_fn(name = "/")]
-pub fn div<'obj>(number: Number, divisors: &[Number]) -> Number<'obj> {
+pub fn div<'obj>(number: Number, divisors: &[Number], arena: &'obj Arena) -> Number<'obj> {
     use std::ops::Div;
     divisors
         .iter()
         .fold(number.into(), |acc, x| {
             NumberFold::acc(acc, x, Div::div, Div::div)
         })
-        .into()
+        .into_number(arena)
 }
 
 #[lisp_fn(name = "1+")]
@@ -138,69 +148,55 @@ mod test {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_add() {
-        match add(&[]).val() {
-            Int(x) => assert_eq!(0, x),
-            _ => unreachable!(),
-        };
+        let arena = Arena::new();
+
+        let num = add(&[], &arena).val();
+        assert_eq!(num, Int(0));
 
         let args = vec_into![7, 13];
-        match add(&args).val() {
-            Int(x) => assert_eq!(20, x),
-            _ => unreachable!(),
-        };
+        let num = add(&args, &arena).val();
+        assert_eq!(num, Int(20));
 
         let args = vec_into![1, 2.5];
-        match add(&args).val() {
-            Float(x) => assert_eq!(3.5, x),
-            _ => unreachable!(),
-        };
+        let num = add(&args, &arena).val();
+        assert_eq!(num, Float(3.5));
     }
 
     #[test]
     fn test_sub() {
-        match sub(None, &[]).val() {
-            Int(x) => assert_eq!(0, x),
-            _ => unreachable!(),
-        };
+        let arena = Arena::new();
 
-        match sub(Some(7.into()), &[]).val() {
-            Int(x) => assert_eq!(-7, x),
-            _ => unreachable!(),
-        };
+        let num = sub(None, &[], &arena).val();
+        assert_eq!(num, Int(0));
+
+        let num = sub(Some(7.into()), &[], &arena).val();
+        assert_eq!(num, Int(-7));
 
         let args = vec_into![13];
-        match sub(Some(7.into()), &args).val() {
-            Int(x) => assert_eq!(-6, x),
-            _ => unreachable!(),
-        };
+        let num = sub(Some(7.into()), &args, &arena).val();
+        assert_eq!(num, Int(-6));
     }
 
     #[test]
     fn test_mul() {
-        match mul(&[]).val() {
-            Int(x) => assert_eq!(1, x),
-            _ => unreachable!(),
-        };
+        let arena = Arena::new();
+        let num = mul(&[], &arena).val();
+        assert_eq!(num, Int(1));
 
         let args = vec_into![7, 13];
-        match mul(&args).val() {
-            Int(x) => assert_eq!(91, x),
-            _ => unreachable!(),
-        };
+        let num = mul(&args, &arena).val();
+        assert_eq!(num, Int(91));
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_div() {
-        match div(12.0.into(), &[]).val() {
-            Float(x) => assert_eq!(12.0, x),
-            _ => unreachable!(),
-        };
+        let arena = Arena::new();
+        let num = div(12.0.into(), &[], &arena).val();
+        assert_eq!(num, Float(12.0));
 
         let args = vec_into![5, 2];
-        match div(12.into(), &args).val() {
-            Int(x) => assert_eq!(1, x),
-            _ => unreachable!(),
-        };
+        let num = div(12.into(), &args, &arena).val();
+        assert_eq!(num, Int(1));
     }
 }

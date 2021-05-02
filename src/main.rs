@@ -4,18 +4,18 @@
     clippy::inefficient_to_string,
     clippy::missing_const_for_fn,
     clippy::needless_borrow,
-    clippy::unicode_not_nfc,
+    clippy::unicode_not_nfc
 )]
 #[macro_use]
 mod macros;
 #[macro_use]
 mod lisp_object;
+mod arena;
 mod arith;
 mod compile;
 mod error;
 mod eval;
 mod forms;
-mod arena;
 mod gc;
 mod hashmap;
 mod intern;

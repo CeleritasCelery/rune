@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-use crate::hashmap::HashMap;
-use crate::lisp_object::{InnerSymbol, Symbol, Function};
 use crate::arena::Arena;
+use crate::hashmap::HashMap;
 use crate::hashmap::HashMapDefault;
+use crate::lisp_object::{Function, InnerSymbol, Symbol};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -17,7 +17,9 @@ struct InnerSymbolMap {
 
 impl InnerSymbolMap {
     fn with_capacity(cap: usize) -> Self {
-        Self { map: HashMap::with_capacity(cap) }
+        Self {
+            map: HashMap::with_capacity(cap),
+        }
     }
 
     fn intern(&mut self, name: &str) -> Symbol {
@@ -77,8 +79,8 @@ pub fn intern(name: &str) -> Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::lisp_object::{FunctionValue, LispFn};
     use crate::arena::Arena;
+    use crate::lisp_object::{FunctionValue, LispFn};
 
     #[test]
     fn test_intern() {

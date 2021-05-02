@@ -1,6 +1,6 @@
 use crate::lisp_object::*;
 
-pub struct Function<'a>{
+pub struct Function<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
@@ -8,7 +8,7 @@ pub struct Function<'a>{
 impl<'a> Function<'a> {
     fn from_bits(bits: i64) -> Self {
         Self {
-            data: InnerObject {bits},
+            data: InnerObject { bits },
             marker: PhantomData,
         }
     }
@@ -23,11 +23,15 @@ impl<'obj> From<Function<'obj>> for Object<'obj> {
 impl<'a> RefObject<'a> for Function<'a> {}
 
 impl<'a> From<LispFnObject> for Function<'a> {
-    fn from(x: LispFnObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: LispFnObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 impl<'a> From<SubrFnObject> for Function<'a> {
-    fn from(x: SubrFnObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: SubrFnObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 pub enum FunctionValue<'a> {
@@ -45,7 +49,7 @@ impl<'a> Function<'a> {
     }
 }
 
-pub struct Number<'a>{
+pub struct Number<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
@@ -53,7 +57,7 @@ pub struct Number<'a>{
 impl<'a> Number<'a> {
     fn from_bits(bits: i64) -> Self {
         Self {
-            data: InnerObject {bits},
+            data: InnerObject { bits },
             marker: PhantomData,
         }
     }
@@ -62,11 +66,15 @@ impl<'a> Number<'a> {
 impl<'a> RefObject<'a> for Number<'a> {}
 
 impl<'a> From<IntObject> for Number<'a> {
-    fn from(x: IntObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: IntObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 impl<'a> From<FloatObject> for Number<'a> {
-    fn from(x: FloatObject) -> Self { Self::from_bits(x.0) }
+    fn from(x: FloatObject) -> Self {
+        Self::from_bits(x.0)
+    }
 }
 
 // TODO remove
@@ -88,6 +96,7 @@ impl<'obj> From<Number<'obj>> for Object<'obj> {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum NumberValue {
     Int(i64),
     Float(f64),
@@ -95,7 +104,7 @@ pub enum NumberValue {
 
 impl<'obj> Number<'obj> {
     pub fn val(&self) -> NumberValue {
-        match self.data.val()  {
+        match self.data.val() {
             Value::Int(x) => NumberValue::Int(x),
             Value::Float(x) => NumberValue::Float(x),
             _ => unreachable!("Number was invalid type"),

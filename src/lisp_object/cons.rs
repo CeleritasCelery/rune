@@ -1,6 +1,6 @@
-use crate::lisp_object::*;
 use crate::arena::Arena;
 use crate::error::{Error, Type};
+use crate::lisp_object::*;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -24,10 +24,7 @@ impl<'a> TryFrom<Object<'a>> for &'a Cons<'a> {
     fn try_from(obj: Object<'a>) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(x) => Ok(x),
-            x => Err(Error::Type(
-                Type::Cons,
-                x.get_type(),
-            )),
+            x => Err(Error::Type(Type::Cons, x.get_type())),
         }
     }
 }
@@ -38,10 +35,7 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
         match obj.val() {
             Value::Cons(x) => Ok(Some(x)),
             Value::Nil => Ok(None),
-            x => Err(Error::Type(
-                Type::Cons,
-                x.get_type(),
-            )),
+            x => Err(Error::Type(Type::Cons, x.get_type())),
         }
     }
 }
@@ -135,7 +129,13 @@ mod test {
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));
-        assert_eq!(list![5, 1, 1.5, "foo"; arena], list![5, 1, 1.5, "foo"; arena]);
-        assert_ne!(list![5, 1, 1.5, "foo"; arena], list![5, 1, 1.5, "bar"; arena]);
+        assert_eq!(
+            list![5, 1, 1.5, "foo"; arena],
+            list![5, 1, 1.5, "foo"; arena]
+        );
+        assert_ne!(
+            list![5, 1, 1.5, "foo"; arena],
+            list![5, 1, 1.5, "bar"; arena]
+        );
     }
 }
