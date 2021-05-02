@@ -19,7 +19,6 @@ pub struct LispFn {
     pub op_codes: CodeVec,
     pub constants: Vec<LispObj>,
     pub args: FnArgs,
-    arena: Arena,
 }
 define_unbox_ref!(LispFn, Func);
 
@@ -27,7 +26,6 @@ impl LispFn {
     pub fn new(
         op_codes: CodeVec,
         constants: Vec<LispObj>,
-        arena: Arena,
         required: u16,
         optional: u16,
         rest: bool,
@@ -35,7 +33,6 @@ impl LispFn {
         LispFn {
             op_codes,
             constants,
-            arena,
             args: FnArgs {
                 required,
                 optional,
@@ -44,12 +41,6 @@ impl LispFn {
                 advice: false,
             },
         }
-    }
-}
-
-impl From<LispFn> for LispObj {
-    fn from(func: LispFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::LispFn)
     }
 }
 
@@ -114,12 +105,6 @@ impl std::cmp::PartialEq for SubrFn {
     }
 }
 
-impl From<SubrFn> for LispObj {
-    fn from(func: SubrFn) -> Self {
-        LispObj::from_tagged_ptr(func, Tag::SubrFn)
-    }
-}
-
 impl<'obj> IntoObject<'obj> for SubrFn {
     fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
         Object::from_type(arena, self, Tag::SubrFn)
@@ -141,29 +126,30 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(88, size_of::<LispFn>());
+        assert_eq!(56, size_of::<LispFn>());
         assert_eq!(32, size_of::<SubrFn>());
     }
 
     #[test]
     fn function() {
-        let x: LispObj = LispFn::new(
+        let arena = Arena::new();
+        let constant: Object = arena.insert(1);
+        let func = LispFn::new(
             vec_into![0, 1, 2].into(),
-            vec_into![1],
-            Arena::new(),
+            vec![unsafe {constant.into_gc()}],
             0,
             0,
             false,
-        )
-        .into();
-        assert!(matches!(x.val(), Value::LispFn(_)));
-        format!("{}", x);
-        let func = match x.val() {
+        );
+        let obj: Object = arena.insert(func);
+        assert!(matches!(obj.val(), Value::LispFn(_)));
+        format!("{}", obj);
+        let func = match obj.val() {
             Value::LispFn(x) => x,
             _ => unreachable!(),
         };
         assert_eq!(func.op_codes, vec_into![0, 1, 2].into());
-        assert_eq!(func.constants, vec_into![1]);
+        assert_eq!(func.constants, vec_into_object![1; arena]);
         assert_eq!(func.args.required, 0);
         assert_eq!(func.args.optional, 0);
         assert_eq!(func.args.rest, false);

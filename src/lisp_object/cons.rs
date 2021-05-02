@@ -60,12 +60,6 @@ impl<'obj> fmt::Display for Cons<'obj> {
     }
 }
 
-impl<'obj> From<Cons<'obj>> for LispObj {
-    fn from(cons: Cons) -> Self {
-        LispObj::from_tagged_ptr(cons, Tag::Cons)
-    }
-}
-
 impl<'obj> IntoObject<'obj> for Cons<'obj> {
     fn into_object(self, alloc: &Arena) -> (Object<'obj>, bool) {
         Object::from_type(alloc, self, Tag::Cons)
@@ -106,12 +100,12 @@ mod test {
         assert_eq!(16, size_of::<Cons>());
         let cons = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
 
-        let mut x = LispObj::from(cons);
+        let mut x: Object = arena.insert(cons);
         assert!(matches!(x.val(), Value::Cons(_)));
 
         let cons1 = x.as_mut_cons().unwrap();
         assert_eq!("start", cons1.car);
-        (*cons1).car = "start2".into();
+        (*cons1).car = arena.insert("start2");
         assert_eq!("start2", cons1.car);
 
         let cons2 = match cons1.cdr.val() {

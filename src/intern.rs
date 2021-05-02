@@ -90,7 +90,7 @@ mod test {
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
-        let func = LispFn::new(vec![5].into(), vec![], Arena::new(), 0, 0, false);
+        let func = LispFn::new(vec![5].into(), vec![], 0, 0, false);
         second.set_func(arena.insert(func));
         let func_cell = first.get_func().unwrap();
         let func = match func_cell.val() {

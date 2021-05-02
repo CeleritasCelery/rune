@@ -36,15 +36,6 @@ impl<'obj> From<Number<'obj>> for NumberFold {
     }
 }
 
-impl<'obj> From<NumberFold> for Number<'obj> {
-    fn from(num: NumberFold) -> Self {
-        match num {
-            NumberFold::Int(x) => x.into(),
-            NumberFold::Float(x) => x.into(),
-        }
-    }
-}
-
 impl NumberFold {
     fn into_number(self, arena: &Arena) -> Number {
         match self {
@@ -120,20 +111,20 @@ pub fn div<'obj>(number: Number, divisors: &[Number], arena: &'obj Arena) -> Num
 }
 
 #[lisp_fn(name = "1+")]
-pub fn plus_one(number: Number) -> Number {
+pub fn plus_one<'obj>(number: Number<'obj>, arena: &'obj Arena) -> Number<'obj> {
     use NumberValue::*;
     match number.val() {
-        Int(x) => (x + 1).into(),
-        Float(x) => (x + 1.0).into(),
+        Int(x) => arena.insert(x + 1),
+        Float(x) => arena.insert(x + 1.0),
     }
 }
 
 #[lisp_fn(name = "1-")]
-pub fn minus_one(number: Number) -> Number {
+pub fn minus_one<'obj>(number: Number<'obj>, arena: &'obj Arena) -> Number<'obj> {
     use NumberValue::*;
     match number.val() {
-        Int(x) => (x - 1).into(),
-        Float(x) => (x - 1.0).into(),
+        Int(x) => arena.insert(x - 1),
+        Float(x) => arena.insert(x - 1.0),
     }
 }
 
@@ -153,11 +144,11 @@ mod test {
         let num = add(&[], &arena).val();
         assert_eq!(num, Int(0));
 
-        let args = vec_into![7, 13];
+        let args = vec_into_object![7, 13; arena];
         let num = add(&args, &arena).val();
         assert_eq!(num, Int(20));
 
-        let args = vec_into![1, 2.5];
+        let args = vec_into_object![1, 2.5; arena];
         let num = add(&args, &arena).val();
         assert_eq!(num, Float(3.5));
     }
@@ -169,11 +160,11 @@ mod test {
         let num = sub(None, &[], &arena).val();
         assert_eq!(num, Int(0));
 
-        let num = sub(Some(7.into()), &[], &arena).val();
+        let num = sub(Some(arena.insert(7)), &[], &arena).val();
         assert_eq!(num, Int(-7));
 
-        let args = vec_into![13];
-        let num = sub(Some(7.into()), &args, &arena).val();
+        let args = vec_into_object![13; arena];
+        let num = sub(Some(arena.insert(7)), &args, &arena).val();
         assert_eq!(num, Int(-6));
     }
 
@@ -183,7 +174,7 @@ mod test {
         let num = mul(&[], &arena).val();
         assert_eq!(num, Int(1));
 
-        let args = vec_into![7, 13];
+        let args = vec_into_object![7, 13; arena];
         let num = mul(&args, &arena).val();
         assert_eq!(num, Int(91));
     }
@@ -192,11 +183,11 @@ mod test {
     #[allow(clippy::float_cmp)]
     fn test_div() {
         let arena = Arena::new();
-        let num = div(12.0.into(), &[], &arena).val();
+        let num = div(arena.insert(12.0), &[], &arena).val();
         assert_eq!(num, Float(12.0));
 
-        let args = vec_into![5, 2];
-        let num = div(12.into(), &args, &arena).val();
+        let args = vec_into_object![5, 2; arena];
+        let num = div(arena.insert(12), &args, &arena).val();
         assert_eq!(num, Int(1));
     }
 }

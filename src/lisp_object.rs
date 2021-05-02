@@ -11,7 +11,6 @@ pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
-use crate::gc::Gc;
 use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
@@ -415,13 +414,6 @@ impl<'obj> Object<'obj> {
             data: InnerObject { bits },
             marker: PhantomData,
         }
-    }
-
-    // TODO: remove this
-    fn from_tagged_ptr<T>(obj: T, tag: Tag) -> Self {
-        let ptr = Gc::new(obj).as_ref() as *const T;
-        let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
-        Self::from_bits(bits)
     }
 
     pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {

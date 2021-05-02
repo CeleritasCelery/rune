@@ -60,12 +60,6 @@ where
 type Int = i64;
 define_unbox!(Int);
 
-impl<'obj> From<Int> for Object<'obj> {
-    fn from(i: Int) -> Self {
-        unsafe { Object::from_ptr(i as *const i64, Tag::Int) }
-    }
-}
-
 impl<'obj> IntoObject<'obj> for i64 {
     fn into_object(self, _alloc: &Arena) -> (Object, bool) {
         unsafe { (Object::from_ptr(self as *const i64, Tag::Int), false) }
@@ -80,12 +74,6 @@ impl IntoTagObject<IntObject> for i64 {
 
 type Float = f64;
 define_unbox!(Float);
-
-impl<'obj> From<f64> for Object<'obj> {
-    fn from(f: f64) -> Self {
-        Object::from_tagged_ptr(f, Tag::Float)
-    }
-}
 
 impl<'obj> IntoObject<'obj> for f64 {
     fn into_object(self, arena: &Arena) -> (Object, bool) {
@@ -125,12 +113,6 @@ impl IntoTagObject<BoolObject> for bool {
     }
 }
 
-impl<'obj> From<&str> for Object<'obj> {
-    fn from(s: &str) -> Self {
-        Object::from_tagged_ptr(s.to_owned(), Tag::String)
-    }
-}
-
 impl<'obj> IntoObject<'obj> for &str {
     fn into_object(self, arena: &Arena) -> (Object, bool) {
         Object::from_type(arena, self.to_owned(), Tag::String)
@@ -145,11 +127,6 @@ impl IntoTagObject<StringObject> for &str {
 }
 
 define_unbox_ref!(String);
-impl<'obj> From<String> for Object<'obj> {
-    fn from(s: String) -> Self {
-        Object::from_tagged_ptr(s, Tag::String)
-    }
-}
 
 impl<'obj> IntoObject<'obj> for String {
     fn into_object(self, arena: &Arena) -> (Object, bool) {
@@ -217,8 +194,8 @@ mod test {
     #[test]
     fn test() {
         let arena = Arena::new();
-        let obj0 = LispObj::from(5);
-        let obj1 = LispObj::from(cons!(1, 2; arena));
+        let obj0 = arena.insert(5);
+        let obj1 = arena.insert(cons!(1, 2; arena));
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

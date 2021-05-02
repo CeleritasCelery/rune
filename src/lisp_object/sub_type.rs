@@ -77,19 +77,6 @@ impl<'a> From<FloatObject> for Number<'a> {
     }
 }
 
-// TODO remove
-impl<'obj> From<i64> for Number<'obj> {
-    fn from(x: i64) -> Self {
-        Self::from_bits(LispObj::from(x).into_raw())
-    }
-}
-
-impl<'obj> From<f64> for Number<'obj> {
-    fn from(x: f64) -> Self {
-        Self::from_bits(LispObj::from(x).into_raw())
-    }
-}
-
 impl<'obj> From<Number<'obj>> for Object<'obj> {
     fn from(x: Number) -> Self {
         Object::from_bits(x.data.into_raw())

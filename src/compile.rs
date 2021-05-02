@@ -23,7 +23,6 @@ impl Default for LispFn {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
             vec![Object::nil()],
-            Arena::new(),
             0,
             0,
             false,
@@ -194,8 +193,8 @@ impl std::convert::From<Exp> for LispFn {
             .into_iter()
             .map(|x| unsafe { x.into_gc() })
             .collect();
-        let arena = exp.constants.arena;
-        LispFn::new(exp.codes, inner, arena, 0, 0, false)
+        std::mem::forget(exp.constants.arena);
+        LispFn::new(exp.codes, inner, 0, 0, false)
     }
 }
 
@@ -579,14 +578,15 @@ mod test {
 
     #[test]
     fn lambda() {
+        let arena = Arena::new();
         check_compiler!("(lambda)", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
 
+        let constant: Object = arena.insert(1);
         let func = LispFn::new(
             vec_into![Constant0, Ret].into(),
-            vec_into![1],
-            Arena::new(),
+            vec![unsafe {constant.into_gc()}],
             0,
             0,
             false,
@@ -596,7 +596,6 @@ mod test {
         let func = LispFn::new(
             vec_into![StackRef0, Ret].into(),
             vec![],
-            Arena::new(),
             1,
             0,
             false,
@@ -606,7 +605,6 @@ mod test {
         let func = LispFn::new(
             vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
             vec_into![intern("+")],
-            Arena::new(),
             2,
             0,
             false,

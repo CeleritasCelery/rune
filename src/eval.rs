@@ -340,7 +340,7 @@ mod test {
     use crate::compile::Exp;
     use crate::reader::LispReader;
 
-    fn test_eval(sexp: &str, expect: LispObj) {
+    fn test_eval(sexp: &str, expect: Object) {
         let arena = Arena::new();
         let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
@@ -351,39 +351,44 @@ mod test {
 
     #[test]
     fn compute() {
-        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63.into());
-        test_eval("7", 7.into());
+        let arena = Arena::new();
+        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", arena.insert(63));
+        test_eval("7", arena.insert(7));
     }
 
     #[test]
     fn let_form() {
-        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", 13.into());
-        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", 9.into());
+        let arena = Arena::new();
+        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", arena.insert(13));
+        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", arena.insert(9));
     }
 
     #[test]
     fn jump() {
-        test_eval("(+ 7 (if nil 11 3))", 10.into());
-        test_eval("(+ 7 (if t 11 3))", 18.into());
-        test_eval("(if nil 11)", false.into());
-        test_eval("(if t 11)", 11.into());
+        let arena = Arena::new();
+        test_eval("(+ 7 (if nil 11 3))", arena.insert(10));
+        test_eval("(+ 7 (if t 11 3))", arena.insert(18));
+        test_eval("(if nil 11)", arena.insert(false));
+        test_eval("(if t 11)", arena.insert(11));
     }
 
     #[test]
     fn variables() {
-        test_eval("(progn (set 'foo 5) foo)", 5.into());
-        test_eval("(let ((foo 1)) (setq foo 2) foo)", 2.into());
-        test_eval("(progn (setq foo 2) foo)", 2.into());
+        let arena = Arena::new();
+        test_eval("(progn (set 'foo 5) foo)", arena.insert(5));
+        test_eval("(let ((foo 1)) (setq foo 2) foo)", arena.insert(2));
+        test_eval("(progn (setq foo 2) foo)", arena.insert(2));
     }
 
     #[test]
     fn call() {
+        let arena = Arena::new();
         test_eval(
             "(progn
 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
 (middle 7 3 13))",
-            224.into(),
+            arena.insert(224),
         );
     }
 

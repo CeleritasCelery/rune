@@ -145,7 +145,7 @@ mod test {
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
-        let func = LispFn::new(vec![1].into(), vec![], Arena::new(), 0, 0, false);
+        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         x.set_func(arena.insert(func));
         let cell = x.get_func().unwrap();
         let before = match cell.val() {
@@ -153,7 +153,7 @@ mod test {
             _ => unreachable!(),
         };
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        let func = LispFn::new(vec![7].into(), vec![], Arena::new(), 0, 0, false);
+        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         x.set_func(arena.insert(func));
         let cell = x.get_func().unwrap();
         let after = match cell.val() {
