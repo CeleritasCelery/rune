@@ -1,4 +1,4 @@
-use crate::lisp_object::{IntoTagObject, LispObj, RefObject, TaggedObject};
+use crate::lisp_object::{IntoObject, LispObj, RefObject, TaggedObject};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -15,7 +15,7 @@ impl<'obj> Arena {
 
     pub fn insert<T, U, V>(&'obj self, obj: T) -> U
     where
-        T: IntoTagObject<V>,
+        T: IntoObject<V>,
         U: RefObject<'obj>,
         V: TaggedObject + Into<U> + Copy,
     {

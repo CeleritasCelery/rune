@@ -44,13 +44,7 @@ impl LispFn {
     }
 }
 
-impl<'obj> IntoObject<'obj> for LispFn {
-    fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
-        Object::from_type(arena, self, Tag::LispFn)
-    }
-}
-
-impl<'obj> IntoTagObject<LispFnObject> for LispFn {
+impl<'obj> IntoObject<LispFnObject> for LispFn {
     fn into_object(self, arena: &Arena) -> LispFnObject {
         let ptr = arena.alloc(self);
         LispFnObject(LispFnObject::new_tagged(ptr as i64))
@@ -105,13 +99,7 @@ impl std::cmp::PartialEq for SubrFn {
     }
 }
 
-impl<'obj> IntoObject<'obj> for SubrFn {
-    fn into_object(self, arena: &'obj crate::arena::Arena) -> (Object<'obj>, bool) {
-        Object::from_type(arena, self, Tag::SubrFn)
-    }
-}
-
-impl<'obj> IntoTagObject<SubrFnObject> for SubrFn {
+impl<'obj> IntoObject<SubrFnObject> for SubrFn {
     fn into_object(self, arena: &Arena) -> SubrFnObject {
         let ptr = arena.alloc(self);
         SubrFnObject(SubrFnObject::new_tagged(ptr as i64))

@@ -334,11 +334,7 @@ impl<'a> RefObject<'a> for Object<'a> {}
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
-pub trait IntoObject<'obj> {
-    fn into_object(self, arena: &'obj Arena) -> (Object<'obj>, bool);
-}
-
-pub trait IntoTagObject<T> {
+pub trait IntoObject<T> {
     fn into_object(self, arena: &Arena) -> T;
 }
 
@@ -373,11 +369,6 @@ impl<'a> Object<'a> {
             data: InnerObject { bits: tag as i64 },
             marker: PhantomData,
         }
-    }
-
-    fn from_type<T: IntoObject<'a>>(arena: &Arena, obj: T, tag: Tag) -> (Self, bool) {
-        let ptr = arena.alloc(obj);
-        unsafe { (Object::from_ptr(ptr, tag), true) }
     }
 
     pub fn val<'b: 'a>(self) -> Value<'b> {

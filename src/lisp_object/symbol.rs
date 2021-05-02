@@ -98,13 +98,7 @@ impl<'obj> From<Symbol> for Object<'obj> {
     }
 }
 
-impl<'obj> IntoObject<'obj> for Symbol {
-    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        (self.into(), false)
-    }
-}
-
-impl<'obj> IntoTagObject<SymbolObject> for Symbol {
+impl<'obj> IntoObject<SymbolObject> for Symbol {
     fn into_object(self, _arena: &Arena) -> SymbolObject {
         let ptr = self.0 as *const _;
         SymbolObject(SymbolObject::new_tagged(ptr as i64))

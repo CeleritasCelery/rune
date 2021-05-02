@@ -60,13 +60,7 @@ where
 type Int = i64;
 define_unbox!(Int);
 
-impl<'obj> IntoObject<'obj> for i64 {
-    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        unsafe { (Object::from_ptr(self as *const i64, Tag::Int), false) }
-    }
-}
-
-impl IntoTagObject<IntObject> for i64 {
+impl IntoObject<IntObject> for i64 {
     fn into_object(self, _arena: &Arena) -> IntObject {
         IntObject(IntObject::new_tagged(self))
     }
@@ -75,13 +69,7 @@ impl IntoTagObject<IntObject> for i64 {
 type Float = f64;
 define_unbox!(Float);
 
-impl<'obj> IntoObject<'obj> for f64 {
-    fn into_object(self, arena: &Arena) -> (Object, bool) {
-        Object::from_type(arena, self, Tag::Float)
-    }
-}
-
-impl IntoTagObject<FloatObject> for f64 {
+impl IntoObject<FloatObject> for f64 {
     fn into_object(self, arena: &Arena) -> FloatObject {
         let ptr = arena.alloc(self);
         FloatObject(FloatObject::new_tagged(ptr as i64))
@@ -94,16 +82,7 @@ impl<'obj> From<bool> for Object<'obj> {
     }
 }
 
-impl<'obj> IntoObject<'obj> for bool {
-    fn into_object(self, _alloc: &Arena) -> (Object, bool) {
-        (
-            Object::from_tag(if self { Tag::True } else { Tag::Nil }),
-            false,
-        )
-    }
-}
-
-impl IntoTagObject<BoolObject> for bool {
+impl IntoObject<BoolObject> for bool {
     fn into_object(self, _arena: &Arena) -> BoolObject {
         if self {
             TrueObject(TrueObject::new_tagged(0)).into()
@@ -113,13 +92,7 @@ impl IntoTagObject<BoolObject> for bool {
     }
 }
 
-impl<'obj> IntoObject<'obj> for &str {
-    fn into_object(self, arena: &Arena) -> (Object, bool) {
-        Object::from_type(arena, self.to_owned(), Tag::String)
-    }
-}
-
-impl IntoTagObject<StringObject> for &str {
+impl IntoObject<StringObject> for &str {
     fn into_object(self, arena: &Arena) -> StringObject {
         let ptr = arena.alloc(self.to_owned());
         StringObject(StringObject::new_tagged(ptr as i64))
@@ -128,26 +101,14 @@ impl IntoTagObject<StringObject> for &str {
 
 define_unbox_ref!(String);
 
-impl<'obj> IntoObject<'obj> for String {
-    fn into_object(self, arena: &Arena) -> (Object, bool) {
-        Object::from_type(arena, self, Tag::String)
-    }
-}
-
-impl IntoTagObject<StringObject> for String {
+impl IntoObject<StringObject> for String {
     fn into_object(self, arena: &Arena) -> StringObject {
         let ptr = arena.alloc(self);
         StringObject(StringObject::new_tagged(ptr as i64))
     }
 }
 
-impl<'obj> IntoObject<'obj> for Object<'obj> {
-    fn into_object(self, _arena: &'obj Arena) -> (Object<'obj>, bool) {
-        (self, false)
-    }
-}
-
-impl<'obj> IntoTagObject<Object<'obj>> for Object<'obj> {
+impl<'obj> IntoObject<Object<'obj>> for Object<'obj> {
     fn into_object(self, _arena: &Arena) -> Object<'obj> {
         self
     }
@@ -161,15 +122,6 @@ where
         match t {
             Some(x) => x.into(),
             None => Object::nil(),
-        }
-    }
-}
-
-impl<'obj, T: IntoObject<'obj>> IntoObject<'obj> for Option<T> {
-    fn into_object(self, arena: &'obj Arena) -> (Object, bool) {
-        match self {
-            Some(x) => x.into_object(arena),
-            None => (Object::nil(), false),
         }
     }
 }

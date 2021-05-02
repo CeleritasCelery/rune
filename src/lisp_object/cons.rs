@@ -60,13 +60,7 @@ impl<'obj> fmt::Display for Cons<'obj> {
     }
 }
 
-impl<'obj> IntoObject<'obj> for Cons<'obj> {
-    fn into_object(self, alloc: &Arena) -> (Object<'obj>, bool) {
-        Object::from_type(alloc, self, Tag::Cons)
-    }
-}
-
-impl<'obj> IntoTagObject<ConsObject> for Cons<'obj> {
+impl<'obj> IntoObject<ConsObject> for Cons<'obj> {
     fn into_object(self, arena: &Arena) -> ConsObject {
         let ptr = arena.alloc(self);
         ConsObject(ConsObject::new_tagged(ptr as i64))
