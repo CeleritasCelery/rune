@@ -41,9 +41,11 @@ impl IP {
         }
     }
 
-    fn jump(&mut self, offset: isize) {
+    fn jump(&mut self, offset: i16) {
         unsafe {
-            self.ip = self.ip.offset(offset);
+            println!("offset {:?}", offset);
+            self.ip = self.ip.offset(offset as isize);
+            println!("ip = {:p}", self.ip);
             debug_assert!(self.range.contains(&self.ip));
         }
     }
@@ -297,20 +299,20 @@ impl Routine {
                 }
                 op::Jump => {
                     let offset = self.frame.ip.take_double_arg();
-                    self.frame.ip.jump(offset as isize);
+                    self.frame.ip.jump(offset as i16);
                 }
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
                     let offset = self.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        self.frame.ip.jump(offset as isize);
+                        self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        self.frame.ip.jump(offset as isize);
+                        self.frame.ip.jump(offset as i16);
                     } else {
                         self.stack.pop();
                     }
@@ -370,6 +372,14 @@ mod test {
         test_eval("(+ 7 (if t 11 3))", arena.insert(18));
         test_eval("(if nil 11)", arena.insert(false));
         test_eval("(if t 11)", arena.insert(11));
+    }
+
+    #[test]
+    fn loops() {
+        let arena = Arena::new();
+        test_eval("(while nil)", arena.insert(false));
+        test_eval("(while nil (set 'foo 7))", arena.insert(false));
+        test_eval("(let ((foo t)) (while foo (setq foo nil)))", arena.insert(false));
     }
 
     #[test]

@@ -3,13 +3,6 @@
 ** implement while loop
 ** compile
 *** remove temporary arena's and replace with stackArenas
-*** create ~UniqObject~ type
-This can be used for const vec
-** Object
-*** move more object from lispobj to object
-*** define an object as a union of composites
-This will let us easily create variants that are a subset of the regular object type.
-*** make ~IntoObject~ have a generic return value
 * change error type to box dyn
 This will reduce coupling in the system by allowing different modules to define their own errors
 

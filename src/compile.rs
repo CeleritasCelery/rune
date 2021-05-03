@@ -103,6 +103,8 @@ macro_rules! emit_op {
     };
 }
 
+const JUMP_SLOTS: i16 = 2;
+
 impl CodeVec {
     pub fn push_op(&mut self, op: OpCode) {
         self.push(op.into());
@@ -127,9 +129,15 @@ impl CodeVec {
     }
 
     fn set_jump_placeholder(&mut self, index: usize) {
-        let offset = self.len() - index - 2;
+        let offset = self.len() as i16 - index as i16 - JUMP_SLOTS;
         self[index] = (offset >> 8) as u8;
         self[index + 1] = offset as u8;
+    }
+
+    fn push_back_jump(&mut self, index: usize) {
+        let offset = index as i16 - self.len() as i16 - JUMP_SLOTS;
+        self.push((offset >> 8) as u8);
+        self.push(offset as u8);
     }
 
     fn emit_const(&mut self, idx: u16) {
@@ -390,6 +398,24 @@ impl<'obj> Exp {
         }
     }
 
+    fn compile_loop(&mut self, obj: Object) -> Result<()> {
+        let forms = into_list(obj)?;
+        if forms.is_empty() {
+           return Err(Error::ArgCount(1, 0));
+        }
+        self.compile_form(forms[0])?;
+        let top = self.codes.len();
+        self.codes.push_op(OpCode::JumpNilElsePop);
+        let place = self.codes.push_jump_placeholder();
+        self.implicit_progn(&forms[1..])?;
+        self.discard();
+        self.codes.push_op(OpCode::Jump);
+        self.codes.push_back_jump(top);
+        self.codes.set_jump_placeholder(place);
+        self.add_const(Object::nil(), None)?;
+        Ok(())
+    }
+
     fn compile_lambda(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         let mut iter = list.iter();
@@ -424,6 +450,7 @@ impl<'obj> Exp {
         let sym: Symbol = inner.try_into()?;
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
+            "while" => self.compile_loop(cons.cdr()),
             "quote" => self.quote(cons.cdr()),
             "progn" => self.progn(cons.cdr()),
             "setq" => self.setq(cons.cdr()),
@@ -535,19 +562,57 @@ mod test {
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
 
+    const fn get_jump_slots(offset: i16) -> (u8, u8) {
+        ((offset >> 8) as u8, offset as u8)
+    }
+
     #[test]
     fn conditional() {
+        let (high4, low4) = get_jump_slots(4);
+        let (high1, low1) = get_jump_slots(1);
         check_compiler!(
             "(if nil 1 2)",
-            [Constant0, JumpNil, 0, 4, Constant1, Jump, 0, 1, Constant2, Ret],
+            [Constant0, JumpNil, high4, low4, Constant1, Jump, high1, low1, Constant2, Ret],
             [Object::nil(), 1, 2]
         );
         check_compiler!(
             "(if t 2)",
-            [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
+            [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
             [Object::t(), 2]
         );
         check_error("(if 1)", Error::ArgCount(2, 1));
+    }
+
+    #[test]
+    fn while_loop() {
+        let (high5, low5) = get_jump_slots(5);
+        let (high_8, low_8) = get_jump_slots(-8);
+        check_compiler!(
+            "(while t)",
+            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant1, Ret],
+            [Object::t(), Object::nil()]
+        );
+
+        check_compiler!(
+            "(while t 1)",
+            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant2, Ret],
+            [Object::t(), 1, Object::nil()]
+        );
+
+        check_compiler!(
+            "(while nil 2)",
+            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant0, Ret],
+            [Object::nil(), 2]
+        );
+
+        let (high7, low7) = get_jump_slots(7);
+        let (high_10, low_10) = get_jump_slots(-10);
+        check_compiler!(
+            "(while nil 2 3)",
+            [Constant0, JumpNilElsePop, high7, low7, Constant1, Discard, Constant2, Discard, Jump, high_10, low_10, Constant0, Ret],
+            [Object::nil(), 2, 3]
+        );
+        check_error("(while)", Error::ArgCount(1, 0));
     }
 
     #[test]
