@@ -215,24 +215,6 @@ impl From<NilObject> for BoolObject {
 }
 
 #[derive(Copy, Clone)]
-pub struct OptionObject(i64);
-impl TaggedObject for OptionObject {
-    const TAG: Tag = Tag::Nil;
-    // TODO: add correct implementation
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<OptionObject> for Object<'a> {
-    fn from(x: OptionObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
 pub struct ConsObject(i64);
 impl TaggedObject for ConsObject {
     const TAG: Tag = Tag::Cons;
