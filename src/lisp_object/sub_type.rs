@@ -91,7 +91,7 @@ pub enum NumberValue {
 }
 
 impl<'obj> Number<'obj> {
-    pub fn val(&self) -> NumberValue {
+    pub fn val(self) -> NumberValue {
         match self.data.val() {
             Value::Int(x) => NumberValue::Int(x),
             Value::Float(x) => NumberValue::Float(x),
