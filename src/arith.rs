@@ -128,7 +128,33 @@ pub fn minus_one<'obj>(number: Number<'obj>, arena: &'obj Arena) -> Number<'obj>
     }
 }
 
-defsubr!(add, sub, mul, div, plus_one, minus_one);
+impl<'obj> std::cmp::PartialEq<i64> for Number<'obj> {
+    fn eq(&self, other: &i64) -> bool {
+        match self.val() {
+            NumberValue::Int(num) => num == *other,
+            NumberValue::Float(num) => num == *other as f64,
+        }
+    }
+}
+
+impl<'obj> std::cmp::PartialEq<f64> for Number<'obj> {
+    fn eq(&self, other: &f64) -> bool {
+        match self.val() {
+            NumberValue::Int(num) => num as f64 == *other,
+            NumberValue::Float(num) => num == *other,
+        }
+    }
+}
+
+#[lisp_fn(name = "=")]
+pub fn num_eq(number: Number, numbers: &[Number]) -> bool {
+    match number.val() {
+        NumberValue::Int(num) => numbers.iter().all(|&x| x == num),
+        NumberValue::Float(num) => numbers.iter().all(|&x| x == num),
+    }
+}
+
+defsubr!(add, sub, mul, div, plus_one, minus_one, num_eq);
 
 #[cfg(test)]
 mod test {
@@ -189,5 +215,20 @@ mod test {
         let args = vec_into_object![5, 2; arena];
         let num = div(arena.insert(12), &args, &arena).val();
         assert_eq!(num, Int(1));
+    }
+
+    #[test]
+    fn test_eq() {
+        let arena = Arena::new();
+        assert!(num_eq(arena.insert(1), &[]));
+
+        let args = vec_into_object![1.0; arena];
+        assert!(num_eq(arena.insert(1), &args));
+
+        let args = vec_into_object![1; arena];
+        assert!(num_eq(arena.insert(1.0), &args));
+
+        let args = vec_into_object![1, 1, 1.1; arena];
+        assert!(!num_eq(arena.insert(1.0), &args));
     }
 }
