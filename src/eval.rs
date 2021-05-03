@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
 use crate::lisp_object::{
-    BuiltInFn, FnArgs, FunctionValue, LispFn, GcObject, Object, Symbol, Value,
+    BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value,
 };
 use crate::opcode::OpCode;
 use std::convert::TryInto;
@@ -379,7 +379,10 @@ mod test {
         let arena = Arena::new();
         test_eval("(while nil)", arena.insert(false));
         test_eval("(while nil (set 'foo 7))", arena.insert(false));
-        test_eval("(let ((foo t)) (while foo (setq foo nil)))", arena.insert(false));
+        test_eval(
+            "(let ((foo t)) (while foo (setq foo nil)))",
+            arena.insert(false),
+        );
     }
 
     #[test]

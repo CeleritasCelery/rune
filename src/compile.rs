@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, LispFn, GcObject, Object, Symbol, Value};
+use crate::lisp_object::{Cons, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 
@@ -401,7 +401,7 @@ impl<'obj> Exp {
     fn compile_loop(&mut self, obj: Object) -> Result<()> {
         let forms = into_list(obj)?;
         if forms.is_empty() {
-           return Err(Error::ArgCount(1, 0));
+            return Err(Error::ArgCount(1, 0));
         }
         self.compile_form(forms[0])?;
         let top = self.codes.len();
@@ -589,19 +589,55 @@ mod test {
         let (high_8, low_8) = get_jump_slots(-8);
         check_compiler!(
             "(while t)",
-            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant1, Ret],
+            [
+                Constant0,
+                JumpNilElsePop,
+                high5,
+                low5,
+                Constant1,
+                Discard,
+                Jump,
+                high_8,
+                low_8,
+                Constant1,
+                Ret
+            ],
             [Object::t(), Object::nil()]
         );
 
         check_compiler!(
             "(while t 1)",
-            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant2, Ret],
+            [
+                Constant0,
+                JumpNilElsePop,
+                high5,
+                low5,
+                Constant1,
+                Discard,
+                Jump,
+                high_8,
+                low_8,
+                Constant2,
+                Ret
+            ],
             [Object::t(), 1, Object::nil()]
         );
 
         check_compiler!(
             "(while nil 2)",
-            [Constant0, JumpNilElsePop, high5, low5, Constant1, Discard, Jump, high_8, low_8, Constant0, Ret],
+            [
+                Constant0,
+                JumpNilElsePop,
+                high5,
+                low5,
+                Constant1,
+                Discard,
+                Jump,
+                high_8,
+                low_8,
+                Constant0,
+                Ret
+            ],
             [Object::nil(), 2]
         );
 
@@ -609,7 +645,21 @@ mod test {
         let (high_10, low_10) = get_jump_slots(-10);
         check_compiler!(
             "(while nil 2 3)",
-            [Constant0, JumpNilElsePop, high7, low7, Constant1, Discard, Constant2, Discard, Jump, high_10, low_10, Constant0, Ret],
+            [
+                Constant0,
+                JumpNilElsePop,
+                high7,
+                low7,
+                Constant1,
+                Discard,
+                Constant2,
+                Discard,
+                Jump,
+                high_10,
+                low_10,
+                Constant0,
+                Ret
+            ],
             [Object::nil(), 2, 3]
         );
         check_error("(while)", Error::ArgCount(1, 0));
@@ -646,20 +696,14 @@ mod test {
         let constant: Object = arena.insert(1);
         let func = LispFn::new(
             vec_into![Constant0, Ret].into(),
-            vec![unsafe {constant.into_gc()}],
+            vec![unsafe { constant.into_gc() }],
             0,
             0,
             false,
         );
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(
-            vec_into![StackRef0, Ret].into(),
-            vec![],
-            1,
-            0,
-            false,
-        );
+        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(

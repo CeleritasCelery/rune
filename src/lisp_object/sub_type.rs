@@ -49,6 +49,7 @@ impl<'a> Function<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Number<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,

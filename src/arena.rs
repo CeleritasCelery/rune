@@ -1,4 +1,4 @@
-use crate::lisp_object::{IntoObject, GcObject, RefObject, TaggedObject};
+use crate::lisp_object::{GcObject, IntoObject, RefObject, TaggedObject};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]

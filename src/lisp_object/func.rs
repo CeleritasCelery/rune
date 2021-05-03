@@ -124,7 +124,7 @@ mod test {
         let constant: Object = arena.insert(1);
         let func = LispFn::new(
             vec_into![0, 1, 2].into(),
-            vec![unsafe {constant.into_gc()}],
+            vec![unsafe { constant.into_gc() }],
             0,
             0,
             false,
