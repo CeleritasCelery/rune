@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, GcObject, LispFn, Object, Symbol, Value};
+use crate::lisp_object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 
@@ -420,10 +420,10 @@ impl<'obj> Exp {
         let list = into_list(obj)?;
         let mut iter = list.iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
-        let arena = Arena::new();
+        let arena = &Arena::new();
         match iter.next() {
             None => {
-                return self.add_const(arena.insert(LispFn::default()), None);
+                return self.add_const(LispFn::default().into_obj(arena), None);
             }
             Some(bindings) => {
                 for binding in &into_list(*bindings)? {
@@ -436,12 +436,12 @@ impl<'obj> Exp {
         };
         let body = iter.as_slice();
         if body.is_empty() {
-            self.add_const(arena.insert(LispFn::default()), None)
+            self.add_const(LispFn::default().into_obj(arena), None)
         } else {
             let len = vars.len();
             let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
             func.args.required = len as u16;
-            self.add_const(arena.insert(func), None)
+            self.add_const(func.into_obj(arena), None)
         }
     }
 
@@ -506,15 +506,15 @@ mod test {
     use OpCode::*;
 
     fn check_error(compare: &str, expect: Error) {
-        let arena = Arena::new();
-        let obj = LispReader::new(compare).read_from(&arena).unwrap().unwrap();
+        let arena = &Arena::new();
+        let obj = LispReader::new(compare).read_from(arena).unwrap().unwrap();
         assert_eq!(Exp::compile(obj).err().unwrap(), expect);
     }
 
     macro_rules! check_compiler {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
-            let arena = Arena::new();
-            let obj = LispReader::new($compare).read_from(&arena).unwrap().unwrap();
+            let arena = &Arena::new();
+            let obj = LispReader::new($compare).read_from(arena).unwrap().unwrap();
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
                 constants: ConstVec::from(vec_into_object![$($const),+; arena]),
@@ -526,7 +526,7 @@ mod test {
 
     #[test]
     fn test_basic() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         check_compiler!("1", [Constant0, Ret], [1]);
         check_compiler!("'foo", [Constant0, Ret], [intern("foo")]);
         check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2; arena)]);
@@ -688,12 +688,12 @@ mod test {
 
     #[test]
     fn lambda() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         check_compiler!("(lambda)", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
         check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
 
-        let constant: Object = arena.insert(1);
+        let constant: Object = 1.into_obj(arena);
         let func = LispFn::new(
             vec_into![Constant0, Ret].into(),
             vec![unsafe { constant.into_gc() }],

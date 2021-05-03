@@ -94,14 +94,13 @@ impl std::ops::Deref for Symbol {
 impl<'obj> From<Symbol> for Object<'obj> {
     fn from(s: Symbol) -> Self {
         let ptr = s.0 as *const _;
-        unsafe { Object::from_ptr(ptr as *mut u8, Tag::Symbol) }
+        InnerObject::from_ptr(ptr as *mut u8, Tag::Symbol).into()
     }
 }
 
-impl<'obj> IntoObject<SymbolObject> for Symbol {
-    fn into_object(self, _arena: &Arena) -> SymbolObject {
-        let ptr = self.0 as *const _;
-        SymbolObject(SymbolObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for Symbol {
+    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+        self.into()
     }
 }
 
@@ -135,12 +134,12 @@ mod test {
 
     #[test]
     fn symbol_func() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
-        x.set_func(arena.insert(func));
+        x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let before = match cell.val() {
             FunctionValue::LispFn(x) => x,
@@ -148,7 +147,7 @@ mod test {
         };
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
-        x.set_func(arena.insert(func));
+        x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let after = match cell.val() {
             FunctionValue::LispFn(x) => x,
@@ -169,11 +168,11 @@ mod test {
 
     #[test]
     fn subr() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
 
         let sym = InnerSymbol::new("bar".to_owned());
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
-        sym.set_func(arena.insert(core_func));
+        sym.set_func(core_func.into_obj(arena));
 
         match sym.get_func().unwrap().val() {
             FunctionValue::SubrFn(x) => {

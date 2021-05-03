@@ -60,27 +60,32 @@ impl<'obj> fmt::Display for Cons<'obj> {
     }
 }
 
-impl<'obj> IntoObject<ConsObject> for Cons<'obj> {
-    fn into_object(self, arena: &Arena) -> ConsObject {
-        let ptr = arena.alloc(self);
-        ConsObject(ConsObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for Cons<'obj> {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        InnerObject::from_type(self, Tag::Cons, arena).into()
     }
 }
 
 #[macro_export]
 macro_rules! cons {
-    ($car:expr, $cdr:expr; $alloc:expr) => {
-        crate::lisp_object::Cons::new($alloc.insert($car), $alloc.insert($cdr))
+    ($car:expr, $cdr:expr; $arena:expr) => {
+        crate::lisp_object::Cons::new(
+            crate::lisp_object::IntoObject::into_obj($car, $arena),
+            crate::lisp_object::IntoObject::into_obj($cdr, $arena),
+        )
     };
-    ($car:expr; $alloc:expr) => {
-        crate::lisp_object::Cons::new($alloc.insert($car), crate::lisp_object::Object::nil())
+    ($car:expr; $arena:expr) => {
+        crate::lisp_object::Cons::new(
+            crate::lisp_object::IntoObject::into_obj($car, $arena),
+            crate::lisp_object::Object::nil(),
+        )
     };
 }
 
 #[macro_export]
 macro_rules! list {
-    ($x:expr; $alloc:expr) => (cons!($x; $alloc));
-    ($x:expr, $($y:expr),+ $(,)? ; $alloc:expr) => (cons!($x, list!($($y),+ ; $alloc) ; $alloc));
+    ($x:expr; $arena:expr) => (cons!($x; $arena));
+    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => (cons!($x, list!($($y),+ ; $arena) ; $arena));
 }
 
 #[cfg(test)]
@@ -90,16 +95,16 @@ mod test {
     use std::mem::size_of;
     #[test]
     fn cons() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         assert_eq!(16, size_of::<Cons>());
         let cons = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
 
-        let mut x: Object = arena.insert(cons);
+        let mut x: Object = cons.into_obj(arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
         let cons1 = x.as_mut_cons().unwrap();
         assert_eq!("start", cons1.car);
-        (*cons1).car = arena.insert("start2");
+        (*cons1).car = "start2".into_obj(arena);
         assert_eq!("start2", cons1.car);
 
         let cons2 = match cons1.cdr.val() {

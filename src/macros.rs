@@ -5,7 +5,7 @@ macro_rules! vec_into {
 
 #[macro_export]
 macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$($arena.insert($x)),+]};
+    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::lisp_object::IntoObject::into_obj($x, $arena)),+]};
 }
 
 macro_rules! count {

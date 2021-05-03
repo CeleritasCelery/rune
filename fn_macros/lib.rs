@@ -40,7 +40,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     } else {
         quote! {}
     };
-    let subr_call = quote! {Ok(#subr(#(#arg_conversion),*)#err.into())};
+    let subr_call = quote! {Ok(crate::lisp_object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
 
     quote! {
         #[allow(non_upper_case_globals)]

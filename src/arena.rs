@@ -1,4 +1,4 @@
-use crate::lisp_object::{GcObject, IntoObject, RefObject, TaggedObject};
+use crate::lisp_object::{GcObject, Object};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -13,21 +13,12 @@ impl<'obj> Arena {
         }
     }
 
-    pub fn insert<T, U, V>(&'obj self, obj: T) -> U
-    where
-        T: IntoObject<V>,
-        U: RefObject<'obj>,
-        V: TaggedObject + Into<U> + Copy,
-    {
-        let obj = obj.into_object(self);
-        if obj.is_boxed() {
-            self.objects.borrow_mut().push(obj.into_gc());
-        }
-        obj.into()
-    }
-
     pub fn alloc<T>(&self, obj: T) -> *const T {
         Box::into_raw(Box::new(obj))
+    }
+
+    pub fn register(&self, obj: Object<'obj>) {
+        self.objects.borrow_mut().push(unsafe { obj.into_gc() });
     }
 }
 

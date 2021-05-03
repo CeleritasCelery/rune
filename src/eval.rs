@@ -340,6 +340,7 @@ mod test {
     use super::*;
     use crate::arena::Arena;
     use crate::compile::Exp;
+    use crate::lisp_object::IntoObject;
     use crate::reader::LispReader;
 
     fn test_eval(sexp: &str, expect: Object) {
@@ -353,61 +354,61 @@ mod test {
 
     #[test]
     fn compute() {
-        let arena = Arena::new();
-        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", arena.insert(63));
-        test_eval("7", arena.insert(7));
+        let arena = &Arena::new();
+        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63.into_obj(arena));
+        test_eval("7", (7).into_obj(arena));
     }
 
     #[test]
     fn let_form() {
-        let arena = Arena::new();
-        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", arena.insert(13));
-        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", arena.insert(9));
+        let arena = &Arena::new();
+        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", 13.into_obj(arena));
+        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", 9.into_obj(arena));
     }
 
     #[test]
     fn jump() {
-        let arena = Arena::new();
-        test_eval("(+ 7 (if nil 11 3))", arena.insert(10));
-        test_eval("(+ 7 (if t 11 3))", arena.insert(18));
-        test_eval("(if nil 11)", arena.insert(false));
-        test_eval("(if t 11)", arena.insert(11));
+        let arena = &Arena::new();
+        test_eval("(+ 7 (if nil 11 3))", 10.into_obj(arena));
+        test_eval("(+ 7 (if t 11 3))", 18.into_obj(arena));
+        test_eval("(if nil 11)", false.into_obj(arena));
+        test_eval("(if t 11)", 11.into_obj(arena));
     }
 
     #[test]
     fn loops() {
-        let arena = Arena::new();
-        test_eval("(while nil)", arena.insert(false));
-        test_eval("(while nil (set 'foo 7))", arena.insert(false));
+        let arena = &Arena::new();
+        test_eval("(while nil)", false.into_obj(arena));
+        test_eval("(while nil (set 'foo 7))", false.into_obj(arena));
         test_eval(
             "(let ((foo t)) (while foo (setq foo nil)))",
-            arena.insert(false),
+            false.into_obj(arena),
         );
     }
 
     #[test]
     fn variables() {
-        let arena = Arena::new();
-        test_eval("(progn (set 'foo 5) foo)", arena.insert(5));
-        test_eval("(let ((foo 1)) (setq foo 2) foo)", arena.insert(2));
-        test_eval("(progn (setq foo 2) foo)", arena.insert(2));
+        let arena = &Arena::new();
+        test_eval("(progn (set 'foo 5) foo)", 5.into_obj(arena));
+        test_eval("(let ((foo 1)) (setq foo 2) foo)", 2.into_obj(arena));
+        test_eval("(progn (setq foo 2) foo)", 2.into_obj(arena));
     }
 
     #[test]
     fn call() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         test_eval(
             "(progn
 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
 (middle 7 3 13))",
-            arena.insert(224),
+            (224).into_obj(arena),
         );
     }
 
     fn test_eval_error(sexp: &str, error: Error) {
-        let arena = Arena::new();
-        let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
+        let arena = &Arena::new();
+        let obj = LispReader::new(sexp).read_from(arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         let mut routine = Routine::new(Gc::new(func));
         let val = routine.execute();

@@ -44,10 +44,10 @@ impl LispFn {
     }
 }
 
-impl<'obj> IntoObject<LispFnObject> for LispFn {
-    fn into_object(self, arena: &Arena) -> LispFnObject {
-        let ptr = arena.alloc(self);
-        LispFnObject(LispFnObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for LispFn {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        let x: Function = self.into_obj(arena);
+        x.into()
     }
 }
 
@@ -99,10 +99,10 @@ impl std::cmp::PartialEq for SubrFn {
     }
 }
 
-impl<'obj> IntoObject<SubrFnObject> for SubrFn {
-    fn into_object(self, arena: &Arena) -> SubrFnObject {
-        let ptr = arena.alloc(self);
-        SubrFnObject(SubrFnObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for SubrFn {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        let x: Function = self.into_obj(arena);
+        x.into()
     }
 }
 
@@ -120,8 +120,8 @@ mod test {
 
     #[test]
     fn function() {
-        let arena = Arena::new();
-        let constant: Object = arena.insert(1);
+        let arena = &Arena::new();
+        let constant: Object = 1.into_obj(arena);
         let func = LispFn::new(
             vec_into![0, 1, 2].into(),
             vec![unsafe { constant.into_gc() }],
@@ -129,7 +129,7 @@ mod test {
             0,
             false,
         );
-        let obj: Object = arena.insert(func);
+        let obj: Object = func.into_obj(arena);
         assert!(matches!(obj.val(), Value::LispFn(_)));
         format!("{}", obj);
         let func = match obj.val() {

@@ -116,253 +116,55 @@ pub enum Tag {
     SubrFn,
 }
 
-pub trait TaggedObject {
-    const TAG: Tag;
-    fn new_tagged(bits: i64) -> i64 {
-        bits << (size_of::<Tag>() * 8) | Self::TAG as i64
-    }
-    #[allow(clippy::wrong_self_convention)]
-    fn is_boxed(self) -> bool;
-    fn into_gc(self) -> GcObject;
-}
-
-#[derive(Copy, Clone)]
-pub struct IntObject(i64);
-impl TaggedObject for IntObject {
-    const TAG: Tag = Tag::Int;
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
+impl<'obj> From<InnerObject> for Object<'obj> {
+    fn from(data: InnerObject) -> Self {
+        Self {
+            data,
+            marker: PhantomData,
+        }
     }
 }
-impl<'a> From<IntObject> for Object<'a> {
-    fn from(x: IntObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct FloatObject(i64);
-impl TaggedObject for FloatObject {
-    const TAG: Tag = Tag::Float;
-    fn is_boxed(self) -> bool {
-        true
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<FloatObject> for Object<'a> {
-    fn from(x: FloatObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct TrueObject(i64);
-impl TaggedObject for TrueObject {
-    const TAG: Tag = Tag::True;
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct NilObject(i64);
-impl TaggedObject for NilObject {
-    const TAG: Tag = Tag::Nil;
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct BoolObject(i64);
-impl TaggedObject for BoolObject {
-    const TAG: Tag = Tag::True;
-    fn new_tagged(_bits: i64) -> i64 {
-        panic!("should not be calling bool object this directly");
-    }
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<BoolObject> for Object<'a> {
-    fn from(x: BoolObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-impl From<TrueObject> for BoolObject {
-    fn from(x: TrueObject) -> Self {
-        Self(x.0)
-    }
-}
-impl From<NilObject> for BoolObject {
-    fn from(x: NilObject) -> Self {
-        Self(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct ConsObject(i64);
-impl TaggedObject for ConsObject {
-    const TAG: Tag = Tag::Cons;
-    fn is_boxed(self) -> bool {
-        true
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<ConsObject> for Object<'a> {
-    fn from(x: ConsObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct SymbolObject(i64);
-impl TaggedObject for SymbolObject {
-    const TAG: Tag = Tag::Symbol;
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<SymbolObject> for Object<'a> {
-    fn from(x: SymbolObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct StringObject(i64);
-impl TaggedObject for StringObject {
-    const TAG: Tag = Tag::String;
-    fn is_boxed(self) -> bool {
-        true
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<StringObject> for Object<'a> {
-    fn from(x: StringObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct LispFnObject(i64);
-impl TaggedObject for LispFnObject {
-    const TAG: Tag = Tag::LispFn;
-    fn is_boxed(self) -> bool {
-        true
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<LispFnObject> for Object<'a> {
-    fn from(x: LispFnObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct SubrFnObject(i64);
-impl TaggedObject for SubrFnObject {
-    const TAG: Tag = Tag::SubrFn;
-    #[inline]
-    fn is_boxed(self) -> bool {
-        true
-    }
-    fn into_gc(self) -> GcObject {
-        GcObject::from_bits(self.0)
-    }
-}
-impl<'a> From<SubrFnObject> for Object<'a> {
-    fn from(x: SubrFnObject) -> Self {
-        Self::from_bits(x.0)
-    }
-}
-
-impl<'obj> TaggedObject for Object<'obj> {
-    const TAG: Tag = Tag::Nil;
-    fn is_boxed(self) -> bool {
-        false
-    }
-    fn into_gc(self) -> GcObject {
-        unsafe { self.into_gc() }
-    }
-}
-
-pub trait RefObject<'a> {}
-
-impl<'a> RefObject<'a> for Object<'a> {}
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
-pub trait IntoObject<T> {
-    fn into_object(self, arena: &Arena) -> T;
+pub trait IntoObject<'obj, T> {
+    fn into_obj(self, arena: &'obj Arena) -> T;
+}
+
+impl<'obj, 'old: 'obj> IntoObject<'obj, Object<'obj>> for Object<'old> {
+    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+        self
+    }
 }
 
 impl<'old, 'new> Object<'old> {
     pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self.val() {
-            Value::Int(x) => arena.insert(x),
-            Value::Cons(x) => arena.insert(x.clone_in(arena)),
-            Value::String(x) => arena.insert(x.clone()),
-            Value::Symbol(x) => arena.insert(x),
-            Value::LispFn(x) => arena.insert(x.clone()),
-            Value::SubrFn(x) => arena.insert(*x),
+            Value::Int(x) => x.into(),
+            Value::Cons(x) => x.clone_in(arena).into_obj(arena),
+            Value::String(x) => x.clone().into_obj(arena),
+            Value::Symbol(x) => x.into(),
+            Value::LispFn(x) => x.clone().into_obj(arena),
+            Value::SubrFn(x) => (*x).into_obj(arena),
             Value::True => Object::t(),
             Value::Nil => Object::nil(),
-            Value::Float(x) => arena.insert(x),
+            Value::Float(x) => x.into_obj(arena),
         }
     }
 }
 
 impl<'a> Object<'a> {
-    unsafe fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
-        let bits = ((ptr as i64) << TAG_SIZE) | tag as i64;
-        Object {
-            data: InnerObject { bits },
-            marker: PhantomData,
-        }
-    }
-
-    const fn from_tag(tag: Tag) -> Self {
-        // cast to i64 to zero the high bits
-        Object {
-            data: InnerObject { bits: tag as i64 },
-            marker: PhantomData,
-        }
-    }
-
+    #[inline(always)]
     pub fn val<'b: 'a>(self) -> Value<'b> {
         self.data.val()
     }
 
-    pub const fn nil() -> Self {
-        Object::from_tag(Tag::Nil)
+    pub fn nil() -> Self {
+        InnerObject::from_tag(Tag::Nil).into()
     }
 
-    pub const fn t() -> Self {
-        Object::from_tag(Tag::True)
+    pub fn t() -> Self {
+        InnerObject::from_tag(Tag::True).into()
     }
 
     pub const fn inner(self) -> GcObject {
@@ -372,8 +174,8 @@ impl<'a> Object<'a> {
         }
     }
 
-    pub unsafe fn into_gc(self) -> Object<'static> {
-        std::mem::transmute(self)
+    pub const unsafe fn into_gc(self) -> Object<'static> {
+        self.inner()
     }
 }
 
@@ -427,6 +229,27 @@ impl<'obj> Object<'obj> {
 }
 
 impl InnerObject {
+    fn from_tag_bits(bits: i64, tag: Tag) -> Self {
+        let bits = (bits << TAG_SIZE) | tag as i64;
+        Self { bits }
+    }
+
+    fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
+        Self::from_tag_bits(ptr as i64, tag)
+    }
+
+    fn from_type<T>(obj: T, tag: Tag, arena: &Arena) -> Self {
+        let ptr = arena.alloc(obj);
+        let obj = Self::from_ptr(ptr, tag);
+        arena.register(obj.into());
+        obj
+    }
+
+    const fn from_tag(tag: Tag) -> Self {
+        // cast to i64 to zero the high bits
+        Self { bits: tag as i64 }
+    }
+
     fn get_ptr<T>(self) -> *const T {
         (unsafe { self.bits } >> TAG_SIZE) as *const T
     }
@@ -435,6 +258,7 @@ impl InnerObject {
         (unsafe { self.bits } >> TAG_SIZE) as *mut T
     }
 
+    #[inline(always)]
     pub fn val<'a>(self) -> Value<'a> {
         unsafe {
             match self.tag {
@@ -505,28 +329,28 @@ mod test {
 
     #[test]
     fn integer() {
-        let arena = Arena::new();
-        let int: Object = arena.insert(3);
+        let arena = &Arena::new();
+        let int: Object = 3.into_obj(arena);
         assert!(matches!(int.val(), Value::Int(_)));
         assert_eq!(int.val(), Value::Int(3));
     }
 
     #[test]
     fn float() {
-        let arena = Arena::new();
-        let x: Object = arena.insert(1.3);
+        let arena = &Arena::new();
+        let x: Object = 1.3.into_obj(arena);
         assert!(matches!(x.val(), Value::Float(_)));
         assert_eq!(x.val(), Value::Float(1.3));
     }
 
     #[test]
     fn string() {
-        let arena = Arena::new();
-        let x: Object = arena.insert("foo");
+        let arena = &Arena::new();
+        let x: Object = "foo".into_obj(arena);
         assert!(matches!(x.val(), Value::String(_)));
         assert_eq!(x.val(), Value::String(&"foo".to_owned()));
 
-        let x: Object = arena.insert("bar".to_owned());
+        let x: Object = "bar".to_owned().into_obj(arena);
         assert!(matches!(x.val(), Value::String(_)));
         assert_eq!(x.val(), Value::String(&"bar".to_owned()));
     }
@@ -538,18 +362,17 @@ mod test {
         let n = Object::nil();
         assert_eq!(n.val(), Value::Nil);
 
-        let arena = Arena::new();
-        let bool_true: Object = arena.insert(true);
+        let bool_true: Object = true.into();
         assert_eq!(bool_true.val(), Value::True);
-        let bool_false: Object = arena.insert(false);
+        let bool_false: Object = false.into();
         assert_eq!(bool_false.val(), Value::Nil);
     }
 
     #[test]
     fn symbol() {
-        let arena = Arena::new();
-        let x: Object = arena.insert(intern("foo"));
+        let symbol = intern("foo");
+        let x: Object = symbol.into();
         assert!(matches!(x.val(), Value::Symbol(_)));
-        assert_eq!(x.val(), Value::Symbol(intern("foo")));
+        assert_eq!(x.val(), Value::Symbol(symbol));
     }
 }

@@ -2,7 +2,7 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::hashmap::HashMapDefault;
-use crate::lisp_object::{Function, InnerSymbol, Symbol};
+use crate::lisp_object::{Function, InnerSymbol, IntoObject, Symbol};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -58,7 +58,7 @@ macro_rules! create_symbolmap {
         let mut map = InnerSymbolMap::with_capacity(SIZE);
         let arena = Arena::new();
         $(for func in $arr.iter() {
-            let func_obj: Function = arena.insert(func.clone());
+            let func_obj: Function = func.into_obj(&arena);
             map.intern(func.name).set_func(func_obj);
         })+;
         SymbolMap{ map, arena }
@@ -84,14 +84,15 @@ mod test {
 
     #[test]
     fn test_intern() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
         let mut symbol_map = INTERNED_SYMBOLS.lock().unwrap();
         let first = symbol_map.intern("foo");
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
         let func = LispFn::new(vec![5].into(), vec![], 0, 0, false);
-        second.set_func(arena.insert(func));
+        let obj: Function = func.into_obj(arena);
+        second.set_func(obj);
         let func_cell = first.get_func().unwrap();
         let func = match func_cell.val() {
             FunctionValue::LispFn(x) => x,

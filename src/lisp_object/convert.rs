@@ -60,57 +60,52 @@ where
 type Int = i64;
 define_unbox!(Int);
 
-impl IntoObject<IntObject> for i64 {
-    fn into_object(self, _arena: &Arena) -> IntObject {
-        IntObject(IntObject::new_tagged(self))
+impl<'obj> From<i64> for Object<'obj> {
+    fn from(x: i64) -> Self {
+        let x: Number = x.into();
+        x.into()
+    }
+}
+
+impl<'obj> IntoObject<'obj, Object<'obj>> for i64 {
+    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+        self.into()
     }
 }
 
 type Float = f64;
 define_unbox!(Float);
 
-impl IntoObject<FloatObject> for f64 {
-    fn into_object(self, arena: &Arena) -> FloatObject {
-        let ptr = arena.alloc(self);
-        FloatObject(FloatObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for f64 {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        let obj: Number = self.into_obj(arena);
+        obj.into()
     }
 }
 
 impl<'obj> From<bool> for Object<'obj> {
     fn from(b: bool) -> Self {
-        Object::from_tag(if b { Tag::True } else { Tag::Nil })
+        InnerObject::from_tag(if b { Tag::True } else { Tag::Nil }).into()
     }
 }
 
-impl IntoObject<BoolObject> for bool {
-    fn into_object(self, _arena: &Arena) -> BoolObject {
-        if self {
-            TrueObject(TrueObject::new_tagged(0)).into()
-        } else {
-            NilObject(NilObject::new_tagged(0)).into()
-        }
+impl<'obj> IntoObject<'obj, Object<'obj>> for bool {
+    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+        self.into()
     }
 }
 
-impl IntoObject<StringObject> for &str {
-    fn into_object(self, arena: &Arena) -> StringObject {
-        let ptr = arena.alloc(self.to_owned());
-        StringObject(StringObject::new_tagged(ptr as i64))
+impl<'obj> IntoObject<'obj, Object<'obj>> for &str {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        InnerObject::from_type(self.to_owned(), Tag::String, arena).into()
     }
 }
 
 define_unbox_ref!(String);
 
-impl IntoObject<StringObject> for String {
-    fn into_object(self, arena: &Arena) -> StringObject {
-        let ptr = arena.alloc(self);
-        StringObject(StringObject::new_tagged(ptr as i64))
-    }
-}
-
-impl<'obj> IntoObject<Object<'obj>> for Object<'obj> {
-    fn into_object(self, _arena: &Arena) -> Object<'obj> {
-        self
+impl<'obj> IntoObject<'obj, Object<'obj>> for String {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        InnerObject::from_type(self, Tag::String, arena).into()
     }
 }
 
@@ -145,9 +140,9 @@ mod test {
 
     #[test]
     fn test() {
-        let arena = Arena::new();
-        let obj0 = arena.insert(5);
-        let obj1 = arena.insert(cons!(1, 2; arena));
+        let arena = &Arena::new();
+        let obj0 = 5.into_obj(arena);
+        let obj1 = cons!(1, 2; arena).into_obj(arena);
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

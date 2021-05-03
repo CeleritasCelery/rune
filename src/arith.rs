@@ -1,4 +1,3 @@
-use crate::arena::Arena;
 use crate::lisp_object::NumberValue::{Float, Int};
 use crate::lisp_object::{Number, NumberValue};
 
@@ -30,35 +29,27 @@ impl<'obj> From<Number<'obj>> for NumberValue {
     }
 }
 
-impl NumberValue {
-    fn into_number(self, arena: &Arena) -> Number {
-        match self {
-            Int(x) => arena.insert(x),
-            Float(x) => arena.insert(x),
-        }
+impl From<f64> for NumberValue {
+    fn from(x: f64) -> Self {
+        Float(x)
     }
 }
 
-impl From<f64> for NumberValue {
-    fn from(x: f64) -> Self { Float(x) }
-}
-
 impl From<i64> for NumberValue {
-    fn from(x: i64) -> Self { Int(x) }
+    fn from(x: i64) -> Self {
+        Int(x)
+    }
 }
 
 #[lisp_fn(name = "+")]
-pub fn add<'obj>(vars: &[Number], arena: &'obj Arena) -> Number<'obj> {
+pub fn add(vars: &[Number]) -> NumberValue {
     use std::ops::Add;
     vars.iter()
-        .fold(0.into(), |acc, x| {
-            arith(acc, x, Add::add, Add::add)
-        })
-        .into_number(arena)
+        .fold(0.into(), |acc, x| arith(acc, x, Add::add, Add::add))
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub<'obj>(number: Option<Number>, numbers: &[Number], arena: &'obj Arena) -> Number<'obj> {
+pub fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
     use std::ops::Sub;
     let num = match number {
         Some(x) => x.into(),
@@ -67,52 +58,45 @@ pub fn sub<'obj>(number: Option<Number>, numbers: &[Number], arena: &'obj Arena)
     // If one argument given, negate it
     if numbers.is_empty() {
         match num {
-            Int(x) => arena.insert(-x),
-            Float(x) => arena.insert(-x),
+            Int(x) => NumberValue::Int(-x),
+            Float(x) => NumberValue::Float(-x),
         }
     } else {
         numbers
             .iter()
             .fold(num, |acc, x| arith(acc, x, Sub::sub, Sub::sub))
-            .into_number(arena)
     }
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul<'obj>(numbers: &[Number], arena: &'obj Arena) -> Number<'obj> {
+pub fn mul(numbers: &[Number]) -> NumberValue {
     use std::ops::Mul;
     numbers
         .iter()
-        .fold(1.into(), |acc, x| {
-            arith(acc, x, Mul::mul, Mul::mul)
-        })
-        .into_number(arena)
+        .fold(1.into(), |acc, x| arith(acc, x, Mul::mul, Mul::mul))
 }
 
 #[lisp_fn(name = "/")]
-pub fn div<'obj>(number: Number, divisors: &[Number], arena: &'obj Arena) -> Number<'obj> {
+pub fn div(number: Number, divisors: &[Number]) -> NumberValue {
     use std::ops::Div;
     divisors
         .iter()
-        .fold(number.into(), |acc, x| {
-            arith(acc, x, Div::div, Div::div)
-        })
-        .into_number(arena)
+        .fold(number.into(), |acc, x| arith(acc, x, Div::div, Div::div))
 }
 
 #[lisp_fn(name = "1+")]
-pub fn plus_one<'obj>(number: Number<'obj>, arena: &'obj Arena) -> Number<'obj> {
+pub fn plus_one(number: Number) -> NumberValue {
     match number.val() {
-        Int(x) => arena.insert(x + 1),
-        Float(x) => arena.insert(x + 1.0),
+        Int(x) => Int(x + 1),
+        Float(x) => Float(x + 1.0),
     }
 }
 
 #[lisp_fn(name = "1-")]
-pub fn minus_one<'obj>(number: Number<'obj>, arena: &'obj Arena) -> Number<'obj> {
+pub fn minus_one(number: Number) -> NumberValue {
     match number.val() {
-        Int(x) => arena.insert(x - 1),
-        Float(x) => arena.insert(x - 1.0),
+        Int(x) => Int(x - 1),
+        Float(x) => Float(x - 1.0),
     }
 }
 
@@ -217,91 +201,92 @@ defsubr!(
 
 #[cfg(test)]
 mod test {
-
     use super::*;
+    use crate::arena::Arena;
+    use crate::lisp_object::IntoObject;
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_add() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
 
-        let num = add(&[], &arena).val();
+        let num = add(&[]);
         assert_eq!(num, Int(0));
 
         let args = vec_into_object![7, 13; arena];
-        let num = add(&args, &arena).val();
+        let num = add(&args);
         assert_eq!(num, Int(20));
 
         let args = vec_into_object![1, 2.5; arena];
-        let num = add(&args, &arena).val();
+        let num = add(&args);
         assert_eq!(num, Float(3.5));
     }
 
     #[test]
     fn test_sub() {
-        let arena = Arena::new();
+        let arena = &Arena::new();
 
-        let num = sub(None, &[], &arena).val();
+        let num = sub(None, &[]);
         assert_eq!(num, Int(0));
 
-        let num = sub(Some(arena.insert(7)), &[], &arena).val();
+        let num = sub(Some(7.into_obj(arena)), &[]);
         assert_eq!(num, Int(-7));
 
         let args = vec_into_object![13; arena];
-        let num = sub(Some(arena.insert(7)), &args, &arena).val();
+        let num = sub(Some(7.into_obj(arena)), &args);
         assert_eq!(num, Int(-6));
     }
 
     #[test]
     fn test_mul() {
-        let arena = Arena::new();
-        let num = mul(&[], &arena).val();
+        let arena = &Arena::new();
+        let num = mul(&[]);
         assert_eq!(num, Int(1));
 
         let args = vec_into_object![7, 13; arena];
-        let num = mul(&args, &arena).val();
+        let num = mul(&args);
         assert_eq!(num, Int(91));
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_div() {
-        let arena = Arena::new();
-        let num = div(arena.insert(12.0), &[], &arena).val();
+        let arena = &Arena::new();
+        let num = div(12.0.into_obj(arena), &[]);
         assert_eq!(num, Float(12.0));
 
         let args = vec_into_object![5, 2; arena];
-        let num = div(arena.insert(12), &args, &arena).val();
+        let num = div(12.into_obj(arena), &args);
         assert_eq!(num, Int(1));
     }
 
     #[test]
     fn test_eq() {
-        let arena = Arena::new();
-        assert!(num_eq(arena.insert(1), &[]));
+        let arena = &Arena::new();
+        assert!(num_eq(1.into_obj(arena), &[]));
 
         let args = vec_into_object![1.0; arena];
-        assert!(num_eq(arena.insert(1), &args));
+        assert!(num_eq(1.into_obj(arena), &args));
 
         let args = vec_into_object![1; arena];
-        assert!(num_eq(arena.insert(1.0), &args));
+        assert!(num_eq(1.0.into_obj(arena), &args));
 
         let args = vec_into_object![1, 1, 1.1; arena];
-        assert!(!num_eq(arena.insert(1.0), &args));
+        assert!(!num_eq(1.0.into_obj(arena), &args));
     }
 
     #[test]
     fn test_cmp() {
-        let arena = Arena::new();
-        assert!(less_than(arena.insert(1), &[]));
+        let arena = &Arena::new();
+        assert!(less_than(1.into_obj(arena), &[]));
 
         let args = vec_into_object![1.1; arena];
-        assert!(less_than(arena.insert(1), &args));
+        assert!(less_than(1.into_obj(arena), &args));
 
         let args = vec_into_object![1; arena];
-        assert!(!less_than(arena.insert(1.0), &args));
+        assert!(!less_than(1.0.into_obj(arena), &args));
 
         let args = vec_into_object![1.1, 2, 2.1; arena];
-        assert!(less_than(arena.insert(1.0), &args));
+        assert!(less_than(1.0.into_obj(arena), &args));
     }
 }
