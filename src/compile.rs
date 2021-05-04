@@ -369,16 +369,29 @@ impl<'obj> Exp {
         }
     }
 
+    fn jump_nil_else_pop(&mut self) -> usize {
+        self.codes.push_op(OpCode::JumpNilElsePop);
+        let place = self.codes.push_jump_placeholder();
+        // pop conditional
+        self.vars.pop();
+        place
+    }
+
+    fn set_jump_nil_else_pop_placeholder(&mut self, place: usize) {
+        self.codes.set_jump_placeholder(place);
+        // add the non-popped conditional back the stack
+        self.vars.push(None);
+    }
+
     fn compile_conditional(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         match list.len() {
             len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
             2 => {
                 self.compile_form(list[0])?;
-                self.codes.push_op(OpCode::JumpNilElsePop);
-                let place = self.codes.push_jump_placeholder();
+                let place = self.jump_nil_else_pop();
                 self.compile_form(list[1])?;
-                self.codes.set_jump_placeholder(place);
+                self.set_jump_nil_else_pop_placeholder(place);
                 Ok(())
             }
             _ => {
@@ -402,16 +415,14 @@ impl<'obj> Exp {
         if forms.is_empty() {
             return Err(Error::ArgCount(1, 0));
         }
-        self.compile_form(forms[0])?;
         let top = self.codes.len();
-        self.codes.push_op(OpCode::JumpNilElsePop);
-        let place = self.codes.push_jump_placeholder();
+        self.compile_form(forms[0])?;
+        let place = self.jump_nil_else_pop();
         self.implicit_progn(&forms[1..])?;
         self.discard();
         self.codes.push_op(OpCode::Jump);
         self.codes.push_back_jump(top);
-        self.codes.set_jump_placeholder(place);
-        self.add_const(Object::nil(), None)?;
+        self.set_jump_nil_else_pop_placeholder(place);
         Ok(())
     }
 
@@ -584,7 +595,7 @@ mod test {
     #[test]
     fn while_loop() {
         let (high5, low5) = get_jump_slots(5);
-        let (high_8, low_8) = get_jump_slots(-8);
+        let (high_9, low_9) = get_jump_slots(-9);
         check_compiler!(
             "(while t)",
             [
@@ -595,9 +606,8 @@ mod test {
                 Constant1,
                 Discard,
                 Jump,
-                high_8,
-                low_8,
-                Constant1,
+                high_9,
+                low_9,
                 Ret
             ],
             [Object::t(), Object::nil()]
@@ -613,12 +623,11 @@ mod test {
                 Constant1,
                 Discard,
                 Jump,
-                high_8,
-                low_8,
-                Constant2,
+                high_9,
+                low_9,
                 Ret
             ],
-            [Object::t(), 1, Object::nil()]
+            [Object::t(), 1]
         );
 
         check_compiler!(
@@ -631,16 +640,15 @@ mod test {
                 Constant1,
                 Discard,
                 Jump,
-                high_8,
-                low_8,
-                Constant0,
+                high_9,
+                low_9,
                 Ret
             ],
             [Object::nil(), 2]
         );
 
         let (high7, low7) = get_jump_slots(7);
-        let (high_10, low_10) = get_jump_slots(-10);
+        let (high_11, low_11) = get_jump_slots(-11);
         check_compiler!(
             "(while nil 2 3)",
             [
@@ -653,9 +661,8 @@ mod test {
                 Constant2,
                 Discard,
                 Jump,
-                high_10,
-                low_10,
-                Constant0,
+                high_11,
+                low_11,
                 Ret
             ],
             [Object::nil(), 2, 3]

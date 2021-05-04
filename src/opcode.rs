@@ -100,12 +100,12 @@ impl fmt::Debug for CodeVec {
             display.push(format!("{:?}", op));
             match op {
                 StackRefN | ConstantN | CallN | VarRefN | VarSetN => {
-                    display.push(format!("{:?}", iter.next()));
+                    display.push(format!("{:?}", iter.next().unwrap()));
                 }
                 StackRefN2 | ConstantN2 | CallN2 | JumpNil | Jump | JumpNilElsePop | VarRefN2
                 | VarSetN2 => {
-                    display.push(format!("{:?}", iter.next()));
-                    display.push(format!("{:?}", iter.next()));
+                    display.push(format!("{:?}", iter.next().unwrap()));
+                    display.push(format!("{:?}", iter.next().unwrap()));
                 }
                 _ => {}
             }

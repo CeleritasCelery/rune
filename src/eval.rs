@@ -41,9 +41,7 @@ impl Ip {
 
     fn jump(&mut self, offset: i16) {
         unsafe {
-            println!("offset {:?}", offset);
             self.ip = self.ip.offset(offset as isize);
-            println!("ip = {:p}", self.ip);
             debug_assert!(self.range.contains(&self.ip));
         }
     }
@@ -210,10 +208,12 @@ impl Routine {
     }
 
     pub fn execute(&mut self) -> Result<GcObject> {
+        use OpCode as op;
         loop {
-            // println!("{:?}", self.stack);
-            use OpCode as op;
-            match unsafe { op::from_unchecked(self.frame.ip.next()) } {
+            println!("{:?}", self.stack);
+            let op = unsafe { op::from_unchecked(self.frame.ip.next()) };
+            println!("op : {:?}", op);
+            match op {
                 op::StackRef0 => self.stack.push_ref(0),
                 op::StackRef1 => self.stack.push_ref(1),
                 op::StackRef2 => self.stack.push_ref(2),
@@ -381,6 +381,10 @@ mod test {
         test_eval(
             "(let ((foo t)) (while foo (setq foo nil)))",
             false.into_obj(arena),
+        );
+        test_eval(
+            "(let ((foo 10) (bar 0)) (while (> foo 3) (setq bar (1+ bar)) (setq foo (1- foo))) bar)",
+            7.into_obj(arena),
         );
     }
 
