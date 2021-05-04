@@ -15,62 +15,18 @@ use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::num::NonZeroI64 as NonZero;
 
 #[derive(Copy, Clone)]
-pub union InnerObject {
-    tag: Tag,
-    bits: i64,
-}
+pub struct InnerObject(NonZero);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Object<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
+
 pub type GcObject = Object<'static>;
-
-impl<'a> cmp::PartialEq for Object<'a> {
-    fn eq(&self, rhs: &Object) -> bool {
-        self.val() == rhs.val()
-    }
-}
-
-impl<'obj> cmp::PartialEq<Object<'obj>> for &str {
-    fn eq(&self, rhs: &Object) -> bool {
-        match rhs.val() {
-            Value::String(x) => *self == x,
-            _ => false,
-        }
-    }
-}
-
-impl<'obj> cmp::PartialEq<Object<'obj>> for f64 {
-    fn eq(&self, rhs: &Object) -> bool {
-        match rhs.val() {
-            Value::Float(x) => *self == x,
-            _ => false,
-        }
-    }
-}
-
-impl<'obj> cmp::PartialEq<Object<'obj>> for i64 {
-    fn eq(&self, rhs: &Object) -> bool {
-        match rhs.val() {
-            Value::Int(x) => *self == x,
-            _ => false,
-        }
-    }
-}
-
-impl<'obj> cmp::PartialEq<Object<'obj>> for bool {
-    fn eq(&self, rhs: &Object) -> bool {
-        match rhs.val() {
-            Value::Nil => !*self,
-            Value::True => *self,
-            _ => false,
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum Value<'a> {
@@ -105,24 +61,15 @@ impl<'a> Value<'a> {
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum Tag {
-    Int = 0,
-    Float = 1,
-    True = 3,
-    Nil = 4,
-    Cons = 5,
-    Symbol = 6,
-    String = 7,
-    LispFn = 8,
+    Symbol = 0,
+    Int,
+    Float,
+    True,
+    Nil,
+    Cons,
+    String,
+    LispFn,
     SubrFn,
-}
-
-impl<'obj> From<InnerObject> for Object<'obj> {
-    fn from(data: InnerObject) -> Self {
-        Self {
-            data,
-            marker: PhantomData,
-        }
-    }
 }
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
@@ -153,9 +100,9 @@ impl<'old, 'new> Object<'old> {
     }
 }
 
-impl<'a> Object<'a> {
+impl<'obj> Object<'obj> {
     #[inline(always)]
-    pub fn val<'b: 'a>(self) -> Value<'b> {
+    pub fn val<'new: 'obj>(self) -> Value<'new> {
         self.data.val()
     }
 
@@ -167,26 +114,9 @@ impl<'a> Object<'a> {
         InnerObject::from_tag(Tag::True).into()
     }
 
-    pub const fn inner(self) -> GcObject {
+    pub const unsafe fn into_gc(self) -> Object<'static> {
         GcObject {
             data: self.data,
-            marker: PhantomData,
-        }
-    }
-
-    pub const unsafe fn into_gc(self) -> Object<'static> {
-        self.inner()
-    }
-}
-
-impl<'obj> Object<'obj> {
-    pub fn into_raw(self) -> i64 {
-        unsafe { self.data.bits }
-    }
-
-    const fn from_bits(bits: i64) -> Self {
-        Self {
-            data: InnerObject { bits },
             marker: PhantomData,
         }
     }
@@ -198,40 +128,32 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub unsafe fn drop(mut self) {
-        match self.data.tag {
-            Tag::Symbol => {}
-            Tag::Float => {
-                let x: *mut f64 = self.data.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::String => {
-                let x: *mut String = self.data.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::LispFn => {
-                let x: *mut LispFn = self.data.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::SubrFn => {
-                let x: *mut SubrFn = self.data.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::Nil => {}
-            Tag::True => {}
-            Tag::Cons => {
-                let x: *mut Cons = self.data.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::Int => {}
+    pub unsafe fn drop(self) {
+        self.data.drop()
+    }
+}
+
+impl<'obj> From<InnerObject> for Object<'obj> {
+    fn from(data: InnerObject) -> Self {
+        Self {
+            data,
+            marker: PhantomData,
         }
     }
 }
 
 impl InnerObject {
+    fn new(bits: i64) -> Self {
+        Self(NonZero::new(bits).expect("Object bits should be non-zero"))
+    }
+
+    const fn get(self) -> i64 {
+        self.0.get()
+    }
+
     fn from_tag_bits(bits: i64, tag: Tag) -> Self {
         let bits = (bits << TAG_SIZE) | tag as i64;
-        Self { bits }
+        Self::new(bits)
     }
 
     fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
@@ -245,23 +167,27 @@ impl InnerObject {
         obj
     }
 
-    const fn from_tag(tag: Tag) -> Self {
+    fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
-        Self { bits: tag as i64 }
+        Self::new(tag as i64)
     }
 
-    fn get_ptr<T>(self) -> *const T {
-        (unsafe { self.bits } >> TAG_SIZE) as *const T
+    fn tag(self) -> Tag {
+        unsafe { std::mem::transmute(self.get() as u8) }
+    }
+
+    const fn get_ptr<T>(self) -> *const T {
+        (self.get() >> TAG_SIZE) as *const T
     }
 
     fn get_mut_ptr<T>(&mut self) -> *mut T {
-        (unsafe { self.bits } >> TAG_SIZE) as *mut T
+        (self.get() >> TAG_SIZE) as *mut T
     }
 
     #[inline(always)]
-    pub fn val<'a>(self) -> Value<'a> {
+    fn val<'a>(self) -> Value<'a> {
         unsafe {
-            match self.tag {
+            match self.tag() {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
                 Tag::Float => Value::Float(*self.get_ptr()),
                 Tag::String => Value::String(&*self.get_ptr()),
@@ -270,17 +196,49 @@ impl InnerObject {
                 Tag::Nil => Value::Nil,
                 Tag::True => Value::True,
                 Tag::Cons => Value::Cons(&*self.get_ptr()),
-                Tag::Int => Value::Int(self.bits >> TAG_SIZE),
+                Tag::Int => Value::Int(self.get() >> TAG_SIZE),
             }
         }
     }
 
-    fn into_raw(self) -> i64 {
-        unsafe { self.bits }
+    pub unsafe fn drop(mut self) {
+        match self.tag() {
+            Tag::Symbol => {}
+            Tag::Float => {
+                let x: *mut f64 = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::String => {
+                let x: *mut String = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::LispFn => {
+                let x: *mut LispFn = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::SubrFn => {
+                let x: *mut SubrFn = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::Nil => {}
+            Tag::True => {}
+            Tag::Cons => {
+                let x: *mut Cons = self.get_mut_ptr();
+                Box::from_raw(x);
+            }
+            Tag::Int => {}
+        }
     }
 }
 
-impl fmt::Display for InnerObject {
+impl cmp::PartialEq for InnerObject {
+    fn eq(&self, rhs: &InnerObject) -> bool {
+        self.val() == rhs.val()
+    }
+}
+
+
+impl<'a> fmt::Display for Object<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.val() {
             Value::Int(x) => write!(f, "{}", x),
@@ -302,13 +260,7 @@ impl fmt::Display for InnerObject {
     }
 }
 
-impl<'a> fmt::Display for Object<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.data.fmt(f)
-    }
-}
-
-impl fmt::Debug for InnerObject {
+impl<'obj> fmt::Debug for Object<'obj> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
@@ -317,12 +269,12 @@ impl fmt::Debug for InnerObject {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::Arena;
     use crate::intern::intern;
 
     #[test]
     fn sizes() {
         assert_eq!(8, size_of::<Object>());
+        assert_eq!(8, size_of::<Option<Object>>());
         assert_eq!(16, size_of::<Value>());
         assert_eq!(1, size_of::<Tag>());
     }
@@ -333,6 +285,8 @@ mod test {
         let int: Object = 3.into_obj(arena);
         assert!(matches!(int.val(), Value::Int(_)));
         assert_eq!(int.val(), Value::Int(3));
+        let int: Object = 0.into_obj(arena);
+        assert_eq!(int.val(), Value::Int(0));
     }
 
     #[test]

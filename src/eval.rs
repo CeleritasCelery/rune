@@ -4,9 +4,7 @@ use crate::arena::Arena;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
-use crate::object::{
-    BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value,
-};
+use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use std::convert::TryInto;
 
@@ -71,7 +69,7 @@ impl CallFrame {
     }
 
     pub fn get_const(&self, i: usize) -> GcObject {
-        (*self.func.constants.get(i).unwrap()).inner()
+        *self.func.constants.get(i).unwrap()
     }
 }
 

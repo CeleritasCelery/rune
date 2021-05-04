@@ -26,10 +26,7 @@ impl FnCell {
 
     fn get(&self) -> Option<Function> {
         let bits = self.0.load(Ordering::Acquire);
-        match bits {
-            0 => None,
-            _ => Some(unsafe { mem::transmute(bits) }),
-        }
+        unsafe { mem::transmute(bits) }
     }
 }
 

@@ -7,7 +7,7 @@ pub struct Function<'a> {
 
 impl<'obj> From<Function<'obj>> for Object<'obj> {
     fn from(x: Function<'obj>) -> Self {
-        Object::from_bits(x.data.into_raw())
+        x.data.into()
     }
 }
 
@@ -71,7 +71,7 @@ impl<'obj> From<i64> for Number<'obj> {
 
 impl<'obj> From<Number<'obj>> for Object<'obj> {
     fn from(x: Number) -> Self {
-        Object::from_bits(x.data.into_raw())
+        x.data.into()
     }
 }
 
@@ -110,5 +110,21 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for NumberValue {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => x.into_obj(arena),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem::size_of;
+
+    #[test]
+    fn sub_type_size() {
+        assert_eq!(8, size_of::<Function>());
+        assert_eq!(8, size_of::<Option<Function>>());
+        assert_eq!(16, size_of::<FunctionValue>());
+        assert_eq!(8, size_of::<Number>());
+        assert_eq!(8, size_of::<Option<Number>>());
+        assert_eq!(16, size_of::<NumberValue>());
     }
 }

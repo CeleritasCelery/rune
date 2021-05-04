@@ -317,8 +317,7 @@ impl<'obj> Exp {
         let pairs = list.chunks_exact(2);
         let is_even = pairs.remainder().is_empty();
         for (idx, pair) in pairs.enumerate() {
-            let inner = pair[0].inner();
-            let sym: Symbol = inner.try_into()?;
+            let sym: Symbol = pair[0].try_into()?;
             let val = pair[1];
 
             self.compile_form(val)?;
@@ -446,8 +445,7 @@ impl<'obj> Exp {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
-        let inner = cons.car().inner();
-        let sym: Symbol = inner.try_into()?;
+        let sym: Symbol = cons.car().try_into()?;
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
             "while" => self.compile_loop(cons.cdr()),

@@ -103,22 +103,24 @@ mod test {
         assert!(matches!(x.val(), Value::Cons(_)));
 
         let cons1 = x.as_mut_cons().unwrap();
-        assert_eq!("start", cons1.car);
+        let start_str = "start".to_owned();
+        assert_eq!(Value::String(&start_str), cons1.car.val());
         (*cons1).car = "start2".into_obj(arena);
-        assert_eq!("start2", cons1.car);
+        let start2_str = "start2".to_owned();
+        assert_eq!(Value::String(&start2_str), cons1.car.val());
 
         let cons2 = match cons1.cdr.val() {
             Value::Cons(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(7, cons2.car);
+        assert_eq!(Value::Int(7), cons2.car.val());
 
         let cons3 = match cons2.cdr.val() {
             Value::Cons(x) => x,
             _ => unreachable!(),
         };
-        assert_eq!(5, cons3.car);
-        assert_eq!(9, cons3.cdr);
+        assert_eq!(Value::Int(5), cons3.car.val());
+        assert_eq!(Value::Int(9), cons3.cdr.val());
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));
