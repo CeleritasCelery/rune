@@ -8,6 +8,11 @@ macro_rules! vec_into_object {
     ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::lisp_object::IntoObject::into_obj($x, $arena)),+]};
 }
 
+#[macro_export]
+macro_rules! into_objects {
+    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::lisp_object::IntoObject::into_obj($x, $arena)),+)};
+}
+
 macro_rules! count {
     (@replace_expr $_t:tt $sub:expr) => {$sub};
     ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};

@@ -1,106 +1,69 @@
 use crate::lisp_object::NumberValue::{Float, Int};
 use crate::lisp_object::{Number, NumberValue};
+use std::cmp::{PartialEq, PartialOrd};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
 fn arith(
     cur: NumberValue,
-    next: &Number,
+    next: NumberValue,
     int_fn: fn(i64, i64) -> i64,
     float_fn: fn(f64, f64) -> f64,
 ) -> NumberValue {
     match cur {
-        Float(cur) => match next.val() {
-            Float(next) => float_fn(cur, next).into(),
-            Int(next) => float_fn(cur, next as f64).into(),
+        Float(cur) => match next {
+            Float(next) => Float(float_fn(cur, next)),
+            Int(next) => Float(float_fn(cur, next as f64)),
         },
-        Int(cur) => match next.val() {
-            Float(next) => float_fn(cur as f64, next).into(),
-            Int(next) => int_fn(cur, next).into(),
+        Int(cur) => match next {
+            Float(next) => Float(float_fn(cur as f64, next)),
+            Int(next) => Int(int_fn(cur, next)),
         },
     }
 }
 
-impl<'obj> From<Number<'obj>> for NumberValue {
-    fn from(num: Number) -> Self {
-        match num.val() {
-            Int(x) => x.into(),
-            Float(x) => x.into(),
+//////////////////////////
+// Arithmetic operators //
+//////////////////////////
+
+impl Neg for NumberValue {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        match self {
+            Int(x) => Int(-x),
+            Float(x) => Float(-x),
         }
     }
 }
 
-impl From<f64> for NumberValue {
-    fn from(x: f64) -> Self {
-        Float(x)
+impl Add for NumberValue {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        arith(self, rhs, Add::add, Add::add)
     }
 }
 
-impl From<i64> for NumberValue {
-    fn from(x: i64) -> Self {
-        Int(x)
+impl Sub for NumberValue {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        arith(self, rhs, Sub::sub, Sub::sub)
     }
 }
 
-#[lisp_fn(name = "+")]
-pub fn add(vars: &[Number]) -> NumberValue {
-    use std::ops::Add;
-    vars.iter()
-        .fold(0.into(), |acc, x| arith(acc, x, Add::add, Add::add))
-}
-
-#[lisp_fn(name = "-")]
-pub fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
-    use std::ops::Sub;
-    let num = match number {
-        Some(x) => x.into(),
-        None => 0.into(),
-    };
-    // If one argument given, negate it
-    if numbers.is_empty() {
-        match num {
-            Int(x) => NumberValue::Int(-x),
-            Float(x) => NumberValue::Float(-x),
-        }
-    } else {
-        numbers
-            .iter()
-            .fold(num, |acc, x| arith(acc, x, Sub::sub, Sub::sub))
+impl Mul for NumberValue {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        arith(self, rhs, Mul::mul, Mul::mul)
     }
 }
 
-#[lisp_fn(name = "*")]
-pub fn mul(numbers: &[Number]) -> NumberValue {
-    use std::ops::Mul;
-    numbers
-        .iter()
-        .fold(1.into(), |acc, x| arith(acc, x, Mul::mul, Mul::mul))
-}
-
-#[lisp_fn(name = "/")]
-pub fn div(number: Number, divisors: &[Number]) -> NumberValue {
-    use std::ops::Div;
-    divisors
-        .iter()
-        .fold(number.into(), |acc, x| arith(acc, x, Div::div, Div::div))
-}
-
-#[lisp_fn(name = "1+")]
-pub fn plus_one(number: Number) -> NumberValue {
-    match number.val() {
-        Int(x) => Int(x + 1),
-        Float(x) => Float(x + 1.0),
+impl Div for NumberValue {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self::Output {
+        arith(self, rhs, Div::div, Div::div)
     }
 }
 
-#[lisp_fn(name = "1-")]
-pub fn minus_one(number: Number) -> NumberValue {
-    match number.val() {
-        Int(x) => Int(x - 1),
-        Float(x) => Float(x - 1.0),
-    }
-}
-
-impl<'obj> std::cmp::PartialEq<i64> for Number<'obj> {
+impl<'obj> PartialEq<i64> for Number<'obj> {
     fn eq(&self, other: &i64) -> bool {
         match self.val() {
             Int(num) => num == *other,
@@ -109,13 +72,67 @@ impl<'obj> std::cmp::PartialEq<i64> for Number<'obj> {
     }
 }
 
-impl<'obj> std::cmp::PartialEq<f64> for Number<'obj> {
+impl<'obj> PartialEq<f64> for Number<'obj> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             Int(num) => num as f64 == *other,
             Float(num) => num == *other,
         }
     }
+}
+
+impl<'obj> PartialOrd for NumberValue {
+    fn partial_cmp(&self, other: &NumberValue) -> Option<std::cmp::Ordering> {
+        match self {
+            Int(lhs) => match other {
+                Int(rhs) => lhs.partial_cmp(rhs),
+                Float(rhs) => (*lhs as f64).partial_cmp(rhs),
+            },
+            Float(lhs) => match other {
+                Int(rhs) => lhs.partial_cmp(&(*rhs as f64)),
+                Float(rhs) => lhs.partial_cmp(rhs),
+            },
+        }
+    }
+}
+
+#[lisp_fn(name = "+")]
+pub fn add(vars: &[Number]) -> NumberValue {
+    vars.iter().fold(Int(0), |acc, x| acc + x.val())
+}
+
+#[lisp_fn(name = "-")]
+pub fn sub(number: Option<NumberValue>, numbers: &[Number]) -> NumberValue {
+    match number {
+        Some(num) => {
+            if numbers.is_empty() {
+                -num
+            } else {
+                numbers.iter().fold(num, |acc, x| acc - x.val())
+            }
+        }
+        None => Int(0),
+    }
+}
+
+#[lisp_fn(name = "*")]
+pub fn mul(numbers: &[Number]) -> NumberValue {
+    numbers.iter().fold(Int(1), |acc, x| acc * x.val())
+}
+
+#[lisp_fn(name = "/")]
+pub fn div(number: NumberValue, divisors: &[Number]) -> NumberValue {
+    divisors.iter().fold(number, |acc, x| acc / x.val())
+}
+
+#[lisp_fn(name = "1+")]
+pub fn plus_one(number: NumberValue) -> NumberValue {
+    number + Int(1)
+}
+
+#[lisp_fn(name = "1-")]
+pub fn minus_one(number: NumberValue) -> NumberValue {
+    number - Int(1)
 }
 
 #[lisp_fn(name = "=")]
@@ -133,21 +150,6 @@ pub fn num_ne(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         Int(num) => numbers.iter().all(|&x| x != num),
         Float(num) => numbers.iter().all(|&x| x != num),
-    }
-}
-
-impl<'obj> std::cmp::PartialOrd for NumberValue {
-    fn partial_cmp(&self, other: &NumberValue) -> Option<std::cmp::Ordering> {
-        match self {
-            Int(lhs) => match other {
-                Int(rhs) => lhs.partial_cmp(rhs),
-                Float(rhs) => (*lhs as f64).partial_cmp(rhs),
-            },
-            Float(lhs) => match other {
-                Int(rhs) => lhs.partial_cmp(&(*rhs as f64)),
-                Float(rhs) => lhs.partial_cmp(rhs),
-            },
-        }
     }
 }
 
@@ -203,90 +205,66 @@ defsubr!(
 mod test {
     use super::*;
     use crate::arena::Arena;
-    use crate::lisp_object::IntoObject;
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_add() {
         let arena = &Arena::new();
+        let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; arena);
 
-        let num = add(&[]);
-        assert_eq!(num, Int(0));
-
-        let args = vec_into_object![7, 13; arena];
-        let num = add(&args);
-        assert_eq!(num, Int(20));
-
-        let args = vec_into_object![1, 2.5; arena];
-        let num = add(&args);
-        assert_eq!(num, Float(3.5));
+        assert_eq!(add(&[]), Int(0));
+        assert_eq!(add(&[int7, int13]), Int(20));
+        assert_eq!(add(&[int1, float2_5]), Float(3.5));
     }
 
     #[test]
     fn test_sub() {
         let arena = &Arena::new();
+        let int13 = into_objects!(13; arena);
 
-        let num = sub(None, &[]);
-        assert_eq!(num, Int(0));
-
-        let num = sub(Some(7.into_obj(arena)), &[]);
-        assert_eq!(num, Int(-7));
-
-        let args = vec_into_object![13; arena];
-        let num = sub(Some(7.into_obj(arena)), &args);
-        assert_eq!(num, Int(-6));
+        assert_eq!(sub(None, &[]), Int(0));
+        assert_eq!(sub(Some(Int(7)), &[]), Int(-7));
+        assert_eq!(sub(Some(Int(7)), &[int13]), Int(-6));
     }
 
     #[test]
     fn test_mul() {
         let arena = &Arena::new();
-        let num = mul(&[]);
-        assert_eq!(num, Int(1));
-
         let args = vec_into_object![7, 13; arena];
-        let num = mul(&args);
-        assert_eq!(num, Int(91));
+
+        assert_eq!(mul(&[]), Int(1));
+        assert_eq!(mul(&args), Int(91));
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_div() {
         let arena = &Arena::new();
-        let num = div(12.0.into_obj(arena), &[]);
-        assert_eq!(num, Float(12.0));
+        let (int2, int5, int12, float12) = into_objects!(2, 5, 12, 12.0; arena);
 
-        let args = vec_into_object![5, 2; arena];
-        let num = div(12.into_obj(arena), &args);
-        assert_eq!(num, Int(1));
+        assert_eq!(div(float12, &[]), Float(12.0));
+        assert_eq!(div(int12, &[int5, int2]), Int(1));
     }
 
     #[test]
     fn test_eq() {
         let arena = &Arena::new();
-        assert!(num_eq(1.into_obj(arena), &[]));
+        let (int1, float1, float1_1) = into_objects![1, 1.0, 1.1; arena];
 
-        let args = vec_into_object![1.0; arena];
-        assert!(num_eq(1.into_obj(arena), &args));
-
-        let args = vec_into_object![1; arena];
-        assert!(num_eq(1.0.into_obj(arena), &args));
-
-        let args = vec_into_object![1, 1, 1.1; arena];
-        assert!(!num_eq(1.0.into_obj(arena), &args));
+        assert!(num_eq(int1, &[]));
+        assert!(num_eq(int1, &[float1]));
+        assert!(num_eq(float1, &[int1]));
+        assert!(!num_eq(float1, &[int1, int1, float1_1]));
     }
 
     #[test]
     fn test_cmp() {
         let arena = &Arena::new();
-        assert!(less_than(1.into_obj(arena), &[]));
+        let (int1, int2, float1, float1_1, float2_1) = into_objects![1, 2, 1.0, 1.1, 2.1; arena];
 
-        let args = vec_into_object![1.1; arena];
-        assert!(less_than(1.into_obj(arena), &args));
-
-        let args = vec_into_object![1; arena];
-        assert!(!less_than(1.0.into_obj(arena), &args));
-
-        let args = vec_into_object![1.1, 2, 2.1; arena];
-        assert!(less_than(1.0.into_obj(arena), &args));
+        assert!(less_than(int1, &[]));
+        assert!(less_than(int1, &[float1_1]));
+        assert!(!less_than(float1, &[int1]));
+        assert!(less_than(float1, &[float1_1, int2, float2_1]));
     }
 }

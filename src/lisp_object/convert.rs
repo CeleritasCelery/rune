@@ -1,6 +1,7 @@
 use crate::error::{Error, Type};
 use crate::lisp_object::*;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::mem::transmute;
 
 impl<'obj> TryFrom<Object<'obj>> for Function<'obj> {
@@ -31,6 +32,20 @@ impl<'obj> TryFrom<Object<'obj>> for Option<Number<'obj>> {
             Value::Nil => Ok(None),
             x => Err(Error::Type(Type::Number, x.get_type())),
         }
+    }
+}
+
+impl<'obj> TryFrom<Object<'obj>> for NumberValue {
+    type Error = Error;
+    fn try_from(obj: Object<'obj>) -> Result<Self, Self::Error> {
+        TryInto::<Number>::try_into(obj).map(|x| x.val())
+    }
+}
+
+impl<'obj> TryFrom<Object<'obj>> for Option<NumberValue> {
+    type Error = Error;
+    fn try_from(obj: Object<'obj>) -> Result<Self, Self::Error> {
+        TryInto::<Option<Number>>::try_into(obj).map(|x| x.map(|x| x.val()))
     }
 }
 
