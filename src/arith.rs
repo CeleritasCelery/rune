@@ -240,10 +240,10 @@ mod test {
     #[allow(clippy::float_cmp)]
     fn test_div() {
         let arena = &Arena::new();
-        let (int2, int5, int12, float12) = into_objects!(2, 5, 12, 12.0; arena);
+        let (int2, int5) = into_objects!(2, 5; arena);
 
-        assert_eq!(div(float12, &[]), Float(12.0));
-        assert_eq!(div(int12, &[int5, int2]), Int(1));
+        assert_eq!(div(Float(12.0), &[]), Float(12.0));
+        assert_eq!(div(Int(12), &[int5, int2]), Int(1));
     }
 
     #[test]
