@@ -86,17 +86,16 @@ impl ConstVec {
 macro_rules! emit_op {
     ($self:ident, $op:ident, $idx:ident) => {
         match $idx {
-            0 => $self.push_op(paste::paste! {[<$op 0>]}),
-            1 => $self.push_op(paste::paste! {[<$op 1>]}),
-            2 => $self.push_op(paste::paste! {[<$op 2>]}),
-            3 => $self.push_op(paste::paste! {[<$op 3>]}),
-            4 => $self.push_op(paste::paste! {[<$op 4>]}),
-            5 => $self.push_op(paste::paste! {[<$op 5>]}),
+            0 => $self.push_op(paste::paste! {OpCode::[<$op 0>]}),
+            1 => $self.push_op(paste::paste! {OpCode::[<$op 1>]}),
+            2 => $self.push_op(paste::paste! {OpCode::[<$op 2>]}),
+            3 => $self.push_op(paste::paste! {OpCode::[<$op 3>]}),
+            4 => $self.push_op(paste::paste! {OpCode::[<$op 4>]}),
+            5 => $self.push_op(paste::paste! {OpCode::[<$op 5>]}),
             _ => {
-                // TODO: look at the asm for this
                 match $idx.try_into() {
-                    Ok(n) => $self.push_op_n(paste::paste! {[<$op N>]}, n),
-                    Err(_) => $self.push_op_n2(paste::paste! {[<$op N2>]}, $idx),
+                    Ok(n) => $self.push_op_n(paste::paste! {OpCode::[<$op N>]}, n),
+                    Err(_) => $self.push_op_n2(paste::paste! {OpCode::[<$op N2>]}, $idx),
                 }
             }
         }
@@ -141,32 +140,26 @@ impl CodeVec {
     }
 
     fn emit_const(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, Constant, idx)
     }
 
     fn emit_varref(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, VarRef, idx)
     }
 
     fn emit_varset(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, VarSet, idx)
     }
 
     fn emit_call(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, Call, idx)
     }
 
     fn emit_stack_ref(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, StackRef, idx)
     }
 
     fn emit_stack_set(&mut self, idx: u16) {
-        use OpCode::*;
         emit_op!(self, StackSet, idx)
     }
 }
