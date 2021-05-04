@@ -1,5 +1,5 @@
-use crate::lisp_object::NumberValue::{Float, Int};
-use crate::lisp_object::{Number, NumberValue};
+use crate::object::NumberValue::{Float, Int};
+use crate::object::{Number, NumberValue};
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 

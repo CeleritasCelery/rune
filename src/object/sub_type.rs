@@ -1,4 +1,4 @@
-use crate::lisp_object::*;
+use crate::object::*;
 
 pub struct Function<'a> {
     data: InnerObject,

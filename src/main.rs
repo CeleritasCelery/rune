@@ -9,7 +9,7 @@
 #[macro_use]
 mod macros;
 #[macro_use]
-mod lisp_object;
+mod object;
 mod arena;
 mod arith;
 mod compile;

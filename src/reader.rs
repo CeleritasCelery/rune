@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::arena::Arena;
 use crate::intern::intern;
-use crate::lisp_object::{IntoObject, Object, Symbol};
+use crate::object::{IntoObject, Object, Symbol};
 use std::fmt;
 use std::str;
 

@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::lisp_object::*;
+use crate::object::*;
 use std::cmp;
 use std::fmt;
 use std::mem;
@@ -124,7 +124,7 @@ mod test {
     use super::*;
     use crate::error::Error;
     use crate::hashmap::HashMap;
-    use crate::lisp_object::{FunctionValue, LispFn, SubrFn};
+    use crate::object::{FunctionValue, LispFn, SubrFn};
 
     #[test]
     fn size() {

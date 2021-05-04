@@ -1,5 +1,5 @@
 use crate::error::{Error, Type};
-use crate::lisp_object::*;
+use crate::object::*;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::mem::transmute;

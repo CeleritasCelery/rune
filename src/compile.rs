@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
-use crate::lisp_object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
+use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
 use std::convert::TryInto;
 

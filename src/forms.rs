@@ -1,4 +1,4 @@
-use crate::lisp_object::{Function, Object, Symbol};
+use crate::object::{Function, Object, Symbol};
 
 #[lisp_fn]
 pub fn defalias(symbol: Symbol, definition: Function) -> Symbol {

@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::error::Error;
 use crate::hashmap::HashMap;
-use crate::lisp_object::*;
+use crate::object::*;
 use crate::opcode::CodeVec;
 use std::fmt;
 
@@ -109,7 +109,7 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for SubrFn {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::lisp_object::Value;
+    use crate::object::Value;
     use std::mem::size_of;
 
     #[test]

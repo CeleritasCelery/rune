@@ -5,12 +5,12 @@ macro_rules! vec_into {
 
 #[macro_export]
 macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::lisp_object::IntoObject::into_obj($x, $arena)),+]};
+    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::object::IntoObject::into_obj($x, $arena)),+]};
 }
 
 #[macro_export]
 macro_rules! into_objects {
-    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::lisp_object::IntoObject::into_obj($x, $arena)),+)};
+    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::object::IntoObject::into_obj($x, $arena)),+)};
 }
 
 macro_rules! count {
@@ -21,7 +21,7 @@ macro_rules! count {
 #[macro_export]
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
-        pub const fn defsubr() -> [crate::lisp_object::SubrFn; count!($($x)+)] {
+        pub const fn defsubr() -> [crate::object::SubrFn; count!($($x)+)] {
             [$(paste::paste!{[<S $x>]}),+]
         }
     );
@@ -33,11 +33,11 @@ macro_rules! define_unbox {
         define_unbox!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl<'obj> std::convert::TryFrom<crate::lisp_object::Object<'obj>> for $ident {
+        impl<'obj> std::convert::TryFrom<crate::object::Object<'obj>> for $ident {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::Object) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
-                    crate::lisp_object::Value::$ident(x) => Ok(x),
+                    crate::object::Value::$ident(x) => Ok(x),
                     x => Err(crate::error::Error::Type(
                         crate::error::Type::$ty,
                         x.get_type(),
@@ -45,12 +45,12 @@ macro_rules! define_unbox {
                 }
             }
         }
-        impl<'obj> std::convert::TryFrom<crate::lisp_object::Object<'obj>> for Option<$ident> {
+        impl<'obj> std::convert::TryFrom<crate::object::Object<'obj>> for Option<$ident> {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::Object) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
-                    crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
-                    crate::lisp_object::Value::Nil => Ok(None),
+                    crate::object::Value::$ident(x) => Ok(Some(x)),
+                    crate::object::Value::Nil => Ok(None),
                     x => Err(crate::error::Error::Type(
                         crate::error::Type::$ty,
                         x.get_type(),
@@ -67,11 +67,11 @@ macro_rules! define_unbox_ref {
         define_unbox_ref!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl<'a> std::convert::TryFrom<crate::lisp_object::Object<'a>> for &'a $ident {
+        impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for &'a $ident {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::Object<'a>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
                 match obj.val() {
-                    crate::lisp_object::Value::$ident(x) => Ok(x),
+                    crate::object::Value::$ident(x) => Ok(x),
                     x => Err(crate::error::Error::Type(
                         crate::error::Type::$ty,
                         x.get_type(),
@@ -79,12 +79,12 @@ macro_rules! define_unbox_ref {
                 }
             }
         }
-        impl<'a> std::convert::TryFrom<crate::lisp_object::Object<'a>> for Option<&'a $ident> {
+        impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for Option<&'a $ident> {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::lisp_object::Object<'a>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
                 match obj.val() {
-                    crate::lisp_object::Value::$ident(x) => Ok(Some(x)),
-                    crate::lisp_object::Value::Nil => Ok(None),
+                    crate::object::Value::$ident(x) => Ok(Some(x)),
+                    crate::object::Value::Nil => Ok(None),
                     x => Err(crate::error::Error::Type(
                         crate::error::Type::$ty,
                         x.get_type(),

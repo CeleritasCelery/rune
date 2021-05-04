@@ -4,7 +4,7 @@ use crate::arena::Arena;
 use crate::error::{Error, Result};
 use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
-use crate::lisp_object::{
+use crate::object::{
     BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value,
 };
 use crate::opcode::OpCode;
@@ -340,7 +340,7 @@ mod test {
     use super::*;
     use crate::arena::Arena;
     use crate::compile::Exp;
-    use crate::lisp_object::IntoObject;
+    use crate::object::IntoObject;
     use crate::reader::LispReader;
 
     fn test_eval(sexp: &str, expect: Object) {

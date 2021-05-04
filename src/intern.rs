@@ -2,7 +2,7 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::hashmap::HashMapDefault;
-use crate::lisp_object::{Function, InnerSymbol, IntoObject, Symbol};
+use crate::object::{Function, InnerSymbol, IntoObject, Symbol};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
@@ -80,7 +80,7 @@ pub fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
     use crate::arena::Arena;
-    use crate::lisp_object::{FunctionValue, LispFn};
+    use crate::object::{FunctionValue, LispFn};
 
     #[test]
     fn test_intern() {

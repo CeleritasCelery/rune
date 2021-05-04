@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
-use crate::lisp_object::*;
+use crate::object::*;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -69,15 +69,15 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for Cons<'obj> {
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $arena:expr) => {
-        crate::lisp_object::Cons::new(
-            crate::lisp_object::IntoObject::into_obj($car, $arena),
-            crate::lisp_object::IntoObject::into_obj($cdr, $arena),
+        crate::object::Cons::new(
+            crate::object::IntoObject::into_obj($car, $arena),
+            crate::object::IntoObject::into_obj($cdr, $arena),
         )
     };
     ($car:expr; $arena:expr) => {
-        crate::lisp_object::Cons::new(
-            crate::lisp_object::IntoObject::into_obj($car, $arena),
-            crate::lisp_object::Object::nil(),
+        crate::object::Cons::new(
+            crate::object::IntoObject::into_obj($car, $arena),
+            crate::object::Object::nil(),
         )
     };
 }
@@ -91,7 +91,7 @@ macro_rules! list {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::lisp_object::Value;
+    use crate::object::Value;
     use std::mem::size_of;
     #[test]
     fn cons() {

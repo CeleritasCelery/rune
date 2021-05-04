@@ -40,14 +40,14 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     } else {
         quote! {}
     };
-    let subr_call = quote! {Ok(crate::lisp_object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
+    let subr_call = quote! {Ok(crate::object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
 
     quote! {
         #[allow(non_upper_case_globals)]
-        const #struct_name: crate::lisp_object::SubrFn = crate::lisp_object::SubrFn {
+        const #struct_name: crate::object::SubrFn = crate::object::SubrFn {
             name: #name,
             subr: #func_name,
-            args: crate::lisp_object::FnArgs {
+            args: crate::object::FnArgs {
                 required: #required,
                 optional: #optional,
                 rest: #rest,
@@ -58,11 +58,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 
         #[allow(non_snake_case)]
         pub fn #func_name<'obj>(
-            args: &[crate::lisp_object::Object<'obj>],
-            vars: &mut crate::hashmap::HashMap<crate::lisp_object::Symbol,
-                                               crate::lisp_object::Object<'obj>>,
+            args: &[crate::object::Object<'obj>],
+            vars: &mut crate::hashmap::HashMap<crate::object::Symbol,
+                                               crate::object::Object<'obj>>,
             arena: &'obj crate::arena::Arena,
-        ) -> crate::error::Result<crate::lisp_object::Object<'obj>> {
+        ) -> crate::error::Result<crate::object::Object<'obj>> {
             #subr_call
         }
 
@@ -82,7 +82,7 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
                 let call = get_call(idx, ty);
                 if convert_type(ty) {
                     if is_slice(ty) {
-                        quote! {crate::lisp_object::try_from_slice(#call)?}
+                        quote! {crate::object::try_from_slice(#call)?}
                     } else {
                         quote! {std::convert::TryFrom::try_from(#call)?}
                     }
