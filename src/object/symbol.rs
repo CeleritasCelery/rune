@@ -2,7 +2,7 @@ use crate::arena::Arena;
 use crate::object::*;
 use std::cmp;
 use std::fmt;
-use std::mem;
+use std::mem::transmute;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
@@ -15,18 +15,19 @@ pub struct InnerSymbol {
 struct FnCell(AtomicI64);
 
 impl FnCell {
-    const fn new() -> Self {
-        Self(AtomicI64::new(0))
+    fn new() -> Self {
+        let bits = unsafe {transmute(None::<Function>)};
+        Self(AtomicI64::new(bits))
     }
 
-    fn set(&self, func: Function) {
-        let value = unsafe { mem::transmute(func) };
+    fn set(&self, func: Option<Function>) {
+        let value = unsafe { transmute(func) };
         self.0.store(value, Ordering::Release);
     }
 
     fn get(&self) -> Option<Function> {
         let bits = self.0.load(Ordering::Acquire);
-        unsafe { mem::transmute(bits) }
+        unsafe { transmute(bits) }
     }
 }
 
@@ -37,7 +38,7 @@ impl cmp::PartialEq for InnerSymbol {
 }
 
 impl InnerSymbol {
-    pub const fn new(name: String) -> Self {
+    pub fn new(name: String) -> Self {
         InnerSymbol {
             name,
             func: FnCell::new(),
@@ -45,7 +46,7 @@ impl InnerSymbol {
     }
 
     pub fn set_func(&self, func: Function) {
-        self.func.set(func);
+        self.func.set(Some(func));
     }
 
     pub fn get_func(&self) -> Option<Function> {
@@ -122,11 +123,12 @@ mod test {
     use crate::error::Error;
     use crate::hashmap::HashMap;
     use crate::object::{FunctionValue, LispFn, SubrFn};
+    use std::mem::size_of;
 
     #[test]
     fn size() {
-        assert_eq!(32, std::mem::size_of::<InnerSymbol>());
-        assert_eq!(8, std::mem::size_of::<Symbol>());
+        assert_eq!(32, size_of::<InnerSymbol>());
+        assert_eq!(8, size_of::<Symbol>());
     }
 
     #[test]
