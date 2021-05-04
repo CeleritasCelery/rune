@@ -102,9 +102,10 @@ pub fn add(vars: &[Number]) -> NumberValue {
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(number: Option<NumberValue>, numbers: &[Number]) -> NumberValue {
+pub fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
     match number {
         Some(num) => {
+            let num = num.val();
             if numbers.is_empty() {
                 -num
             } else {
@@ -121,18 +122,18 @@ pub fn mul(numbers: &[Number]) -> NumberValue {
 }
 
 #[lisp_fn(name = "/")]
-pub fn div(number: NumberValue, divisors: &[Number]) -> NumberValue {
-    divisors.iter().fold(number, |acc, x| acc / x.val())
+pub fn div(number: Number, divisors: &[Number]) -> NumberValue {
+    divisors.iter().fold(number.val(), |acc, x| acc / x.val())
 }
 
 #[lisp_fn(name = "1+")]
-pub fn plus_one(number: NumberValue) -> NumberValue {
-    number + Int(1)
+pub fn plus_one(number: Number) -> NumberValue {
+    number.val() + Int(1)
 }
 
 #[lisp_fn(name = "1-")]
-pub fn minus_one(number: NumberValue) -> NumberValue {
-    number - Int(1)
+pub fn minus_one(number: Number) -> NumberValue {
+    number.val() - Int(1)
 }
 
 #[lisp_fn(name = "=")]
@@ -223,8 +224,8 @@ mod test {
         let int13 = into_objects!(13; arena);
 
         assert_eq!(sub(None, &[]), Int(0));
-        assert_eq!(sub(Some(Int(7)), &[]), Int(-7));
-        assert_eq!(sub(Some(Int(7)), &[int13]), Int(-6));
+        assert_eq!(sub(Some(7.into()), &[]), Int(-7));
+        assert_eq!(sub(Some(7.into()), &[int13]), Int(-6));
     }
 
     #[test]
@@ -240,10 +241,10 @@ mod test {
     #[allow(clippy::float_cmp)]
     fn test_div() {
         let arena = &Arena::new();
-        let (int2, int5) = into_objects!(2, 5; arena);
+        let (int2, int5, float12) = into_objects!(2, 5, 12.0; arena);
 
-        assert_eq!(div(Float(12.0), &[]), Float(12.0));
-        assert_eq!(div(Int(12), &[int5, int2]), Int(1));
+        assert_eq!(div(float12, &[]), Float(12.0));
+        assert_eq!(div(12.into(), &[int5, int2]), Int(1));
     }
 
     #[test]
