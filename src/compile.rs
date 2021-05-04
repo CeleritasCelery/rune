@@ -4,6 +4,7 @@ use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
 use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
 use crate::opcode::{CodeVec, OpCode};
+use paste::paste;
 use std::convert::TryInto;
 
 impl OpCode {
@@ -86,15 +87,15 @@ impl ConstVec {
 macro_rules! emit_op {
     ($self:ident, $op:ident, $idx:ident) => {
         match $idx {
-            0 => $self.push_op(paste::paste! {OpCode::[<$op 0>]}),
-            1 => $self.push_op(paste::paste! {OpCode::[<$op 1>]}),
-            2 => $self.push_op(paste::paste! {OpCode::[<$op 2>]}),
-            3 => $self.push_op(paste::paste! {OpCode::[<$op 3>]}),
-            4 => $self.push_op(paste::paste! {OpCode::[<$op 4>]}),
-            5 => $self.push_op(paste::paste! {OpCode::[<$op 5>]}),
+            0 => $self.push_op(paste! {OpCode::[<$op 0>]}),
+            1 => $self.push_op(paste! {OpCode::[<$op 1>]}),
+            2 => $self.push_op(paste! {OpCode::[<$op 2>]}),
+            3 => $self.push_op(paste! {OpCode::[<$op 3>]}),
+            4 => $self.push_op(paste! {OpCode::[<$op 4>]}),
+            5 => $self.push_op(paste! {OpCode::[<$op 5>]}),
             _ => match $idx.try_into() {
-                Ok(n) => $self.push_op_n(paste::paste! {OpCode::[<$op N>]}, n),
-                Err(_) => $self.push_op_n2(paste::paste! {OpCode::[<$op N2>]}, $idx),
+                Ok(n) => $self.push_op_n(paste! {OpCode::[<$op N>]}, n),
+                Err(_) => $self.push_op_n2(paste! {OpCode::[<$op N2>]}, $idx),
             },
         }
     };
