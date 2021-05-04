@@ -43,6 +43,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let subr_call = quote! {Ok(crate::object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
 
     quote! {
+        #[doc(hidden)]
         #[allow(non_upper_case_globals)]
         const #struct_name: crate::object::SubrFn = crate::object::SubrFn {
             name: #name,
@@ -56,6 +57,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
             }
         };
 
+        #[doc(hidden)]
         #[allow(non_snake_case)]
         pub fn #func_name<'obj>(
             args: &[crate::object::Object<'obj>],

@@ -1,8 +1,6 @@
 #+title: Next steps for Remac
 * build REPL
-** implement while loop
-** compile
-*** remove temporary arena's and replace with stackArenas
+* Don't leak memory
 * change error type to box dyn
 This will reduce coupling in the system by allowing different modules to define their own errors
 
