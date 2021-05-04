@@ -92,12 +92,10 @@ macro_rules! emit_op {
             3 => $self.push_op(paste::paste! {OpCode::[<$op 3>]}),
             4 => $self.push_op(paste::paste! {OpCode::[<$op 4>]}),
             5 => $self.push_op(paste::paste! {OpCode::[<$op 5>]}),
-            _ => {
-                match $idx.try_into() {
-                    Ok(n) => $self.push_op_n(paste::paste! {OpCode::[<$op N>]}, n),
-                    Err(_) => $self.push_op_n2(paste::paste! {OpCode::[<$op N2>]}, $idx),
-                }
-            }
+            _ => match $idx.try_into() {
+                Ok(n) => $self.push_op_n(paste::paste! {OpCode::[<$op N>]}, n),
+                Err(_) => $self.push_op_n2(paste::paste! {OpCode::[<$op N2>]}, $idx),
+            },
         }
     };
 }

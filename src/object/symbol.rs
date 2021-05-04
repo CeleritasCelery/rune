@@ -16,7 +16,7 @@ struct FnCell(AtomicI64);
 
 impl FnCell {
     fn new() -> Self {
-        let bits = unsafe {transmute(None::<Function>)};
+        let bits = unsafe { transmute(None::<Function>) };
         Self(AtomicI64::new(bits))
     }
 
