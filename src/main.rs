@@ -16,7 +16,6 @@ mod compile;
 mod error;
 mod eval;
 mod forms;
-mod gc;
 mod hashmap;
 mod intern;
 mod opcode;

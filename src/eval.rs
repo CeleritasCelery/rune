@@ -2,16 +2,15 @@
 
 use crate::arena::Arena;
 use crate::error::{Error, Result};
-use crate::gc::Gc;
 use crate::hashmap::{HashMap, HashMapDefault};
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use std::convert::TryInto;
 
 #[derive(Clone)]
-struct CallFrame {
+struct CallFrame<'a> {
     ip: Ip,
-    func: Gc<LispFn>,
+    func: &'a LispFn,
     start: usize,
 }
 
@@ -57,8 +56,8 @@ impl Ip {
     }
 }
 
-impl CallFrame {
-    pub fn new(func: Gc<LispFn>, frame_start: usize) -> CallFrame {
+impl<'a> CallFrame<'a> {
+    pub fn new(func: &'a LispFn, frame_start: usize) -> CallFrame {
         CallFrame {
             ip: Ip::new(&func.op_codes),
             func,
@@ -104,11 +103,11 @@ impl LispStack for Vec<GcObject> {
     }
 }
 
-pub struct Routine {
+pub struct Routine<'a> {
     stack: Vec<GcObject>,
     vars: HashMap<Symbol, GcObject>,
-    call_frames: Vec<CallFrame>,
-    frame: CallFrame,
+    call_frames: Vec<CallFrame<'a>>,
+    frame: CallFrame<'a>,
     arena: Arena,
 }
 
@@ -124,8 +123,8 @@ pub fn set<'obj>(
 
 defsubr!(set);
 
-impl Routine {
-    fn new(func: Gc<LispFn>) -> Routine {
+impl<'a> Routine<'a> {
+    fn new(func: &'a LispFn) -> Routine {
         Routine {
             stack: vec![],
             vars: HashMap::create(),
@@ -183,6 +182,7 @@ impl Routine {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(self.frame.clone());
                 self.frame = CallFrame::new(
+                    // TODO: This is unsound
                     unsafe { std::mem::transmute(func) },
                     self.stack.from_end(fn_idx),
                 );
@@ -345,7 +345,8 @@ mod test {
         let arena = Arena::new();
         let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
+        let box_func = Box::new(func);
+        let mut routine = Routine::new(box_func.as_ref());
         let val = routine.execute();
         assert_eq!(expect, val.unwrap());
     }
@@ -412,7 +413,8 @@ mod test {
         let arena = &Arena::new();
         let obj = LispReader::new(sexp).read_from(arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
-        let mut routine = Routine::new(Gc::new(func));
+        let func_box = Box::new(func);
+        let mut routine = Routine::new(func_box.as_ref());
         let val = routine.execute();
         assert_eq!(val.err().unwrap(), error);
     }
