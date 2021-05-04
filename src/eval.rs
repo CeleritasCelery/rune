@@ -12,21 +12,21 @@ use std::convert::TryInto;
 
 #[derive(Clone)]
 struct CallFrame {
-    ip: IP,
+    ip: Ip,
     func: Gc<LispFn>,
     start: usize,
 }
 
 #[derive(Clone)]
-struct IP {
+struct Ip {
     range: std::ops::Range<*const u8>,
     ip: *const u8,
 }
 
-impl IP {
+impl Ip {
     #[allow(clippy::missing_const_for_fn)]
     fn new(vec: &[u8]) -> Self {
-        IP {
+        Ip {
             range: vec.as_ptr_range(),
             ip: vec.as_ptr(),
         }
@@ -64,7 +64,7 @@ impl IP {
 impl CallFrame {
     pub fn new(func: Gc<LispFn>, frame_start: usize) -> CallFrame {
         CallFrame {
-            ip: IP::new(&func.op_codes),
+            ip: Ip::new(&func.op_codes),
             func,
             start: frame_start,
         }
