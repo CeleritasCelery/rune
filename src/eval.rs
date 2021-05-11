@@ -6,6 +6,7 @@ use crate::hashmap::{HashMap, HashMapDefault};
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use std::convert::TryInto;
+use fn_macros::lisp_fn;
 
 #[derive(Clone)]
 struct CallFrame<'a> {
@@ -182,7 +183,8 @@ impl<'a> Routine<'a> {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(self.frame.clone());
                 self.frame = CallFrame::new(
-                    // TODO: This is unsound
+                    // TODO: This is unsound. We don't know that this will live
+                    // long enough
                     unsafe { std::mem::transmute(func) },
                     self.stack.from_end(fn_idx),
                 );

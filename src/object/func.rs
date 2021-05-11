@@ -95,7 +95,8 @@ impl std::fmt::Debug for SubrFn {
 
 impl std::cmp::PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
-        self.subr as fn(&'static _, &'static mut _, &'static _) -> _ == other.subr
+        let lhs: fn(&'static _, &'static mut _, &'static _) -> _ = self.subr;
+        lhs == other.subr
     }
 }
 

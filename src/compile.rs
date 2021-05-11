@@ -50,7 +50,7 @@ impl<'obj> From<Vec<Object<'obj>>> for ConstVec {
     }
 }
 
-impl std::cmp::PartialEq for ConstVec {
+impl PartialEq for ConstVec {
     fn eq(&self, other: &Self) -> bool {
         self.consts == other.consts
     }
@@ -185,7 +185,7 @@ pub struct Exp {
     vars: Vec<Option<Symbol>>,
 }
 
-impl std::convert::From<Exp> for LispFn {
+impl From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
         let inner = exp.constants.consts;
         std::mem::forget(exp.constants.arena);

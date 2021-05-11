@@ -2,6 +2,7 @@ use crate::object::NumberValue::{Float, Int};
 use crate::object::{Number, NumberValue};
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use fn_macros::lisp_fn;
 
 fn arith(
     cur: NumberValue,
@@ -81,7 +82,7 @@ impl<'obj> PartialEq<f64> for Number<'obj> {
     }
 }
 
-impl<'obj> PartialOrd for NumberValue {
+impl PartialOrd for NumberValue {
     fn partial_cmp(&self, other: &NumberValue) -> Option<std::cmp::Ordering> {
         match self {
             Int(lhs) => match other {

@@ -91,7 +91,7 @@ impl std::ops::Deref for Symbol {
 
 impl<'obj> From<Symbol> for Object<'obj> {
     fn from(s: Symbol) -> Self {
-        let ptr = s.0 as *const _;
+        let ptr: *const _ = s.0;
         InnerObject::from_ptr(ptr as *mut u8, Tag::Symbol).into()
     }
 }
@@ -112,7 +112,8 @@ impl std::cmp::Eq for Symbol {}
 
 impl std::hash::Hash for Symbol {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let bits = (self.0 as *const _) as u64;
+        let inner: *const _ = self.0;
+        let bits = inner as u64;
         bits.hash(state);
     }
 }

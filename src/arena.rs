@@ -22,7 +22,7 @@ impl<'obj> Arena {
     }
 }
 
-impl std::ops::Drop for Arena {
+impl Drop for Arena {
     fn drop(&mut self) {
         for obj in self.objects.get_mut() {
             unsafe {
@@ -32,7 +32,7 @@ impl std::ops::Drop for Arena {
     }
 }
 
-impl std::clone::Clone for Arena {
+impl Clone for Arena {
     fn clone(&self) -> Self {
         let new = Arena::new();
         for old in self.objects.borrow().iter() {

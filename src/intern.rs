@@ -38,7 +38,7 @@ impl InnerSymbolMap {
             Some(x) => x.as_ref(),
             None => {
                 let sym = Box::new(InnerSymbol::new(name.to_owned()));
-                let ptr = sym.as_ref() as *const InnerSymbol;
+                let ptr: *const InnerSymbol = sym.as_ref();
                 self.map.insert(name.to_owned(), sym);
                 ptr
             }

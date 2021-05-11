@@ -11,7 +11,6 @@ pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
-use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -235,7 +234,7 @@ impl InnerObject {
     }
 }
 
-impl cmp::PartialEq for InnerObject {
+impl PartialEq for InnerObject {
     fn eq(&self, rhs: &InnerObject) -> bool {
         self.val() == rhs.val()
     }

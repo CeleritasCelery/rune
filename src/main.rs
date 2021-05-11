@@ -1,3 +1,11 @@
+#![warn(rust_2018_idioms)]
+#![allow(elided_lifetimes_in_paths)]
+#![forbid(non_ascii_idents)]
+#![warn(trivial_casts)]
+#![warn(trivial_numeric_casts)]
+#![deny(macro_use_extern_crate)]
+#![deny(absolute_paths_not_starting_with_crate)]
+#![deny(keyword_idents)]
 #![warn(
     clippy::trivially_copy_pass_by_ref,
     clippy::explicit_iter_loop,
@@ -6,6 +14,11 @@
     clippy::needless_borrow,
     clippy::unicode_not_nfc
 )]
+
+// potential useful lints with too many false positives
+// #![deny(unused_qualifications)]
+// #![deny(meta_variable_misuse)]
+
 #[macro_use]
 mod macros;
 #[macro_use]
@@ -20,8 +33,6 @@ mod hashmap;
 mod intern;
 mod opcode;
 mod reader;
-#[macro_use]
-extern crate fn_macros;
 
 #[allow(clippy::missing_const_for_fn)]
 fn main() {
