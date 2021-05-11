@@ -5,8 +5,8 @@ use crate::error::{Error, Result};
 use crate::hashmap::{HashMap, HashMapDefault};
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
-use std::convert::TryInto;
 use fn_macros::lisp_fn;
+use std::convert::TryInto;
 
 #[derive(Clone)]
 struct CallFrame<'a> {

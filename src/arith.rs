@@ -1,8 +1,8 @@
 use crate::object::NumberValue::{Float, Int};
 use crate::object::{Number, NumberValue};
+use fn_macros::lisp_fn;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Sub};
-use fn_macros::lisp_fn;
 
 fn arith(
     cur: NumberValue,

@@ -1,12 +1,8 @@
 #![warn(rust_2018_idioms)]
 #![allow(elided_lifetimes_in_paths)]
-#![forbid(non_ascii_idents)]
-#![warn(trivial_casts)]
-#![warn(trivial_numeric_casts)]
-#![deny(macro_use_extern_crate)]
-#![deny(absolute_paths_not_starting_with_crate)]
-#![deny(keyword_idents)]
 #![warn(
+    trivial_casts,
+    trivial_numeric_casts,
     clippy::trivially_copy_pass_by_ref,
     clippy::explicit_iter_loop,
     clippy::inefficient_to_string,
@@ -14,6 +10,12 @@
     clippy::needless_borrow,
     clippy::unicode_not_nfc
 )]
+#![deny(
+    macro_use_extern_crate,
+    keyword_idents,
+    absolute_paths_not_starting_with_crate
+)]
+#![forbid(non_ascii_idents)]
 
 // potential useful lints with too many false positives
 // #![deny(unused_qualifications)]
