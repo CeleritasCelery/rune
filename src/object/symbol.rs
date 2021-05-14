@@ -128,8 +128,7 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(32, size_of::<InnerSymbol>());
-        assert_eq!(8, size_of::<Symbol>());
+        assert_eq!(size_of::<isize>(), size_of::<Symbol>());
     }
 
     #[test]

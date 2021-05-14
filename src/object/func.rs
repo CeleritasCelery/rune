@@ -111,13 +111,6 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for SubrFn {
 mod test {
     use super::*;
     use crate::object::Value;
-    use std::mem::size_of;
-
-    #[test]
-    fn size() {
-        assert_eq!(56, size_of::<LispFn>());
-        assert_eq!(32, size_of::<SubrFn>());
-    }
 
     #[test]
     fn function() {

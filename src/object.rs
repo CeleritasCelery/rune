@@ -269,9 +269,12 @@ mod test {
 
     #[test]
     fn sizes() {
-        assert_eq!(8, size_of::<Object>());
-        assert_eq!(8, size_of::<Option<Object>>());
-        assert_eq!(16, size_of::<Value>());
+        assert_eq!(size_of::<isize>(), size_of::<Object>());
+        assert_eq!(size_of::<Object>(), size_of::<Option<Object>>());
+        assert_eq!(
+            /* data */ size_of::<Object>() + /* discriminant */ size_of::<isize>(),
+            size_of::<Value>()
+        );
         assert_eq!(1, size_of::<Tag>());
     }
 
