@@ -11,6 +11,7 @@ pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
+use enum_as_inner::EnumAsInner;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -27,7 +28,7 @@ pub struct Object<'a> {
 
 pub type GcObject = Object<'static>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, EnumAsInner)]
 pub enum Value<'a> {
     Int(i64),
     True,
@@ -307,14 +308,14 @@ mod test {
     #[test]
     fn other() {
         let t = Object::t();
-        assert_eq!(t.val(), Value::True);
+        assert!(t.val().is_true());
         let n = Object::nil();
-        assert_eq!(n.val(), Value::Nil);
+        assert!(n.val().is_nil());
 
         let bool_true: Object = true.into();
-        assert_eq!(bool_true.val(), Value::True);
+        assert!(bool_true.val().is_true());
         let bool_false: Object = false.into();
-        assert_eq!(bool_false.val(), Value::Nil);
+        assert!(bool_false.val().is_nil());
     }
 
     #[test]

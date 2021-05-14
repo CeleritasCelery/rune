@@ -123,7 +123,7 @@ mod test {
     use super::*;
     use crate::error::Error;
     use crate::hashmap::HashMap;
-    use crate::object::{FunctionValue, LispFn, SubrFn};
+    use crate::object::{LispFn, SubrFn};
     use std::mem::size_of;
 
     #[test]
@@ -141,18 +141,12 @@ mod test {
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
-        let before = match cell.val() {
-            FunctionValue::LispFn(x) => x,
-            _ => unreachable!(),
-        };
+        let before = cell.val().into_lisp_fn().expect("expected lispfn");
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
-        let after = match cell.val() {
-            FunctionValue::LispFn(x) => x,
-            _ => unreachable!(),
-        };
+        let after = cell.val().into_lisp_fn().expect("expected lispfn");
         assert_eq!(after.op_codes.get(0).unwrap(), &7);
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
     }
@@ -174,11 +168,12 @@ mod test {
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
         sym.set_func(core_func.into_obj(arena));
 
-        match sym.get_func().unwrap().val() {
-            FunctionValue::SubrFn(x) => {
-                assert_eq!(*x, SubrFn::new("bar", dummy, 0, 0, false));
-            }
-            _ => unreachable!(),
-        };
+        let subr = sym
+            .get_func()
+            .unwrap()
+            .val()
+            .into_subr_fn()
+            .expect("expected subrfn");
+        assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
     }
 }

@@ -1,4 +1,5 @@
 use crate::object::*;
+use enum_as_inner::EnumAsInner;
 
 pub struct Function<'a> {
     data: InnerObject,
@@ -34,6 +35,7 @@ impl<'obj> IntoObject<'obj, Function<'obj>> for SubrFn {
     }
 }
 
+#[derive(Debug, EnumAsInner)]
 pub enum FunctionValue<'a> {
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),

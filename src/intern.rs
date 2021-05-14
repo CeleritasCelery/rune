@@ -80,7 +80,7 @@ pub fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
     use crate::arena::Arena;
-    use crate::object::{FunctionValue, LispFn};
+    use crate::object::LispFn;
 
     #[test]
     fn test_intern() {
@@ -94,10 +94,7 @@ mod test {
         let obj: Function = func.into_obj(arena);
         second.set_func(obj);
         let func_cell = first.get_func().unwrap();
-        let func = match func_cell.val() {
-            FunctionValue::LispFn(x) => x,
-            _ => unreachable!(),
-        };
+        let func = func_cell.val().into_lisp_fn().expect("expected lispfn");
         assert_eq!(func.op_codes.get(0).unwrap(), &5);
         assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
