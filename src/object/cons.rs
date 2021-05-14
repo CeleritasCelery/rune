@@ -1,21 +1,56 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
 use crate::object::*;
+use std::cell::Cell;
 use std::convert::TryFrom;
 use std::fmt;
 
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Cons<'a> {
-    car: Object<'a>,
-    cdr: Object<'a>,
+    car: Cell<Object<'a>>,
+    cdr: Cell<Object<'a>>,
 }
 
 impl<'old, 'new> Cons<'old> {
-    pub fn clone_in(self, arena: &'new Arena) -> Cons<'new> {
-        Cons {
-            car: self.car.clone_in(arena),
-            cdr: self.cdr.clone_in(arena),
+    pub fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
+        Cons::new(self.car().clone_in(arena), self.cdr().clone_in(arena))
+    }
+}
+
+impl<'a> Cons<'a> {
+    pub const fn new(car: Object<'a>, cdr: Object<'a>) -> Self {
+        Self {
+            car: Cell::new(car),
+            cdr: Cell::new(cdr),
         }
+    }
+
+    pub fn car(&self) -> Object {
+        self.car.get()
+    }
+
+    pub fn cdr(&self) -> Object {
+        self.cdr.get()
+    }
+
+    pub fn set_car(&self, new_car: Object<'a>) {
+        self.car.set(new_car);
+    }
+
+    pub fn set_cdr(&self, new_cdr: Object<'a>) {
+        self.cdr.set(new_cdr);
+    }
+}
+
+impl<'obj> fmt::Display for Cons<'obj> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.car(), self.cdr())
+    }
+}
+
+impl<'obj> IntoObject<'obj, Object<'obj>> for Cons<'obj> {
+    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+        InnerObject::from_type(self, Tag::Cons, arena).into()
     }
 }
 
@@ -37,32 +72,6 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
             Value::Nil => Ok(None),
             x => Err(Error::Type(Type::Cons, x.get_type())),
         }
-    }
-}
-
-impl<'a> Cons<'a> {
-    pub const fn new(car: Object<'a>, cdr: Object<'a>) -> Self {
-        Self { car, cdr }
-    }
-
-    pub const fn car(&self) -> Object {
-        self.car
-    }
-
-    pub const fn cdr(&self) -> Object {
-        self.cdr
-    }
-}
-
-impl<'obj> fmt::Display for Cons<'obj> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.car, self.cdr)
-    }
-}
-
-impl<'obj> IntoObject<'obj, Object<'obj>> for Cons<'obj> {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
-        InnerObject::from_type(self, Tag::Cons, arena).into()
     }
 }
 
@@ -99,28 +108,32 @@ mod test {
         assert_eq!(16, size_of::<Cons>());
         let cons = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
 
-        let mut x: Object = cons.into_obj(arena);
+        let x: Object = cons.into_obj(arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
-        let cons1 = x.as_mut_cons().unwrap();
+        let cons1 = match x.val() {
+            Value::Cons(x) => x,
+            _ => unreachable!("expected cons"),
+        };
+
         let start_str = "start".to_owned();
-        assert_eq!(Value::String(&start_str), cons1.car.val());
-        (*cons1).car = "start2".into_obj(arena);
+        assert_eq!(Value::String(&start_str), cons1.car().val());
+        (*cons1).set_car("start2".into_obj(arena));
         let start2_str = "start2".to_owned();
-        assert_eq!(Value::String(&start2_str), cons1.car.val());
+        assert_eq!(Value::String(&start2_str), cons1.car().val());
 
-        let cons2 = match cons1.cdr.val() {
+        let cons2 = match cons1.cdr().val() {
             Value::Cons(x) => x,
-            _ => unreachable!(),
+            _ => unreachable!("expected cons"),
         };
-        assert_eq!(Value::Int(7), cons2.car.val());
+        assert_eq!(Value::Int(7), cons2.car().val());
 
-        let cons3 = match cons2.cdr.val() {
+        let cons3 = match cons2.cdr().val() {
             Value::Cons(x) => x,
-            _ => unreachable!(),
+            _ => unreachable!("expected cons"),
         };
-        assert_eq!(Value::Int(5), cons3.car.val());
-        assert_eq!(Value::Int(9), cons3.cdr.val());
+        assert_eq!(Value::Int(5), cons3.car().val());
+        assert_eq!(Value::Int(9), cons3.cdr().val());
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));

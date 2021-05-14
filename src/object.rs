@@ -124,13 +124,6 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub fn as_mut_cons(&mut self) -> Option<&mut Cons> {
-        match self.val() {
-            Value::Cons(_) => Some(unsafe { &mut *self.data.get_mut_ptr() }),
-            _ => None,
-        }
-    }
-
     pub unsafe fn drop(self) {
         self.data.drop()
     }
