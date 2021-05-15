@@ -150,7 +150,7 @@ mod test {
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
     }
 
-    #[allow(clippy::clippy::unnecessary_wraps)]
+    #[allow(clippy::unnecessary_wraps)]
     fn dummy<'obj>(
         vars: &[Object<'obj>],
         _map: &mut HashMap<Symbol, Object<'obj>>,

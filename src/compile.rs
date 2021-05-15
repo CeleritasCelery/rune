@@ -82,6 +82,15 @@ impl ConstVec {
             Err(_) => Err(Error::ConstOverflow),
         }
     }
+
+    fn insert_lambda(&mut self, func: LispFn) -> Result<u16> {
+        let obj: Object = func.into_obj(&self.arena);
+        self.consts.push(unsafe { obj.into_gc() });
+        match (self.consts.len() - 1).try_into() {
+            Ok(x) => Ok(x),
+            Err(_) => Err(Error::ConstOverflow),
+        }
+    }
 }
 
 macro_rules! emit_op {
@@ -197,6 +206,13 @@ impl<'obj> Exp {
     fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
+        self.codes.emit_const(idx);
+        Ok(())
+    }
+
+    fn add_const_lambda(&mut self, func: LispFn) -> Result<()> {
+        self.vars.push(None);
+        let idx = self.constants.insert_lambda(func)?;
         self.codes.emit_const(idx);
         Ok(())
     }
@@ -422,10 +438,10 @@ impl<'obj> Exp {
         let list = into_list(obj)?;
         let mut iter = list.iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
-        let arena = &Arena::new();
+
         match iter.next() {
             None => {
-                return self.add_const(LispFn::default().into_obj(arena), None);
+                return self.add_const_lambda(LispFn::default());
             }
             Some(bindings) => {
                 for binding in &into_list(*bindings)? {
@@ -438,12 +454,12 @@ impl<'obj> Exp {
         };
         let body = iter.as_slice();
         if body.is_empty() {
-            self.add_const(LispFn::default().into_obj(arena), None)
+            self.add_const_lambda(LispFn::default())
         } else {
             let len = vars.len();
             let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
             func.args.required = len as u16;
-            self.add_const(func.into_obj(arena), None)
+            self.add_const_lambda(func)
         }
     }
 
