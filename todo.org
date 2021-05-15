@@ -5,6 +5,13 @@
 This will reduce coupling in the system by allowing different modules to define their own errors
 
 Or use a crate like [[https://docs.rs/error-chain/0.12.4/error_chain/][error-chain]]
+* GC
+** create a Uniqobject wrapper for objects that can be dropped
+This type can be returned by ~into_object~ and then used for storage in functions or arenas
+** create a rooted generic object to register things as roots
+Moving a reference into root should be safe to fix the lifetime
+** look into mutable strings and soundness
+
 * define sexp macro
 Not sure if this can be done with just a regular macro or would require a proc macro. But this would let us decouple our tests from the reader in a clean way.
 * define benchmarks
