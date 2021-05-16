@@ -311,7 +311,7 @@ impl<'a, 'obj> LispReader<'a> {
         }
     }
 
-    pub fn read_from(&mut self, arena: &'obj Arena) -> Option<Result<Object<'obj>, LispReaderErr>> {
+    pub fn read_into(&mut self, arena: &'obj Arena) -> Option<Result<Object<'obj>, LispReaderErr>> {
         match self.read(arena) {
             Ok(x) => Some(Ok(x)),
             Err(Error::EndOfStream) => None,
@@ -356,7 +356,7 @@ mod test {
             let arena = &Arena::new();
             let mut reader = LispReader::new($compare);
             let obj: Object = $expect.into_obj(arena);
-            assert_eq!(obj, reader.read_from(&arena).unwrap().unwrap())
+            assert_eq!(obj, reader.read_into(&arena).unwrap().unwrap())
         };
     }
 
@@ -431,7 +431,7 @@ baz""#
     fn assert_error(input: &str, pos: usize, error: Error) {
         let arena = &Arena::new();
         let result = LispReader::new(input)
-            .read_from(arena)
+            .read_into(arena)
             .unwrap()
             .err()
             .unwrap();
@@ -443,7 +443,7 @@ baz""#
     fn error() {
         use Error::*;
         let arena = &Arena::new();
-        assert!((LispReader::new("").read_from(arena).is_none()));
+        assert!((LispReader::new("").read_into(arena).is_none()));
         let null = StreamStart::new(std::ptr::null());
         assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
         assert_error(" \"foo", 1, MissingStringDel(null));
@@ -454,7 +454,7 @@ baz""#
     #[test]
     fn comments() {
         let arena = &Arena::new();
-        assert!(LispReader::new(" ; comment ").read_from(arena).is_none());
+        assert!(LispReader::new(" ; comment ").read_into(arena).is_none());
         check_reader!(1, "; comment \n  1");
     }
 }

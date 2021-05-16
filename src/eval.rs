@@ -58,7 +58,7 @@ impl Ip {
 }
 
 impl<'a> CallFrame<'a> {
-    pub fn new(func: &'a LispFn, frame_start: usize) -> CallFrame {
+    fn new(func: &'a LispFn, frame_start: usize) -> CallFrame {
         CallFrame {
             ip: Ip::new(&func.op_codes),
             func,
@@ -66,7 +66,7 @@ impl<'a> CallFrame<'a> {
         }
     }
 
-    pub fn get_const(&self, i: usize) -> GcObject {
+    fn get_const(&self, i: usize) -> GcObject {
         *self.func.constants.get(i).unwrap()
     }
 }
@@ -104,12 +104,24 @@ impl LispStack for Vec<GcObject> {
     }
 }
 
+pub struct Environment {
+    vars: HashMap<Symbol, GcObject>,
+    arena: Arena,
+}
+
+impl Environment {
+    pub fn new() -> Self {
+        Self {
+            vars: HashMap::create(),
+            arena: Arena::new(),
+        }
+    }
+}
+
 pub struct Routine<'a> {
     stack: Vec<GcObject>,
-    vars: HashMap<Symbol, GcObject>,
     call_frames: Vec<CallFrame<'a>>,
     frame: CallFrame<'a>,
-    arena: Arena,
 }
 
 #[lisp_fn]
@@ -125,16 +137,6 @@ pub fn set<'obj>(
 defsubr!(set);
 
 impl<'a> Routine<'a> {
-    fn new(func: &'a LispFn) -> Routine {
-        Routine {
-            stack: vec![],
-            vars: HashMap::create(),
-            call_frames: vec![],
-            frame: CallFrame::new(func, 0),
-            arena: Arena::new(),
-        }
-    }
-
     fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
         if count < args.required {
             return Err(Error::ArgCount(args.required, count));
@@ -151,10 +153,10 @@ impl<'a> Routine<'a> {
         Ok(())
     }
 
-    fn varref(&mut self, idx: usize) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
-            let value = match self.vars.get(&sym) {
+            let value = match env.vars.get(&sym) {
                 Some(x) => x,
                 None => return Err(Error::VoidVariable),
             };
@@ -165,14 +167,14 @@ impl<'a> Routine<'a> {
         }
     }
 
-    fn varset(&mut self, idx: usize) -> Result<()> {
+    fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
         let symbol: Symbol = self.frame.get_const(idx).try_into()?;
         let value = self.stack.pop().unwrap();
-        set(symbol, value, &mut self.vars);
+        set(symbol, value, &mut env.vars);
         Ok(())
     }
 
-    fn call(&mut self, arg_cnt: u16) -> Result<()> {
+    fn call(&mut self, arg_cnt: u16, env: &mut Environment) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
@@ -191,7 +193,7 @@ impl<'a> Routine<'a> {
             }
             FunctionValue::SubrFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
-                self.call_subr(func.subr, arg_cnt as usize)?;
+                self.call_subr(func.subr, arg_cnt as usize, env)?;
             }
         };
         Ok(())
@@ -201,130 +203,135 @@ impl<'a> Routine<'a> {
         unsafe { std::mem::transmute(x) }
     }
 
-    fn call_subr(&mut self, func: BuiltInFn, args: usize) -> Result<()> {
+    fn call_subr(&mut self, func: BuiltInFn, args: usize, env: &mut Environment) -> Result<()> {
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
-        self.stack[i] = func(slice, &mut self.vars, Self::fix_lifetime(&self.arena))?;
+        self.stack[i] = func(slice, &mut env.vars, Self::fix_lifetime(&env.arena))?;
         self.stack.truncate(i + 1);
         Ok(())
     }
 
-    pub fn execute(&mut self) -> Result<GcObject> {
+    pub fn execute(func: &LispFn, env: &mut Environment) -> Result<GcObject> {
         use OpCode as op;
+        let mut rout = Routine {
+            stack: vec![],
+            call_frames: vec![],
+            frame: CallFrame::new(func, 0),
+        };
         loop {
-            println!("{:?}", self.stack);
-            let op = unsafe { op::from_unchecked(self.frame.ip.next()) };
-            println!("op : {:?}", op);
+            // println!("{:?}", rout.stack);
+            let op = unsafe { op::from_unchecked(rout.frame.ip.next()) };
+            // println!("op : {:?}", op);
             match op {
-                op::StackRef0 => self.stack.push_ref(0),
-                op::StackRef1 => self.stack.push_ref(1),
-                op::StackRef2 => self.stack.push_ref(2),
-                op::StackRef3 => self.stack.push_ref(3),
-                op::StackRef4 => self.stack.push_ref(4),
-                op::StackRef5 => self.stack.push_ref(5),
+                op::StackRef0 => rout.stack.push_ref(0),
+                op::StackRef1 => rout.stack.push_ref(1),
+                op::StackRef2 => rout.stack.push_ref(2),
+                op::StackRef3 => rout.stack.push_ref(3),
+                op::StackRef4 => rout.stack.push_ref(4),
+                op::StackRef5 => rout.stack.push_ref(5),
                 op::StackRefN => {
-                    let idx = self.frame.ip.take_arg();
-                    self.stack.push_ref(idx);
+                    let idx = rout.frame.ip.take_arg();
+                    rout.stack.push_ref(idx);
                 }
                 op::StackRefN2 => {
-                    let idx = self.frame.ip.take_double_arg();
-                    self.stack.push_ref(idx);
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.stack.push_ref(idx);
                 }
-                op::StackSet0 => self.stack.set_ref(0),
-                op::StackSet1 => self.stack.set_ref(1),
-                op::StackSet2 => self.stack.set_ref(2),
-                op::StackSet3 => self.stack.set_ref(3),
-                op::StackSet4 => self.stack.set_ref(4),
-                op::StackSet5 => self.stack.set_ref(5),
+                op::StackSet0 => rout.stack.set_ref(0),
+                op::StackSet1 => rout.stack.set_ref(1),
+                op::StackSet2 => rout.stack.set_ref(2),
+                op::StackSet3 => rout.stack.set_ref(3),
+                op::StackSet4 => rout.stack.set_ref(4),
+                op::StackSet5 => rout.stack.set_ref(5),
                 op::StackSetN => {
-                    let idx = self.frame.ip.take_arg();
-                    self.stack.set_ref(idx);
+                    let idx = rout.frame.ip.take_arg();
+                    rout.stack.set_ref(idx);
                 }
                 op::StackSetN2 => {
-                    let idx = self.frame.ip.take_double_arg();
-                    self.stack.set_ref(idx);
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.stack.set_ref(idx);
                 }
-                op::Constant0 => self.stack.push(self.frame.get_const(0)),
-                op::Constant1 => self.stack.push(self.frame.get_const(1)),
-                op::Constant2 => self.stack.push(self.frame.get_const(2)),
-                op::Constant3 => self.stack.push(self.frame.get_const(3)),
-                op::Constant4 => self.stack.push(self.frame.get_const(4)),
-                op::Constant5 => self.stack.push(self.frame.get_const(5)),
+                op::Constant0 => rout.stack.push(rout.frame.get_const(0)),
+                op::Constant1 => rout.stack.push(rout.frame.get_const(1)),
+                op::Constant2 => rout.stack.push(rout.frame.get_const(2)),
+                op::Constant3 => rout.stack.push(rout.frame.get_const(3)),
+                op::Constant4 => rout.stack.push(rout.frame.get_const(4)),
+                op::Constant5 => rout.stack.push(rout.frame.get_const(5)),
                 op::ConstantN => {
-                    let idx = self.frame.ip.take_arg();
-                    self.stack.push(self.frame.get_const(idx))
+                    let idx = rout.frame.ip.take_arg();
+                    rout.stack.push(rout.frame.get_const(idx))
                 }
                 op::ConstantN2 => {
-                    let idx = self.frame.ip.take_double_arg();
-                    self.stack.push(self.frame.get_const(idx))
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.stack.push(rout.frame.get_const(idx))
                 }
-                op::VarRef0 => self.varref(0)?,
-                op::VarRef1 => self.varref(1)?,
-                op::VarRef2 => self.varref(2)?,
-                op::VarRef3 => self.varref(3)?,
-                op::VarRef4 => self.varref(4)?,
-                op::VarRef5 => self.varref(5)?,
+                op::VarRef0 => rout.varref(0, env)?,
+                op::VarRef1 => rout.varref(1, env)?,
+                op::VarRef2 => rout.varref(2, env)?,
+                op::VarRef3 => rout.varref(3, env)?,
+                op::VarRef4 => rout.varref(4, env)?,
+                op::VarRef5 => rout.varref(5, env)?,
                 op::VarRefN => {
-                    let idx = self.frame.ip.take_arg();
-                    self.varref(idx)?
+                    let idx = rout.frame.ip.take_arg();
+                    rout.varref(idx, env)?
                 }
                 op::VarRefN2 => {
-                    let idx = self.frame.ip.take_double_arg();
-                    self.varref(idx)?
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.varref(idx, env)?
                 }
-                op::VarSet0 => self.varset(0)?,
-                op::VarSet1 => self.varset(1)?,
-                op::VarSet2 => self.varset(2)?,
-                op::VarSet3 => self.varset(3)?,
-                op::VarSet4 => self.varset(4)?,
-                op::VarSet5 => self.varset(5)?,
+                op::VarSet0 => rout.varset(0, env)?,
+                op::VarSet1 => rout.varset(1, env)?,
+                op::VarSet2 => rout.varset(2, env)?,
+                op::VarSet3 => rout.varset(3, env)?,
+                op::VarSet4 => rout.varset(4, env)?,
+                op::VarSet5 => rout.varset(5, env)?,
                 op::VarSetN => {
-                    let idx = self.frame.ip.take_arg();
-                    self.varset(idx)?
+                    let idx = rout.frame.ip.take_arg();
+                    rout.varset(idx, env)?
                 }
                 op::VarSetN2 => {
-                    let idx = self.frame.ip.take_double_arg();
-                    self.varset(idx)?
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.varset(idx, env)?
                 }
-                op::Call0 => self.call(0)?,
-                op::Call1 => self.call(1)?,
-                op::Call2 => self.call(2)?,
-                op::Call3 => self.call(3)?,
+                op::Call0 => rout.call(0, env)?,
+                op::Call1 => rout.call(1, env)?,
+                op::Call2 => rout.call(2, env)?,
+                op::Call3 => rout.call(3, env)?,
                 op::Discard => {
-                    self.stack.pop();
+                    rout.stack.pop();
                 }
                 op::Duplicate => {
-                    let value = *self.stack.last().unwrap();
-                    self.stack.push(value);
+                    let value = *rout.stack.last().unwrap();
+                    rout.stack.push(value);
                 }
                 op::Jump => {
-                    let offset = self.frame.ip.take_double_arg();
-                    self.frame.ip.jump(offset as i16);
+                    let offset = rout.frame.ip.take_double_arg();
+                    rout.frame.ip.jump(offset as i16);
                 }
                 op::JumpNil => {
-                    let cond = self.stack.pop().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let cond = rout.stack.pop().unwrap();
+                    let offset = rout.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        self.frame.ip.jump(offset as i16);
+                        rout.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
-                    let cond = self.stack.last().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let cond = rout.stack.last().unwrap();
+                    let offset = rout.frame.ip.take_double_arg();
                     if matches!(cond.val(), Value::Nil) {
-                        self.frame.ip.jump(offset as i16);
+                        rout.frame.ip.jump(offset as i16);
                     } else {
-                        self.stack.pop();
+                        rout.stack.pop();
                     }
                 }
                 op::Ret => {
-                    if self.call_frames.is_empty() {
-                        return Ok(self.stack.pop().unwrap());
+                    if rout.call_frames.is_empty() {
+                        return Ok(rout.stack.pop().unwrap());
                     } else {
-                        let var = self.stack.pop().unwrap();
-                        self.stack[self.frame.start] = var;
-                        self.stack.truncate(self.frame.start + 1);
-                        self.frame = self.call_frames.pop().unwrap();
+                        let var = rout.stack.pop().unwrap();
+                        rout.stack[rout.frame.start] = var;
+                        rout.stack.truncate(rout.frame.start + 1);
+                        rout.frame = rout.call_frames.pop().unwrap();
                     }
                 }
                 x => return Err(Error::UnknownOpcode(x as u8)),
@@ -345,12 +352,11 @@ mod test {
 
     fn test_eval(sexp: &str, expect: Object) {
         let arena = Arena::new();
-        let obj = LispReader::new(sexp).read_from(&arena).unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let box_func = Box::new(func);
-        let mut routine = Routine::new(box_func.as_ref());
-        let val = routine.execute();
-        assert_eq!(expect, val.unwrap());
+        let obj = LispReader::new(sexp).read_into(&arena).unwrap().unwrap();
+        let func = Exp::compile(obj).unwrap().into();
+        let mut env = Environment::new();
+        let val = Routine::execute(&func, &mut env).unwrap();
+        assert_eq!(val, expect);
     }
 
     #[test]
@@ -358,6 +364,7 @@ mod test {
         let arena = &Arena::new();
         test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63.into_obj(arena));
         test_eval("7", (7).into_obj(arena));
+        test_eval("(+ 1 2.5)", (3.5).into_obj(arena));
     }
 
     #[test]
@@ -413,11 +420,10 @@ mod test {
 
     fn test_eval_error(sexp: &str, error: Error) {
         let arena = &Arena::new();
-        let obj = LispReader::new(sexp).read_from(arena).unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        let func_box = Box::new(func);
-        let mut routine = Routine::new(func_box.as_ref());
-        let val = routine.execute();
+        let obj = LispReader::new(sexp).read_into(arena).unwrap().unwrap();
+        let func = Exp::compile(obj).unwrap().into();
+        let mut env = Environment::new();
+        let val = Routine::execute(&func, &mut env);
         assert_eq!(val.err().unwrap(), error);
     }
 

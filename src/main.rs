@@ -36,7 +36,35 @@ mod intern;
 mod opcode;
 mod reader;
 
+use crate::{
+    arena::Arena,
+    compile::Exp,
+    eval::{Environment, Routine},
+    object::LispFn,
+    reader::LispReader,
+};
+use std::io::{self, Write};
+
 #[allow(clippy::missing_const_for_fn)]
 fn main() {
-    eval::run();
+    println!("Hello, world!");
+    let mut buffer = String::new();
+    let stdin = io::stdin();
+    let arena = Arena::new();
+    let mut env = Environment::new();
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap();
+        stdin.read_line(&mut buffer).unwrap();
+        if buffer == "exit\n" {
+            std::process::exit(0);
+        }
+        let obj = LispReader::new(&buffer).read_into(&arena).unwrap().unwrap();
+        let func: LispFn = Exp::compile(obj).unwrap().into();
+        buffer.clear();
+        match Routine::execute(&func, &mut env) {
+            Ok(val) => println!("{}", val),
+            Err(e) => println!("{:?}", e),
+        }
+    }
 }
