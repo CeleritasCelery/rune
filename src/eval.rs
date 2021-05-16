@@ -340,8 +340,6 @@ impl<'a> Routine<'a> {
     }
 }
 
-pub const fn run() {}
-
 #[cfg(test)]
 mod test {
     use super::*;

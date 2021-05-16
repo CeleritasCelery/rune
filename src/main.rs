@@ -45,7 +45,6 @@ use crate::{
 };
 use std::io::{self, Write};
 
-#[allow(clippy::missing_const_for_fn)]
 fn main() {
     println!("Hello, world!");
     let mut buffer = String::new();
