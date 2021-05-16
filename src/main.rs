@@ -41,7 +41,7 @@ use crate::{
     compile::Exp,
     eval::{Environment, Routine},
     object::LispFn,
-    reader::LispReader,
+    reader::Reader,
 };
 use std::io::{self, Write};
 
@@ -58,7 +58,7 @@ fn main() {
         if buffer == "exit\n" {
             std::process::exit(0);
         }
-        let obj = LispReader::new(&buffer).read_into(&arena).unwrap().unwrap();
+        let obj = Reader::new(&buffer).read_into(&arena).unwrap().unwrap();
         let func: LispFn = Exp::compile(obj).unwrap().into();
         buffer.clear();
         match Routine::execute(&func, &mut env) {

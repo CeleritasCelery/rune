@@ -169,14 +169,14 @@ const fn symbol_char(chr: char) -> bool {
     )
 }
 
-pub struct LispReader<'a> {
+pub struct Reader<'a> {
     slice: &'a str,
     stream: Stream<'a>,
 }
 
-impl<'a> LispReader<'a> {
+impl<'a> Reader<'a> {
     pub fn new(slice: &'a str) -> Self {
-        LispReader {
+        Reader {
             slice,
             stream: Stream::new(slice),
         }
@@ -204,7 +204,7 @@ impl<'a> LispReader<'a> {
     }
 }
 
-impl<'a, 'obj> LispReader<'a> {
+impl<'a, 'obj> Reader<'a> {
     fn char_pos(&self) -> StreamStart {
         self.stream.get_prev_pos()
     }
@@ -354,7 +354,7 @@ mod test {
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
             let arena = &Arena::new();
-            let mut reader = LispReader::new($compare);
+            let mut reader = Reader::new($compare);
             let obj: Object = $expect.into_obj(arena);
             assert_eq!(obj, reader.read_into(&arena).unwrap().unwrap())
         };
@@ -430,11 +430,7 @@ baz""#
 
     fn assert_error(input: &str, pos: usize, error: Error) {
         let arena = &Arena::new();
-        let result = LispReader::new(input)
-            .read_into(arena)
-            .unwrap()
-            .err()
-            .unwrap();
+        let result = Reader::new(input).read_into(arena).unwrap().err().unwrap();
         assert_eq!(result.pos, pos);
         assert_eq!(result.message, format!("{}", error));
     }
@@ -443,7 +439,7 @@ baz""#
     fn error() {
         use Error::*;
         let arena = &Arena::new();
-        assert!((LispReader::new("").read_into(arena).is_none()));
+        assert!((Reader::new("").read_into(arena).is_none()));
         let null = StreamStart::new(std::ptr::null());
         assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
         assert_error(" \"foo", 1, MissingStringDel(null));
@@ -454,7 +450,7 @@ baz""#
     #[test]
     fn comments() {
         let arena = &Arena::new();
-        assert!(LispReader::new(" ; comment ").read_into(arena).is_none());
+        assert!(Reader::new(" ; comment ").read_into(arena).is_none());
         check_reader!(1, "; comment \n  1");
     }
 }

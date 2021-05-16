@@ -346,11 +346,11 @@ mod test {
     use crate::arena::Arena;
     use crate::compile::Exp;
     use crate::object::IntoObject;
-    use crate::reader::LispReader;
+    use crate::reader::Reader;
 
     fn test_eval(sexp: &str, expect: Object) {
         let arena = Arena::new();
-        let obj = LispReader::new(sexp).read_into(&arena).unwrap().unwrap();
+        let obj = Reader::new(sexp).read_into(&arena).unwrap().unwrap();
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env).unwrap();
@@ -418,7 +418,7 @@ mod test {
 
     fn test_eval_error(sexp: &str, error: Error) {
         let arena = &Arena::new();
-        let obj = LispReader::new(sexp).read_into(arena).unwrap().unwrap();
+        let obj = Reader::new(sexp).read_into(arena).unwrap().unwrap();
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env);
