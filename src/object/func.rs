@@ -126,7 +126,7 @@ mod test {
         let obj: Object = func.into_obj(arena);
         assert!(matches!(obj.val(), Value::LispFn(_)));
         format!("{}", obj);
-        let func = obj.val().into_lisp_fn().expect("expected lispfn");
+        let func = obj.as_lisp_fn().expect("expected lispfn");
         assert_eq!(func.op_codes, vec_into![0, 1, 2].into());
         assert_eq!(func.constants, vec_into_object![1; arena]);
         assert_eq!(func.args.required, 0);

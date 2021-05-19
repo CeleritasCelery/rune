@@ -111,7 +111,7 @@ mod test {
         let x: Object = cons.into_obj(arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
-        let cons1 = x.val().into_cons().expect("expected cons");
+        let cons1 = x.as_cons().expect("expected cons");
 
         let start_str = "start".to_owned();
         assert_eq!(Value::String(&start_str), cons1.car().val());
@@ -119,11 +119,11 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(Value::String(&start2_str), cons1.car().val());
 
-        let cons2 = cons1.cdr().val().into_cons().expect("expected cons");
+        let cons2 = cons1.cdr().as_cons().expect("expected cons");
 
         assert_eq!(Value::Int(7), cons2.car().val());
 
-        let cons3 = cons2.cdr().val().into_cons().expect("expected cons");
+        let cons3 = cons2.cdr().as_cons().expect("expected cons");
         assert_eq!(Value::Int(5), cons3.car().val());
         assert_eq!(Value::Int(9), cons3.cdr().val());
 

@@ -63,7 +63,7 @@ fn main() {
         buffer.clear();
         match Routine::execute(&func, &mut env) {
             Ok(val) => println!("{}", val),
-            Err(e) => println!("{:?}", e),
+            Err(e) => println!("Error: {:?}", e),
         }
     }
 }

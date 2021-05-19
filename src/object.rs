@@ -11,7 +11,6 @@ pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
-use enum_as_inner::EnumAsInner;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -28,15 +27,15 @@ pub struct Object<'a> {
 
 pub type GcObject = Object<'static>;
 
-#[derive(Debug, PartialEq, EnumAsInner)]
+#[derive(Debug, PartialEq)]
 pub enum Value<'a> {
+    Symbol(Symbol),
     Int(i64),
+    Float(f64),
     True,
     Nil,
     Cons(&'a Cons<'a>),
     String(&'a String),
-    Symbol(Symbol),
-    Float(f64),
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),
 }
@@ -127,6 +126,67 @@ impl<'obj> Object<'obj> {
 
     pub unsafe fn drop(self) {
         self.data.drop()
+    }
+
+    pub fn as_int(self) -> Option<i64> {
+        match self.val() {
+            Value::Int(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_cons(self) -> Option<&'obj Cons<'obj>> {
+        match self.val() {
+            Value::Cons(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_string(self) -> Option<&'obj String> {
+        match self.val() {
+            Value::String(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_symbol(self) -> Option<Symbol> {
+        match self.val() {
+            Value::Symbol(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_lisp_fn(self) -> Option<&'obj LispFn> {
+        match self.val() {
+            Value::LispFn(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_subr_fn(self) -> Option<&'obj SubrFn> {
+        match self.val() {
+            Value::SubrFn(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn is_true(self) -> bool {
+        matches!(self.val(), Value::True)
+    }
+
+    pub fn is_nil(self) -> bool {
+        matches!(self.val(), Value::Nil)
+    }
+
+    pub fn is_non_nil(self) -> bool {
+        !matches!(self.val(), Value::Nil)
+    }
+
+    pub fn as_float(self) -> Option<f64> {
+        match self.val() {
+            Value::Float(x) => Some(x),
+            _ => None,
+        }
     }
 }
 
@@ -311,14 +371,14 @@ mod test {
     #[test]
     fn other() {
         let t = Object::t();
-        assert!(t.val().is_true());
+        assert!(t.is_true());
         let n = Object::nil();
-        assert!(n.val().is_nil());
+        assert!(n.is_nil());
 
         let bool_true: Object = true.into();
-        assert!(bool_true.val().is_true());
+        assert!(bool_true.is_true());
         let bool_false: Object = false.into();
-        assert!(bool_false.val().is_nil());
+        assert!(bool_false.is_nil());
     }
 
     #[test]

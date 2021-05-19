@@ -1,5 +1,4 @@
 use crate::object::*;
-use enum_as_inner::EnumAsInner;
 
 pub struct Function<'a> {
     data: InnerObject,
@@ -35,12 +34,12 @@ impl<'obj> IntoObject<'obj, Function<'obj>> for SubrFn {
     }
 }
 
-#[derive(Debug, EnumAsInner)]
 pub enum FunctionValue<'a> {
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),
 }
 
+#[allow(clippy::wrong_self_convention)]
 impl<'a> Function<'a> {
     #[inline(always)]
     pub fn val(self) -> FunctionValue<'a> {
@@ -48,6 +47,20 @@ impl<'a> Function<'a> {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
             _ => unreachable!("Function was invalid type"),
+        }
+    }
+
+    pub fn as_lisp_fn(self) -> Option<&'a LispFn> {
+        match self.val() {
+            FunctionValue::LispFn(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn as_subr_fn(self) -> Option<&'a SubrFn> {
+        match self.val() {
+            FunctionValue::SubrFn(x) => Some(x),
+            _ => None,
         }
     }
 }

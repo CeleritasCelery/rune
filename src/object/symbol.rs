@@ -140,12 +140,12 @@ mod test {
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
-        let before = cell.val().into_lisp_fn().expect("expected lispfn");
+        let before = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
-        let after = cell.val().into_lisp_fn().expect("expected lispfn");
+        let after = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(after.op_codes.get(0).unwrap(), &7);
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
     }
@@ -170,8 +170,7 @@ mod test {
         let subr = sym
             .get_func()
             .unwrap()
-            .val()
-            .into_subr_fn()
+            .as_subr_fn()
             .expect("expected subrfn");
         assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
     }

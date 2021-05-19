@@ -7,7 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-enum-as-inner = { git = "https://github.com/CeleritasCelery/enum-as-inner.git", branch = "master" }
 fn_macros = { version = "0.1.0", path = "fn_macros" }
 fnv = "1.0.3"
 lazy_static = "1.4.0"

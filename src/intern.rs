@@ -94,7 +94,7 @@ mod test {
         let obj: Function = func.into_obj(arena);
         second.set_func(obj);
         let func_cell = first.get_func().unwrap();
-        let func = func_cell.val().into_lisp_fn().expect("expected lispfn");
+        let func = func_cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(func.op_codes.get(0).unwrap(), &5);
         assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
