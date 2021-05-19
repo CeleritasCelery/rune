@@ -350,7 +350,7 @@ mod test {
 
     fn test_eval(sexp: &str, expect: Object) {
         let arena = Arena::new();
-        let obj = Reader::new(sexp).read_into(&arena).unwrap().unwrap();
+        let obj = Reader::read_into(sexp, &arena).unwrap();
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env).unwrap();
@@ -418,7 +418,7 @@ mod test {
 
     fn test_eval_error(sexp: &str, error: Error) {
         let arena = &Arena::new();
-        let obj = Reader::new(sexp).read_into(arena).unwrap().unwrap();
+        let obj = Reader::read_into(sexp, arena).unwrap();
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env);

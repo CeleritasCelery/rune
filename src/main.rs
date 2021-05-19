@@ -58,12 +58,26 @@ fn main() {
         if buffer == "exit\n" {
             std::process::exit(0);
         }
-        let obj = Reader::new(&buffer).read_into(&arena).unwrap().unwrap();
-        let func: LispFn = Exp::compile(obj).unwrap().into();
-        buffer.clear();
+        let obj = match Reader::read_into(&buffer, &arena) {
+            Ok(obj) => obj,
+            Err(e) => {
+                println!("Error: {:?}", e);
+                buffer.clear();
+                continue;
+            }
+        };
+        let func: LispFn = match Exp::compile(obj) {
+            Ok(obj) => obj.into(),
+            Err(e) => {
+                println!("Error: {:?}", e);
+                buffer.clear();
+                continue;
+            }
+        };
         match Routine::execute(&func, &mut env) {
             Ok(val) => println!("{}", val),
             Err(e) => println!("Error: {:?}", e),
         }
+        buffer.clear();
     }
 }

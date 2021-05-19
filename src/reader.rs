@@ -57,7 +57,7 @@ impl StreamStart {
 }
 
 impl<'a> Stream<'a> {
-    pub fn new(slice: &str) -> Stream {
+    fn new(slice: &str) -> Stream {
         let chars = slice.chars();
         Stream {
             iter: chars.clone(),
@@ -65,19 +65,19 @@ impl<'a> Stream<'a> {
         }
     }
 
-    pub fn back(&mut self) {
+    fn back(&mut self) {
         self.iter = self.prev.clone();
     }
 
-    pub fn get_pos(&self) -> StreamStart {
+    fn get_pos(&self) -> StreamStart {
         StreamStart::new(self.iter.as_str().as_ptr())
     }
 
-    pub fn get_prev_pos(&self) -> StreamStart {
+    fn get_prev_pos(&self) -> StreamStart {
         StreamStart::new(self.prev.as_str().as_ptr())
     }
 
-    pub fn slice(&self, start: StreamStart) -> &str {
+    fn slice(&self, start: StreamStart) -> &str {
         let ptr = start.get();
         let size = self.iter.as_str().as_ptr() as usize - (ptr as usize);
         unsafe {
@@ -86,7 +86,7 @@ impl<'a> Stream<'a> {
         }
     }
 
-    pub fn slice_without_end_delimiter(&self, start: StreamStart) -> &str {
+    fn slice_without_end_delimiter(&self, start: StreamStart) -> &str {
         let ptr = start.get();
         let size = self.prev.as_str().as_ptr() as usize - (ptr as usize);
         unsafe {
@@ -175,13 +175,6 @@ pub struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    pub fn new(slice: &'a str) -> Self {
-        Reader {
-            slice,
-            stream: Stream::new(slice),
-        }
-    }
-
     fn get_error_pos(&self, stream_end: StreamStart) -> usize {
         let end = stream_end.get() as usize;
         end - self.slice.as_ptr() as usize
@@ -198,7 +191,7 @@ impl<'a> Reader<'a> {
             | Error::MissingStringDel(x)
             | Error::UnexpectedChar(_, x) => LispReaderErr::new(message, self.get_error_pos(x)),
             Error::EndOfStream => {
-                panic!("EndOfStream Should not be converted to a LispReaderErr");
+                LispReaderErr::new(message, 0)
             }
         }
     }
@@ -297,7 +290,7 @@ impl<'a, 'obj> Reader<'a> {
         self.stream.find(valid_char)
     }
 
-    pub fn read(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn read(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         match self.read_char().ok_or(Error::EndOfStream)? {
             '"' => self.read_string(arena),
             '(' => self.read_list(arena),
@@ -311,11 +304,14 @@ impl<'a, 'obj> Reader<'a> {
         }
     }
 
-    pub fn read_into(&mut self, arena: &'obj Arena) -> Option<Result<Object<'obj>, LispReaderErr>> {
-        match self.read(arena) {
-            Ok(x) => Some(Ok(x)),
-            Err(Error::EndOfStream) => None,
-            Err(e) => Some(Err(self.convert_error(e))),
+    pub fn read_into(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, LispReaderErr> {
+        let mut reader = Reader {
+            slice,
+            stream: Stream::new(slice),
+        };
+        match reader.read(arena) {
+            Ok(x) => Ok(x),
+            Err(e) => Err(reader.convert_error(e)),
         }
     }
 }
@@ -354,9 +350,8 @@ mod test {
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
             let arena = &Arena::new();
-            let mut reader = Reader::new($compare);
             let obj: Object = $expect.into_obj(arena);
-            assert_eq!(obj, reader.read_into(&arena).unwrap().unwrap())
+            assert_eq!(obj, Reader::read_into($compare, &arena).unwrap())
         };
     }
 
@@ -430,7 +425,7 @@ baz""#
 
     fn assert_error(input: &str, pos: usize, error: Error) {
         let arena = &Arena::new();
-        let result = Reader::new(input).read_into(arena).unwrap().err().unwrap();
+        let result = Reader::read_into(input, arena).err().unwrap();
         assert_eq!(result.pos, pos);
         assert_eq!(result.message, format!("{}", error));
     }
@@ -439,7 +434,7 @@ baz""#
     fn error() {
         use Error::*;
         let arena = &Arena::new();
-        assert!((Reader::new("").read_into(arena).is_none()));
+        assert!((Reader::read_into("", arena).is_err()));
         let null = StreamStart::new(std::ptr::null());
         assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
         assert_error(" \"foo", 1, MissingStringDel(null));
@@ -449,8 +444,7 @@ baz""#
 
     #[test]
     fn comments() {
-        let arena = &Arena::new();
-        assert!(Reader::new(" ; comment ").read_into(arena).is_none());
+        assert_error(" ; comment ", 0, Error::EndOfStream);
         check_reader!(1, "; comment \n  1");
     }
 }
