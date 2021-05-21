@@ -10,6 +10,7 @@ pub enum Error {
     MissingCloseParen(usize),
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
+    ExtraItemInCdr(usize),
     ExtraCloseParen(usize),
     EndOfStream,
 }
@@ -22,6 +23,7 @@ impl fmt::Display for Error {
             Error::ExtraCloseParen(_) => write!(f, "Extra Closing Paren"),
             Error::UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
             Error::EndOfStream => write!(f, "End of Stream"),
+            Error::ExtraItemInCdr(_) => write!(f, "Extra item in cdr"),
         }
     }
 }
@@ -33,6 +35,7 @@ impl Error {
             Error::MissingStringDel(x) => *x,
             Error::UnexpectedChar(_, x) => *x,
             Error::ExtraCloseParen(x) => *x,
+            Error::ExtraItemInCdr(x) => *x,
             Error::EndOfStream => 0,
         }
     }
@@ -178,7 +181,7 @@ impl<'a, 'obj> Reader<'a> {
                 match self.read_char() {
                     None => Err(Error::MissingCloseParen(delim)),
                     Some(')') => Ok(cons!(car, cdr; arena).into_obj(arena)),
-                    Some(c) => Err(Error::UnexpectedChar(c, self.back_by(c))),
+                    Some(c) => Err(Error::ExtraItemInCdr(self.back_by(c))),
                 }
             }
             Some(')') => Ok(cons!(car; arena).into_obj(arena)),
@@ -341,7 +344,7 @@ baz""#
         assert_error("  (1 (2 3) 4", MissingCloseParen(2));
         assert_error("  (1 (2 3 4", MissingCloseParen(5));
         assert_error(" \"foo", MissingStringDel(1));
-        assert_error("(1 2 . 3 4)", UnexpectedChar('4', 9));
+        assert_error("(1 2 . 3 4)", ExtraItemInCdr(9));
         assert_error(")", ExtraCloseParen(0));
     }
 
