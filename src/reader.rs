@@ -338,6 +338,8 @@ baz""#
         let arena = &Arena::new();
         assert!((Reader::read_into("", arena).is_err()));
         assert_error(" (1 2", MissingCloseParen(1));
+        assert_error("  (1 (2 3) 4", MissingCloseParen(2));
+        assert_error("  (1 (2 3 4", MissingCloseParen(5));
         assert_error(" \"foo", MissingStringDel(1));
         assert_error("(1 2 . 3 4)", UnexpectedChar('4', 9));
         assert_error(")", ExtraCloseParen(0));
