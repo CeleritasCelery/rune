@@ -5,17 +5,12 @@ use crate::object::{IntoObject, Object, Symbol};
 use std::fmt;
 use std::str;
 
-pub struct Stream<'a> {
-    prev: str::Chars<'a>,
-    iter: str::Chars<'a>,
-}
-
 #[derive(PartialEq, Debug)]
 pub enum Error {
-    MissingCloseParen(Option<StreamStart>),
-    MissingStringDel(StreamStart),
-    UnexpectedChar(char, StreamStart),
-    ExtraCloseParen(StreamStart),
+    MissingCloseParen(usize),
+    MissingStringDel(usize),
+    UnexpectedChar(char, usize),
+    ExtraCloseParen(usize),
     EndOfStream,
 }
 
@@ -31,76 +26,15 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct LispReaderErr {
-    message: String,
-    pos: usize,
-}
-
-impl LispReaderErr {
-    const fn new(message: String, pos: usize) -> Self {
-        Self { message, pos }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct StreamStart(*const u8);
-
-impl StreamStart {
-    const fn new(ptr: *const u8) -> Self {
-        StreamStart(ptr)
-    }
-
-    const fn get(self) -> *const u8 {
-        self.0
-    }
-}
-
-impl<'a> Stream<'a> {
-    fn new(slice: &str) -> Stream {
-        let chars = slice.chars();
-        Stream {
-            iter: chars.clone(),
-            prev: chars,
+impl Error {
+    const fn position(&self) -> usize {
+        match self {
+            Error::MissingCloseParen(x) => *x,
+            Error::MissingStringDel(x) => *x,
+            Error::UnexpectedChar(_, x) => *x,
+            Error::ExtraCloseParen(x) => *x,
+            Error::EndOfStream => 0,
         }
-    }
-
-    fn back(&mut self) {
-        self.iter = self.prev.clone();
-    }
-
-    fn get_pos(&self) -> StreamStart {
-        StreamStart::new(self.iter.as_str().as_ptr())
-    }
-
-    fn get_prev_pos(&self) -> StreamStart {
-        StreamStart::new(self.prev.as_str().as_ptr())
-    }
-
-    fn slice(&self, start: StreamStart) -> &str {
-        let ptr = start.get();
-        let size = self.iter.as_str().as_ptr() as usize - (ptr as usize);
-        unsafe {
-            let slice = std::slice::from_raw_parts(ptr, size);
-            str::from_utf8_unchecked(slice)
-        }
-    }
-
-    fn slice_without_end_delimiter(&self, start: StreamStart) -> &str {
-        let ptr = start.get();
-        let size = self.prev.as_str().as_ptr() as usize - (ptr as usize);
-        unsafe {
-            let slice = std::slice::from_raw_parts(ptr, size);
-            str::from_utf8_unchecked(slice)
-        }
-    }
-}
-
-impl<'a> Iterator for Stream<'a> {
-    type Item = char;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.prev = self.iter.clone();
-        self.iter.next()
     }
 }
 
@@ -169,98 +103,92 @@ const fn symbol_char(chr: char) -> bool {
     )
 }
 
-pub struct Reader<'a> {
-    slice: &'a str,
-    stream: Stream<'a>,
+fn escaped(escaped: &mut bool, chr: char) -> bool {
+    if *escaped {
+        *escaped = false;
+        true
+    } else if chr == '\\' {
+        *escaped = true;
+        true
+    } else {
+        false
+    }
 }
 
-impl<'a> Reader<'a> {
-    fn get_error_pos(&self, stream_end: StreamStart) -> usize {
-        let end = stream_end.get() as usize;
-        end - self.slice.as_ptr() as usize
-    }
-
-    fn convert_error(&self, err: Error) -> LispReaderErr {
-        let message = format!("{}", err);
-        match err {
-            Error::MissingCloseParen(x) => LispReaderErr::new(
-                message,
-                self.get_error_pos(x.expect("read should determine open paren position")),
-            ),
-            Error::ExtraCloseParen(x)
-            | Error::MissingStringDel(x)
-            | Error::UnexpectedChar(_, x) => LispReaderErr::new(message, self.get_error_pos(x)),
-            Error::EndOfStream => {
-                LispReaderErr::new(message, 0)
-            }
-        }
-    }
+pub struct Reader<'a> {
+    slice: &'a str,
+    pos: usize,
 }
 
 impl<'a, 'obj> Reader<'a> {
-    fn char_pos(&self) -> StreamStart {
-        self.stream.get_prev_pos()
+    fn take_slice(&mut self, beg: usize, len: Option<usize>) -> &str {
+        match len {
+            Some(len) => {
+                self.pos = beg + len;
+                &self.slice[beg..self.pos]
+            }
+            None => {
+                self.pos = self.slice.len();
+                &self.slice[beg..]
+            }
+        }
+    }
+
+    fn back_by(&self, chr: char) -> usize {
+        self.pos - chr.len_utf8()
+    }
+
+    fn forward_by(&self, chr: char) -> usize {
+        self.pos + chr.len_utf8()
     }
 
     fn read_symbol(&mut self, arena: &'obj Arena) -> Object<'obj> {
-        let pos = self.stream.get_pos();
-        while let Some(chr) = self.stream.next() {
-            if chr == '\\' {
-                self.stream.next();
-            } else if !symbol_char(chr) {
-                self.stream.back();
-                break;
-            }
-        }
-        parse_symbol(self.stream.slice(pos), arena)
+        let mut skip = false;
+        let slice = &self.slice[self.pos..];
+        let idx = slice.find(|c| !escaped(&mut skip, c) && !symbol_char(c));
+        parse_symbol(self.take_slice(self.pos, idx), arena)
     }
 
-    fn read_string(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        let pos = self.stream.get_pos();
-        let open_delim_pos = self.char_pos();
-        while let Some(chr) = self.stream.next() {
-            if chr == '\\' {
-                self.stream.next();
-            } else if chr == '"' {
-                let slice = self.stream.slice_without_end_delimiter(pos);
+    fn read_string(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        let slice = &self.slice[self.pos..];
+        let mut skip = false;
+        let idx = slice.find(|c| !escaped(&mut skip, c) && c == '"');
+        match idx {
+            Some(i) => {
+                let slice = self.take_slice(self.pos, Some(i));
                 let string = unescape_string(slice);
-                return Ok(string.into_obj(arena));
+                // skip over end delimiter
+                self.pos = self.forward_by('"');
+                Ok(string.into_obj(arena))
             }
+            None => Err(Error::MissingStringDel(delim)),
         }
-        Err(Error::MissingStringDel(open_delim_pos))
     }
 
-    fn read_cons(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        if self.read_char() == Some(')') {
-            return Ok(Object::nil());
-        } else {
-            self.stream.back();
+    fn read_list(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        match self.read_char() {
+            Some(')') => return Ok(Object::nil()),
+            Some(c) => {self.pos = self.back_by(c);},
+            None => {},
         }
         let car = self.read(arena)?;
         match self.read_char() {
             Some('.') => {
                 let cdr = self.read(arena)?;
                 match self.read_char() {
-                    None => Err(Error::MissingCloseParen(None)),
+                    None => Err(Error::MissingCloseParen(delim)),
                     Some(')') => Ok(cons!(car, cdr; arena).into_obj(arena)),
-                    Some(c) => Err(Error::UnexpectedChar(c, self.char_pos())),
+                    Some(c) => Err(Error::UnexpectedChar(c, self.back_by(c))),
                 }
             }
             Some(')') => Ok(cons!(car; arena).into_obj(arena)),
-            Some(_) => {
-                self.stream.back();
-                let rest = self.read_cons(arena)?;
+            Some(c) => {
+                self.pos = self.back_by(c);
+                // This could overflow with a very long list
+                let rest = self.read_list(delim, arena)?;
                 Ok(cons!(car, rest; arena).into_obj(arena))
             }
-            None => Err(Error::MissingCloseParen(None)),
-        }
-    }
-
-    fn read_list(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        let pos = self.char_pos();
-        match self.read_cons(arena) {
-            Err(Error::MissingCloseParen(None)) => Err(Error::MissingCloseParen(Some(pos))),
-            x => x,
+            None => Err(Error::MissingCloseParen(delim)),
         }
     }
 
@@ -272,7 +200,7 @@ impl<'a, 'obj> Reader<'a> {
 
     fn read_char(&mut self) -> Option<char> {
         let mut in_comment = false;
-        let valid_char = |chr: &char| {
+        let valid_char = |(_, chr): &(usize, char)| {
             if in_comment {
                 if *chr == '\n' {
                     in_comment = false;
@@ -287,65 +215,40 @@ impl<'a, 'obj> Reader<'a> {
                 true
             }
         };
-        self.stream.find(valid_char)
+        let idx = self.slice[self.pos..].char_indices().find(valid_char);
+        idx.map(|(idx, chr)| {
+            self.pos += idx + chr.len_utf8();
+            chr
+        })
     }
 
     fn read(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        match self.read_char().ok_or(Error::EndOfStream)? {
-            '"' => self.read_string(arena),
-            '(' => self.read_list(arena),
+        let chr = self.read_char().ok_or(Error::EndOfStream)?;
+        match chr {
+            '"' => self.read_string(self.back_by(chr), arena),
+            '(' => self.read_list(self.back_by(chr), arena),
             '\'' => self.read_quote(arena),
-            ')' => Err(Error::ExtraCloseParen(self.char_pos())),
-            c if symbol_char(c) => {
-                self.stream.back();
+            ')' => Err(Error::ExtraCloseParen(self.back_by(chr))),
+            chr if symbol_char(chr) => {
+                self.pos = self.back_by(chr);
                 Ok(self.read_symbol(arena))
             }
-            c => Err(Error::UnexpectedChar(c, self.char_pos())),
+            chr => Err(Error::UnexpectedChar(chr, self.back_by(chr))),
         }
     }
 
-    pub fn read_into(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, LispReaderErr> {
+    pub fn read_into(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         let mut reader = Reader {
             slice,
-            stream: Stream::new(slice),
+            pos: 0,
         };
-        match reader.read(arena) {
-            Ok(x) => Ok(x),
-            Err(e) => Err(reader.convert_error(e)),
-        }
+        reader.read(arena)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn stream() {
-        let mut stream = Stream::new("fox");
-        assert_eq!('f', stream.next().unwrap());
-        assert_eq!('o', stream.next().unwrap());
-        assert_eq!('x', stream.next().unwrap());
-        stream.back();
-        stream.back();
-        assert_eq!('x', stream.next().unwrap());
-        assert_eq!(None, stream.next());
-    }
-
-    #[test]
-    fn stream_slice() {
-        let mut stream = Stream::new("fox");
-        let start = stream.get_pos();
-        assert_eq!("", stream.slice(start));
-        stream.next();
-        stream.next();
-        assert_eq!("fo", stream.slice(start));
-        stream.next();
-        assert_eq!("fox", stream.slice(start));
-        assert_eq!("fo", stream.slice_without_end_delimiter(start));
-        let start2 = stream.get_pos();
-        assert_eq!("", stream.slice(start2));
-    }
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
@@ -423,28 +326,26 @@ baz""#
         check_reader!(list!(quote, list!(1, 2, 3; arena); arena), "'(1 2 3)");
     }
 
-    fn assert_error(input: &str, pos: usize, error: Error) {
+    fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
         let result = Reader::read_into(input, arena).err().unwrap();
-        assert_eq!(result.pos, pos);
-        assert_eq!(result.message, format!("{}", error));
+        assert_eq!(result, error);
     }
 
     #[test]
-    fn error() {
+    fn reader_error() {
         use Error::*;
         let arena = &Arena::new();
         assert!((Reader::read_into("", arena).is_err()));
-        let null = StreamStart::new(std::ptr::null());
-        assert_error(" (1 2", 1, MissingCloseParen(Some(null)));
-        assert_error(" \"foo", 1, MissingStringDel(null));
-        assert_error("(1 2 . 3 4)", 9, UnexpectedChar('4', null));
-        assert_error(")", 0, ExtraCloseParen(null));
+        assert_error(" (1 2", MissingCloseParen(1));
+        assert_error(" \"foo", MissingStringDel(1));
+        assert_error("(1 2 . 3 4)", UnexpectedChar('4', 9));
+        assert_error(")", ExtraCloseParen(0));
     }
 
     #[test]
     fn comments() {
-        assert_error(" ; comment ", 0, Error::EndOfStream);
+        assert_error(" ; comment ", Error::EndOfStream);
         check_reader!(1, "; comment \n  1");
     }
 }
