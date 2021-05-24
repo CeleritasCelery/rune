@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::arena::Arena;
 use crate::error::{Error, Result};
 use crate::hashmap::{HashMap, HashMapDefault};
@@ -70,8 +68,6 @@ impl<'a> CallFrame<'a> {
         *self.func.constants.get(i).unwrap()
     }
 }
-
-type Stack = Vec<GcObject>;
 
 trait LispStack {
     fn from_end(&self, i: usize) -> usize;

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::arena::Arena;
 use crate::error::{Error, Result, Type};
 use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
@@ -362,19 +360,6 @@ impl<'obj> Exp {
         self.codes.emit_call(list.len() as u16);
         self.vars.truncate(prev_len);
         Ok(())
-    }
-
-    fn compile_operator(&mut self, obj: Object, op: OpCode) -> Result<()> {
-        let list = into_list(obj)?;
-        match list.len() {
-            2 => {
-                self.compile_form(list[0])?;
-                self.compile_form(list[1])?;
-                self.codes.push_op(op);
-                Ok(())
-            }
-            len => Err(Error::ArgCount(2, len as u16)),
-        }
     }
 
     fn jump_nil_else_pop(&mut self) -> usize {

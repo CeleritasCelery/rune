@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::hashmap::HashMapDefault;
@@ -6,6 +5,7 @@ use crate::object::{Function, InnerSymbol, IntoObject, Symbol};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
+#[allow(dead_code)]
 pub struct SymbolMap {
     map: InnerSymbolMap,
     arena: Arena,
