@@ -58,7 +58,7 @@ fn main() {
         if buffer == "exit\n" {
             std::process::exit(0);
         }
-        let obj = match Reader::read_into(&buffer, &arena) {
+        let obj = match Reader::read(&buffer, &arena) {
             Ok(obj) => obj,
             Err(e) => {
                 println!("Error: {:?}", e);

@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-use crate::arena::Arena;
 use crate::intern::intern;
 use crate::object::{IntoObject, Object, Symbol};
-use std::fmt;
+use crate::{arena::Arena, object::Cons};
 use std::str;
+use std::{fmt, iter::Peekable, str::CharIndices};
 
 #[derive(PartialEq, Debug)]
 pub enum Error {
@@ -11,8 +10,12 @@ pub enum Error {
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
     ExtraItemInCdr(usize),
+    // Emacs does not have this error. If the reader is given '(1 .) it will
+    // translate that to '(1 \.)
+    MissingCdr(usize),
     ExtraCloseParen(usize),
-    EndOfStream,
+    MissingQuotedItem(usize),
+    EmptyStream,
 }
 
 impl fmt::Display for Error {
@@ -22,8 +25,10 @@ impl fmt::Display for Error {
             Error::MissingStringDel(_) => write!(f, "Missing closing string quote"),
             Error::ExtraCloseParen(_) => write!(f, "Extra Closing Paren"),
             Error::UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
-            Error::EndOfStream => write!(f, "End of Stream"),
+            Error::EmptyStream => write!(f, "Empty Stream"),
             Error::ExtraItemInCdr(_) => write!(f, "Extra item in cdr"),
+            Error::MissingCdr(_) => write!(f, "Missing cdr"),
+            Error::MissingQuotedItem(_) => write!(f, "Missing element after quote"),
         }
     }
 }
@@ -31,13 +36,134 @@ impl fmt::Display for Error {
 impl Error {
     const fn position(&self) -> usize {
         match self {
-            Error::MissingCloseParen(x) => *x,
-            Error::MissingStringDel(x) => *x,
-            Error::UnexpectedChar(_, x) => *x,
-            Error::ExtraCloseParen(x) => *x,
-            Error::ExtraItemInCdr(x) => *x,
-            Error::EndOfStream => 0,
+            Error::MissingQuotedItem(x)
+            | Error::MissingCloseParen(x)
+            | Error::MissingStringDel(x)
+            | Error::ExtraCloseParen(x)
+            | Error::ExtraItemInCdr(x)
+            | Error::MissingCdr(x)
+            | Error::UnexpectedChar(_, x) => *x,
+            Error::EmptyStream => 0,
         }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+enum Token<'a> {
+    OpenParen(usize),
+    CloseParen(usize),
+    Quote(usize),
+    Dot(usize),
+    Ident(&'a str),
+    String(&'a str),
+    Error(TokenError),
+}
+
+#[derive(PartialEq, Debug, Copy, Clone)]
+enum TokenError {
+    MissingStringDel(usize),
+    UnexpectedChar(char, usize),
+}
+
+impl From<TokenError> for Error {
+    fn from(e: TokenError) -> Self {
+        match e {
+            TokenError::MissingStringDel(i) => Error::MissingStringDel(i),
+            TokenError::UnexpectedChar(c, i) => Error::UnexpectedChar(c, i),
+        }
+    }
+}
+
+struct Tokenizer<'a> {
+    slice: &'a str,
+    iter: Peekable<CharIndices<'a>>,
+}
+
+impl<'a> Tokenizer<'a> {
+    fn new(slice: &'a str) -> Self {
+        Self {
+            slice,
+            iter: slice.char_indices().peekable(),
+        }
+    }
+
+    fn position(&self, token: Token<'a>) -> usize {
+        match token {
+            Token::OpenParen(x) | Token::CloseParen(x) | Token::Quote(x) | Token::Dot(x) => x,
+            Token::Ident(slice) | Token::String(slice) => {
+                let beg = self.slice.as_ptr() as usize;
+                let end = slice.as_ptr() as usize;
+                end - beg
+            }
+            Token::Error(e) => {
+                let error: Error = e.into();
+                error.position()
+            }
+        }
+    }
+
+    fn skip_till(&mut self, mut func: impl FnMut(char) -> bool) -> usize {
+        while self.iter.next_if(|x| !func(x.1)).is_some() {}
+        match self.iter.peek() {
+            Some((idx, _)) => *idx,
+            None => self.slice.len(),
+        }
+    }
+
+    fn skip_till_char(&mut self) {
+        let mut in_comment = false;
+        let valid_char = |chr: char| {
+            if in_comment {
+                if chr == '\n' {
+                    in_comment = false;
+                }
+                false
+            } else if chr.is_ascii_whitespace() {
+                false
+            } else if chr == ';' {
+                in_comment = true;
+                false
+            } else {
+                true
+            }
+        };
+        self.skip_till(valid_char);
+    }
+
+    fn get_string(&mut self, open_delim_pos: usize) -> Token<'a> {
+        let mut skip = false;
+        let idx_chr = self
+            .iter
+            .find(|(_, chr)| !escaped(&mut skip, *chr) && *chr == '"');
+        match idx_chr {
+            Some((end, '"')) => Token::String(&self.slice[(open_delim_pos + 1)..end]),
+            _ => Token::Error(TokenError::MissingStringDel(open_delim_pos)),
+        }
+    }
+
+    fn get_symbol(&mut self, beg: usize, chr: char) -> Token<'a> {
+        let mut skip = chr == '\\';
+        let end = self.skip_till(|chr| !escaped(&mut skip, chr) && !symbol_char(chr));
+        Token::Ident(&self.slice[beg..end])
+    }
+}
+
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Token<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.skip_till_char();
+        let (idx, chr) = self.iter.next()?;
+        let token = match chr {
+            '(' => Token::OpenParen(idx),
+            '\'' => Token::Quote(idx),
+            ')' => Token::CloseParen(idx),
+            '.' => Token::Dot(idx),
+            '"' => self.get_string(idx),
+            chr if symbol_char(chr) => self.get_symbol(idx, chr),
+            chr => Token::Error(TokenError::UnexpectedChar(chr, idx)),
+        };
+        Some(token)
     }
 }
 
@@ -118,134 +244,87 @@ fn escaped(escaped: &mut bool, chr: char) -> bool {
     }
 }
 
+fn vector_into_list<'obj>(
+    vec: Vec<Object<'obj>>,
+    tail: Option<Object<'obj>>,
+    arena: &'obj Arena,
+) -> Object<'obj> {
+    let mut iter = vec.into_iter().rev();
+    let mut end = match iter.next() {
+        Some(car) => Cons::new(car, tail.into()),
+        None => return Object::nil(),
+    };
+    for obj in iter {
+        end = Cons::new(obj, end.into_obj(arena));
+    }
+    end.into_obj(arena)
+}
+
 pub struct Reader<'a> {
-    slice: &'a str,
-    pos: usize,
+    tokens: Tokenizer<'a>,
 }
 
 impl<'a, 'obj> Reader<'a> {
-    fn take_slice(&mut self, beg: usize, len: Option<usize>) -> &str {
-        match len {
-            Some(len) => {
-                self.pos = beg + len;
-                &self.slice[beg..self.pos]
-            }
-            None => {
-                self.pos = self.slice.len();
-                &self.slice[beg..]
-            }
-        }
+    fn read_symbol(&mut self, symbol: &'a str, arena: &'obj Arena) -> Object<'obj> {
+        parse_symbol(symbol, arena)
     }
 
-    fn back_by(&self, chr: char) -> usize {
-        self.pos - chr.len_utf8()
-    }
-
-    fn forward_by(&self, chr: char) -> usize {
-        self.pos + chr.len_utf8()
-    }
-
-    fn read_symbol(&mut self, arena: &'obj Arena) -> Object<'obj> {
-        let mut skip = false;
-        let slice = &self.slice[self.pos..];
-        let idx = slice.find(|c| !escaped(&mut skip, c) && !symbol_char(c));
-        parse_symbol(self.take_slice(self.pos, idx), arena)
-    }
-
-    fn read_string(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        let slice = &self.slice[self.pos..];
-        let mut skip = false;
-        let idx = slice.find(|c| !escaped(&mut skip, c) && c == '"');
-        match idx {
-            Some(i) => {
-                let slice = self.take_slice(self.pos, Some(i));
-                let string = unescape_string(slice);
-                // skip over end delimiter
-                self.pos = self.forward_by('"');
-                Ok(string.into_obj(arena))
-            }
-            None => Err(Error::MissingStringDel(delim)),
-        }
-    }
-
-    fn read_list(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        match self.read_char() {
-            Some(')') => return Ok(Object::nil()),
-            Some(c) => {self.pos = self.back_by(c);},
-            None => {},
-        }
-        let car = self.read(arena)?;
-        match self.read_char() {
-            Some('.') => {
-                let cdr = self.read(arena)?;
-                match self.read_char() {
-                    None => Err(Error::MissingCloseParen(delim)),
-                    Some(')') => Ok(cons!(car, cdr; arena).into_obj(arena)),
-                    Some(c) => Err(Error::ExtraItemInCdr(self.back_by(c))),
-                }
-            }
-            Some(')') => Ok(cons!(car; arena).into_obj(arena)),
-            Some(c) => {
-                self.pos = self.back_by(c);
-                // This could overflow with a very long list
-                let rest = self.read_list(delim, arena)?;
-                Ok(cons!(car, rest; arena).into_obj(arena))
-            }
+    fn read_cdr(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        match self.tokens.next() {
+            Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
+            Some(sexp) => match self.tokens.next() {
+                Some(Token::CloseParen(_)) => self.read_sexp(sexp, arena),
+                Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
+                None => Err(Error::MissingCloseParen(delim)),
+            },
             None => Err(Error::MissingCloseParen(delim)),
         }
     }
 
-    fn read_quote(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        let obj = self.read(arena)?;
+    fn read_list(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        let mut objects = Vec::new();
+        while let Some(token) = self.tokens.next() {
+            match token {
+                Token::CloseParen(_) => return Ok(vector_into_list(objects, None, arena)),
+                Token::Dot(_) => {
+                    let cdr = self.read_cdr(delim, arena)?;
+                    return Ok(vector_into_list(objects, Some(cdr), arena));
+                }
+                tok => objects.push(self.read_sexp(tok, arena)?),
+            }
+        }
+        Err(Error::MissingCloseParen(delim))
+    }
+
+    fn read_quote(&mut self, pos: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        let obj = match self.tokens.next() {
+            Some(token) => self.read_sexp(token, arena)?,
+            None => return Err(Error::MissingQuotedItem(pos)),
+        };
         let quoted = list!(intern("quote"), obj; arena);
         Ok(quoted.into_obj(arena))
     }
 
-    fn read_char(&mut self) -> Option<char> {
-        let mut in_comment = false;
-        let valid_char = |(_, chr): &(usize, char)| {
-            if in_comment {
-                if *chr == '\n' {
-                    in_comment = false;
-                }
-                false
-            } else if chr.is_ascii_whitespace() {
-                false
-            } else if *chr == ';' {
-                in_comment = true;
-                false
-            } else {
-                true
-            }
-        };
-        let idx = self.slice[self.pos..].char_indices().find(valid_char);
-        idx.map(|(idx, chr)| {
-            self.pos += idx + chr.len_utf8();
-            chr
-        })
-    }
-
-    fn read(&mut self, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
-        let chr = self.read_char().ok_or(Error::EndOfStream)?;
-        match chr {
-            '"' => self.read_string(self.back_by(chr), arena),
-            '(' => self.read_list(self.back_by(chr), arena),
-            '\'' => self.read_quote(arena),
-            ')' => Err(Error::ExtraCloseParen(self.back_by(chr))),
-            chr if symbol_char(chr) => {
-                self.pos = self.back_by(chr);
-                Ok(self.read_symbol(arena))
-            }
-            chr => Err(Error::UnexpectedChar(chr, self.back_by(chr))),
+    fn read_sexp(&mut self, token: Token<'a>, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        match token {
+            Token::OpenParen(i) => self.read_list(i, arena),
+            Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
+            Token::Quote(i) => self.read_quote(i, arena),
+            Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
+            Token::Ident(x) => Ok(self.read_symbol(x, arena)),
+            Token::String(x) => Ok(unescape_string(x).into_obj(arena)),
+            Token::Error(e) => Err(e.into()),
         }
     }
 
-    pub fn read_into(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    pub fn read(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         let mut reader = Reader {
-            slice,
-            pos: 0,
+            tokens: Tokenizer::new(slice),
         };
-        reader.read(arena)
+        match reader.tokens.next() {
+            Some(t) => reader.read_sexp(t, arena),
+            None => Err(Error::EmptyStream),
+        }
     }
 }
 
@@ -253,11 +332,24 @@ impl<'a, 'obj> Reader<'a> {
 mod test {
     use super::*;
 
+    #[test]
+    fn tokens() {
+        let mut iter = Tokenizer::new("1 foo (\"bar\" . 1.3)");
+        assert_eq!(iter.next(), Some(Token::Ident("1")));
+        assert_eq!(iter.next(), Some(Token::Ident("foo")));
+        assert_eq!(iter.next(), Some(Token::OpenParen(6)));
+        assert_eq!(iter.next(), Some(Token::String("bar")));
+        assert_eq!(iter.next(), Some(Token::Dot(13)));
+        assert_eq!(iter.next(), Some(Token::Ident("1.3")));
+        assert_eq!(iter.next(), Some(Token::CloseParen(18)));
+        assert_eq!(iter.next(), None);
+    }
+
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {
             let arena = &Arena::new();
             let obj: Object = $expect.into_obj(arena);
-            assert_eq!(obj, Reader::read_into($compare, &arena).unwrap())
+            assert_eq!(obj, Reader::read($compare, &arena).unwrap())
         };
     }
 
@@ -331,26 +423,28 @@ baz""#
 
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
-        let result = Reader::read_into(input, arena).err().unwrap();
+        let result = Reader::read(input, arena).err().unwrap();
         assert_eq!(result, error);
     }
 
     #[test]
     fn reader_error() {
         use Error::*;
-        let arena = &Arena::new();
-        assert!((Reader::read_into("", arena).is_err()));
+        assert_error("", EmptyStream);
         assert_error(" (1 2", MissingCloseParen(1));
         assert_error("  (1 (2 3) 4", MissingCloseParen(2));
         assert_error("  (1 (2 3 4", MissingCloseParen(5));
         assert_error(" \"foo", MissingStringDel(1));
         assert_error("(1 2 . 3 4)", ExtraItemInCdr(9));
-        assert_error(")", ExtraCloseParen(0));
+        assert_error("(1 2 . )", MissingCdr(7));
+        assert_error("(1 3 )", UnexpectedChar('', 5));
+        assert_error(" '", MissingQuotedItem(1));
+        assert_error(" )", ExtraCloseParen(1));
     }
 
     #[test]
     fn comments() {
-        assert_error(" ; comment ", Error::EndOfStream);
+        assert_error(" ; comment ", Error::EmptyStream);
         check_reader!(1, "; comment \n  1");
     }
 }
