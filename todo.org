@@ -12,9 +12,6 @@ Moving a reference into root should be safe to fix the lifetime
 ** look into mutable strings and soundness
 * Reader
 ** allow reading uncompleted sexp
-** remove iterator implementation
-** remove unsafe code
-Use a point integer to manage position instead of your special struct
 * VM
 ** make functions thread local
 Or at least add an option for it
