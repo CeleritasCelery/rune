@@ -45,6 +45,12 @@ use crate::{
 };
 use std::io::{self, Write};
 
+fn parens_closed(buffer: &str) -> bool {
+    let open = buffer.chars().filter(|&x| x == '(').count();
+    let close = buffer.chars().filter(|&x| x == ')').count();
+    open <= close
+}
+
 fn main() {
     println!("Hello, world!");
     let mut buffer = String::new();
@@ -57,6 +63,9 @@ fn main() {
         stdin.read_line(&mut buffer).unwrap();
         if buffer == "exit\n" {
             std::process::exit(0);
+        }
+        if !parens_closed(&buffer) {
+            continue;
         }
         let obj = match Reader::read(&buffer, &arena) {
             Ok(obj) => obj,
