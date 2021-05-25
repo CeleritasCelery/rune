@@ -16,10 +16,10 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::num::NonZeroI64 as NonZero;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct InnerObject(NonZero);
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Object<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
@@ -313,12 +313,6 @@ impl<'a> fmt::Display for Object<'a> {
                 }
             }
         }
-    }
-}
-
-impl<'obj> fmt::Debug for Object<'obj> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
     }
 }
 
