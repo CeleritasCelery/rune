@@ -19,7 +19,7 @@ use std::num::NonZeroI64 as NonZero;
 #[derive(Copy, Clone, Debug)]
 pub struct InnerObject(NonZero);
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Object<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
@@ -313,6 +313,12 @@ impl<'a> fmt::Display for Object<'a> {
                 }
             }
         }
+    }
+}
+
+impl<'obj> fmt::Debug for Object<'obj> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 
