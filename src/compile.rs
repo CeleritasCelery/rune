@@ -201,7 +201,7 @@ impl From<Exp> for LispFn {
 }
 
 impl<'obj> Exp {
-    fn add_const(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
+    fn const_ref(&mut self, obj: Object<'obj>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
@@ -250,7 +250,7 @@ impl<'obj> Exp {
     fn quote(&mut self, value: Object<'obj>) -> Result<()> {
         let list = into_list(value)?;
         match list.len() {
-            1 => self.add_const(list[0], None),
+            1 => self.const_ref(list[0], None),
             x => Err(Error::ArgCount(1, x as u16)),
         }
     }
@@ -274,7 +274,7 @@ impl<'obj> Exp {
 
     fn implicit_progn(&mut self, forms: &[Object]) -> Result<()> {
         if forms.is_empty() {
-            self.add_const(Object::nil(), None)
+            self.const_ref(Object::nil(), None)
         } else {
             // Use take and skip to ensure that the last form does not discard
             for form in forms.iter().take(1) {
@@ -293,8 +293,8 @@ impl<'obj> Exp {
         let list = into_list(cons.cdr())?;
         let mut iter = list.iter();
         match iter.next() {
-            Some(v) => self.add_const(*v, Some(var))?,
-            None => self.add_const(Object::nil(), Some(var))?,
+            Some(v) => self.const_ref(*v, Some(var))?,
+            None => self.const_ref(Object::nil(), Some(var))?,
         };
         match iter.next() {
             None => Ok(()),
@@ -303,7 +303,7 @@ impl<'obj> Exp {
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
-        self.add_const(Object::nil(), Some(sym))
+        self.const_ref(Object::nil(), Some(sym))
     }
 
     fn let_bind(&mut self, obj: Object) -> Result<()> {
@@ -346,6 +346,7 @@ impl<'obj> Exp {
                 None => {
                     let idx = self.constants.insert(sym.into())?;
                     self.codes.emit_varset(idx);
+                    self.vars.pop();
                 }
             };
         }
@@ -353,7 +354,7 @@ impl<'obj> Exp {
     }
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
-        self.add_const(cons.car(), None)?;
+        self.const_ref(cons.car(), None)?;
         let prev_len = self.vars.len();
         let list = into_list(cons.cdr())?;
         for form in &list {
@@ -470,6 +471,7 @@ impl<'obj> Exp {
             None => {
                 let idx = self.constants.insert(sym.into())?;
                 self.codes.emit_varref(idx);
+                self.vars.push(None);
                 Ok(())
             }
         }
@@ -479,7 +481,7 @@ impl<'obj> Exp {
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
-            _ => self.add_const(obj, None),
+            _ => self.const_ref(obj, None),
         }
     }
 
@@ -562,6 +564,11 @@ mod test {
             "(progn (setq foo 2) foo)",
             [Constant0, Duplicate, VarSet1, Discard, VarRef1, Ret],
             [2, intern("foo")]
+        );
+        check_compiler!(
+            "(let ((bar 4)) (+ foo bar))",
+            [Constant0, Constant1, VarRef2, StackRef2, Call2, Ret],
+            [4, intern("+"), intern("foo")]
         );
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }
