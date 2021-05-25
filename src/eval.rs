@@ -330,7 +330,7 @@ impl<'a> Routine<'a> {
                         rout.frame = rout.call_frames.pop().unwrap();
                     }
                 }
-                x => return Err(Error::UnknownOpcode(x as u8)),
+                x => panic!("unknown opcode {:?}", x),
             }
         }
     }

@@ -319,9 +319,16 @@ impl<'obj> Exp {
 
     fn setq(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
-        let last = (list.len() / 2) - 1;
         let pairs = list.chunks_exact(2);
-        let is_even = pairs.remainder().is_empty();
+        let len = list.len() as u16;
+        if len < 2 {
+            return Err(Error::ArgCount(2, len));
+        }
+        if len % 2 != 0 {
+            // We have an extra element in the setq that does not have a value
+            return Err(Error::ArgCount(len + 1, len));
+        }
+        let last = (list.len() / 2) - 1;
         for (idx, pair) in pairs.enumerate() {
             let sym: Symbol = pair[0].try_into()?;
             let val = pair[1];
@@ -342,12 +349,7 @@ impl<'obj> Exp {
                 }
             };
         }
-        if is_even {
-            Ok(())
-        } else {
-            let len = list.len() as u16;
-            Err(Error::ArgCount(len - 1, len))
-        }
+        Ok(())
     }
 
     fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {

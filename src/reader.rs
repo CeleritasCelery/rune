@@ -33,6 +33,8 @@ impl fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 impl Error {
     const fn position(&self) -> usize {
         match self {

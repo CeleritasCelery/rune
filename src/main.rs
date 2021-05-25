@@ -61,7 +61,7 @@ fn main() {
         let obj = match Reader::read(&buffer, &arena) {
             Ok(obj) => obj,
             Err(e) => {
-                println!("Error: {:?}", e);
+                println!("Error: {}", e);
                 buffer.clear();
                 continue;
             }
@@ -69,14 +69,14 @@ fn main() {
         let func: LispFn = match Exp::compile(obj) {
             Ok(obj) => obj.into(),
             Err(e) => {
-                println!("Error: {:?}", e);
+                println!("Error: {}", e);
                 buffer.clear();
                 continue;
             }
         };
         match Routine::execute(&func, &mut env) {
             Ok(val) => println!("{}", val),
-            Err(e) => println!("Error: {:?}", e),
+            Err(e) => println!("Error: {}", e),
         }
         buffer.clear();
     }
