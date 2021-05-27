@@ -1,6 +1,5 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::hashmap::HashMapDefault;
 use crate::object::{Function, InnerSymbol, IntoObject, Symbol};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -18,7 +17,7 @@ struct InnerSymbolMap {
 impl InnerSymbolMap {
     fn with_capacity(cap: usize) -> Self {
         Self {
-            map: HashMap::with_capacity(cap),
+            map: HashMap::with_capacity_and_hasher(cap, Default::default()),
         }
     }
 

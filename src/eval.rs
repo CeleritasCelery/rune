@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::error::{Error, Result};
-use crate::hashmap::{HashMap, HashMapDefault};
+use crate::hashmap::HashMap;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
@@ -108,7 +108,7 @@ pub struct Environment {
 impl Environment {
     pub fn new() -> Self {
         Self {
-            vars: HashMap::create(),
+            vars: HashMap::default(),
             arena: Arena::new(),
         }
     }
