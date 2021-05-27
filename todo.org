@@ -1,5 +1,6 @@
 #+title: Next steps for Remac
 * Don't leak memory
+This is a pre-req for adding GC. Basically make sure that we don't loose track of any memory, if we don't collect it right now.
 * change error type to box dyn
 This will reduce coupling in the system by allowing different modules to define their own errors
 
@@ -10,8 +11,6 @@ This type can be returned by ~into_object~ and then used for storage in function
 ** create a rooted generic object to register things as roots
 Moving a reference into root should be safe to fix the lifetime
 ** look into mutable strings and soundness
-* Reader
-** allow reading uncompleted sexp
 * VM
 ** make functions thread local
 Or at least add an option for it
