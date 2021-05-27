@@ -22,16 +22,16 @@ impl InnerSymbolMap {
     }
 
     fn intern(&mut self, name: &str) -> Symbol {
-        // SAFETY: This is my work around for there being no Entry API that
-        // takes a reference. Instead we have an inner function that returns a
-        // pointer and we cast that to a static reference. We can guarantee that
-        // the reference is static because we have no methods to remove items
-        // from SymbolMap and SymbolMap has a private constructor, so the only
-        // one that exists is the one we create in this module, which is static.
-        // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
+        // SAFETY: We can guarantee that the reference is static because we have
+        // no methods to remove items from SymbolMap and SymbolMap has a private
+        // constructor, so the only one that exists is the one we create in this
+        // module, which is static.
         unsafe { Symbol::from_raw(self.get_symbol(name)) }
     }
 
+    // This is my work around for there being no Entry API that takes a
+    // reference.
+    // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
     fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {
         match self.map.get(name) {
             Some(x) => x.as_ref(),
