@@ -44,6 +44,17 @@ impl<'obj> TryFrom<Object<'obj>> for bool {
     }
 }
 
+impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
+    type Error = Error;
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::Cons(cons) => Ok(List::Cons(cons)),
+            Value::Nil => Ok(List::Nil),
+            x => Err(Error::Type(Type::List, x.get_type())),
+        }
+    }
+}
+
 pub fn try_from_slice<'obj, T>(slice: &'obj [Object<'obj>]) -> Result<&'obj [T], Error>
 where
     T: TryFrom<Object<'obj>, Error = Error> + TagObject<'obj>,

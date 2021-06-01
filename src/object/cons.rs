@@ -77,13 +77,19 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
 }
 
 #[lisp_fn]
-fn car<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
-    list.car()
+fn car(list: List) -> Object {
+    match list {
+        List::Cons(cons) => cons.car(),
+        List::Nil => Object::nil(),
+    }
 }
 
 #[lisp_fn]
-fn cdr<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
-    list.cdr()
+fn cdr(list: List) -> Object {
+    match list {
+        List::Cons(cons) => cons.cdr(),
+        List::Nil => Object::nil(),
+    }
 }
 
 #[lisp_fn]

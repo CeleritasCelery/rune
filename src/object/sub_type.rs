@@ -132,6 +132,11 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for NumberValue {
     }
 }
 
+pub enum List<'o> {
+    Nil,
+    Cons(&'o Cons<'o>),
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
