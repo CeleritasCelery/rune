@@ -5,8 +5,6 @@ pub struct Function<'a> {
     marker: PhantomData<&'a ()>,
 }
 
-impl<'obj> TagObject<'obj> for Function<'obj> {}
-
 impl<'obj> From<Function<'obj>> for Object<'obj> {
     fn from(x: Function<'obj>) -> Self {
         x.data.into()
@@ -70,8 +68,6 @@ pub struct Number<'a> {
     data: InnerObject,
     marker: PhantomData<&'a ()>,
 }
-
-impl<'obj> TagObject<'obj> for Number<'obj> {}
 
 impl<'obj> From<InnerObject> for Number<'obj> {
     fn from(data: InnerObject) -> Self {
@@ -144,11 +140,9 @@ mod test {
 
     #[test]
     fn sub_type_size() {
-        assert_eq!(8, size_of::<Function>());
-        assert_eq!(8, size_of::<Option<Function>>());
-        assert_eq!(16, size_of::<FunctionValue>());
-        assert_eq!(8, size_of::<Number>());
-        assert_eq!(8, size_of::<Option<Number>>());
-        assert_eq!(16, size_of::<NumberValue>());
+        assert_eq!(size_of::<Object>(), size_of::<Function>());
+        assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Function>>());
+        assert_eq!(size_of::<Object>(), size_of::<Number>());
+        assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Number>>());
     }
 }

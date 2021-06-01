@@ -57,7 +57,7 @@ impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
 
 pub fn try_from_slice<'obj, T>(slice: &'obj [Object<'obj>]) -> Result<&'obj [T], Error>
 where
-    T: TryFrom<Object<'obj>, Error = Error> + TagObject<'obj>,
+    T: TryFrom<Object<'obj>, Error = Error> + 'obj,
 {
     debug_assert_eq!(size_of::<Object>(), size_of::<T>());
     for x in slice.iter() {

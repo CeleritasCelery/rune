@@ -83,10 +83,6 @@ impl<'obj, 'old: 'obj> IntoObject<'obj, Object<'obj>> for Object<'old> {
     }
 }
 
-pub trait TagObject<'obj> {}
-
-impl<'obj> TagObject<'obj> for Object<'obj> {}
-
 impl<'old, 'new> Object<'old> {
     pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self.val() {
