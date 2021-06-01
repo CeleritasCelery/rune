@@ -67,7 +67,12 @@ macro_rules! create_symbolmap {
 lazy_static! {
     pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
-        create_symbolmap!(arith::defsubr(), eval::defsubr(), forms::defsubr(),)
+        create_symbolmap!(
+            arith::defsubr(),
+            eval::defsubr(),
+            forms::defsubr(),
+            object::cons::defsubr()
+        )
     });
 }
 

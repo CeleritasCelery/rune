@@ -1,6 +1,7 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
 use crate::object::*;
+use fn_macros::lisp_fn;
 use std::cell::Cell;
 use std::convert::TryFrom;
 use std::fmt;
@@ -74,6 +75,35 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
         }
     }
 }
+
+#[lisp_fn]
+fn car<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
+    list.car()
+}
+
+#[lisp_fn]
+fn cdr<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
+    list.cdr()
+}
+
+#[lisp_fn]
+fn setcar<'obj>(cell: &'obj Cons<'obj>, newcar: Object<'obj>) -> Object<'obj> {
+    cell.set_car(newcar);
+    newcar
+}
+
+#[lisp_fn]
+fn setcdr<'obj>(cell: &'obj Cons<'obj>, newcdr: Object<'obj>) -> Object<'obj> {
+    cell.set_cdr(newcdr);
+    newcdr
+}
+
+#[lisp_fn]
+const fn cons<'obj>(car: Object<'obj>, cdr: Object<'obj>) -> Cons<'obj> {
+    Cons::new(car, cdr)
+}
+
+defsubr!(car, cdr, setcar, setcdr, cons);
 
 #[macro_export]
 macro_rules! cons {
