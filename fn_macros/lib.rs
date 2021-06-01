@@ -118,11 +118,8 @@ fn is_arena(ty: &syn::Type) -> bool {
 
 fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
     match ty {
-        syn::Type::Reference(refer) => {
-            let elem = get_call(idx, refer.elem.as_ref());
-            quote! {&#elem}
-        }
-        syn::Type::Slice(_) => quote! {args[#idx..]},
+        syn::Type::Reference(refer) => get_call(idx, refer.elem.as_ref()),
+        syn::Type::Slice(_) => quote! {&args[#idx..]},
         _ => quote! {args[#idx]},
     }
 }
@@ -204,8 +201,6 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
         syn::Item::Fn(syn::ItemFn { ref sig, .. }) => {
             if sig.unsafety.is_some() {
                 Err(Error::new_spanned(sig, "lisp functions cannot be `unsafe`"))
-            } else if sig.constness.is_some() {
-                Err(Error::new_spanned(sig, "lisp functions cannot be `const`"))
             } else {
                 let (args, output) = parse_signature(sig)?;
                 Ok(Function {
@@ -290,13 +285,8 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            pub fn add<'obj>(vars: &[Number], arena: &'obj Arena) -> Number<'obj> {
-                use std::ops::Add;
-                vars.iter()
-                    .fold(0.into(), |acc, x| {
-                        NumberFold::acc(acc, x, Add::add, Add::add)
-                    })
-                    .into_number(arena)
+            fn car<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
+                list.car()
             }
         };
         let function: Function = syn::parse2(stream).unwrap();

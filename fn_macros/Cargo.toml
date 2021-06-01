@@ -1,7 +1,7 @@
 [package]
 name = "fn_macros"
 version = "0.1.0"
-description = "Procedural macro used to generate definitions for lisp native functions."
+description = "Procedural macro used to generate definitions for lisp functions."
 edition = "2018"
 
 [lib]
