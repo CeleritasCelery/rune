@@ -290,9 +290,9 @@ impl PartialEq for InnerObject {
     }
 }
 
-impl<'a> fmt::Display for Object<'a> {
+impl<'a> fmt::Display for Value<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.val() {
+        match self {
             Value::Int(x) => write!(f, "{}", x),
             Value::Cons(x) => write!(f, "{}", x),
             Value::String(x) => write!(f, "\"{}\"", x),
@@ -309,6 +309,12 @@ impl<'a> fmt::Display for Object<'a> {
                 }
             }
         }
+    }
+}
+
+impl<'a> fmt::Display for Object<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.val(), f)
     }
 }
 

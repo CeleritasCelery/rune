@@ -4,7 +4,7 @@ use crate::object::*;
 use fn_macros::lisp_fn;
 use std::cell::Cell;
 use std::convert::TryFrom;
-use std::fmt;
+use std::fmt::{self, Write};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Cons<'a> {
@@ -45,7 +45,19 @@ impl<'a> Cons<'a> {
 
 impl<'obj> fmt::Display for Cons<'obj> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.car(), self.cdr())
+        f.write_char('(')?;
+        print_rest(self, f)
+    }
+}
+
+fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
+    match cons.cdr().val() {
+        Value::Cons(cdr) => {
+            write!(f, "{} ", cons.car())?;
+            print_rest(cdr, f)
+        } 
+        Value::Nil => write!(f, "{})", cons.car()),
+        cdr => write!(f, "{} . {})", cons.car(), cdr),
     }
 }
 
