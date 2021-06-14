@@ -1,4 +1,4 @@
-use crate::object::{GcObject, Object};
+use crate::object::{GcObject, IntoObject, Object};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -19,6 +19,13 @@ impl<'obj> Arena {
 
     pub fn register(&self, obj: Object<'obj>) {
         self.objects.borrow_mut().push(unsafe { obj.into_gc() });
+    }
+
+    pub fn add<Input, Output>(&'obj self, item: Input) -> Output
+    where
+        Input: IntoObject<'obj, Output>,
+    {
+        item.into_obj(self)
     }
 }
 

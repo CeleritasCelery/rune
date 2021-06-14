@@ -64,7 +64,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
             vars: &mut crate::hashmap::HashMap<crate::object::Symbol,
                                                crate::object::Object<'obj>>,
             arena: &'obj crate::arena::Arena,
-        ) -> crate::error::Result<crate::object::Object<'obj>> {
+        ) -> anyhow::Result<crate::object::Object<'obj>> {
             #subr_call
         }
 

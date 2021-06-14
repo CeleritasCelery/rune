@@ -1,9 +1,10 @@
 use crate::arena::Arena;
-use crate::error::Error;
 use crate::hashmap::HashMap;
 use crate::object::*;
 use crate::opcode::CodeVec;
 use std::fmt;
+
+use anyhow::Result;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FnArgs {
@@ -55,7 +56,7 @@ pub type BuiltInFn = for<'obj> fn(
     &[Object<'obj>],
     &mut HashMap<Symbol, Object<'obj>>,
     &'obj Arena,
-) -> Result<Object<'obj>, Error>;
+) -> Result<Object<'obj>>;
 
 #[derive(Copy, Clone)]
 pub struct SubrFn {

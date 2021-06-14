@@ -1,10 +1,30 @@
 use crate::arena::Arena;
-use crate::error::{Error, Result};
 use crate::hashmap::HashMap;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::convert::TryInto;
+
+use anyhow::{bail, Result};
+
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    ArgCount(u16, u16),
+    VoidFunction(Symbol),
+    VoidVariable(Symbol),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::ArgCount(exp, act) => write!(f, "Expected {} arg(s), found {}", exp, act),
+            Error::VoidFunction(func) => write!(f, "Void function: {}", func.get_name()),
+            Error::VoidVariable(var) => write!(f, "Void variable: {}", var.get_name()),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[derive(Clone)]
 struct CallFrame<'a> {
@@ -135,11 +155,11 @@ defsubr!(set);
 impl<'a> Routine<'a> {
     fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
         if count < args.required {
-            return Err(Error::ArgCount(args.required, count));
+            bail!(Error::ArgCount(args.required, count));
         }
         let total_args = args.required + args.optional;
         if !args.rest && (count > total_args) {
-            return Err(Error::ArgCount(total_args, count));
+            bail!(Error::ArgCount(total_args, count));
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
@@ -154,7 +174,7 @@ impl<'a> Routine<'a> {
         if let Value::Symbol(sym) = symbol.val() {
             let value = match env.vars.get(&sym) {
                 Some(x) => x,
-                None => return Err(Error::VoidVariable),
+                None => bail!(Error::VoidVariable(sym)),
             };
             self.stack.push(*value);
             Ok(())
@@ -176,7 +196,7 @@ impl<'a> Routine<'a> {
             Value::Symbol(x) => x,
             x => panic!("Expected symbol for call found {:?}", x),
         };
-        match sym.get_func().ok_or(Error::VoidFunction)?.val() {
+        match sym.get_func().ok_or(Error::VoidFunction(sym))?.val() {
             FunctionValue::LispFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
                 self.call_frames.push(self.frame.clone());
@@ -418,12 +438,12 @@ mod test {
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env);
-        assert_eq!(val.err().unwrap(), error);
+        assert_eq!(val.err().unwrap().downcast::<Error>().unwrap(), (error));
     }
 
     #[test]
     fn errors() {
-        test_eval_error("(bad-function-name)", Error::VoidFunction);
+        test_eval_error("(bad-function-name)", Error::VoidFunction(crate::intern::intern("bad-function-name")));
         test_eval_error("(1+ 1 2)", Error::ArgCount(1, 2));
         test_eval_error("(/)", Error::ArgCount(1, 0));
     }

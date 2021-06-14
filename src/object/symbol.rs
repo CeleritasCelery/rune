@@ -121,7 +121,6 @@ impl std::hash::Hash for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::error::Error;
     use crate::hashmap::HashMap;
     use crate::object::{LispFn, SubrFn};
     use std::mem::size_of;
@@ -155,7 +154,7 @@ mod test {
         vars: &[Object<'obj>],
         _map: &mut HashMap<Symbol, Object<'obj>>,
         _arena: &'obj Arena,
-    ) -> Result<Object<'obj>, Error> {
+    ) -> anyhow::Result<Object<'obj>> {
         Ok(vars[0])
     }
 
