@@ -55,7 +55,7 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
         Value::Cons(cdr) => {
             write!(f, "{} ", cons.car())?;
             print_rest(cdr, f)
-        } 
+        }
         Value::Nil => write!(f, "{})", cons.car()),
         cdr => write!(f, "{} . {})", cons.car(), cdr),
     }

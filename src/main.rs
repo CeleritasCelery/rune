@@ -33,6 +33,7 @@ mod eval;
 mod forms;
 mod hashmap;
 mod intern;
+mod lread;
 mod opcode;
 mod reader;
 
@@ -67,7 +68,7 @@ fn main() {
         if !parens_closed(&buffer) {
             continue;
         }
-        let obj = match Reader::read(&buffer, &arena) {
+        let (obj, _) = match Reader::read(&buffer, &arena) {
             Ok(obj) => obj,
             Err(e) => {
                 println!("Error: {}", e);

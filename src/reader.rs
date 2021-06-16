@@ -104,6 +104,13 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn cur_pos(&mut self) -> usize {
+        match self.iter.peek() {
+            Some((idx, _)) => *idx,
+            None => self.slice.len(),
+        }
+    }
+
     fn skip_till(&mut self, mut func: impl FnMut(char) -> bool) -> usize {
         while self.iter.next_if(|x| !func(x.1)).is_some() {}
         match self.iter.peek() {
@@ -319,12 +326,14 @@ impl<'a, 'obj> Reader<'a> {
         }
     }
 
-    pub fn read(slice: &'a str, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    pub fn read(slice: &'a str, arena: &'obj Arena) -> Result<(Object<'obj>, usize), Error> {
         let mut reader = Reader {
             tokens: Tokenizer::new(slice),
         };
         match reader.tokens.next() {
-            Some(t) => reader.read_sexp(t, arena),
+            Some(t) => reader
+                .read_sexp(t, arena)
+                .map(|x| (x, reader.tokens.cur_pos())),
             None => Err(Error::EmptyStream),
         }
     }
@@ -351,7 +360,7 @@ mod test {
         ($expect:expr, $compare:expr) => {
             let arena = &Arena::new();
             let obj: Object = $expect.into_obj(arena);
-            assert_eq!(obj, Reader::read($compare, &arena).unwrap())
+            assert_eq!(obj, Reader::read($compare, &arena).unwrap().0)
         };
     }
 

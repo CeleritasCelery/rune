@@ -120,6 +120,7 @@ impl LispStack for Vec<GcObject> {
     }
 }
 
+#[derive(Debug)]
 pub struct Environment {
     vars: HashMap<Symbol, GcObject>,
     arena: Arena,
@@ -144,9 +145,11 @@ pub struct Routine<'a> {
 pub fn set<'obj>(
     place: Symbol,
     newlet: Object<'obj>,
+    arena: &Arena,
     vars: &mut HashMap<Symbol, Object<'obj>>,
 ) -> Object<'obj> {
-    vars.insert(place, unsafe { newlet.into_gc() });
+    let new = newlet.clone_in(arena);
+    vars.insert(place, unsafe { new.into_gc() });
     newlet
 }
 
@@ -186,7 +189,7 @@ impl<'a> Routine<'a> {
     fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
         let symbol: Symbol = self.frame.get_const(idx).try_into()?;
         let value = self.stack.pop().unwrap();
-        set(symbol, value, &mut env.vars);
+        set(symbol, value, &env.arena, &mut env.vars);
         Ok(())
     }
 
@@ -366,7 +369,7 @@ mod test {
 
     fn test_eval(sexp: &str, expect: Object) {
         let arena = Arena::new();
-        let obj = Reader::read(sexp, &arena).unwrap();
+        let obj = Reader::read(sexp, &arena).unwrap().0;
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env).unwrap();
@@ -434,7 +437,7 @@ mod test {
 
     fn test_eval_error(sexp: &str, error: Error) {
         let arena = &Arena::new();
-        let obj = Reader::read(sexp, arena).unwrap();
+        let obj = Reader::read(sexp, arena).unwrap().0;
         let func = Exp::compile(obj).unwrap().into();
         let mut env = Environment::new();
         let val = Routine::execute(&func, &mut env);
@@ -443,7 +446,10 @@ mod test {
 
     #[test]
     fn errors() {
-        test_eval_error("(bad-function-name)", Error::VoidFunction(crate::intern::intern("bad-function-name")));
+        test_eval_error(
+            "(bad-function-name)",
+            Error::VoidFunction(crate::intern::intern("bad-function-name")),
+        );
         test_eval_error("(1+ 1 2)", Error::ArgCount(1, 2));
         test_eval_error("(/)", Error::ArgCount(1, 0));
     }

@@ -513,14 +513,14 @@ mod test {
 
     fn check_error(compare: &str, expect: Error) {
         let arena = &Arena::new();
-        let obj = Reader::read(compare, arena).unwrap();
+        let obj = Reader::read(compare, arena).unwrap().0;
         assert_eq!(Exp::compile(obj).err().unwrap(), expect);
     }
 
     macro_rules! check_compiler {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
             let arena = &Arena::new();
-            let obj = Reader::read($compare, arena).unwrap();
+            let obj = Reader::read($compare, arena).unwrap().0;
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
                 constants: ConstVec::from(vec_into_object![$($const),+; arena]),
