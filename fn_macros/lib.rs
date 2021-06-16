@@ -40,7 +40,8 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     } else {
         quote! {}
     };
-    let subr_call = quote! {Ok(crate::object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
+    let subr_call =
+        quote! {Ok(crate::object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
 
     quote! {
         #[doc(hidden)]
@@ -61,8 +62,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub fn #func_name<'obj>(
             args: &[crate::object::Object<'obj>],
-            vars: &mut crate::hashmap::HashMap<crate::object::Symbol,
-                                               crate::object::Object<'obj>>,
+            env: &mut crate::eval::Environment,
             arena: &'obj crate::arena::Arena,
         ) -> anyhow::Result<crate::object::Object<'obj>> {
             #subr_call
@@ -76,8 +76,8 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
     args.iter()
         .enumerate()
         .map(|(idx, ty)| {
-            if is_var_hashmap(ty) {
-                quote! {vars}
+            if is_env(ty) {
+                quote! {env}
             } else if is_arena(ty) {
                 quote! {arena}
             } else {
@@ -96,20 +96,20 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
         .collect()
 }
 
-fn is_var_hashmap(ty: &syn::Type) -> bool {
+fn is_arena(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => match refer.elem.as_ref() {
-            syn::Type::Path(path) => get_path_ident_name(path) == "HashMap",
+            syn::Type::Path(path) => get_path_ident_name(path) == "Arena",
             _ => false,
         },
         _ => false,
     }
 }
 
-fn is_arena(ty: &syn::Type) -> bool {
+fn is_env(ty: &syn::Type) -> bool {
     match ty {
         syn::Type::Reference(refer) => match refer.elem.as_ref() {
-            syn::Type::Path(path) => get_path_ident_name(path) == "Arena",
+            syn::Type::Path(path) => get_path_ident_name(path) == "Environment",
             _ => false,
         },
         _ => false,
@@ -141,7 +141,7 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
 
     let args: Vec<&syn::Type> = args
         .iter()
-        .filter(|x| !(is_var_hashmap(x) || is_arena(x)))
+        .filter(|x| !(is_env(x) || is_arena(x)))
         .collect();
 
     let rest = match args.last() {

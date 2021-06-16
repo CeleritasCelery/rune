@@ -57,7 +57,7 @@ fn main() {
     let mut buffer = String::new();
     let stdin = io::stdin();
     let arena = Arena::new();
-    let mut env = Environment::new();
+    let mut env = Environment::default();
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -84,7 +84,7 @@ fn main() {
                 continue;
             }
         };
-        match Routine::execute(&func, &mut env) {
+        match Routine::execute(&func, &mut env, &arena) {
             Ok(val) => println!("{}", val),
             Err(e) => println!("Error: {}", e),
         }

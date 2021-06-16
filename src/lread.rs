@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 
 use std::fs;
 
-fn load_from_string(contents: &str, arena: &Arena, env: &mut Environment) -> Result<bool> {
+fn read_from_string(contents: &str, arena: &Arena, env: &mut Environment) -> Result<bool> {
     let mut pos = 0;
     loop {
         dbg!(pos);
@@ -20,7 +20,7 @@ fn load_from_string(contents: &str, arena: &Arena, env: &mut Environment) -> Res
         };
         dbg!(new_pos);
         let func = Exp::compile(obj)?.into();
-        Routine::execute(&func, env)?;
+        Routine::execute(&func, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
@@ -28,7 +28,7 @@ fn load_from_string(contents: &str, arena: &Arena, env: &mut Environment) -> Res
 
 fn load(file: &str, arena: &Arena, env: &mut Environment) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
-    load_from_string(&file_contents, arena, env)
+    read_from_string(&file_contents, arena, env)
 }
 
 #[cfg(test)]
@@ -39,9 +39,14 @@ mod test {
     #[test]
     fn test_load() {
         let arena = &Arena::new();
-        let env = &mut Environment::new();
-        load_from_string("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
+        let env = &mut Environment::default();
+        read_from_string("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
         println!("{:?}", env);
         println!("{:?}", arena);
+
+        let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
+        let func = Exp::compile(obj).unwrap().into();
+        let val = Routine::execute(&func, env, arena).unwrap();
+        assert_eq!(val, arena.add(4.5));
     }
 }

@@ -121,7 +121,7 @@ impl std::hash::Hash for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::hashmap::HashMap;
+    use crate::eval::Environment;
     use crate::object::{LispFn, SubrFn};
     use std::mem::size_of;
 
@@ -152,7 +152,7 @@ mod test {
     #[allow(clippy::unnecessary_wraps)]
     fn dummy<'obj>(
         vars: &[Object<'obj>],
-        _map: &mut HashMap<Symbol, Object<'obj>>,
+        _map: &mut Environment,
         _arena: &'obj Arena,
     ) -> anyhow::Result<Object<'obj>> {
         Ok(vars[0])

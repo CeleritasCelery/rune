@@ -1,5 +1,4 @@
 use crate::arena::Arena;
-use crate::hashmap::HashMap;
 use crate::object::*;
 use crate::opcode::CodeVec;
 use std::fmt;
@@ -54,7 +53,7 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for LispFn {
 
 pub type BuiltInFn = for<'obj> fn(
     &[Object<'obj>],
-    &mut HashMap<Symbol, Object<'obj>>,
+    &mut crate::eval::Environment,
     &'obj Arena,
 ) -> Result<Object<'obj>>;
 

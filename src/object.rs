@@ -106,11 +106,11 @@ impl<'obj> Object<'obj> {
     }
 
     pub fn nil() -> Self {
-        InnerObject::from_tag(Tag::Nil).into()
+        InnerObject::nil().into()
     }
 
     pub fn t() -> Self {
-        InnerObject::from_tag(Tag::True).into()
+        InnerObject::t().into()
     }
 
     pub const unsafe fn into_gc(self) -> Object<'static> {
@@ -122,6 +122,10 @@ impl<'obj> Object<'obj> {
 
     pub unsafe fn drop(self) {
         self.data.drop()
+    }
+
+    pub const unsafe fn inner(self) -> InnerObject {
+        self.data
     }
 
     pub fn as_int(self) -> Option<i64> {
@@ -200,6 +204,14 @@ impl InnerObject {
         Self(NonZero::new(bits).expect("Object bits should be non-zero"))
     }
 
+    pub fn nil() -> Self {
+        Self::from_tag(Tag::Nil)
+    }
+
+    pub fn t() -> Self {
+        Self::from_tag(Tag::True)
+    }
+
     const fn get(self) -> i64 {
         self.0.get()
     }
@@ -238,7 +250,7 @@ impl InnerObject {
     }
 
     #[inline(always)]
-    fn val<'a>(self) -> Value<'a> {
+    pub fn val<'a>(self) -> Value<'a> {
         unsafe {
             match self.tag() {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),

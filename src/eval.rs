@@ -1,5 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
+use crate::object::InnerObject;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
@@ -84,59 +85,55 @@ impl<'a> CallFrame<'a> {
         }
     }
 
-    fn get_const(&self, i: usize) -> GcObject {
-        *self.func.constants.get(i).unwrap()
+    fn get_const(&self, i: usize) -> InnerObject {
+        unsafe { self.func.constants.get(i).unwrap().inner() }
     }
+}
+
+pub fn from_slice<'obj>(slice: &'obj [InnerObject]) -> &'obj [Object<'obj>] {
+    let ptr = slice.as_ptr() as *const Object<'obj>;
+    let len = slice.len();
+    unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
 trait LispStack {
     fn from_end(&self, i: usize) -> usize;
     fn push_ref(&mut self, i: usize);
     fn set_ref(&mut self, i: usize);
-    fn ref_at(&self, i: usize) -> &GcObject;
-    fn take_slice(&self, i: usize) -> &[GcObject];
+    fn ref_at(&self, i: usize) -> InnerObject;
+    fn take_slice(&self, i: usize) -> &[InnerObject];
 }
 
-impl LispStack for Vec<GcObject> {
+impl LispStack for Vec<InnerObject> {
     fn from_end(&self, i: usize) -> usize {
         debug_assert!(i < self.len());
         self.len() - (i + 1)
     }
 
     fn push_ref(&mut self, i: usize) {
-        self.push(*self.ref_at(i));
+        self.push(self.ref_at(i));
     }
 
     fn set_ref(&mut self, i: usize) {
         self.swap_remove(self.from_end(i));
     }
 
-    fn ref_at(&self, i: usize) -> &GcObject {
-        self.get(self.from_end(i)).unwrap()
+    fn ref_at(&self, i: usize) -> InnerObject {
+        *self.get(self.from_end(i)).unwrap()
     }
 
-    fn take_slice(&self, i: usize) -> &[GcObject] {
+    fn take_slice(&self, i: usize) -> &[InnerObject] {
         &self[self.from_end(i - 1)..]
     }
 }
 
-#[derive(Debug)]
-pub struct Environment {
-    vars: HashMap<Symbol, GcObject>,
-    arena: Arena,
-}
-
-impl Environment {
-    pub fn new() -> Self {
-        Self {
-            vars: HashMap::default(),
-            arena: Arena::new(),
-        }
-    }
+#[derive(Debug, Default)]
+pub struct Environment<'ob> {
+    vars: HashMap<Symbol, Object<'ob>>,
 }
 
 pub struct Routine<'a> {
-    stack: Vec<GcObject>,
+    stack: Vec<InnerObject>,
     call_frames: Vec<CallFrame<'a>>,
     frame: CallFrame<'a>,
 }
@@ -146,14 +143,12 @@ pub fn set<'obj>(
     place: Symbol,
     newlet: Object<'obj>,
     arena: &Arena,
-    vars: &mut HashMap<Symbol, Object<'obj>>,
+    env: &mut Environment,
 ) -> Object<'obj> {
     let new = newlet.clone_in(arena);
-    vars.insert(place, unsafe { new.into_gc() });
+    env.vars.insert(place, unsafe { new.into_gc() });
     newlet
 }
-
-defsubr!(set);
 
 impl<'a> Routine<'a> {
     fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
@@ -166,34 +161,35 @@ impl<'a> Routine<'a> {
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
-                self.stack.push(GcObject::nil());
+                self.stack.push(InnerObject::nil());
             }
         }
         Ok(())
     }
 
-    fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment<'a>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
             let value = match env.vars.get(&sym) {
                 Some(x) => x,
                 None => bail!(Error::VoidVariable(sym)),
             };
-            self.stack.push(*value);
+            self.stack.push(unsafe { value.inner() });
             Ok(())
         } else {
             panic!("Varref was not a symbol: {:?}", symbol);
         }
     }
 
-    fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
-        let symbol: Symbol = self.frame.get_const(idx).try_into()?;
+    fn varset(&mut self, idx: usize, env: &mut Environment, arena: &Arena) -> Result<()> {
+        let obj: Object = self.frame.get_const(idx).into();
+        let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
-        set(symbol, value, &env.arena, &mut env.vars);
+        set(symbol, value.into(), arena, env);
         Ok(())
     }
 
-    fn call(&mut self, arg_cnt: u16, env: &mut Environment) -> Result<()> {
+    fn call(&mut self, arg_cnt: u16, env: &mut Environment, arena: &Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
@@ -212,25 +208,28 @@ impl<'a> Routine<'a> {
             }
             FunctionValue::SubrFn(func) => {
                 self.process_args(arg_cnt, func.args, sym)?;
-                self.call_subr(func.subr, arg_cnt as usize, env)?;
+                self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
             }
         };
         Ok(())
     }
 
-    fn fix_lifetime<'old, 'unbound>(x: &'old Arena) -> &'unbound Arena {
-        unsafe { std::mem::transmute(x) }
-    }
-
-    fn call_subr(&mut self, func: BuiltInFn, args: usize, env: &mut Environment) -> Result<()> {
+    fn call_subr(
+        &mut self,
+        func: BuiltInFn,
+        args: usize,
+        env: &mut Environment,
+        arena: &Arena,
+    ) -> Result<()> {
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
-        self.stack[i] = func(slice, &mut env.vars, Self::fix_lifetime(&env.arena))?;
+        let result = func(from_slice(slice), env, arena)?;
+        self.stack[i] = unsafe { result.inner() };
         self.stack.truncate(i + 1);
         Ok(())
     }
 
-    pub fn execute(func: &LispFn, env: &mut Environment) -> Result<GcObject> {
+    pub fn execute(func: &LispFn, env: &mut Environment, arena: &Arena) -> Result<GcObject> {
         use OpCode as op;
         let mut rout = Routine {
             stack: vec![],
@@ -298,24 +297,24 @@ impl<'a> Routine<'a> {
                     let idx = rout.frame.ip.take_double_arg();
                     rout.varref(idx, env)?
                 }
-                op::VarSet0 => rout.varset(0, env)?,
-                op::VarSet1 => rout.varset(1, env)?,
-                op::VarSet2 => rout.varset(2, env)?,
-                op::VarSet3 => rout.varset(3, env)?,
-                op::VarSet4 => rout.varset(4, env)?,
-                op::VarSet5 => rout.varset(5, env)?,
+                op::VarSet0 => rout.varset(0, env, arena)?,
+                op::VarSet1 => rout.varset(1, env, arena)?,
+                op::VarSet2 => rout.varset(2, env, arena)?,
+                op::VarSet3 => rout.varset(3, env, arena)?,
+                op::VarSet4 => rout.varset(4, env, arena)?,
+                op::VarSet5 => rout.varset(5, env, arena)?,
                 op::VarSetN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varset(idx, env)?
+                    rout.varset(idx, env, arena)?
                 }
                 op::VarSetN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varset(idx, env)?
+                    rout.varset(idx, env, arena)?
                 }
-                op::Call0 => rout.call(0, env)?,
-                op::Call1 => rout.call(1, env)?,
-                op::Call2 => rout.call(2, env)?,
-                op::Call3 => rout.call(3, env)?,
+                op::Call0 => rout.call(0, env, arena)?,
+                op::Call1 => rout.call(1, env, arena)?,
+                op::Call2 => rout.call(2, env, arena)?,
+                op::Call3 => rout.call(3, env, arena)?,
                 op::Discard => {
                     rout.stack.pop();
                 }
@@ -345,7 +344,7 @@ impl<'a> Routine<'a> {
                 }
                 op::Ret => {
                     if rout.call_frames.is_empty() {
-                        return Ok(rout.stack.pop().unwrap());
+                        return Ok(rout.stack.pop().unwrap().into());
                     } else {
                         let var = rout.stack.pop().unwrap();
                         rout.stack[rout.frame.start] = var;
@@ -359,6 +358,18 @@ impl<'a> Routine<'a> {
     }
 }
 
+#[lisp_fn]
+pub fn eval<'ob>(
+    form: Object<'ob>,
+    env: &mut Environment,
+    arena: &Arena,
+) -> anyhow::Result<Object<'ob>> {
+    let func = crate::compile::Exp::compile(form)?.into();
+    Routine::execute(&func, env, arena)
+}
+
+defsubr!(eval, set);
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -368,11 +379,11 @@ mod test {
     use crate::reader::Reader;
 
     fn test_eval(sexp: &str, expect: Object) {
-        let arena = Arena::new();
-        let obj = Reader::read(sexp, &arena).unwrap().0;
+        let arena = &Arena::new();
+        let obj = Reader::read(sexp, arena).unwrap().0;
         let func = Exp::compile(obj).unwrap().into();
-        let mut env = Environment::new();
-        let val = Routine::execute(&func, &mut env).unwrap();
+        let env = &mut Environment::default();
+        let val = Routine::execute(&func, env, arena).unwrap();
         assert_eq!(val, expect);
     }
 
@@ -439,8 +450,8 @@ mod test {
         let arena = &Arena::new();
         let obj = Reader::read(sexp, arena).unwrap().0;
         let func = Exp::compile(obj).unwrap().into();
-        let mut env = Environment::new();
-        let val = Routine::execute(&func, &mut env);
+        let env = &mut Environment::default();
+        let val = Routine::execute(&func, env, arena);
         assert_eq!(val.err().unwrap().downcast::<Error>().unwrap(), (error));
     }
 
