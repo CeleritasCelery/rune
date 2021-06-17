@@ -293,15 +293,24 @@ impl<'obj> Exp {
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
-        let var = cons.car().try_into()?;
+        let var: Symbol = cons.car().try_into()?;
         let list = into_list(cons.cdr())?;
         let mut iter = list.iter();
         match iter.next() {
-            Some(v) => self.const_ref(*v, Some(var))?,
+            // (let ((x y)))
+            Some(value) => {
+                self.compile_form(*value)?;
+                let last = self.vars.last_mut();
+                let tos = last.expect("stack empty after compile form");
+                *tos = Some(var);
+            }
+            // (let ((x)))
             None => self.const_ref(Object::nil(), Some(var))?,
         };
         match iter.next() {
+            // (let ((x y)))
             None => Ok(()),
+            // (let ((x y z ..)))
             Some(_) => Err(Error::LetValueCount(list.len() as u16)),
         }
     }
@@ -640,6 +649,7 @@ mod test {
         check_compiler!("1", [Constant0, Ret], [1]);
         check_compiler!("'foo", [Constant0, Ret], [intern("foo")]);
         check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2; arena)]);
+        check_compiler!("\"foo\"", [Constant0, Ret], ["foo"]);
     }
 
     #[test]

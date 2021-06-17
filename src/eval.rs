@@ -406,6 +406,10 @@ mod test {
             "(let ((foo 7) (bar nil)) (+ 7 (if bar foo 3)))",
             10.into_obj(arena),
         );
+        test_eval(
+            "(let ((foo (+ 3 4)) (bar t)) (+ 7 (if bar foo 3)))",
+            14.into_obj(arena),
+        );
         test_eval("(if nil 11)", false.into_obj(arena));
         test_eval("(if t 11)", 11.into_obj(arena));
     }
