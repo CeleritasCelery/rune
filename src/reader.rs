@@ -15,20 +15,24 @@ pub enum Error {
     MissingCdr(usize),
     ExtraCloseParen(usize),
     MissingQuotedItem(usize),
+    UnknownMacroCharacter(char, usize),
     EmptyStream,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::MissingCloseParen(_) => write!(f, "Missing close paren"),
-            Error::MissingStringDel(_) => write!(f, "Missing closing string quote"),
-            Error::ExtraCloseParen(_) => write!(f, "Extra Closing Paren"),
-            Error::UnexpectedChar(chr, _) => write!(f, "Unexpected character {}", chr),
+            Error::MissingCloseParen(i) => write!(f, "Missing close paren: at {}", i),
+            Error::MissingStringDel(i) => write!(f, "Missing closing string quote: at {}", i),
+            Error::ExtraCloseParen(i) => write!(f, "Extra Closing Paren: at {}", i),
+            Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {}: at {}", chr, i),
             Error::EmptyStream => write!(f, "Empty Stream"),
-            Error::ExtraItemInCdr(_) => write!(f, "Extra item in cdr"),
-            Error::MissingCdr(_) => write!(f, "Missing cdr"),
-            Error::MissingQuotedItem(_) => write!(f, "Missing element after quote"),
+            Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
+            Error::MissingCdr(i) => write!(f, "Missing cdr: at {}", i),
+            Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
+            Error::UnknownMacroCharacter(chr, i) => {
+                write!(f, "Unkown reader macro character {}: at {}", chr, i)
+            }
         }
     }
 }
@@ -44,7 +48,8 @@ impl Error {
             | Error::ExtraCloseParen(x)
             | Error::ExtraItemInCdr(x)
             | Error::MissingCdr(x)
-            | Error::UnexpectedChar(_, x) => *x,
+            | Error::UnexpectedChar(_, x)
+            | Error::UnknownMacroCharacter(_, x) => *x,
             Error::EmptyStream => 0,
         }
     }
@@ -55,6 +60,7 @@ enum Token<'a> {
     OpenParen(usize),
     CloseParen(usize),
     Quote(usize),
+    Sharp(usize),
     Dot(usize),
     Ident(&'a str),
     String(&'a str),
@@ -91,7 +97,11 @@ impl<'a> Tokenizer<'a> {
 
     fn position(&self, token: Token<'a>) -> usize {
         match token {
-            Token::OpenParen(x) | Token::CloseParen(x) | Token::Quote(x) | Token::Dot(x) => x,
+            Token::OpenParen(x)
+            | Token::CloseParen(x)
+            | Token::Quote(x)
+            | Token::Sharp(x)
+            | Token::Dot(x) => x,
             Token::Ident(slice) | Token::String(slice) => {
                 let beg = self.slice.as_ptr() as usize;
                 let end = slice.as_ptr() as usize;
@@ -155,6 +165,10 @@ impl<'a> Tokenizer<'a> {
         let end = self.skip_till(|chr| !escaped(&mut skip, chr) && !symbol_char(chr));
         Token::Ident(&self.slice[beg..end])
     }
+
+    fn read_char(&mut self) -> Option<char> {
+        self.iter.next().map(|x| x.1)
+    }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -166,6 +180,7 @@ impl<'a> Iterator for Tokenizer<'a> {
         let token = match chr {
             '(' => Token::OpenParen(idx),
             '\'' => Token::Quote(idx),
+            '#' => Token::Sharp(idx),
             ')' => Token::CloseParen(idx),
             '.' => Token::Dot(idx),
             '"' => self.get_string(idx),
@@ -314,11 +329,28 @@ impl<'a, 'obj> Reader<'a> {
         Ok(quoted.into_obj(arena))
     }
 
+    fn read_sharp(&mut self, pos: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+        match self.tokens.read_char() {
+            Some('\'') => match self.tokens.next() {
+                Some(Token::OpenParen(i)) => self.read_list(i, arena),
+                Some(token) => {
+                    let obj = self.read_sexp(token, arena)?;
+                    let quoted = list!(intern("quote"), obj; arena);
+                    Ok(quoted.into_obj(arena))
+                }
+                None => Err(Error::MissingQuotedItem(pos)),
+            },
+            Some(chr) => Err(Error::UnknownMacroCharacter(chr, pos)),
+            None => Err(Error::MissingQuotedItem(pos)),
+        }
+    }
+
     fn read_sexp(&mut self, token: Token<'a>, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
         match token {
             Token::OpenParen(i) => self.read_list(i, arena),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
             Token::Quote(i) => self.read_quote(i, arena),
+            Token::Sharp(i) => self.read_sharp(i, arena),
             Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
             Token::Ident(x) => Ok(self.read_symbol(x, arena)),
             Token::String(x) => Ok(unescape_string(x).into_obj(arena)),
@@ -430,6 +462,20 @@ baz""#
         check_reader!(list!(quote, intern("foo"); arena), "(quote foo)");
         check_reader!(list!(quote, intern("foo"); arena), "'foo");
         check_reader!(list!(quote, list!(1, 2, 3; arena); arena), "'(1 2 3)");
+    }
+
+    #[test]
+    fn read_sharp() {
+        let arena = &Arena::new();
+        let quote = intern("quote");
+        check_reader!(list!(quote, intern("foo"); arena), "#'foo");
+        check_reader!(
+            list!(intern("lambda"), intern("foo"), false, false; arena),
+            "#'(lambda foo () nil)"
+        );
+        assert_error("#", Error::MissingQuotedItem(0));
+        assert_error("#'", Error::MissingQuotedItem(0));
+        assert_error("#a", Error::UnknownMacroCharacter('a', 0));
     }
 
     fn assert_error(input: &str, error: Error) {
