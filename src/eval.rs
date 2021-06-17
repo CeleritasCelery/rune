@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::hashmap::HashMap;
+use crate::data::Environment;
 use crate::object::InnerObject;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
@@ -90,7 +90,10 @@ impl<'a> CallFrame<'a> {
     }
 }
 
-pub fn from_slice<'obj>(slice: &'obj [InnerObject]) -> &'obj [Object<'obj>] {
+pub fn from_slice<'borrow, 'obj>(
+    slice: &'borrow [InnerObject],
+    _arena: &'obj Arena,
+) -> &'borrow [Object<'obj>] {
     let ptr = slice.as_ptr() as *const Object<'obj>;
     let len = slice.len();
     unsafe { std::slice::from_raw_parts(ptr, len) }
@@ -127,30 +130,13 @@ impl LispStack for Vec<InnerObject> {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Environment<'ob> {
-    vars: HashMap<Symbol, Object<'ob>>,
-}
-
 pub struct Routine<'a> {
     stack: Vec<InnerObject>,
     call_frames: Vec<CallFrame<'a>>,
     frame: CallFrame<'a>,
 }
 
-#[lisp_fn]
-pub fn set<'obj>(
-    place: Symbol,
-    newlet: Object<'obj>,
-    arena: &Arena,
-    env: &mut Environment,
-) -> Object<'obj> {
-    let new = newlet.clone_in(arena);
-    env.vars.insert(place, unsafe { new.into_gc() });
-    newlet
-}
-
-impl<'a> Routine<'a> {
+impl<'a, 'ob> Routine<'a> {
     fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
         if count < args.required {
             bail!(Error::ArgCount(args.required, count));
@@ -185,11 +171,11 @@ impl<'a> Routine<'a> {
         let obj: Object = self.frame.get_const(idx).into();
         let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
-        set(symbol, value.into(), arena, env);
+        crate::data::set(symbol, value.into(), arena, env);
         Ok(())
     }
 
-    fn call(&mut self, arg_cnt: u16, env: &mut Environment, arena: &Arena) -> Result<()> {
+    fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
@@ -218,18 +204,23 @@ impl<'a> Routine<'a> {
         &mut self,
         func: BuiltInFn,
         args: usize,
-        env: &mut Environment,
-        arena: &Arena,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
     ) -> Result<()> {
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
-        let result = func(from_slice(slice), env, arena)?;
+        let new_slice = from_slice(slice, arena);
+        let result = func(new_slice, env, arena)?;
         self.stack[i] = unsafe { result.inner() };
         self.stack.truncate(i + 1);
         Ok(())
     }
 
-    pub fn execute(func: &LispFn, env: &mut Environment, arena: &Arena) -> Result<GcObject> {
+    pub fn execute(
+        func: &LispFn,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<GcObject> {
         use OpCode as op;
         let mut rout = Routine {
             stack: vec![],
@@ -361,14 +352,14 @@ impl<'a> Routine<'a> {
 #[lisp_fn]
 pub fn eval<'ob>(
     form: Object<'ob>,
-    env: &mut Environment,
-    arena: &Arena,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
 ) -> anyhow::Result<Object<'ob>> {
     let func = crate::compile::Exp::compile(form)?.into();
     Routine::execute(&func, env, arena)
 }
 
-defsubr!(eval, set);
+defsubr!(eval);
 
 #[cfg(test)]
 mod test {

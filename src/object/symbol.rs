@@ -121,7 +121,7 @@ impl std::hash::Hash for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::eval::Environment;
+    use crate::data::Environment;
     use crate::object::{LispFn, SubrFn};
     use std::mem::size_of;
 

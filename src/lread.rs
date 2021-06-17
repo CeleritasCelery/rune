@@ -1,35 +1,42 @@
 use crate::arena::Arena;
 use crate::compile::Exp;
-use crate::eval::Environment;
+use crate::data::Environment;
 use crate::eval::Routine;
 use crate::reader::{Error, Reader};
+use fn_macros::lisp_fn;
 
 use anyhow::{anyhow, Result};
 
 use std::fs;
 
-fn read_from_string(contents: &str, arena: &Arena, env: &mut Environment) -> Result<bool> {
+fn read_from_string<'obj>(
+    contents: &str,
+    arena: &'obj Arena,
+    env: &mut Environment<'obj>,
+) -> Result<bool> {
     let mut pos = 0;
     loop {
-        dbg!(pos);
-        println!(">{}<", &contents[pos..]);
         let (obj, new_pos) = match Reader::read(&contents[pos..], arena) {
             Ok((obj, pos)) => (obj, pos),
             Err(Error::EmptyStream) => return Ok(true),
             Err(e) => return Err(anyhow!(e)),
         };
-        dbg!(new_pos);
         let func = Exp::compile(obj)?.into();
         Routine::execute(&func, env, arena)?;
         assert_ne!(new_pos, 0);
+        println!("read: {}", &contents[pos..(new_pos + pos)]);
         pos += new_pos;
     }
 }
 
-fn load(file: &str, arena: &Arena, env: &mut Environment) -> Result<bool> {
+#[lisp_fn]
+#[allow(clippy::ptr_arg)]
+fn load<'obj>(file: &String, arena: &'obj Arena, env: &mut Environment<'obj>) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
     read_from_string(&file_contents, arena, env)
 }
+
+defsubr!(load);
 
 #[cfg(test)]
 mod test {

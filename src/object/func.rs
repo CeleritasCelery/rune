@@ -53,7 +53,7 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for LispFn {
 
 pub type BuiltInFn = for<'obj> fn(
     &[Object<'obj>],
-    &mut crate::eval::Environment,
+    &mut crate::data::Environment<'obj>,
     &'obj Arena,
 ) -> Result<Object<'obj>>;
 

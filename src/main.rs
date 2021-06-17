@@ -28,6 +28,7 @@ mod object;
 mod arena;
 mod arith;
 mod compile;
+mod data;
 mod error;
 mod eval;
 mod forms;
@@ -38,11 +39,7 @@ mod opcode;
 mod reader;
 
 use crate::{
-    arena::Arena,
-    compile::Exp,
-    eval::{Environment, Routine},
-    object::LispFn,
-    reader::Reader,
+    arena::Arena, compile::Exp, data::Environment, eval::Routine, object::LispFn, reader::Reader,
 };
 use std::io::{self, Write};
 

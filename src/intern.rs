@@ -71,7 +71,9 @@ lazy_static! {
             arith::defsubr(),
             eval::defsubr(),
             forms::defsubr(),
-            object::cons::defsubr()
+            object::cons::defsubr(),
+            lread::defsubr(),
+            data::defsubr(),
         )
     });
 }
