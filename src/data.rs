@@ -1,4 +1,3 @@
-use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Object, Symbol};
 use fn_macros::lisp_fn;
@@ -10,14 +9,8 @@ pub struct Environment<'ob> {
 }
 
 #[lisp_fn]
-pub fn set<'obj>(
-    place: Symbol,
-    newlet: Object<'obj>,
-    arena: &Arena,
-    env: &mut Environment,
-) -> Object<'obj> {
-    let new = newlet.clone_in(arena);
-    env.vars.insert(place, unsafe { new.into_gc() });
+pub fn set<'obj>(place: Symbol, newlet: Object<'obj>, env: &mut Environment<'obj>) -> Object<'obj> {
+    env.vars.insert(place, newlet);
     newlet
 }
 
@@ -52,4 +45,15 @@ pub fn get<'obj>(symbol: Symbol, propname: Symbol, env: &Environment<'obj>) -> O
     }
 }
 
-defsubr!(set, put, get);
+#[lisp_fn]
+pub fn defvar<'ob>(
+    symbol: Symbol,
+    initvalue: Option<Object<'ob>>,
+    _docstring: Option<&String>,
+    env: &mut Environment<'ob>,
+) -> Object<'ob> {
+    let value = initvalue.unwrap_or_else(Object::nil);
+    set(symbol, value, env)
+}
+
+defsubr!(set, put, get, defvar);

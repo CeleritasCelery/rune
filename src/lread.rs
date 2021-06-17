@@ -21,10 +21,10 @@ fn read_from_string<'obj>(
             Err(Error::EmptyStream) => return Ok(true),
             Err(e) => return Err(anyhow!(e)),
         };
+        println!("read: {}", &contents[pos..(new_pos + pos)]);
         let func = Exp::compile(obj)?.into();
         Routine::execute(&func, env, arena)?;
         assert_ne!(new_pos, 0);
-        println!("read: {}", &contents[pos..(new_pos + pos)]);
         pos += new_pos;
     }
 }

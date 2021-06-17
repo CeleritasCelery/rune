@@ -451,6 +451,31 @@ impl<'obj> Exp {
         }
     }
 
+    fn compile_defvar(&mut self, obj: Object) -> Result<()> {
+        let list = into_list(obj)?;
+        let mut iter = list.iter();
+
+        match iter.next() {
+            Some(x) => {
+                match x.val() {
+                    Value::Symbol(sym) => {
+                        // TODO: Only set the value if variables was not defined
+                        match iter.next() {
+                            Some(value) => self.compile_form(*value)?,
+                            None => self.const_ref(Object::nil(), None)?,
+                        };
+                        self.duplicate();
+                        let idx = self.constants.insert(sym.into())?;
+                        self.codes.emit_varset(idx);
+                        Ok(())
+                    }
+                    x => Err(Error::Type(Type::Symbol, x.get_type())),
+                }
+            }
+            None => Err(Error::ArgCount(1, 0)),
+        }
+    }
+
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         let sym: Symbol = cons.car().try_into()?;
         match sym.get_name() {
@@ -459,6 +484,7 @@ impl<'obj> Exp {
             "quote" => self.quote(cons.cdr()),
             "progn" => self.progn(cons.cdr()),
             "setq" => self.setq(cons.cdr()),
+            "defvar" => self.compile_defvar(cons.cdr()),
             "let" => self.let_form(cons.cdr()),
             "if" => self.compile_conditional(cons.cdr()),
             _ => self.compile_funcall(cons),
@@ -569,6 +595,16 @@ mod test {
             "(let ((bar 4)) (+ foo bar))",
             [Constant0, Constant1, VarRef2, StackRef2, Call2, Ret],
             [4, intern("+"), intern("foo")]
+        );
+        check_compiler!(
+            "(defvar foo 1)",
+            [Constant0, Duplicate, VarSet1, Ret],
+            [1, intern("foo")]
+        );
+        check_compiler!(
+            "(defvar foo)",
+            [Constant0, Duplicate, VarSet1, Ret],
+            [false, intern("foo")]
         );
         check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
     }

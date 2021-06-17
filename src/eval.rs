@@ -167,11 +167,11 @@ impl<'a, 'ob> Routine<'a> {
         }
     }
 
-    fn varset(&mut self, idx: usize, env: &mut Environment, arena: &Arena) -> Result<()> {
+    fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
         let obj: Object = self.frame.get_const(idx).into();
         let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
-        crate::data::set(symbol, value.into(), arena, env);
+        crate::data::set(symbol, value.into(), env);
         Ok(())
     }
 
@@ -288,19 +288,19 @@ impl<'a, 'ob> Routine<'a> {
                     let idx = rout.frame.ip.take_double_arg();
                     rout.varref(idx, env)?
                 }
-                op::VarSet0 => rout.varset(0, env, arena)?,
-                op::VarSet1 => rout.varset(1, env, arena)?,
-                op::VarSet2 => rout.varset(2, env, arena)?,
-                op::VarSet3 => rout.varset(3, env, arena)?,
-                op::VarSet4 => rout.varset(4, env, arena)?,
-                op::VarSet5 => rout.varset(5, env, arena)?,
+                op::VarSet0 => rout.varset(0, env)?,
+                op::VarSet1 => rout.varset(1, env)?,
+                op::VarSet2 => rout.varset(2, env)?,
+                op::VarSet3 => rout.varset(3, env)?,
+                op::VarSet4 => rout.varset(4, env)?,
+                op::VarSet5 => rout.varset(5, env)?,
                 op::VarSetN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varset(idx, env, arena)?
+                    rout.varset(idx, env)?
                 }
                 op::VarSetN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varset(idx, env, arena)?
+                    rout.varset(idx, env)?
                 }
                 op::Call0 => rout.call(0, env, arena)?,
                 op::Call1 => rout.call(1, env, arena)?,
