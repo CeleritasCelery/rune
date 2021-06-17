@@ -16,13 +16,16 @@ fn read_from_string<'obj>(
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
+        println!("reading");
         let (obj, new_pos) = match Reader::read(&contents[pos..], arena) {
             Ok((obj, pos)) => (obj, pos),
             Err(Error::EmptyStream) => return Ok(true),
             Err(e) => return Err(anyhow!(e)),
         };
-        println!("read: {}", &contents[pos..(new_pos + pos)]);
+        println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
+        println!("compiling");
         let func = Exp::compile(obj)?.into();
+        println!("running");
         Routine::execute(&func, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;

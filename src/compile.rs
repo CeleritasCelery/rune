@@ -250,7 +250,9 @@ impl<'obj> Exp {
     fn quote(&mut self, value: Object<'obj>) -> Result<()> {
         let list = into_list(value)?;
         match list.len() {
+            // (quote x)
             1 => self.const_ref(list[0], None),
+            // (quote)
             x => Err(Error::ArgCount(1, x as u16)),
         }
     }
@@ -260,7 +262,9 @@ impl<'obj> Exp {
         let list = into_list(form)?;
         let mut iter = list.iter();
         match iter.next() {
+            // (let x)
             Some(x) => self.let_bind(*x),
+            // (let)
             None => Err(Error::ArgCount(1, 0)),
         }?;
         self.implicit_progn(iter.as_slice())?;
@@ -309,7 +313,9 @@ impl<'obj> Exp {
     fn let_bind(&mut self, obj: Object) -> Result<()> {
         for binding in into_list(obj)? {
             match binding.val() {
+                // (let ((x y)))
                 Value::Cons(cons) => self.let_bind_call(cons)?,
+                // (let (x))
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
                 x => return Err(Error::Type(Type::Cons, x.get_type())),
             }
@@ -321,9 +327,11 @@ impl<'obj> Exp {
         let list = into_list(obj)?;
         let pairs = list.chunks_exact(2);
         let len = list.len() as u16;
+        // (setq) | (setq x)
         if len < 2 {
             return Err(Error::ArgCount(2, len));
         }
+        // (setq x y z)
         if len % 2 != 0 {
             // We have an extra element in the setq that does not have a value
             return Err(Error::ArgCount(len + 1, len));
@@ -365,42 +373,73 @@ impl<'obj> Exp {
         Ok(())
     }
 
-    fn jump_nil_else_pop(&mut self) -> usize {
-        self.codes.push_op(OpCode::JumpNilElsePop);
+    fn jump(&mut self, jump_code: OpCode) -> (usize, OpCode) {
+        match jump_code {
+            OpCode::JumpNil
+            | OpCode::JumpNotNil
+            | OpCode::JumpNilElsePop
+            | OpCode::JumpNotNilElsePop => {
+                self.vars.pop();
+            }
+            OpCode::Jump => {}
+            x => panic!("invalid jump opcode provided: {:?}", x),
+        }
+        self.codes.push_op(jump_code);
         let place = self.codes.push_jump_placeholder();
-        // pop conditional
-        self.vars.pop();
-        place
+        (place, jump_code)
     }
 
-    fn set_jump_nil_else_pop_placeholder(&mut self, place: usize) {
-        self.codes.set_jump_placeholder(place);
-        // add the non-popped conditional back the stack
-        self.vars.push(None);
+    fn set_jump_target(&mut self, placeholders: &[(usize, OpCode)]) {
+        let mut has_conditional_pop = false;
+        for placeholder in placeholders.iter() {
+            match placeholder.1 {
+                OpCode::JumpNilElsePop | OpCode::JumpNotNilElsePop => has_conditional_pop = true,
+                OpCode::JumpNil | OpCode::JumpNotNil | OpCode::Jump => {}
+                x => panic!("invalid jump opcode provided: {:?}", x),
+            }
+            self.codes.set_jump_placeholder(placeholder.0);
+        }
+        if has_conditional_pop {
+            // add the non-popped conditional back the stack, since we are past
+            // the "else pop" part of the Code
+            self.vars.push(None);
+        }
     }
 
-    fn compile_conditional(&mut self, obj: Object) -> Result<()> {
+    fn jump_back(&mut self, jump_code: OpCode, location: usize) {
+        if matches!(jump_code, OpCode::Jump) {
+            self.codes.push_op(OpCode::Jump);
+            self.codes.push_back_jump(location);
+        } else {
+            panic!("invalid back jump opcode provided: {:?}", jump_code)
+        }
+    }
+
+    fn compile_if(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
         match list.len() {
+            // (if) | (if x)
             len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
+            // (if x y)
             2 => {
                 self.compile_form(list[0])?;
-                let place = self.jump_nil_else_pop();
+                let target = self.jump(OpCode::JumpNilElsePop);
                 self.compile_form(list[1])?;
-                self.set_jump_nil_else_pop_placeholder(place);
+                self.set_jump_target(&[target]);
                 Ok(())
             }
+            // (if x y z ...)
             _ => {
                 let mut forms = list.iter();
                 self.compile_form(*forms.next().unwrap())?;
-                self.codes.push_op(OpCode::JumpNil);
-                let place = self.codes.push_jump_placeholder();
+                let else_nil_target = self.jump(OpCode::JumpNil);
+                // if branch
                 self.compile_form(*forms.next().unwrap())?;
-                self.codes.push_op(OpCode::Jump);
-                let place2 = self.codes.push_jump_placeholder();
-                self.codes.set_jump_placeholder(place);
+                let jump_to_end_target = self.jump(OpCode::Jump);
+                // else branch
+                self.set_jump_target(&[else_nil_target]);
                 self.implicit_progn(forms.as_slice())?;
-                self.codes.set_jump_placeholder(place2);
+                self.set_jump_target(&[jump_to_end_target]);
                 Ok(())
             }
         }
@@ -413,12 +452,11 @@ impl<'obj> Exp {
         }
         let top = self.codes.len();
         self.compile_form(forms[0])?;
-        let place = self.jump_nil_else_pop();
+        let loop_exit = self.jump(OpCode::JumpNilElsePop);
         self.implicit_progn(&forms[1..])?;
         self.discard();
-        self.codes.push_op(OpCode::Jump);
-        self.codes.push_back_jump(top);
-        self.set_jump_nil_else_pop_placeholder(place);
+        self.jump_back(OpCode::Jump, top);
+        self.set_jump_target(&[loop_exit]);
         Ok(())
     }
 
@@ -428,9 +466,11 @@ impl<'obj> Exp {
         let mut vars: Vec<Option<Symbol>> = vec![];
 
         match iter.next() {
+            // (lambda ())
             None => {
                 return self.add_const_lambda(LispFn::default());
             }
+            // (lambda (x ...) ...)
             Some(bindings) => {
                 for binding in &into_list(*bindings)? {
                     match binding.val() {
@@ -456,12 +496,15 @@ impl<'obj> Exp {
         let mut iter = list.iter();
 
         match iter.next() {
+            // (defvar x ...)
             Some(x) => {
                 match x.val() {
                     Value::Symbol(sym) => {
                         // TODO: Only set the value if variables was not defined
                         match iter.next() {
+                            // (defvar x y)
                             Some(value) => self.compile_form(*value)?,
+                            // (defvar x)
                             None => self.const_ref(Object::nil(), None)?,
                         };
                         self.duplicate();
@@ -469,15 +512,49 @@ impl<'obj> Exp {
                         self.codes.emit_varset(idx);
                         Ok(())
                     }
+                    // (defvar "x")
                     x => Err(Error::Type(Type::Symbol, x.get_type())),
                 }
             }
+            // (defvar)
             None => Err(Error::ArgCount(1, 0)),
         }
     }
 
+    fn compile_cond(&mut self, obj: Object) -> Result<()> {
+        let forms = into_list(obj)?;
+        if forms.is_empty() {
+            return self.const_ref(Object::nil(), None);
+        }
+        let mut final_return_targets = Vec::new();
+        let last_idx = forms.len() - 1;
+        for form in &forms[..last_idx] {
+            let cond = into_list(*form)?;
+            match cond.len() {
+                // (cond ())
+                0 => {}
+                // (cond (x))
+                1 => {
+                    self.compile_form(cond[0])?;
+                    let target = self.jump(OpCode::JumpNotNilElsePop);
+                    final_return_targets.push(target);
+                }
+                // (cond (x y ...))
+                _ => {
+                    self.compile_form(cond[0])?;
+                    let target = self.jump(OpCode::JumpNil);
+                    self.implicit_progn(&cond[1..])?;
+                    self.set_jump_target(&[target]);
+                }
+            }
+        }
+        self.set_jump_target(&final_return_targets);
+        Ok(())
+    }
+
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         let sym: Symbol = cons.car().try_into()?;
+        println!("dispatching: {}", sym.get_name());
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
             "while" => self.compile_loop(cons.cdr()),
@@ -485,8 +562,9 @@ impl<'obj> Exp {
             "progn" => self.progn(cons.cdr()),
             "setq" => self.setq(cons.cdr()),
             "defvar" => self.compile_defvar(cons.cdr()),
+            "cond" => self.compile_cond(cons.cdr()),
             "let" => self.let_form(cons.cdr()),
-            "if" => self.compile_conditional(cons.cdr()),
+            "if" => self.compile_if(cons.cdr()),
             _ => self.compile_funcall(cons),
         }
     }
@@ -627,6 +705,7 @@ mod test {
             [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
             [Object::t(), 2]
         );
+        check_compiler!("(cond)", [Constant0, Ret], [Object::nil()]);
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 
