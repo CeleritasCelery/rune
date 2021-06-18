@@ -520,7 +520,7 @@ impl<'obj> Exp {
             Some(x) => {
                 match x.val() {
                     Value::Symbol(sym) => {
-                        // TODO: Only set the value if variables was not defined
+                        // TODO: compile this into a lambda like Emacs does
                         match iter.next() {
                             // (defvar x y)
                             Some(value) => self.compile_form(*value)?,
@@ -541,34 +541,78 @@ impl<'obj> Exp {
         }
     }
 
-    fn compile_cond(&mut self, obj: Object) -> Result<()> {
-        let forms = into_list(obj)?;
-        if forms.is_empty() {
-            return self.const_ref(Object::nil(), None);
-        }
-        let mut final_return_targets = Vec::new();
-        let last_idx = forms.len() - 1;
-        for form in &forms[..last_idx] {
-            let cond = into_list(*form)?;
-            match cond.len() {
-                // (cond ())
-                0 => {}
-                // (cond (x))
-                1 => {
-                    self.compile_form(cond[0])?;
-                    let target = self.jump(OpCode::JumpNotNilElsePop);
-                    final_return_targets.push(target);
-                }
-                // (cond (x y ...))
-                _ => {
-                    self.compile_form(cond[0])?;
-                    let target = self.jump(OpCode::JumpNil);
-                    self.implicit_progn(&cond[1..])?;
-                    self.set_jump_target(&[target]);
-                }
+    fn compile_cond_clause(
+        &mut self,
+        clause: Object,
+        jump_targets: &mut Vec<(usize, OpCode)>,
+    ) -> Result<()> {
+        let cond = into_list(clause)?;
+        match cond.len() {
+            // (cond ())
+            0 => {}
+            // (cond (x))
+            1 => {
+                self.compile_form(cond[0])?;
+                let target = self.jump(OpCode::JumpNotNilElsePop);
+                jump_targets.push(target);
+            }
+            // (cond (x y ...))
+            _ => {
+                self.compile_form(cond[0])?;
+                let skip_target = self.jump(OpCode::JumpNil);
+                self.implicit_progn(&cond[1..])?;
+                let taken_target = self.jump(OpCode::Jump);
+                self.set_jump_target(&[skip_target]);
+                jump_targets.push(taken_target);
             }
         }
-        self.set_jump_target(&final_return_targets);
+        Ok(())
+    }
+
+    fn compile_last_cond_clause(
+        &mut self,
+        clause: Object,
+        jump_targets: &mut Vec<(usize, OpCode)>,
+    ) -> Result<()> {
+        let cond = into_list(clause)?;
+        match cond.len() {
+            // (cond ())
+            0 => {
+                self.const_ref(Object::nil(), None)?;
+            }
+            // (cond (x))
+            1 => {
+                self.compile_form(cond[0])?;
+                let target = self.jump(OpCode::JumpNotNilElsePop);
+                self.const_ref(Object::nil(), None)?;
+                jump_targets.push(target);
+            }
+            // (cond (x y ...))
+            _ => {
+                self.compile_form(cond[0])?;
+                let target = self.jump(OpCode::JumpNilElsePop);
+                self.implicit_progn(&cond[1..])?;
+                jump_targets.push(target);
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_cond(&mut self, obj: Object) -> Result<()> {
+        let clauses = into_list(obj)?;
+        if clauses.is_empty() {
+            return self.const_ref(Object::nil(), None);
+        }
+        let final_return_targets = &mut Vec::new();
+        let second_last = clauses.len() - 1;
+        let (first, last) = clauses.split_at(second_last);
+        for clause in first {
+            self.compile_cond_clause(*clause, final_return_targets)?;
+        }
+        for clause in last {
+            self.compile_last_cond_clause(*clause, final_return_targets)?;
+        }
+        self.set_jump_target(final_return_targets);
         Ok(())
     }
 
@@ -761,8 +805,23 @@ mod test {
             [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
             [Object::t(), 2]
         );
-        check_compiler!("(cond)", [Constant0, Ret], [Object::nil()]);
         check_error("(if 1)", Error::ArgCount(2, 1));
+    }
+
+    #[test]
+    fn cond_stmt() {
+        check_compiler!("(cond)", [Constant0, Ret], [Object::nil()]);
+        check_compiler!("(cond ())", [Constant0, Ret], [Object::nil()]);
+        check_compiler!(
+            "(cond (1))",
+            [Constant0, JumpNotNilElsePop, 0, 1, Constant1, Ret],
+            [1, false]
+        );
+        check_compiler!(
+            "(cond (1 2))",
+            [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
+            [1, 2]
+        );
     }
 
     #[test]

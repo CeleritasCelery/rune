@@ -106,8 +106,8 @@ impl fmt::Debug for CodeVec {
                 StackRefN | ConstantN | CallN | VarRefN | VarSetN | DiscardN | DiscardNKeepTOS => {
                     display.push(format!("{:?}", iter.next().unwrap()));
                 }
-                StackRefN2 | ConstantN2 | CallN2 | JumpNil | Jump | JumpNilElsePop | VarRefN2
-                | VarSetN2 => {
+                StackRefN2 | ConstantN2 | CallN2 | JumpNil | JumpNotNil | Jump | JumpNilElsePop
+                | JumpNotNilElsePop | VarRefN2 | VarSetN2 => {
                     display.push(format!("{:?}", iter.next().unwrap()));
                     display.push(format!("{:?}", iter.next().unwrap()));
                 }
