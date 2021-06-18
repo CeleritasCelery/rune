@@ -16,7 +16,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::num::NonZeroI64 as NonZero;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct InnerObject(NonZero);
 
 #[derive(Copy, Clone, PartialEq)]
@@ -336,6 +336,17 @@ impl<'obj> fmt::Debug for Object<'obj> {
     }
 }
 
+impl fmt::Display for InnerObject {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.val(), f)
+    }
+}
+
+impl fmt::Debug for InnerObject {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;

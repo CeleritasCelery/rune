@@ -309,6 +309,21 @@ impl<'a, 'ob> Routine<'a> {
                 op::Discard => {
                     rout.stack.pop();
                 }
+                op::DiscardN => {
+                    let num = rout.frame.ip.take_arg();
+                    let cur_len = rout.stack.len();
+                    rout.stack.truncate(cur_len - num);
+                }
+                op::DiscardNKeepTOS => {
+                    let tos = rout
+                        .stack
+                        .pop()
+                        .expect("stack was empty when discard called");
+                    let num = rout.frame.ip.take_arg();
+                    let cur_len = rout.stack.len();
+                    rout.stack.truncate(cur_len - num);
+                    rout.stack.push(tos);
+                }
                 op::Duplicate => {
                     let value = *rout.stack.last().unwrap();
                     rout.stack.push(value);
@@ -335,6 +350,7 @@ impl<'a, 'ob> Routine<'a> {
                 }
                 op::Ret => {
                     if rout.call_frames.is_empty() {
+                        assert!(rout.stack.len() == 1);
                         return Ok(rout.stack.pop().unwrap().into());
                     } else {
                         let var = rout.stack.pop().unwrap();
@@ -343,7 +359,14 @@ impl<'a, 'ob> Routine<'a> {
                         rout.frame = rout.call_frames.pop().unwrap();
                     }
                 }
-                x => panic!("unknown opcode {:?}", x),
+                op => {
+                    let num = op as u8;
+                    if num <= op::Unknown as u8 {
+                        panic!("unimplemented opcode: {:?}", op);
+                    } else {
+                        panic!("unknown opcode: {:?}", num);
+                    }
+                }
             }
         }
     }
@@ -369,83 +392,69 @@ mod test {
     use crate::object::IntoObject;
     use crate::reader::Reader;
 
-    fn test_eval(sexp: &str, expect: Object) {
-        let arena = &Arena::new();
-        let obj = Reader::read(sexp, arena).unwrap().0;
-        let func = Exp::compile(obj).unwrap().into();
-        let env = &mut Environment::default();
-        let val = Routine::execute(&func, env, arena).unwrap();
-        assert_eq!(val, expect);
+    macro_rules! test_eval {
+        ($sexp:expr, $expect:expr) => {
+            println!("Test String: {}", $sexp);
+            let arena = &Arena::new();
+            let obj = Reader::read($sexp, arena).unwrap().0;
+            let func = Exp::compile(obj).unwrap().into();
+            let env = &mut Environment::default();
+            let val = Routine::execute(&func, env, arena).unwrap();
+            assert_eq!(val, $expect.into_obj(arena));
+        };
     }
 
     #[test]
     fn compute() {
-        let arena = &Arena::new();
-        test_eval("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63.into_obj(arena));
-        test_eval("7", (7).into_obj(arena));
-        test_eval("(+ 1 2.5)", (3.5).into_obj(arena));
+        test_eval!("(- 7 (- 13 (* 3 (+ 7 (+ 13 1 2)))))", 63);
+        test_eval!("7", 7);
+        test_eval!("(+ 1 2.5)", 3.5);
     }
 
     #[test]
     fn let_form() {
-        let arena = &Arena::new();
-        test_eval("(let ((foo 5) (bar 8)) (+ foo bar))", 13.into_obj(arena));
-        test_eval("(let ((foo 5) (bar 8)) (+ 1 bar))", 9.into_obj(arena));
+        test_eval!("(let ((foo 5) (bar 8)) (+ foo bar))", 13);
+        test_eval!("(let ((foo 5) (bar 8)) (+ 1 bar))", 9);
     }
 
     #[test]
     fn jump() {
-        let arena = &Arena::new();
-        test_eval("(+ 7 (if nil 11 3))", 10.into_obj(arena));
-        test_eval("(+ 7 (if t 11 3) 4)", 22.into_obj(arena));
-        test_eval(
-            "(let ((foo 7) (bar t)) (+ 7 (if bar foo 3)))",
-            14.into_obj(arena),
-        );
-        test_eval(
-            "(let ((foo 7) (bar nil)) (+ 7 (if bar foo 3)))",
-            10.into_obj(arena),
-        );
-        test_eval(
-            "(let ((foo (+ 3 4)) (bar t)) (+ 7 (if bar foo 3)))",
-            14.into_obj(arena),
-        );
-        test_eval("(if nil 11)", false.into_obj(arena));
-        test_eval("(if t 11)", 11.into_obj(arena));
+        test_eval!("(+ 7 (if nil 11 3))", 10);
+        test_eval!("(+ 7 (if t 11 3) 4)", 22);
+        test_eval!("(let ((foo 7) (bar t)) (+ 7 (if bar foo 3)))", 14);
+        test_eval!("(let ((foo 7) (bar nil)) (+ 7 (if bar foo 3)))", 10);
+        test_eval!("(let ((foo (+ 3 4)) (bar t)) (+ 7 (if bar foo 3)))", 14);
+        test_eval!("(if nil 11)", false);
+        test_eval!("(if t 11)", 11);
     }
 
     #[test]
     fn loops() {
-        let arena = &Arena::new();
-        test_eval("(while nil)", false.into_obj(arena));
-        test_eval("(while nil (set 'foo 7))", false.into_obj(arena));
-        test_eval(
-            "(let ((foo t)) (while foo (setq foo nil)))",
-            false.into_obj(arena),
-        );
-        test_eval(
+        test_eval!("(while nil)", false);
+        test_eval!("(while nil (set 'foo 7))", false);
+        test_eval!("(let ((foo t)) (while foo (setq foo nil)))", false);
+        test_eval!(
             "(let ((foo 10) (bar 0)) (while (> foo 3) (setq bar (1+ bar)) (setq foo (1- foo))) bar)",
-            7.into_obj(arena),
+            7
         );
     }
 
     #[test]
     fn variables() {
-        let arena = &Arena::new();
-        test_eval("(progn (set 'foo 5) foo)", 5.into_obj(arena));
-        test_eval("(let ((foo 1)) (setq foo 2) foo)", 2.into_obj(arena));
-        test_eval("(progn (setq foo 2) foo)", 2.into_obj(arena));
+        test_eval!("(progn (set 'foo 5) foo)", 5);
+        test_eval!("(let ((foo 1)) (setq foo 2) foo)", 2);
+        test_eval!("(progn (setq foo 2) foo)", 2);
+        test_eval!("(progn (defvar foo 1) foo)", 1);
     }
 
     #[test]
     fn call() {
-        let arena = &Arena::new();
-        test_eval(
+        test_eval!(
             "(progn
 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
 (middle 7 3 13))",
-            (224).into_obj(arena),
+            224
         );
     }
 

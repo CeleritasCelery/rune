@@ -237,6 +237,11 @@ impl<'obj> Exp {
         }
     }
 
+    fn var_set(&mut self, idx: u16) {
+        self.codes.emit_varset(idx);
+        self.vars.pop();
+    }
+
     fn discard(&mut self) {
         self.codes.push_op(OpCode::Discard);
         self.vars.pop();
@@ -252,23 +257,29 @@ impl<'obj> Exp {
         match list.len() {
             // (quote x)
             1 => self.const_ref(list[0], None),
-            // (quote)
+            // (quote) | (quote x y)
             x => Err(Error::ArgCount(1, x as u16)),
         }
     }
 
-    fn let_form(&mut self, form: Object) -> Result<()> {
-        let prev_len = self.vars.len();
+    fn compile_let(&mut self, form: Object) -> Result<()> {
         let list = into_list(form)?;
         let mut iter = list.iter();
-        match iter.next() {
-            // (let x)
-            Some(x) => self.let_bind(*x),
+        let num_binding_forms = match iter.next() {
+            // (let x ...)
+            Some(x) => self.let_bind(*x)?,
             // (let)
-            None => Err(Error::ArgCount(1, 0)),
-        }?;
+            None => return Err(Error::ArgCount(1, 0)),
+        };
         self.implicit_progn(iter.as_slice())?;
-        self.vars.truncate(prev_len);
+        // Remove let bindings from the stack
+        if num_binding_forms > 0 {
+            self.codes
+                .push_op_n(OpCode::DiscardNKeepTOS, num_binding_forms as u8);
+            let last = self.vars.pop().expect("empty stack in compile");
+            self.vars.truncate(self.vars.len() - num_binding_forms);
+            self.vars.push(last);
+        }
         Ok(())
     }
 
@@ -319,8 +330,9 @@ impl<'obj> Exp {
         self.const_ref(Object::nil(), Some(sym))
     }
 
-    fn let_bind(&mut self, obj: Object) -> Result<()> {
-        for binding in into_list(obj)? {
+    fn let_bind(&mut self, obj: Object) -> Result<usize> {
+        let bindings = into_list(obj)?;
+        for binding in &bindings {
             match binding.val() {
                 // (let ((x y)))
                 Value::Cons(cons) => self.let_bind_call(cons)?,
@@ -329,7 +341,7 @@ impl<'obj> Exp {
                 x => return Err(Error::Type(Type::Cons, x.get_type())),
             }
         }
-        Ok(())
+        Ok(bindings.len())
     }
 
     fn setq(&mut self, obj: Object) -> Result<()> {
@@ -362,8 +374,7 @@ impl<'obj> Exp {
                 Some(idx) => self.stack_set(idx)?,
                 None => {
                     let idx = self.constants.insert(sym.into())?;
-                    self.codes.emit_varset(idx);
-                    self.vars.pop();
+                    self.var_set(idx);
                 }
             };
         }
@@ -518,7 +529,7 @@ impl<'obj> Exp {
                         };
                         self.duplicate();
                         let idx = self.constants.insert(sym.into())?;
-                        self.codes.emit_varset(idx);
+                        self.var_set(idx);
                         Ok(())
                     }
                     // (defvar "x")
@@ -563,7 +574,6 @@ impl<'obj> Exp {
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         let sym: Symbol = cons.car().try_into()?;
-        println!("dispatching: {}", sym.get_name());
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
             "while" => self.compile_loop(cons.cdr()),
@@ -572,7 +582,7 @@ impl<'obj> Exp {
             "setq" => self.setq(cons.cdr()),
             "defvar" => self.compile_defvar(cons.cdr()),
             "cond" => self.compile_cond(cons.cdr()),
-            "let" => self.let_form(cons.cdr()),
+            "let" => self.compile_let(cons.cdr()),
             "if" => self.compile_if(cons.cdr()),
             _ => self.compile_funcall(cons),
         }
@@ -633,6 +643,7 @@ mod test {
     macro_rules! check_compiler {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
             let arena = &Arena::new();
+            println!("Test String: {}", $compare);
             let obj = Reader::read($compare, arena).unwrap().0;
             let expect = Exp{
                 codes:vec_into![$($op),+].into(),
@@ -653,15 +664,31 @@ mod test {
     }
 
     #[test]
-    fn variable() {
-        check_compiler!("(let (foo))", [Constant0, Constant0, Ret], [false]);
+    fn test_compile_variable() {
+        check_compiler!(
+            "(let (foo))",
+            [Constant0, Constant0, DiscardNKeepTOS, 1, Ret],
+            [false]
+        );
         check_compiler!("(let ())", [Constant0, Ret], [false]);
         check_compiler!(
             "(let ((foo 1)(bar 2)(baz 3)))",
-            [Constant0, Constant1, Constant2, Constant3, Ret],
+            [
+                Constant0,
+                Constant1,
+                Constant2,
+                Constant3,
+                DiscardNKeepTOS,
+                3,
+                Ret
+            ],
             [1, 2, 3, false]
         );
-        check_compiler!("(let ((foo 1)) foo)", [Constant0, StackRef0, Ret], [1]);
+        check_compiler!(
+            "(let ((foo 1)) foo)",
+            [Constant0, StackRef0, DiscardNKeepTOS, 1, Ret],
+            [1]
+        );
         check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
         check_compiler!("(progn)", [Constant0, Ret], [false]);
         check_compiler!(
@@ -671,7 +698,17 @@ mod test {
         );
         check_compiler!(
             "(let ((foo 1)) (setq foo 2) foo)",
-            [Constant0, Constant1, Duplicate, StackSet2, Discard, StackRef0, Ret],
+            [
+                Constant0,
+                Constant1,
+                Duplicate,
+                StackSet2,
+                Discard,
+                StackRef0,
+                DiscardNKeepTOS,
+                1,
+                Ret
+            ],
             [1, 2]
         );
         check_compiler!(
@@ -681,7 +718,16 @@ mod test {
         );
         check_compiler!(
             "(let ((bar 4)) (+ foo bar))",
-            [Constant0, Constant1, VarRef2, StackRef2, Call2, Ret],
+            [
+                Constant0,
+                Constant1,
+                VarRef2,
+                StackRef2,
+                Call2,
+                DiscardNKeepTOS,
+                1,
+                Ret
+            ],
             [4, intern("+"), intern("foo")]
         );
         check_compiler!(

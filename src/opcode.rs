@@ -52,6 +52,8 @@ pub enum OpCode {
     CallN,
     CallN2,
     Discard,
+    DiscardN,
+    DiscardNKeepTOS,
     Duplicate,
     Jump,
     JumpNil,
@@ -101,7 +103,7 @@ impl fmt::Debug for CodeVec {
             let op = unsafe { OpCode::from_unchecked(*i) };
             display.push(format!("{:?}", op));
             match op {
-                StackRefN | ConstantN | CallN | VarRefN | VarSetN => {
+                StackRefN | ConstantN | CallN | VarRefN | VarSetN | DiscardN | DiscardNKeepTOS => {
                     display.push(format!("{:?}", iter.next().unwrap()));
                 }
                 StackRefN2 | ConstantN2 | CallN2 | JumpNil | Jump | JumpNilElsePop | VarRefN2
