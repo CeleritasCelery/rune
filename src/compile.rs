@@ -561,6 +561,7 @@ impl<'obj> Exp {
                 self.compile_form(cond[0])?;
                 let skip_target = self.jump(OpCode::JumpNil);
                 self.implicit_progn(&cond[1..])?;
+                self.vars.pop();
                 let taken_target = self.jump(OpCode::Jump);
                 self.set_jump_target(&[skip_target]);
                 jump_targets.push(taken_target);

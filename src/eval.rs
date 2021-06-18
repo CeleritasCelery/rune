@@ -348,6 +348,15 @@ impl<'a, 'ob> Routine<'a> {
                         rout.stack.pop();
                     }
                 }
+                op::JumpNotNilElsePop => {
+                    let cond = rout.stack.last().unwrap();
+                    let offset = rout.frame.ip.take_double_arg();
+                    if ! matches!(cond.val(), Value::Nil) {
+                        rout.frame.ip.jump(offset as i16);
+                    } else {
+                        rout.stack.pop();
+                    }
+                }
                 op::Ret => {
                     if rout.call_frames.is_empty() {
                         assert!(rout.stack.len() == 1);
@@ -396,9 +405,10 @@ mod test {
         ($sexp:expr, $expect:expr) => {
             println!("Test String: {}", $sexp);
             let arena = &Arena::new();
+            let env = &mut Environment::default();
             let obj = Reader::read($sexp, arena).unwrap().0;
             let func = Exp::compile(obj).unwrap().into();
-            let env = &mut Environment::default();
+            println!("code: {:?}", func);
             let val = Routine::execute(&func, env, arena).unwrap();
             assert_eq!(val, $expect.into_obj(arena));
         };
@@ -426,6 +436,16 @@ mod test {
         test_eval!("(let ((foo (+ 3 4)) (bar t)) (+ 7 (if bar foo 3)))", 14);
         test_eval!("(if nil 11)", false);
         test_eval!("(if t 11)", 11);
+        test_eval!("(cond)", false);
+        test_eval!("(cond ())", false);
+        test_eval!("(cond (1))", 1);
+        test_eval!("(cond (1 2))", 2);
+        test_eval!("(cond (nil 2)(3))", 3);
+        test_eval!("(cond (nil 2)(3 4))", 4);
+        test_eval!("(cond (t 2)(3 4))", 2);
+        test_eval!("(let ((foo 7)) (cond (foo 2)(3 4)))", 2);
+        test_eval!("(let ((foo 7)) (cond (nil 3)(foo 4)))", 4);
+        test_eval!("(let ((foo 7) (bar nil))(cond (bar 3)(foo 11) (t 13)))", 11);
     }
 
     #[test]
