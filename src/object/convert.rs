@@ -55,15 +55,15 @@ impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
     }
 }
 
-pub fn try_from_slice<'obj, T>(slice: &'obj [Object<'obj>]) -> Result<&'obj [T], Error>
-where
-    T: TryFrom<Object<'obj>, Error = Error> + 'obj,
-{
-    debug_assert_eq!(size_of::<Object>(), size_of::<T>());
+pub fn try_from_slice<'obj>(slice: &'obj [Object<'obj>]) -> Result<&'obj [Number], Error> {
     for x in slice.iter() {
-        let _: T = TryFrom::try_from(*x)?;
+        let num: Number = TryFrom::try_from(*x)?;
+        unsafe {
+            // ensure they have the same bit representation
+            debug_assert_eq!(transmute::<_, i64>(num), transmute(*x));
+        }
     }
-    let ptr = slice.as_ptr() as *const T;
+    let ptr = slice.as_ptr() as *const Number;
     let len = slice.len();
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }

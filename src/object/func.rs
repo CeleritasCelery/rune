@@ -131,6 +131,6 @@ mod test {
         assert_eq!(func.constants, vec_into_object![1; arena]);
         assert_eq!(func.args.required, 0);
         assert_eq!(func.args.optional, 0);
-        assert_eq!(func.args.rest, false);
+        assert!(!func.args.rest);
     }
 }
