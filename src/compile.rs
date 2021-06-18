@@ -264,10 +264,10 @@ impl<'obj> Exp {
 
     fn compile_let(&mut self, form: Object) -> Result<()> {
         let list = into_list(form)?;
-        let mut iter = list.iter();
+        let mut iter = list.into_iter();
         let num_binding_forms = match iter.next() {
             // (let x ...)
-            Some(x) => self.let_bind(*x)?,
+            Some(x) => self.let_bind(x)?,
             // (let)
             None => return Err(Error::ArgCount(1, 0)),
         };
@@ -306,11 +306,12 @@ impl<'obj> Exp {
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
         let var: Symbol = cons.car().try_into()?;
         let list = into_list(cons.cdr())?;
-        let mut iter = list.iter();
+        let len = list.len();
+        let mut iter = list.into_iter();
         match iter.next() {
             // (let ((x y)))
             Some(value) => {
-                self.compile_form(*value)?;
+                self.compile_form(value)?;
                 let last = self.vars.last_mut();
                 let tos = last.expect("stack empty after compile form");
                 *tos = Some(var);
@@ -322,7 +323,7 @@ impl<'obj> Exp {
             // (let ((x y)))
             None => Ok(()),
             // (let ((x y z ..)))
-            Some(_) => Err(Error::LetValueCount(list.len() as u16)),
+            Some(_) => Err(Error::LetValueCount(len as u16)),
         }
     }
 
@@ -384,11 +385,12 @@ impl<'obj> Exp {
     fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
         self.const_ref(cons.car(), None)?;
         let prev_len = self.vars.len();
-        let list = into_list(cons.cdr())?;
-        for form in &list {
-            self.compile_form(*form)?;
+        let args = into_list(cons.cdr())?;
+        let num_args = args.len();
+        for arg in args {
+            self.compile_form(arg)?;
         }
-        self.codes.emit_call(list.len() as u16);
+        self.codes.emit_call(num_args as u16);
         self.vars.truncate(prev_len);
         Ok(())
     }
@@ -446,11 +448,11 @@ impl<'obj> Exp {
             }
             // (if x y z ...)
             _ => {
-                let mut forms = list.iter();
-                self.compile_form(*forms.next().unwrap())?;
+                let mut forms = list.into_iter();
+                self.compile_form(forms.next().unwrap())?;
                 let else_nil_target = self.jump(OpCode::JumpNil);
                 // if branch
-                self.compile_form(*forms.next().unwrap())?;
+                self.compile_form(forms.next().unwrap())?;
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
                 self.set_jump_target(else_nil_target);
@@ -478,7 +480,7 @@ impl<'obj> Exp {
 
     fn compile_lambda(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
-        let mut iter = list.iter();
+        let mut iter = list.into_iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
 
         match iter.next() {
@@ -488,7 +490,7 @@ impl<'obj> Exp {
             }
             // (lambda (x ...) ...)
             Some(bindings) => {
-                for binding in &into_list(*bindings)? {
+                for binding in &into_list(bindings)? {
                     match binding.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
                         x => return Err(Error::Type(Type::Symbol, x.get_type())),
@@ -509,7 +511,7 @@ impl<'obj> Exp {
 
     fn compile_defvar(&mut self, obj: Object) -> Result<()> {
         let list = into_list(obj)?;
-        let mut iter = list.iter();
+        let mut iter = list.into_iter();
 
         match iter.next() {
             // (defvar x ...)
@@ -519,7 +521,7 @@ impl<'obj> Exp {
                         // TODO: compile this into a lambda like Emacs does
                         match iter.next() {
                             // (defvar x y)
-                            Some(value) => self.compile_form(*value)?,
+                            Some(value) => self.compile_form(value)?,
                             // (defvar x)
                             None => self.const_ref(Object::nil(), None)?,
                         };
