@@ -407,8 +407,9 @@ mod test {
             let arena = &Arena::new();
             let env = &mut Environment::default();
             let obj = Reader::read($sexp, arena).unwrap().0;
-            let func = Exp::compile(obj).unwrap().into();
-            println!("code: {:?}", func);
+            let func: LispFn = Exp::compile(obj).unwrap().into();
+            println!("codes: {:?}", func.op_codes);
+            println!("const: {:?}", func.constants);
             let val = Routine::execute(&func, env, arena).unwrap();
             assert_eq!(val, $expect.into_obj(arena));
         };
@@ -443,6 +444,7 @@ mod test {
         test_eval!("(cond (nil 2)(3))", 3);
         test_eval!("(cond (nil 2)(3 4))", 4);
         test_eval!("(cond (t 2)(3 4))", 2);
+        test_eval!("(let ((foo 7)) (cond (2)(3)(4)) foo)", 7);
         test_eval!("(let ((foo 7)) (cond (foo 2)(3 4)))", 2);
         test_eval!("(let ((foo 7)) (cond (nil 3)(foo 4)))", 4);
         test_eval!("(let ((foo 7) (bar nil))(cond (bar 3)(foo 11) (t 13)))", 11);

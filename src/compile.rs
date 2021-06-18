@@ -409,21 +409,17 @@ impl<'obj> Exp {
         (place, jump_code)
     }
 
-    fn set_jump_target(&mut self, placeholders: &[(usize, OpCode)]) {
-        let mut has_conditional_pop = false;
-        for placeholder in placeholders.iter() {
-            match placeholder.1 {
-                OpCode::JumpNilElsePop | OpCode::JumpNotNilElsePop => has_conditional_pop = true,
-                OpCode::JumpNil | OpCode::JumpNotNil | OpCode::Jump => {}
-                x => panic!("invalid jump opcode provided: {:?}", x),
+    fn set_jump_target(&mut self, target: (usize, OpCode)) {
+        match target.1 {
+            // add the non-popped conditional back to the stack, since we are
+            // past the "else pop" part of the Code
+            OpCode::JumpNilElsePop | OpCode::JumpNotNilElsePop => {
+                self.vars.push(None);
             }
-            self.codes.set_jump_placeholder(placeholder.0);
+            OpCode::JumpNil | OpCode::JumpNotNil | OpCode::Jump => {}
+            x => panic!("invalid jump opcode provided: {:?}", x),
         }
-        if has_conditional_pop {
-            // add the non-popped conditional back the stack, since we are past
-            // the "else pop" part of the Code
-            self.vars.push(None);
-        }
+        self.codes.set_jump_placeholder(target.0);
     }
 
     fn jump_back(&mut self, jump_code: OpCode, location: usize) {
@@ -445,7 +441,7 @@ impl<'obj> Exp {
                 self.compile_form(list[0])?;
                 let target = self.jump(OpCode::JumpNilElsePop);
                 self.compile_form(list[1])?;
-                self.set_jump_target(&[target]);
+                self.set_jump_target(target);
                 Ok(())
             }
             // (if x y z ...)
@@ -457,9 +453,9 @@ impl<'obj> Exp {
                 self.compile_form(*forms.next().unwrap())?;
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
-                self.set_jump_target(&[else_nil_target]);
+                self.set_jump_target(else_nil_target);
                 self.implicit_progn(forms.as_slice())?;
-                self.set_jump_target(&[jump_to_end_target]);
+                self.set_jump_target(jump_to_end_target);
                 Ok(())
             }
         }
@@ -476,7 +472,7 @@ impl<'obj> Exp {
         self.implicit_progn(&forms[1..])?;
         self.discard();
         self.jump_back(OpCode::Jump, top);
-        self.set_jump_target(&[loop_exit]);
+        self.set_jump_target(loop_exit);
         Ok(())
     }
 
@@ -563,7 +559,7 @@ impl<'obj> Exp {
                 self.implicit_progn(&cond[1..])?;
                 self.vars.pop();
                 let taken_target = self.jump(OpCode::Jump);
-                self.set_jump_target(&[skip_target]);
+                self.set_jump_target(skip_target);
                 jump_targets.push(taken_target);
             }
         }
@@ -600,20 +596,21 @@ impl<'obj> Exp {
     }
 
     fn compile_cond(&mut self, obj: Object) -> Result<()> {
-        let clauses = into_list(obj)?;
-        if clauses.is_empty() {
-            return self.const_ref(Object::nil(), None);
-        }
+        let mut clauses = into_list(obj)?;
+        let last = match clauses.pop() {
+            Some(clause) => clause,
+            // (cond)
+            None => {return self.const_ref(Object::nil(), None);}
+        };
         let final_return_targets = &mut Vec::new();
-        let second_last = clauses.len() - 1;
-        let (first, last) = clauses.split_at(second_last);
-        for clause in first {
-            self.compile_cond_clause(*clause, final_return_targets)?;
+        for clause in clauses {
+            self.compile_cond_clause(clause, final_return_targets)?;
         }
-        for clause in last {
-            self.compile_last_cond_clause(*clause, final_return_targets)?;
+        self.compile_last_cond_clause(last, final_return_targets)?;
+
+        for target in final_return_targets {
+            self.codes.set_jump_placeholder(target.0);
         }
-        self.set_jump_target(final_return_targets);
         Ok(())
     }
 
