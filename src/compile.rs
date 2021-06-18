@@ -822,6 +822,42 @@ mod test {
             [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
             [1, 2]
         );
+        check_compiler!(
+            "(cond (1 2)(3 4))",
+            [
+                Constant0,
+                JumpNil,
+                0,
+                4,
+                Constant1,
+                Jump,
+                0,
+                5,
+                Constant2,
+                JumpNilElsePop,
+                0,
+                1,
+                Constant3,
+                Ret
+            ],
+            [1, 2, 3, 4]
+        );
+        check_compiler!(
+            "(cond (1)(2))",
+            [
+                Constant0,
+                JumpNotNilElsePop,
+                0,
+                5,
+                Constant1,
+                JumpNotNilElsePop,
+                0,
+                1,
+                Constant2,
+                Ret
+            ],
+            [1, 2, false]
+        );
     }
 
     #[test]
