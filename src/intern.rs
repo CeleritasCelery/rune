@@ -10,8 +10,11 @@ pub struct SymbolMap {
     arena: Arena,
 }
 
+struct SymbolBox(*const InnerSymbol);
+unsafe impl Send for SymbolBox {}
+
 struct InnerSymbolMap {
-    map: HashMap<String, Box<InnerSymbol>>,
+    map: HashMap<String, SymbolBox>,
 }
 
 impl InnerSymbolMap {
@@ -34,11 +37,12 @@ impl InnerSymbolMap {
     // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
     fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {
         match self.map.get(name) {
-            Some(x) => x.as_ref(),
+            Some(x) => x.0,
             None => {
                 let sym = Box::new(InnerSymbol::new(name.to_owned()));
                 let ptr: *const InnerSymbol = sym.as_ref();
-                self.map.insert(name.to_owned(), sym);
+                self.map
+                    .insert(name.to_owned(), SymbolBox(Box::into_raw(sym)));
                 ptr
             }
         }
