@@ -10,6 +10,11 @@ pub struct SymbolMap {
     arena: Arena,
 }
 
+/*
+Box needs to follow rust's aliasing rules (references can't outlive the borrow).
+Miri checks for this. But we have a requirement for this in our current design.
+So we use this work around that I found on the forum.
+*/
 struct SymbolBox(*const InnerSymbol);
 unsafe impl Send for SymbolBox {}
 
