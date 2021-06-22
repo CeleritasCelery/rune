@@ -1,9 +1,11 @@
 use crate::arena::Arena;
 use crate::data::Environment;
 use crate::object::InnerObject;
+use crate::object::IntoObject;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
+use std::cmp::max;
 use std::convert::TryInto;
 
 use anyhow::{bail, Result};
@@ -137,7 +139,7 @@ pub struct Routine<'a> {
 }
 
 impl<'a, 'ob> Routine<'a> {
-    fn process_args(&mut self, count: u16, args: FnArgs, _sym: Symbol) -> Result<()> {
+    fn process_args(&mut self, count: u16, args: FnArgs) -> Result<u16> {
         if count < args.required {
             bail!(Error::ArgCount(args.required, count));
         }
@@ -150,7 +152,7 @@ impl<'a, 'ob> Routine<'a> {
                 self.stack.push(InnerObject::nil());
             }
         }
-        Ok(())
+        Ok(max(total_args, count))
     }
 
     fn varref(&mut self, idx: usize, env: &Environment<'a>) -> Result<()> {
@@ -183,20 +185,36 @@ impl<'a, 'ob> Routine<'a> {
         };
         match sym.get_func().ok_or(Error::VoidFunction(sym))?.val() {
             FunctionValue::LispFn(func) => {
-                self.process_args(arg_cnt, func.args, sym)?;
-                self.call_frames.push(self.frame.clone());
-                self.frame = CallFrame::new(
-                    // TODO: This is unsound. We don't know that this will live
-                    // long enough
-                    unsafe { std::mem::transmute(func) },
-                    self.stack.from_end(fn_idx),
-                );
+                self.call_lisp(func, arg_cnt)?;
             }
             FunctionValue::SubrFn(func) => {
-                self.process_args(arg_cnt, func.args, sym)?;
+                let arg_cnt = self.process_args(arg_cnt, func.args)?;
                 self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
             }
+            FunctionValue::Cons(cons) => match cons.car().val() {
+                Value::Symbol(sym) => match sym.get_name() {
+                    "function" => {
+                        let func: LispFn = crate::compile::Exp::compile(cons.cdr())?.into();
+                        self.call_lisp(&func, arg_cnt)?;
+                        sym.set_func(func.into_obj(arena));
+                    }
+                    name => bail!("unknown function definition: {}", name),
+                },
+                _ => bail!("invalid function defintion: {}", cons.car()),
+            },
         };
+        Ok(())
+    }
+
+    fn call_lisp(&mut self, func: &LispFn, arg_cnt: u16) -> Result<()> {
+        let arg_cnt = self.process_args(arg_cnt, func.args)?;
+        self.call_frames.push(self.frame.clone());
+        self.frame = CallFrame::new(
+            // TODO: This is unsound. We don't know that this will live
+            // long enough
+            unsafe { std::mem::transmute(func) },
+            self.stack.from_end(arg_cnt as usize),
+        );
         Ok(())
     }
 
@@ -228,9 +246,9 @@ impl<'a, 'ob> Routine<'a> {
             frame: CallFrame::new(func, 0),
         };
         loop {
-            // println!("{:?}", rout.stack);
+            println!("{:?}", rout.stack);
             let op = unsafe { op::from_unchecked(rout.frame.ip.next()) };
-            // println!("op : {:?}", op);
+            println!("op : {:?}", op);
             match op {
                 op::StackRef0 => rout.stack.push_ref(0),
                 op::StackRef1 => rout.stack.push_ref(1),
@@ -351,7 +369,7 @@ impl<'a, 'ob> Routine<'a> {
                 op::JumpNotNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if ! matches!(cond.val(), Value::Nil) {
+                    if !matches!(cond.val(), Value::Nil) {
                         rout.frame.ip.jump(offset as i16);
                     } else {
                         rout.stack.pop();

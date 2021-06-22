@@ -60,6 +60,9 @@ enum Token<'a> {
     OpenParen(usize),
     CloseParen(usize),
     Quote(usize),
+    Backquote(usize),
+    Unquote(usize),
+    Splice(usize),
     Sharp(usize),
     Dot(usize),
     Ident(&'a str),
@@ -100,6 +103,9 @@ impl<'a> Tokenizer<'a> {
             Token::OpenParen(x)
             | Token::CloseParen(x)
             | Token::Quote(x)
+            | Token::Backquote(x)
+            | Token::Unquote(x)
+            | Token::Splice(x)
             | Token::Sharp(x)
             | Token::Dot(x) => x,
             Token::Ident(slice) | Token::String(slice) => {
@@ -166,6 +172,16 @@ impl<'a> Tokenizer<'a> {
         Token::Ident(&self.slice[beg..end])
     }
 
+    fn get_macro_char(&mut self, idx: usize) -> Token<'a> {
+        match self.iter.peek() {
+            Some((_, '@')) => {
+                self.iter.next();
+                Token::Splice(idx)
+            }
+            _ => Token::Unquote(idx),
+        }
+    }
+
     fn read_char(&mut self) -> Option<char> {
         self.iter.next().map(|x| x.1)
     }
@@ -180,6 +196,8 @@ impl<'a> Iterator for Tokenizer<'a> {
         let token = match chr {
             '(' => Token::OpenParen(idx),
             '\'' => Token::Quote(idx),
+            ',' => self.get_macro_char(idx),
+            '`' => Token::Backquote(idx),
             '#' => Token::Sharp(idx),
             ')' => Token::CloseParen(idx),
             '.' => Token::Dot(idx),
@@ -320,12 +338,17 @@ impl<'a, 'obj> Reader<'a> {
         Err(Error::MissingCloseParen(delim))
     }
 
-    fn read_quote(&mut self, pos: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn quote_item(
+        &mut self,
+        pos: usize,
+        symbol_name: &str,
+        arena: &'obj Arena,
+    ) -> Result<Object<'obj>, Error> {
         let obj = match self.tokens.next() {
             Some(token) => self.read_sexp(token, arena)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        let quoted = list!(intern("quote"), obj; arena);
+        let quoted = list!(intern(symbol_name), obj; arena);
         Ok(quoted.into_obj(arena))
     }
 
@@ -349,7 +372,10 @@ impl<'a, 'obj> Reader<'a> {
         match token {
             Token::OpenParen(i) => self.read_list(i, arena),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
-            Token::Quote(i) => self.read_quote(i, arena),
+            Token::Quote(i) => self.quote_item(i, "quote", arena),
+            Token::Unquote(i) => self.quote_item(i, ",", arena),
+            Token::Splice(i) => self.quote_item(i, ",@", arena),
+            Token::Backquote(i) => self.quote_item(i, "`", arena),
             Token::Sharp(i) => self.read_sharp(i, arena),
             Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
             Token::Ident(x) => Ok(self.read_symbol(x, arena)),

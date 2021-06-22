@@ -1,5 +1,5 @@
 use crate::hashmap::HashMap;
-use crate::object::{Object, Symbol};
+use crate::object::{List, Object, Symbol};
 use fn_macros::lisp_fn;
 
 #[derive(Debug, Default)]
@@ -56,4 +56,10 @@ pub fn defvar<'ob>(
     set(symbol, value, env)
 }
 
-defsubr!(set, put, get, defvar);
+#[lisp_fn]
+pub const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symbol {
+    // TODO: implement
+    feature
+}
+
+defsubr!(set, put, get, defvar, provide);

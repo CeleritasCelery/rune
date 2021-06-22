@@ -35,6 +35,7 @@ impl<'obj> IntoObject<'obj, Function<'obj>> for SubrFn {
 pub enum FunctionValue<'a> {
     LispFn(&'a LispFn),
     SubrFn(&'a SubrFn),
+    Cons(&'a Cons<'a>),
 }
 
 #[allow(clippy::wrong_self_convention)]
@@ -44,6 +45,7 @@ impl<'a> Function<'a> {
         match self.data.val() {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
+            Value::Cons(x) => FunctionValue::Cons(x),
             _ => unreachable!("Function was invalid type"),
         }
     }

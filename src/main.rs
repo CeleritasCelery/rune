@@ -38,53 +38,61 @@ mod lread;
 mod opcode;
 mod reader;
 
-use crate::{
-    arena::Arena, compile::Exp, data::Environment, eval::Routine, object::LispFn, reader::Reader,
-};
-use std::io::{self, Write};
+use crate::arena::Arena;
+// use crate::compile::Exp;
+use crate::data::Environment;
+// use crate::eval::Routine;
+// use crate::object::LispFn;
+// use crate::reader::Reader;
+// use std::io::{self, Write};
 
-fn parens_closed(buffer: &str) -> bool {
-    let open = buffer.chars().filter(|&x| x == '(').count();
-    let close = buffer.chars().filter(|&x| x == ')').count();
-    open <= close
-}
+// fn parens_closed(buffer: &str) -> bool {
+//     let open = buffer.chars().filter(|&x| x == '(').count();
+//     let close = buffer.chars().filter(|&x| x == ')').count();
+//     open <= close
+// }
 
 fn main() {
     println!("Hello, world!");
-    let mut buffer = String::new();
-    let stdin = io::stdin();
-    let arena = Arena::new();
-    let mut env = Environment::default();
-    loop {
-        print!("> ");
-        io::stdout().flush().unwrap();
-        stdin.read_line(&mut buffer).unwrap();
-        if buffer == "exit\n" {
-            std::process::exit(0);
-        }
-        if !parens_closed(&buffer) {
-            continue;
-        }
-        let (obj, _) = match Reader::read(&buffer, &arena) {
-            Ok(obj) => obj,
-            Err(e) => {
-                println!("Error: {}", e);
-                buffer.clear();
-                continue;
-            }
-        };
-        let func: LispFn = match Exp::compile(obj) {
-            Ok(obj) => obj.into(),
-            Err(e) => {
-                println!("Error: {}", e);
-                buffer.clear();
-                continue;
-            }
-        };
-        match Routine::execute(&func, &mut env, &arena) {
-            Ok(val) => println!("{}", val),
-            Err(e) => println!("Error: {}", e),
-        }
-        buffer.clear();
+    let buffer = String::from("(load \"/home/foco/remac/test/byte-run.el\")");
+    // let stdin = io::stdin();
+    let arena = &Arena::new();
+    let env = &mut Environment::default();
+    // loop {
+    //     print!("> ");
+    //     io::stdout().flush().unwrap();
+    //     stdin.read_line(&mut buffer).unwrap();
+    //     if buffer == "exit\n" {
+    //         std::process::exit(0);
+    //     }
+    //     if !parens_closed(&buffer) {
+    //         continue;
+    //     }
+    //     let (obj, _) = match Reader::read(&buffer, &arena) {
+    //         Ok(obj) => obj,
+    //         Err(e) => {
+    //             println!("Error: {}", e);
+    //             buffer.clear();
+    //             continue;
+    //         }
+    //     };
+    //     let func: LispFn = match Exp::compile(obj) {
+    //         Ok(obj) => obj.into(),
+    //         Err(e) => {
+    //             println!("Error: {}", e);
+    //             buffer.clear();
+    //             continue;
+    //         }
+    //     };
+    //     match Routine::execute(&func, &mut env, &arena) {
+    //         Ok(val) => println!("{}", val),
+    //         Err(e) => println!("Error: {}", e),
+    //     }
+    //     buffer.clear();
+    // }
+
+    match crate::lread::read_from_string(&buffer, arena, env) {
+        Ok(val) => println!("{}", val),
+        Err(e) => println!("Error: {}", e),
     }
 }

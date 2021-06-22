@@ -304,7 +304,7 @@ impl<'obj> Exp {
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
-        let var: Symbol = cons.car().try_into()?;
+        let var: Symbol = dbg!(cons.car().try_into())?;
         let list = into_list(cons.cdr())?;
         let len = list.len();
         let mut iter = list.into_iter();
@@ -491,9 +491,10 @@ impl<'obj> Exp {
             // (lambda (x ...) ...)
             Some(bindings) => {
                 for binding in &into_list(bindings)? {
+                    println!("binding = {}", binding);
                     match binding.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
-                        x => return Err(Error::Type(Type::Symbol, x.get_type())),
+                        x => return dbg!(Err(Error::Type(Type::Symbol, x.get_type()))),
                     }
                 }
             }
@@ -602,7 +603,9 @@ impl<'obj> Exp {
         let last = match clauses.pop() {
             Some(clause) => clause,
             // (cond)
-            None => {return self.const_ref(Object::nil(), None);}
+            None => {
+                return self.const_ref(Object::nil(), None);
+            }
         };
         let final_return_targets = &mut Vec::new();
         for clause in clauses {
@@ -617,7 +620,8 @@ impl<'obj> Exp {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
-        let sym: Symbol = cons.car().try_into()?;
+        println!("car = {}", cons.car());
+        let sym: Symbol = dbg!(cons.car().try_into())?;
         match sym.get_name() {
             "lambda" => self.compile_lambda(cons.cdr()),
             "while" => self.compile_loop(cons.cdr()),
@@ -645,7 +649,7 @@ impl<'obj> Exp {
     }
 
     fn compile_form(&mut self, obj: Object<'obj>) -> Result<()> {
-        match obj.val() {
+        match dbg!(obj.val()) {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.const_ref(obj, None),

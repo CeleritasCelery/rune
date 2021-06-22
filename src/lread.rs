@@ -2,6 +2,7 @@ use crate::arena::Arena;
 use crate::compile::Exp;
 use crate::data::Environment;
 use crate::eval::Routine;
+use crate::object::LispFn;
 use crate::reader::{Error, Reader};
 use fn_macros::lisp_fn;
 
@@ -9,7 +10,7 @@ use anyhow::{anyhow, Result};
 
 use std::fs;
 
-fn read_from_string<'obj>(
+pub fn read_from_string<'obj>(
     contents: &str,
     arena: &'obj Arena,
     env: &mut Environment<'obj>,
@@ -24,8 +25,10 @@ fn read_from_string<'obj>(
         };
         println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
         println!("compiling");
-        let func = Exp::compile(obj)?.into();
+        let func: LispFn = Exp::compile(obj)?.into();
         println!("running");
+        println!("codes: {:?}", func.op_codes);
+        println!("const: {:?}", func.constants);
         Routine::execute(&func, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;

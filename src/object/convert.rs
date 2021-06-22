@@ -55,6 +55,17 @@ impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
     }
 }
 
+impl<'obj> TryFrom<Object<'obj>> for Option<List<'obj>> {
+    type Error = Error;
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::Cons(cons) => Ok(Some(List::Cons(cons))),
+            Value::Nil => Ok(None),
+            x => Err(Error::Type(Type::List, x.get_type())),
+        }
+    }
+}
+
 pub fn try_from_slice<'obj>(slice: &'obj [Object<'obj>]) -> Result<&'obj [Number], Error> {
     for x in slice.iter() {
         let num: Number = TryFrom::try_from(*x)?;
