@@ -19,6 +19,7 @@ pub struct LispFn {
     pub op_codes: CodeVec,
     pub constants: Vec<GcObject>,
     pub args: FnArgs,
+    arena: Arena,
 }
 define_unbox_ref!(LispFn, Func);
 
@@ -29,10 +30,12 @@ impl LispFn {
         required: u16,
         optional: u16,
         rest: bool,
+        arena: Arena,
     ) -> Self {
         LispFn {
             op_codes,
             constants,
+            arena,
             args: FnArgs {
                 required,
                 optional,
@@ -122,6 +125,7 @@ mod test {
             0,
             0,
             false,
+            Arena::new(),
         );
         let obj: Object = func.into_obj(arena);
         assert!(matches!(obj.val(), Value::LispFn(_)));

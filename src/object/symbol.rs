@@ -136,12 +136,12 @@ mod test {
         let x = InnerSymbol::new("foo".to_owned());
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
-        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
+        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false, Arena::new());
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let before = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
+        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false, Arena::new());
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let after = cell.as_lisp_fn().expect("expected lispfn");

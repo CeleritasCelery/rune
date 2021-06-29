@@ -25,6 +25,7 @@ impl Default for LispFn {
             0,
             0,
             false,
+            Arena::new(),
         )
     }
 }
@@ -195,8 +196,7 @@ pub struct Exp {
 impl From<Exp> for LispFn {
     fn from(exp: Exp) -> Self {
         let inner = exp.constants.consts;
-        std::mem::forget(exp.constants.arena);
-        LispFn::new(exp.codes, inner, 0, 0, false)
+        LispFn::new(exp.codes, inner, 0, 0, false, exp.constants.arena)
     }
 }
 
@@ -977,10 +977,11 @@ mod test {
             0,
             0,
             false,
+            Arena::new(),
         );
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
+        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false, Arena::new());
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(
@@ -989,6 +990,7 @@ mod test {
             2,
             0,
             false,
+            Arena::new(),
         );
         check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
