@@ -25,6 +25,7 @@ pub fn read_from_string<'obj>(
         };
         println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
         println!("compiling");
+        // this will go out of scope
         let func: LispFn = Exp::compile(obj)?.into();
         println!("running");
         println!("codes: {:?}", func.op_codes);

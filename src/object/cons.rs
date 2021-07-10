@@ -4,7 +4,7 @@ use crate::object::*;
 use fn_macros::lisp_fn;
 use std::cell::Cell;
 use std::convert::TryFrom;
-use std::fmt::{self, Write};
+use std::fmt::{self, Display, Write};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Cons<'a> {
@@ -40,6 +40,13 @@ impl<'a> Cons<'a> {
 
     pub fn set_cdr(&self, new_cdr: Object<'a>) {
         self.cdr.set(new_cdr);
+    }
+
+    pub fn next(&self) -> Option<&'a Cons<'a>> {
+        match self.cdr().val() {
+            Value::Cons(cons) => Some(cons),
+            _ => None,
+        }
     }
 }
 
@@ -85,6 +92,55 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
             Value::Nil => Ok(None),
             x => Err(Error::Type(Type::Cons, x.get_type())),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct ConsIter<'a>(Option<&'a Cons<'a>>);
+
+#[derive(Debug)]
+pub struct ConsIterError;
+
+impl Display for ConsIterError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Found non-nil cdr at end of list")
+    }
+}
+
+impl std::error::Error for ConsIterError {}
+
+impl<'a> IntoIterator for &'a Cons<'a> {
+    type Item = Result<Object<'a>, ConsIterError>;
+    type IntoIter = ConsIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ConsIter(Some(self))
+    }
+}
+
+impl<'a> Iterator for ConsIter<'a> {
+    type Item = Result<Object<'a>, ConsIterError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            Some(cons) => {
+                let val = cons.car();
+                let next = match cons.cdr().val() {
+                    Value::Cons(next) => Some(next),
+                    Value::Nil => None,
+                    _ => return Some(Err(ConsIterError)),
+                };
+                *self = ConsIter(next);
+                Some(Ok(val))
+            },
+            None => None,
+        }
+    }
+}
+
+impl<'a> ConsIter<'a> {
+    pub fn empty() -> Self {
+        ConsIter(None)
     }
 }
 
@@ -150,6 +206,7 @@ mod test {
     use super::*;
     use crate::object::Value;
     use std::mem::size_of;
+
     #[test]
     fn cons() {
         let arena = &Arena::new();

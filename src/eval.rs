@@ -1,14 +1,13 @@
 use crate::arena::Arena;
 use crate::data::Environment;
 use crate::object::InnerObject;
-use crate::object::IntoObject;
 use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::cmp::max;
 use std::convert::TryInto;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -132,6 +131,19 @@ impl LispStack for Vec<InnerObject> {
     }
 }
 
+fn symbol_is<'ob>(obj: Object<'ob>, name: &str) -> Result<()> {
+    match obj.val() {
+        Value::Symbol(sym) => {
+            if sym.get_name() == name {
+                Ok(())
+            } else {
+                Err(anyhow!("Invalid function defintion: {}", sym))
+            }
+        },
+        x => Err(anyhow!("Invalid function definition: {}", x)),
+    }
+}
+
 pub struct Routine<'a> {
     stack: Vec<InnerObject>,
     call_frames: Vec<CallFrame<'a>>,
@@ -191,17 +203,14 @@ impl<'a, 'ob> Routine<'a> {
                 let arg_cnt = self.process_args(arg_cnt, func.args)?;
                 self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
             }
-            FunctionValue::Cons(cons) => match cons.car().val() {
-                Value::Symbol(sym) => match sym.get_name() {
-                    "function" => {
-                        let func: LispFn = crate::compile::Exp::compile(cons.cdr())?.into();
-                        self.call_lisp(&func, arg_cnt)?;
-                        sym.set_func(func.into_obj(arena));
-                    }
-                    name => bail!("unknown function definition: {}", name),
-                },
-                _ => bail!("invalid function defintion: {}", cons.car()),
-            },
+            FunctionValue::Cons(cons) => {
+                symbol_is(cons.car(), "function")?;
+                let next = cons.next().ok_or(anyhow!("invalid function definition"))?;
+                symbol_is(next.car(), "lambda")?;
+                let lambda = crate::compile::Exp::compile_lambda(next.cdr())?;
+                self.call_lisp(&lambda, arg_cnt)?;
+                sym.set_func(arena.add(lambda));
+            }
         };
         Ok(())
     }

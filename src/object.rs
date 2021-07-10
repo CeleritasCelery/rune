@@ -1,6 +1,6 @@
 #[macro_use]
 pub mod cons;
-pub use cons::Cons;
+pub use cons::*;
 pub mod sub_type;
 pub use sub_type::*;
 pub mod func;

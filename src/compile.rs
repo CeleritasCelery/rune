@@ -1,9 +1,10 @@
 use crate::arena::Arena;
-use crate::error::{Error, Result, Type};
-use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value};
+use crate::error::{Error, Type};
+use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value, ConsIter};
 use crate::opcode::{CodeVec, OpCode};
 use paste::paste;
 use std::convert::TryInto;
+use anyhow::{Result, bail, ensure};
 
 impl OpCode {
     pub unsafe fn from_unchecked(x: u8) -> Self {
@@ -74,7 +75,7 @@ impl ConstVec {
         }
     }
 
-    fn insert(&mut self, obj: Object) -> Result<u16> {
+    fn insert(&mut self, obj: Object) -> Result<u16, Error> {
         let idx = self.insert_or_get(obj);
         match idx.try_into() {
             Ok(x) => Ok(x),
@@ -82,7 +83,7 @@ impl ConstVec {
         }
     }
 
-    fn insert_lambda(&mut self, func: LispFn) -> Result<u16> {
+    fn insert_lambda(&mut self, func: LispFn) -> Result<u16, Error> {
         let obj: Object = func.into_obj(&self.arena);
         self.consts.push(unsafe { obj.into_gc() });
         match (self.consts.len() - 1).try_into() {
@@ -171,7 +172,7 @@ impl CodeVec {
     }
 }
 
-fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<Object<'obj>>> {
+fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<Object<'obj>>, Error> {
     match obj.val() {
         Value::Nil => Ok(vec),
         Value::Cons(cons) => {
@@ -182,8 +183,16 @@ fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<
     }
 }
 
-fn into_list(obj: Object) -> Result<Vec<Object>> {
+fn into_list(obj: Object) -> Result<Vec<Object>, Error> {
     push_cons(obj, vec![])
+}
+
+fn into_iter<'ob>(obj: Object<'ob>) -> Result<ConsIter<'ob>> {
+    match obj.val() {
+        Value::Cons(cons) => Ok(cons.into_iter()),
+        Value::Nil => Ok(ConsIter::empty()),
+        x => Err(Error::Type(Type::List, x.get_type()).into()),
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -222,11 +231,11 @@ impl<'obj> Exp {
                 self.codes.emit_stack_ref(x);
                 Ok(())
             }
-            Err(_) => Err(Error::StackSizeOverflow),
+            Err(_) => Err(Error::StackSizeOverflow.into()),
         }
     }
 
-    fn stack_set(&mut self, idx: usize) -> Result<()> {
+    fn stack_set(&mut self, idx: usize) -> Result<(), Error> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.pop();
@@ -253,12 +262,10 @@ impl<'obj> Exp {
     }
 
     fn quote(&mut self, value: Object<'obj>) -> Result<()> {
-        let list = into_list(value)?;
-        match list.len() {
-            // (quote x)
-            1 => self.const_ref(list[0], None),
-            // (quote) | (quote x y)
-            x => Err(Error::ArgCount(1, x as u16)),
+        let mut forms = into_iter(value)?;
+        match forms.clone().count() {
+            1 => self.const_ref(forms.next().unwrap()?, None),
+            x => Err(Error::ArgCount(1, x as u16).into()),
         }
     }
 
@@ -269,7 +276,7 @@ impl<'obj> Exp {
             // (let x ...)
             Some(x) => self.let_bind(x)?,
             // (let)
-            None => return Err(Error::ArgCount(1, 0)),
+            None => bail!(Error::ArgCount(1, 0)),
         };
         self.implicit_progn(iter.as_slice())?;
         // Remove let bindings from the stack
@@ -304,7 +311,7 @@ impl<'obj> Exp {
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
-        let var: Symbol = dbg!(cons.car().try_into())?;
+        let var: Symbol = cons.car().try_into()?;
         let list = into_list(cons.cdr())?;
         let len = list.len();
         let mut iter = list.into_iter();
@@ -323,7 +330,7 @@ impl<'obj> Exp {
             // (let ((x y)))
             None => Ok(()),
             // (let ((x y z ..)))
-            Some(_) => Err(Error::LetValueCount(len as u16)),
+            Some(_) => Err(Error::LetValueCount(len as u16).into()),
         }
     }
 
@@ -339,7 +346,7 @@ impl<'obj> Exp {
                 Value::Cons(cons) => self.let_bind_call(cons)?,
                 // (let (x))
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
-                x => return Err(Error::Type(Type::Cons, x.get_type())),
+                x => bail!(Error::Type(Type::Cons, x.get_type())),
             }
         }
         Ok(bindings.len())
@@ -349,15 +356,11 @@ impl<'obj> Exp {
         let list = into_list(obj)?;
         let pairs = list.chunks_exact(2);
         let len = list.len() as u16;
-        // (setq) | (setq x)
-        if len < 2 {
-            return Err(Error::ArgCount(2, len));
-        }
-        // (setq x y z)
-        if len % 2 != 0 {
-            // We have an extra element in the setq that does not have a value
-            return Err(Error::ArgCount(len + 1, len));
-        }
+        // (setq)
+        ensure!(len > 0, Error::ArgCount(2, len));
+        // (setq x) | (setq x y z)
+        // Make sure we don't have an extra element in the setq that does not have a value
+        ensure!(len % 2 == 0, Error::ArgCount(len + 1, len));
         let last = (list.len() / 2) - 1;
         for (idx, pair) in pairs.enumerate() {
             let sym: Symbol = pair[0].try_into()?;
@@ -437,7 +440,7 @@ impl<'obj> Exp {
         let list = into_list(obj)?;
         match list.len() {
             // (if) | (if x)
-            len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16)),
+            len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16).into()),
             // (if x y)
             2 => {
                 self.compile_form(list[0])?;
@@ -465,9 +468,7 @@ impl<'obj> Exp {
 
     fn compile_loop(&mut self, obj: Object) -> Result<()> {
         let forms = into_list(obj)?;
-        if forms.is_empty() {
-            return Err(Error::ArgCount(1, 0));
-        }
+        ensure!(!forms.is_empty(), Error::ArgCount(1, 0));
         let top = self.codes.len();
         self.compile_form(forms[0])?;
         let loop_exit = self.jump(OpCode::JumpNilElsePop);
@@ -478,7 +479,7 @@ impl<'obj> Exp {
         Ok(())
     }
 
-    fn compile_lambda(&mut self, obj: Object) -> Result<()> {
+    pub fn compile_lambda(obj: Object) -> Result<LispFn> {
         let list = into_list(obj)?;
         let mut iter = list.into_iter();
         let mut vars: Vec<Option<Symbol>> = vec![];
@@ -486,7 +487,7 @@ impl<'obj> Exp {
         match iter.next() {
             // (lambda ())
             None => {
-                return self.add_const_lambda(LispFn::default());
+                return Ok(LispFn::default());
             }
             // (lambda (x ...) ...)
             Some(bindings) => {
@@ -494,20 +495,25 @@ impl<'obj> Exp {
                     println!("binding = {}", binding);
                     match binding.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
-                        x => return dbg!(Err(Error::Type(Type::Symbol, x.get_type()))),
+                        x => bail!(Error::Type(Type::Symbol, x.get_type())),
                     }
                 }
             }
-        };
+        }
         let body = iter.as_slice();
         if body.is_empty() {
-            self.add_const_lambda(LispFn::default())
+            Ok(LispFn::default())
         } else {
             let len = vars.len();
             let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
             func.args.required = len as u16;
-            self.add_const_lambda(func)
+            Ok(func)
         }
+    }
+
+    fn compile_lambda_def(&mut self, obj: Object) -> Result<()> {
+        let lambda = Self::compile_lambda(obj)?;
+        self.add_const_lambda(lambda)
     }
 
     fn compile_defvar(&mut self, obj: Object) -> Result<()> {
@@ -532,11 +538,11 @@ impl<'obj> Exp {
                         Ok(())
                     }
                     // (defvar "x")
-                    x => Err(Error::Type(Type::Symbol, x.get_type())),
+                    x => Err(Error::Type(Type::Symbol, x.get_type()).into()),
                 }
             }
             // (defvar)
-            None => Err(Error::ArgCount(1, 0)),
+            None => Err(Error::ArgCount(1, 0).into()),
         }
     }
 
@@ -621,9 +627,9 @@ impl<'obj> Exp {
 
     fn dispatch_special_form(&mut self, cons: &Cons) -> Result<()> {
         println!("car = {}", cons.car());
-        let sym: Symbol = dbg!(cons.car().try_into())?;
+        let sym: Symbol = cons.car().try_into()?;
         match sym.get_name() {
-            "lambda" => self.compile_lambda(cons.cdr()),
+            "lambda" => self.compile_lambda_def(cons.cdr()),
             "while" => self.compile_loop(cons.cdr()),
             "quote" => self.quote(cons.cdr()),
             "progn" => self.progn(cons.cdr()),
@@ -649,7 +655,7 @@ impl<'obj> Exp {
     }
 
     fn compile_form(&mut self, obj: Object<'obj>) -> Result<()> {
-        match dbg!(obj.val()) {
+        match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.const_ref(obj, None),
@@ -685,7 +691,7 @@ mod test {
     fn check_error(compare: &str, expect: Error) {
         let arena = &Arena::new();
         let obj = Reader::read(compare, arena).unwrap().0;
-        assert_eq!(Exp::compile(obj).err().unwrap(), expect);
+        assert_eq!(Exp::compile(obj).err().unwrap().downcast::<Error>().unwrap(), expect);
     }
 
     macro_rules! check_compiler {
@@ -982,7 +988,8 @@ mod test {
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
         let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false, Arena::new());
-        check_compiler!("(lambda (x) x)", [Constant0, Ret], [func]);
+        check_compiler!("(lambda (x) x)", [Constant0, Ret], [func.clone()]);
+        check_compiler!("(let ((x 1)(y 2)) (lambda (x) x))", [Constant0, Constant1, Constant2, DiscardNKeepTOS, 2, Ret], [1, 2, func]);
 
         let func = LispFn::new(
             vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
