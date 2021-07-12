@@ -25,6 +25,9 @@ pub struct Object<'a> {
     marker: PhantomData<&'a ()>,
 }
 
+pub const NIL: Object = Object{data: InnerObject(unsafe {NonZero::new_unchecked(Tag::Nil as i64)}), marker: PhantomData};
+pub const TRUE: Object = Object{data: InnerObject(unsafe {NonZero::new_unchecked(Tag::True as i64)}), marker: PhantomData};
+
 pub type GcObject = Object<'static>;
 
 #[derive(Debug, PartialEq)]
@@ -92,8 +95,8 @@ impl<'old, 'new> Object<'old> {
             Value::Symbol(x) => x.into(),
             Value::LispFn(x) => x.clone().into_obj(arena),
             Value::SubrFn(x) => (*x).into_obj(arena),
-            Value::True => Object::t(),
-            Value::Nil => Object::nil(),
+            Value::True => TRUE,
+            Value::Nil => NIL,
             Value::Float(x) => x.into_obj(arena),
         }
     }
@@ -103,14 +106,6 @@ impl<'obj> Object<'obj> {
     #[inline(always)]
     pub fn val<'new: 'obj>(self) -> Value<'new> {
         self.data.val()
-    }
-
-    pub fn nil() -> Self {
-        InnerObject::nil().into()
-    }
-
-    pub fn t() -> Self {
-        InnerObject::t().into()
     }
 
     pub const unsafe fn into_gc(self) -> Object<'static> {
@@ -202,14 +197,6 @@ impl<'obj> From<InnerObject> for Object<'obj> {
 impl InnerObject {
     fn new(bits: i64) -> Self {
         Self(NonZero::new(bits).expect("Object bits should be non-zero"))
-    }
-
-    pub fn nil() -> Self {
-        Self::from_tag(Tag::Nil)
-    }
-
-    pub fn t() -> Self {
-        Self::from_tag(Tag::True)
     }
 
     const fn get(self) -> i64 {
@@ -395,9 +382,9 @@ mod test {
 
     #[test]
     fn other() {
-        let t = Object::t();
+        let t = TRUE;
         assert!(t.is_true());
-        let n = Object::nil();
+        let n = NIL;
         assert!(n.is_nil());
 
         let bool_true: Object = true.into();

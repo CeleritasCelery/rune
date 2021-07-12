@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::data::Environment;
 use crate::object::InnerObject;
-use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value};
+use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::cmp::max;
@@ -161,7 +161,7 @@ impl<'a, 'ob> Routine<'a> {
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
-                self.stack.push(InnerObject::nil());
+                self.stack.push(unsafe {NIL.inner()});
             }
         }
         Ok(max(total_args, count))

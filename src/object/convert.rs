@@ -138,7 +138,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => Object::nil(),
+            None => NIL,
         }
     }
 }

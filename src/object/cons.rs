@@ -152,7 +152,7 @@ impl<'a> ConsIter<'a> {
 fn car(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.car(),
-        List::Nil => Object::nil(),
+        List::Nil => NIL,
     }
 }
 
@@ -160,7 +160,7 @@ fn car(list: List) -> Object {
 fn cdr(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => Object::nil(),
+        List::Nil => NIL,
     }
 }
 
@@ -194,7 +194,7 @@ macro_rules! cons {
     ($car:expr; $arena:expr) => {
         crate::object::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
-            crate::object::Object::nil(),
+            crate::object::NIL,
         )
     };
 }
