@@ -44,10 +44,12 @@ impl InnerSymbolMap {
         match self.map.get(name) {
             Some(x) => x.0,
             None => {
-                let sym = Box::new(InnerSymbol::new(name.to_owned()));
+                let name = name.to_owned();
+                let ptr: &'static str = unsafe { std::mem::transmute(name.as_str()) };
+                let sym = Box::new(InnerSymbol::new(ptr));
                 let ptr: *const InnerSymbol = sym.as_ref();
                 self.map
-                    .insert(name.to_owned(), SymbolBox(Box::into_raw(sym)));
+                    .insert(name, SymbolBox(Box::into_raw(sym)));
                 ptr
             }
         }

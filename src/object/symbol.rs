@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Debug)]
 pub struct InnerSymbol {
-    name: String,
+    name: &'static str,
     func: FnCell,
 }
 
@@ -15,9 +15,8 @@ pub struct InnerSymbol {
 struct FnCell(AtomicI64);
 
 impl FnCell {
-    fn new() -> Self {
-        let bits = unsafe { transmute(None::<Function>) };
-        Self(AtomicI64::new(bits))
+    const fn new() -> Self {
+        Self(AtomicI64::new(0))
     }
 
     fn set(&self, func: Option<Function>) {
@@ -38,7 +37,7 @@ impl cmp::PartialEq for InnerSymbol {
 }
 
 impl InnerSymbol {
-    pub fn new(name: String) -> Self {
+    pub const fn new(name: &'static str) -> Self {
         InnerSymbol {
             name,
             func: FnCell::new(),
@@ -133,7 +132,7 @@ mod test {
     #[test]
     fn symbol_func() {
         let arena = &Arena::new();
-        let x = InnerSymbol::new("foo".to_owned());
+        let x = InnerSymbol::new("foo");
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false, Arena::new());
@@ -163,7 +162,7 @@ mod test {
     fn subr() {
         let arena = &Arena::new();
 
-        let sym = InnerSymbol::new("bar".to_owned());
+        let sym = InnerSymbol::new("bar");
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
         sym.set_func(core_func.into_obj(arena));
 
