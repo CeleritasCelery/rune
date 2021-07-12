@@ -98,7 +98,7 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
 #[derive(Clone)]
 pub struct ConsIter<'a>(Option<&'a Cons<'a>>);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ConsIterError;
 
 impl Display for ConsIterError {
@@ -141,6 +141,10 @@ impl<'a> Iterator for ConsIter<'a> {
 impl<'a> ConsIter<'a> {
     pub fn empty() -> Self {
         ConsIter(None)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == None
     }
 }
 

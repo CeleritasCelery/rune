@@ -172,21 +172,6 @@ impl CodeVec {
     }
 }
 
-fn push_cons<'obj>(obj: Object<'obj>, mut vec: Vec<Object<'obj>>) -> Result<Vec<Object<'obj>>, Error> {
-    match obj.val() {
-        Value::Nil => Ok(vec),
-        Value::Cons(cons) => {
-            vec.push(cons.car());
-            push_cons(cons.cdr(), vec)
-        }
-        x => Err(Error::Type(Type::List, x.get_type())),
-    }
-}
-
-fn into_list(obj: Object) -> Result<Vec<Object>, Error> {
-    push_cons(obj, vec![])
-}
-
 fn into_iter<'ob>(obj: Object<'ob>) -> Result<ConsIter<'ob>> {
     match obj.val() {
         Value::Cons(cons) => Ok(cons.into_iter()),
@@ -270,15 +255,14 @@ impl<'obj> Exp {
     }
 
     fn compile_let(&mut self, form: Object) -> Result<()> {
-        let list = into_list(form)?;
-        let mut iter = list.into_iter();
+        let mut iter = into_iter(form)?;
         let num_binding_forms = match iter.next() {
             // (let x ...)
-            Some(x) => self.let_bind(x)?,
+            Some(x) => self.let_bind(x?)?,
             // (let)
             None => bail!(Error::ArgCount(1, 0)),
         };
-        self.implicit_progn(iter.as_slice())?;
+        self.implicit_progn(iter)?;
         // Remove let bindings from the stack
         if num_binding_forms > 0 {
             self.codes
@@ -291,34 +275,29 @@ impl<'obj> Exp {
     }
 
     fn progn(&mut self, forms: Object) -> Result<()> {
-        self.implicit_progn(into_list(forms)?.as_ref())
+        self.implicit_progn(into_iter(forms)?)
     }
 
-    fn implicit_progn(&mut self, forms: &[Object]) -> Result<()> {
-        if forms.is_empty() {
-            self.const_ref(Object::nil(), None)
+    fn implicit_progn(&mut self, mut forms: ConsIter) -> Result<()> {
+        if let Some(form) = forms.next() {
+            self.compile_form(form?)?;
         } else {
-            // Use take and skip to ensure that the last form does not discard
-            for form in forms.iter().take(1) {
-                self.compile_form(*form)?;
-            }
-            for form in forms.iter().skip(1) {
-                self.discard();
-                self.compile_form(*form)?;
-            }
-            Ok(())
+            return self.const_ref(Object::nil(), None);
         }
+        for form in forms {
+            self.discard();
+            self.compile_form(form?)?;
+        }
+        Ok(())
     }
 
     fn let_bind_call(&mut self, cons: &Cons) -> Result<()> {
         let var: Symbol = cons.car().try_into()?;
-        let list = into_list(cons.cdr())?;
-        let len = list.len();
-        let mut iter = list.into_iter();
+        let mut iter = into_iter(cons.cdr())?;
         match iter.next() {
             // (let ((x y)))
             Some(value) => {
-                self.compile_form(value)?;
+                self.compile_form(value?)?;
                 let last = self.vars.last_mut();
                 let tos = last.expect("stack empty after compile form");
                 *tos = Some(var);
@@ -326,12 +305,10 @@ impl<'obj> Exp {
             // (let ((x)))
             None => self.const_ref(Object::nil(), Some(var))?,
         };
-        match iter.next() {
-            // (let ((x y)))
-            None => Ok(()),
-            // (let ((x y z ..)))
-            Some(_) => Err(Error::LetValueCount(len as u16).into()),
-        }
+        let rest = iter.count();
+        // (let ((x y z ..)))
+        ensure!(rest == 0, Error::LetValueCount(rest as u16 + 1));
+        Ok(())
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
@@ -339,48 +316,50 @@ impl<'obj> Exp {
     }
 
     fn let_bind(&mut self, obj: Object) -> Result<usize> {
-        let bindings = into_list(obj)?;
-        for binding in &bindings {
-            match binding.val() {
+        let bindings = into_iter(obj)?;
+        let mut len = 0;
+        for binding in bindings {
+            match binding?.val() {
                 // (let ((x y)))
                 Value::Cons(cons) => self.let_bind_call(cons)?,
                 // (let (x))
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
                 x => bail!(Error::Type(Type::Cons, x.get_type())),
             }
+            len += 1;
         }
-        Ok(bindings.len())
+        Ok(len)
     }
 
     fn setq(&mut self, obj: Object) -> Result<()> {
-        let list = into_list(obj)?;
-        let pairs = list.chunks_exact(2);
-        let len = list.len() as u16;
+        let mut forms = into_iter(obj)?;
+        let mut args_processed = 0;
         // (setq)
-        ensure!(len > 0, Error::ArgCount(2, len));
-        // (setq x) | (setq x y z)
-        // Make sure we don't have an extra element in the setq that does not have a value
-        ensure!(len % 2 == 0, Error::ArgCount(len + 1, len));
-        let last = (list.len() / 2) - 1;
-        for (idx, pair) in pairs.enumerate() {
-            let sym: Symbol = pair[0].try_into()?;
-            let val = pair[1];
-
-            self.compile_form(val)?;
-
-            // Duplicate the last value to be the return value of the setq
-            // expression
-            if idx == last {
+        ensure!(!forms.is_empty(), Error::ArgCount(2, 0));
+        // Iterate over variable/value pairs
+        while let Some(var) = forms.next() {
+            args_processed += 1;
+            // value
+            match forms.next() {
+                // (setq x y)
+                Some(val) => self.compile_form(val?)?,
+                // (setq x)
+                None => bail!(Error::ArgCount(args_processed + 1, args_processed)),
+            }
+            args_processed += 1;
+            if forms.is_empty() {
                 self.duplicate();
             }
 
+            // variable
+            let sym = var?.try_into()?;
             match self.vars.iter().rposition(|&x| x == Some(sym)) {
                 Some(idx) => self.stack_set(idx)?,
                 None => {
                     let idx = self.constants.insert(sym.into())?;
                     self.var_set(idx);
                 }
-            };
+            }
         }
         Ok(())
     }
@@ -388,10 +367,11 @@ impl<'obj> Exp {
     fn compile_funcall(&mut self, cons: &Cons) -> Result<()> {
         self.const_ref(cons.car(), None)?;
         let prev_len = self.vars.len();
-        let args = into_list(cons.cdr())?;
-        let num_args = args.len();
+        let args = into_iter(cons.cdr())?;
+        let mut num_args = 0;
         for arg in args {
-            self.compile_form(arg)?;
+            self.compile_form(arg?)?;
+            num_args += 1;
         }
         self.codes.emit_call(num_args as u16);
         self.vars.truncate(prev_len);
@@ -437,29 +417,30 @@ impl<'obj> Exp {
     }
 
     fn compile_if(&mut self, obj: Object) -> Result<()> {
-        let list = into_list(obj)?;
-        match list.len() {
+        // let list = into_list(obj)?;
+        let mut forms = into_iter(obj)?;
+        let len = forms.clone().count();
+        match len {
             // (if) | (if x)
-            len @ 0 | len @ 1 => Err(Error::ArgCount(2, len as u16).into()),
+            0 | 1 => Err(Error::ArgCount(2, len as u16).into()),
             // (if x y)
             2 => {
-                self.compile_form(list[0])?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNilElsePop);
-                self.compile_form(list[1])?;
+                self.compile_form(forms.next().unwrap()?)?;
                 self.set_jump_target(target);
                 Ok(())
             }
             // (if x y z ...)
             _ => {
-                let mut forms = list.into_iter();
-                self.compile_form(forms.next().unwrap())?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let else_nil_target = self.jump(OpCode::JumpNil);
                 // if branch
-                self.compile_form(forms.next().unwrap())?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
                 self.set_jump_target(else_nil_target);
-                self.implicit_progn(forms.as_slice())?;
+                self.implicit_progn(forms)?;
                 self.set_jump_target(jump_to_end_target);
                 Ok(())
             }
@@ -467,12 +448,14 @@ impl<'obj> Exp {
     }
 
     fn compile_loop(&mut self, obj: Object) -> Result<()> {
-        let forms = into_list(obj)?;
-        ensure!(!forms.is_empty(), Error::ArgCount(1, 0));
+        let mut forms = into_iter(obj)?;
         let top = self.codes.len();
-        self.compile_form(forms[0])?;
+        match forms.next() {
+            Some(form) => self.compile_form(form?)?,
+            None => bail!(Error::ArgCount(1, 0)),
+        }
         let loop_exit = self.jump(OpCode::JumpNilElsePop);
-        self.implicit_progn(&forms[1..])?;
+        self.implicit_progn(forms)?;
         self.discard();
         self.jump_back(OpCode::Jump, top);
         self.set_jump_target(loop_exit);
@@ -480,8 +463,7 @@ impl<'obj> Exp {
     }
 
     pub fn compile_lambda(obj: Object) -> Result<LispFn> {
-        let list = into_list(obj)?;
-        let mut iter = list.into_iter();
+        let mut iter = into_iter(obj)?;
         let mut vars: Vec<Option<Symbol>> = vec![];
 
         match iter.next() {
@@ -491,21 +473,19 @@ impl<'obj> Exp {
             }
             // (lambda (x ...) ...)
             Some(bindings) => {
-                for binding in &into_list(bindings)? {
-                    println!("binding = {}", binding);
-                    match binding.val() {
+                for binding in into_iter(bindings?)? {
+                    match binding?.val() {
                         Value::Symbol(x) => vars.push(Some(x)),
                         x => bail!(Error::Type(Type::Symbol, x.get_type())),
                     }
                 }
             }
         }
-        let body = iter.as_slice();
-        if body.is_empty() {
+        if iter.is_empty() {
             Ok(LispFn::default())
         } else {
             let len = vars.len();
-            let mut func: LispFn = Self::compile_func_body(body, vars)?.into();
+            let mut func: LispFn = Self::compile_func_body(iter, vars)?.into();
             func.args.required = len as u16;
             Ok(func)
         }
@@ -517,18 +497,17 @@ impl<'obj> Exp {
     }
 
     fn compile_defvar(&mut self, obj: Object) -> Result<()> {
-        let list = into_list(obj)?;
-        let mut iter = list.into_iter();
+        let mut iter = into_iter(obj)?;
 
         match iter.next() {
             // (defvar x ...)
             Some(x) => {
-                match x.val() {
+                match x?.val() {
                     Value::Symbol(sym) => {
                         // TODO: compile this into a lambda like Emacs does
                         match iter.next() {
                             // (defvar x y)
-                            Some(value) => self.compile_form(value)?,
+                            Some(value) => self.compile_form(value?)?,
                             // (defvar x)
                             None => self.const_ref(Object::nil(), None)?,
                         };
@@ -551,21 +530,22 @@ impl<'obj> Exp {
         clause: Object,
         jump_targets: &mut Vec<(usize, OpCode)>,
     ) -> Result<()> {
-        let cond = into_list(clause)?;
-        match cond.len() {
+        let mut cond = into_iter(clause)?;
+        let len = cond.clone().count();
+        match len {
             // (cond ())
             0 => {}
             // (cond (x))
             1 => {
-                self.compile_form(cond[0])?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
                 jump_targets.push(target);
             }
             // (cond (x y ...))
             _ => {
-                self.compile_form(cond[0])?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let skip_target = self.jump(OpCode::JumpNil);
-                self.implicit_progn(&cond[1..])?;
+                self.implicit_progn(cond)?;
                 self.vars.pop();
                 let taken_target = self.jump(OpCode::Jump);
                 self.set_jump_target(skip_target);
@@ -580,24 +560,25 @@ impl<'obj> Exp {
         clause: Object,
         jump_targets: &mut Vec<(usize, OpCode)>,
     ) -> Result<()> {
-        let cond = into_list(clause)?;
-        match cond.len() {
+        let mut cond = into_iter(clause)?;
+        let len = cond.clone().count();
+        match len {
             // (cond ())
             0 => {
                 self.const_ref(Object::nil(), None)?;
             }
             // (cond (x))
             1 => {
-                self.compile_form(cond[0])?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
                 self.const_ref(Object::nil(), None)?;
                 jump_targets.push(target);
             }
             // (cond (x y ...))
             _ => {
-                self.compile_form(cond[0])?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNilElsePop);
-                self.implicit_progn(&cond[1..])?;
+                self.implicit_progn(cond)?;
                 jump_targets.push(target);
             }
         }
@@ -605,19 +586,20 @@ impl<'obj> Exp {
     }
 
     fn compile_cond(&mut self, obj: Object) -> Result<()> {
-        let mut clauses = into_list(obj)?;
-        let last = match clauses.pop() {
-            Some(clause) => clause,
-            // (cond)
-            None => {
-                return self.const_ref(Object::nil(), None);
-            }
-        };
-        let final_return_targets = &mut Vec::new();
-        for clause in clauses {
-            self.compile_cond_clause(clause, final_return_targets)?;
+        let mut clauses = into_iter(obj)?;
+        // (cond)
+        if clauses.is_empty() {
+            return self.const_ref(Object::nil(), None);
         }
-        self.compile_last_cond_clause(last, final_return_targets)?;
+
+        let final_return_targets = &mut Vec::new();
+        while let Some(clause) = clauses.next() {
+            if clauses.is_empty() {
+                self.compile_last_cond_clause(clause?, final_return_targets)?;
+            } else {
+                self.compile_cond_clause(clause?, final_return_targets)?;
+            }
+        }
 
         for target in final_return_targets {
             self.codes.set_jump_placeholder(target.0);
@@ -662,7 +644,7 @@ impl<'obj> Exp {
         }
     }
 
-    fn compile_func_body(obj: &[Object], vars: Vec<Option<Symbol>>) -> Result<Self> {
+    fn compile_func_body(obj: ConsIter, vars: Vec<Option<Symbol>>) -> Result<Self> {
         let mut exp = Self {
             codes: CodeVec::default(),
             constants: ConstVec::new(),
@@ -675,7 +657,8 @@ impl<'obj> Exp {
     }
 
     pub fn compile(obj: Object) -> Result<Self> {
-        Self::compile_func_body(&[obj], vec![])
+        let cons = Cons::new(obj, Object::nil());
+        Self::compile_func_body(cons.into_iter(), vec![])
     }
 }
 
@@ -688,10 +671,11 @@ mod test {
     use crate::reader::Reader;
     use OpCode::*;
 
-    fn check_error(compare: &str, expect: Error) {
+    fn check_error<E>(compare: &str, expect: E) 
+    where E: std::error::Error + PartialEq + Send + Sync + 'static {
         let arena = &Arena::new();
         let obj = Reader::read(compare, arena).unwrap().0;
-        assert_eq!(Exp::compile(obj).err().unwrap().downcast::<Error>().unwrap(), expect);
+        assert_eq!(Exp::compile(obj).err().unwrap().downcast::<E>().unwrap(), expect);
     }
 
     macro_rules! check_compiler {
@@ -1016,7 +1000,7 @@ mod test {
         check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
         check_error("(let ((foo 1 2)))", Error::LetValueCount(2));
         check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
-        check_error("(let ((foo 1 . 2)))", Error::Type(Type::List, Type::Int));
+        check_error("(let ((foo 1 . 2)))", crate::object::ConsIterError);
         check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));
         check_error("(let)", Error::ArgCount(1, 0));
     }
