@@ -26,11 +26,11 @@ pub struct Object<'a> {
 }
 
 pub const NIL: Object = Object {
-    data: InnerObject(unsafe { NonZero::new_unchecked(Tag::Nil as i64) }),
+    data: InnerObject::from_tag(Tag::Nil),
     marker: PhantomData,
 };
 pub const TRUE: Object = Object {
-    data: InnerObject(unsafe { NonZero::new_unchecked(Tag::True as i64) }),
+    data: InnerObject::from_tag(Tag::True),
     marker: PhantomData,
 };
 
@@ -201,15 +201,15 @@ impl<'obj> From<InnerObject> for Object<'obj> {
 }
 
 impl InnerObject {
-    fn new(bits: i64) -> Self {
-        Self(NonZero::new(bits).expect("Object bits should be non-zero"))
+    const fn new(bits: i64) -> Self {
+        unsafe { Self(NonZero::new_unchecked(bits)) }
     }
 
     const fn get(self) -> i64 {
         self.0.get()
     }
 
-    fn from_tag_bits(bits: i64, tag: Tag) -> Self {
+    const fn from_tag_bits(bits: i64, tag: Tag) -> Self {
         let bits = (bits << TAG_SIZE) | tag as i64;
         Self::new(bits)
     }
@@ -225,7 +225,7 @@ impl InnerObject {
         obj
     }
 
-    fn from_tag(tag: Tag) -> Self {
+    const fn from_tag(tag: Tag) -> Self {
         // cast to i64 to zero the high bits
         Self::new(tag as i64)
     }
