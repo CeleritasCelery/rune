@@ -48,8 +48,7 @@ impl InnerSymbolMap {
                 let ptr: &'static str = unsafe { std::mem::transmute(name.as_str()) };
                 let sym = Box::new(InnerSymbol::new(ptr));
                 let ptr: *const InnerSymbol = sym.as_ref();
-                self.map
-                    .insert(name, SymbolBox(Box::into_raw(sym)));
+                self.map.insert(name, SymbolBox(Box::into_raw(sym)));
                 ptr
             }
         }

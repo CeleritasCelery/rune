@@ -132,14 +132,14 @@ impl<'a> Iterator for ConsIter<'a> {
                 };
                 *self = ConsIter(next);
                 Some(Ok(val))
-            },
+            }
             None => None,
         }
     }
 }
 
 impl<'a> ConsIter<'a> {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         ConsIter(None)
     }
 

@@ -1,7 +1,9 @@
 use crate::arena::Arena;
 use crate::data::Environment;
 use crate::object::InnerObject;
-use crate::object::{BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL};
+use crate::object::{
+    BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL,
+};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::cmp::max;
@@ -131,7 +133,7 @@ impl LispStack for Vec<InnerObject> {
     }
 }
 
-fn symbol_is<'ob>(obj: Object<'ob>, name: &str) -> Result<()> {
+fn symbol_is(obj: Object, name: &str) -> Result<()> {
     match obj.val() {
         Value::Symbol(sym) => {
             if sym.get_name() == name {
@@ -139,7 +141,7 @@ fn symbol_is<'ob>(obj: Object<'ob>, name: &str) -> Result<()> {
             } else {
                 Err(anyhow!("Invalid function defintion: {}", sym))
             }
-        },
+        }
         x => Err(anyhow!("Invalid function definition: {}", x)),
     }
 }
@@ -161,7 +163,7 @@ impl<'a, 'ob> Routine<'a> {
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
-                self.stack.push(unsafe {NIL.inner()});
+                self.stack.push(unsafe { NIL.inner() });
             }
         }
         Ok(max(total_args, count))
@@ -205,7 +207,9 @@ impl<'a, 'ob> Routine<'a> {
             }
             FunctionValue::Cons(cons) => {
                 symbol_is(cons.car(), "function")?;
-                let next = cons.next().ok_or(anyhow!("invalid function definition"))?;
+                let next = cons
+                    .next()
+                    .ok_or_else(|| anyhow!("invalid function definition"))?;
                 symbol_is(next.car(), "lambda")?;
                 let lambda = crate::compile::Exp::compile_lambda(next.cdr())?;
                 self.call_lisp(&lambda, arg_cnt)?;

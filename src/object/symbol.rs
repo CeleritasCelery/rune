@@ -52,8 +52,8 @@ impl InnerSymbol {
         self.func.get()
     }
 
-    pub fn get_name(&self) -> &str {
-        &self.name
+    pub const fn get_name(&self) -> &str {
+        self.name
     }
 }
 

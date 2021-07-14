@@ -25,8 +25,14 @@ pub struct Object<'a> {
     marker: PhantomData<&'a ()>,
 }
 
-pub const NIL: Object = Object{data: InnerObject(unsafe {NonZero::new_unchecked(Tag::Nil as i64)}), marker: PhantomData};
-pub const TRUE: Object = Object{data: InnerObject(unsafe {NonZero::new_unchecked(Tag::True as i64)}), marker: PhantomData};
+pub const NIL: Object = Object {
+    data: InnerObject(unsafe { NonZero::new_unchecked(Tag::Nil as i64) }),
+    marker: PhantomData,
+};
+pub const TRUE: Object = Object {
+    data: InnerObject(unsafe { NonZero::new_unchecked(Tag::True as i64) }),
+    marker: PhantomData,
+};
 
 pub type GcObject = Object<'static>;
 

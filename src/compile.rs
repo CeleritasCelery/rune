@@ -1,10 +1,10 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
-use crate::object::{Cons, GcObject, IntoObject, LispFn, Object, Symbol, Value, ConsIter, NIL};
+use crate::object::{Cons, ConsIter, GcObject, IntoObject, LispFn, Object, Symbol, Value, NIL};
 use crate::opcode::{CodeVec, OpCode};
+use anyhow::{bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
-use anyhow::{Result, bail, ensure};
 
 impl OpCode {
     pub unsafe fn from_unchecked(x: u8) -> Self {
@@ -172,7 +172,7 @@ impl CodeVec {
     }
 }
 
-fn into_iter<'ob>(obj: Object<'ob>) -> Result<ConsIter<'ob>> {
+fn into_iter(obj: Object) -> Result<ConsIter> {
     match obj.val() {
         Value::Cons(cons) => Ok(cons.into_iter()),
         Value::Nil => Ok(ConsIter::empty()),
@@ -668,15 +668,20 @@ mod test {
     use super::*;
     use crate::arena::Arena;
     use crate::intern::intern;
+    use crate::object::TRUE;
     use crate::reader::Reader;
     use OpCode::*;
-    use crate::object::TRUE;
 
-    fn check_error<E>(compare: &str, expect: E) 
-    where E: std::error::Error + PartialEq + Send + Sync + 'static {
+    fn check_error<E>(compare: &str, expect: E)
+    where
+        E: std::error::Error + PartialEq + Send + Sync + 'static,
+    {
         let arena = &Arena::new();
         let obj = Reader::read(compare, arena).unwrap().0;
-        assert_eq!(Exp::compile(obj).err().unwrap().downcast::<E>().unwrap(), expect);
+        assert_eq!(
+            Exp::compile(obj).err().unwrap().downcast::<E>().unwrap(),
+            expect
+        );
     }
 
     macro_rules! check_compiler {
@@ -972,9 +977,20 @@ mod test {
         );
         check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
 
-        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false, Arena::new());
+        let func = LispFn::new(
+            vec_into![StackRef0, Ret].into(),
+            vec![],
+            1,
+            0,
+            false,
+            Arena::new(),
+        );
         check_compiler!("(lambda (x) x)", [Constant0, Ret], [func.clone()]);
-        check_compiler!("(let ((x 1)(y 2)) (lambda (x) x))", [Constant0, Constant1, Constant2, DiscardNKeepTOS, 2, Ret], [1, 2, func]);
+        check_compiler!(
+            "(let ((x 1)(y 2)) (lambda (x) x))",
+            [Constant0, Constant1, Constant2, DiscardNKeepTOS, 2, Ret],
+            [1, 2, func]
+        );
 
         let func = LispFn::new(
             vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),

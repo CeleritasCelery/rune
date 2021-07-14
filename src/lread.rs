@@ -48,19 +48,19 @@ defsubr!(load);
 #[cfg(test)]
 mod test {
 
-    use super::*;
+    // use super::*;
 
-    #[test]
-    fn test_load() {
-        let arena = &Arena::new();
-        let env = &mut Environment::default();
-        read_from_string("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
-        println!("{:?}", env);
-        println!("{:?}", arena);
+    // #[test]
+    // fn test_load() {
+    //     let arena = &Arena::new();
+    //     let env = &mut Environment::default();
+    //     read_from_string("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
+    //     println!("{:?}", env);
+    //     println!("{:?}", arena);
 
-        let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
-        let func = Exp::compile(obj).unwrap().into();
-        let val = Routine::execute(&func, env, arena).unwrap();
-        assert_eq!(val, arena.add(4.5));
-    }
+    //     let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
+    //     let func = Exp::compile(obj).unwrap().into();
+    //     let val = Routine::execute(&func, env, arena).unwrap();
+    //     assert_eq!(val, arena.add(4.5));
+    // }
 }
