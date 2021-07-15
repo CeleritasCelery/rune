@@ -15,27 +15,56 @@ pub struct FnArgs {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LispFn {
-    pub op_codes: CodeVec,
-    pub constants: Vec<GcObject>,
+pub struct LispFn<'ob> {
+    pub body: Expression<'ob>,
     pub args: FnArgs,
-    arena: Arena,
 }
-define_unbox_ref!(LispFn, Func);
 
-impl LispFn {
+impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for &'a LispFn<'a> {
+    type Error = crate::error::Error;
+    fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+        match obj.val() {
+            crate::object::Value::LispFn(x) => Ok(x),
+            x => Err(crate::error::Error::Type(
+                crate::error::Type::Func,
+                x.get_type(),
+            )),
+        }
+    }
+}
+impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for Option<&'a LispFn<'a>> {
+    type Error = crate::error::Error;
+    fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+        match obj.val() {
+            crate::object::Value::LispFn(x) => Ok(Some(x)),
+            crate::object::Value::Nil => Ok(None),
+            x => Err(crate::error::Error::Type(
+                crate::error::Type::Func,
+                x.get_type(),
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Expression<'ob> {
+    pub op_codes: CodeVec,
+    pub constants: Vec<Object<'ob>>,
+}
+
+impl<'ob> LispFn<'ob> {
     pub fn new(
         op_codes: CodeVec,
-        constants: Vec<GcObject>,
+        constants: Vec<Object<'ob>>,
         required: u16,
         optional: u16,
         rest: bool,
-        arena: Arena,
     ) -> Self {
         LispFn {
-            op_codes,
-            constants,
-            arena,
+            body: Expression {
+                op_codes,
+                constants,
+            },
             args: FnArgs {
                 required,
                 optional,
@@ -47,8 +76,8 @@ impl LispFn {
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for LispFn {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }
@@ -125,14 +154,13 @@ mod test {
             0,
             0,
             false,
-            Arena::new(),
         );
         let obj: Object = func.into_obj(arena);
         assert!(matches!(obj.val(), Value::LispFn(_)));
         format!("{}", obj);
         let func = obj.as_lisp_fn().expect("expected lispfn");
-        assert_eq!(func.op_codes, vec_into![0, 1, 2].into());
-        assert_eq!(func.constants, vec_into_object![1; arena]);
+        assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());
+        assert_eq!(func.body.constants, vec_into_object![1; arena]);
         assert_eq!(func.args.required, 0);
         assert_eq!(func.args.optional, 0);
         assert!(!func.args.rest);

@@ -45,7 +45,7 @@ pub enum Value<'a> {
     Nil,
     Cons(&'a Cons<'a>),
     String(&'a String),
-    LispFn(&'a LispFn),
+    LispFn(&'a LispFn<'a>),
     SubrFn(&'a SubrFn),
 }
 
@@ -157,7 +157,7 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub fn as_lisp_fn(self) -> Option<&'obj LispFn> {
+    pub fn as_lisp_fn(self) -> Option<&'obj LispFn<'obj>> {
         match self.val() {
             Value::LispFn(x) => Some(x),
             _ => None,

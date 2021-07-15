@@ -1,8 +1,7 @@
 use crate::arena::Arena;
-use crate::compile::Exp;
+use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
-use crate::object::LispFn;
 use crate::reader::{Error, Reader};
 use fn_macros::lisp_fn;
 
@@ -26,11 +25,11 @@ pub fn read_from_string<'obj>(
         println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
         println!("compiling");
         // this will go out of scope
-        let func: LispFn = Exp::compile(obj)?.into();
+        let exp = compile(obj, arena)?;
         println!("running");
-        println!("codes: {:?}", func.op_codes);
-        println!("const: {:?}", func.constants);
-        Routine::execute(&func, env, arena)?;
+        println!("codes: {:?}", exp.op_codes);
+        println!("const: {:?}", exp.constants);
+        Routine::execute(&exp, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }

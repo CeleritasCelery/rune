@@ -106,12 +106,12 @@ mod test {
         assert_eq!("foo", first.get_name());
         assert!(first.get_func().is_none());
         let second = symbol_map.intern("foo");
-        let func = LispFn::new(vec![5].into(), vec![], 0, 0, false, Arena::new());
+        let func = LispFn::new(vec![5].into(), vec![], 0, 0, false);
         let obj: Function = func.into_obj(arena);
         second.set_func(obj);
         let func_cell = first.get_func().unwrap();
         let func = func_cell.as_lisp_fn().expect("expected lispfn");
-        assert_eq!(func.op_codes.get(0).unwrap(), &5);
+        assert_eq!(func.body.op_codes.get(0).unwrap(), &5);
         assert_eq!(symbol_map.intern("batman"), symbol_map.intern("batman"));
     }
 }

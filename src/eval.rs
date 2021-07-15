@@ -2,7 +2,7 @@ use crate::arena::Arena;
 use crate::data::Environment;
 use crate::object::InnerObject;
 use crate::object::{
-    BuiltInFn, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL,
+    BuiltInFn, Expression, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL,
 };
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
@@ -33,7 +33,7 @@ impl std::error::Error for Error {}
 #[derive(Clone)]
 struct CallFrame<'a> {
     ip: Ip,
-    func: &'a LispFn,
+    func: &'a Expression<'a>,
     start: usize,
 }
 
@@ -80,7 +80,7 @@ impl Ip {
 }
 
 impl<'a> CallFrame<'a> {
-    fn new(func: &'a LispFn, frame_start: usize) -> CallFrame {
+    fn new(func: &'a Expression<'a>, frame_start: usize) -> CallFrame {
         CallFrame {
             ip: Ip::new(&func.op_codes),
             func,
@@ -211,7 +211,7 @@ impl<'a, 'ob> Routine<'a> {
                     .next()
                     .ok_or_else(|| anyhow!("invalid function definition"))?;
                 symbol_is(next.car(), "lambda")?;
-                let lambda = crate::compile::Exp::compile_lambda(next.cdr())?;
+                let lambda = crate::compile::Exp::compile_lambda(next.cdr(), arena)?;
                 self.call_lisp(&lambda, arg_cnt)?;
                 sym.set_func(arena.add(lambda));
             }
@@ -248,7 +248,7 @@ impl<'a, 'ob> Routine<'a> {
     }
 
     pub fn execute(
-        func: &LispFn,
+        exp: &Expression<'ob>,
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<GcObject> {
@@ -256,7 +256,7 @@ impl<'a, 'ob> Routine<'a> {
         let mut rout = Routine {
             stack: vec![],
             call_frames: vec![],
-            frame: CallFrame::new(func, 0),
+            frame: CallFrame::new(exp, 0),
         };
         loop {
             println!("{:?}", rout.stack);
@@ -418,7 +418,7 @@ pub fn eval<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> anyhow::Result<Object<'ob>> {
-    let func = crate::compile::Exp::compile(form)?.into();
+    let func = crate::compile::compile(form, arena)?;
     Routine::execute(&func, env, arena)
 }
 
@@ -428,7 +428,7 @@ defsubr!(eval);
 mod test {
     use super::*;
     use crate::arena::Arena;
-    use crate::compile::Exp;
+    use crate::compile::compile;
     use crate::object::IntoObject;
     use crate::reader::Reader;
 
@@ -438,10 +438,10 @@ mod test {
             let arena = &Arena::new();
             let env = &mut Environment::default();
             let obj = Reader::read($sexp, arena).unwrap().0;
-            let func: LispFn = Exp::compile(obj).unwrap().into();
-            println!("codes: {:?}", func.op_codes);
-            println!("const: {:?}", func.constants);
-            let val = Routine::execute(&func, env, arena).unwrap();
+            let exp = compile(obj, arena).unwrap();
+            println!("codes: {:?}", exp.op_codes);
+            println!("const: {:?}", exp.constants);
+            let val = Routine::execute(&exp, env, arena).unwrap();
             assert_eq!(val, $expect.into_obj(arena));
         };
     }
@@ -514,9 +514,9 @@ mod test {
     fn test_eval_error(sexp: &str, error: Error) {
         let arena = &Arena::new();
         let obj = Reader::read(sexp, arena).unwrap().0;
-        let func = Exp::compile(obj).unwrap().into();
+        let exp = compile(obj, arena).unwrap();
         let env = &mut Environment::default();
-        let val = Routine::execute(&func, env, arena);
+        let val = Routine::execute(&exp, env, arena);
         assert_eq!(val.err().unwrap().downcast::<Error>().unwrap(), (error));
     }
 

@@ -20,8 +20,8 @@ impl<'obj> From<InnerObject> for Function<'obj> {
     }
 }
 
-impl<'obj> IntoObject<'obj, Function<'obj>> for LispFn {
-    fn into_obj(self, arena: &'obj Arena) -> Function<'obj> {
+impl<'ob> IntoObject<'ob, Function<'ob>> for LispFn<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         InnerObject::from_type(self, Tag::LispFn, arena).into()
     }
 }
@@ -33,7 +33,7 @@ impl<'obj> IntoObject<'obj, Function<'obj>> for SubrFn {
 }
 
 pub enum FunctionValue<'a> {
-    LispFn(&'a LispFn),
+    LispFn(&'a LispFn<'a>),
     SubrFn(&'a SubrFn),
     Cons(&'a Cons<'a>),
 }
@@ -50,7 +50,7 @@ impl<'a> Function<'a> {
         }
     }
 
-    pub fn as_lisp_fn(self) -> Option<&'a LispFn> {
+    pub fn as_lisp_fn(self) -> Option<&'a LispFn<'a>> {
         match self.val() {
             FunctionValue::LispFn(x) => Some(x),
             _ => None,

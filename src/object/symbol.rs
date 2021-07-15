@@ -135,17 +135,17 @@ mod test {
         let x = InnerSymbol::new("foo");
         assert_eq!("foo", x.get_name());
         assert!(x.get_func().is_none());
-        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false, Arena::new());
+        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let before = cell.as_lisp_fn().expect("expected lispfn");
-        assert_eq!(before.op_codes.get(0).unwrap(), &1);
-        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false, Arena::new());
+        assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
+        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         x.set_func(func.into_obj(arena));
         let cell = x.get_func().unwrap();
         let after = cell.as_lisp_fn().expect("expected lispfn");
-        assert_eq!(after.op_codes.get(0).unwrap(), &7);
-        assert_eq!(before.op_codes.get(0).unwrap(), &1);
+        assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
+        assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
     }
 
     #[allow(clippy::unnecessary_wraps)]

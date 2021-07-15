@@ -26,11 +26,11 @@ impl<'a> Cons<'a> {
         }
     }
 
-    pub fn car(&self) -> Object {
+    pub fn car(&self) -> Object<'a> {
         self.car.get()
     }
 
-    pub fn cdr(&self) -> Object {
+    pub fn cdr(&self) -> Object<'a> {
         self.cdr.get()
     }
 
@@ -96,30 +96,30 @@ impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
 }
 
 #[derive(Clone)]
-pub struct ConsIter<'a>(Option<&'a Cons<'a>>);
+pub struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
 
 #[derive(Debug, PartialEq)]
 pub struct ConsIterError;
 
 impl Display for ConsIterError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Found non-nil cdr at end of list")
     }
 }
 
 impl std::error::Error for ConsIterError {}
 
-impl<'a> IntoIterator for &'a Cons<'a> {
-    type Item = Result<Object<'a>, ConsIterError>;
-    type IntoIter = ConsIter<'a>;
+impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
+    type Item = Result<Object<'ob>, ConsIterError>;
+    type IntoIter = ConsIter<'borrow, 'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
         ConsIter(Some(self))
     }
 }
 
-impl<'a> Iterator for ConsIter<'a> {
-    type Item = Result<Object<'a>, ConsIterError>;
+impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
+    type Item = Result<Object<'ob>, ConsIterError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
@@ -138,7 +138,7 @@ impl<'a> Iterator for ConsIter<'a> {
     }
 }
 
-impl<'a> ConsIter<'a> {
+impl<'a, 'ob> ConsIter<'a, 'ob> {
     pub const fn empty() -> Self {
         ConsIter(None)
     }
