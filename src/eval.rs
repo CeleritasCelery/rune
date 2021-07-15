@@ -87,15 +87,6 @@ impl<'brw, 'ob> CallFrame<'brw, 'ob> {
     }
 }
 
-pub fn from_slice<'brw, 'ob>(
-    slice: &'brw [Object<'ob>],
-    _arena: &'ob Arena,
-) -> &'brw [Object<'ob>] {
-    let ptr = slice.as_ptr();
-    let len = slice.len();
-    unsafe { std::slice::from_raw_parts(ptr, len) }
-}
-
 trait LispStack<T> {
     fn from_end(&self, i: usize) -> usize;
     fn push_ref(&mut self, i: usize);
@@ -228,8 +219,7 @@ impl<'ob> Routine<'_, 'ob> {
     ) -> Result<()> {
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
-        let new_slice = from_slice(slice, arena);
-        let result = func(new_slice, env, arena)?;
+        let result = func(slice, env, arena)?;
         self.stack[i] = result;
         self.stack.truncate(i + 1);
         Ok(())
