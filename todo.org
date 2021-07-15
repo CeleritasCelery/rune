@@ -8,8 +8,6 @@ Moving a reference into root should be safe to fix the lifetime
 * VM
 ** make functions thread local
 Or at least add an option for it
-** use non-static lifetimes
-This is predicated on the rooted type
 * define sexp macro
 Not sure if this can be done with just a regular macro or would require a proc macro. But this would let us decouple our tests from the reader in a clean way.
 * define benchmarks
