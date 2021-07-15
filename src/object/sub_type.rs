@@ -1,5 +1,6 @@
 use crate::object::*;
 
+#[derive(Copy, Clone)]
 pub struct Function<'ob> {
     data: InnerObject,
     marker: PhantomData<&'ob ()>,
@@ -38,7 +39,6 @@ pub enum FunctionValue<'ob> {
     Cons(&'ob Cons<'ob>),
 }
 
-#[allow(clippy::wrong_self_convention)]
 impl<'ob> Function<'ob> {
     #[inline(always)]
     pub fn val(self) -> FunctionValue<'ob> {

@@ -188,25 +188,25 @@ impl<'ob> Routine<'_, 'ob> {
                     .next()
                     .ok_or_else(|| anyhow!("invalid function definition"))?;
                 symbol_is(next.car(), "lambda")?;
-                let lambda = crate::compile::Exp::compile_lambda(next.cdr(), arena)?;
-                self.call_lisp(&lambda, arg_cnt)?;
-                sym.set_func(arena.add(lambda));
+                let func: Object = {
+                    let lambda = crate::compile::Exp::compile_lambda(next.cdr(), arena)?;
+                    let func: crate::object::Function = arena.add(lambda);
+                    sym.set_func(func);
+                    func.into()
+                };
+                let lisp_fn = func.as_lisp_fn().unwrap();
+                self.call_lisp(lisp_fn, arg_cnt)?;
             }
         };
         Ok(())
     }
 
-    fn call_lisp(&mut self, func: &LispFn, arg_cnt: u16) -> Result<()> {
+    fn call_lisp(&mut self, func: &'ob LispFn, arg_cnt: u16) -> Result<()> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
         self.fill_args(fill_args);
         let arg_cnt = arg_cnt + fill_args;
         self.call_frames.push(self.frame.clone());
-        self.frame = CallFrame::new(
-            // TODO: This is unsound. We don't know that this will live
-            // long enough
-            unsafe { std::mem::transmute(func) },
-            self.stack.from_end(arg_cnt as usize),
-        );
+        self.frame = CallFrame::new(&func.body, self.stack.from_end(arg_cnt as usize));
         Ok(())
     }
 

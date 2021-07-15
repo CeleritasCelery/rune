@@ -24,7 +24,7 @@ impl FnCell {
         self.0.store(value, Ordering::Release);
     }
 
-    fn get(&self) -> Option<Function> {
+    fn get(&self) -> Option<Function<'static>> {
         let bits = self.0.load(Ordering::Acquire);
         unsafe { transmute(bits) }
     }
@@ -44,11 +44,13 @@ impl InnerSymbol {
         }
     }
 
+    // UNSOUND!! The function is owned by a different arena, but we are taking a
+    // reference to it. Need to make a copy
     pub fn set_func(&self, func: Function) {
         self.func.set(Some(func));
     }
 
-    pub fn get_func(&self) -> Option<Function> {
+    pub fn get_func(&self) -> Option<Function<'static>> {
         self.func.get()
     }
 
