@@ -60,11 +60,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 
         #[doc(hidden)]
         #[allow(non_snake_case)]
-        pub fn #func_name<'obj>(
-            args: &[crate::object::Object<'obj>],
-            env: &mut crate::data::Environment<'obj>,
-            arena: &'obj crate::arena::Arena,
-        ) -> anyhow::Result<crate::object::Object<'obj>> {
+        pub fn #func_name<'ob>(
+            args: &[crate::object::Object<'ob>],
+            env: &mut crate::data::Environment<'ob>,
+            arena: &'ob crate::arena::Arena,
+        ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }
 
@@ -285,7 +285,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'obj>(list: &'obj Cons<'obj>) -> Object<'obj> {
+            fn car<'ob>(list: &Cons<'ob>) -> Object<'ob> {
                 list.car()
             }
         };
@@ -297,6 +297,5 @@ mod test {
         };
         let result = expand(function, spec);
         println!("{}", result.to_string());
-        panic!();
     }
 }
