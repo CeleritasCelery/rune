@@ -5,7 +5,7 @@ use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::convert::TryInto;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -118,19 +118,6 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     }
 }
 
-fn symbol_is(obj: Object, name: &str) -> Result<()> {
-    match obj.val() {
-        Value::Symbol(sym) => {
-            if sym.get_name() == name {
-                Ok(())
-            } else {
-                Err(anyhow!("Invalid function defintion: {}", sym))
-            }
-        }
-        x => Err(anyhow!("Invalid function definition: {}", x)),
-    }
-}
-
 pub struct Routine<'brw, 'ob> {
     stack: Vec<Object<'ob>>,
     call_frames: Vec<CallFrame<'brw, 'ob>>,
@@ -181,21 +168,6 @@ impl<'ob> Routine<'_, 'ob> {
                 self.fill_args(fill_args);
                 let arg_cnt = arg_cnt + fill_args;
                 self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
-            }
-            FunctionValue::Cons(cons) => {
-                symbol_is(cons.car(), "function")?;
-                let next = cons
-                    .next()
-                    .ok_or_else(|| anyhow!("invalid function definition"))?;
-                symbol_is(next.car(), "lambda")?;
-                let func: Object = {
-                    let lambda = crate::compile::Exp::compile_lambda(next.cdr(), arena)?;
-                    let func: crate::object::Function = arena.add(lambda);
-                    sym.set_func(func);
-                    func.into()
-                };
-                let lisp_fn = func.as_lisp_fn().unwrap();
-                self.call_lisp(lisp_fn, arg_cnt)?;
             }
         };
         Ok(())

@@ -36,7 +36,6 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
 pub enum FunctionValue<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'ob SubrFn),
-    Cons(&'ob Cons<'ob>),
 }
 
 impl<'ob> Function<'ob> {
@@ -45,7 +44,6 @@ impl<'ob> Function<'ob> {
         match self.data.val() {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
-            Value::Cons(x) => FunctionValue::Cons(x),
             _ => unreachable!("Function was invalid type"),
         }
     }
