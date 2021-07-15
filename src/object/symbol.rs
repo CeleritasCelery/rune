@@ -88,15 +88,15 @@ impl std::ops::Deref for Symbol {
     }
 }
 
-impl<'obj> From<Symbol> for Object<'obj> {
+impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
         let ptr: *const _ = s.0;
         InnerObject::from_ptr(ptr as *mut u8, Tag::Symbol).into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for Symbol {
-    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self.into()
     }
 }
@@ -149,11 +149,11 @@ mod test {
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn dummy<'obj>(
-        vars: &[Object<'obj>],
+    fn dummy<'ob>(
+        vars: &[Object<'ob>],
         _map: &mut Environment,
-        _arena: &'obj Arena,
-    ) -> anyhow::Result<Object<'obj>> {
+        _arena: &'ob Arena,
+    ) -> anyhow::Result<Object<'ob>> {
         Ok(vars[0])
     }
 

@@ -9,18 +9,18 @@ pub struct Environment<'ob> {
 }
 
 #[lisp_fn]
-pub fn set<'obj>(place: Symbol, newlet: Object<'obj>, env: &mut Environment<'obj>) -> Object<'obj> {
+pub fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment<'ob>) -> Object<'ob> {
     env.vars.insert(place, newlet);
     newlet
 }
 
 #[lisp_fn]
-pub fn put<'obj>(
+pub fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    value: Object<'obj>,
-    env: &mut Environment<'obj>,
-) -> Object<'obj> {
+    value: Object<'ob>,
+    env: &mut Environment<'ob>,
+) -> Object<'ob> {
     match env.props.get_mut(&symbol) {
         Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
             Some(x) => x.1 = value,
@@ -35,7 +35,7 @@ pub fn put<'obj>(
 }
 
 #[lisp_fn]
-pub fn get<'obj>(symbol: Symbol, propname: Symbol, env: &Environment<'obj>) -> Object<'obj> {
+pub fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => *val,

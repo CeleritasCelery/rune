@@ -20,9 +20,9 @@ pub struct LispFn<'ob> {
     pub args: FnArgs,
 }
 
-impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for &'a LispFn<'a> {
+impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for &LispFn<'ob> {
     type Error = crate::error::Error;
-    fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+    fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             crate::object::Value::LispFn(x) => Ok(x),
             x => Err(crate::error::Error::Type(
@@ -32,9 +32,9 @@ impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for &'a LispFn<'a> {
         }
     }
 }
-impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for Option<&'a LispFn<'a>> {
+impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<&LispFn<'ob>> {
     type Error = crate::error::Error;
-    fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+    fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             crate::object::Value::LispFn(x) => Ok(Some(x)),
             crate::object::Value::Nil => Ok(None),
@@ -83,11 +83,11 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
     }
 }
 
-pub type BuiltInFn = for<'obj> fn(
-    &[Object<'obj>],
-    &mut crate::data::Environment<'obj>,
-    &'obj Arena,
-) -> Result<Object<'obj>>;
+pub type BuiltInFn = for<'ob> fn(
+    &[Object<'ob>],
+    &mut crate::data::Environment<'ob>,
+    &'ob Arena,
+) -> Result<Object<'ob>>;
 
 #[derive(Copy, Clone)]
 pub struct SubrFn {
@@ -132,8 +132,8 @@ impl std::cmp::PartialEq for SubrFn {
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for SubrFn {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }

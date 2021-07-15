@@ -64,7 +64,7 @@ impl Div for NumberValue {
     }
 }
 
-impl<'obj> PartialEq<i64> for Number<'obj> {
+impl<'ob> PartialEq<i64> for Number<'ob> {
     fn eq(&self, other: &i64) -> bool {
         match self.val() {
             Int(num) => num == *other,
@@ -73,7 +73,7 @@ impl<'obj> PartialEq<i64> for Number<'obj> {
     }
 }
 
-impl<'obj> PartialEq<f64> for Number<'obj> {
+impl<'ob> PartialEq<f64> for Number<'ob> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             Int(num) => num as f64 == *other,

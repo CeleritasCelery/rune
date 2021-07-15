@@ -31,9 +31,9 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 #[derive(Clone)]
-struct CallFrame<'a> {
+struct CallFrame<'ob> {
     ip: Ip,
-    func: &'a Expression<'a>,
+    func: &'ob Expression<'ob>,
     start: usize,
 }
 
@@ -79,8 +79,8 @@ impl Ip {
     }
 }
 
-impl<'a> CallFrame<'a> {
-    fn new(func: &'a Expression<'a>, frame_start: usize) -> CallFrame {
+impl<'ob> CallFrame<'ob> {
+    fn new(func: &'ob Expression<'ob>, frame_start: usize) -> CallFrame {
         CallFrame {
             ip: Ip::new(&func.op_codes),
             func,
@@ -93,11 +93,11 @@ impl<'a> CallFrame<'a> {
     }
 }
 
-pub fn from_slice<'borrow, 'obj>(
+pub fn from_slice<'borrow, 'ob>(
     slice: &'borrow [InnerObject],
-    _arena: &'obj Arena,
-) -> &'borrow [Object<'obj>] {
-    let ptr = slice.as_ptr() as *const Object<'obj>;
+    _arena: &'ob Arena,
+) -> &'borrow [Object<'ob>] {
+    let ptr = slice.as_ptr() as *const Object<'ob>;
     let len = slice.len();
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
@@ -146,13 +146,13 @@ fn symbol_is(obj: Object, name: &str) -> Result<()> {
     }
 }
 
-pub struct Routine<'a> {
+pub struct Routine<'ob> {
     stack: Vec<InnerObject>,
-    call_frames: Vec<CallFrame<'a>>,
-    frame: CallFrame<'a>,
+    call_frames: Vec<CallFrame<'ob>>,
+    frame: CallFrame<'ob>,
 }
 
-impl<'a, 'ob> Routine<'a> {
+impl<'env, 'ob> Routine<'env> {
     fn process_args(&mut self, count: u16, args: FnArgs) -> Result<u16> {
         if count < args.required {
             bail!(Error::ArgCount(args.required, count));
@@ -169,7 +169,7 @@ impl<'a, 'ob> Routine<'a> {
         Ok(max(total_args, count))
     }
 
-    fn varref(&mut self, idx: usize, env: &Environment<'a>) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
             let value = match env.vars.get(&sym) {

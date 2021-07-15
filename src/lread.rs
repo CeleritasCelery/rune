@@ -9,10 +9,10 @@ use anyhow::{anyhow, Result};
 
 use std::fs;
 
-pub fn read_from_string<'obj>(
+pub fn read_from_string<'ob>(
     contents: &str,
-    arena: &'obj Arena,
-    env: &mut Environment<'obj>,
+    arena: &'ob Arena,
+    env: &mut Environment<'ob>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -37,7 +37,7 @@ pub fn read_from_string<'obj>(
 
 #[lisp_fn]
 #[allow(clippy::ptr_arg)]
-fn load<'obj>(file: &String, arena: &'obj Arena, env: &mut Environment<'obj>) -> Result<bool> {
+fn load<'ob>(file: &String, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
     read_from_string(&file_contents, arena, env)
 }

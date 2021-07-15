@@ -33,7 +33,7 @@ macro_rules! define_unbox {
         define_unbox!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl<'obj> std::convert::TryFrom<crate::object::Object<'obj>> for $ident {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $ident {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
@@ -45,7 +45,7 @@ macro_rules! define_unbox {
                 }
             }
         }
-        impl<'obj> std::convert::TryFrom<crate::object::Object<'obj>> for Option<$ident> {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$ident> {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
@@ -67,9 +67,9 @@ macro_rules! define_unbox_ref {
         define_unbox_ref!($ident, $ident);
     };
     ($ident:ident, $ty:ident) => {
-        impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for &'a $ident {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for &'ob $ident {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::object::Value::$ident(x) => Ok(x),
                     x => Err(crate::error::Error::Type(
@@ -79,9 +79,9 @@ macro_rules! define_unbox_ref {
                 }
             }
         }
-        impl<'a> std::convert::TryFrom<crate::object::Object<'a>> for Option<&'a $ident> {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<&'ob $ident> {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'a>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::object::Value::$ident(x) => Ok(Some(x)),
                     crate::object::Value::Nil => Ok(None),

@@ -1,17 +1,17 @@
 use crate::object::*;
 
-pub struct Function<'a> {
+pub struct Function<'ob> {
     data: InnerObject,
-    marker: PhantomData<&'a ()>,
+    marker: PhantomData<&'ob ()>,
 }
 
-impl<'obj> From<Function<'obj>> for Object<'obj> {
-    fn from(x: Function<'obj>) -> Self {
+impl<'ob> From<Function<'ob>> for Object<'ob> {
+    fn from(x: Function<'ob>) -> Self {
         x.data.into()
     }
 }
 
-impl<'obj> From<InnerObject> for Function<'obj> {
+impl<'ob> From<InnerObject> for Function<'ob> {
     fn from(data: InnerObject) -> Self {
         Self {
             data,
@@ -26,22 +26,22 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for LispFn<'ob> {
     }
 }
 
-impl<'obj> IntoObject<'obj, Function<'obj>> for SubrFn {
-    fn into_obj(self, arena: &'obj Arena) -> Function<'obj> {
+impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
+    fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         InnerObject::from_type(self, Tag::SubrFn, arena).into()
     }
 }
 
-pub enum FunctionValue<'a> {
-    LispFn(&'a LispFn<'a>),
-    SubrFn(&'a SubrFn),
-    Cons(&'a Cons<'a>),
+pub enum FunctionValue<'ob> {
+    LispFn(&'ob LispFn<'ob>),
+    SubrFn(&'ob SubrFn),
+    Cons(&'ob Cons<'ob>),
 }
 
 #[allow(clippy::wrong_self_convention)]
-impl<'a> Function<'a> {
+impl<'ob> Function<'ob> {
     #[inline(always)]
-    pub fn val(self) -> FunctionValue<'a> {
+    pub fn val(self) -> FunctionValue<'ob> {
         match self.data.val() {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
@@ -50,14 +50,14 @@ impl<'a> Function<'a> {
         }
     }
 
-    pub fn as_lisp_fn(self) -> Option<&'a LispFn<'a>> {
+    pub fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self.val() {
             FunctionValue::LispFn(x) => Some(x),
             _ => None,
         }
     }
 
-    pub fn as_subr_fn(self) -> Option<&'a SubrFn> {
+    pub fn as_subr_fn(self) -> Option<&'ob SubrFn> {
         match self.val() {
             FunctionValue::SubrFn(x) => Some(x),
             _ => None,
@@ -66,12 +66,12 @@ impl<'a> Function<'a> {
 }
 
 #[derive(Copy, Clone)]
-pub struct Number<'a> {
+pub struct Number<'ob> {
     data: InnerObject,
-    marker: PhantomData<&'a ()>,
+    marker: PhantomData<&'ob ()>,
 }
 
-impl<'obj> From<InnerObject> for Number<'obj> {
+impl<'ob> From<InnerObject> for Number<'ob> {
     fn from(data: InnerObject) -> Self {
         Self {
             data,
@@ -80,26 +80,26 @@ impl<'obj> From<InnerObject> for Number<'obj> {
     }
 }
 
-impl<'obj> From<i64> for Number<'obj> {
+impl<'ob> From<i64> for Number<'ob> {
     fn from(x: i64) -> Self {
         InnerObject::from_tag_bits(x, Tag::Int).into()
     }
 }
 
-impl<'obj> From<Number<'obj>> for Object<'obj> {
+impl<'ob> From<Number<'ob>> for Object<'ob> {
     fn from(x: Number) -> Self {
         x.data.into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Number<'obj>> for i64 {
-    fn into_obj(self, _arena: &'obj Arena) -> Number<'obj> {
+impl<'ob> IntoObject<'ob, Number<'ob>> for i64 {
+    fn into_obj(self, _arena: &'ob Arena) -> Number<'ob> {
         self.into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Number<'obj>> for f64 {
-    fn into_obj(self, arena: &'obj Arena) -> Number<'obj> {
+impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
+    fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
         InnerObject::from_type(self, Tag::Float, arena).into()
     }
 }
@@ -110,7 +110,7 @@ pub enum NumberValue {
     Float(f64),
 }
 
-impl<'obj> Number<'obj> {
+impl<'ob> Number<'ob> {
     #[inline(always)]
     pub fn val(self) -> NumberValue {
         match self.data.val() {
@@ -121,8 +121,8 @@ impl<'obj> Number<'obj> {
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for NumberValue {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => x.into_obj(arena),

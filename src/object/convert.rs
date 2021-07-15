@@ -3,7 +3,7 @@ use crate::object::*;
 use std::convert::TryFrom;
 use std::mem::transmute;
 
-impl<'obj> TryFrom<Object<'obj>> for Function<'obj> {
+impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -13,7 +13,7 @@ impl<'obj> TryFrom<Object<'obj>> for Function<'obj> {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for Number<'obj> {
+impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -23,7 +23,7 @@ impl<'obj> TryFrom<Object<'obj>> for Number<'obj> {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for Option<Number<'obj>> {
+impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -34,7 +34,7 @@ impl<'obj> TryFrom<Object<'obj>> for Option<Number<'obj>> {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for bool {
+impl<'ob> TryFrom<Object<'ob>> for bool {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -44,7 +44,7 @@ impl<'obj> TryFrom<Object<'obj>> for bool {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
+impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -55,7 +55,7 @@ impl<'obj> TryFrom<Object<'obj>> for List<'obj> {
     }
 }
 
-impl<'obj> TryFrom<Object<'obj>> for Option<List<'obj>> {
+impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
@@ -66,7 +66,9 @@ impl<'obj> TryFrom<Object<'obj>> for Option<List<'obj>> {
     }
 }
 
-pub fn try_from_slice<'obj>(slice: &'obj [Object<'obj>]) -> Result<&'obj [Number], Error> {
+pub fn try_from_slice<'borrow, 'ob>(
+    slice: &'borrow [Object<'ob>],
+) -> Result<&'borrow [Number<'ob>], Error> {
     for x in slice.iter() {
         let num: Number = TryFrom::try_from(*x)?;
         unsafe {
@@ -82,15 +84,15 @@ pub fn try_from_slice<'obj>(slice: &'obj [Object<'obj>]) -> Result<&'obj [Number
 type Int = i64;
 define_unbox!(Int);
 
-impl<'obj> From<i64> for Object<'obj> {
+impl<'ob> From<i64> for Object<'ob> {
     fn from(x: i64) -> Self {
         let x: Number = x.into();
         x.into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for i64 {
-    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self.into()
     }
 }
@@ -98,42 +100,42 @@ impl<'obj> IntoObject<'obj, Object<'obj>> for i64 {
 type Float = f64;
 define_unbox!(Float);
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for f64 {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let obj: Number = self.into_obj(arena);
         obj.into()
     }
 }
 
-impl<'obj> From<bool> for Object<'obj> {
+impl<'ob> From<bool> for Object<'ob> {
     fn from(b: bool) -> Self {
         InnerObject::from_tag(if b { Tag::True } else { Tag::Nil }).into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for bool {
-    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self.into()
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for &str {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         InnerObject::from_type(self.to_owned(), Tag::String, arena).into()
     }
 }
 
 define_unbox_ref!(String);
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for String {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for String {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         InnerObject::from_type(self, Tag::String, arena).into()
     }
 }
 
-impl<'obj, T> From<Option<T>> for Object<'obj>
+impl<'ob, T> From<Option<T>> for Object<'ob>
 where
-    T: Into<Object<'obj>>,
+    T: Into<Object<'ob>>,
 {
     fn from(t: Option<T>) -> Self {
         match t {

@@ -286,11 +286,11 @@ fn escaped(escaped: &mut bool, chr: char) -> bool {
     }
 }
 
-fn vector_into_list<'obj>(
-    vec: Vec<Object<'obj>>,
-    tail: Option<Object<'obj>>,
-    arena: &'obj Arena,
-) -> Object<'obj> {
+fn vector_into_list<'ob>(
+    vec: Vec<Object<'ob>>,
+    tail: Option<Object<'ob>>,
+    arena: &'ob Arena,
+) -> Object<'ob> {
     let mut iter = vec.into_iter().rev();
     let mut end = match iter.next() {
         Some(car) => Cons::new(car, tail.into()),
@@ -306,12 +306,12 @@ pub struct Reader<'a> {
     tokens: Tokenizer<'a>,
 }
 
-impl<'a, 'obj> Reader<'a> {
-    fn read_symbol(&mut self, symbol: &'a str, arena: &'obj Arena) -> Object<'obj> {
+impl<'a, 'ob> Reader<'a> {
+    fn read_symbol(&mut self, symbol: &'a str, arena: &'ob Arena) -> Object<'ob> {
         parse_symbol(symbol, arena)
     }
 
-    fn read_cdr(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn read_cdr(&mut self, delim: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         match self.tokens.next() {
             Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
             Some(sexp) => match self.tokens.next() {
@@ -323,7 +323,7 @@ impl<'a, 'obj> Reader<'a> {
         }
     }
 
-    fn read_list(&mut self, delim: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn read_list(&mut self, delim: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
@@ -342,8 +342,8 @@ impl<'a, 'obj> Reader<'a> {
         &mut self,
         pos: usize,
         symbol_name: &str,
-        arena: &'obj Arena,
-    ) -> Result<Object<'obj>, Error> {
+        arena: &'ob Arena,
+    ) -> Result<Object<'ob>, Error> {
         let obj = match self.tokens.next() {
             Some(token) => self.read_sexp(token, arena)?,
             None => return Err(Error::MissingQuotedItem(pos)),
@@ -352,7 +352,7 @@ impl<'a, 'obj> Reader<'a> {
         Ok(quoted.into_obj(arena))
     }
 
-    fn read_sharp(&mut self, pos: usize, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn read_sharp(&mut self, pos: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => self.read_list(i, arena),
@@ -368,7 +368,7 @@ impl<'a, 'obj> Reader<'a> {
         }
     }
 
-    fn read_sexp(&mut self, token: Token<'a>, arena: &'obj Arena) -> Result<Object<'obj>, Error> {
+    fn read_sexp(&mut self, token: Token<'a>, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         match token {
             Token::OpenParen(i) => self.read_list(i, arena),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
@@ -384,7 +384,7 @@ impl<'a, 'obj> Reader<'a> {
         }
     }
 
-    pub fn read(slice: &'a str, arena: &'obj Arena) -> Result<(Object<'obj>, usize), Error> {
+    pub fn read(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize), Error> {
         let mut reader = Reader {
             tokens: Tokenizer::new(slice),
         };

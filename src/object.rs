@@ -20,9 +20,9 @@ use std::num::NonZeroI64 as NonZero;
 pub struct InnerObject(NonZero);
 
 #[derive(Copy, Clone, PartialEq)]
-pub struct Object<'a> {
+pub struct Object<'ob> {
     data: InnerObject,
-    marker: PhantomData<&'a ()>,
+    marker: PhantomData<&'ob ()>,
 }
 
 pub const NIL: Object = Object {
@@ -37,19 +37,19 @@ pub const TRUE: Object = Object {
 pub type GcObject = Object<'static>;
 
 #[derive(Debug, PartialEq)]
-pub enum Value<'a> {
+pub enum Value<'ob> {
     Symbol(Symbol),
     Int(i64),
     Float(f64),
     True,
     Nil,
-    Cons(&'a Cons<'a>),
-    String(&'a String),
-    LispFn(&'a LispFn<'a>),
-    SubrFn(&'a SubrFn),
+    Cons(&'ob Cons<'ob>),
+    String(&'ob String),
+    LispFn(&'ob LispFn<'ob>),
+    SubrFn(&'ob SubrFn),
 }
 
-impl<'a> Value<'a> {
+impl<'ob> Value<'ob> {
     pub const fn get_type(&self) -> crate::error::Type {
         use crate::error::Type::*;
         match self {
@@ -82,12 +82,12 @@ pub enum Tag {
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
-pub trait IntoObject<'obj, T> {
-    fn into_obj(self, arena: &'obj Arena) -> T;
+pub trait IntoObject<'ob, T> {
+    fn into_obj(self, arena: &'ob Arena) -> T;
 }
 
-impl<'obj, 'old: 'obj> IntoObject<'obj, Object<'obj>> for Object<'old> {
-    fn into_obj(self, _arena: &'obj Arena) -> Object<'obj> {
+impl<'ob, 'old: 'ob> IntoObject<'ob, Object<'ob>> for Object<'old> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self
     }
 }
@@ -108,9 +108,9 @@ impl<'old, 'new> Object<'old> {
     }
 }
 
-impl<'obj> Object<'obj> {
+impl<'ob> Object<'ob> {
     #[inline(always)]
-    pub fn val<'new: 'obj>(self) -> Value<'new> {
+    pub fn val<'new: 'ob>(self) -> Value<'new> {
         self.data.val()
     }
 
@@ -136,14 +136,14 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub fn as_cons(self) -> Option<&'obj Cons<'obj>> {
+    pub fn as_cons(self) -> Option<&'ob Cons<'ob>> {
         match self.val() {
             Value::Cons(x) => Some(x),
             _ => None,
         }
     }
 
-    pub fn as_string(self) -> Option<&'obj String> {
+    pub fn as_string(self) -> Option<&'ob String> {
         match self.val() {
             Value::String(x) => Some(x),
             _ => None,
@@ -157,14 +157,14 @@ impl<'obj> Object<'obj> {
         }
     }
 
-    pub fn as_lisp_fn(self) -> Option<&'obj LispFn<'obj>> {
+    pub fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self.val() {
             Value::LispFn(x) => Some(x),
             _ => None,
         }
     }
 
-    pub fn as_subr_fn(self) -> Option<&'obj SubrFn> {
+    pub fn as_subr_fn(self) -> Option<&'ob SubrFn> {
         match self.val() {
             Value::SubrFn(x) => Some(x),
             _ => None,
@@ -191,7 +191,7 @@ impl<'obj> Object<'obj> {
     }
 }
 
-impl<'obj> From<InnerObject> for Object<'obj> {
+impl<'ob> From<InnerObject> for Object<'ob> {
     fn from(data: InnerObject) -> Self {
         Self {
             data,
@@ -243,7 +243,7 @@ impl InnerObject {
     }
 
     #[inline(always)]
-    pub fn val<'a>(self) -> Value<'a> {
+    pub fn val<'ob>(self) -> Value<'ob> {
         unsafe {
             match self.tag() {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
@@ -295,7 +295,7 @@ impl PartialEq for InnerObject {
     }
 }
 
-impl<'a> fmt::Display for Value<'a> {
+impl<'ob> fmt::Display for Value<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Int(x) => write!(f, "{}", x),
@@ -317,13 +317,13 @@ impl<'a> fmt::Display for Value<'a> {
     }
 }
 
-impl<'a> fmt::Display for Object<'a> {
+impl<'ob> fmt::Display for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.val(), f)
     }
 }
 
-impl<'obj> fmt::Debug for Object<'obj> {
+impl<'ob> fmt::Debug for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }

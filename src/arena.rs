@@ -6,7 +6,7 @@ pub struct Arena {
     objects: RefCell<Vec<GcObject>>,
 }
 
-impl<'obj> Arena {
+impl<'ob> Arena {
     pub const fn new() -> Self {
         Arena {
             objects: RefCell::new(Vec::new()),
@@ -17,13 +17,13 @@ impl<'obj> Arena {
         Box::into_raw(Box::new(obj))
     }
 
-    pub fn register(&self, obj: Object<'obj>) {
+    pub fn register(&self, obj: Object<'ob>) {
         self.objects.borrow_mut().push(unsafe { obj.into_gc() });
     }
 
-    pub fn add<Input, Output>(&'obj self, item: Input) -> Output
+    pub fn add<Input, Output>(&'ob self, item: Input) -> Output
     where
-        Input: IntoObject<'obj, Output>,
+        Input: IntoObject<'ob, Output>,
     {
         item.into_obj(self)
     }

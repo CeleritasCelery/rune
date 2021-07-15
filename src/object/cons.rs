@@ -7,9 +7,9 @@ use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Cons<'a> {
-    car: Cell<Object<'a>>,
-    cdr: Cell<Object<'a>>,
+pub struct Cons<'ob> {
+    car: Cell<Object<'ob>>,
+    cdr: Cell<Object<'ob>>,
 }
 
 impl<'old, 'new> Cons<'old> {
@@ -18,31 +18,31 @@ impl<'old, 'new> Cons<'old> {
     }
 }
 
-impl<'a> Cons<'a> {
-    pub const fn new(car: Object<'a>, cdr: Object<'a>) -> Self {
+impl<'ob> Cons<'ob> {
+    pub const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
         Self {
             car: Cell::new(car),
             cdr: Cell::new(cdr),
         }
     }
 
-    pub fn car(&self) -> Object<'a> {
+    pub fn car(&self) -> Object<'ob> {
         self.car.get()
     }
 
-    pub fn cdr(&self) -> Object<'a> {
+    pub fn cdr(&self) -> Object<'ob> {
         self.cdr.get()
     }
 
-    pub fn set_car(&self, new_car: Object<'a>) {
+    pub fn set_car(&self, new_car: Object<'ob>) {
         self.car.set(new_car);
     }
 
-    pub fn set_cdr(&self, new_cdr: Object<'a>) {
+    pub fn set_cdr(&self, new_cdr: Object<'ob>) {
         self.cdr.set(new_cdr);
     }
 
-    pub fn next(&self) -> Option<&'a Cons<'a>> {
+    pub fn next(&self) -> Option<&Cons<'ob>> {
         match self.cdr().val() {
             Value::Cons(cons) => Some(cons),
             _ => None,
@@ -50,7 +50,7 @@ impl<'a> Cons<'a> {
     }
 }
 
-impl<'obj> fmt::Display for Cons<'obj> {
+impl<'ob> fmt::Display for Cons<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
         print_rest(self, f)
@@ -68,15 +68,15 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<'obj> IntoObject<'obj, Object<'obj>> for Cons<'obj> {
-    fn into_obj(self, arena: &'obj Arena) -> Object<'obj> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         InnerObject::from_type(self, Tag::Cons, arena).into()
     }
 }
 
-impl<'a> TryFrom<Object<'a>> for &'a Cons<'a> {
+impl<'ob> TryFrom<Object<'ob>> for &Cons<'ob> {
     type Error = Error;
-    fn try_from(obj: Object<'a>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(x) => Ok(x),
             x => Err(Error::Type(Type::Cons, x.get_type())),
@@ -84,9 +84,9 @@ impl<'a> TryFrom<Object<'a>> for &'a Cons<'a> {
     }
 }
 
-impl<'a> TryFrom<Object<'a>> for Option<&'a Cons<'a>> {
+impl<'ob> TryFrom<Object<'ob>> for Option<&Cons<'ob>> {
     type Error = Error;
-    fn try_from(obj: Object<'a>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(x) => Ok(Some(x)),
             Value::Nil => Ok(None),
@@ -138,7 +138,7 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
     }
 }
 
-impl<'a, 'ob> ConsIter<'a, 'ob> {
+impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
     pub const fn empty() -> Self {
         ConsIter(None)
     }
@@ -165,19 +165,19 @@ fn cdr(list: List) -> Object {
 }
 
 #[lisp_fn]
-fn setcar<'obj>(cell: &'obj Cons<'obj>, newcar: Object<'obj>) -> Object<'obj> {
+fn setcar<'ob>(cell: &Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[lisp_fn]
-fn setcdr<'obj>(cell: &'obj Cons<'obj>, newcdr: Object<'obj>) -> Object<'obj> {
+fn setcdr<'ob>(cell: &Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
 
 #[lisp_fn]
-const fn cons<'obj>(car: Object<'obj>, cdr: Object<'obj>) -> Cons<'obj> {
+const fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>) -> Cons<'ob> {
     Cons::new(car, cdr)
 }
 

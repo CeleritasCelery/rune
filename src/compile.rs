@@ -29,8 +29,8 @@ struct ConstVec<'ob> {
     consts: Vec<Object<'ob>>,
 }
 
-impl<'obj> From<Vec<Object<'obj>>> for ConstVec<'obj> {
-    fn from(vec: Vec<Object<'obj>>) -> Self {
+impl<'ob> From<Vec<Object<'ob>>> for ConstVec<'ob> {
+    fn from(vec: Vec<Object<'ob>>) -> Self {
         let mut consts = ConstVec { consts: Vec::new() };
         for x in vec.into_iter() {
             consts.insert_or_get(x);
