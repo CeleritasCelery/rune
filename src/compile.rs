@@ -5,24 +5,26 @@ use crate::opcode::{CodeVec, OpCode};
 use anyhow::{bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
+use std::fmt::Display;
 
-impl From<OpCode> for u8 {
-    fn from(x: OpCode) -> u8 {
-        x as u8
+#[derive(Debug, PartialEq)]
+enum CompError {
+    ConstOverflow,
+    LetValueCount(usize),
+    StackSizeOverflow,
+}
+
+impl Display for CompError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompError::ConstOverflow => write!(f, "Too many constants declared in fuction"),
+            CompError::LetValueCount(_) => write!(f, "Let forms can only have 1 value"),
+            CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
+        }
     }
 }
 
-impl<'ob> Default for LispFn<'ob> {
-    fn default() -> Self {
-        LispFn::new(
-            vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![NIL],
-            0,
-            0,
-            false,
-        )
-    }
-}
+impl std::error::Error for CompError {}
 
 #[derive(Debug)]
 struct ConstVec<'ob> {
@@ -60,20 +62,20 @@ impl<'ob> ConstVec<'ob> {
         }
     }
 
-    fn insert(&mut self, obj: Object<'ob>) -> Result<u16, Error> {
+    fn insert(&mut self, obj: Object<'ob>) -> Result<u16, CompError> {
         let idx = self.insert_or_get(obj);
         match idx.try_into() {
             Ok(x) => Ok(x),
-            Err(_) => Err(Error::ConstOverflow),
+            Err(_) => Err(CompError::ConstOverflow),
         }
     }
 
-    fn insert_lambda(&mut self, func: LispFn<'ob>, arena: &'ob Arena) -> Result<u16, Error> {
+    fn insert_lambda(&mut self, func: LispFn<'ob>, arena: &'ob Arena) -> Result<u16, CompError> {
         let obj: Object = func.into_obj(arena);
         self.consts.push(obj);
         match (self.consts.len() - 1).try_into() {
             Ok(x) => Ok(x),
-            Err(_) => Err(Error::ConstOverflow),
+            Err(_) => Err(CompError::ConstOverflow),
         }
     }
 }
@@ -203,18 +205,18 @@ impl<'ob> Exp<'ob> {
                 self.codes.emit_stack_ref(x);
                 Ok(())
             }
-            Err(_) => Err(Error::StackSizeOverflow.into()),
+            Err(_) => Err(CompError::StackSizeOverflow.into()),
         }
     }
 
-    fn stack_set(&mut self, idx: usize) -> Result<(), Error> {
+    fn stack_set(&mut self, idx: usize) -> Result<(), CompError> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
                 self.vars.pop();
                 self.codes.emit_stack_set(x);
                 Ok(())
             }
-            Err(_) => Err(Error::StackSizeOverflow),
+            Err(_) => Err(CompError::StackSizeOverflow),
         }
     }
 
@@ -294,7 +296,7 @@ impl<'ob> Exp<'ob> {
         };
         let rest = iter.count();
         // (let ((x y z ..)))
-        ensure!(rest == 0, Error::LetValueCount(rest as u16 + 1));
+        ensure!(rest == 0, CompError::LetValueCount(rest + 1));
         Ok(())
     }
 
@@ -998,7 +1000,7 @@ mod test {
     #[test]
     fn let_errors() {
         check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
-        check_error("(let ((foo 1 2)))", Error::LetValueCount(2));
+        check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
         check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
         check_error("(let ((foo 1 . 2)))", crate::object::ConsIterError);
         check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));

@@ -121,6 +121,12 @@ impl fmt::Debug for CodeVec {
     }
 }
 
+impl From<OpCode> for u8 {
+    fn from(x: OpCode) -> u8 {
+        x as u8
+    }
+}
+
 impl TryFrom<u8> for OpCode {
     type Error = anyhow::Error;
 

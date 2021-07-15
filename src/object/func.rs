@@ -2,6 +2,7 @@ use crate::arena::Arena;
 use crate::error::Error;
 use crate::object::*;
 use crate::opcode::CodeVec;
+use crate::opcode::OpCode;
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -94,6 +95,18 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
+    }
+}
+
+impl<'ob> Default for LispFn<'ob> {
+    fn default() -> Self {
+        LispFn::new(
+            vec_into![OpCode::Constant0, OpCode::Ret].into(),
+            vec![NIL],
+            0,
+            0,
+            false,
+        )
     }
 }
 

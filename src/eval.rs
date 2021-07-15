@@ -508,11 +508,13 @@ mod test {
 
     #[test]
     fn errors() {
+        use crate::error::Error::ArgCount;
+        use crate::intern::intern;
         test_eval_error(
             "(bad-function-name)",
-            Error::VoidFunction(crate::intern::intern("bad-function-name")),
+            Error::VoidFunction(intern("bad-function-name")),
         );
-        test_eval_error("(1+ 1 2)", crate::error::Error::ArgCount(1, 2));
-        test_eval_error("(/)", crate::error::Error::ArgCount(1, 0));
+        test_eval_error("(1+ 1 2)", ArgCount(1, 2));
+        test_eval_error("(/)", ArgCount(1, 0));
     }
 }
