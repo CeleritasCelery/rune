@@ -17,7 +17,7 @@ use std::mem::size_of;
 use std::num::NonZeroI64 as NonZero;
 
 #[derive(Copy, Clone)]
-pub struct InnerObject(NonZero);
+struct InnerObject(NonZero);
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Object<'ob> {
@@ -33,8 +33,6 @@ pub const TRUE: Object = Object {
     data: InnerObject::from_tag(Tag::True),
     marker: PhantomData,
 };
-
-pub type GcObject = Object<'static>;
 
 #[derive(Debug, PartialEq)]
 pub enum Value<'ob> {
@@ -114,19 +112,8 @@ impl<'ob> Object<'ob> {
         self.data.val()
     }
 
-    pub const unsafe fn into_gc(self) -> Object<'static> {
-        GcObject {
-            data: self.data,
-            marker: PhantomData,
-        }
-    }
-
     pub unsafe fn drop(self) {
         self.data.drop()
-    }
-
-    pub const unsafe fn inner(self) -> InnerObject {
-        self.data
     }
 
     pub fn as_int(self) -> Option<i64> {

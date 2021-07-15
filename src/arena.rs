@@ -1,9 +1,9 @@
-use crate::object::{GcObject, IntoObject, Object};
+use crate::object::{IntoObject, Object};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
 pub struct Arena {
-    objects: RefCell<Vec<GcObject>>,
+    objects: RefCell<Vec<Object<'static>>>,
 }
 
 impl<'ob> Arena {
@@ -18,7 +18,9 @@ impl<'ob> Arena {
     }
 
     pub fn register(&self, obj: Object<'ob>) {
-        self.objects.borrow_mut().push(unsafe { obj.into_gc() });
+        self.objects
+            .borrow_mut()
+            .push(unsafe { Self::extend_lifetime(obj) });
     }
 
     pub fn add<Input, Output>(&'ob self, item: Input) -> Output
@@ -26,6 +28,10 @@ impl<'ob> Arena {
         Input: IntoObject<'ob, Output>,
     {
         item.into_obj(self)
+    }
+
+    unsafe fn extend_lifetime(obj: Object<'ob>) -> Object<'static> {
+        std::mem::transmute(obj)
     }
 }
 

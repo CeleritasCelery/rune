@@ -1,8 +1,7 @@
 use crate::arena::Arena;
 use crate::data::Environment;
-use crate::object::InnerObject;
 use crate::object::{
-    BuiltInFn, Expression, FnArgs, FunctionValue, GcObject, LispFn, Object, Symbol, Value, NIL,
+    BuiltInFn, Expression, FnArgs, FunctionValue, LispFn, Object, Symbol, Value, NIL,
 };
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
@@ -88,29 +87,29 @@ impl<'brw, 'ob> CallFrame<'brw, 'ob> {
         }
     }
 
-    fn get_const(&self, i: usize) -> InnerObject {
-        unsafe { self.code.constants.get(i).unwrap().inner() }
+    fn get_const(&self, i: usize) -> Object<'ob> {
+        *self.code.constants.get(i).unwrap()
     }
 }
 
 pub fn from_slice<'brw, 'ob>(
-    slice: &'brw [InnerObject],
+    slice: &'brw [Object<'ob>],
     _arena: &'ob Arena,
 ) -> &'brw [Object<'ob>] {
-    let ptr = slice.as_ptr() as *const Object<'ob>;
+    let ptr = slice.as_ptr();
     let len = slice.len();
     unsafe { std::slice::from_raw_parts(ptr, len) }
 }
 
-trait LispStack {
+trait LispStack<T> {
     fn from_end(&self, i: usize) -> usize;
     fn push_ref(&mut self, i: usize);
     fn set_ref(&mut self, i: usize);
-    fn ref_at(&self, i: usize) -> InnerObject;
-    fn take_slice(&self, i: usize) -> &[InnerObject];
+    fn ref_at(&self, i: usize) -> T;
+    fn take_slice(&self, i: usize) -> &[T];
 }
 
-impl LispStack for Vec<InnerObject> {
+impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     fn from_end(&self, i: usize) -> usize {
         debug_assert!(i < self.len());
         self.len() - (i + 1)
@@ -124,11 +123,11 @@ impl LispStack for Vec<InnerObject> {
         self.swap_remove(self.from_end(i));
     }
 
-    fn ref_at(&self, i: usize) -> InnerObject {
+    fn ref_at(&self, i: usize) -> Object<'ob> {
         *self.get(self.from_end(i)).unwrap()
     }
 
-    fn take_slice(&self, i: usize) -> &[InnerObject] {
+    fn take_slice(&self, i: usize) -> &[Object<'ob>] {
         &self[self.from_end(i - 1)..]
     }
 }
@@ -147,7 +146,7 @@ fn symbol_is(obj: Object, name: &str) -> Result<()> {
 }
 
 pub struct Routine<'brw, 'ob> {
-    stack: Vec<InnerObject>,
+    stack: Vec<Object<'ob>>,
     call_frames: Vec<CallFrame<'brw, 'ob>>,
     frame: CallFrame<'brw, 'ob>,
 }
@@ -163,27 +162,27 @@ impl<'ob> Routine<'_, 'ob> {
         }
         if total_args > count {
             for _ in 0..(total_args - count) {
-                self.stack.push(unsafe { NIL.inner() });
+                self.stack.push(NIL);
             }
         }
         Ok(max(total_args, count))
     }
 
-    fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
             let value = match env.vars.get(&sym) {
                 Some(x) => x,
                 None => bail!(Error::VoidVariable(sym)),
             };
-            self.stack.push(unsafe { value.inner() });
+            self.stack.push(*value);
             Ok(())
         } else {
             panic!("Varref was not a symbol: {:?}", symbol);
         }
     }
 
-    fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
+    fn varset(&mut self, idx: usize, env: &mut Environment<'ob>) -> Result<()> {
         let obj: Object = self.frame.get_const(idx).into();
         let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
@@ -242,7 +241,7 @@ impl<'ob> Routine<'_, 'ob> {
         let slice = self.stack.take_slice(args);
         let new_slice = from_slice(slice, arena);
         let result = func(new_slice, env, arena)?;
-        self.stack[i] = unsafe { result.inner() };
+        self.stack[i] = result;
         self.stack.truncate(i + 1);
         Ok(())
     }
@@ -251,7 +250,7 @@ impl<'ob> Routine<'_, 'ob> {
         exp: &Expression<'ob>,
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
-    ) -> Result<GcObject> {
+    ) -> Result<Object<'ob>> {
         use OpCode as op;
         let mut rout = Routine {
             stack: vec![],
