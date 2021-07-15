@@ -1,18 +1,14 @@
 use crate::arena::Arena;
 use crate::data::Environment;
-use crate::object::{
-    BuiltInFn, Expression, FnArgs, FunctionValue, LispFn, Object, Symbol, Value, NIL,
-};
+use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Symbol, Value, NIL};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
-use std::cmp::max;
 use std::convert::TryInto;
 
 use anyhow::{anyhow, bail, Result};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    ArgCount(u16, u16),
     VoidFunction(Symbol),
     VoidVariable(Symbol),
 }
@@ -20,7 +16,6 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::ArgCount(exp, act) => write!(f, "Expected {} arg(s), found {}", exp, act),
             Error::VoidFunction(func) => write!(f, "Void function: {}", func.get_name()),
             Error::VoidVariable(var) => write!(f, "Void variable: {}", var.get_name()),
         }
@@ -152,20 +147,10 @@ pub struct Routine<'brw, 'ob> {
 }
 
 impl<'ob> Routine<'_, 'ob> {
-    fn process_args(&mut self, count: u16, args: FnArgs) -> Result<u16> {
-        if count < args.required {
-            bail!(Error::ArgCount(args.required, count));
+    fn fill_args(&mut self, fill_args: u16) {
+        for _ in 0..fill_args {
+            self.stack.push(NIL);
         }
-        let total_args = args.required + args.optional;
-        if !args.rest && (count > total_args) {
-            bail!(Error::ArgCount(total_args, count));
-        }
-        if total_args > count {
-            for _ in 0..(total_args - count) {
-                self.stack.push(NIL);
-            }
-        }
-        Ok(max(total_args, count))
     }
 
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
@@ -183,10 +168,10 @@ impl<'ob> Routine<'_, 'ob> {
     }
 
     fn varset(&mut self, idx: usize, env: &mut Environment<'ob>) -> Result<()> {
-        let obj: Object = self.frame.get_const(idx).into();
+        let obj: Object = self.frame.get_const(idx);
         let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
-        crate::data::set(symbol, value.into(), env);
+        crate::data::set(symbol, value, env);
         Ok(())
     }
 
@@ -201,7 +186,9 @@ impl<'ob> Routine<'_, 'ob> {
                 self.call_lisp(func, arg_cnt)?;
             }
             FunctionValue::SubrFn(func) => {
-                let arg_cnt = self.process_args(arg_cnt, func.args)?;
+                let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+                self.fill_args(fill_args);
+                let arg_cnt = arg_cnt + fill_args;
                 self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
             }
             FunctionValue::Cons(cons) => {
@@ -219,7 +206,9 @@ impl<'ob> Routine<'_, 'ob> {
     }
 
     fn call_lisp(&mut self, func: &LispFn, arg_cnt: u16) -> Result<()> {
-        let arg_cnt = self.process_args(arg_cnt, func.args)?;
+        let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+        self.fill_args(fill_args);
+        let arg_cnt = arg_cnt + fill_args;
         self.call_frames.push(self.frame.clone());
         self.frame = CallFrame::new(
             // TODO: This is unsound. We don't know that this will live
@@ -365,14 +354,14 @@ impl<'ob> Routine<'_, 'ob> {
                 op::JumpNil => {
                     let cond = rout.stack.pop().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if matches!(cond.val(), Value::Nil) {
+                    if cond.is_nil() {
                         rout.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if matches!(cond.val(), Value::Nil) {
+                    if cond.is_nil() {
                         rout.frame.ip.jump(offset as i16);
                     } else {
                         rout.stack.pop();
@@ -381,7 +370,7 @@ impl<'ob> Routine<'_, 'ob> {
                 op::JumpNotNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if !matches!(cond.val(), Value::Nil) {
+                    if cond.is_non_nil() {
                         rout.frame.ip.jump(offset as i16);
                     } else {
                         rout.stack.pop();
@@ -390,7 +379,7 @@ impl<'ob> Routine<'_, 'ob> {
                 op::Ret => {
                     if rout.call_frames.is_empty() {
                         assert!(rout.stack.len() == 1);
-                        return Ok(rout.stack.pop().unwrap().into());
+                        return Ok(rout.stack.pop().unwrap());
                     } else {
                         let var = rout.stack.pop().unwrap();
                         rout.stack[rout.frame.start] = var;
@@ -505,13 +494,16 @@ mod test {
         );
     }
 
-    fn test_eval_error(sexp: &str, error: Error) {
+    fn test_eval_error<E>(sexp: &str, error: E)
+    where
+        E: std::error::Error + PartialEq + Send + Sync + 'static,
+    {
         let arena = &Arena::new();
         let obj = Reader::read(sexp, arena).unwrap().0;
         let exp = compile(obj, arena).unwrap();
         let env = &mut Environment::default();
         let val = Routine::execute(&exp, env, arena);
-        assert_eq!(val.err().unwrap().downcast::<Error>().unwrap(), (error));
+        assert_eq!(val.err().unwrap().downcast::<E>().unwrap(), (error));
     }
 
     #[test]
@@ -520,7 +512,7 @@ mod test {
             "(bad-function-name)",
             Error::VoidFunction(crate::intern::intern("bad-function-name")),
         );
-        test_eval_error("(1+ 1 2)", Error::ArgCount(1, 2));
-        test_eval_error("(/)", Error::ArgCount(1, 0));
+        test_eval_error("(1+ 1 2)", crate::error::Error::ArgCount(1, 2));
+        test_eval_error("(/)", crate::error::Error::ArgCount(1, 0));
     }
 }

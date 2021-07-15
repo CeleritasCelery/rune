@@ -1,9 +1,10 @@
 use crate::arena::Arena;
+use crate::error::Error;
 use crate::object::*;
 use crate::opcode::CodeVec;
 use std::fmt;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FnArgs {
@@ -18,6 +19,19 @@ pub struct FnArgs {
 pub struct LispFn<'ob> {
     pub body: Expression<'ob>,
     pub args: FnArgs,
+}
+
+impl FnArgs {
+    pub fn num_of_fill_args(self, args: u16) -> Result<u16> {
+        if args < self.required {
+            bail!(Error::ArgCount(self.required, args));
+        }
+        let total_args = self.required + self.optional;
+        if !self.rest && (args > total_args) {
+            bail!(Error::ArgCount(total_args, args));
+        }
+        Ok(total_args.saturating_sub(args))
+    }
 }
 
 impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for &LispFn<'ob> {
