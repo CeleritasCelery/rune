@@ -260,7 +260,7 @@ impl<'a, 'ob> Routine<'a> {
         };
         loop {
             println!("{:?}", rout.stack);
-            let op = unsafe { op::from_unchecked(rout.frame.ip.next()) };
+            let op = rout.frame.ip.next().try_into()?;
             println!("op : {:?}", op);
             match op {
                 op::StackRef0 => rout.stack.push_ref(0),
@@ -400,12 +400,7 @@ impl<'a, 'ob> Routine<'a> {
                     }
                 }
                 op => {
-                    let num = op as u8;
-                    if num <= op::Unknown as u8 {
-                        panic!("unimplemented opcode: {:?}", op);
-                    } else {
-                        panic!("unknown opcode: {:?}", num);
-                    }
+                    panic!("Unimplemented opcode: {:?}", op);
                 }
             }
         }

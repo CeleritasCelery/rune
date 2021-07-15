@@ -6,12 +6,6 @@ use anyhow::{bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
 
-impl OpCode {
-    pub unsafe fn from_unchecked(x: u8) -> Self {
-        std::mem::transmute(x)
-    }
-}
-
 impl From<OpCode> for u8 {
     fn from(x: OpCode) -> u8 {
         x as u8

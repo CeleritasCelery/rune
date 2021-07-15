@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt,
+};
 
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
@@ -100,7 +103,7 @@ impl fmt::Debug for CodeVec {
         let mut display: Vec<String> = vec![];
         let mut iter = self.0.iter();
         while let Some(i) = iter.next() {
-            let op = unsafe { OpCode::from_unchecked(*i) };
+            let op = (*i).try_into().unwrap_or(Unknown);
             display.push(format!("{:?}", op));
             match op {
                 StackRefN | ConstantN | CallN | VarRefN | VarSetN | DiscardN | DiscardNKeepTOS => {
@@ -115,5 +118,17 @@ impl fmt::Debug for CodeVec {
             }
         }
         write!(f, "{:?}", display)
+    }
+}
+
+impl TryFrom<u8> for OpCode {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value <= OpCode::Unknown as u8 {
+            Ok(unsafe { std::mem::transmute(value) })
+        } else {
+            Err(anyhow::anyhow!("Invalid opcode value: {}", value))
+        }
     }
 }
