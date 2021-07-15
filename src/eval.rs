@@ -31,9 +31,9 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 #[derive(Clone)]
-struct CallFrame<'ob> {
+struct CallFrame<'brw, 'ob> {
     ip: Ip,
-    func: &'ob Expression<'ob>,
+    code: &'brw Expression<'ob>,
     start: usize,
 }
 
@@ -79,24 +79,24 @@ impl Ip {
     }
 }
 
-impl<'ob> CallFrame<'ob> {
-    fn new(func: &'ob Expression<'ob>, frame_start: usize) -> CallFrame {
+impl<'brw, 'ob> CallFrame<'brw, 'ob> {
+    fn new(func: &'brw Expression<'ob>, frame_start: usize) -> CallFrame<'brw, 'ob> {
         CallFrame {
             ip: Ip::new(&func.op_codes),
-            func,
+            code: func,
             start: frame_start,
         }
     }
 
     fn get_const(&self, i: usize) -> InnerObject {
-        unsafe { self.func.constants.get(i).unwrap().inner() }
+        unsafe { self.code.constants.get(i).unwrap().inner() }
     }
 }
 
-pub fn from_slice<'borrow, 'ob>(
-    slice: &'borrow [InnerObject],
+pub fn from_slice<'brw, 'ob>(
+    slice: &'brw [InnerObject],
     _arena: &'ob Arena,
-) -> &'borrow [Object<'ob>] {
+) -> &'brw [Object<'ob>] {
     let ptr = slice.as_ptr() as *const Object<'ob>;
     let len = slice.len();
     unsafe { std::slice::from_raw_parts(ptr, len) }
@@ -146,13 +146,13 @@ fn symbol_is(obj: Object, name: &str) -> Result<()> {
     }
 }
 
-pub struct Routine<'ob> {
+pub struct Routine<'brw, 'ob> {
     stack: Vec<InnerObject>,
-    call_frames: Vec<CallFrame<'ob>>,
-    frame: CallFrame<'ob>,
+    call_frames: Vec<CallFrame<'brw, 'ob>>,
+    frame: CallFrame<'brw, 'ob>,
 }
 
-impl<'env, 'ob> Routine<'env> {
+impl<'ob> Routine<'_, 'ob> {
     fn process_args(&mut self, count: u16, args: FnArgs) -> Result<u16> {
         if count < args.required {
             bail!(Error::ArgCount(args.required, count));
@@ -169,7 +169,7 @@ impl<'env, 'ob> Routine<'env> {
         Ok(max(total_args, count))
     }
 
-    fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
             let value = match env.vars.get(&sym) {
