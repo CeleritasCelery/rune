@@ -6,6 +6,14 @@ pub struct Function<'ob> {
     marker: PhantomData<&'ob ()>,
 }
 
+impl<'ob> std::ops::Deref for Function<'ob> {
+    type Target = Object<'ob>;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { std::mem::transmute::<&Function, &Object>(self) }
+    }
+}
+
 impl<'ob> From<Function<'ob>> for Object<'ob> {
     fn from(x: Function<'ob>) -> Self {
         x.data.into()

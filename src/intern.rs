@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Function, InnerSymbol, IntoObject, Object, Symbol};
+use crate::object::{Function, InnerSymbol, IntoObject, Symbol};
 use lazy_static::lazy_static;
 use std::convert::TryInto;
 use std::sync::Mutex;
@@ -63,8 +63,7 @@ impl SymbolMap {
     }
 
     pub fn set_func(&self, symbol: Symbol, func: Function) {
-        let obj: Object = func.into();
-        let new_obj = obj.clone_in(&self.arena);
+        let new_obj = func.clone_in(&self.arena);
         let new_func: Function = new_obj.try_into().unwrap();
         symbol.set_func(new_func);
     }
