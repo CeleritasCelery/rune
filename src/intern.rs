@@ -1,7 +1,8 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Function, InnerSymbol, IntoObject, Symbol};
+use crate::object::{Function, InnerSymbol, IntoObject, Object, Symbol};
 use lazy_static::lazy_static;
+use std::convert::TryInto;
 use std::sync::Mutex;
 
 #[allow(dead_code)]
@@ -48,6 +49,7 @@ impl InnerSymbolMap {
                 let ptr: &'static str = unsafe { std::mem::transmute(name.as_str()) };
                 let sym = Box::new(InnerSymbol::new(ptr));
                 let ptr: *const InnerSymbol = sym.as_ref();
+                // We have a memory leak here
                 self.map.insert(name, SymbolBox(Box::into_raw(sym)));
                 ptr
             }
@@ -58,6 +60,13 @@ impl InnerSymbolMap {
 impl SymbolMap {
     pub fn intern(&mut self, name: &str) -> Symbol {
         self.map.intern(name)
+    }
+
+    pub fn set_func(&self, symbol: Symbol, func: Function) {
+        let obj: Object = func.into();
+        let new_obj = obj.clone_in(&self.arena);
+        let new_func: Function = new_obj.try_into().unwrap();
+        symbol.set_func(new_func);
     }
 }
 
