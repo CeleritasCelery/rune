@@ -192,7 +192,7 @@ lazy_static! {
             arith::defsubr(),
             eval::defsubr(),
             forms::defsubr(),
-            object::cons::defsubr(),
+            cons::defsubr(),
             lread::defsubr(),
             data::defsubr(),
         )

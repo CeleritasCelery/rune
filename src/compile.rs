@@ -1,7 +1,8 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
 use crate::symbol::Symbol;
-use crate::object::{Cons, ConsIter, Expression, IntoObject, LispFn, Object, Value, NIL};
+use crate::cons::{Cons, ConsIter};
+use crate::object::{Expression, IntoObject, LispFn, Object, Value, NIL};
 use crate::opcode::{CodeVec, OpCode};
 use anyhow::{bail, ensure, Result};
 use paste::paste;
@@ -1003,7 +1004,7 @@ mod test {
         check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
         check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
         check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
-        check_error("(let ((foo 1 . 2)))", crate::object::ConsIterError);
+        check_error("(let ((foo 1 . 2)))", crate::cons::ConsIterError);
         check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));
         check_error("(let)", Error::ArgCount(1, 0));
     }

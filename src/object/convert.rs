@@ -1,5 +1,6 @@
 use crate::error::{Error, Type};
 use crate::object::*;
+use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
 use std::mem::transmute;
@@ -147,6 +148,12 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
     }
 }
 
+impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+        InnerObject::from_type(self, Tag::Cons, arena).into()
+    }
+}
+
 impl<'ob, T> From<Option<T>> for Object<'ob>
 where
     T: Into<Object<'ob>>,
@@ -180,7 +187,7 @@ mod test {
     fn test() {
         let arena = &Arena::new();
         let obj0 = 5.into_obj(arena);
-        let obj1 = cons!(1, 2; arena).into_obj(arena);
+        let obj1 = Cons::new(1.into(), 2.into()).into_obj(arena);
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

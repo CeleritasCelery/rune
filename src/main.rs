@@ -23,8 +23,9 @@
 
 #[macro_use]
 mod macros;
-#[macro_use]
 mod object;
+#[macro_use]
+mod cons;
 mod arena;
 mod arith;
 mod compile;

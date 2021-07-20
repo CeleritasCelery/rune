@@ -68,12 +68,6 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
-        InnerObject::from_type(self, Tag::Cons, arena).into()
-    }
-}
-
 impl<'ob> TryFrom<Object<'ob>> for &Cons<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
@@ -186,13 +180,13 @@ defsubr!(car, cdr, setcar, setcdr, cons);
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $arena:expr) => {
-        crate::object::Cons::new(
+        crate::cons::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
             crate::object::IntoObject::into_obj($cdr, $arena),
         )
     };
     ($car:expr; $arena:expr) => {
-        crate::object::Cons::new(
+        crate::cons::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
             crate::object::NIL,
         )

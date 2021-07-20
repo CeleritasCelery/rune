@@ -1,6 +1,3 @@
-#[macro_use]
-pub mod cons;
-pub use cons::*;
 pub mod sub_type;
 pub use sub_type::*;
 pub mod func;
@@ -10,6 +7,7 @@ pub use convert::*;
 
 use crate::arena::Arena;
 use crate::symbol::Symbol;
+use crate::cons::Cons;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
