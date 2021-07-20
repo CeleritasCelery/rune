@@ -5,12 +5,11 @@ pub mod sub_type;
 pub use sub_type::*;
 pub mod func;
 pub use func::*;
-pub mod symbol;
-pub use symbol::*;
 pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
+use crate::symbol::Symbol;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -330,7 +329,7 @@ impl fmt::Debug for InnerObject {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::intern::intern;
+    use crate::symbol::intern;
 
     #[test]
     fn sizes() {

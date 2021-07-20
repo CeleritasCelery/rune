@@ -33,10 +33,10 @@ mod error;
 mod eval;
 mod forms;
 mod hashmap;
-mod intern;
 mod lread;
 mod opcode;
 mod reader;
+mod symbol;
 
 use crate::arena::Arena;
 // use crate::compile::Exp;

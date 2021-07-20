@@ -1,5 +1,6 @@
 use crate::hashmap::HashMap;
-use crate::object::{List, Object, Symbol, NIL};
+use crate::symbol::Symbol;
+use crate::object::{List, Object, NIL};
 use fn_macros::lisp_fn;
 
 #[derive(Debug, Default)]

@@ -1,5 +1,6 @@
 use crate::error::{Error, Type};
 use crate::object::*;
+use crate::symbol::Symbol;
 use std::convert::TryFrom;
 use std::mem::transmute;
 
@@ -130,6 +131,19 @@ define_unbox_ref!(String);
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         InnerObject::from_type(self, Tag::String, arena).into()
+    }
+}
+
+impl<'ob> From<Symbol> for Object<'ob> {
+    fn from(s: Symbol) -> Self {
+        let ptr = s.as_ptr();
+        InnerObject::from_ptr(ptr as *mut u8, Tag::Symbol).into()
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        self.into()
     }
 }
 

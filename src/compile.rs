@@ -1,6 +1,7 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
-use crate::object::{Cons, ConsIter, Expression, IntoObject, LispFn, Object, Symbol, Value, NIL};
+use crate::symbol::Symbol;
+use crate::object::{Cons, ConsIter, Expression, IntoObject, LispFn, Object, Value, NIL};
 use crate::opcode::{CodeVec, OpCode};
 use anyhow::{bail, ensure, Result};
 use paste::paste;
@@ -662,9 +663,9 @@ mod test {
 
     use super::*;
     use crate::arena::Arena;
-    use crate::intern::intern;
     use crate::object::TRUE;
     use crate::reader::Reader;
+    use crate::symbol::intern;
     use OpCode::*;
 
     fn check_error<E>(compare: &str, expect: E)

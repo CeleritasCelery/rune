@@ -1,5 +1,5 @@
-use crate::intern::intern;
-use crate::object::{IntoObject, Object, Symbol, NIL, TRUE};
+use crate::symbol::{intern, Symbol};
+use crate::object::{IntoObject, Object, NIL, TRUE};
 use crate::{arena::Arena, object::Cons};
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};

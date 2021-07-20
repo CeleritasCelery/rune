@@ -1,6 +1,7 @@
 use crate::arena::Arena;
 use crate::data::Environment;
-use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Symbol, Value, NIL};
+use crate::symbol::Symbol;
+use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value, NIL};
 use crate::opcode::OpCode;
 use fn_macros::lisp_fn;
 use std::convert::TryInto;
@@ -471,7 +472,7 @@ mod test {
     #[test]
     fn errors() {
         use crate::error::Error::ArgCount;
-        use crate::intern::intern;
+        use crate::symbol::intern;
         test_eval_error(
             "(bad-function-name)",
             Error::VoidFunction(intern("bad-function-name")),

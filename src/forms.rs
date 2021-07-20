@@ -1,5 +1,6 @@
-use crate::intern::INTERNED_SYMBOLS;
-use crate::object::{Function, Object, Symbol, NIL};
+use crate::symbol::INTERNED_SYMBOLS;
+use crate::symbol::Symbol;
+use crate::object::{Function, Object, NIL};
 use fn_macros::lisp_fn;
 
 #[lisp_fn]
