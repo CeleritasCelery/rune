@@ -52,7 +52,6 @@ impl InnerSymbol {
 
 #[derive(Copy, Clone)]
 pub struct Symbol(&'static InnerSymbol);
-define_unbox!(Symbol);
 
 impl Symbol {
     #[allow(clippy::missing_const_for_fn)]

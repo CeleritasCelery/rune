@@ -1,9 +1,7 @@
 use crate::arena::Arena;
-use crate::error::{Error, Type};
 use crate::object::*;
 use fn_macros::lisp_fn;
 use std::cell::Cell;
-use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
 
 #[derive(PartialEq, Debug, Clone)]
@@ -68,26 +66,7 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for &Cons<'ob> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(x) => Ok(x),
-            x => Err(Error::Type(Type::Cons, x.get_type())),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for Option<&Cons<'ob>> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(x) => Ok(Some(x)),
-            Value::Nil => Ok(None),
-            x => Err(Error::Type(Type::Cons, x.get_type())),
-        }
-    }
-}
+define_unbox!(Cons, Cons, &Cons<'ob>);
 
 #[derive(Clone)]
 pub struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);

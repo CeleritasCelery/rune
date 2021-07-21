@@ -29,11 +29,11 @@ macro_rules! defsubr {
 
 #[macro_use]
 macro_rules! define_unbox {
-    ($ident:ident) => {
-        define_unbox!($ident, $ident);
+    ($ident:ident, $ty:ty) => {
+        define_unbox!($ident, $ident, $ty);
     };
-    ($ident:ident, $ty:ident) => {
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $ident {
+    ($ident:ident, $ty:ident, $self:ty) => {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
                 match obj.val() {
@@ -45,43 +45,9 @@ macro_rules! define_unbox {
                 }
             }
         }
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$ident> {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
-                match obj.val() {
-                    crate::object::Value::$ident(x) => Ok(Some(x)),
-                    crate::object::Value::Nil => Ok(None),
-                    x => Err(crate::error::Error::Type(
-                        crate::error::Type::$ty,
-                        x.get_type(),
-                    )),
-                }
-            }
-        }
-    };
-}
-
-#[macro_use]
-macro_rules! define_unbox_ref {
-    ($ident:ident) => {
-        define_unbox_ref!($ident, $ident);
-    };
-    ($ident:ident, $ty:ident) => {
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for &'ob $ident {
-            type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-                match obj.val() {
-                    crate::object::Value::$ident(x) => Ok(x),
-                    x => Err(crate::error::Error::Type(
-                        crate::error::Type::$ty,
-                        x.get_type(),
-                    )),
-                }
-            }
-        }
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<&'ob $ident> {
-            type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.val() {
                     crate::object::Value::$ident(x) => Ok(Some(x)),
                     crate::object::Value::Nil => Ok(None),

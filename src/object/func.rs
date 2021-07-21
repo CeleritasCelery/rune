@@ -35,31 +35,7 @@ impl FnArgs {
     }
 }
 
-impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for &LispFn<'ob> {
-    type Error = crate::error::Error;
-    fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            crate::object::Value::LispFn(x) => Ok(x),
-            x => Err(crate::error::Error::Type(
-                crate::error::Type::Func,
-                x.get_type(),
-            )),
-        }
-    }
-}
-impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<&LispFn<'ob>> {
-    type Error = crate::error::Error;
-    fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            crate::object::Value::LispFn(x) => Ok(Some(x)),
-            crate::object::Value::Nil => Ok(None),
-            x => Err(crate::error::Error::Type(
-                crate::error::Type::Func,
-                x.get_type(),
-            )),
-        }
-    }
-}
+define_unbox!(LispFn, Func, &LispFn<'ob>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expression<'ob> {
@@ -122,7 +98,7 @@ pub struct SubrFn {
     pub args: FnArgs,
     pub name: &'static str,
 }
-define_unbox_ref!(SubrFn, Func);
+define_unbox!(SubrFn, Func, &SubrFn);
 
 impl SubrFn {
     pub fn new(

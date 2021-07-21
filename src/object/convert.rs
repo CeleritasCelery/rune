@@ -68,6 +68,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
     }
 }
 
+// This is required because we have no specialization yet
 pub fn try_from_slice<'borrow, 'ob>(
     slice: &'borrow [Object<'ob>],
 ) -> Result<&'borrow [Number<'ob>], Error> {
@@ -83,8 +84,7 @@ pub fn try_from_slice<'borrow, 'ob>(
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-type Int = i64;
-define_unbox!(Int);
+define_unbox!(Int, i64);
 
 impl<'ob> From<i64> for Object<'ob> {
     fn from(x: i64) -> Self {
@@ -99,8 +99,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
     }
 }
 
-type Float = f64;
-define_unbox!(Float);
+define_unbox!(Float, f64);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
@@ -127,13 +126,14 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
     }
 }
 
-define_unbox_ref!(String);
+define_unbox!(String, &String);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         InnerObject::from_type(self, Tag::String, arena).into()
     }
 }
+define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
@@ -171,15 +171,15 @@ mod test {
     use super::*;
     use std::convert::TryInto;
 
-    fn wrapper(args: &[Object]) -> Result<Int, Error> {
+    fn wrapper(args: &[Object]) -> Result<i64, Error> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,
         ))
     }
 
-    fn inner(arg0: Option<Int>, arg1: &Cons) -> Int {
-        let x: Int = arg1.car().try_into().unwrap();
+    fn inner(arg0: Option<i64>, arg1: &Cons) -> i64 {
+        let x: i64 = arg1.car().try_into().unwrap();
         arg0.unwrap() + x
     }
 
