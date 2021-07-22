@@ -105,7 +105,6 @@ impl std::hash::Hash for Symbol {
     }
 }
 
-#[allow(dead_code)]
 pub struct SymbolMap {
     map: InnerSymbolMap,
     arena: Arena,
@@ -118,6 +117,27 @@ So we use this work around that I found on the forum.
 */
 struct SymbolBox(*const InnerSymbol);
 unsafe impl Send for SymbolBox {}
+
+impl SymbolBox {
+    fn new(inner: InnerSymbol) -> Self {
+        let ptr = Box::into_raw(Box::new(inner));
+        Self(ptr)
+    }
+}
+
+impl AsRef<InnerSymbol> for SymbolBox {
+    fn as_ref(&self) -> &InnerSymbol {
+        unsafe { &*self.0 }
+    }
+}
+
+impl Drop for SymbolBox {
+    fn drop(&mut self) {
+        unsafe {
+            Box::from_raw(self.0 as *mut InnerSymbol);
+        }
+    }
+}
 
 struct InnerSymbolMap {
     map: HashMap<String, SymbolBox>,
@@ -146,11 +166,13 @@ impl InnerSymbolMap {
             Some(x) => x.0,
             None => {
                 let name = name.to_owned();
-                let ptr: &'static str = unsafe { transmute(name.as_str()) };
-                let sym = Box::new(InnerSymbol::new(ptr));
+                let sym = {
+                    let ptr: &'static str = unsafe { transmute(name.as_str()) };
+                    let inner = InnerSymbol::new(ptr);
+                    SymbolBox::new(inner)
+                };
                 let ptr: *const InnerSymbol = sym.as_ref();
-                // We have a memory leak here
-                self.map.insert(name, SymbolBox(Box::into_raw(sym)));
+                self.map.insert(name, sym);
                 ptr
             }
         }
