@@ -1,13 +1,12 @@
+use crate::arena::Arena;
+use crate::hashmap::HashMap;
 use crate::object::{Function, IntoObject};
+use lazy_static::lazy_static;
 use std::cmp;
+use std::convert::TryInto;
 use std::fmt;
 use std::mem::transmute;
 use std::sync::atomic::{AtomicI64, Ordering};
-
-use crate::arena::Arena;
-use crate::hashmap::HashMap;
-use lazy_static::lazy_static;
-use std::convert::TryInto;
 use std::sync::Mutex;
 
 #[derive(Debug)]
@@ -61,7 +60,7 @@ impl Symbol {
     }
 
     pub fn as_ptr(&self) -> *const u8 {
-        let ptr : *const _ = self.0;
+        let ptr: *const _ = self.0;
         ptr as *const _
     }
 
@@ -76,7 +75,6 @@ impl Symbol {
     fn set_func(&self, func: Function) {
         self.0.func.set(Some(func));
     }
-
 }
 
 impl fmt::Debug for Symbol {
@@ -207,7 +205,7 @@ mod test {
     use super::*;
     use crate::arena::Arena;
     use crate::data::Environment;
-    use crate::object::{LispFn, SubrFn, Object, IntoObject};
+    use crate::object::{IntoObject, LispFn, Object, SubrFn};
     use std::mem::size_of;
 
     #[test]
@@ -223,7 +221,7 @@ mod test {
     fn symbol_func() {
         let arena = &Arena::new();
         let inner = InnerSymbol::new("foo");
-        let sym = Symbol(unsafe { fix_lifetime(&inner)});
+        let sym = Symbol(unsafe { fix_lifetime(&inner) });
         assert_eq!("foo", sym.get_name());
         assert!(sym.get_func().is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
@@ -254,7 +252,7 @@ mod test {
         let arena = &Arena::new();
 
         let inner = InnerSymbol::new("bar");
-        let sym = Symbol(unsafe {fix_lifetime(&inner)});
+        let sym = Symbol(unsafe { fix_lifetime(&inner) });
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
         sym.set_func(core_func.into_obj(arena));
 
