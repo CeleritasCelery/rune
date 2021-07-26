@@ -1,16 +1,5 @@
-#[macro_export]
 macro_rules! vec_into {
     ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
-}
-
-#[macro_export]
-macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::object::IntoObject::into_obj($x, $arena)),+]};
-}
-
-#[macro_export]
-macro_rules! into_objects {
-    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::object::IntoObject::into_obj($x, $arena)),+)};
 }
 
 macro_rules! count {
@@ -18,7 +7,6 @@ macro_rules! count {
     ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};
 }
 
-#[macro_export]
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
         pub const fn defsubr() -> [crate::object::SubrFn; count!($($x)+)] {
@@ -27,7 +15,6 @@ macro_rules! defsubr {
     );
 }
 
-#[macro_use]
 macro_rules! define_unbox {
     ($ident:ident, $ty:ty) => {
         define_unbox!($ident, $ident, $ty);
@@ -59,4 +46,14 @@ macro_rules! define_unbox {
             }
         }
     };
+}
+
+#[cfg(test)]
+macro_rules! vec_into_object {
+    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::object::IntoObject::into_obj($x, $arena)),+]};
+}
+
+#[cfg(test)]
+macro_rules! into_objects {
+    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::object::IntoObject::into_obj($x, $arena)),+)};
 }
