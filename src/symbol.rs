@@ -59,7 +59,7 @@ impl Symbol {
         Symbol(&*ptr)
     }
 
-    pub fn as_ptr(&self) -> *const u8 {
+    pub const fn as_ptr(self) -> *const u8 {
         let ptr: *const _ = self.0;
         ptr as *const _
     }
@@ -68,11 +68,11 @@ impl Symbol {
         self.0.name
     }
 
-    pub fn get_func(&self) -> Option<Function<'static>> {
+    pub fn get_func(self) -> Option<Function<'static>> {
         self.0.func.get()
     }
 
-    fn set_func(&self, func: Function) {
+    fn set_func(self, func: Function) {
         self.0.func.set(Some(func));
     }
 }
