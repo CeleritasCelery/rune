@@ -1,10 +1,19 @@
 #![warn(rust_2018_idioms)]
-#![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![warn(
     unused_qualifications,
     meta_variable_misuse,
-    absolute_paths_not_starting_with_crate
+    explicit_outlives_requirements,
+    missing_copy_implementations,
+    noop_method_call,
+    pointer_structural_match,
+    semicolon_in_expressions_from_macros,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_crate_dependencies,
+    unused_lifetimes
 )]
+#![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![allow(
     elided_lifetimes_in_paths,
     clippy::blanket_clippy_restriction_lints,
