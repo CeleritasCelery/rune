@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::object::*;
+use crate::object::{List, Object, Value, NIL};
 use fn_macros::lisp_fn;
 use std::cell::Cell;
 use std::fmt::{self, Display, Write};
@@ -41,7 +41,7 @@ impl<'ob> Cons<'ob> {
     }
 }
 
-impl<'ob> fmt::Display for Cons<'ob> {
+impl<'ob> Display for Cons<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
         print_rest(self, f)
@@ -158,6 +158,7 @@ macro_rules! cons {
         )
     };
     ($car:expr; $arena:expr) => {
+        #[allow(unused_qualifications)]
         crate::cons::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
             crate::object::NIL,
@@ -174,7 +175,7 @@ macro_rules! list {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::object::Value;
+    use crate::object::IntoObject;
     use std::mem::size_of;
 
     fn as_cons(obj: Object) -> Option<&Cons> {

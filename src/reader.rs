@@ -1,7 +1,7 @@
-use crate::symbol::{intern, Symbol};
-use crate::object::{IntoObject, Object, NIL, TRUE};
 use crate::arena::Arena;
 use crate::cons::Cons;
+use crate::object::{IntoObject, Object, NIL, TRUE};
+use crate::symbol::{intern, Symbol};
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
 
@@ -56,7 +56,7 @@ impl Error {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 enum Token<'a> {
     OpenParen(usize),
     CloseParen(usize),
@@ -203,8 +203,8 @@ impl<'a> Iterator for Tokenizer<'a> {
             ')' => Token::CloseParen(idx),
             '.' => Token::Dot(idx),
             '"' => self.get_string(idx),
-            chr if symbol_char(chr) => self.get_symbol(idx, chr),
-            chr => Token::Error(TokenError::UnexpectedChar(chr, idx)),
+            other if symbol_char(other) => self.get_symbol(idx, other),
+            unknown => Token::Error(TokenError::UnexpectedChar(unknown, idx)),
         };
         Some(token)
     }
@@ -308,10 +308,6 @@ pub(crate) struct Reader<'a> {
 }
 
 impl<'a, 'ob> Reader<'a> {
-    fn read_symbol(&mut self, symbol: &'a str, arena: &'ob Arena) -> Object<'ob> {
-        parse_symbol(symbol, arena)
-    }
-
     fn read_cdr(&mut self, delim: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         match self.tokens.next() {
             Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
@@ -379,7 +375,7 @@ impl<'a, 'ob> Reader<'a> {
             Token::Backquote(i) => self.quote_item(i, "`", arena),
             Token::Sharp(i) => self.read_sharp(i, arena),
             Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
-            Token::Ident(x) => Ok(self.read_symbol(x, arena)),
+            Token::Ident(x) => Ok(parse_symbol(x, arena)),
             Token::String(x) => Ok(unescape_string(x).into_obj(arena)),
             Token::Error(e) => Err(e.into()),
         }
@@ -416,11 +412,11 @@ mod test {
     }
 
     macro_rules! check_reader {
-        ($expect:expr, $compare:expr) => {
-            let arena = &Arena::new();
-            let obj: Object = $expect.into_obj(arena);
-            assert_eq!(obj, Reader::read($compare, &arena).unwrap().0)
-        };
+        ($expect:expr, $compare:expr) => {{
+            let read_arena = &Arena::new();
+            let obj: Object = $expect.into_obj(read_arena);
+            assert_eq!(obj, Reader::read($compare, &read_arena).unwrap().0)
+        }};
     }
 
     #[test]
@@ -505,6 +501,7 @@ baz""#
         assert_error("#a", Error::UnknownMacroCharacter('a', 0));
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
         let result = Reader::read(input, arena).err().unwrap();
@@ -513,6 +510,7 @@ baz""#
 
     #[test]
     fn reader_error() {
+        #[allow(clippy::enum_glob_use)]
         use Error::*;
         assert_error("", EmptyStream);
         assert_error(" (1 2", MissingCloseParen(1));

@@ -13,6 +13,7 @@ impl<'ob> Arena {
         }
     }
 
+    #[allow(clippy::unused_self)]
     pub(crate) fn alloc<T>(&self, obj: T) -> *const T {
         Box::into_raw(Box::new(obj))
     }

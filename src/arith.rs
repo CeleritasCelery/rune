@@ -158,13 +158,7 @@ pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
 fn cmp(number: Number, numbers: &[Number], cmp: fn(&NumberValue, &NumberValue) -> bool) -> bool {
     numbers
         .iter()
-        .try_fold(number.val(), |acc, &x| {
-            if cmp(&acc, &x.val()) {
-                Some(Int(0))
-            } else {
-                None
-            }
-        })
+        .try_fold(number.val(), |acc, &x| cmp(&acc, &x.val()).then(|| Int(0)))
         .is_some()
 }
 

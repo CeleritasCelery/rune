@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::error::Error;
-use crate::object::*;
+use crate::object::{Function, IntoObject, Object, NIL};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
 use std::fmt;
@@ -129,7 +129,7 @@ impl std::fmt::Debug for SubrFn {
     }
 }
 
-impl std::cmp::PartialEq for SubrFn {
+impl PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
         let lhs: fn(&'static _, &'static mut _, &'static _) -> _ = self.subr;
         lhs == other.subr

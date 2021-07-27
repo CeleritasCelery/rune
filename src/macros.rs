@@ -1,7 +1,9 @@
+#[allow(unused_qualifications)]
 macro_rules! vec_into {
     ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
 }
 
+#[allow(meta_variable_misuse)]
 macro_rules! count {
     (@replace_expr $_t:tt $sub:expr) => {$sub};
     ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};
@@ -18,6 +20,7 @@ macro_rules! define_unbox {
         define_unbox!($ident, $ident, $ty);
     };
     ($ident:ident, $ty:ident, $self:ty) => {
+        #[allow(unused_qualifications)]
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {
@@ -30,6 +33,7 @@ macro_rules! define_unbox {
                 }
             }
         }
+        #[allow(unused_qualifications)]
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object) -> Result<Self, Self::Error> {

@@ -46,17 +46,16 @@ pub(crate) enum Value<'ob> {
 
 impl<'ob> Value<'ob> {
     pub(crate) const fn get_type(&self) -> crate::error::Type {
-        use crate::error::Type::*;
+        use crate::error::Type;
         match self {
-            Value::Symbol(_) => Symbol,
-            Value::Float(_) => Float,
-            Value::String(_) => String,
-            Value::Nil => Nil,
-            Value::True => True,
-            Value::Cons(_) => Cons,
-            Value::Int(_) => Int,
-            Value::LispFn(_) => Func,
-            Value::SubrFn(_) => Func,
+            Value::Symbol(_) => Type::Symbol,
+            Value::Float(_) => Type::Float,
+            Value::String(_) => Type::String,
+            Value::Nil => Type::Nil,
+            Value::True => Type::True,
+            Value::Cons(_) => Type::Cons,
+            Value::Int(_) => Type::Int,
+            Value::LispFn(_) | Value::SubrFn(_) => Type::Func,
         }
     }
 }
@@ -110,7 +109,7 @@ impl<'ob> Object<'ob> {
     }
 
     pub(crate) unsafe fn drop(self) {
-        self.data.drop()
+        self.data.drop();
     }
 
     pub(crate) fn is_nil(self) -> bool {
@@ -141,8 +140,8 @@ impl InnerObject {
     }
 
     const fn from_tag_bits(bits: i64, tag: Tag) -> Self {
-        let bits = (bits << TAG_SIZE) | tag as i64;
-        Self::new(bits)
+        let tagged = (bits << TAG_SIZE) | tag as i64;
+        Self::new(tagged)
     }
 
     fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
@@ -162,7 +161,10 @@ impl InnerObject {
     }
 
     fn tag(self) -> Tag {
-        unsafe { std::mem::transmute(self.get() as u8) }
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        unsafe {
+            std::mem::transmute(self.get() as u8)
+        }
     }
 
     const fn get_ptr<T>(self) -> *const T {
@@ -192,7 +194,6 @@ impl InnerObject {
 
     pub(crate) unsafe fn drop(mut self) {
         match self.tag() {
-            Tag::Symbol => {}
             Tag::Float => {
                 let x: *mut f64 = self.get_mut_ptr();
                 Box::from_raw(x);
@@ -209,13 +210,11 @@ impl InnerObject {
                 let x: *mut SubrFn = self.get_mut_ptr();
                 Box::from_raw(x);
             }
-            Tag::Nil => {}
-            Tag::True => {}
             Tag::Cons => {
                 let x: *mut Cons = self.get_mut_ptr();
                 Box::from_raw(x);
             }
-            Tag::Int => {}
+            Tag::Symbol | Tag::Nil | Tag::True | Tag::Int => {}
         }
     }
 }
@@ -238,7 +237,7 @@ impl<'ob> fmt::Display for Value<'ob> {
             Value::True => write!(f, "t"),
             Value::Nil => write!(f, "nil"),
             Value::Float(x) => {
-                if x.fract() == 0.0 {
+                if x.fract() == 0.0_f64 {
                     write!(f, "{:.1}", x)
                 } else {
                     write!(f, "{}", x)

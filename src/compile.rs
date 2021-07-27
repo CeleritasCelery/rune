@@ -36,7 +36,7 @@ struct ConstVec<'ob> {
 impl<'ob> From<Vec<Object<'ob>>> for ConstVec<'ob> {
     fn from(vec: Vec<Object<'ob>>) -> Self {
         let mut consts = ConstVec { consts: Vec::new() };
-        for x in vec.into_iter() {
+        for x in vec {
             consts.insert_or_get(x);
         }
         consts
@@ -137,27 +137,27 @@ impl CodeVec {
     }
 
     fn emit_const(&mut self, idx: u16) {
-        emit_op!(self, Constant, idx)
+        emit_op!(self, Constant, idx);
     }
 
     fn emit_varref(&mut self, idx: u16) {
-        emit_op!(self, VarRef, idx)
+        emit_op!(self, VarRef, idx);
     }
 
     fn emit_varset(&mut self, idx: u16) {
-        emit_op!(self, VarSet, idx)
+        emit_op!(self, VarSet, idx);
     }
 
     fn emit_call(&mut self, idx: u16) {
-        emit_op!(self, Call, idx)
+        emit_op!(self, Call, idx);
     }
 
     fn emit_stack_ref(&mut self, idx: u16) {
-        emit_op!(self, StackRef, idx)
+        emit_op!(self, StackRef, idx);
     }
 
     fn emit_stack_set(&mut self, idx: u16) {
-        emit_op!(self, StackSet, idx)
+        emit_op!(self, StackSet, idx);
     }
 }
 
@@ -403,7 +403,7 @@ impl<'ob> Exp<'ob> {
             self.codes.push_op(OpCode::Jump);
             self.codes.push_back_jump(location);
         } else {
-            panic!("invalid back jump opcode provided: {:?}", jump_code)
+            panic!("invalid back jump opcode provided: {:?}", jump_code);
         }
     }
 
@@ -667,8 +667,10 @@ mod test {
     use crate::object::TRUE;
     use crate::reader::Reader;
     use crate::symbol::intern;
+    #[allow(clippy::enum_glob_use)]
     use OpCode::*;
 
+    #[allow(clippy::needless_pass_by_value)]
     fn check_error<E>(compare: &str, expect: E)
     where
         E: std::error::Error + PartialEq + Send + Sync + 'static,
@@ -682,16 +684,16 @@ mod test {
     }
 
     macro_rules! check_compiler {
-        ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => {
-            let arena = &Arena::new();
+        ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => ({
+            let comp_arena = &Arena::new();
             println!("Test String: {}", $compare);
-            let obj = Reader::read($compare, arena).unwrap().0;
+            let obj = Reader::read($compare, comp_arena).unwrap().0;
             let expect = Expression {
                 op_codes: vec_into![$($op),+].into(),
-                constants: vec_into_object![$($const),+; arena],
+                constants: vec_into_object![$($const),+; comp_arena],
             };
-            assert_eq!(compile(obj, arena).unwrap(), expect);
-        }
+            assert_eq!(compile(obj, comp_arena).unwrap(), expect);
+        })
     }
 
     #[test]
@@ -996,7 +998,7 @@ mod test {
     fn errors() {
         check_error("(\"foo\")", Error::Type(Type::Symbol, Type::String));
         check_error("(quote)", Error::ArgCount(1, 0));
-        check_error("(quote 1 2)", Error::ArgCount(1, 2))
+        check_error("(quote 1 2)", Error::ArgCount(1, 2));
     }
 
     #[test]

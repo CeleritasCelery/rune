@@ -84,7 +84,7 @@ impl<'brw, 'ob> CallFrame<'brw, 'ob> {
     }
 
     fn get_const(&self, i: usize) -> Object<'ob> {
-        *self.code.constants.get(i).unwrap()
+        self.code.constants[i]
     }
 }
 
@@ -111,7 +111,7 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     }
 
     fn ref_at(&self, i: usize) -> Object<'ob> {
-        *self.get(self.from_end(i)).unwrap()
+        self[self.from_end(i)]
     }
 
     fn take_slice(&self, i: usize) -> &[Object<'ob>] {
@@ -132,6 +132,7 @@ impl<'ob> Routine<'_, 'ob> {
         }
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
@@ -154,6 +155,7 @@ impl<'ob> Routine<'_, 'ob> {
         Ok(())
     }
 
+    #[allow(clippy::panic_in_result_fn)]
     fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
@@ -167,8 +169,8 @@ impl<'ob> Routine<'_, 'ob> {
             FunctionValue::SubrFn(func) => {
                 let fill_args = func.args.num_of_fill_args(arg_cnt)?;
                 self.fill_args(fill_args);
-                let arg_cnt = arg_cnt + fill_args;
-                self.call_subr(func.subr, arg_cnt as usize, env, arena)?;
+                let total_args = arg_cnt + fill_args;
+                self.call_subr(func.subr, total_args as usize, env, arena)?;
             }
         };
         Ok(())
@@ -177,9 +179,9 @@ impl<'ob> Routine<'_, 'ob> {
     fn call_lisp(&mut self, func: &'ob LispFn, arg_cnt: u16) -> Result<()> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
         self.fill_args(fill_args);
-        let arg_cnt = arg_cnt + fill_args;
+        let total_args = arg_cnt + fill_args;
         self.call_frames.push(self.frame.clone());
-        self.frame = CallFrame::new(&func.body, self.stack.from_end(arg_cnt as usize));
+        self.frame = CallFrame::new(&func.body, self.stack.from_end(total_args as usize));
         Ok(())
     }
 
@@ -198,6 +200,8 @@ impl<'ob> Routine<'_, 'ob> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::panic_in_result_fn)]
     pub(crate) fn execute(
         exp: &Expression<'ob>,
         env: &mut Environment<'ob>,
@@ -250,11 +254,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::Constant5 => rout.stack.push(rout.frame.get_const(5)),
                 op::ConstantN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.stack.push(rout.frame.get_const(idx))
+                    rout.stack.push(rout.frame.get_const(idx));
                 }
                 op::ConstantN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.push(rout.frame.get_const(idx))
+                    rout.stack.push(rout.frame.get_const(idx));
                 }
                 op::VarRef0 => rout.varref(0, env)?,
                 op::VarRef1 => rout.varref(1, env)?,
@@ -264,11 +268,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::VarRef5 => rout.varref(5, env)?,
                 op::VarRefN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varref(idx, env)?
+                    rout.varref(idx, env)?;
                 }
                 op::VarRefN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varref(idx, env)?
+                    rout.varref(idx, env)?;
                 }
                 op::VarSet0 => rout.varset(0, env)?,
                 op::VarSet1 => rout.varset(1, env)?,
@@ -278,11 +282,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::VarSet5 => rout.varset(5, env)?,
                 op::VarSetN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varset(idx, env)?
+                    rout.varset(idx, env)?;
                 }
                 op::VarSetN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varset(idx, env)?
+                    rout.varset(idx, env)?;
                 }
                 op::Call0 => rout.call(0, env, arena)?,
                 op::Call1 => rout.call(1, env, arena)?,
@@ -350,12 +354,11 @@ impl<'ob> Routine<'_, 'ob> {
                     if rout.call_frames.is_empty() {
                         assert!(rout.stack.len() == 1);
                         return Ok(rout.stack.pop().unwrap());
-                    } else {
-                        let var = rout.stack.pop().unwrap();
-                        rout.stack[rout.frame.start] = var;
-                        rout.stack.truncate(rout.frame.start + 1);
-                        rout.frame = rout.call_frames.pop().unwrap();
                     }
+                    let var = rout.stack.pop().unwrap();
+                    rout.stack[rout.frame.start] = var;
+                    rout.stack.truncate(rout.frame.start + 1);
+                    rout.frame = rout.call_frames.pop().unwrap();
                 }
                 op => {
                     panic!("Unimplemented opcode: {:?}", op);
@@ -370,7 +373,7 @@ pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
-) -> anyhow::Result<Object<'ob>> {
+) -> Result<Object<'ob>> {
     let func = crate::compile::compile(form, arena)?;
     Routine::execute(&func, env, arena)
 }
@@ -386,7 +389,7 @@ mod test {
     use crate::reader::Reader;
 
     macro_rules! test_eval {
-        ($sexp:expr, $expect:expr) => {
+        ($sexp:expr, $expect:expr) => {{
             println!("Test String: {}", $sexp);
             let arena = &Arena::new();
             let env = &mut Environment::default();
@@ -396,7 +399,7 @@ mod test {
             println!("const: {:?}", exp.constants);
             let val = Routine::execute(&exp, env, arena).unwrap();
             assert_eq!(val, $expect.into_obj(arena));
-        };
+        }};
     }
 
     #[test]
@@ -464,6 +467,7 @@ mod test {
         );
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn test_eval_error<E>(sexp: &str, error: E)
     where
         E: std::error::Error + PartialEq + Send + Sync + 'static,

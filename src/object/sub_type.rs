@@ -1,4 +1,7 @@
-use crate::object::*;
+use crate::arena::Arena;
+use crate::cons::Cons;
+use crate::object::{InnerObject, IntoObject, LispFn, Object, SubrFn, Tag, Value};
+use std::marker::PhantomData;
 
 #[derive(Copy, Clone)]
 pub(crate) struct Function<'ob> {
@@ -10,7 +13,8 @@ impl<'ob> std::ops::Deref for Function<'ob> {
     type Target = Object<'ob>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { std::mem::transmute::<&Function, &Object>(self) }
+        let ptr: *const Self = self;
+        unsafe { &*ptr.cast::<Object>() }
     }
 }
 
@@ -60,7 +64,7 @@ impl<'ob> Function<'ob> {
     pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self.val() {
             FunctionValue::LispFn(x) => Some(x),
-            _ => None,
+            FunctionValue::SubrFn(_) => None,
         }
     }
 
@@ -68,7 +72,7 @@ impl<'ob> Function<'ob> {
     pub(crate) fn as_subr_fn(self) -> Option<&'ob SubrFn> {
         match self.val() {
             FunctionValue::SubrFn(x) => Some(x),
-            _ => None,
+            FunctionValue::LispFn(_) => None,
         }
     }
 
@@ -135,7 +139,7 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum NumberValue {
     Int(i64),
     Float(f64),
@@ -161,6 +165,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
     }
 }
 
+#[derive(Copy, Clone)]
 pub(crate) enum List<'o> {
     Nil,
     Cons(&'o Cons<'o>),

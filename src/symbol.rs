@@ -2,7 +2,6 @@ use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Function, IntoObject};
 use lazy_static::lazy_static;
-use std::cmp;
 use std::convert::TryInto;
 use std::fmt;
 use std::mem::transmute;
@@ -34,7 +33,7 @@ impl FnCell {
     }
 }
 
-impl cmp::PartialEq for InnerSymbol {
+impl PartialEq for InnerSymbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(&*self, &*other)
     }
@@ -55,13 +54,13 @@ pub(crate) struct Symbol(&'static InnerSymbol);
 impl Symbol {
     #[allow(clippy::missing_const_for_fn)]
     pub(crate) unsafe fn from_raw(ptr: *const u8) -> Symbol {
-        let ptr = ptr as *const InnerSymbol;
-        Symbol(&*ptr)
+        let inner = ptr.cast::<InnerSymbol>();
+        Symbol(&*inner)
     }
 
     pub(crate) const fn as_ptr(self) -> *const u8 {
         let ptr: *const _ = self.0;
-        ptr as *const _
+        ptr.cast()
     }
 
     pub(crate) const fn get_name(&self) -> &str {
@@ -89,13 +88,13 @@ impl fmt::Display for Symbol {
     }
 }
 
-impl std::cmp::PartialEq for Symbol {
+impl PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(&*self.0, &*other.0)
     }
 }
 
-impl std::cmp::Eq for Symbol {}
+impl Eq for Symbol {}
 
 impl std::hash::Hash for Symbol {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -146,7 +145,7 @@ struct InnerSymbolMap {
 impl InnerSymbolMap {
     fn with_capacity(cap: usize) -> Self {
         Self {
-            map: HashMap::with_capacity_and_hasher(cap, Default::default()),
+            map: HashMap::with_capacity_and_hasher(cap, std::hash::BuildHasherDefault::default()),
         }
     }
 
@@ -155,7 +154,7 @@ impl InnerSymbolMap {
         // no methods to remove items from SymbolMap and SymbolMap has a private
         // constructor, so the only one that exists is the one we create in this
         // module, which is static.
-        unsafe { Symbol::from_raw(self.get_symbol(name) as *const _) }
+        unsafe { Symbol::from_raw(self.get_symbol(name).cast()) }
     }
 
     // This is my work around for there being no Entry API that takes a
@@ -195,7 +194,7 @@ impl SymbolMap {
 
 macro_rules! create_symbolmap {
     ($($arr:expr),+ $(,)?) => ({
-        const SIZE: usize = 0usize $(+ $arr.len())+;
+        const SIZE: usize = 0_usize $(+ $arr.len())+;
         let mut map = InnerSymbolMap::with_capacity(SIZE);
         let arena = Arena::new();
         $(for func in $arr.iter() {
@@ -212,14 +211,13 @@ macro_rules! create_symbolmap {
 
 lazy_static! {
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
-        use crate::*;
         create_symbolmap!(
-            arith::DEFSUBR,
-            eval::DEFSUBR,
-            forms::DEFSUBR,
-            cons::DEFSUBR,
-            lread::DEFSUBR,
-            data::DEFSUBR,
+            crate::arith::DEFSUBR,
+            crate::eval::DEFSUBR,
+            crate::forms::DEFSUBR,
+            crate::cons::DEFSUBR,
+            crate::lread::DEFSUBR,
+            crate::data::DEFSUBR,
         )
     });
 }

@@ -1,6 +1,7 @@
+use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::*;
+use crate::object::{Function, InnerObject, IntoObject, List, Number, Object, Tag, Value, NIL};
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
 use std::mem::transmute;
@@ -79,7 +80,7 @@ pub(crate) fn try_from_slice<'borrow, 'ob>(
             debug_assert_eq!(transmute::<_, i64>(num), transmute(*x));
         }
     }
-    let ptr = slice.as_ptr() as *const Number;
+    let ptr = slice.as_ptr().cast::<Number>();
     let len = slice.len();
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }

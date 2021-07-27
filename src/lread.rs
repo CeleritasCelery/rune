@@ -9,6 +9,7 @@ use anyhow::{anyhow, Result};
 
 use std::fs;
 
+#[allow(clippy::panic_in_result_fn)]
 pub(crate) fn read_from_string<'ob>(
     contents: &str,
     arena: &'ob Arena,

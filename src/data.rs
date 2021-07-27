@@ -1,6 +1,6 @@
 use crate::hashmap::HashMap;
-use crate::symbol::Symbol;
 use crate::object::{List, Object, NIL};
+use crate::symbol::Symbol;
 use fn_macros::lisp_fn;
 
 #[derive(Debug, Default)]
@@ -10,7 +10,11 @@ pub(crate) struct Environment<'ob> {
 }
 
 #[lisp_fn]
-pub(crate) fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment<'ob>) -> Object<'ob> {
+pub(crate) fn set<'ob>(
+    place: Symbol,
+    newlet: Object<'ob>,
+    env: &mut Environment<'ob>,
+) -> Object<'ob> {
     env.vars.insert(place, newlet);
     newlet
 }

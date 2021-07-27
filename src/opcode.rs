@@ -99,6 +99,7 @@ impl std::ops::DerefMut for CodeVec {
 
 impl fmt::Debug for CodeVec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        #[allow(clippy::enum_glob_use)]
         use OpCode::*;
         let mut display: Vec<String> = vec![];
         let mut iter = self.0.iter();
