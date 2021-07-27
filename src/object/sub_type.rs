@@ -69,6 +69,25 @@ impl<'ob> Function<'ob> {
             _ => None,
         }
     }
+
+    #[cfg(miri)]
+    pub unsafe fn set_as_miri_root(self) {
+        match self.val() {
+            FunctionValue::LispFn(x) => {
+                let ptr: *const _ = x;
+                miri_static_root(ptr as _);
+            }
+            FunctionValue::SubrFn(x) => {
+                let ptr: *const _ = x;
+                miri_static_root(ptr as _);
+            }
+        }
+    }
+}
+
+#[cfg(miri)]
+extern "Rust" {
+    fn miri_static_root(ptr: *const u8);
 }
 
 #[derive(Copy, Clone)]

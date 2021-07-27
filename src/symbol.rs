@@ -187,6 +187,10 @@ impl SymbolMap {
     pub fn set_func(&self, symbol: Symbol, func: Function) {
         let new_obj = func.clone_in(&self.arena);
         let new_func: Function = new_obj.try_into().unwrap();
+        #[cfg(miri)]
+        unsafe {
+            new_func.set_as_miri_root();
+        }
         symbol.set_func(new_func);
     }
 }
@@ -197,8 +201,14 @@ macro_rules! create_symbolmap {
         let mut map = InnerSymbolMap::with_capacity(SIZE);
         let arena = Arena::new();
         $(for func in $arr.iter() {
+            let func = func;
             let func_obj: Function = func.into_obj(&arena);
-            map.intern(func.name).set_func(func_obj);
+            #[cfg(miri)]
+            unsafe {
+                func_obj.set_as_miri_root();
+            }
+            let name: &'static str = func.name;
+            map.intern(name).set_func(func_obj);
         })+;
         SymbolMap{ map, arena }
     })
@@ -208,12 +218,12 @@ lazy_static! {
     pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
         create_symbolmap!(
-            arith::defsubr(),
-            eval::defsubr(),
-            forms::defsubr(),
-            cons::defsubr(),
-            lread::defsubr(),
-            data::defsubr(),
+            arith::DEFSUBR,
+            eval::DEFSUBR,
+            forms::DEFSUBR,
+            cons::DEFSUBR,
+            lread::DEFSUBR,
+            data::DEFSUBR,
         )
     });
 }

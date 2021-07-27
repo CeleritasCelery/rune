@@ -9,9 +9,7 @@ macro_rules! count {
 
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
-        pub const fn defsubr() -> [crate::object::SubrFn; count!($($x)+)] {
-            [$(paste::paste!{[<S $x>]}),+]
-        }
+        pub const DEFSUBR: [crate::object::SubrFn; count!($($x)+)] = [$(paste::paste!{[<S $x>]}),+];
     );
 }
 

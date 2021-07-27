@@ -1,6 +1,6 @@
+use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::*;
-use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
 use std::mem::transmute;

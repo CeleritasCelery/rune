@@ -6,8 +6,8 @@ pub mod convert;
 pub use convert::*;
 
 use crate::arena::Arena;
-use crate::symbol::Symbol;
 use crate::cons::Cons;
+use crate::symbol::Symbol;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::size_of;
