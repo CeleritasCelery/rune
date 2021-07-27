@@ -1,4 +1,12 @@
+#![deny(
+    macro_use_extern_crate,
+    keyword_idents,
+    absolute_paths_not_starting_with_crate
+)]
+#![forbid(non_ascii_idents)]
 #![warn(rust_2018_idioms)]
+// This lint makes code more verbose with little benefit
+#![allow(elided_lifetimes_in_paths)]
 #![warn(
     unused_qualifications,
     meta_variable_misuse,
@@ -13,9 +21,9 @@
     unused_crate_dependencies,
     unused_lifetimes
 )]
+// Enable all clippy lints, and then selectivly disable the ones we don't want
 #![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![allow(
-    elided_lifetimes_in_paths,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
     clippy::as_conversions,
@@ -41,12 +49,6 @@
     clippy::single_match_else,
     clippy::panic
 )]
-#![deny(
-    macro_use_extern_crate,
-    keyword_idents,
-    absolute_paths_not_starting_with_crate
-)]
-#![forbid(non_ascii_idents)]
 
 #[macro_use]
 mod macros;
