@@ -1,33 +1,26 @@
-use crate::object::{IntoObject, Object};
+use crate::object::Object;
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
-pub struct Arena {
+pub(crate) struct Arena {
     objects: RefCell<Vec<Object<'static>>>,
 }
 
 impl<'ob> Arena {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Arena {
             objects: RefCell::new(Vec::new()),
         }
     }
 
-    pub fn alloc<T>(&self, obj: T) -> *const T {
+    pub(crate) fn alloc<T>(&self, obj: T) -> *const T {
         Box::into_raw(Box::new(obj))
     }
 
-    pub fn register(&self, obj: Object<'ob>) {
+    pub(crate) fn register(&self, obj: Object<'ob>) {
         self.objects
             .borrow_mut()
             .push(unsafe { Self::extend_lifetime(obj) });
-    }
-
-    pub fn add<Input, Output>(&'ob self, item: Input) -> Output
-    where
-        Input: IntoObject<'ob, Output>,
-    {
-        item.into_obj(self)
     }
 
     unsafe fn extend_lifetime(obj: Object<'ob>) -> Object<'static> {

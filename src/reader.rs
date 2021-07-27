@@ -6,7 +6,7 @@ use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
 
 #[derive(PartialEq, Debug)]
-pub enum Error {
+pub(crate) enum Error {
     MissingCloseParen(usize),
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
@@ -303,7 +303,7 @@ fn vector_into_list<'ob>(
     end.into_obj(arena)
 }
 
-pub struct Reader<'a> {
+pub(crate) struct Reader<'a> {
     tokens: Tokenizer<'a>,
 }
 
@@ -385,7 +385,7 @@ impl<'a, 'ob> Reader<'a> {
         }
     }
 
-    pub fn read(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize), Error> {
+    pub(crate) fn read(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize), Error> {
         let mut reader = Reader {
             tokens: Tokenizer::new(slice),
         };

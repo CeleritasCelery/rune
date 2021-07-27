@@ -50,25 +50,25 @@ impl InnerSymbol {
 }
 
 #[derive(Copy, Clone)]
-pub struct Symbol(&'static InnerSymbol);
+pub(crate) struct Symbol(&'static InnerSymbol);
 
 impl Symbol {
     #[allow(clippy::missing_const_for_fn)]
-    pub unsafe fn from_raw(ptr: *const u8) -> Symbol {
+    pub(crate) unsafe fn from_raw(ptr: *const u8) -> Symbol {
         let ptr = ptr as *const InnerSymbol;
         Symbol(&*ptr)
     }
 
-    pub const fn as_ptr(self) -> *const u8 {
+    pub(crate) const fn as_ptr(self) -> *const u8 {
         let ptr: *const _ = self.0;
         ptr as *const _
     }
 
-    pub const fn get_name(&self) -> &str {
+    pub(crate) const fn get_name(&self) -> &str {
         self.0.name
     }
 
-    pub fn get_func(self) -> Option<Function<'static>> {
+    pub(crate) fn get_func(self) -> Option<Function<'static>> {
         self.0.func.get()
     }
 
@@ -105,7 +105,7 @@ impl std::hash::Hash for Symbol {
     }
 }
 
-pub struct SymbolMap {
+pub(crate) struct SymbolMap {
     map: InnerSymbolMap,
     arena: Arena,
 }
@@ -180,17 +180,15 @@ impl InnerSymbolMap {
 }
 
 impl SymbolMap {
-    pub fn intern(&mut self, name: &str) -> Symbol {
+    pub(crate) fn intern(&mut self, name: &str) -> Symbol {
         self.map.intern(name)
     }
 
-    pub fn set_func(&self, symbol: Symbol, func: Function) {
+    pub(crate) fn set_func(&self, symbol: Symbol, func: Function) {
         let new_obj = func.clone_in(&self.arena);
         let new_func: Function = new_obj.try_into().unwrap();
         #[cfg(miri)]
-        unsafe {
-            new_func.set_as_miri_root();
-        }
+        new_func.set_as_miri_root();
         symbol.set_func(new_func);
     }
 }
@@ -204,9 +202,7 @@ macro_rules! create_symbolmap {
             let func = func;
             let func_obj: Function = func.into_obj(&arena);
             #[cfg(miri)]
-            unsafe {
-                func_obj.set_as_miri_root();
-            }
+            func_obj.set_as_miri_root();
             let name: &'static str = func.name;
             map.intern(name).set_func(func_obj);
         })+;
@@ -215,7 +211,7 @@ macro_rules! create_symbolmap {
 }
 
 lazy_static! {
-    pub static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
+    pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         use crate::*;
         create_symbolmap!(
             arith::DEFSUBR,
@@ -228,7 +224,7 @@ lazy_static! {
     });
 }
 
-pub fn intern(name: &str) -> Symbol {
+pub(crate) fn intern(name: &str) -> Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
 }
 

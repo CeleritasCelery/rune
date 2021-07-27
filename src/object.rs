@@ -1,9 +1,9 @@
-pub mod sub_type;
-pub use sub_type::*;
-pub mod func;
-pub use func::*;
-pub mod convert;
-pub use convert::*;
+pub(crate) mod sub_type;
+pub(crate) use sub_type::*;
+pub(crate) mod func;
+pub(crate) use func::*;
+pub(crate) mod convert;
+pub(crate) use convert::*;
 
 use crate::arena::Arena;
 use crate::cons::Cons;
@@ -17,22 +17,22 @@ use std::num::NonZeroI64 as NonZero;
 struct InnerObject(NonZero);
 
 #[derive(Copy, Clone, PartialEq)]
-pub struct Object<'ob> {
+pub(crate) struct Object<'ob> {
     data: InnerObject,
     marker: PhantomData<&'ob ()>,
 }
 
-pub const NIL: Object = Object {
+pub(crate) const NIL: Object = Object {
     data: InnerObject::from_tag(Tag::Nil),
     marker: PhantomData,
 };
-pub const TRUE: Object = Object {
+pub(crate) const TRUE: Object = Object {
     data: InnerObject::from_tag(Tag::True),
     marker: PhantomData,
 };
 
 #[derive(Debug, PartialEq)]
-pub enum Value<'ob> {
+pub(crate) enum Value<'ob> {
     Symbol(Symbol),
     Int(i64),
     Float(f64),
@@ -45,7 +45,7 @@ pub enum Value<'ob> {
 }
 
 impl<'ob> Value<'ob> {
-    pub const fn get_type(&self) -> crate::error::Type {
+    pub(crate) const fn get_type(&self) -> crate::error::Type {
         use crate::error::Type::*;
         match self {
             Value::Symbol(_) => Symbol,
@@ -63,7 +63,7 @@ impl<'ob> Value<'ob> {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
-pub enum Tag {
+pub(crate) enum Tag {
     Symbol = 0,
     Int,
     Float,
@@ -77,7 +77,7 @@ pub enum Tag {
 
 const TAG_SIZE: usize = size_of::<Tag>() * 8;
 
-pub trait IntoObject<'ob, T> {
+pub(crate) trait IntoObject<'ob, T> {
     fn into_obj(self, arena: &'ob Arena) -> T;
 }
 
@@ -88,7 +88,7 @@ impl<'ob, 'old: 'ob> IntoObject<'ob, Object<'ob>> for Object<'old> {
 }
 
 impl<'old, 'new> Object<'old> {
-    pub fn clone_in(self, arena: &'new Arena) -> Object<'new> {
+    pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self.val() {
             Value::Int(x) => x.into(),
             Value::Cons(x) => x.clone_in(arena).into_obj(arena),
@@ -105,73 +105,20 @@ impl<'old, 'new> Object<'old> {
 
 impl<'ob> Object<'ob> {
     #[inline(always)]
-    pub fn val<'new: 'ob>(self) -> Value<'new> {
+    pub(crate) fn val<'new: 'ob>(self) -> Value<'new> {
         self.data.val()
     }
 
-    pub unsafe fn drop(self) {
+    pub(crate) unsafe fn drop(self) {
         self.data.drop()
     }
 
-    pub fn as_int(self) -> Option<i64> {
-        match self.val() {
-            Value::Int(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn as_cons(self) -> Option<&'ob Cons<'ob>> {
-        match self.val() {
-            Value::Cons(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn as_string(self) -> Option<&'ob String> {
-        match self.val() {
-            Value::String(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn as_symbol(self) -> Option<Symbol> {
-        match self.val() {
-            Value::Symbol(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
-        match self.val() {
-            Value::LispFn(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn as_subr_fn(self) -> Option<&'ob SubrFn> {
-        match self.val() {
-            Value::SubrFn(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn is_true(self) -> bool {
-        matches!(self.val(), Value::True)
-    }
-
-    pub fn is_nil(self) -> bool {
+    pub(crate) fn is_nil(self) -> bool {
         matches!(self.val(), Value::Nil)
     }
 
-    pub fn is_non_nil(self) -> bool {
+    pub(crate) fn is_non_nil(self) -> bool {
         !matches!(self.val(), Value::Nil)
-    }
-
-    pub fn as_float(self) -> Option<f64> {
-        match self.val() {
-            Value::Float(x) => Some(x),
-            _ => None,
-        }
     }
 }
 
@@ -227,7 +174,7 @@ impl InnerObject {
     }
 
     #[inline(always)]
-    pub fn val<'ob>(self) -> Value<'ob> {
+    pub(crate) fn val<'ob>(self) -> Value<'ob> {
         unsafe {
             match self.tag() {
                 Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
@@ -243,7 +190,7 @@ impl InnerObject {
         }
     }
 
-    pub unsafe fn drop(mut self) {
+    pub(crate) unsafe fn drop(mut self) {
         match self.tag() {
             Tag::Symbol => {}
             Tag::Float => {
@@ -373,12 +320,13 @@ mod test {
     #[test]
     fn other() {
         let t = TRUE;
-        assert!(t.is_true());
+        matches!(t.val(), Value::True);
+        assert!(t.is_non_nil());
         let n = NIL;
         assert!(n.is_nil());
 
         let bool_true: Object = true.into();
-        assert!(bool_true.is_true());
+        matches!(bool_true.val(), Value::True);
         let bool_false: Object = false.into();
         assert!(bool_false.is_nil());
     }

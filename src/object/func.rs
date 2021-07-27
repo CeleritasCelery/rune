@@ -8,22 +8,22 @@ use std::fmt;
 use anyhow::{bail, Result};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct FnArgs {
-    pub rest: bool,
-    pub required: u16,
-    pub optional: u16,
-    pub max_stack_usage: u16,
-    pub advice: bool,
+pub(crate) struct FnArgs {
+    pub(crate) rest: bool,
+    pub(crate) required: u16,
+    pub(crate) optional: u16,
+    pub(crate) max_stack_usage: u16,
+    pub(crate) advice: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LispFn<'ob> {
-    pub body: Expression<'ob>,
-    pub args: FnArgs,
+pub(crate) struct LispFn<'ob> {
+    pub(crate) body: Expression<'ob>,
+    pub(crate) args: FnArgs,
 }
 
 impl FnArgs {
-    pub fn num_of_fill_args(self, args: u16) -> Result<u16> {
+    pub(crate) fn num_of_fill_args(self, args: u16) -> Result<u16> {
         if args < self.required {
             bail!(Error::ArgCount(self.required, args));
         }
@@ -38,13 +38,13 @@ impl FnArgs {
 define_unbox!(LispFn, Func, &LispFn<'ob>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expression<'ob> {
-    pub op_codes: CodeVec,
-    pub constants: Vec<Object<'ob>>,
+pub(crate) struct Expression<'ob> {
+    pub(crate) op_codes: CodeVec,
+    pub(crate) constants: Vec<Object<'ob>>,
 }
 
 impl<'ob> LispFn<'ob> {
-    pub fn new(
+    pub(crate) fn new(
         op_codes: CodeVec,
         constants: Vec<Object<'ob>>,
         required: u16,
@@ -86,22 +86,23 @@ impl<'ob> Default for LispFn<'ob> {
     }
 }
 
-pub type BuiltInFn = for<'ob> fn(
+pub(crate) type BuiltInFn = for<'ob> fn(
     &[Object<'ob>],
     &mut crate::data::Environment<'ob>,
     &'ob Arena,
 ) -> Result<Object<'ob>>;
 
 #[derive(Copy, Clone)]
-pub struct SubrFn {
-    pub subr: BuiltInFn,
-    pub args: FnArgs,
-    pub name: &'static str,
+pub(crate) struct SubrFn {
+    pub(crate) subr: BuiltInFn,
+    pub(crate) args: FnArgs,
+    pub(crate) name: &'static str,
 }
 define_unbox!(SubrFn, Func, &SubrFn);
 
+#[cfg(test)]
 impl SubrFn {
-    pub fn new(
+    pub(crate) fn new(
         name: &'static str,
         subr: BuiltInFn,
         required: u16,
@@ -155,7 +156,10 @@ mod test {
         let obj: Object = func.into_obj(arena);
         assert!(matches!(obj.val(), Value::LispFn(_)));
         format!("{}", obj);
-        let func = obj.as_lisp_fn().expect("expected lispfn");
+        let func = match obj.val() {
+            Value::LispFn(x) => x,
+            _ => unreachable!("expected lispfn"),
+        };
         assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());
         assert_eq!(func.body.constants, vec_into_object![1; arena]);
         assert_eq!(func.args.required, 0);

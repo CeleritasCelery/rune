@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 
 use std::fs;
 
-pub fn read_from_string<'ob>(
+pub(crate) fn read_from_string<'ob>(
     contents: &str,
     arena: &'ob Arena,
     env: &mut Environment<'ob>,
@@ -48,6 +48,7 @@ defsubr!(load);
 mod test {
 
     use super::*;
+    use crate::object::IntoObject;
 
     #[test]
     fn test_load() {
@@ -60,6 +61,6 @@ mod test {
         let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
         let func = compile(obj, arena).unwrap();
         let val = Routine::execute(&func, env, arena).unwrap();
-        assert_eq!(val, arena.add(4.5));
+        assert_eq!(val, 4.5.into_obj(arena));
     }
 }

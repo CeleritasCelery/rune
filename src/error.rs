@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
-pub enum Error {
+pub(crate) enum Error {
     ArgCount(u16, u16),
     Type(Type, Type),
 }
@@ -18,7 +18,7 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 #[derive(Debug, PartialEq)]
-pub enum Type {
+pub(crate) enum Type {
     Int,
     True,
     Nil,
@@ -26,8 +26,6 @@ pub enum Type {
     String,
     Symbol,
     Float,
-    Void,
-    Marker,
     Func,
     Number,
     List,

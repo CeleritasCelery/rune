@@ -3,9 +3,10 @@ use std::{
     fmt,
 };
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
-pub enum OpCode {
+pub(crate) enum OpCode {
     StackRef0 = 0,
     StackRef1,
     StackRef2,
@@ -64,12 +65,11 @@ pub enum OpCode {
     JumpNilElsePop,
     JumpNotNilElsePop,
     Ret,
-    End,
     Unknown,
 }
 
 #[derive(PartialEq, Clone)]
-pub struct CodeVec(Vec<u8>);
+pub(crate) struct CodeVec(Vec<u8>);
 
 impl Default for CodeVec {
     fn default() -> Self {

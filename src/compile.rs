@@ -1,9 +1,9 @@
 use crate::arena::Arena;
-use crate::error::{Error, Type};
-use crate::symbol::Symbol;
 use crate::cons::{Cons, ConsIter};
+use crate::error::{Error, Type};
 use crate::object::{Expression, IntoObject, LispFn, Object, Value, NIL};
 use crate::opcode::{CodeVec, OpCode};
+use crate::symbol::Symbol;
 use anyhow::{bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
@@ -50,7 +50,7 @@ impl<'ob> PartialEq for ConstVec<'ob> {
 }
 
 impl<'ob> ConstVec<'ob> {
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         ConstVec { consts: Vec::new() }
     }
 
@@ -102,7 +102,7 @@ macro_rules! emit_op {
 const JUMP_SLOTS: i16 = 2;
 
 impl CodeVec {
-    pub fn push_op(&mut self, op: OpCode) {
+    pub(crate) fn push_op(&mut self, op: OpCode) {
         self.push(op.into());
     }
 
@@ -170,7 +170,7 @@ fn into_iter(obj: Object) -> Result<ConsIter> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Exp<'ob> {
+pub(crate) struct Exp<'ob> {
     codes: CodeVec,
     constants: ConstVec<'ob>,
     vars: Vec<Option<Symbol>>,
@@ -453,7 +453,7 @@ impl<'ob> Exp<'ob> {
         Ok(())
     }
 
-    pub fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
+    pub(crate) fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
         let mut iter = into_iter(obj)?;
         let mut vars: Vec<Option<Symbol>> = vec![];
 
@@ -654,7 +654,7 @@ impl<'ob> Exp<'ob> {
     }
 }
 
-pub fn compile<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<Expression<'ob>> {
+pub(crate) fn compile<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<Expression<'ob>> {
     let cons = Cons::new(obj, NIL);
     Exp::compile_func_body(cons.into_iter(), vec![], arena).map(|x| x.into())
 }

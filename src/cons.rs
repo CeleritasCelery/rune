@@ -5,46 +5,39 @@ use std::cell::Cell;
 use std::fmt::{self, Display, Write};
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct Cons<'ob> {
+pub(crate) struct Cons<'ob> {
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
 }
 
 impl<'old, 'new> Cons<'old> {
-    pub fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
+    pub(crate) fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
         Cons::new(self.car().clone_in(arena), self.cdr().clone_in(arena))
     }
 }
 
 impl<'ob> Cons<'ob> {
-    pub const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
+    pub(crate) const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
         Self {
             car: Cell::new(car),
             cdr: Cell::new(cdr),
         }
     }
 
-    pub fn car(&self) -> Object<'ob> {
+    pub(crate) fn car(&self) -> Object<'ob> {
         self.car.get()
     }
 
-    pub fn cdr(&self) -> Object<'ob> {
+    pub(crate) fn cdr(&self) -> Object<'ob> {
         self.cdr.get()
     }
 
-    pub fn set_car(&self, new_car: Object<'ob>) {
+    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
         self.car.set(new_car);
     }
 
-    pub fn set_cdr(&self, new_cdr: Object<'ob>) {
+    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
         self.cdr.set(new_cdr);
-    }
-
-    pub fn next(&self) -> Option<&Cons<'ob>> {
-        match self.cdr().val() {
-            Value::Cons(cons) => Some(cons),
-            _ => None,
-        }
     }
 }
 
@@ -69,10 +62,10 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 define_unbox!(Cons, Cons, &Cons<'ob>);
 
 #[derive(Clone)]
-pub struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
+pub(crate) struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
 
 #[derive(Debug, PartialEq)]
-pub struct ConsIterError;
+pub(crate) struct ConsIterError;
 
 impl Display for ConsIterError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -112,11 +105,11 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
 }
 
 impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
-    pub const fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         ConsIter(None)
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0 == None
     }
 }
@@ -184,6 +177,13 @@ mod test {
     use crate::object::Value;
     use std::mem::size_of;
 
+    fn as_cons(obj: Object) -> Option<&Cons> {
+        match obj.val() {
+            Value::Cons(x) => Some(x),
+            _ => None,
+        }
+    }
+
     #[test]
     fn cons() {
         let arena = &Arena::new();
@@ -193,7 +193,7 @@ mod test {
         let x: Object = cons.into_obj(arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
-        let cons1 = x.as_cons().expect("expected cons");
+        let cons1 = as_cons(x).expect("expected cons");
 
         let start_str = "start".to_owned();
         assert_eq!(Value::String(&start_str), cons1.car().val());
@@ -201,11 +201,11 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(Value::String(&start2_str), cons1.car().val());
 
-        let cons2 = cons1.cdr().as_cons().expect("expected cons");
+        let cons2 = as_cons(cons1.cdr()).expect("expected cons");
 
         assert_eq!(Value::Int(7), cons2.car().val());
 
-        let cons3 = cons2.cdr().as_cons().expect("expected cons");
+        let cons3 = as_cons(cons2.cdr()).expect("expected cons");
         assert_eq!(Value::Int(5), cons3.car().val());
         assert_eq!(Value::Int(9), cons3.cdr().val());
 

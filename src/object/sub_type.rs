@@ -1,7 +1,7 @@
 use crate::object::*;
 
 #[derive(Copy, Clone)]
-pub struct Function<'ob> {
+pub(crate) struct Function<'ob> {
     data: InnerObject,
     marker: PhantomData<&'ob ()>,
 }
@@ -41,14 +41,14 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-pub enum FunctionValue<'ob> {
+pub(crate) enum FunctionValue<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'ob SubrFn),
 }
 
 impl<'ob> Function<'ob> {
     #[inline(always)]
-    pub fn val(self) -> FunctionValue<'ob> {
+    pub(crate) fn val(self) -> FunctionValue<'ob> {
         match self.data.val() {
             Value::LispFn(x) => FunctionValue::LispFn(x),
             Value::SubrFn(x) => FunctionValue::SubrFn(x),
@@ -56,14 +56,16 @@ impl<'ob> Function<'ob> {
         }
     }
 
-    pub fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
+    #[cfg(test)]
+    pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self.val() {
             FunctionValue::LispFn(x) => Some(x),
             _ => None,
         }
     }
 
-    pub fn as_subr_fn(self) -> Option<&'ob SubrFn> {
+    #[cfg(test)]
+    pub(crate) fn as_subr_fn(self) -> Option<&'ob SubrFn> {
         match self.val() {
             FunctionValue::SubrFn(x) => Some(x),
             _ => None,
@@ -71,15 +73,19 @@ impl<'ob> Function<'ob> {
     }
 
     #[cfg(miri)]
-    pub unsafe fn set_as_miri_root(self) {
+    pub(crate) fn set_as_miri_root(self) {
         match self.val() {
             FunctionValue::LispFn(x) => {
                 let ptr: *const _ = x;
-                miri_static_root(ptr as _);
+                unsafe {
+                    miri_static_root(ptr as _);
+                }
             }
             FunctionValue::SubrFn(x) => {
                 let ptr: *const _ = x;
-                miri_static_root(ptr as _);
+                unsafe {
+                    miri_static_root(ptr as _);
+                }
             }
         }
     }
@@ -91,7 +97,7 @@ extern "Rust" {
 }
 
 #[derive(Copy, Clone)]
-pub struct Number<'ob> {
+pub(crate) struct Number<'ob> {
     data: InnerObject,
     marker: PhantomData<&'ob ()>,
 }
@@ -130,14 +136,14 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum NumberValue {
+pub(crate) enum NumberValue {
     Int(i64),
     Float(f64),
 }
 
 impl<'ob> Number<'ob> {
     #[inline(always)]
-    pub fn val(self) -> NumberValue {
+    pub(crate) fn val(self) -> NumberValue {
         match self.data.val() {
             Value::Int(x) => NumberValue::Int(x),
             Value::Float(x) => NumberValue::Float(x),
@@ -155,7 +161,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
     }
 }
 
-pub enum List<'o> {
+pub(crate) enum List<'o> {
     Nil,
     Cons(&'o Cons<'o>),
 }

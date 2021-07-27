@@ -4,19 +4,19 @@ use crate::object::{List, Object, NIL};
 use fn_macros::lisp_fn;
 
 #[derive(Debug, Default)]
-pub struct Environment<'ob> {
-    pub vars: HashMap<Symbol, Object<'ob>>,
+pub(crate) struct Environment<'ob> {
+    pub(crate) vars: HashMap<Symbol, Object<'ob>>,
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
 }
 
 #[lisp_fn]
-pub fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment<'ob>) -> Object<'ob> {
+pub(crate) fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment<'ob>) -> Object<'ob> {
     env.vars.insert(place, newlet);
     newlet
 }
 
 #[lisp_fn]
-pub fn put<'ob>(
+pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: Object<'ob>,
@@ -36,7 +36,7 @@ pub fn put<'ob>(
 }
 
 #[lisp_fn]
-pub fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Object<'ob> {
+pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => *val,
@@ -47,7 +47,7 @@ pub fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Obj
 }
 
 #[lisp_fn]
-pub fn defvar<'ob>(
+pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
     _docstring: Option<&String>,
@@ -58,7 +58,7 @@ pub fn defvar<'ob>(
 }
 
 #[lisp_fn]
-pub const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symbol {
+pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symbol {
     // TODO: implement
     feature
 }

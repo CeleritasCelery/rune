@@ -98,12 +98,12 @@ impl PartialOrd for NumberValue {
 }
 
 #[lisp_fn(name = "+")]
-pub fn add(vars: &[Number]) -> NumberValue {
+pub(crate) fn add(vars: &[Number]) -> NumberValue {
     vars.iter().fold(Int(0), |acc, x| acc + x.val())
 }
 
 #[lisp_fn(name = "-")]
-pub fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
+pub(crate) fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
     match number {
         Some(num) => {
             let num = num.val();
@@ -118,28 +118,28 @@ pub fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
 }
 
 #[lisp_fn(name = "*")]
-pub fn mul(numbers: &[Number]) -> NumberValue {
+pub(crate) fn mul(numbers: &[Number]) -> NumberValue {
     numbers.iter().fold(Int(1), |acc, x| acc * x.val())
 }
 
 #[lisp_fn(name = "/")]
-pub fn div(number: Number, divisors: &[Number]) -> NumberValue {
+pub(crate) fn div(number: Number, divisors: &[Number]) -> NumberValue {
     divisors.iter().fold(number.val(), |acc, x| acc / x.val())
 }
 
 #[lisp_fn(name = "1+")]
-pub fn plus_one(number: Number) -> NumberValue {
+pub(crate) fn plus_one(number: Number) -> NumberValue {
     number.val() + Int(1)
 }
 
 #[lisp_fn(name = "1-")]
-pub fn minus_one(number: Number) -> NumberValue {
+pub(crate) fn minus_one(number: Number) -> NumberValue {
     number.val() - Int(1)
 }
 
 #[lisp_fn(name = "=")]
 #[allow(clippy::float_cmp)]
-pub fn num_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         Int(num) => numbers.iter().all(|&x| x == num),
         Float(num) => numbers.iter().all(|&x| x == num),
@@ -148,7 +148,7 @@ pub fn num_eq(number: Number, numbers: &[Number]) -> bool {
 
 #[lisp_fn(name = "/=")]
 #[allow(clippy::float_cmp)]
-pub fn num_ne(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         Int(num) => numbers.iter().all(|&x| x != num),
         Float(num) => numbers.iter().all(|&x| x != num),
@@ -169,22 +169,22 @@ fn cmp(number: Number, numbers: &[Number], cmp: fn(&NumberValue, &NumberValue) -
 }
 
 #[lisp_fn(name = "<")]
-pub fn less_than(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn less_than(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::lt)
 }
 
 #[lisp_fn(name = "<=")]
-pub fn less_than_or_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn less_than_or_eq(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::le)
 }
 
 #[lisp_fn(name = ">")]
-pub fn greater_than(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn greater_than(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::gt)
 }
 
 #[lisp_fn(name = ">=")]
-pub fn greater_than_or_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn greater_than_or_eq(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::ge)
 }
 

@@ -1,15 +1,15 @@
 use crate::arena::Arena;
 use crate::data::Environment;
-use crate::symbol::Symbol;
 use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value, NIL};
 use crate::opcode::OpCode;
+use crate::symbol::Symbol;
 use fn_macros::lisp_fn;
 use std::convert::TryInto;
 
 use anyhow::{bail, Result};
 
 #[derive(Debug, PartialEq)]
-pub enum Error {
+pub(crate) enum Error {
     VoidFunction(Symbol),
     VoidVariable(Symbol),
 }
@@ -119,7 +119,7 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     }
 }
 
-pub struct Routine<'brw, 'ob> {
+pub(crate) struct Routine<'brw, 'ob> {
     stack: Vec<Object<'ob>>,
     call_frames: Vec<CallFrame<'brw, 'ob>>,
     frame: CallFrame<'brw, 'ob>,
@@ -198,7 +198,7 @@ impl<'ob> Routine<'_, 'ob> {
         Ok(())
     }
 
-    pub fn execute(
+    pub(crate) fn execute(
         exp: &Expression<'ob>,
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
@@ -321,6 +321,13 @@ impl<'ob> Routine<'_, 'ob> {
                         rout.frame.ip.jump(offset as i16);
                     }
                 }
+                op::JumpNotNil => {
+                    let cond = rout.stack.pop().unwrap();
+                    let offset = rout.frame.ip.take_double_arg();
+                    if cond.is_non_nil() {
+                        rout.frame.ip.jump(offset as i16);
+                    }
+                }
                 op::JumpNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
@@ -359,7 +366,7 @@ impl<'ob> Routine<'_, 'ob> {
 }
 
 #[lisp_fn]
-pub fn eval<'ob>(
+pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,

@@ -69,7 +69,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
 }
 
 // This is required because we have no specialization yet
-pub fn try_from_slice<'borrow, 'ob>(
+pub(crate) fn try_from_slice<'borrow, 'ob>(
     slice: &'borrow [Object<'ob>],
 ) -> Result<&'borrow [Number<'ob>], Error> {
     for x in slice.iter() {
