@@ -72,7 +72,9 @@ use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
+use crate::lread::read_from_string;
 use crate::reader::Reader;
+use std::env;
 use std::io::{self, Write};
 
 fn parens_closed(buffer: &str) -> bool {
@@ -81,7 +83,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn main() {
+fn repl() {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -119,10 +121,22 @@ fn main() {
         }
         buffer.clear();
     }
+}
 
-    // let mut buffer = String::from("(load \"/home/foco/remac/test/byte-run.el\")");
-    // match crate::lread::read_from_string(&buffer, arena, env) {
-    //     Ok(val) => println!("{}", val),
-    //     Err(e) => println!("Error: {}", e),
-    // }
+fn load() {
+    let arena = &Arena::new();
+    let env = &mut Environment::default();
+    let buffer = String::from(r#"(load "/home/foco/remac/lisp/byte-run.el")"#);
+    match read_from_string(&buffer, arena, env) {
+        Ok(val) => println!("{}", val),
+        Err(e) => println!("Error: {}", e),
+    }
+}
+
+fn main() {
+    match env::args().nth(1) {
+        Some(arg) if arg == "--repl" => repl(),
+        Some(arg) => panic!("unknown arg: {}", arg),
+        None => load(),
+    }
 }
