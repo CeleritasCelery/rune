@@ -957,39 +957,50 @@ mod test {
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
+    #[allow(clippy::needless_pass_by_value)]
+    fn check_lambda(sexp: &str, func: LispFn) {
+        let comp_arena = &Arena::new();
+        println!("Test String: {}", sexp);
+        let obj = Reader::read(sexp, comp_arena).unwrap().0;
+        let lambda = match obj.val() {
+            Value::Cons(cons) => cons.cdr(),
+            x => panic!("expected cons, found {}", x),
+        };
+        assert_eq!(Exp::compile_lambda(lambda, comp_arena).unwrap(), func);
+    }
+
     #[test]
     fn lambda() {
-        let arena = &Arena::new();
-        check_compiler!("(lambda)", [Constant0, Ret], [LispFn::default()]);
-        check_compiler!("(lambda ())", [Constant0, Ret], [LispFn::default()]);
-        check_compiler!("(lambda () nil)", [Constant0, Ret], [LispFn::default()]);
+        check_lambda("(lambda)", LispFn::default());
+        check_lambda("(lambda ())", LispFn::default());
+        check_lambda("(lambda () nil)", LispFn::default());
 
-        let constant: Object = 1.into_obj(arena);
-        let func = LispFn::new(
-            vec_into![Constant0, Ret].into(),
-            vec![constant],
-            0,
-            0,
-            false,
+        check_lambda(
+            "(lambda () 1)",
+            LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], 0, 0, false),
         );
-        check_compiler!("(lambda () 1)", [Constant0, Ret], [func]);
+
+        check_lambda(
+            "(lambda (x) x)",
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+        );
+        check_lambda(
+            "(lambda (x y) (+ x y))",
+            LispFn::new(
+                vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
+                vec_into![intern("+")],
+                2,
+                0,
+                false,
+            ),
+        );
 
         let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
-        check_compiler!("(lambda (x) x)", [Constant0, Ret], [func.clone()]);
         check_compiler!(
             "(let ((x 1)(y 2)) (lambda (x) x))",
             [Constant0, Constant1, Constant2, DiscardNKeepTOS, 2, Ret],
             [1, 2, func]
         );
-
-        let func = LispFn::new(
-            vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
-            vec_into![intern("+")],
-            2,
-            0,
-            false,
-        );
-        check_compiler!("(lambda (x y) (+ x y))", [Constant0, Ret], [func]);
 
         check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));
     }
