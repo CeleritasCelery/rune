@@ -170,14 +170,14 @@ fn into_iter(obj: Object) -> Result<ConsIter> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Exp<'ob> {
+struct Compiler<'ob> {
     codes: CodeVec,
     constants: ConstVec<'ob>,
     vars: Vec<Option<Symbol>>,
 }
 
-impl<'ob> From<Exp<'ob>> for Expression<'ob> {
-    fn from(exp: Exp<'ob>) -> Self {
+impl<'ob> From<Compiler<'ob>> for Expression<'ob> {
+    fn from(exp: Compiler<'ob>) -> Self {
         Self {
             constants: exp.constants.consts,
             op_codes: exp.codes,
@@ -185,7 +185,7 @@ impl<'ob> From<Exp<'ob>> for Expression<'ob> {
     }
 }
 
-impl<'ob> Exp<'ob> {
+impl<'ob> Compiler<'ob> {
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
@@ -453,57 +453,8 @@ impl<'ob> Exp<'ob> {
         Ok(())
     }
 
-    fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
-        let mut args: Vec<Symbol> = vec![];
-        let mut required = 0;
-        let mut optional = 0;
-        let mut rest = false;
-        let mut arg_type = &mut required;
-        let mut iter = into_iter(bindings)?;
-        while let Some(binding) = iter.next() {
-            let sym = binding?.as_symbol()?;
-            match sym.get_name() {
-                "&optional" => arg_type = &mut optional,
-                "&rest" => {
-                    if let Some(last) = iter.next() {
-                        rest = true;
-                        args.push(last?.as_symbol()?);
-                        ensure!(
-                            iter.next().is_none(),
-                            "Found multiple arguments after &rest"
-                        );
-                    }
-                }
-                _ => {
-                    *arg_type += 1;
-                    args.push(sym);
-                }
-            }
-        }
-        Ok((required, optional, rest, args))
-    }
-
-    pub(crate) fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
-        let mut iter = into_iter(obj)?;
-
-        let (required, optional, rest, args) = match iter.next() {
-            // (lambda ())
-            None => return Ok(LispFn::default()),
-            // (lambda (x ...) ...)
-            Some(bindings) => Self::parse_fn_binding(bindings?)?,
-        };
-        if iter.is_empty() {
-            Ok(LispFn::default())
-        } else {
-            let exp: Expression<'ob> =
-                Self::compile_func_body(iter, args.into_iter().map(Some).collect(), arena)?.into();
-            let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
-            Ok(func)
-        }
-    }
-
     fn compile_lambda_def(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
-        let lambda = Self::compile_lambda(obj, arena)?;
+        let lambda = compile_lambda(obj, arena)?;
         self.add_const_lambda(lambda, arena)
     }
 
@@ -669,9 +620,58 @@ impl<'ob> Exp<'ob> {
     }
 }
 
+fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
+    let mut args: Vec<Symbol> = vec![];
+    let mut required = 0;
+    let mut optional = 0;
+    let mut rest = false;
+    let mut arg_type = &mut required;
+    let mut iter = into_iter(bindings)?;
+    while let Some(binding) = iter.next() {
+        let sym = binding?.as_symbol()?;
+        match sym.get_name() {
+            "&optional" => arg_type = &mut optional,
+            "&rest" => {
+                if let Some(last) = iter.next() {
+                    rest = true;
+                    args.push(last?.as_symbol()?);
+                    ensure!(
+                        iter.next().is_none(),
+                        "Found multiple arguments after &rest"
+                    );
+                }
+            }
+            _ => {
+                *arg_type += 1;
+                args.push(sym);
+            }
+        }
+    }
+    Ok((required, optional, rest, args))
+}
+
+pub(crate) fn compile_lambda<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
+    let mut iter = into_iter(obj)?;
+
+    let (required, optional, rest, args) = match iter.next() {
+        // (lambda ())
+        None => return Ok(LispFn::default()),
+        // (lambda (x ...) ...)
+        Some(bindings) => parse_fn_binding(bindings?)?,
+    };
+    if iter.is_empty() {
+        Ok(LispFn::default())
+    } else {
+        let func_args = args.into_iter().map(Some).collect();
+        let exp: Expression<'ob> = Compiler::compile_func_body(iter, func_args, arena)?.into();
+        let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
+        Ok(func)
+    }
+}
+
 pub(crate) fn compile<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<Expression<'ob>> {
     let cons = Cons::new(obj, NIL);
-    Exp::compile_func_body(cons.into_iter(), vec![], arena).map(|x| x.into())
+    Compiler::compile_func_body(cons.into_iter(), vec![], arena).map(|x| x.into())
 }
 
 #[cfg(test)]
@@ -981,7 +981,7 @@ mod test {
             Value::Cons(cons) => cons.cdr(),
             x => panic!("expected cons, found {}", x),
         };
-        assert_eq!(Exp::compile_lambda(lambda, comp_arena).unwrap(), func);
+        assert_eq!(compile_lambda(lambda, comp_arena).unwrap(), func);
     }
 
     #[test]
