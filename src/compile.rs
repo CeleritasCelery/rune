@@ -1066,7 +1066,6 @@ mod test {
         check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
         check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
         check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
-        check_error("(let ((foo 1 . 2)))", crate::cons::ConsIterError);
         check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));
         check_error("(let)", Error::ArgCount(1, 0));
     }

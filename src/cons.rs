@@ -1,5 +1,6 @@
 use crate::arena::Arena;
 use crate::object::{List, Object, Value, NIL};
+use anyhow::{anyhow, Result};
 use fn_macros::lisp_fn;
 use std::cell::Cell;
 use std::fmt::{self, Display, Write};
@@ -64,19 +65,8 @@ define_unbox!(Cons, Cons, &Cons<'ob>);
 #[derive(Clone)]
 pub(crate) struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
 
-#[derive(Debug, PartialEq)]
-pub(crate) struct ConsIterError;
-
-impl Display for ConsIterError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Found non-nil cdr at end of list")
-    }
-}
-
-impl std::error::Error for ConsIterError {}
-
 impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
-    type Item = Result<Object<'ob>, ConsIterError>;
+    type Item = Result<Object<'ob>>;
     type IntoIter = ConsIter<'borrow, 'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -85,7 +75,7 @@ impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
 }
 
 impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
-    type Item = Result<Object<'ob>, ConsIterError>;
+    type Item = Result<Object<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
@@ -94,7 +84,7 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
                 let next = match cons.cdr().val() {
                     Value::Cons(next) => Some(next),
                     Value::Nil => None,
-                    _ => return Some(Err(ConsIterError)),
+                    _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 *self = ConsIter(next);
                 Some(Ok(val))
