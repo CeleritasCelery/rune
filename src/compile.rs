@@ -453,38 +453,51 @@ impl<'ob> Exp<'ob> {
         Ok(())
     }
 
-    pub(crate) fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
-        let mut iter = into_iter(obj)?;
+    fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
         let mut args: Vec<Symbol> = vec![];
         let mut required = 0;
         let mut optional = 0;
+        let mut rest = false;
         let mut arg_type = &mut required;
-
-        match iter.next() {
-            // (lambda ())
-            None => {
-                return Ok(LispFn::default());
-            }
-            // (lambda (x ...) ...)
-            Some(bindings) => {
-                for binding in into_iter(bindings?)? {
-                    let sym = binding?.as_symbol()?;
-                    match sym.get_name() {
-                        "&optional" => arg_type = &mut optional,
-                        _ => {
-                            *arg_type += 1;
-                            args.push(sym);
-                        }
+        let mut iter = into_iter(bindings)?;
+        while let Some(binding) = iter.next() {
+            let sym = binding?.as_symbol()?;
+            match sym.get_name() {
+                "&optional" => arg_type = &mut optional,
+                "&rest" => {
+                    if let Some(last) = iter.next() {
+                        rest = true;
+                        args.push(last?.as_symbol()?);
+                        ensure!(
+                            iter.next().is_none(),
+                            "Found multiple arguments after &rest"
+                        );
                     }
+                }
+                _ => {
+                    *arg_type += 1;
+                    args.push(sym);
                 }
             }
         }
+        Ok((required, optional, rest, args))
+    }
+
+    pub(crate) fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
+        let mut iter = into_iter(obj)?;
+
+        let (required, optional, rest, args) = match iter.next() {
+            // (lambda ())
+            None => return Ok(LispFn::default()),
+            // (lambda (x ...) ...)
+            Some(bindings) => Self::parse_fn_binding(bindings?)?,
+        };
         if iter.is_empty() {
             Ok(LispFn::default())
         } else {
             let exp: Expression<'ob> =
                 Self::compile_func_body(iter, args.into_iter().map(Some).collect(), arena)?.into();
-            let func = LispFn::new(exp.op_codes, exp.constants, required, optional, false);
+            let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
             Ok(func)
         }
     }
@@ -500,23 +513,18 @@ impl<'ob> Exp<'ob> {
         match iter.next() {
             // (defvar x ...)
             Some(x) => {
-                match x?.val() {
-                    Value::Symbol(sym) => {
-                        // TODO: compile this into a lambda like Emacs does
-                        match iter.next() {
-                            // (defvar x y)
-                            Some(value) => self.compile_form(value?, arena)?,
-                            // (defvar x)
-                            None => self.const_ref(NIL, None)?,
-                        };
-                        self.duplicate();
-                        let idx = self.constants.insert(sym.into())?;
-                        self.var_set(idx);
-                        Ok(())
-                    }
-                    // (defvar "x")
-                    x => Err(Error::Type(Type::Symbol, x.get_type()).into()),
-                }
+                let sym = x?.as_symbol()?;
+                // TODO: compile this into a lambda like Emacs does
+                match iter.next() {
+                    // (defvar x y)
+                    Some(value) => self.compile_form(value?, arena)?,
+                    // (defvar x)
+                    None => self.const_ref(NIL, None)?,
+                };
+                self.duplicate();
+                let idx = self.constants.insert(sym.into())?;
+                self.var_set(idx);
+                Ok(())
             }
             // (defvar)
             None => Err(Error::ArgCount(1, 0).into()),
@@ -1008,6 +1016,22 @@ mod test {
             "(lambda (x &optional y &optional z) z)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 2, false),
         );
+        check_lambda(
+            "(lambda (x &rest) x)",
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+        );
+        check_lambda(
+            "(lambda (x &rest y) y)",
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, true),
+        );
+
+        let arena = &Arena::new();
+        let obj = Reader::read("(lambda (x &rest y z) y)", arena).unwrap().0;
+        assert!(compile(obj, arena)
+            .err()
+            .unwrap()
+            .downcast::<&str>()
+            .is_ok());
 
         check_lambda(
             "(lambda (x y) (+ x y))",
