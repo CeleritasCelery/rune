@@ -455,7 +455,10 @@ impl<'ob> Exp<'ob> {
 
     pub(crate) fn compile_lambda(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
         let mut iter = into_iter(obj)?;
-        let mut vars: Vec<Option<Symbol>> = vec![];
+        let mut args: Vec<Symbol> = vec![];
+        let mut required = 0;
+        let mut optional = 0;
+        let mut arg_type = &mut required;
 
         match iter.next() {
             // (lambda ())
@@ -465,9 +468,13 @@ impl<'ob> Exp<'ob> {
             // (lambda (x ...) ...)
             Some(bindings) => {
                 for binding in into_iter(bindings?)? {
-                    match binding?.val() {
-                        Value::Symbol(x) => vars.push(Some(x)),
-                        x => bail!(Error::Type(Type::Symbol, x.get_type())),
+                    let sym = binding?.as_symbol()?;
+                    match sym.get_name() {
+                        "&optional" => arg_type = &mut optional,
+                        _ => {
+                            *arg_type += 1;
+                            args.push(sym);
+                        }
                     }
                 }
             }
@@ -475,9 +482,9 @@ impl<'ob> Exp<'ob> {
         if iter.is_empty() {
             Ok(LispFn::default())
         } else {
-            let len = vars.len();
-            let exp: Expression<'ob> = Self::compile_func_body(iter, vars, arena)?.into();
-            let func = LispFn::new(exp.op_codes, exp.constants, len as u16, 0, false);
+            let exp: Expression<'ob> =
+                Self::compile_func_body(iter, args.into_iter().map(Some).collect(), arena)?.into();
+            let func = LispFn::new(exp.op_codes, exp.constants, required, optional, false);
             Ok(func)
         }
     }
@@ -984,6 +991,24 @@ mod test {
             "(lambda (x) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
         );
+
+        check_lambda(
+            "(lambda (x &optional) x)",
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+        );
+        check_lambda(
+            "(lambda (x &optional y) x)",
+            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 1, false),
+        );
+        check_lambda(
+            "(lambda (x &optional y z) y)",
+            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
+        );
+        check_lambda(
+            "(lambda (x &optional y &optional z) z)",
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 2, false),
+        );
+
         check_lambda(
             "(lambda (x y) (+ x y))",
             LispFn::new(

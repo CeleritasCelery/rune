@@ -119,6 +119,14 @@ impl<'ob> Object<'ob> {
     pub(crate) fn is_non_nil(self) -> bool {
         !matches!(self.val(), Value::Nil)
     }
+
+    pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {
+        use crate::error::{Error, Type};
+        match self.val() {
+            Value::Symbol(x) => Ok(x),
+            x => anyhow::bail!(Error::Type(Type::Symbol, x.get_type())),
+        }
+    }
 }
 
 impl<'ob> From<InnerObject> for Object<'ob> {
