@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::object::{List, Object, Value, NIL};
 use anyhow::{anyhow, Result};
-use fn_macros::lisp_fn;
+use fn_macros::defun;
 use std::cell::Cell;
 use std::fmt::{self, Display, Write};
 
@@ -104,7 +104,7 @@ impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
     }
 }
 
-#[lisp_fn]
+#[defun]
 fn car(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.car(),
@@ -112,7 +112,7 @@ fn car(list: List) -> Object {
     }
 }
 
-#[lisp_fn]
+#[defun]
 fn cdr(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.cdr(),
@@ -120,19 +120,19 @@ fn cdr(list: List) -> Object {
     }
 }
 
-#[lisp_fn]
+#[defun]
 fn setcar<'ob>(cell: &Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
-#[lisp_fn]
+#[defun]
 fn setcdr<'ob>(cell: &Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
 
-#[lisp_fn]
+#[defun]
 const fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>) -> Cons<'ob> {
     Cons::new(car, cdr)
 }

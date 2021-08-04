@@ -2,7 +2,7 @@ use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{List, Object, NIL};
 use crate::symbol::Symbol;
-use fn_macros::lisp_fn;
+use fn_macros::defun;
 
 #[derive(Debug, Default)]
 pub(crate) struct Environment<'ob> {
@@ -11,7 +11,7 @@ pub(crate) struct Environment<'ob> {
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: Object<'ob>,
@@ -21,7 +21,7 @@ pub(crate) fn set<'ob>(
     newlet
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
@@ -41,7 +41,7 @@ pub(crate) fn put<'ob>(
     value
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
@@ -52,7 +52,7 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
     }
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -63,7 +63,7 @@ pub(crate) fn defvar<'ob>(
     set(symbol, value, env)
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symbol {
     // TODO: implement
     feature

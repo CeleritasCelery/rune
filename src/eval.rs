@@ -4,7 +4,7 @@ use crate::data::Environment;
 use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value, NIL};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
-use fn_macros::lisp_fn;
+use fn_macros::defun;
 use std::convert::TryInto;
 
 use anyhow::{bail, Result};
@@ -394,7 +394,7 @@ impl<'ob> Routine<'_, 'ob> {
     }
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     env: &mut Environment<'ob>,

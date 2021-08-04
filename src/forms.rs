@@ -6,9 +6,9 @@ use crate::data::Environment;
 use crate::object::{IntoObject, LocalFunction, LocalFunctionValue, Object, NIL};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
-use fn_macros::lisp_fn;
+use fn_macros::defun;
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn defalias<'ob>(
     symbol: Symbol,
     definition: LocalFunction<'ob>,
@@ -30,7 +30,7 @@ pub(crate) fn defalias<'ob>(
     symbol
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
     let mut head = NIL;
     for object in objects.iter().rev() {
@@ -39,7 +39,7 @@ pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'o
     head
 }
 
-#[lisp_fn]
+#[defun]
 pub(crate) fn progn<'ob>(forms: &[Object<'ob>]) -> Object<'ob> {
     match forms.last() {
         Some(form) => *form,

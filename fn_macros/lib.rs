@@ -4,7 +4,7 @@ use quote::{format_ident, quote};
 use syn::{parse_macro_input, Error};
 
 #[proc_macro_attribute]
-pub fn lisp_fn(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
+pub fn defun(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
     let attr_args = parse_macro_input!(attr_ts as syn::AttributeArgs);
     let function = parse_macro_input!(fn_ts as Function);
 
