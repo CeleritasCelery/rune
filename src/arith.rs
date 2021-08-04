@@ -77,7 +77,7 @@ impl<'ob> PartialEq<f64> for Number<'ob> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             Int(num) => num as f64 == *other,
-            Float(num) => num == *other,
+            Float(num) => (*other - num).abs() <= f64::EPSILON,
         }
     }
 }
@@ -138,7 +138,6 @@ pub(crate) fn minus_one(number: Number) -> NumberValue {
 }
 
 #[defun(name = "=")]
-#[allow(clippy::float_cmp)]
 pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         Int(num) => numbers.iter().all(|&x| x == num),
