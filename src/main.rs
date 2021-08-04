@@ -29,6 +29,7 @@
     clippy::as_conversions,
     clippy::similar_names,
     clippy::missing_docs_in_private_items,
+    clippy::needless_pass_by_value,
     clippy::implicit_return,
     clippy::inline_always,
     clippy::wildcard_enum_match_arm,

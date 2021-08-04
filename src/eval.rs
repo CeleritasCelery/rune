@@ -40,7 +40,6 @@ struct Ip {
 }
 
 impl Ip {
-    #[allow(clippy::missing_const_for_fn)]
     fn new(vec: &[u8]) -> Self {
         Ip {
             range: vec.as_ptr_range(),
@@ -492,7 +491,6 @@ mod test {
         );
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn test_eval_error<E>(sexp: &str, error: E)
     where
         E: std::error::Error + PartialEq + Send + Sync + 'static,

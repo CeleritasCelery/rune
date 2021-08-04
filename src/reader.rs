@@ -505,7 +505,6 @@ baz""#
         assert_error("#a", Error::UnknownMacroCharacter('a', 0));
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
         let result = Reader::read(input, arena).err().unwrap();
@@ -514,18 +513,16 @@ baz""#
 
     #[test]
     fn reader_error() {
-        #[allow(clippy::enum_glob_use)]
-        use Error::*;
-        assert_error("", EmptyStream);
-        assert_error(" (1 2", MissingCloseParen(1));
-        assert_error("  (1 (2 3) 4", MissingCloseParen(2));
-        assert_error("  (1 (2 3 4", MissingCloseParen(5));
-        assert_error(" \"foo", MissingStringDel(1));
-        assert_error("(1 2 . 3 4)", ExtraItemInCdr(9));
-        assert_error("(1 2 . )", MissingCdr(7));
-        assert_error("(1 3 )", UnexpectedChar('', 5));
-        assert_error(" '", MissingQuotedItem(1));
-        assert_error(" )", ExtraCloseParen(1));
+        assert_error("", Error::EmptyStream);
+        assert_error(" (1 2", Error::MissingCloseParen(1));
+        assert_error("  (1 (2 3) 4", Error::MissingCloseParen(2));
+        assert_error("  (1 (2 3 4", Error::MissingCloseParen(5));
+        assert_error(" \"foo", Error::MissingStringDel(1));
+        assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr(9));
+        assert_error("(1 2 . )", Error::MissingCdr(7));
+        assert_error("(1 3 )", Error::UnexpectedChar('', 5));
+        assert_error(" '", Error::MissingQuotedItem(1));
+        assert_error(" )", Error::ExtraCloseParen(1));
     }
 
     #[test]

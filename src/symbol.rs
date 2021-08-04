@@ -52,7 +52,6 @@ impl InnerSymbol {
 pub(crate) struct Symbol(&'static InnerSymbol);
 
 impl Symbol {
-    #[allow(clippy::missing_const_for_fn)]
     pub(crate) unsafe fn from_raw(ptr: *const u8) -> Symbol {
         let inner = ptr.cast::<InnerSymbol>();
         Symbol(&*inner)

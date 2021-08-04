@@ -686,7 +686,6 @@ mod test {
     #[allow(clippy::enum_glob_use)]
     use OpCode::*;
 
-    #[allow(clippy::needless_pass_by_value)]
     fn check_error<E>(compare: &str, expect: E)
     where
         E: std::error::Error + PartialEq + Send + Sync + 'static,
@@ -973,7 +972,6 @@ mod test {
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn check_lambda(sexp: &str, func: LispFn) {
         let comp_arena = &Arena::new();
         println!("Test String: {}", sexp);

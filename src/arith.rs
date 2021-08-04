@@ -1,5 +1,6 @@
 use crate::object::NumberValue::{Float, Int};
 use crate::object::{Number, NumberValue};
+use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -77,7 +78,7 @@ impl<'ob> PartialEq<f64> for Number<'ob> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             Int(num) => num as f64 == *other,
-            Float(num) => (*other - num).abs() <= f64::EPSILON,
+            Float(num) => num.approx_eq(*other, (f64::EPSILON, 2)),
         }
     }
 }
@@ -146,7 +147,7 @@ pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
 }
 
 #[defun(name = "/=")]
-#[allow(clippy::float_cmp)]
+#[allow(clippy::float_cmp)] // This is a bug in clippy, we are not comparing floats directly
 pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         Int(num) => numbers.iter().all(|&x| x != num),
@@ -202,7 +203,6 @@ mod test {
     use crate::arena::Arena;
 
     #[test]
-    #[allow(clippy::float_cmp)]
     fn test_add() {
         let arena = &Arena::new();
         let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; arena);
@@ -232,7 +232,6 @@ mod test {
     }
 
     #[test]
-    #[allow(clippy::float_cmp)]
     fn test_div() {
         let arena = &Arena::new();
         let (int2, int5, float12) = into_objects!(2, 5, 12.0; arena);
