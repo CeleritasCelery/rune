@@ -133,7 +133,7 @@ impl TryFrom<u8> for OpCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value <= OpCode::Unknown as u8 {
-            Ok(unsafe { std::mem::transmute(value) })
+            Ok(unsafe { std::mem::transmute::<u8, OpCode>(value) })
         } else {
             Err(anyhow::anyhow!("Invalid opcode value: {}", value))
         }

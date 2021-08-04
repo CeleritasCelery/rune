@@ -23,13 +23,13 @@ impl FnCell {
     }
 
     fn set(&self, func: Option<Function>) {
-        let value = unsafe { transmute(func) };
+        let value = unsafe { transmute::<Option<Function>, i64>(func) };
         self.0.store(value, Ordering::Release);
     }
 
     fn get(&self) -> Option<Function<'static>> {
         let bits = self.0.load(Ordering::Acquire);
-        unsafe { transmute(bits) }
+        unsafe { transmute::<i64, Option<Function>>(bits) }
     }
 }
 
@@ -165,7 +165,7 @@ impl InnerSymbolMap {
             None => {
                 let name = name.to_owned();
                 let sym = {
-                    let ptr: &'static str = unsafe { transmute(name.as_str()) };
+                    let ptr = unsafe { transmute::<&str, &'static str>(name.as_str()) };
                     let inner = InnerSymbol::new(ptr);
                     SymbolBox::new(inner)
                 };

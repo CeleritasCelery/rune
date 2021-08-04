@@ -3,8 +3,8 @@ use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{InnerObject, IntoObject, LispFn, Object, SubrFn, Tag, Value};
 use std::convert::TryFrom;
-use std::intrinsics::transmute;
 use std::marker::PhantomData;
+use std::mem::transmute;
 
 #[derive(Copy, Clone)]
 pub(crate) struct Function<'ob> {
@@ -157,7 +157,7 @@ impl<'ob> TryFrom<LocalFunction<'ob>> for Function<'ob> {
     fn try_from(value: LocalFunction<'ob>) -> Result<Self, Self::Error> {
         match value.val() {
             LocalFunctionValue::LispFn(_) | LocalFunctionValue::SubrFn(_) => {
-                Ok(unsafe { transmute(value) })
+                Ok(unsafe { transmute::<LocalFunction, Function>(value) })
             }
             LocalFunctionValue::Cons(_) => Err(Error::Type(Type::Func, Type::Cons)),
         }

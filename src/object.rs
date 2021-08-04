@@ -171,7 +171,7 @@ impl InnerObject {
     fn tag(self) -> Tag {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         unsafe {
-            std::mem::transmute(self.get() as u8)
+            std::mem::transmute::<u8, Tag>(self.get() as u8)
         }
     }
 

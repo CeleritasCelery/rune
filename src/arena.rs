@@ -32,7 +32,7 @@ impl<'ob> Arena {
     }
 
     unsafe fn extend_lifetime(obj: Object<'ob>) -> Object<'static> {
-        std::mem::transmute(obj)
+        std::mem::transmute::<Object<'ob>, Object<'static>>(obj)
     }
 }
 

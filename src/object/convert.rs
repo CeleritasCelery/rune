@@ -12,7 +12,9 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::LispFn(_) | Value::SubrFn(_) => Ok(unsafe { transmute(obj) }),
+            Value::LispFn(_) | Value::SubrFn(_) => {
+                Ok(unsafe { transmute::<Object, Function>(obj) })
+            }
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }
@@ -22,7 +24,9 @@ impl<'ob> TryFrom<Object<'ob>> for LocalFunction<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::LispFn(_) | Value::SubrFn(_) | Value::Cons(_) => Ok(unsafe { transmute(obj) }),
+            Value::LispFn(_) | Value::SubrFn(_) | Value::Cons(_) => {
+                Ok(unsafe { transmute::<Object, LocalFunction>(obj) })
+            }
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }
@@ -32,7 +36,7 @@ impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::Int(_) | Value::Float(_) => Ok(unsafe { transmute(obj) }),
+            Value::Int(_) | Value::Float(_) => Ok(unsafe { transmute::<Object, Number>(obj) }),
             x => Err(Error::Type(Type::Number, x.get_type())),
         }
     }
@@ -42,7 +46,9 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
-            Value::Int(_) | Value::Float(_) => Ok(Some(unsafe { transmute(obj) })),
+            Value::Int(_) | Value::Float(_) => {
+                Ok(Some(unsafe { transmute::<Object, Number>(obj) }))
+            }
             Value::Nil => Ok(None),
             x => Err(Error::Type(Type::Number, x.get_type())),
         }
@@ -89,7 +95,7 @@ pub(crate) fn try_from_slice<'borrow, 'ob>(
         let num: Number = TryFrom::try_from(*x)?;
         unsafe {
             // ensure they have the same bit representation
-            debug_assert_eq!(transmute::<_, i64>(num), transmute(*x));
+            debug_assert_eq!(transmute::<Number, i64>(num), transmute(*x));
         }
     }
     let ptr = slice.as_ptr().cast::<Number>();
