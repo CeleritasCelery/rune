@@ -1,4 +1,5 @@
 use crate::arena::Arena;
+use crate::compile::{compile, compile_lambda};
 use crate::data::Environment;
 use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value, NIL};
 use crate::opcode::OpCode;
@@ -63,14 +64,14 @@ impl Ip {
         }
     }
 
-    fn take_arg(&mut self) -> usize {
-        self.next() as usize
+    fn take_arg(&mut self) -> u8 {
+        self.next()
     }
 
-    fn take_double_arg(&mut self) -> usize {
-        let upper = self.next();
-        let lower = self.next();
-        (upper as usize) << 8 | lower as usize
+    fn take_double_arg(&mut self) -> u16 {
+        let upper: u16 = self.next().into();
+        let lower: u16 = self.next().into();
+        upper << 8 | lower
     }
 }
 
@@ -143,7 +144,7 @@ impl<'ob> Routine<'_, 'ob> {
             self.stack.push(*value);
             Ok(())
         } else {
-            panic!("Varref was not a symbol: {:?}", symbol);
+            unreachable!("Varref was not a symbol: {:?}", symbol);
         }
     }
 
@@ -160,18 +161,33 @@ impl<'ob> Routine<'_, 'ob> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
-            x => panic!("Expected symbol for call found {:?}", x),
+            x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        match sym.get_func().ok_or(Error::VoidFunction(sym))?.val() {
-            FunctionValue::LispFn(func) => {
-                self.call_lisp(func, arg_cnt)?;
-            }
-            FunctionValue::SubrFn(func) => {
-                let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-                self.fill_args(fill_args);
-                let total_args = arg_cnt + fill_args;
-                self.call_subr(func.subr, total_args as usize, env, arena)?;
-            }
+        match sym.get_func() {
+            Some(func) => match func.val() {
+                FunctionValue::LispFn(func) => {
+                    self.call_lisp(func, arg_cnt)?;
+                }
+                FunctionValue::SubrFn(func) => {
+                    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+                    self.fill_args(fill_args);
+                    let total_args = arg_cnt + fill_args;
+                    self.call_subr(func.subr, total_args as usize, env, arena)?;
+                }
+            },
+            None => match env.funcs.get(&sym) {
+                Some(uncompiled_func) => {
+                    let func = compile_lambda(uncompiled_func.cdr(), arena)?;
+                    let obj = arena.add(func);
+                    crate::forms::defalias(sym, obj, env);
+                    if let crate::object::LocalFunctionValue::LispFn(func) = obj.val() {
+                        self.call_lisp(func, arg_cnt)?;
+                    } else {
+                        unreachable!("type was no longer lisp fn");
+                    }
+                }
+                None => bail!(Error::VoidFunction(sym)),
+            },
         };
         Ok(())
     }
@@ -226,11 +242,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::StackRef5 => rout.stack.push_ref(5),
                 op::StackRefN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.stack.push_ref(idx);
+                    rout.stack.push_ref(idx.into());
                 }
                 op::StackRefN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.push_ref(idx);
+                    rout.stack.push_ref(idx.into());
                 }
                 op::StackSet0 => rout.stack.set_ref(0),
                 op::StackSet1 => rout.stack.set_ref(1),
@@ -240,11 +256,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::StackSet5 => rout.stack.set_ref(5),
                 op::StackSetN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.stack.set_ref(idx);
+                    rout.stack.set_ref(idx.into());
                 }
                 op::StackSetN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.set_ref(idx);
+                    rout.stack.set_ref(idx.into());
                 }
                 op::Constant0 => rout.stack.push(rout.frame.get_const(0)),
                 op::Constant1 => rout.stack.push(rout.frame.get_const(1)),
@@ -254,11 +270,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::Constant5 => rout.stack.push(rout.frame.get_const(5)),
                 op::ConstantN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.stack.push(rout.frame.get_const(idx));
+                    rout.stack.push(rout.frame.get_const(idx.into()));
                 }
                 op::ConstantN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.push(rout.frame.get_const(idx));
+                    rout.stack.push(rout.frame.get_const(idx.into()));
                 }
                 op::VarRef0 => rout.varref(0, env)?,
                 op::VarRef1 => rout.varref(1, env)?,
@@ -268,11 +284,11 @@ impl<'ob> Routine<'_, 'ob> {
                 op::VarRef5 => rout.varref(5, env)?,
                 op::VarRefN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varref(idx, env)?;
+                    rout.varref(idx.into(), env)?;
                 }
                 op::VarRefN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varref(idx, env)?;
+                    rout.varref(idx.into(), env)?;
                 }
                 op::VarSet0 => rout.varset(0, env)?,
                 op::VarSet1 => rout.varset(1, env)?,
@@ -282,21 +298,31 @@ impl<'ob> Routine<'_, 'ob> {
                 op::VarSet5 => rout.varset(5, env)?,
                 op::VarSetN => {
                     let idx = rout.frame.ip.take_arg();
-                    rout.varset(idx, env)?;
+                    rout.varset(idx.into(), env)?;
                 }
                 op::VarSetN2 => {
                     let idx = rout.frame.ip.take_double_arg();
-                    rout.varset(idx, env)?;
+                    rout.varset(idx.into(), env)?;
                 }
                 op::Call0 => rout.call(0, env, arena)?,
                 op::Call1 => rout.call(1, env, arena)?,
                 op::Call2 => rout.call(2, env, arena)?,
                 op::Call3 => rout.call(3, env, arena)?,
+                op::Call4 => rout.call(4, env, arena)?,
+                op::Call5 => rout.call(5, env, arena)?,
+                op::CallN => {
+                    let idx = rout.frame.ip.take_arg();
+                    rout.call(idx.into(), env, arena)?;
+                }
+                op::CallN2 => {
+                    let idx = rout.frame.ip.take_double_arg();
+                    rout.call(idx, env, arena)?;
+                }
                 op::Discard => {
                     rout.stack.pop();
                 }
                 op::DiscardN => {
-                    let num = rout.frame.ip.take_arg();
+                    let num: usize = rout.frame.ip.take_arg().into();
                     let cur_len = rout.stack.len();
                     rout.stack.truncate(cur_len - num);
                 }
@@ -305,7 +331,7 @@ impl<'ob> Routine<'_, 'ob> {
                         .stack
                         .pop()
                         .expect("stack was empty when discard called");
-                    let num = rout.frame.ip.take_arg();
+                    let num: usize = rout.frame.ip.take_arg().into();
                     let cur_len = rout.stack.len();
                     rout.stack.truncate(cur_len - num);
                     rout.stack.push(tos);
@@ -360,7 +386,7 @@ impl<'ob> Routine<'_, 'ob> {
                     rout.stack.truncate(rout.frame.start + 1);
                     rout.frame = rout.call_frames.pop().unwrap();
                 }
-                op => {
+                op @ op::Unknown => {
                     panic!("Unimplemented opcode: {:?}", op);
                 }
             }
@@ -374,7 +400,7 @@ pub(crate) fn eval<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
-    let func = crate::compile::compile(form, arena)?;
+    let func = compile(form, arena)?;
     Routine::execute(&func, env, arena)
 }
 
@@ -384,7 +410,6 @@ defsubr!(eval);
 mod test {
     use super::*;
     use crate::arena::Arena;
-    use crate::compile::compile;
     use crate::object::IntoObject;
     use crate::reader::Reader;
 

@@ -239,7 +239,8 @@ impl<'ob> Compiler<'ob> {
 
     fn quote(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
-        match forms.clone().count() {
+        let len = forms.clone().count();
+        match len {
             1 => self.const_ref(forms.next().unwrap()?, None),
             x => Err(Error::ArgCount(1, x as u16).into()),
         }
@@ -572,7 +573,7 @@ impl<'ob> Compiler<'ob> {
         match sym.get_name() {
             "lambda" => self.compile_lambda_def(cons.cdr(), arena),
             "while" => self.compile_loop(cons.cdr(), arena),
-            "quote" => self.quote(cons.cdr()),
+            "quote" | "function" => self.quote(cons.cdr()),
             "progn" => self.progn(cons.cdr(), arena),
             "setq" => self.setq(cons.cdr(), arena),
             "defvar" => self.compile_defvar(cons.cdr(), arena),

@@ -1,3 +1,4 @@
+use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{List, Object, NIL};
 use crate::symbol::Symbol;
@@ -6,6 +7,7 @@ use fn_macros::lisp_fn;
 #[derive(Debug, Default)]
 pub(crate) struct Environment<'ob> {
     pub(crate) vars: HashMap<Symbol, Object<'ob>>,
+    pub(crate) funcs: HashMap<Symbol, &'ob Cons<'ob>>,
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
 }
 

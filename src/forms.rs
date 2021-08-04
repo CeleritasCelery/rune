@@ -1,13 +1,42 @@
-use crate::object::{Function, Object, NIL};
+use std::convert::TryInto;
+
+use crate::arena::Arena;
+use crate::cons::Cons;
+use crate::data::Environment;
+use crate::object::{IntoObject, LocalFunction, LocalFunctionValue, Object, NIL};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::lisp_fn;
 
 #[lisp_fn]
-pub(crate) fn defalias(symbol: Symbol, definition: Function) -> Symbol {
-    let map = INTERNED_SYMBOLS.lock().unwrap();
-    map.set_func(symbol, definition);
+pub(crate) fn defalias<'ob>(
+    symbol: Symbol,
+    definition: LocalFunction<'ob>,
+    env: &mut Environment<'ob>,
+) -> Symbol {
+    match definition.try_into() {
+        Ok(func) => {
+            let map = INTERNED_SYMBOLS.lock().unwrap();
+            map.set_func(symbol, func);
+        }
+        Err(_) => {
+            if let LocalFunctionValue::Cons(cons) = definition.val() {
+                env.funcs.insert(symbol, cons);
+            } else {
+                unreachable!("local function was not function or cons");
+            }
+        }
+    };
     symbol
+}
+
+#[lisp_fn]
+pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
+    let mut head = NIL;
+    for object in objects.iter().rev() {
+        head = Cons::new(*object, head).into_obj(arena);
+    }
+    head
 }
 
 #[lisp_fn]
@@ -18,4 +47,4 @@ pub(crate) fn progn<'ob>(forms: &[Object<'ob>]) -> Object<'ob> {
     }
 }
 
-defsubr!(defalias, progn);
+defsubr!(defalias, progn, list);

@@ -1,7 +1,9 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{Function, InnerObject, IntoObject, List, Number, Object, Tag, Value, NIL};
+use crate::object::{
+    Function, InnerObject, IntoObject, List, LocalFunction, Number, Object, Tag, Value, NIL,
+};
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
 use std::mem::transmute;
@@ -11,6 +13,16 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::LispFn(_) | Value::SubrFn(_) => Ok(unsafe { transmute(obj) }),
+            x => Err(Error::Type(Type::Func, x.get_type())),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for LocalFunction<'ob> {
+    type Error = Error;
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+        match obj.val() {
+            Value::LispFn(_) | Value::SubrFn(_) | Value::Cons(_) => Ok(unsafe { transmute(obj) }),
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }

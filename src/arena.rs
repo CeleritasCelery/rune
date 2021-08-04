@@ -1,4 +1,4 @@
-use crate::object::Object;
+use crate::object::{IntoObject, Object};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -22,6 +22,13 @@ impl<'ob> Arena {
         self.objects
             .borrow_mut()
             .push(unsafe { Self::extend_lifetime(obj) });
+    }
+
+    pub(crate) fn add<Input, Output>(&'ob self, item: Input) -> Output
+    where
+        Input: IntoObject<'ob, Output>,
+    {
+        item.into_obj(self)
     }
 
     unsafe fn extend_lifetime(obj: Object<'ob>) -> Object<'static> {

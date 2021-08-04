@@ -1,6 +1,9 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
+use crate::error::{Error, Type};
 use crate::object::{InnerObject, IntoObject, LispFn, Object, SubrFn, Tag, Value};
+use std::convert::TryFrom;
+use std::intrinsics::transmute;
 use std::marker::PhantomData;
 
 #[derive(Copy, Clone)]
@@ -98,6 +101,67 @@ impl<'ob> Function<'ob> {
 #[cfg(miri)]
 extern "Rust" {
     fn miri_static_root(ptr: *const u8);
+}
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct LocalFunction<'ob> {
+    data: InnerObject,
+    marker: PhantomData<&'ob ()>,
+}
+
+impl<'ob> std::ops::Deref for LocalFunction<'ob> {
+    type Target = Object<'ob>;
+
+    fn deref(&self) -> &Self::Target {
+        let ptr: *const Self = self;
+        unsafe { &*ptr.cast::<Object>() }
+    }
+}
+
+pub(crate) enum LocalFunctionValue<'ob> {
+    LispFn(&'ob LispFn<'ob>),
+    SubrFn(&'ob SubrFn),
+    Cons(&'ob Cons<'ob>),
+}
+
+impl<'ob> LocalFunction<'ob> {
+    #[inline(always)]
+    pub(crate) fn val(self) -> LocalFunctionValue<'ob> {
+        match self.data.val() {
+            Value::LispFn(x) => LocalFunctionValue::LispFn(x),
+            Value::SubrFn(x) => LocalFunctionValue::SubrFn(x),
+            Value::Cons(x) => LocalFunctionValue::Cons(x),
+            _ => unreachable!("local Function was invalid type"),
+        }
+    }
+}
+
+impl<'ob> From<InnerObject> for LocalFunction<'ob> {
+    fn from(data: InnerObject) -> Self {
+        Self {
+            data,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'ob> IntoObject<'ob, LocalFunction<'ob>> for LispFn<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> LocalFunction<'ob> {
+        InnerObject::from_type(self, Tag::LispFn, arena).into()
+    }
+}
+
+impl<'ob> TryFrom<LocalFunction<'ob>> for Function<'ob> {
+    type Error = Error;
+
+    fn try_from(value: LocalFunction<'ob>) -> Result<Self, Self::Error> {
+        match value.val() {
+            LocalFunctionValue::LispFn(_) | LocalFunctionValue::SubrFn(_) => {
+                Ok(unsafe { transmute(value) })
+            }
+            LocalFunctionValue::Cons(_) => Err(Error::Type(Type::Func, Type::Cons)),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]

@@ -352,10 +352,14 @@ impl<'a, 'ob> Reader<'a> {
     fn read_sharp(&mut self, pos: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
-                Some(Token::OpenParen(i)) => self.read_list(i, arena),
+                Some(Token::OpenParen(i)) => {
+                    let list = self.read_list(i, arena)?;
+                    let quoted = list!(intern("function"), list; arena);
+                    Ok(quoted.into_obj(arena))
+                }
                 Some(token) => {
                     let obj = self.read_sexp(token, arena)?;
-                    let quoted = list!(intern("quote"), obj; arena);
+                    let quoted = list!(intern("function"), obj; arena);
                     Ok(quoted.into_obj(arena))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
@@ -490,10 +494,10 @@ baz""#
     #[test]
     fn read_sharp() {
         let arena = &Arena::new();
-        let quote = intern("quote");
+        let quote = intern("function");
         check_reader!(list!(quote, intern("foo"); arena), "#'foo");
         check_reader!(
-            list!(intern("lambda"), intern("foo"), false, false; arena),
+            list!(quote, list!(intern("lambda"), intern("foo"), false, false; arena); arena),
             "#'(lambda foo () nil)"
         );
         assert_error("#", Error::MissingQuotedItem(0));
