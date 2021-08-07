@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::error::Error;
-use crate::object::{Function, IntoObject, Object, NIL};
+use crate::object::{Function, IntoObject, Object};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
 use std::fmt;
@@ -78,7 +78,7 @@ impl<'ob> Default for LispFn<'ob> {
     fn default() -> Self {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![NIL],
+            vec![Object::NIL],
             0,
             0,
             false,

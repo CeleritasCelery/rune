@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::object::{List, Object, Value, NIL};
+use crate::object::{List, Object, Value};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
@@ -108,7 +108,7 @@ impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
 fn car(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.car(),
-        List::Nil => NIL,
+        List::Nil => Object::NIL,
     }
 }
 
@@ -116,7 +116,7 @@ fn car(list: List) -> Object {
 fn cdr(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => NIL,
+        List::Nil => Object::NIL,
     }
 }
 
@@ -151,7 +151,7 @@ macro_rules! cons {
         #[allow(unused_qualifications)]
         crate::cons::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
-            crate::object::NIL,
+            crate::object::Object::NIL,
         )
     };
 }

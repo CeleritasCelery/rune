@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
-use crate::object::{IntoObject, Object, NIL, TRUE};
+use crate::object::{IntoObject, Object};
 use crate::symbol::{intern, Symbol};
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
@@ -237,8 +237,8 @@ fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
         Err(_) => match slice.parse::<f64>() {
             Ok(num) => num.into_obj(arena),
             Err(_) => match slice {
-                "nil" => NIL,
-                "t" => TRUE,
+                "nil" => Object::NIL,
+                "t" => Object::TRUE,
                 _ => intern_symbol(slice).into_obj(arena),
             },
         },
@@ -295,7 +295,7 @@ fn vector_into_list<'ob>(
     let mut iter = vec.into_iter().rev();
     let mut end = match iter.next() {
         Some(car) => Cons::new(car, tail.into()),
-        None => return NIL,
+        None => return Object::NIL,
     };
     for obj in iter {
         end = Cons::new(obj, end.into_obj(arena));

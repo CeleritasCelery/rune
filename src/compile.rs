@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::cons::{Cons, ConsIter};
 use crate::error::{Error, Type};
-use crate::object::{Expression, IntoObject, LispFn, Object, Value, NIL};
+use crate::object::{Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::Symbol;
 use anyhow::{bail, ensure, Result};
@@ -274,7 +274,7 @@ impl<'ob> Compiler<'ob> {
         if let Some(form) = forms.next() {
             self.compile_form(form?, arena)?;
         } else {
-            return self.const_ref(NIL, None);
+            return self.const_ref(Object::NIL, None);
         }
         for form in forms {
             self.discard();
@@ -295,7 +295,7 @@ impl<'ob> Compiler<'ob> {
                 *tos = Some(var);
             }
             // (let ((x)))
-            None => self.const_ref(NIL, Some(var))?,
+            None => self.const_ref(Object::NIL, Some(var))?,
         };
         let rest = iter.count();
         // (let ((x y z ..)))
@@ -304,7 +304,7 @@ impl<'ob> Compiler<'ob> {
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
-        self.const_ref(NIL, Some(sym))
+        self.const_ref(Object::NIL, Some(sym))
     }
 
     fn let_bind(&mut self, obj: Object, arena: &'ob Arena) -> Result<usize> {
@@ -471,7 +471,7 @@ impl<'ob> Compiler<'ob> {
                     // (defvar x y)
                     Some(value) => self.compile_form(value?, arena)?,
                     // (defvar x)
-                    None => self.const_ref(NIL, None)?,
+                    None => self.const_ref(Object::NIL, None)?,
                 };
                 self.duplicate();
                 let idx = self.constants.insert(sym.into())?;
@@ -525,13 +525,13 @@ impl<'ob> Compiler<'ob> {
         match len {
             // (cond ())
             0 => {
-                self.const_ref(NIL, None)?;
+                self.const_ref(Object::NIL, None)?;
             }
             // (cond (x))
             1 => {
                 self.compile_form(cond.next().unwrap()?, arena)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
-                self.const_ref(NIL, None)?;
+                self.const_ref(Object::NIL, None)?;
                 jump_targets.push(target);
             }
             // (cond (x y ...))
@@ -549,7 +549,7 @@ impl<'ob> Compiler<'ob> {
         let mut clauses = into_iter(obj)?;
         // (cond)
         if clauses.is_empty() {
-            return self.const_ref(NIL, None);
+            return self.const_ref(Object::NIL, None);
         }
 
         let final_return_targets = &mut Vec::new();
@@ -671,7 +671,7 @@ pub(crate) fn compile_lambda<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result
 }
 
 pub(crate) fn compile<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<Expression<'ob>> {
-    let cons = Cons::new(obj, NIL);
+    let cons = Cons::new(obj, Object::NIL);
     Compiler::compile_func_body(cons.into_iter(), vec![], arena).map(|x| x.into())
 }
 
@@ -680,7 +680,6 @@ mod test {
 
     use super::*;
     use crate::arena::Arena;
-    use crate::object::TRUE;
     use crate::reader::Reader;
     use crate::symbol::intern;
     #[allow(clippy::enum_glob_use)]
@@ -811,20 +810,20 @@ mod test {
         check_compiler!(
             "(if nil 1 2)",
             [Constant0, JumpNil, high4, low4, Constant1, Jump, high1, low1, Constant2, Ret],
-            [NIL, 1, 2]
+            [Object::NIL, 1, 2]
         );
         check_compiler!(
             "(if t 2)",
             [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
-            [TRUE, 2]
+            [Object::TRUE, 2]
         );
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 
     #[test]
     fn cond_stmt() {
-        check_compiler!("(cond)", [Constant0, Ret], [NIL]);
-        check_compiler!("(cond ())", [Constant0, Ret], [NIL]);
+        check_compiler!("(cond)", [Constant0, Ret], [Object::NIL]);
+        check_compiler!("(cond ())", [Constant0, Ret], [Object::NIL]);
         check_compiler!(
             "(cond (1))",
             [Constant0, JumpNotNilElsePop, 0, 1, Constant1, Ret],
@@ -891,7 +890,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [TRUE, NIL]
+            [Object::TRUE, Object::NIL]
         );
 
         check_compiler!(
@@ -908,7 +907,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [TRUE, 1]
+            [Object::TRUE, 1]
         );
 
         check_compiler!(
@@ -925,7 +924,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [NIL, 2]
+            [Object::NIL, 2]
         );
 
         let (high7, low7) = get_jump_slots(7);
@@ -946,7 +945,7 @@ mod test {
                 low_11,
                 Ret
             ],
-            [NIL, 2, 3]
+            [Object::NIL, 2, 3]
         );
         check_error("(while)", Error::ArgCount(1, 0));
     }

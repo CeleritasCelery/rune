@@ -1,6 +1,6 @@
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
-use crate::object::{List, Object, NIL};
+use crate::object::{List, Object};
 use crate::symbol::Symbol;
 use fn_macros::defun;
 
@@ -46,9 +46,9 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => *val,
-            None => NIL,
+            None => Object::NIL,
         },
-        None => NIL,
+        None => Object::NIL,
     }
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn defvar<'ob>(
     _docstring: Option<&String>,
     env: &mut Environment<'ob>,
 ) -> Object<'ob> {
-    let value = initvalue.unwrap_or(NIL);
+    let value = initvalue.unwrap_or(Object::NIL);
     set(symbol, value, env)
 }
 

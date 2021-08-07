@@ -22,15 +22,6 @@ pub(crate) struct Object<'ob> {
     marker: PhantomData<&'ob ()>,
 }
 
-pub(crate) const NIL: Object = Object {
-    data: InnerObject::from_tag(Tag::Nil),
-    marker: PhantomData,
-};
-pub(crate) const TRUE: Object = Object {
-    data: InnerObject::from_tag(Tag::True),
-    marker: PhantomData,
-};
-
 #[derive(Debug, PartialEq)]
 pub(crate) enum Value<'ob> {
     Symbol(Symbol),
@@ -95,14 +86,23 @@ impl<'old, 'new> Object<'old> {
             Value::Symbol(x) => x.into(),
             Value::LispFn(x) => x.clone().into_obj(arena),
             Value::SubrFn(x) => (*x).into_obj(arena),
-            Value::True => TRUE,
-            Value::Nil => NIL,
+            Value::True => Object::TRUE,
+            Value::Nil => Object::NIL,
             Value::Float(x) => x.into_obj(arena),
         }
     }
 }
 
 impl<'ob> Object<'ob> {
+    pub(crate) const NIL: Self = Object {
+        data: InnerObject::from_tag(Tag::Nil),
+        marker: PhantomData,
+    };
+    pub(crate) const TRUE: Self = Object {
+        data: InnerObject::from_tag(Tag::True),
+        marker: PhantomData,
+    };
+
     #[inline(always)]
     pub(crate) fn val<'new: 'ob>(self) -> Value<'new> {
         self.data.val()
@@ -326,10 +326,10 @@ mod test {
 
     #[test]
     fn other() {
-        let t = TRUE;
+        let t = Object::TRUE;
         matches!(t.val(), Value::True);
         assert!(t.is_non_nil());
-        let n = NIL;
+        let n = Object::NIL;
         assert!(n.is_nil());
 
         let bool_true: Object = true.into();

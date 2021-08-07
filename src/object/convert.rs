@@ -2,7 +2,7 @@ use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{
-    Function, InnerObject, IntoObject, List, LocalFunction, Number, Object, Tag, Value, NIL,
+    Function, InnerObject, IntoObject, List, LocalFunction, Number, Object, Tag, Value,
 };
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
@@ -180,7 +180,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => NIL,
+            None => Object::NIL,
         }
     }
 }

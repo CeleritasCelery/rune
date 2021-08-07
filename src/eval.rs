@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::compile::{compile, compile_lambda};
 use crate::data::Environment;
-use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value, NIL};
+use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
@@ -128,7 +128,7 @@ pub(crate) struct Routine<'brw, 'ob> {
 impl<'ob> Routine<'_, 'ob> {
     fn fill_args(&mut self, fill_args: u16) {
         for _ in 0..fill_args {
-            self.stack.push(NIL);
+            self.stack.push(Object::NIL);
         }
     }
 

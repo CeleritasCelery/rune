@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::data::Environment;
-use crate::object::{IntoObject, LocalFunction, LocalFunctionValue, Object, NIL};
+use crate::object::{IntoObject, LocalFunction, LocalFunctionValue, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::defun;
@@ -32,7 +32,7 @@ pub(crate) fn defalias<'ob>(
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
-    let mut head = NIL;
+    let mut head = Object::NIL;
     for object in objects.iter().rev() {
         head = Cons::new(*object, head).into_obj(arena);
     }
@@ -43,7 +43,7 @@ pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'o
 pub(crate) fn progn<'ob>(forms: &[Object<'ob>]) -> Object<'ob> {
     match forms.last() {
         Some(form) => *form,
-        None => NIL,
+        None => Object::NIL,
     }
 }
 
