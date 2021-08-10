@@ -46,9 +46,9 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => *val,
-            None => Object::NIL,
+            None => Object::Nil,
         },
-        None => Object::NIL,
+        None => Object::Nil,
     }
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn defvar<'ob>(
     _docstring: Option<&String>,
     env: &mut Environment<'ob>,
 ) -> Object<'ob> {
-    let value = initvalue.unwrap_or(Object::NIL);
+    let value = initvalue.unwrap_or(Object::Nil);
     set(symbol, value, env)
 }
 

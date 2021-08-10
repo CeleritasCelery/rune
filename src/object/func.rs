@@ -95,7 +95,7 @@ impl<'ob> Default for LispFn<'ob> {
     fn default() -> Self {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![Object::NIL],
+            vec![Object::Nil],
             0,
             0,
             false,
@@ -163,7 +163,6 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::object::Value;
 
     #[test]
     fn function() {
@@ -171,10 +170,10 @@ mod test {
         let constant: Object = 1.into_obj(arena);
         let func = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
         let obj: Object = func.into_obj(arena);
-        assert!(matches!(obj.val(), Value::LispFn(_)));
+        assert!(matches!(obj, Object::LispFn(_)));
         format!("{}", obj);
-        let func = match obj.val() {
-            Value::LispFn(x) => x,
+        let func = match obj {
+            Object::LispFn(x) => x,
             _ => unreachable!("expected lispfn"),
         };
         assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());

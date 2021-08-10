@@ -50,12 +50,12 @@ impl<'ob> Display for Cons<'ob> {
 }
 
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    match cons.cdr().val() {
-        Value::Cons(cdr) => {
+    match cons.cdr() {
+        Object::Cons(cdr) => {
             write!(f, "{} ", cons.car())?;
-            print_rest(cdr, f)
+            print_rest(&cdr, f)
         }
-        Value::Nil => write!(f, "{})", cons.car()),
+        Object::Nil => write!(f, "{})", cons.car()),
         cdr => write!(f, "{} . {})", cons.car(), cdr),
     }
 }
@@ -108,7 +108,7 @@ impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
 fn car(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.car(),
-        List::Nil => Object::NIL,
+        List::Nil => Object::Nil,
     }
 }
 
@@ -116,7 +116,7 @@ fn car(list: List) -> Object {
 fn cdr(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => Object::NIL,
+        List::Nil => Object::Nil,
     }
 }
 
@@ -151,7 +151,7 @@ macro_rules! cons {
         #[allow(unused_qualifications)]
         crate::cons::Cons::new(
             crate::object::IntoObject::into_obj($car, $arena),
-            crate::object::Object::NIL,
+            crate::object::Object::Nil,
         )
     };
 }

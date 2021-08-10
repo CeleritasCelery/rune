@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{Function, IntoObject, List, LocalFunction, Number, Object, Value};
+use crate::object::{Function, IntoObject, List, LocalFunction, Number, Object};
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
 
@@ -56,8 +56,8 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
 impl<'ob> TryFrom<Object<'ob>> for bool {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Nil => Ok(false),
+        match obj {
+            Object::Nil => Ok(false),
             _ => Ok(true),
         }
     }
@@ -66,9 +66,9 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
 impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(cons) => Ok(List::Cons(cons)),
-            Value::Nil => Ok(List::Nil),
+        match obj {
+            Object::Cons(cons) => Ok(List::Cons(cons.get())),
+            Object::Nil => Ok(List::Nil),
             x => Err(Error::Type(Type::List, x.get_type())),
         }
     }
@@ -77,9 +77,9 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
 impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Cons(cons) => Ok(Some(List::Cons(cons))),
-            Value::Nil => Ok(None),
+        match obj {
+            Object::Cons(cons) => Ok(Some(List::Cons(cons.get()))),
+            Object::Nil => Ok(None),
             x => Err(Error::Type(Type::List, x.get_type())),
         }
     }
@@ -187,7 +187,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => Object::NIL,
+            None => Object::Nil,
         }
     }
 }

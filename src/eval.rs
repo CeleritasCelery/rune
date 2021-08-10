@@ -128,7 +128,7 @@ pub(crate) struct Routine<'brw, 'ob> {
 impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn fill_args(&mut self, fill_args: u16) {
         for _ in 0..fill_args {
-            self.stack.push(Object::NIL);
+            self.stack.push(Object::Nil);
         }
     }
 
@@ -351,21 +351,21 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::JumpNil => {
                     let cond = rout.stack.pop().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if cond.is_nil() {
+                    if cond == Object::Nil {
                         rout.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNotNil => {
                     let cond = rout.stack.pop().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if cond.is_non_nil() {
+                    if cond != Object::Nil {
                         rout.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if cond.is_nil() {
+                    if *cond == Object::Nil {
                         rout.frame.ip.jump(offset as i16);
                     } else {
                         rout.stack.pop();
@@ -374,10 +374,10 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::JumpNotNilElsePop => {
                     let cond = rout.stack.last().unwrap();
                     let offset = rout.frame.ip.take_double_arg();
-                    if cond.is_non_nil() {
-                        rout.frame.ip.jump(offset as i16);
-                    } else {
+                    if *cond == Object::Nil {
                         rout.stack.pop();
+                    } else {
+                        rout.frame.ip.jump(offset as i16);
                     }
                 }
                 op::Ret => {

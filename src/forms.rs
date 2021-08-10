@@ -32,7 +32,7 @@ pub(crate) fn defalias<'ob>(
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
-    let mut head = Object::NIL;
+    let mut head = Object::Nil;
     for object in objects.iter().rev() {
         head = Cons::new(*object, head).into_obj(arena);
     }
@@ -43,7 +43,7 @@ pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'o
 pub(crate) fn progn<'ob>(forms: &[Object<'ob>]) -> Object<'ob> {
     match forms.last() {
         Some(form) => *form,
-        None => Object::NIL,
+        None => Object::Nil,
     }
 }
 

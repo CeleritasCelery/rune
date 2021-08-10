@@ -17,7 +17,8 @@ struct InnerSymbol {
 struct FnCell(AtomicI64);
 
 impl FnCell {
-    const fn new() -> Self {
+    fn new() -> Self {
+        // Miri won't let me use None for some reason, so we have to put the raw value instead
         Self(AtomicI64::new(2))
     }
 
@@ -39,7 +40,7 @@ impl PartialEq for InnerSymbol {
 }
 
 impl InnerSymbol {
-    const fn new(name: &'static str) -> Self {
+    fn new(name: &'static str) -> Self {
         InnerSymbol {
             name,
             func: FnCell::new(),

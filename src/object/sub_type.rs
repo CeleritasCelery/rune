@@ -58,31 +58,31 @@ impl<'ob> Function<'ob> {
 
     #[cfg(test)]
     pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
-        match self.val() {
-            FunctionValue::LispFn(x) => Some(x),
-            FunctionValue::SubrFn(_) => None,
+        match self {
+            Function::LispFn(x) => Some(x.get()),
+            Function::SubrFn(_) => None,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn as_subr_fn(self) -> Option<&'ob SubrFn> {
-        match self.val() {
-            FunctionValue::SubrFn(x) => Some(x),
-            FunctionValue::LispFn(_) => None,
+        match self {
+            Function::SubrFn(x) => Some(x.get()),
+            Function::LispFn(_) => None,
         }
     }
 
     #[cfg(miri)]
     pub(crate) fn set_as_miri_root(self) {
-        match self.val() {
-            FunctionValue::LispFn(x) => {
-                let ptr: *const _ = x;
+        match self {
+            Function::LispFn(x) => {
+                let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FunctionValue::SubrFn(x) => {
-                let ptr: *const _ = x;
+            Function::SubrFn(x) => {
+                let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }

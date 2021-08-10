@@ -83,9 +83,30 @@ where
     }
 }
 
+impl<'a, T> fmt::Display for Data<&'a T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.get())
+    }
+}
+
 impl Fixnum {
     fn get(self) -> i64 {
         self.expand()
+    }
+}
+
+impl PartialEq for Fixnum {
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl fmt::Display for Fixnum {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.get())
     }
 }
 
@@ -99,15 +120,15 @@ impl Data<Symbol> {
     }
 }
 
-impl PartialEq for Fixnum {
+impl PartialEq for Data<Symbol> {
     fn eq(&self, other: &Self) -> bool {
         self.get() == other.get()
     }
 }
 
-impl PartialEq for Data<Symbol> {
-    fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
+impl fmt::Display for Data<Symbol> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.get())
     }
 }
 
@@ -165,24 +186,21 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
 
 impl<'old, 'new> Object<'old> {
     pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
-        match self.val() {
-            Value::Int(x) => x.into(),
-            Value::Cons(x) => x.clone_in(arena).into_obj(arena),
-            Value::String(x) => x.clone().into_obj(arena),
-            Value::Symbol(x) => x.into(),
-            Value::LispFn(x) => x.clone_in(arena).into_obj(arena),
-            Value::SubrFn(x) => (*x).into_obj(arena),
-            Value::True => Object::TRUE,
-            Value::Nil => Object::NIL,
-            Value::Float(x) => x.into_obj(arena),
+        match self {
+            Object::Int(x) => x.get().into(),
+            Object::Cons(x) => x.clone_in(arena).into_obj(arena),
+            Object::String(x) => x.get().clone().into_obj(arena),
+            Object::Symbol(x) => x.get().into(),
+            Object::LispFn(x) => x.clone_in(arena).into_obj(arena),
+            Object::SubrFn(x) => (*x).into_obj(arena),
+            Object::True => Object::True,
+            Object::Nil => Object::Nil,
+            Object::Float(x) => x.into_obj(arena),
         }
     }
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) const NIL: Self = Object::Nil;
-    pub(crate) const TRUE: Self = Object::True;
-
     #[inline(always)]
     pub(crate) fn val(self) -> Value<'ob> {
         match self {
@@ -212,35 +230,27 @@ impl<'ob> Object<'ob> {
         }
     }
 
-    pub(crate) fn is_nil(self) -> bool {
-        matches!(self.val(), Value::Nil)
-    }
-
-    pub(crate) fn is_non_nil(self) -> bool {
-        !matches!(self.val(), Value::Nil)
-    }
-
     pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {
         use crate::error::{Error, Type};
-        match self.val() {
-            Value::Symbol(x) => Ok(x),
+        match self {
+            Object::Symbol(x) => Ok(x.get()),
             x => anyhow::bail!(Error::Type(Type::Symbol, x.get_type())),
         }
     }
 }
 
-impl<'ob> fmt::Display for Value<'ob> {
+impl<'ob> fmt::Display for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Int(x) => write!(f, "{}", x),
-            Value::Cons(x) => write!(f, "{}", x),
-            Value::String(x) => write!(f, "\"{}\"", x),
-            Value::Symbol(x) => write!(f, "{}", x),
-            Value::LispFn(x) => write!(f, "(lambda {:?})", x),
-            Value::SubrFn(x) => write!(f, "{:?}", x),
-            Value::True => write!(f, "t"),
-            Value::Nil => write!(f, "nil"),
-            Value::Float(x) => {
+            Object::Int(x) => write!(f, "{}", x),
+            Object::Cons(x) => write!(f, "{}", x),
+            Object::String(x) => write!(f, "\"{}\"", x),
+            Object::Symbol(x) => write!(f, "{}", x),
+            Object::LispFn(x) => write!(f, "(lambda {:?})", x),
+            Object::SubrFn(x) => write!(f, "{:?}", x),
+            Object::True => write!(f, "t"),
+            Object::Nil => write!(f, "nil"),
+            Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{:.1}", x)
                 } else {
@@ -248,12 +258,6 @@ impl<'ob> fmt::Display for Value<'ob> {
                 }
             }
         }
-    }
-}
-
-impl<'ob> fmt::Display for Object<'ob> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.val(), f)
     }
 }
 
@@ -311,16 +315,16 @@ mod test {
 
     #[test]
     fn other() {
-        let t = Object::TRUE;
+        let t = Object::True;
         matches!(t.val(), Value::True);
-        assert!(t.is_non_nil());
-        let n = Object::NIL;
-        assert!(n.is_nil());
+        assert!(t != Object::Nil);
+        let n = Object::Nil;
+        assert!(n == Object::Nil);
 
         let bool_true: Object = true.into();
         matches!(bool_true.val(), Value::True);
         let bool_false: Object = false.into();
-        assert!(bool_false.is_nil());
+        assert!(bool_false == Object::Nil);
     }
 
     #[test]
