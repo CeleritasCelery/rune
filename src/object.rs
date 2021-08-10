@@ -10,12 +10,16 @@ use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::fmt;
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, Not};
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct Data<T> {
     data: [u8; 7],
     marker: PhantomData<T>,
+}
+
+pub(crate) trait Inner<T> {
+    fn inner(self) -> T;
 }
 
 unsafe impl<T> Send for Data<T> {}
@@ -52,9 +56,58 @@ impl<'a, T> Data<&'a T> {
     }
 
     fn get(self) -> &'a T {
+        self.inner()
+    }
+}
+
+impl<'a, T> Inner<&'a T> for Data<&'a T> {
+    fn inner(self) -> &'a T {
         let bits = self.expand();
         let ptr = bits as *const T;
         unsafe { &*ptr }
+    }
+}
+
+impl Inner<i64> for Fixnum {
+    fn inner(self) -> i64 {
+        self.expand()
+    }
+}
+
+impl Inner<Symbol> for Data<Symbol> {
+    fn inner(self) -> Symbol {
+        unsafe { Symbol::from_raw(self.expand() as *const u8) }
+    }
+}
+
+impl<T> Not for Data<T>
+where
+    Data<T>: Inner<T>,
+{
+    type Output = T;
+
+    fn not(self) -> Self::Output {
+        self.inner()
+    }
+}
+
+impl<T> PartialEq for Data<T>
+where
+    T: PartialEq + Copy,
+    Data<T>: Inner<T>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.inner() == other.inner()
+    }
+}
+
+impl<T> fmt::Display for Data<T>
+where
+    T: fmt::Display + Copy,
+    Data<T>: Inner<T>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.inner(), f)
     }
 }
 
@@ -63,7 +116,7 @@ impl<'a, T> Deref for Data<&'a T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        self.get()
+        self.inner()
     }
 }
 
@@ -74,61 +127,19 @@ impl<'a, T> AsRef<T> for Data<&'a T> {
     }
 }
 
-impl<'a, T> PartialEq for Data<&'a T>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
-    }
-}
-
-impl<'a, T> fmt::Display for Data<&'a T>
-where
-    T: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.get())
-    }
-}
-
 impl Fixnum {
     fn get(self) -> i64 {
-        self.expand()
-    }
-}
-
-impl PartialEq for Fixnum {
-    fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
-    }
-}
-
-impl fmt::Display for Fixnum {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.get())
+        self.inner()
     }
 }
 
 impl Data<Symbol> {
     fn get(self) -> Symbol {
-        unsafe { Symbol::from_raw(self.expand() as *const u8) }
+        self.inner()
     }
 
     fn from_symbol(x: Symbol) -> Self {
         Data::from_int(x.as_ptr() as i64)
-    }
-}
-
-impl PartialEq for Data<Symbol> {
-    fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
-    }
-}
-
-impl fmt::Display for Data<Symbol> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.get())
     }
 }
 
