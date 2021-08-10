@@ -1,9 +1,25 @@
-use crate::object::{IntoObject, Object};
+use crate::cons::Cons;
+use crate::object::{IntoObject, LispFn, SubrFn};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Arena {
-    objects: RefCell<Vec<Object<'static>>>,
+    objects: RefCell<Vec<OwnedObject<'static>>>,
+}
+
+#[derive(Debug, PartialEq)]
+enum OwnedObject<'ob> {
+    Float(Box<f64>),
+    Cons(Box<Cons<'ob>>),
+    String(Box<String>),
+    LispFn(Box<LispFn<'ob>>),
+    SubrFn(Box<SubrFn>),
+}
+
+impl<'ob> OwnedObject<'ob> {
+    unsafe fn coerce_lifetime(self) -> OwnedObject<'static> {
+        std::mem::transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
+    }
 }
 
 impl<'ob> Arena {
@@ -13,15 +29,55 @@ impl<'ob> Arena {
         }
     }
 
-    #[allow(clippy::unused_self)]
-    pub(crate) fn alloc<T>(&self, obj: T) -> *const T {
-        Box::into_raw(Box::new(obj))
-    }
-
-    pub(crate) fn register(&self, obj: Object<'ob>) {
+    fn register(&'ob self, obj: OwnedObject<'ob>) {
         self.objects
             .borrow_mut()
-            .push(unsafe { Self::extend_lifetime(obj) });
+            .push(unsafe { obj.coerce_lifetime() });
+    }
+
+    pub(crate) fn alloc_f64(&'ob self, x: f64) -> &'ob f64 {
+        self.register(OwnedObject::Float(Box::new(x)));
+        if let Some(OwnedObject::Float(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&f64, &'ob f64>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+
+    pub(crate) fn alloc_cons(&'ob self, x: Cons<'ob>) -> &'ob Cons<'ob> {
+        self.register(OwnedObject::Cons(Box::new(x)));
+        if let Some(OwnedObject::Cons(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&Cons, &'ob Cons>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+
+    pub(crate) fn alloc_string(&'ob self, x: String) -> &'ob String {
+        self.register(OwnedObject::String(Box::new(x)));
+        if let Some(OwnedObject::String(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&String, &'ob String>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+
+    pub(crate) fn alloc_lisp_fn(&'ob self, x: LispFn<'ob>) -> &'ob LispFn<'ob> {
+        self.register(OwnedObject::LispFn(Box::new(x)));
+        if let Some(OwnedObject::LispFn(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&LispFn, &'ob LispFn>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+
+    pub(crate) fn alloc_subr_fn(&'ob self, x: SubrFn) -> &'ob SubrFn {
+        self.register(OwnedObject::SubrFn(Box::new(x)));
+        if let Some(OwnedObject::SubrFn(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&SubrFn, &'ob SubrFn>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
     }
 
     pub(crate) fn add<Input, Output>(&'ob self, item: Input) -> Output
@@ -29,29 +85,5 @@ impl<'ob> Arena {
         Input: IntoObject<'ob, Output>,
     {
         item.into_obj(self)
-    }
-
-    unsafe fn extend_lifetime(obj: Object<'ob>) -> Object<'static> {
-        std::mem::transmute::<Object<'ob>, Object<'static>>(obj)
-    }
-}
-
-impl Drop for Arena {
-    fn drop(&mut self) {
-        for obj in self.objects.get_mut() {
-            unsafe {
-                obj.drop();
-            }
-        }
-    }
-}
-
-impl Clone for Arena {
-    fn clone(&self) -> Self {
-        let new = Arena::new();
-        for old in self.objects.borrow().iter() {
-            old.clone_in(&new);
-        }
-        new
     }
 }

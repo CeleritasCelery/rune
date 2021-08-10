@@ -16,7 +16,7 @@ pub(crate) struct FnArgs {
     pub(crate) advice: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct LispFn<'ob> {
     pub(crate) body: Expression<'ob>,
     pub(crate) args: FnArgs,
@@ -35,9 +35,9 @@ impl FnArgs {
     }
 }
 
-define_unbox!(LispFn, Func, &LispFn<'ob>);
+define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Expression<'ob> {
     pub(crate) op_codes: CodeVec,
     pub(crate) constants: Vec<Object<'ob>>,
@@ -74,6 +74,23 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
     }
 }
 
+impl<'old, 'new> LispFn<'old> {
+    pub(crate) fn clone_in(&self, arena: &'new Arena) -> LispFn<'new> {
+        LispFn {
+            body: Expression {
+                op_codes: self.body.op_codes.clone(),
+                constants: self
+                    .body
+                    .constants
+                    .iter()
+                    .map(|x| x.clone_in(arena))
+                    .collect(),
+            },
+            args: self.args,
+        }
+    }
+}
+
 impl<'ob> Default for LispFn<'ob> {
     fn default() -> Self {
         LispFn::new(
@@ -98,7 +115,7 @@ pub(crate) struct SubrFn {
     pub(crate) args: FnArgs,
     pub(crate) name: &'static str,
 }
-define_unbox!(SubrFn, Func, &SubrFn);
+define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 #[cfg(test)]
 impl SubrFn {

@@ -307,7 +307,7 @@ impl<'ob> Compiler<'ob> {
         self.const_ref(Object::NIL, Some(sym))
     }
 
-    fn let_bind(&mut self, obj: Object, arena: &'ob Arena) -> Result<usize> {
+    fn let_bind(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<usize> {
         let bindings = into_iter(obj)?;
         let mut len = 0;
         for binding in bindings {
@@ -971,8 +971,7 @@ mod test {
         check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
     }
 
-    fn check_lambda(sexp: &str, func: LispFn) {
-        let comp_arena = &Arena::new();
+    fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
         println!("Test String: {}", sexp);
         let obj = Reader::read(sexp, comp_arena).unwrap().0;
         let lambda = match obj.val() {
@@ -984,46 +983,54 @@ mod test {
 
     #[test]
     fn lambda() {
-        check_lambda("(lambda)", LispFn::default());
-        check_lambda("(lambda ())", LispFn::default());
-        check_lambda("(lambda () nil)", LispFn::default());
+        let arena = &Arena::new();
+        check_lambda("(lambda)", LispFn::default(), arena);
+        check_lambda("(lambda ())", LispFn::default(), arena);
+        check_lambda("(lambda () nil)", LispFn::default(), arena);
 
         check_lambda(
             "(lambda () 1)",
             LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], 0, 0, false),
+            arena,
         );
 
         check_lambda(
             "(lambda (x) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            arena,
         );
 
         check_lambda(
             "(lambda (x &optional) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            arena,
         );
         check_lambda(
             "(lambda (x &optional y) x)",
             LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 1, false),
+            arena,
         );
         check_lambda(
             "(lambda (x &optional y z) y)",
             LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
+            arena,
         );
         check_lambda(
             "(lambda (x &optional y &optional z) z)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 2, false),
+            arena,
         );
         check_lambda(
             "(lambda (x &rest) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            arena,
         );
         check_lambda(
             "(lambda (x &rest y) y)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, true),
+            arena,
         );
 
-        let arena = &Arena::new();
         let obj = Reader::read("(lambda (x &rest y z) y)", arena).unwrap().0;
         assert!(compile(obj, arena)
             .err()
@@ -1040,6 +1047,7 @@ mod test {
                 0,
                 false,
             ),
+            arena,
         );
 
         let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);

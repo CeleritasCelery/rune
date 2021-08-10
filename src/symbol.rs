@@ -2,7 +2,6 @@ use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Function, IntoObject};
 use lazy_static::lazy_static;
-use std::convert::TryInto;
 use std::fmt;
 use std::mem::transmute;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -19,7 +18,7 @@ struct FnCell(AtomicI64);
 
 impl FnCell {
     const fn new() -> Self {
-        Self(AtomicI64::new(0))
+        Self(AtomicI64::new(2))
     }
 
     fn set(&self, func: Option<Function>) {
@@ -27,7 +26,7 @@ impl FnCell {
         self.0.store(value, Ordering::Release);
     }
 
-    fn get(&self) -> Option<Function<'static>> {
+    fn get<'a>(&self) -> Option<Function<'a>> {
         let bits = self.0.load(Ordering::Acquire);
         unsafe { transmute::<i64, Option<Function>>(bits) }
     }
@@ -66,7 +65,7 @@ impl Symbol {
         self.0.name
     }
 
-    pub(crate) fn get_func(self) -> Option<Function<'static>> {
+    pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Function<'_>> {
         self.0.func.get()
     }
 
@@ -183,8 +182,8 @@ impl SymbolMap {
     }
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: Function) {
-        let new_obj = func.clone_in(&self.arena);
-        let new_func: Function = new_obj.try_into().unwrap();
+        println!("mark");
+        let new_func = func.clone_in(&self.arena);
         #[cfg(miri)]
         new_func.set_as_miri_root();
         symbol.set_func(new_func);
@@ -248,15 +247,15 @@ mod test {
         let inner = InnerSymbol::new("foo");
         let sym = Symbol(unsafe { fix_lifetime(&inner) });
         assert_eq!("foo", sym.get_name());
-        assert!(sym.get_func().is_none());
+        assert!(sym.get_func(arena).is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         sym.set_func(func.into_obj(arena));
-        let cell = sym.get_func().unwrap();
+        let cell = sym.get_func(arena).unwrap();
         let before = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         sym.set_func(func.into_obj(arena));
-        let cell = sym.get_func().unwrap();
+        let cell = sym.get_func(arena).unwrap();
         let after = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
@@ -282,7 +281,7 @@ mod test {
         sym.set_func(core_func.into_obj(arena));
 
         let subr = sym
-            .get_func()
+            .get_func(arena)
             .unwrap()
             .as_subr_fn()
             .expect("expected subrfn");

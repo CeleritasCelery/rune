@@ -125,7 +125,7 @@ pub(crate) struct Routine<'brw, 'ob> {
     frame: CallFrame<'brw, 'ob>,
 }
 
-impl<'ob> Routine<'_, 'ob> {
+impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn fill_args(&mut self, fill_args: u16) {
         for _ in 0..fill_args {
             self.stack.push(Object::NIL);
@@ -157,17 +157,20 @@ impl<'ob> Routine<'_, 'ob> {
 
     #[allow(clippy::panic_in_result_fn)]
     fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
-        let fn_idx = arg_cnt as usize;
+        let fn_idx = dbg!(arg_cnt as usize);
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        match sym.get_func() {
+        println!("symbol ready");
+        match sym.get_func(arena) {
             Some(func) => match func.val() {
                 FunctionValue::LispFn(func) => {
+                    println!("call lisp");
                     self.call_lisp(func, arg_cnt)?;
                 }
                 FunctionValue::SubrFn(func) => {
+                    println!("call subr");
                     let fill_args = func.args.num_of_fill_args(arg_cnt)?;
                     self.fill_args(fill_args);
                     let total_args = arg_cnt + fill_args;
@@ -191,7 +194,7 @@ impl<'ob> Routine<'_, 'ob> {
         Ok(())
     }
 
-    fn call_lisp(&mut self, func: &'ob LispFn, arg_cnt: u16) -> Result<()> {
+    fn call_lisp(&mut self, func: &'brw LispFn<'ob>, arg_cnt: u16) -> Result<()> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
         self.fill_args(fill_args);
         let total_args = arg_cnt + fill_args;
@@ -207,8 +210,10 @@ impl<'ob> Routine<'_, 'ob> {
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<()> {
+        println!("inside call");
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
+        println!("slice = {:?}", slice);
         let result = func(slice, env, arena)?;
         self.stack[i] = result;
         self.stack.truncate(i + 1);

@@ -1,20 +1,18 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{
-    Function, InnerObject, IntoObject, List, LocalFunction, Number, Object, Tag, Value,
-};
+use crate::object::{Function, IntoObject, List, LocalFunction, Number, Object, Value};
 use crate::symbol::Symbol;
 use std::convert::TryFrom;
-use std::mem::transmute;
+
+use super::Data;
 
 impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::LispFn(_) | Value::SubrFn(_) => {
-                Ok(unsafe { transmute::<Object, Function>(obj) })
-            }
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::LispFn(x) => Ok(Function::LispFn(x)),
+            Object::SubrFn(x) => Ok(Function::SubrFn(x)),
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }
@@ -22,11 +20,11 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
 
 impl<'ob> TryFrom<Object<'ob>> for LocalFunction<'ob> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::LispFn(_) | Value::SubrFn(_) | Value::Cons(_) => {
-                Ok(unsafe { transmute::<Object, LocalFunction>(obj) })
-            }
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::LispFn(x) => Ok(LocalFunction::LispFn(x)),
+            Object::SubrFn(x) => Ok(LocalFunction::SubrFn(x)),
+            Object::Cons(x) => Ok(LocalFunction::Cons(x)),
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }
@@ -34,9 +32,10 @@ impl<'ob> TryFrom<Object<'ob>> for LocalFunction<'ob> {
 
 impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Int(_) | Value::Float(_) => Ok(unsafe { transmute::<Object, Number>(obj) }),
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Int(x) => Ok(Number::Int(x)),
+            Object::Float(x) => Ok(Number::Float(x)),
             x => Err(Error::Type(Type::Number, x.get_type())),
         }
     }
@@ -44,12 +43,11 @@ impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
 
 impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj.val() {
-            Value::Int(_) | Value::Float(_) => {
-                Ok(Some(unsafe { transmute::<Object, Number>(obj) }))
-            }
-            Value::Nil => Ok(None),
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Int(x) => Ok(Some(Number::Int(x))),
+            Object::Float(x) => Ok(Some(Number::Float(x))),
+            Object::Nil => Ok(None),
             x => Err(Error::Type(Type::Number, x.get_type())),
         }
     }
@@ -67,7 +65,7 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
 
 impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(cons) => Ok(List::Cons(cons)),
             Value::Nil => Ok(List::Nil),
@@ -78,7 +76,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
 
 impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.val() {
             Value::Cons(cons) => Ok(Some(List::Cons(cons))),
             Value::Nil => Ok(None),
@@ -95,7 +93,10 @@ pub(crate) fn try_from_slice<'borrow, 'ob>(
         let num: Number = TryFrom::try_from(*x)?;
         unsafe {
             // ensure they have the same bit representation
-            debug_assert_eq!(transmute::<Number, i64>(num), transmute(*x));
+            debug_assert_eq!(
+                std::mem::transmute::<Number, i64>(num),
+                std::mem::transmute(*x)
+            );
         }
     }
     let ptr = slice.as_ptr().cast::<Number>();
@@ -129,7 +130,11 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
 
 impl<'ob> From<bool> for Object<'ob> {
     fn from(b: bool) -> Self {
-        InnerObject::from_tag(if b { Tag::True } else { Tag::Nil }).into()
+        if b {
+            Object::True
+        } else {
+            Object::Nil
+        }
     }
 }
 
@@ -141,23 +146,24 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
-        InnerObject::from_type(self.to_owned(), Tag::String, arena).into()
+        let rf = arena.alloc_string(self.to_owned());
+        Object::String(Data::from_ref(rf))
     }
 }
 
-define_unbox!(String, &String);
+define_unbox!(String, &'ob String);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
-        InnerObject::from_type(self, Tag::String, arena).into()
+        let rf = arena.alloc_string(self);
+        Object::String(Data::from_ref(rf))
     }
 }
 define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
-        let ptr = s.as_ptr();
-        InnerObject::from_ptr(ptr as *mut u8, Tag::Symbol).into()
+        Object::Symbol(Data::from_symbol(s))
     }
 }
 
@@ -169,7 +175,8 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
-        InnerObject::from_type(self, Tag::Cons, arena).into()
+        let rf = arena.alloc_cons(self);
+        Object::Cons(Data::from_ref(rf))
     }
 }
 

@@ -10,16 +10,118 @@ use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::fmt;
 use std::marker::PhantomData;
-use std::mem::size_of;
-use std::num::NonZeroI64 as NonZero;
+use std::ops::Deref;
 
-#[derive(Copy, Clone)]
-struct InnerObject(NonZero);
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct Data<T> {
+    data: [u8; 7],
+    marker: PhantomData<T>,
+}
+
+unsafe impl<T> Send for Data<T> {}
+unsafe impl<T> Sync for Data<T> {}
+
+pub(crate) type Fixnum = Data<i64>;
+
+impl<T> Data<T> {
+    #[inline(always)]
+    fn expand(self) -> i64 {
+        let data = self.data;
+        let whole = [
+            0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
+        ];
+        i64::from_le_bytes(whole) >> 8
+    }
+
+    #[inline(always)]
+    fn from_int(data: i64) -> Self {
+        let bytes = data.to_le_bytes();
+        Data {
+            data: [
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+            ],
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> Data<&'a T> {
+    fn from_ref(rf: &'a T) -> Self {
+        let ptr: *const T = rf;
+        Self::from_int(ptr as i64)
+    }
+
+    fn get(self) -> &'a T {
+        let bits = self.expand();
+        let ptr = bits as *const T;
+        unsafe { &*ptr }
+    }
+}
+
+impl<'a, T> Deref for Data<&'a T> {
+    type Target = T;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+impl<'a, T> AsRef<T> for Data<&'a T> {
+    #[inline(always)]
+    fn as_ref(&self) -> &T {
+        &*self
+    }
+}
+
+impl<'a, T> PartialEq for Data<&'a T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl Fixnum {
+    fn get(self) -> i64 {
+        self.expand()
+    }
+}
+
+impl Data<Symbol> {
+    fn get(self) -> Symbol {
+        unsafe { Symbol::from_raw(self.expand() as *const u8) }
+    }
+
+    fn from_symbol(x: Symbol) -> Self {
+        Data::from_int(x.as_ptr() as i64)
+    }
+}
+
+impl PartialEq for Fixnum {
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl PartialEq for Data<Symbol> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
 
 #[derive(Copy, Clone, PartialEq)]
-pub(crate) struct Object<'ob> {
-    data: InnerObject,
-    marker: PhantomData<&'ob ()>,
+pub(crate) enum Object<'ob> {
+    Int(Fixnum),
+    Float(Data<&'ob f64>),
+    Symbol(Data<Symbol>),
+    True,
+    Nil,
+    Cons(Data<&'ob Cons<'ob>>),
+    String(Data<&'ob String>),
+    LispFn(Data<&'ob LispFn<'ob>>),
+    SubrFn(Data<&'ob SubrFn>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -51,27 +153,11 @@ impl<'ob> Value<'ob> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[repr(u8)]
-pub(crate) enum Tag {
-    Symbol = 0,
-    Int,
-    Float,
-    True,
-    Nil,
-    Cons,
-    String,
-    LispFn,
-    SubrFn,
-}
-
-const TAG_SIZE: usize = size_of::<Tag>() * 8;
-
 pub(crate) trait IntoObject<'ob, T> {
     fn into_obj(self, arena: &'ob Arena) -> T;
 }
 
-impl<'ob, 'old: 'ob> IntoObject<'ob, Object<'ob>> for Object<'old> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self
     }
@@ -84,7 +170,7 @@ impl<'old, 'new> Object<'old> {
             Value::Cons(x) => x.clone_in(arena).into_obj(arena),
             Value::String(x) => x.clone().into_obj(arena),
             Value::Symbol(x) => x.into(),
-            Value::LispFn(x) => x.clone().into_obj(arena),
+            Value::LispFn(x) => x.clone_in(arena).into_obj(arena),
             Value::SubrFn(x) => (*x).into_obj(arena),
             Value::True => Object::TRUE,
             Value::Nil => Object::NIL,
@@ -94,22 +180,36 @@ impl<'old, 'new> Object<'old> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) const NIL: Self = Object {
-        data: InnerObject::from_tag(Tag::Nil),
-        marker: PhantomData,
-    };
-    pub(crate) const TRUE: Self = Object {
-        data: InnerObject::from_tag(Tag::True),
-        marker: PhantomData,
-    };
+    pub(crate) const NIL: Self = Object::Nil;
+    pub(crate) const TRUE: Self = Object::True;
 
     #[inline(always)]
-    pub(crate) fn val<'new: 'ob>(self) -> Value<'new> {
-        self.data.val()
+    pub(crate) fn val(self) -> Value<'ob> {
+        match self {
+            Object::Symbol(x) => Value::Symbol(x.get()),
+            Object::Float(x) => Value::Float(*x),
+            Object::String(x) => Value::String(x.get()),
+            Object::LispFn(x) => Value::LispFn(x.get()),
+            Object::SubrFn(x) => Value::SubrFn(x.get()),
+            Object::Nil => Value::Nil,
+            Object::True => Value::True,
+            Object::Cons(x) => Value::Cons(x.get()),
+            Object::Int(x) => Value::Int(x.get()),
+        }
     }
 
-    pub(crate) unsafe fn drop(self) {
-        self.data.drop();
+    pub(crate) const fn get_type(self) -> crate::error::Type {
+        use crate::error::Type;
+        match self {
+            Object::Symbol(_) => Type::Symbol,
+            Object::Float(_) => Type::Float,
+            Object::String(_) => Type::String,
+            Object::Nil => Type::Nil,
+            Object::True => Type::True,
+            Object::Cons(_) => Type::Cons,
+            Object::Int(_) => Type::Int,
+            Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
+        }
     }
 
     pub(crate) fn is_nil(self) -> bool {
@@ -126,110 +226,6 @@ impl<'ob> Object<'ob> {
             Value::Symbol(x) => Ok(x),
             x => anyhow::bail!(Error::Type(Type::Symbol, x.get_type())),
         }
-    }
-}
-
-impl<'ob> From<InnerObject> for Object<'ob> {
-    fn from(data: InnerObject) -> Self {
-        Self {
-            data,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl InnerObject {
-    const fn new(bits: i64) -> Self {
-        unsafe { Self(NonZero::new_unchecked(bits)) }
-    }
-
-    const fn get(self) -> i64 {
-        self.0.get()
-    }
-
-    const fn from_tag_bits(bits: i64, tag: Tag) -> Self {
-        let tagged = (bits << TAG_SIZE) | tag as i64;
-        Self::new(tagged)
-    }
-
-    fn from_ptr<T>(ptr: *const T, tag: Tag) -> Self {
-        Self::from_tag_bits(ptr as i64, tag)
-    }
-
-    fn from_type<T>(obj: T, tag: Tag, arena: &Arena) -> Self {
-        let ptr = arena.alloc(obj);
-        let obj = Self::from_ptr(ptr, tag);
-        arena.register(obj.into());
-        obj
-    }
-
-    const fn from_tag(tag: Tag) -> Self {
-        // cast to i64 to zero the high bits
-        Self::new(tag as i64)
-    }
-
-    fn tag(self) -> Tag {
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        unsafe {
-            std::mem::transmute::<u8, Tag>(self.get() as u8)
-        }
-    }
-
-    const fn get_ptr<T>(self) -> *const T {
-        (self.get() >> TAG_SIZE) as *const T
-    }
-
-    fn get_mut_ptr<T>(&mut self) -> *mut T {
-        (self.get() >> TAG_SIZE) as *mut T
-    }
-
-    #[inline(always)]
-    pub(crate) fn val<'ob>(self) -> Value<'ob> {
-        unsafe {
-            match self.tag() {
-                Tag::Symbol => Value::Symbol(Symbol::from_raw(self.get_ptr())),
-                Tag::Float => Value::Float(*self.get_ptr()),
-                Tag::String => Value::String(&*self.get_ptr()),
-                Tag::LispFn => Value::LispFn(&*self.get_ptr()),
-                Tag::SubrFn => Value::SubrFn(&*self.get_ptr()),
-                Tag::Nil => Value::Nil,
-                Tag::True => Value::True,
-                Tag::Cons => Value::Cons(&*self.get_ptr()),
-                Tag::Int => Value::Int(self.get() >> TAG_SIZE),
-            }
-        }
-    }
-
-    pub(crate) unsafe fn drop(mut self) {
-        match self.tag() {
-            Tag::Float => {
-                let x: *mut f64 = self.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::String => {
-                let x: *mut String = self.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::LispFn => {
-                let x: *mut LispFn = self.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::SubrFn => {
-                let x: *mut SubrFn = self.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::Cons => {
-                let x: *mut Cons = self.get_mut_ptr();
-                Box::from_raw(x);
-            }
-            Tag::Symbol | Tag::Nil | Tag::True | Tag::Int => {}
-        }
-    }
-}
-
-impl PartialEq for InnerObject {
-    fn eq(&self, rhs: &InnerObject) -> bool {
-        self.val() == rhs.val()
     }
 }
 
@@ -267,21 +263,11 @@ impl<'ob> fmt::Debug for Object<'ob> {
     }
 }
 
-impl fmt::Display for InnerObject {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.val(), f)
-    }
-}
-
-impl fmt::Debug for InnerObject {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::symbol::intern;
+    use std::mem::size_of;
 
     #[test]
     fn sizes() {
@@ -291,7 +277,6 @@ mod test {
             /* data */ size_of::<Object>() + /* discriminant */ size_of::<isize>(),
             size_of::<Value>()
         );
-        assert_eq!(1, size_of::<Tag>());
     }
 
     #[test]
