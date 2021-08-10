@@ -132,7 +132,6 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         }
     }
 
-    #[allow(clippy::panic_in_result_fn)]
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Value::Symbol(sym) = symbol.val() {
@@ -155,22 +154,18 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         Ok(())
     }
 
-    #[allow(clippy::panic_in_result_fn)]
     fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
-        let fn_idx = dbg!(arg_cnt as usize);
+        let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).val() {
             Value::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        println!("symbol ready");
         match sym.get_func(arena) {
             Some(func) => match func.val() {
                 FunctionValue::LispFn(func) => {
-                    println!("call lisp");
                     self.call_lisp(func, arg_cnt)?;
                 }
                 FunctionValue::SubrFn(func) => {
-                    println!("call subr");
                     let fill_args = func.args.num_of_fill_args(arg_cnt)?;
                     self.fill_args(fill_args);
                     let total_args = arg_cnt + fill_args;
@@ -210,10 +205,8 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<()> {
-        println!("inside call");
         let i = self.stack.from_end(args);
         let slice = self.stack.take_slice(args);
-        println!("slice = {:?}", slice);
         let result = func(slice, env, arena)?;
         self.stack[i] = result;
         self.stack.truncate(i + 1);
@@ -221,7 +214,6 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[allow(clippy::panic_in_result_fn)]
     pub(crate) fn execute(
         exp: &Expression<'ob>,
         env: &mut Environment<'ob>,

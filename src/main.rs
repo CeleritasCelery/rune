@@ -34,6 +34,7 @@
     clippy::inline_always,
     clippy::wildcard_enum_match_arm,
     clippy::unreachable,
+    clippy::panic_in_result_fn,
     clippy::integer_arithmetic,
     clippy::pattern_type_mismatch,
     clippy::indexing_slicing,
