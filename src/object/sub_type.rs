@@ -4,7 +4,7 @@ use crate::error::{Error, Type};
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use std::convert::TryFrom;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),

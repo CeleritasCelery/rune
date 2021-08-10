@@ -1,36 +1,20 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Function, IntoObject};
+use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
 use std::fmt;
 use std::mem::transmute;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
 
 #[derive(Debug)]
 struct InnerSymbol {
     name: &'static str,
-    func: FnCell,
+    func: AtomicCell<Option<Function<'static>>>,
 }
 
-#[derive(Debug)]
-struct FnCell(AtomicI64);
-
-impl FnCell {
-    fn new() -> Self {
-        // Miri won't let me use None for some reason, so we have to put the raw value instead
-        Self(AtomicI64::new(2))
-    }
-
-    fn set(&self, func: Option<Function>) {
-        let value = unsafe { transmute::<Option<Function>, i64>(func) };
-        self.0.store(value, Ordering::Release);
-    }
-
-    fn get<'a>(&self) -> Option<Function<'a>> {
-        let bits = self.0.load(Ordering::Acquire);
-        unsafe { transmute::<i64, Option<Function>>(bits) }
-    }
+unsafe fn coerce_lifetime<'a, 'b>(x: Function<'a>) -> Function<'b> {
+    transmute(x)
 }
 
 impl PartialEq for InnerSymbol {
@@ -43,7 +27,7 @@ impl InnerSymbol {
     fn new(name: &'static str) -> Self {
         InnerSymbol {
             name,
-            func: FnCell::new(),
+            func: AtomicCell::new(None),
         }
     }
 }
@@ -67,11 +51,11 @@ impl Symbol {
     }
 
     pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Function<'_>> {
-        self.0.func.get()
+        unsafe { self.0.func.load().map(|x| coerce_lifetime(x)) }
     }
 
-    fn set_func(self, func: Function) {
-        self.0.func.set(Some(func));
+    unsafe fn set_func(self, func: Function) {
+        self.0.func.store(Some(coerce_lifetime(func)));
     }
 }
 
@@ -183,11 +167,12 @@ impl SymbolMap {
     }
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: Function) {
-        println!("mark");
         let new_func = func.clone_in(&self.arena);
         #[cfg(miri)]
         new_func.set_as_miri_root();
-        symbol.set_func(new_func);
+        unsafe {
+            symbol.set_func(new_func);
+        }
     }
 }
 
@@ -202,7 +187,7 @@ macro_rules! create_symbolmap {
             #[cfg(miri)]
             func_obj.set_as_miri_root();
             let name: &'static str = func.name;
-            map.intern(name).set_func(func_obj);
+            unsafe {map.intern(name).set_func(func_obj);}
         })+;
         SymbolMap{ map, arena }
     })
@@ -250,12 +235,16 @@ mod test {
         assert_eq!("foo", sym.get_name());
         assert!(sym.get_func(arena).is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
-        sym.set_func(func.into_obj(arena));
+        unsafe {
+            sym.set_func(func.into_obj(arena));
+        }
         let cell = sym.get_func(arena).unwrap();
         let before = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
-        sym.set_func(func.into_obj(arena));
+        unsafe {
+            sym.set_func(func.into_obj(arena));
+        }
         let cell = sym.get_func(arena).unwrap();
         let after = cell.as_lisp_fn().expect("expected lispfn");
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
@@ -279,7 +268,9 @@ mod test {
         let inner = InnerSymbol::new("bar");
         let sym = Symbol(unsafe { fix_lifetime(&inner) });
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
-        sym.set_func(core_func.into_obj(arena));
+        unsafe {
+            sym.set_func(core_func.into_obj(arena));
+        }
 
         let subr = sym
             .get_func(arena)

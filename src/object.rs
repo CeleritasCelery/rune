@@ -23,9 +23,8 @@ pub(crate) trait Inner<T> {
 }
 
 unsafe impl<T> Send for Data<T> {}
-unsafe impl<T> Sync for Data<T> {}
 
-pub(crate) type Fixnum = Data<i64>;
+type Fixnum = Data<i64>;
 
 impl<T> Data<T> {
     #[inline(always)]
