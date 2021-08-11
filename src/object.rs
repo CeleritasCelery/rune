@@ -114,7 +114,7 @@ impl<'a, T> Deref for Data<&'a T> {
     type Target = T;
 
     #[inline(always)]
-    fn deref(&self) -> &Self::Target {
+    fn deref(&'_ self) -> &'a Self::Target {
         self.inner()
     }
 }

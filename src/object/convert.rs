@@ -67,7 +67,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(cons) => Ok(List::Cons(cons.get())),
+            Object::Cons(cons) => Ok(List::Cons(!cons)),
             Object::Nil => Ok(List::Nil),
             x => Err(Error::Type(Type::List, x.get_type())),
         }
@@ -78,7 +78,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(cons) => Ok(Some(List::Cons(cons.get()))),
+            Object::Cons(cons) => Ok(Some(List::Cons(!cons))),
             Object::Nil => Ok(None),
             x => Err(Error::Type(Type::List, x.get_type())),
         }

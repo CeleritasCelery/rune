@@ -46,7 +46,7 @@ impl<'ob> Function<'ob> {
     #[cfg(test)]
     pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self {
-            Function::LispFn(x) => Some(x.get()),
+            Function::LispFn(x) => Some(!x),
             Function::SubrFn(_) => None,
         }
     }
@@ -54,7 +54,7 @@ impl<'ob> Function<'ob> {
     #[cfg(test)]
     pub(crate) fn as_subr_fn(self) -> Option<&'ob SubrFn> {
         match self {
-            Function::SubrFn(x) => Some(x.get()),
+            Function::SubrFn(x) => Some(!x),
             Function::LispFn(_) => None,
         }
     }
@@ -153,7 +153,7 @@ impl<'ob> Number<'ob> {
     #[inline(always)]
     pub(crate) fn val(self) -> NumberValue {
         match self {
-            Number::Int(x) => NumberValue::Int(x.get()),
+            Number::Int(x) => NumberValue::Int(!x),
             Number::Float(x) => NumberValue::Float(*x),
         }
     }
