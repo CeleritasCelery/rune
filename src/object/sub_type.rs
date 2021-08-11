@@ -42,20 +42,7 @@ impl<'old, 'new> Function<'old> {
     }
 }
 
-pub(crate) enum FunctionValue<'ob> {
-    LispFn(&'ob LispFn<'ob>),
-    SubrFn(&'ob SubrFn),
-}
-
 impl<'ob> Function<'ob> {
-    #[inline(always)]
-    pub(crate) fn val(self) -> FunctionValue<'ob> {
-        match self {
-            Function::LispFn(x) => FunctionValue::LispFn(x.get()),
-            Function::SubrFn(x) => FunctionValue::SubrFn(x.get()),
-        }
-    }
-
     #[cfg(test)]
     pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
         match self {
@@ -101,23 +88,6 @@ pub(crate) enum LocalFunction<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Cons(Data<&'ob Cons<'ob>>),
-}
-
-pub(crate) enum LocalFunctionValue<'ob> {
-    LispFn(&'ob LispFn<'ob>),
-    SubrFn(&'ob SubrFn),
-    Cons(&'ob Cons<'ob>),
-}
-
-impl<'ob> LocalFunction<'ob> {
-    #[inline(always)]
-    pub(crate) fn val(self) -> LocalFunctionValue<'ob> {
-        match self {
-            LocalFunction::LispFn(x) => LocalFunctionValue::LispFn(x.get()),
-            LocalFunction::SubrFn(x) => LocalFunctionValue::SubrFn(x.get()),
-            LocalFunction::Cons(x) => LocalFunctionValue::Cons(x.get()),
-        }
-    }
 }
 
 impl<'ob> IntoObject<'ob, LocalFunction<'ob>> for LispFn<'ob> {

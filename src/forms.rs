@@ -3,7 +3,7 @@ use std::convert::TryInto;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::data::Environment;
-use crate::object::{IntoObject, LocalFunction, LocalFunctionValue, Object};
+use crate::object::{IntoObject, LocalFunction, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::defun;
@@ -20,8 +20,8 @@ pub(crate) fn defalias<'ob>(
             map.set_func(symbol, func);
         }
         Err(_) => {
-            if let LocalFunctionValue::Cons(cons) = definition.val() {
-                env.funcs.insert(symbol, cons);
+            if let LocalFunction::Cons(cons) = definition {
+                env.funcs.insert(symbol, !cons);
             } else {
                 unreachable!("local function was not function or cons");
             }

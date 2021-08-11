@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::compile::{compile, compile_lambda};
 use crate::data::Environment;
-use crate::object::{BuiltInFn, Expression, FunctionValue, LispFn, Object, Value};
+use crate::object::{BuiltInFn, Expression, Function, LispFn, Object};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
@@ -134,10 +134,10 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
-        if let Value::Symbol(sym) = symbol.val() {
-            let value = match env.vars.get(&sym) {
+        if let Object::Symbol(sym) = symbol {
+            let value = match env.vars.get(&!sym) {
                 Some(x) => x,
-                None => bail!(Error::VoidVariable(sym)),
+                None => bail!(Error::VoidVariable(!sym)),
             };
             self.stack.push(*value);
             Ok(())
@@ -156,16 +156,16 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
     fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
-        let sym = match self.stack.ref_at(fn_idx).val() {
-            Value::Symbol(x) => x,
+        let sym = match self.stack.ref_at(fn_idx) {
+            Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
         match sym.get_func(arena) {
-            Some(func) => match func.val() {
-                FunctionValue::LispFn(func) => {
-                    self.call_lisp(func, arg_cnt)?;
+            Some(func) => match func {
+                Function::LispFn(func) => {
+                    self.call_lisp(!func, arg_cnt)?;
                 }
-                FunctionValue::SubrFn(func) => {
+                Function::SubrFn(func) => {
                     let fill_args = func.args.num_of_fill_args(arg_cnt)?;
                     self.fill_args(fill_args);
                     let total_args = arg_cnt + fill_args;
@@ -177,8 +177,8 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     let func = compile_lambda(uncompiled_func.cdr(), arena)?;
                     let obj = arena.add(func);
                     crate::forms::defalias(sym, obj, env);
-                    if let crate::object::LocalFunctionValue::LispFn(func) = obj.val() {
-                        self.call_lisp(func, arg_cnt)?;
+                    if let crate::object::LocalFunction::LispFn(func) = obj {
+                        self.call_lisp(!func, arg_cnt)?;
                     } else {
                         unreachable!("type was no longer lisp fn");
                     }
