@@ -1,8 +1,6 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
-use crate::error::{Error, Type};
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
-use std::convert::TryFrom;
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
@@ -33,32 +31,7 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-impl<'old, 'new> Function<'old> {
-    pub(crate) fn clone_in(self, arena: &'new Arena) -> Function<'new> {
-        match self {
-            Function::LispFn(x) => (*x).clone_in(arena).into_obj(arena),
-            Function::SubrFn(x) => (*x).into_obj(arena),
-        }
-    }
-}
-
 impl<'ob> Function<'ob> {
-    #[cfg(test)]
-    pub(crate) fn as_lisp_fn(self) -> Option<&'ob LispFn<'ob>> {
-        match self {
-            Function::LispFn(x) => Some(!x),
-            Function::SubrFn(_) => None,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn as_subr_fn(self) -> Option<&'ob SubrFn> {
-        match self {
-            Function::SubrFn(x) => Some(!x),
-            Function::LispFn(_) => None,
-        }
-    }
-
     #[cfg(miri)]
     pub(crate) fn set_as_miri_root(self) {
         match self {
@@ -83,28 +56,69 @@ extern "Rust" {
     fn miri_static_root(ptr: *const u8);
 }
 
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum LocalFunction<'ob> {
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
-    Cons(Data<&'ob Cons<'ob>>),
+    Macro(Data<&'ob Cons<'ob>>),
 }
 
-impl<'ob> IntoObject<'ob, LocalFunction<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> LocalFunction<'ob> {
-        let rf = arena.alloc_lisp_fn(self);
-        LocalFunction::LispFn(Data::from_ref(rf))
+impl<'ob> IntoObject<'ob, Callable<'ob>> for LispFn<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Callable<'ob> {
+        let x: Function = self.into_obj(arena);
+        x.into()
     }
 }
 
-impl<'ob> TryFrom<LocalFunction<'ob>> for Function<'ob> {
-    type Error = Error;
+impl<'ob> IntoObject<'ob, Callable<'ob>> for SubrFn {
+    fn into_obj(self, arena: &'ob Arena) -> Callable<'ob> {
+        let x: Function = self.into_obj(arena);
+        x.into()
+    }
+}
 
-    fn try_from(value: LocalFunction<'ob>) -> Result<Self, Self::Error> {
-        match value {
-            LocalFunction::LispFn(x) => Ok(Function::LispFn(x)),
-            LocalFunction::SubrFn(x) => Ok(Function::SubrFn(x)),
-            LocalFunction::Cons(_) => Err(Error::Type(Type::Func, Type::Cons)),
+impl<'ob> From<Function<'ob>> for Callable<'ob> {
+    fn from(x: Function<'ob>) -> Self {
+        match x {
+            Function::LispFn(x) => Callable::LispFn(x),
+            Function::SubrFn(x) => Callable::SubrFn(x),
+        }
+    }
+}
+
+impl<'ob> From<Callable<'ob>> for Object<'ob> {
+    fn from(x: Callable<'ob>) -> Self {
+        match x {
+            Callable::LispFn(x) => Object::LispFn(x),
+            Callable::SubrFn(x) => Object::SubrFn(x),
+            Callable::Macro(x) => Object::Cons(x),
+        }
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for Callable<'ob> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        self.into()
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Callable<'ob>> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        match self {
+            Some(Callable::LispFn(x)) => Object::LispFn(x),
+            Some(Callable::SubrFn(x)) => Object::SubrFn(x),
+            Some(Callable::Macro(x)) => Object::Cons(x),
+            None => Object::Nil,
+        }
+    }
+}
+
+impl<'a> Callable<'a> {
+    pub(crate) fn clone_in(self, arena: &Arena) -> Object {
+        match self {
+            Callable::LispFn(x) => x.clone_in(arena).into_obj(arena),
+            Callable::SubrFn(x) => x.into_obj(arena),
+            Callable::Macro(x) => x.clone_in(arena).into_obj(arena),
         }
     }
 }

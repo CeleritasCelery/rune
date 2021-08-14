@@ -1,8 +1,9 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Function, IntoObject};
+use crate::object::{Callable, IntoObject, Object};
 use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
+use std::convert::TryInto;
 use std::fmt;
 use std::mem::transmute;
 use std::sync::Mutex;
@@ -10,10 +11,9 @@ use std::sync::Mutex;
 #[derive(Debug)]
 struct InnerSymbol {
     name: &'static str,
-    func: AtomicCell<Option<Function<'static>>>,
+    func: AtomicCell<Option<Callable<'static>>>,
 }
-
-unsafe fn coerce_lifetime<'a, 'b>(x: Function<'a>) -> Function<'b> {
+unsafe fn coerce_callable_lifetime<'a, 'b>(x: Callable<'a>) -> Callable<'b> {
     transmute(x)
 }
 
@@ -50,12 +50,16 @@ impl Symbol {
         self.0.name
     }
 
-    pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Function<'_>> {
-        unsafe { self.0.func.load().map(|x| coerce_lifetime(x)) }
+    pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Callable<'_>> {
+        unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
-    unsafe fn set_func(self, func: Function) {
-        self.0.func.store(Some(coerce_lifetime(func)));
+    unsafe fn set_func(self, func: Callable) {
+        self.0.func.store(Some(coerce_callable_lifetime(func)));
+    }
+
+    pub(crate) fn unbind_func(self) {
+        self.0.func.store(None);
     }
 }
 
@@ -166,8 +170,9 @@ impl SymbolMap {
         self.map.intern(name)
     }
 
-    pub(crate) fn set_func(&self, symbol: Symbol, func: Function) {
-        let new_func = func.clone_in(&self.arena);
+    pub(crate) fn set_func(&self, symbol: Symbol, func: Callable) {
+        let obj: Object = func.clone_in(&self.arena);
+        let new_func = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();
         unsafe {
@@ -183,7 +188,7 @@ macro_rules! create_symbolmap {
         let arena = Arena::new();
         $(for func in $arr.iter() {
             let func = func;
-            let func_obj: Function = func.into_obj(&arena);
+            let func_obj = func.into_obj(&arena);
             #[cfg(miri)]
             func_obj.set_as_miri_root();
             let name: &'static str = func.name;
@@ -239,14 +244,20 @@ mod test {
             sym.set_func(func.into_obj(arena));
         }
         let cell = sym.get_func(arena).unwrap();
-        let before = cell.as_lisp_fn().expect("expected lispfn");
+        let before = match cell {
+            Callable::LispFn(x) => !x,
+            _ => unreachable!("Type should be a lisp function"),
+        };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
         let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         unsafe {
             sym.set_func(func.into_obj(arena));
         }
         let cell = sym.get_func(arena).unwrap();
-        let after = cell.as_lisp_fn().expect("expected lispfn");
+        let after = match cell {
+            Callable::LispFn(x) => !x,
+            _ => unreachable!("Type should be a lisp function"),
+        };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
     }
@@ -272,11 +283,10 @@ mod test {
             sym.set_func(core_func.into_obj(arena));
         }
 
-        let subr = sym
-            .get_func(arena)
-            .unwrap()
-            .as_subr_fn()
-            .expect("expected subrfn");
-        assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
+        if let Some(Callable::SubrFn(subr)) = sym.get_func(arena) {
+            assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
+        } else {
+            unreachable!("Type should be subr");
+        }
     }
 }

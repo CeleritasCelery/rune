@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::compile::{compile, compile_lambda};
 use crate::data::Environment;
-use crate::object::{BuiltInFn, Expression, Function, LispFn, Object};
+use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
@@ -125,13 +125,13 @@ pub(crate) struct Routine<'brw, 'ob> {
     frame: CallFrame<'brw, 'ob>,
 }
 
-impl<'ob, 'brw> Routine<'brw, 'ob> {
-    fn fill_args(&mut self, fill_args: u16) {
-        for _ in 0..fill_args {
-            self.stack.push(Object::Nil);
-        }
+fn fill_extra_args(stack: &mut Vec<Object>, fill_args: u16) {
+    for _ in 0..fill_args {
+        stack.push(Object::Nil);
     }
+}
 
+impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Object::Symbol(sym) = symbol {
@@ -162,27 +162,28 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         };
         match sym.get_func(arena) {
             Some(func) => match func {
-                Function::LispFn(func) => {
+                Callable::LispFn(func) => {
                     self.call_lisp(!func, arg_cnt)?;
                 }
-                Function::SubrFn(func) => {
-                    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-                    self.fill_args(fill_args);
-                    let total_args = arg_cnt + fill_args;
-                    self.call_subr(func.subr, total_args as usize, env, arena)?;
+                Callable::SubrFn(func) => {
+                    self.call_subr(*func, arg_cnt, env, arena)?;
+                }
+                Callable::Macro(_) => {
+                    bail!("Attempt to call macro {} at runtime", sym.get_name())
                 }
             },
             None => match env.funcs.get(&sym) {
-                Some(uncompiled_func) => {
-                    let func = compile_lambda(uncompiled_func.cdr(), arena)?;
+                Some(Object::Cons(uncompiled_func)) => {
+                    let func = compile_lambda(uncompiled_func.cdr(), env, arena)?;
                     let obj = arena.add(func);
-                    crate::forms::defalias(sym, obj, env);
-                    if let crate::object::LocalFunction::LispFn(func) = obj {
+                    crate::data::defalias(sym, obj, env);
+                    if let Callable::LispFn(func) = obj.try_into()? {
                         self.call_lisp(!func, arg_cnt)?;
                     } else {
                         unreachable!("type was no longer lisp fn");
                     }
                 }
+                Some(other) => bail!("Type {:?} is not a valid function", other.get_type()),
                 None => bail!(Error::VoidFunction(sym)),
             },
         };
@@ -191,7 +192,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
     fn call_lisp(&mut self, func: &'brw LispFn<'ob>, arg_cnt: u16) -> Result<()> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-        self.fill_args(fill_args);
+        fill_extra_args(&mut self.stack, fill_args);
         let total_args = arg_cnt + fill_args;
         self.call_frames.push(self.frame.clone());
         self.frame = CallFrame::new(&func.body, self.stack.from_end(total_args as usize));
@@ -200,187 +201,186 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
     fn call_subr(
         &mut self,
-        func: BuiltInFn,
-        args: usize,
+        func: SubrFn,
+        arg_cnt: u16,
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<()> {
-        let i = self.stack.from_end(args);
-        let slice = self.stack.take_slice(args);
-        let result = func(slice, env, arena)?;
+        let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+        fill_extra_args(&mut self.stack, fill_args);
+        let total_args = (arg_cnt + fill_args) as usize;
+        let i = self.stack.from_end(total_args);
+        let slice = self.stack.take_slice(total_args);
+        let result = (func.subr)(slice, env, arena)?;
         self.stack[i] = result;
         self.stack.truncate(i + 1);
         Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn execute(
-        exp: &Expression<'ob>,
+    pub(crate) fn run(
+        &mut self,
         env: &mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         use OpCode as op;
-        let mut rout = Routine {
-            stack: vec![],
-            call_frames: vec![],
-            frame: CallFrame::new(exp, 0),
-        };
+        let init_stack_size = self.stack.len();
         loop {
-            println!("{:?}", rout.stack);
-            let op = rout.frame.ip.next().try_into()?;
+            println!("{:?}", self.stack);
+            let op = self.frame.ip.next().try_into()?;
             println!("op : {:?}", op);
             match op {
-                op::StackRef0 => rout.stack.push_ref(0),
-                op::StackRef1 => rout.stack.push_ref(1),
-                op::StackRef2 => rout.stack.push_ref(2),
-                op::StackRef3 => rout.stack.push_ref(3),
-                op::StackRef4 => rout.stack.push_ref(4),
-                op::StackRef5 => rout.stack.push_ref(5),
+                op::StackRef0 => self.stack.push_ref(0),
+                op::StackRef1 => self.stack.push_ref(1),
+                op::StackRef2 => self.stack.push_ref(2),
+                op::StackRef3 => self.stack.push_ref(3),
+                op::StackRef4 => self.stack.push_ref(4),
+                op::StackRef5 => self.stack.push_ref(5),
                 op::StackRefN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.stack.push_ref(idx.into());
+                    let idx = self.frame.ip.take_arg();
+                    self.stack.push_ref(idx.into());
                 }
                 op::StackRefN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.push_ref(idx.into());
+                    let idx = self.frame.ip.take_double_arg();
+                    self.stack.push_ref(idx.into());
                 }
-                op::StackSet0 => rout.stack.set_ref(0),
-                op::StackSet1 => rout.stack.set_ref(1),
-                op::StackSet2 => rout.stack.set_ref(2),
-                op::StackSet3 => rout.stack.set_ref(3),
-                op::StackSet4 => rout.stack.set_ref(4),
-                op::StackSet5 => rout.stack.set_ref(5),
+                op::StackSet0 => self.stack.set_ref(0),
+                op::StackSet1 => self.stack.set_ref(1),
+                op::StackSet2 => self.stack.set_ref(2),
+                op::StackSet3 => self.stack.set_ref(3),
+                op::StackSet4 => self.stack.set_ref(4),
+                op::StackSet5 => self.stack.set_ref(5),
                 op::StackSetN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.stack.set_ref(idx.into());
+                    let idx = self.frame.ip.take_arg();
+                    self.stack.set_ref(idx.into());
                 }
                 op::StackSetN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.set_ref(idx.into());
+                    let idx = self.frame.ip.take_double_arg();
+                    self.stack.set_ref(idx.into());
                 }
-                op::Constant0 => rout.stack.push(rout.frame.get_const(0)),
-                op::Constant1 => rout.stack.push(rout.frame.get_const(1)),
-                op::Constant2 => rout.stack.push(rout.frame.get_const(2)),
-                op::Constant3 => rout.stack.push(rout.frame.get_const(3)),
-                op::Constant4 => rout.stack.push(rout.frame.get_const(4)),
-                op::Constant5 => rout.stack.push(rout.frame.get_const(5)),
+                op::Constant0 => self.stack.push(self.frame.get_const(0)),
+                op::Constant1 => self.stack.push(self.frame.get_const(1)),
+                op::Constant2 => self.stack.push(self.frame.get_const(2)),
+                op::Constant3 => self.stack.push(self.frame.get_const(3)),
+                op::Constant4 => self.stack.push(self.frame.get_const(4)),
+                op::Constant5 => self.stack.push(self.frame.get_const(5)),
                 op::ConstantN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.stack.push(rout.frame.get_const(idx.into()));
+                    let idx = self.frame.ip.take_arg();
+                    self.stack.push(self.frame.get_const(idx.into()));
                 }
                 op::ConstantN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.stack.push(rout.frame.get_const(idx.into()));
+                    let idx = self.frame.ip.take_double_arg();
+                    self.stack.push(self.frame.get_const(idx.into()));
                 }
-                op::VarRef0 => rout.varref(0, env)?,
-                op::VarRef1 => rout.varref(1, env)?,
-                op::VarRef2 => rout.varref(2, env)?,
-                op::VarRef3 => rout.varref(3, env)?,
-                op::VarRef4 => rout.varref(4, env)?,
-                op::VarRef5 => rout.varref(5, env)?,
+                op::VarRef0 => self.varref(0, env)?,
+                op::VarRef1 => self.varref(1, env)?,
+                op::VarRef2 => self.varref(2, env)?,
+                op::VarRef3 => self.varref(3, env)?,
+                op::VarRef4 => self.varref(4, env)?,
+                op::VarRef5 => self.varref(5, env)?,
                 op::VarRefN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.varref(idx.into(), env)?;
+                    let idx = self.frame.ip.take_arg();
+                    self.varref(idx.into(), env)?;
                 }
                 op::VarRefN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.varref(idx.into(), env)?;
+                    let idx = self.frame.ip.take_double_arg();
+                    self.varref(idx.into(), env)?;
                 }
-                op::VarSet0 => rout.varset(0, env)?,
-                op::VarSet1 => rout.varset(1, env)?,
-                op::VarSet2 => rout.varset(2, env)?,
-                op::VarSet3 => rout.varset(3, env)?,
-                op::VarSet4 => rout.varset(4, env)?,
-                op::VarSet5 => rout.varset(5, env)?,
+                op::VarSet0 => self.varset(0, env)?,
+                op::VarSet1 => self.varset(1, env)?,
+                op::VarSet2 => self.varset(2, env)?,
+                op::VarSet3 => self.varset(3, env)?,
+                op::VarSet4 => self.varset(4, env)?,
+                op::VarSet5 => self.varset(5, env)?,
                 op::VarSetN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.varset(idx.into(), env)?;
+                    let idx = self.frame.ip.take_arg();
+                    self.varset(idx.into(), env)?;
                 }
                 op::VarSetN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.varset(idx.into(), env)?;
+                    let idx = self.frame.ip.take_double_arg();
+                    self.varset(idx.into(), env)?;
                 }
-                op::Call0 => rout.call(0, env, arena)?,
-                op::Call1 => rout.call(1, env, arena)?,
-                op::Call2 => rout.call(2, env, arena)?,
-                op::Call3 => rout.call(3, env, arena)?,
-                op::Call4 => rout.call(4, env, arena)?,
-                op::Call5 => rout.call(5, env, arena)?,
+                op::Call0 => self.call(0, env, arena)?,
+                op::Call1 => self.call(1, env, arena)?,
+                op::Call2 => self.call(2, env, arena)?,
+                op::Call3 => self.call(3, env, arena)?,
+                op::Call4 => self.call(4, env, arena)?,
+                op::Call5 => self.call(5, env, arena)?,
                 op::CallN => {
-                    let idx = rout.frame.ip.take_arg();
-                    rout.call(idx.into(), env, arena)?;
+                    let idx = self.frame.ip.take_arg();
+                    self.call(idx.into(), env, arena)?;
                 }
                 op::CallN2 => {
-                    let idx = rout.frame.ip.take_double_arg();
-                    rout.call(idx, env, arena)?;
+                    let idx = self.frame.ip.take_double_arg();
+                    self.call(idx, env, arena)?;
                 }
                 op::Discard => {
-                    rout.stack.pop();
+                    self.stack.pop();
                 }
                 op::DiscardN => {
-                    let num: usize = rout.frame.ip.take_arg().into();
-                    let cur_len = rout.stack.len();
-                    rout.stack.truncate(cur_len - num);
+                    let num: usize = self.frame.ip.take_arg().into();
+                    let cur_len = self.stack.len();
+                    self.stack.truncate(cur_len - num);
                 }
                 op::DiscardNKeepTOS => {
-                    let tos = rout
+                    let tos = self
                         .stack
                         .pop()
                         .expect("stack was empty when discard called");
-                    let num: usize = rout.frame.ip.take_arg().into();
-                    let cur_len = rout.stack.len();
-                    rout.stack.truncate(cur_len - num);
-                    rout.stack.push(tos);
+                    let num: usize = self.frame.ip.take_arg().into();
+                    let cur_len = self.stack.len();
+                    self.stack.truncate(cur_len - num);
+                    self.stack.push(tos);
                 }
                 op::Duplicate => {
-                    let value = *rout.stack.last().unwrap();
-                    rout.stack.push(value);
+                    let value = *self.stack.last().unwrap();
+                    self.stack.push(value);
                 }
                 op::Jump => {
-                    let offset = rout.frame.ip.take_double_arg();
-                    rout.frame.ip.jump(offset as i16);
+                    let offset = self.frame.ip.take_double_arg();
+                    self.frame.ip.jump(offset as i16);
                 }
                 op::JumpNil => {
-                    let cond = rout.stack.pop().unwrap();
-                    let offset = rout.frame.ip.take_double_arg();
+                    let cond = self.stack.pop().unwrap();
+                    let offset = self.frame.ip.take_double_arg();
                     if cond == Object::Nil {
-                        rout.frame.ip.jump(offset as i16);
+                        self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNotNil => {
-                    let cond = rout.stack.pop().unwrap();
-                    let offset = rout.frame.ip.take_double_arg();
+                    let cond = self.stack.pop().unwrap();
+                    let offset = self.frame.ip.take_double_arg();
                     if cond != Object::Nil {
-                        rout.frame.ip.jump(offset as i16);
+                        self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
-                    let cond = rout.stack.last().unwrap();
-                    let offset = rout.frame.ip.take_double_arg();
+                    let cond = self.stack.last().unwrap();
+                    let offset = self.frame.ip.take_double_arg();
                     if *cond == Object::Nil {
-                        rout.frame.ip.jump(offset as i16);
+                        self.frame.ip.jump(offset as i16);
                     } else {
-                        rout.stack.pop();
+                        self.stack.pop();
                     }
                 }
                 op::JumpNotNilElsePop => {
-                    let cond = rout.stack.last().unwrap();
-                    let offset = rout.frame.ip.take_double_arg();
+                    let cond = self.stack.last().unwrap();
+                    let offset = self.frame.ip.take_double_arg();
                     if *cond == Object::Nil {
-                        rout.stack.pop();
+                        self.stack.pop();
                     } else {
-                        rout.frame.ip.jump(offset as i16);
+                        self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::Ret => {
-                    if rout.call_frames.is_empty() {
-                        assert!(rout.stack.len() == 1);
-                        return Ok(rout.stack.pop().unwrap());
+                    if self.call_frames.is_empty() {
+                        assert_eq!(self.stack.len(), init_stack_size + 1);
+                        return Ok(self.stack.pop().unwrap());
                     }
-                    let var = rout.stack.pop().unwrap();
-                    rout.stack[rout.frame.start] = var;
-                    rout.stack.truncate(rout.frame.start + 1);
-                    rout.frame = rout.call_frames.pop().unwrap();
+                    let var = self.stack.pop().unwrap();
+                    self.stack[self.frame.start] = var;
+                    self.stack.truncate(self.frame.start + 1);
+                    self.frame = self.call_frames.pop().unwrap();
                 }
                 op @ op::Unknown => {
                     panic!("Unimplemented opcode: {:?}", op);
@@ -388,6 +388,48 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             }
         }
     }
+
+    pub(crate) fn execute(
+        exp: &Expression<'ob>,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Object<'ob>> {
+        let mut rout = Routine {
+            stack: vec![],
+            call_frames: vec![],
+            frame: CallFrame::new(exp, 0),
+        };
+        rout.run(env, arena)
+    }
+}
+
+pub(crate) fn call_lisp<'brw, 'ob>(
+    func: &'brw LispFn<'ob>,
+    mut args: Vec<Object<'ob>>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    let arg_cnt = args.len() as u16;
+    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+    fill_extra_args(&mut args, fill_args);
+    let mut rout = Routine {
+        stack: args,
+        call_frames: vec![],
+        frame: CallFrame::new(&func.body, 0),
+    };
+    rout.run(env, arena)
+}
+
+pub(crate) fn call_subr<'ob>(
+    func: SubrFn,
+    mut args: Vec<Object<'ob>>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    let arg_cnt = args.len() as u16;
+    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+    fill_extra_args(&mut args, fill_args);
+    (func.subr)(&args, env, arena)
 }
 
 #[defun]
@@ -396,7 +438,7 @@ pub(crate) fn eval<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
-    let func = compile(form, arena)?;
+    let func = compile(form, env, arena)?;
     Routine::execute(&func, env, arena)
 }
 
@@ -415,11 +457,23 @@ mod test {
             let arena = &Arena::new();
             let env = &mut Environment::default();
             let obj = Reader::read($sexp, arena).unwrap().0;
-            let exp = compile(obj, arena).unwrap();
+            let exp = compile(obj, env, arena).unwrap();
             println!("codes: {:?}", exp.op_codes);
             println!("const: {:?}", exp.constants);
             let val = Routine::execute(&exp, env, arena).unwrap();
             assert_eq!(val, $expect.into_obj(arena));
+        }};
+    }
+
+    macro_rules! test_eval_serial {
+        ($sexp:expr, $expect:expr, $env:expr, $arena:expr) => {{
+            println!("Test String: {}", $sexp);
+            let obj = Reader::read($sexp, $arena).unwrap().0;
+            let exp = compile(obj, $env, $arena).unwrap();
+            println!("codes: {:?}", exp.op_codes);
+            println!("const: {:?}", exp.constants);
+            let val = Routine::execute(&exp, $env, $arena).unwrap();
+            assert_eq!(val, $expect.into_obj($arena));
         }};
     }
 
@@ -481,10 +535,47 @@ mod test {
     fn call() {
         test_eval!(
             "(progn
-(defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
-(defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
-(middle 7 3 13))",
+                 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
+                 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
+                 (middle 7 3 13))",
             224
+        );
+    }
+
+    #[test]
+    fn test_macro() {
+        let arena = &Arena::new();
+        let env = &mut Environment::default();
+        test_eval_serial!(
+            "(defalias 'test_macro_1 (cons 'macro #'(lambda (x y) (list '+ x 3))))",
+            crate::symbol::intern("test_macro_1"),
+            env,
+            arena
+        );
+        test_eval_serial!("(test_macro_1 5 1)", 8, env, arena);
+        test_eval_serial!("(+ (test_macro_1 2 4) (test_macro_1 4 9))", 12, env, arena);
+    }
+
+    #[test]
+    fn recursive_macro() {
+        let arena = &Arena::new();
+        let env = &mut Environment::default();
+        test_eval_serial!(
+            "(progn (defalias 'recursive_macro_1 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_2 x y)))))
+                    (defalias 'recursive_macro_2 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_3 x y)))))
+                    (defalias 'recursive_macro_3 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_1 x y))))))",
+            crate::symbol::intern("recursive_macro_3"),
+            env,
+            arena
+        );
+
+        let obj = Reader::read("(recursive_macro_1 1 5)", arena).unwrap().0;
+        assert_eq!(
+            compile(obj, env, arena)
+                .unwrap_err()
+                .downcast::<crate::compile::CompError>()
+                .unwrap(),
+            crate::compile::CompError::RecursiveMacro
         );
     }
 
@@ -493,9 +584,9 @@ mod test {
         E: std::error::Error + PartialEq + Send + Sync + 'static,
     {
         let arena = &Arena::new();
-        let obj = Reader::read(sexp, arena).unwrap().0;
-        let exp = compile(obj, arena).unwrap();
         let env = &mut Environment::default();
+        let obj = Reader::read(sexp, arena).unwrap().0;
+        let exp = compile(obj, env, arena).unwrap();
         let val = Routine::execute(&exp, env, arena);
         assert_eq!(val.err().unwrap().downcast::<E>().unwrap(), (error));
     }

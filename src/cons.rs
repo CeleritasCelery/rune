@@ -3,12 +3,47 @@ use crate::object::{List, Object, Value};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
+use std::convert::TryFrom;
 use std::fmt::{self, Display, Write};
+use std::ops::Deref;
 
 #[derive(PartialEq, Debug, Clone)]
 pub(crate) struct Cons<'ob> {
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub(crate) struct MutCons<'ob>(&'ob Cons<'ob>);
+
+impl<'ob> MutCons<'ob> {
+    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
+        self.0.car.set(new_car);
+    }
+
+    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
+        self.0.cdr.set(new_cdr);
+    }
+}
+
+impl<'ob> Deref for MutCons<'ob> {
+    type Target = Cons<'ob>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+use crate::error::{Error, Type};
+
+impl<'ob> TryFrom<Object<'ob>> for MutCons<'ob> {
+    type Error = Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Cons(x) => Ok(MutCons(!x)),
+            x => Err(Error::Type(Type::Cons, x.get_type())),
+        }
+    }
 }
 
 impl<'old, 'new> Cons<'old> {
@@ -31,14 +66,6 @@ impl<'ob> Cons<'ob> {
 
     pub(crate) fn cdr(&self) -> Object<'ob> {
         self.cdr.get()
-    }
-
-    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
-        self.car.set(new_car);
-    }
-
-    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
-        self.cdr.set(new_cdr);
     }
 }
 
@@ -121,13 +148,13 @@ fn cdr(list: List) -> Object {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
+fn setcar<'ob>(cell: MutCons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
+fn setcdr<'ob>(cell: MutCons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
@@ -137,7 +164,7 @@ const fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>) -> Cons<'ob> {
     Cons::new(car, cdr)
 }
 
-defsubr!(car, cdr, setcar, setcdr, cons);
+defsubr!(car, cdr, cons, setcar, setcdr);
 
 #[macro_export]
 macro_rules! cons {
@@ -184,11 +211,11 @@ mod test {
         let x: Object = cons.into_obj(arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
-        let cons1 = as_cons(x).expect("expected cons");
+        let cons1 = MutCons(as_cons(x).expect("expected cons"));
 
         let start_str = "start".to_owned();
         assert_eq!(Value::String(&start_str), cons1.car().val());
-        (*cons1).set_car("start2".into_obj(arena));
+        cons1.set_car("start2".into_obj(arena));
         let start2_str = "start2".to_owned();
         assert_eq!(Value::String(&start2_str), cons1.car().val());
 

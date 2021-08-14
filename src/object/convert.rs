@@ -1,9 +1,9 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{Function, IntoObject, List, LocalFunction, Number, Object};
+use crate::object::{Callable, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 use super::Data;
 
@@ -18,13 +18,29 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for LocalFunction<'ob> {
+impl<'ob> TryFrom<&'ob Cons<'ob>> for Callable<'ob> {
+    type Error = Error;
+    fn try_from(cons: &'ob Cons<'ob>) -> Result<Self, Self::Error> {
+        match cons.car() {
+            Object::Symbol(sym) if (!sym).get_name() == "macro" => {
+                if matches!(cons.cdr(), Object::LispFn(_)) {
+                    Ok(Callable::Macro(Data::from_ref(cons)))
+                } else {
+                    Err(Error::Type(Type::Func, Type::Cons))
+                }
+            }
+            _ => Err(Error::Type(Type::Func, Type::Cons)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::LispFn(x) => Ok(LocalFunction::LispFn(x)),
-            Object::SubrFn(x) => Ok(LocalFunction::SubrFn(x)),
-            Object::Cons(x) => Ok(LocalFunction::Cons(x)),
+            Object::LispFn(x) => Ok(Callable::LispFn(x)),
+            Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
+            Object::Cons(cons) => (!cons).try_into(),
             x => Err(Error::Type(Type::Func, x.get_type())),
         }
     }

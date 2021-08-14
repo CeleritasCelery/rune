@@ -1,14 +1,45 @@
-use crate::cons::Cons;
+use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{List, Object};
+use crate::object::{Callable, List, Object};
 use crate::symbol::Symbol;
+use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::defun;
+use std::convert::TryInto;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Environment<'ob> {
     pub(crate) vars: HashMap<Symbol, Object<'ob>>,
-    pub(crate) funcs: HashMap<Symbol, &'ob Cons<'ob>>,
+    pub(crate) funcs: HashMap<Symbol, Object<'ob>>,
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
+    pub(crate) macro_callstack: Vec<Symbol>,
+}
+
+pub(crate) fn set_global_function<'ob>(
+    symbol: Symbol,
+    func: Callable<'ob>,
+    env: &mut Environment<'ob>,
+) {
+    let map = INTERNED_SYMBOLS.lock().unwrap();
+    env.funcs.remove(&symbol);
+    map.set_func(symbol, func);
+}
+
+#[defun]
+pub(crate) fn defalias<'ob>(
+    symbol: Symbol,
+    definition: Object<'ob>,
+    env: &mut Environment<'ob>,
+) -> Symbol {
+    match definition.try_into() {
+        Ok(func) => {
+            set_global_function(symbol, func, env);
+        }
+        Err(_) => {
+            symbol.unbind_func();
+            env.funcs.insert(symbol, definition);
+        }
+    };
+    symbol
 }
 
 #[defun]
@@ -53,6 +84,21 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
 }
 
 #[defun]
+pub(crate) fn symbol_function<'ob>(
+    symbol: Symbol,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Object<'ob> {
+    if let Some(func) = symbol.get_func(arena) {
+        println!("global function");
+        func.into()
+    } else {
+        println!("local function");
+        *env.funcs.get(&symbol).unwrap_or(&Object::Nil)
+    }
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -69,4 +115,4 @@ pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symb
     feature
 }
 
-defsubr!(set, put, get, defvar, provide);
+defsubr!(set, put, get, defvar, defalias, provide, symbol_function);

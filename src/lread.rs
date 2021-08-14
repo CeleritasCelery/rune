@@ -26,7 +26,7 @@ pub(crate) fn read_from_string<'ob>(
         println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
         println!("compiling");
         // this will go out of scope
-        let exp = compile(obj, arena)?;
+        let exp = compile(obj, env, arena)?;
         println!("running");
         println!("codes: {:?}", exp.op_codes);
         println!("const: {:?}", exp.constants);
@@ -60,7 +60,7 @@ mod test {
         println!("{:?}", arena);
 
         let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
-        let func = compile(obj, arena).unwrap();
+        let func = compile(obj, env, arena).unwrap();
         let val = Routine::execute(&func, env, arena).unwrap();
         assert_eq!(val, 4.5.into_obj(arena));
     }

@@ -85,12 +85,10 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl() {
+fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
-    let arena = &Arena::new();
-    let env = &mut Environment::default();
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -109,7 +107,7 @@ fn repl() {
                 continue;
             }
         };
-        let func = match compile(obj, arena) {
+        let func = match compile(obj, env, arena) {
             Ok(obj) => obj,
             Err(e) => {
                 println!("Error: {}", e);
@@ -125,9 +123,7 @@ fn repl() {
     }
 }
 
-fn load() {
-    let arena = &Arena::new();
-    let env = &mut Environment::default();
+fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     let buffer = String::from(r#"(load "/home/foco/remac/lisp/byte-run.el")"#);
     match read_from_string(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
@@ -136,9 +132,15 @@ fn load() {
 }
 
 fn main() {
+    let arena = &Arena::new();
+    let env = &mut Environment::default();
     match env::args().nth(1) {
-        Some(arg) if arg == "--repl" => repl(),
+        Some(arg) if arg == "--repl" => repl(env, arena),
+        Some(arg) if arg == "--load" => load(env, arena),
         Some(arg) => panic!("unknown arg: {}", arg),
-        None => load(),
+        None => {
+            load(env, arena);
+            repl(env, arena);
+        }
     }
 }

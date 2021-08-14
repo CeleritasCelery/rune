@@ -1,34 +1,7 @@
-use std::convert::TryInto;
-
 use crate::arena::Arena;
 use crate::cons::Cons;
-use crate::data::Environment;
-use crate::object::{IntoObject, LocalFunction, Object};
-use crate::symbol::Symbol;
-use crate::symbol::INTERNED_SYMBOLS;
+use crate::object::{IntoObject, Object};
 use fn_macros::defun;
-
-#[defun]
-pub(crate) fn defalias<'ob>(
-    symbol: Symbol,
-    definition: LocalFunction<'ob>,
-    env: &mut Environment<'ob>,
-) -> Symbol {
-    match definition.try_into() {
-        Ok(func) => {
-            let map = INTERNED_SYMBOLS.lock().unwrap();
-            map.set_func(symbol, func);
-        }
-        Err(_) => {
-            if let LocalFunction::Cons(cons) = definition {
-                env.funcs.insert(symbol, !cons);
-            } else {
-                unreachable!("local function was not function or cons");
-            }
-        }
-    };
-    symbol
-}
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
@@ -47,4 +20,4 @@ pub(crate) fn progn<'ob>(forms: &[Object<'ob>]) -> Object<'ob> {
     }
 }
 
-defsubr!(defalias, progn, list);
+defsubr!(progn, list);

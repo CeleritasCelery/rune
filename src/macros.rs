@@ -11,6 +11,7 @@ macro_rules! count {
 
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
+        #[allow(unused_qualifications)]
         pub(crate) const DEFSUBR: [crate::object::SubrFn; count!($($x)+)] = [$(paste::paste!{[<S $x>]}),+];
     );
 }

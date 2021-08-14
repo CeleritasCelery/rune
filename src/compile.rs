@@ -1,6 +1,8 @@
 use crate::arena::Arena;
 use crate::cons::{Cons, ConsIter};
+use crate::data::Environment;
 use crate::error::{Error, Type};
+use crate::eval;
 use crate::object::{Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::Symbol;
@@ -10,10 +12,11 @@ use std::convert::TryInto;
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
-enum CompError {
+pub(crate) enum CompError {
     ConstOverflow,
     LetValueCount(usize),
     StackSizeOverflow,
+    RecursiveMacro,
 }
 
 impl Display for CompError {
@@ -22,6 +25,7 @@ impl Display for CompError {
             CompError::ConstOverflow => write!(f, "Too many constants declared in fuction"),
             CompError::LetValueCount(_) => write!(f, "Let forms can only have 1 value"),
             CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
+            CompError::RecursiveMacro => write!(f, "Recursive macros are not supported"),
         }
     }
 }
@@ -170,14 +174,15 @@ fn into_iter(obj: Object) -> Result<ConsIter> {
 }
 
 #[derive(Debug, PartialEq)]
-struct Compiler<'ob> {
+struct Compiler<'ob, 'brw> {
     codes: CodeVec,
     constants: ConstVec<'ob>,
     vars: Vec<Option<Symbol>>,
+    env: &'brw mut Environment<'ob>,
 }
 
-impl<'ob> From<Compiler<'ob>> for Expression<'ob> {
-    fn from(exp: Compiler<'ob>) -> Self {
+impl<'ob> From<Compiler<'ob, '_>> for Expression<'ob> {
+    fn from(exp: Compiler<'ob, '_>) -> Self {
         Self {
             constants: exp.constants.consts,
             op_codes: exp.codes,
@@ -185,7 +190,16 @@ impl<'ob> From<Compiler<'ob>> for Expression<'ob> {
     }
 }
 
-impl<'ob> Compiler<'ob> {
+impl<'ob, 'brw> Compiler<'ob, 'brw> {
+    fn new(env: &'brw mut Environment<'ob>, vars: Vec<Option<Symbol>>) -> Compiler<'ob, 'brw> {
+        Self {
+            codes: CodeVec::default(),
+            constants: ConstVec::new(),
+            env,
+            vars,
+        }
+    }
+
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
@@ -356,17 +370,74 @@ impl<'ob> Compiler<'ob> {
         Ok(())
     }
 
-    fn compile_funcall(&mut self, cons: &Cons<'ob>, arena: &'ob Arena) -> Result<()> {
-        self.const_ref(cons.car(), None)?;
-        let prev_len = self.vars.len();
-        let args = into_iter(cons.cdr())?;
-        let mut num_args = 0;
-        for arg in args {
-            self.compile_form(arg?, arena)?;
-            num_args += 1;
+    fn compile_funcall(
+        &mut self,
+        name: Symbol,
+        args: Object<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<()> {
+        let callable = crate::data::symbol_function(name, &mut self.env, arena);
+        if let Object::Cons(cons) = callable {
+            match cons.car().val() {
+                Value::Symbol(sym) if sym.get_name() == "macro" => {
+                    let mut arg_list = vec![];
+                    for arg in into_iter(args)? {
+                        arg_list.push(arg?);
+                    }
+                    let form = match cons.cdr().val() {
+                        Value::LispFn(lisp_macro) => {
+                            eval::call_lisp(lisp_macro, arg_list, self.env, arena)?
+                        }
+                        Value::SubrFn(lisp_macro) => {
+                            eval::call_subr(*lisp_macro, arg_list, self.env, arena)?
+                        }
+                        Value::Cons(_) => {
+                            if self.env.macro_callstack.iter().any(|&x| x == name) {
+                                bail!(CompError::RecursiveMacro);
+                            }
+                            self.env.macro_callstack.push(name);
+                            let lisp_macro = if let Value::Cons(cons) = cons.cdr().val() {
+                                match cons.car().val() {
+                                    Value::Symbol(sym) if sym.get_name() == "lambda" => {
+                                        compile_lambda(cons.cdr(), self.env, arena)?
+                                    }
+                                    _ => bail!(Error::Type(Type::Symbol, cons.car().get_type())),
+                                }
+                            } else {
+                                bail!(Error::Type(Type::Cons, cons.cdr().get_type()));
+                            };
+                            self.env.macro_callstack.pop();
+                            let func = arena.add(lisp_macro);
+                            let def = arena.add(cons!(sym, func; arena));
+                            crate::data::set_global_function(
+                                sym,
+                                def.try_into().expect("Type should be a valid macro"),
+                                self.env,
+                            );
+                            if let Object::LispFn(func) = func {
+                                eval::call_lisp(!func, arg_list, self.env, arena)?
+                            } else {
+                                unreachable!("Compiled function was not lisp fn");
+                            }
+                        }
+                        x => bail!("Invalid macro type: {:?}", x.get_type()),
+                    };
+                    self.compile_form(form, arena)?;
+                }
+                _ => {}
+            }
+        } else {
+            self.const_ref(name.into(), None)?;
+            let prev_len = self.vars.len();
+            let args = into_iter(args)?;
+            let mut num_args = 0;
+            for arg in args {
+                self.compile_form(arg?, arena)?;
+                num_args += 1;
+            }
+            self.codes.emit_call(num_args as u16);
+            self.vars.truncate(prev_len);
         }
-        self.codes.emit_call(num_args as u16);
-        self.vars.truncate(prev_len);
         Ok(())
     }
 
@@ -455,7 +526,7 @@ impl<'ob> Compiler<'ob> {
     }
 
     fn compile_lambda_def(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
-        let lambda = compile_lambda(obj, arena)?;
+        let lambda = compile_lambda(obj, self.env, arena)?;
         self.add_const_lambda(lambda, arena)
     }
 
@@ -580,7 +651,7 @@ impl<'ob> Compiler<'ob> {
             "cond" => self.compile_cond(cons.cdr(), arena),
             "let" => self.compile_let(cons.cdr(), arena),
             "if" => self.compile_if(cons.cdr(), arena),
-            _ => self.compile_funcall(cons, arena),
+            _ => self.compile_funcall(sym, cons.cdr(), arena),
         }
     }
 
@@ -597,6 +668,8 @@ impl<'ob> Compiler<'ob> {
     }
 
     fn compile_form(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+        // println!("state = {:?}", self.vars);
+        // println!("constants = {:?}", self.constants);
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons, arena),
             Value::Symbol(sym) => self.variable_reference(sym),
@@ -607,13 +680,10 @@ impl<'ob> Compiler<'ob> {
     fn compile_func_body(
         obj: ConsIter<'_, 'ob>,
         vars: Vec<Option<Symbol>>,
+        env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<Self> {
-        let mut exp = Self {
-            codes: CodeVec::default(),
-            constants: ConstVec::new(),
-            vars,
-        };
+        let mut exp = Compiler::new(env, vars);
         exp.implicit_progn(obj, arena)?;
         exp.codes.push_op(OpCode::Ret);
         exp.vars.truncate(0);
@@ -651,7 +721,11 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     Ok((required, optional, rest, args))
 }
 
-pub(crate) fn compile_lambda<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<LispFn<'ob>> {
+pub(crate) fn compile_lambda<'ob>(
+    obj: Object<'ob>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<LispFn<'ob>> {
     let mut iter = into_iter(obj)?;
 
     let (required, optional, rest, args) = match iter.next() {
@@ -664,15 +738,19 @@ pub(crate) fn compile_lambda<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result
         Ok(LispFn::default())
     } else {
         let func_args = args.into_iter().map(Some).collect();
-        let exp: Expression<'ob> = Compiler::compile_func_body(iter, func_args, arena)?.into();
+        let exp: Expression<'ob> = Compiler::compile_func_body(iter, func_args, env, arena)?.into();
         let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
         Ok(func)
     }
 }
 
-pub(crate) fn compile<'ob>(obj: Object<'ob>, arena: &'ob Arena) -> Result<Expression<'ob>> {
+pub(crate) fn compile<'ob>(
+    obj: Object<'ob>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Expression<'ob>> {
     let cons = Cons::new(obj, Object::Nil);
-    Compiler::compile_func_body(cons.into_iter(), vec![], arena).map(|x| x.into())
+    Compiler::compile_func_body(cons.into_iter(), vec![], env, arena).map(|x| x.into())
 }
 
 #[cfg(test)]
@@ -690,9 +768,14 @@ mod test {
         E: std::error::Error + PartialEq + Send + Sync + 'static,
     {
         let arena = &Arena::new();
+        let env = &mut Environment::default();
         let obj = Reader::read(compare, arena).unwrap().0;
         assert_eq!(
-            compile(obj, arena).err().unwrap().downcast::<E>().unwrap(),
+            compile(obj, env, arena)
+                .err()
+                .unwrap()
+                .downcast::<E>()
+                .unwrap(),
             expect
         );
     }
@@ -700,13 +783,14 @@ mod test {
     macro_rules! check_compiler {
         ($compare:expr, [$($op:expr),+], [$($const:expr),+]) => ({
             let comp_arena = &Arena::new();
+            let comp_env = &mut Environment::default();
             println!("Test String: {}", $compare);
             let obj = Reader::read($compare, comp_arena).unwrap().0;
             let expect = Expression {
                 op_codes: vec_into![$($op),+].into(),
                 constants: vec_into_object![$($const),+; comp_arena],
             };
-            assert_eq!(compile(obj, comp_arena).unwrap(), expect);
+            assert_eq!(compile(obj, comp_env, comp_arena).unwrap(), expect);
         })
     }
 
@@ -974,16 +1058,18 @@ mod test {
     fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
         println!("Test String: {}", sexp);
         let obj = Reader::read(sexp, comp_arena).unwrap().0;
+        let env = &mut Environment::default();
         let lambda = match obj {
             Object::Cons(cons) => cons.cdr(),
             x => panic!("expected cons, found {}", x),
         };
-        assert_eq!(compile_lambda(lambda, comp_arena).unwrap(), func);
+        assert_eq!(compile_lambda(lambda, env, comp_arena).unwrap(), func);
     }
 
     #[test]
     fn lambda() {
         let arena = &Arena::new();
+        let env = &mut Environment::default();
         check_lambda("(lambda)", LispFn::default(), arena);
         check_lambda("(lambda ())", LispFn::default(), arena);
         check_lambda("(lambda () nil)", LispFn::default(), arena);
@@ -1032,7 +1118,7 @@ mod test {
         );
 
         let obj = Reader::read("(lambda (x &rest y z) y)", arena).unwrap().0;
-        assert!(compile(obj, arena)
+        assert!(compile(obj, env, arena)
             .err()
             .unwrap()
             .downcast::<&str>()
