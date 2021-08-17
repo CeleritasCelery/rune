@@ -299,16 +299,17 @@ fn vector_into_list<'ob>(
     }
 }
 
-pub(crate) struct Reader<'a> {
+pub(crate) struct Reader<'a, 'ob> {
     tokens: Tokenizer<'a>,
+    arena: &'ob Arena,
 }
 
-impl<'a, 'ob> Reader<'a> {
-    fn read_cdr(&mut self, delim: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
+impl<'a, 'ob> Reader<'a, 'ob> {
+    fn read_cdr(&mut self, delim: usize) -> Result<Object<'ob>, Error> {
         match self.tokens.next() {
             Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
             Some(sexp) => match self.tokens.next() {
-                Some(Token::CloseParen(_)) => self.read_sexp(sexp, arena),
+                Some(Token::CloseParen(_)) => self.read_sexp(sexp),
                 Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
                 None => Err(Error::MissingCloseParen(delim)),
             },
@@ -316,47 +317,42 @@ impl<'a, 'ob> Reader<'a> {
         }
     }
 
-    fn read_list(&mut self, delim: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
+    fn read_list(&mut self, delim: usize) -> Result<Object<'ob>, Error> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
-                Token::CloseParen(_) => return Ok(vector_into_list(objects, None, arena)),
+                Token::CloseParen(_) => return Ok(vector_into_list(objects, None, self.arena)),
                 Token::Dot(_) => {
-                    let cdr = self.read_cdr(delim, arena)?;
-                    return Ok(vector_into_list(objects, Some(cdr), arena));
+                    let cdr = self.read_cdr(delim)?;
+                    return Ok(vector_into_list(objects, Some(cdr), self.arena));
                 }
-                tok => objects.push(self.read_sexp(tok, arena)?),
+                tok => objects.push(self.read_sexp(tok)?),
             }
         }
         Err(Error::MissingCloseParen(delim))
     }
 
-    fn quote_item(
-        &mut self,
-        pos: usize,
-        symbol_name: &str,
-        arena: &'ob Arena,
-    ) -> Result<Object<'ob>, Error> {
+    fn quote_item(&mut self, pos: usize, symbol_name: &str) -> Result<Object<'ob>, Error> {
         let obj = match self.tokens.next() {
-            Some(token) => self.read_sexp(token, arena)?,
+            Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        let quoted = list!(intern(symbol_name), obj; arena);
-        Ok(quoted.into_obj(arena))
+        let quoted = list!(intern(symbol_name), obj; self.arena);
+        Ok(quoted.into_obj(self.arena))
     }
 
-    fn read_sharp(&mut self, pos: usize, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
+    fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>, Error> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
-                    let list = self.read_list(i, arena)?;
-                    let quoted = list!(intern("function"), list; arena);
-                    Ok(quoted.into_obj(arena))
+                    let list = self.read_list(i)?;
+                    let quoted = list!(intern("function"), list; self.arena);
+                    Ok(quoted.into_obj(self.arena))
                 }
                 Some(token) => {
-                    let obj = self.read_sexp(token, arena)?;
-                    let quoted = list!(intern("function"), obj; arena);
-                    Ok(quoted.into_obj(arena))
+                    let obj = self.read_sexp(token)?;
+                    let quoted = list!(intern("function"), obj; self.arena);
+                    Ok(quoted.into_obj(self.arena))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
@@ -365,18 +361,18 @@ impl<'a, 'ob> Reader<'a> {
         }
     }
 
-    fn read_sexp(&mut self, token: Token<'a>, arena: &'ob Arena) -> Result<Object<'ob>, Error> {
+    fn read_sexp(&mut self, token: Token<'a>) -> Result<Object<'ob>, Error> {
         match token {
-            Token::OpenParen(i) => self.read_list(i, arena),
+            Token::OpenParen(i) => self.read_list(i),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
-            Token::Quote(i) => self.quote_item(i, "quote", arena),
-            Token::Unquote(i) => self.quote_item(i, ",", arena),
-            Token::Splice(i) => self.quote_item(i, ",@", arena),
-            Token::Backquote(i) => self.quote_item(i, "`", arena),
-            Token::Sharp(i) => self.read_sharp(i, arena),
+            Token::Quote(i) => self.quote_item(i, "quote"),
+            Token::Unquote(i) => self.quote_item(i, ","),
+            Token::Splice(i) => self.quote_item(i, ",@"),
+            Token::Backquote(i) => self.quote_item(i, "`"),
+            Token::Sharp(i) => self.read_sharp(i),
             Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
-            Token::Ident(x) => Ok(parse_symbol(x, arena)),
-            Token::String(x) => Ok(unescape_string(x).into_obj(arena)),
+            Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
+            Token::String(x) => Ok(unescape_string(x).into_obj(self.arena)),
             Token::Error(e) => Err(e.into()),
         }
     }
@@ -384,11 +380,10 @@ impl<'a, 'ob> Reader<'a> {
     pub(crate) fn read(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize), Error> {
         let mut reader = Reader {
             tokens: Tokenizer::new(slice),
+            arena,
         };
         match reader.tokens.next() {
-            Some(t) => reader
-                .read_sexp(t, arena)
-                .map(|x| (x, reader.tokens.cur_pos())),
+            Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
             None => Err(Error::EmptyStream),
         }
     }

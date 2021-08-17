@@ -179,6 +179,7 @@ struct Compiler<'ob, 'brw> {
     constants: ConstVec<'ob>,
     vars: Vec<Option<Symbol>>,
     env: &'brw mut Environment<'ob>,
+    arena: &'ob Arena,
 }
 
 impl<'ob> From<Compiler<'ob, '_>> for Expression<'ob> {
@@ -191,12 +192,17 @@ impl<'ob> From<Compiler<'ob, '_>> for Expression<'ob> {
 }
 
 impl<'ob, 'brw> Compiler<'ob, 'brw> {
-    fn new(env: &'brw mut Environment<'ob>, vars: Vec<Option<Symbol>>) -> Compiler<'ob, 'brw> {
+    fn new(
+        vars: Vec<Option<Symbol>>,
+        env: &'brw mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Compiler<'ob, 'brw> {
         Self {
             codes: CodeVec::default(),
             constants: ConstVec::new(),
             env,
             vars,
+            arena,
         }
     }
 
@@ -207,9 +213,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn add_const_lambda(&mut self, func: LispFn<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn add_const_lambda(&mut self, func: LispFn<'ob>) -> Result<()> {
         self.vars.push(None);
-        let idx = self.constants.insert_lambda(func, arena)?;
+        let idx = self.constants.insert_lambda(func, self.arena)?;
         self.codes.emit_const(idx);
         Ok(())
     }
@@ -260,15 +266,15 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_let(&mut self, form: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_let(&mut self, form: Object<'ob>) -> Result<()> {
         let mut iter = into_iter(form)?;
         let num_binding_forms = match iter.next() {
             // (let x ...)
-            Some(x) => self.let_bind(x?, arena)?,
+            Some(x) => self.let_bind(x?)?,
             // (let)
             None => bail!(Error::ArgCount(1, 0)),
         };
-        self.implicit_progn(iter, arena)?;
+        self.implicit_progn(iter)?;
         // Remove let bindings from the stack
         if num_binding_forms > 0 {
             self.codes
@@ -280,30 +286,30 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn progn(&mut self, forms: Object<'ob>, arena: &'ob Arena) -> Result<()> {
-        self.implicit_progn(into_iter(forms)?, arena)
+    fn progn(&mut self, forms: Object<'ob>) -> Result<()> {
+        self.implicit_progn(into_iter(forms)?)
     }
 
-    fn implicit_progn(&mut self, mut forms: ConsIter<'_, 'ob>, arena: &'ob Arena) -> Result<()> {
+    fn implicit_progn(&mut self, mut forms: ConsIter<'_, 'ob>) -> Result<()> {
         if let Some(form) = forms.next() {
-            self.compile_form(form?, arena)?;
+            self.compile_form(form?)?;
         } else {
             return self.const_ref(Object::Nil, None);
         }
         for form in forms {
             self.discard();
-            self.compile_form(form?, arena)?;
+            self.compile_form(form?)?;
         }
         Ok(())
     }
 
-    fn let_bind_call(&mut self, cons: &'ob Cons<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn let_bind_call(&mut self, cons: &'ob Cons<'ob>) -> Result<()> {
         let var: Symbol = cons.car().try_into()?;
         let mut iter = into_iter(cons.cdr())?;
         match iter.next() {
             // (let ((x y)))
             Some(value) => {
-                self.compile_form(value?, arena)?;
+                self.compile_form(value?)?;
                 let last = self.vars.last_mut();
                 let tos = last.expect("stack empty after compile form");
                 *tos = Some(var);
@@ -321,13 +327,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.const_ref(Object::Nil, Some(sym))
     }
 
-    fn let_bind(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<usize> {
+    fn let_bind(&mut self, obj: Object<'ob>) -> Result<usize> {
         let bindings = into_iter(obj)?;
         let mut len = 0;
         for binding in bindings {
             match binding?.val() {
                 // (let ((x y)))
-                Value::Cons(cons) => self.let_bind_call(cons, arena)?,
+                Value::Cons(cons) => self.let_bind_call(cons)?,
                 // (let (x))
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
                 x => bail!(Error::Type(Type::Cons, x.get_type())),
@@ -337,7 +343,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(len)
     }
 
-    fn setq(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn setq(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(obj)?;
         let mut args_processed = 0;
         // (setq)
@@ -348,7 +354,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             // value
             match forms.next() {
                 // (setq x y)
-                Some(val) => self.compile_form(val?, arena)?,
+                Some(val) => self.compile_form(val?)?,
                 // (setq x)
                 None => bail!(Error::ArgCount(args_processed + 1, args_processed)),
             }
@@ -375,8 +381,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         name: Symbol,
         args: Object<'ob>,
         body: Object<'ob>,
-        arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
+        let arena = self.arena;
         let mut arg_list = vec![];
         for arg in into_iter(args)? {
             arg_list.push(arg?);
@@ -415,18 +421,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_funcall(
-        &mut self,
-        name: Symbol,
-        args: Object<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<()> {
-        let callable = crate::data::symbol_function(name, &mut self.env, arena);
+    fn compile_funcall(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
+        let callable = crate::data::symbol_function(name, &mut self.env, self.arena);
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
                 Value::Symbol(sym) if sym.get_name() == "macro" => {
-                    let form = self.compile_macro_call(name, args, cons.cdr(), arena)?;
-                    self.compile_form(form, arena)?;
+                    let form = self.compile_macro_call(name, args, cons.cdr())?;
+                    self.compile_form(form)?;
                 }
                 _ => {}
             }
@@ -436,7 +437,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             let args = into_iter(args)?;
             let mut num_args = 0;
             for arg in args {
-                self.compile_form(arg?, arena)?;
+                self.compile_form(arg?)?;
                 num_args += 1;
             }
             self.codes.emit_call(num_args as u16);
@@ -483,7 +484,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_if(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_if(&mut self, obj: Object<'ob>) -> Result<()> {
         // let list = into_list(obj)?;
         let mut forms = into_iter(obj)?;
         let len = forms.clone().count();
@@ -492,49 +493,49 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             0 | 1 => Err(Error::ArgCount(2, len as u16).into()),
             // (if x y)
             2 => {
-                self.compile_form(forms.next().unwrap()?, arena)?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNilElsePop);
-                self.compile_form(forms.next().unwrap()?, arena)?;
+                self.compile_form(forms.next().unwrap()?)?;
                 self.set_jump_target(target);
                 Ok(())
             }
             // (if x y z ...)
             _ => {
-                self.compile_form(forms.next().unwrap()?, arena)?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let else_nil_target = self.jump(OpCode::JumpNil);
                 // if branch
-                self.compile_form(forms.next().unwrap()?, arena)?;
+                self.compile_form(forms.next().unwrap()?)?;
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
                 self.set_jump_target(else_nil_target);
-                self.implicit_progn(forms, arena)?;
+                self.implicit_progn(forms)?;
                 self.set_jump_target(jump_to_end_target);
                 Ok(())
             }
         }
     }
 
-    fn compile_loop(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_loop(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(obj)?;
         let top = self.codes.len();
         match forms.next() {
-            Some(form) => self.compile_form(form?, arena)?,
+            Some(form) => self.compile_form(form?)?,
             None => bail!(Error::ArgCount(1, 0)),
         }
         let loop_exit = self.jump(OpCode::JumpNilElsePop);
-        self.implicit_progn(forms, arena)?;
+        self.implicit_progn(forms)?;
         self.discard();
         self.jump_back(OpCode::Jump, top);
         self.set_jump_target(loop_exit);
         Ok(())
     }
 
-    fn compile_lambda_def(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
-        let lambda = compile_lambda(obj, self.env, arena)?;
-        self.add_const_lambda(lambda, arena)
+    fn compile_lambda_def(&mut self, obj: Object<'ob>) -> Result<()> {
+        let lambda = compile_lambda(obj, self.env, self.arena)?;
+        self.add_const_lambda(lambda)
     }
 
-    fn compile_defvar(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_defvar(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut iter = into_iter(obj)?;
 
         match iter.next() {
@@ -544,7 +545,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 // TODO: compile this into a lambda like Emacs does
                 match iter.next() {
                     // (defvar x y)
-                    Some(value) => self.compile_form(value?, arena)?,
+                    Some(value) => self.compile_form(value?)?,
                     // (defvar x)
                     None => self.const_ref(Object::Nil, None)?,
                 };
@@ -562,7 +563,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         &mut self,
         clause: Object<'ob>,
         jump_targets: &mut Vec<(usize, OpCode)>,
-        arena: &'ob Arena,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
         let len = cond.clone().count();
@@ -571,15 +571,15 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             0 => {}
             // (cond (x))
             1 => {
-                self.compile_form(cond.next().unwrap()?, arena)?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
                 jump_targets.push(target);
             }
             // (cond (x y ...))
             _ => {
-                self.compile_form(cond.next().unwrap()?, arena)?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let skip_target = self.jump(OpCode::JumpNil);
-                self.implicit_progn(cond, arena)?;
+                self.implicit_progn(cond)?;
                 self.vars.pop();
                 let taken_target = self.jump(OpCode::Jump);
                 self.set_jump_target(skip_target);
@@ -593,7 +593,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         &mut self,
         clause: Object<'ob>,
         jump_targets: &mut Vec<(usize, OpCode)>,
-        arena: &'ob Arena,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
         let len = cond.clone().count();
@@ -604,23 +603,23 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             }
             // (cond (x))
             1 => {
-                self.compile_form(cond.next().unwrap()?, arena)?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
                 self.const_ref(Object::Nil, None)?;
                 jump_targets.push(target);
             }
             // (cond (x y ...))
             _ => {
-                self.compile_form(cond.next().unwrap()?, arena)?;
+                self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNilElsePop);
-                self.implicit_progn(cond, arena)?;
+                self.implicit_progn(cond)?;
                 jump_targets.push(target);
             }
         }
         Ok(())
     }
 
-    fn compile_cond(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_cond(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut clauses = into_iter(obj)?;
         // (cond)
         if clauses.is_empty() {
@@ -630,9 +629,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let final_return_targets = &mut Vec::new();
         while let Some(clause) = clauses.next() {
             if clauses.is_empty() {
-                self.compile_last_cond_clause(clause?, final_return_targets, arena)?;
+                self.compile_last_cond_clause(clause?, final_return_targets)?;
             } else {
-                self.compile_cond_clause(clause?, final_return_targets, arena)?;
+                self.compile_cond_clause(clause?, final_return_targets)?;
             }
         }
 
@@ -642,20 +641,21 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn dispatch_special_form(&mut self, cons: &Cons<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
         println!("car = {}", cons.car());
-        let sym: Symbol = cons.car().try_into()?;
-        match sym.get_name() {
-            "lambda" => self.compile_lambda_def(cons.cdr(), arena),
-            "while" => self.compile_loop(cons.cdr(), arena),
-            "quote" | "function" => self.quote(cons.cdr()),
-            "progn" => self.progn(cons.cdr(), arena),
-            "setq" => self.setq(cons.cdr(), arena),
-            "defvar" => self.compile_defvar(cons.cdr(), arena),
-            "cond" => self.compile_cond(cons.cdr(), arena),
-            "let" => self.compile_let(cons.cdr(), arena),
-            "if" => self.compile_if(cons.cdr(), arena),
-            _ => self.compile_funcall(sym, cons.cdr(), arena),
+        let name: Symbol = cons.car().try_into()?;
+        let forms = cons.cdr();
+        match name.get_name() {
+            "lambda" => self.compile_lambda_def(forms),
+            "while" => self.compile_loop(forms),
+            "quote" | "function" => self.quote(forms),
+            "progn" => self.progn(forms),
+            "setq" => self.setq(forms),
+            "defvar" => self.compile_defvar(forms),
+            "cond" => self.compile_cond(forms),
+            "let" => self.compile_let(forms),
+            "if" => self.compile_if(forms),
+            _ => self.compile_funcall(name, forms),
         }
     }
 
@@ -671,11 +671,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_form(&mut self, obj: Object<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn compile_form(&mut self, obj: Object<'ob>) -> Result<()> {
         // println!("state = {:?}", self.vars);
         // println!("constants = {:?}", self.constants);
         match obj.val() {
-            Value::Cons(cons) => self.dispatch_special_form(cons, arena),
+            Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.const_ref(obj, None),
         }
@@ -687,8 +687,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<Self> {
-        let mut exp = Compiler::new(env, vars);
-        exp.implicit_progn(obj, arena)?;
+        let mut exp = Compiler::new(vars, env, arena);
+        exp.implicit_progn(obj)?;
         exp.codes.push_op(OpCode::Ret);
         exp.vars.truncate(0);
         Ok(exp)
