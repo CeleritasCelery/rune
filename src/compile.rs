@@ -5,7 +5,7 @@ use crate::error::{Error, Type};
 use crate::eval;
 use crate::object::{Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
-use crate::symbol::Symbol;
+use crate::symbol::{intern, Symbol};
 use anyhow::{bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
@@ -370,6 +370,51 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    fn compile_macro_call(
+        &mut self,
+        name: Symbol,
+        args: Object<'ob>,
+        body: Object<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Object<'ob>> {
+        let mut arg_list = vec![];
+        for arg in into_iter(args)? {
+            arg_list.push(arg?);
+        }
+        match body.val() {
+            Value::LispFn(lisp_macro) => eval::call_lisp(lisp_macro, arg_list, self.env, arena),
+            Value::SubrFn(lisp_macro) => eval::call_subr(*lisp_macro, arg_list, self.env, arena),
+            Value::Cons(macro_form) => {
+                if self.env.macro_callstack.iter().any(|&x| x == name) {
+                    bail!(CompError::RecursiveMacro);
+                }
+                self.env.macro_callstack.push(name);
+
+                let lisp_macro = {
+                    let func_ident = macro_form.car().as_symbol()?;
+                    match func_ident.get_name() {
+                        "lambda" => compile_lambda(macro_form.cdr(), self.env, arena)?,
+                        bad_function => bail!("Invalid Function : {}", bad_function),
+                    }
+                };
+                self.env.macro_callstack.pop();
+                let func = arena.add(lisp_macro);
+                let def = arena.add(cons!(intern("macro"), func; arena));
+                crate::data::set_global_function(
+                    name,
+                    def.try_into().expect("Type should be a valid macro"),
+                    self.env,
+                );
+                if let Object::LispFn(func) = func {
+                    eval::call_lisp(!func, arg_list, self.env, arena)
+                } else {
+                    unreachable!("Compiled function was not lisp fn");
+                }
+            }
+            x => bail!("Invalid macro type: {:?}", x.get_type()),
+        }
+    }
+
     fn compile_funcall(
         &mut self,
         name: Symbol,
@@ -380,48 +425,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
                 Value::Symbol(sym) if sym.get_name() == "macro" => {
-                    let mut arg_list = vec![];
-                    for arg in into_iter(args)? {
-                        arg_list.push(arg?);
-                    }
-                    let form = match cons.cdr().val() {
-                        Value::LispFn(lisp_macro) => {
-                            eval::call_lisp(lisp_macro, arg_list, self.env, arena)?
-                        }
-                        Value::SubrFn(lisp_macro) => {
-                            eval::call_subr(*lisp_macro, arg_list, self.env, arena)?
-                        }
-                        Value::Cons(_) => {
-                            if self.env.macro_callstack.iter().any(|&x| x == name) {
-                                bail!(CompError::RecursiveMacro);
-                            }
-                            self.env.macro_callstack.push(name);
-                            let lisp_macro = if let Value::Cons(cons) = cons.cdr().val() {
-                                match cons.car().val() {
-                                    Value::Symbol(sym) if sym.get_name() == "lambda" => {
-                                        compile_lambda(cons.cdr(), self.env, arena)?
-                                    }
-                                    _ => bail!(Error::Type(Type::Symbol, cons.car().get_type())),
-                                }
-                            } else {
-                                bail!(Error::Type(Type::Cons, cons.cdr().get_type()));
-                            };
-                            self.env.macro_callstack.pop();
-                            let func = arena.add(lisp_macro);
-                            let def = arena.add(cons!(sym, func; arena));
-                            crate::data::set_global_function(
-                                sym,
-                                def.try_into().expect("Type should be a valid macro"),
-                                self.env,
-                            );
-                            if let Object::LispFn(func) = func {
-                                eval::call_lisp(!func, arg_list, self.env, arena)?
-                            } else {
-                                unreachable!("Compiled function was not lisp fn");
-                            }
-                        }
-                        x => bail!("Invalid macro type: {:?}", x.get_type()),
-                    };
+                    let form = self.compile_macro_call(name, args, cons.cdr(), arena)?;
                     self.compile_form(form, arena)?;
                 }
                 _ => {}
