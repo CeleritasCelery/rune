@@ -536,8 +536,8 @@ mod test {
     fn call() {
         test_eval!(
             "(progn
-                 (defalias 'bottom (lambda (x y z) (+ x z) (* x (+ y z))))
-                 (defalias 'middle (lambda (x y z) (+ (bottom x z y) (bottom x z y))))
+                 (defalias 'bottom #'(lambda (x y z) (+ x z) (* x (+ y z))))
+                 (defalias 'middle #'(lambda (x y z) (+ (bottom x z y) (bottom x z y))))
                  (middle 7 3 13))",
             224
         );

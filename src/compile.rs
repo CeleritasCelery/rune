@@ -434,29 +434,36 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_funcall(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
+    fn compile_func_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
+        println!("compiling function");
+        self.const_ref(name.into(), None)?;
+        let prev_len = self.vars.len();
+        let args = into_iter(args)?;
+        let mut num_args = 0;
+        for arg in args {
+            self.compile_form(arg?)?;
+            num_args += 1;
+        }
+        self.codes.emit_call(num_args as u16);
+        self.vars.truncate(prev_len);
+        Ok(())
+    }
+
+    fn compile_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
+        println!("compiling call : {}", name.get_name());
         let callable = crate::data::symbol_function(name, &mut self.env, self.arena);
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
                 Value::Symbol(sym) if sym.get_name() == "macro" => {
+                    println!("compiling macro");
                     let form = self.compile_macro_call(name, args, cons.cdr())?;
-                    self.compile_form(form)?;
+                    self.compile_form(form)
                 }
-                _ => {}
+                _ => self.compile_func_call(name, args),
             }
         } else {
-            self.const_ref(name.into(), None)?;
-            let prev_len = self.vars.len();
-            let args = into_iter(args)?;
-            let mut num_args = 0;
-            for arg in args {
-                self.compile_form(arg?)?;
-                num_args += 1;
-            }
-            self.codes.emit_call(num_args as u16);
-            self.vars.truncate(prev_len);
+            self.compile_func_call(name, args)
         }
-        Ok(())
     }
 
     fn jump(&mut self, jump_code: OpCode) -> (usize, OpCode) {
@@ -664,12 +671,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             "quote" | "function" => self.quote(forms),
             "progn" => self.progn(forms),
             "setq" => self.setq(forms),
-            "defvar" => self.compile_defvar(forms),
+            "defvar" | "defconst" => self.compile_defvar(forms),
             "cond" => self.compile_cond(forms),
             "let" => self.compile_let(forms, true),
             "let*" => self.compile_let(forms, false),
             "if" => self.compile_if(forms),
-            _ => self.compile_funcall(name, forms),
+            _ => self.compile_call(name, forms),
         }
     }
 
