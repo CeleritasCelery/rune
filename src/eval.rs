@@ -224,6 +224,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         use OpCode as op;
+        #[cfg(debug_assertions)]
         let init_stack_size = self.stack.len();
         loop {
             println!("{:?}", self.stack);
@@ -374,7 +375,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 }
                 op::Ret => {
                     if self.call_frames.is_empty() {
-                        assert_eq!(self.stack.len(), init_stack_size + 1);
+                        debug_assert_eq!(self.stack.len(), init_stack_size + 1);
                         return Ok(self.stack.pop().unwrap());
                     }
                     let var = self.stack.pop().unwrap();

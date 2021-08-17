@@ -41,7 +41,7 @@ impl<'ob> TryFrom<Object<'ob>> for MutCons<'ob> {
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
             Object::Cons(x) => Ok(MutCons(!x)),
-            x => Err(Error::Type(Type::Cons, x.get_type())),
+            _ => Err(Error::from_object(Type::Cons, obj)),
         }
     }
 }

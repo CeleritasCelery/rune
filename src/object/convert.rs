@@ -13,7 +13,7 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            x => Err(Error::Type(Type::Func, x.get_type())),
+            x => Err(Error::from_object(Type::Func, x)),
         }
     }
 }
@@ -26,10 +26,10 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for Callable<'ob> {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
                     Ok(Callable::Macro(Data::from_ref(cons)))
                 } else {
-                    Err(Error::Type(Type::Func, Type::Cons))
+                    Err(Error::from_object(Type::Func, cons.car()))
                 }
             }
-            _ => Err(Error::Type(Type::Func, Type::Cons)),
+            _ => Err(Error::from_object(Type::Func, cons.car())),
         }
     }
 }
@@ -41,7 +41,7 @@ impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
             Object::LispFn(x) => Ok(Callable::LispFn(x)),
             Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
             Object::Cons(cons) => (!cons).try_into(),
-            x => Err(Error::Type(Type::Func, x.get_type())),
+            _ => Err(Error::from_object(Type::Func, obj)),
         }
     }
 }
@@ -52,7 +52,7 @@ impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
         match obj {
             Object::Int(x) => Ok(Number::Int(x)),
             Object::Float(x) => Ok(Number::Float(x)),
-            x => Err(Error::Type(Type::Number, x.get_type())),
+            _ => Err(Error::from_object(Type::Number, obj)),
         }
     }
 }
@@ -64,7 +64,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
             Object::Int(x) => Ok(Some(Number::Int(x))),
             Object::Float(x) => Ok(Some(Number::Float(x))),
             Object::Nil => Ok(None),
-            x => Err(Error::Type(Type::Number, x.get_type())),
+            _ => Err(Error::from_object(Type::Number, obj)),
         }
     }
 }
@@ -85,7 +85,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
         match obj {
             Object::Cons(cons) => Ok(List::Cons(!cons)),
             Object::Nil => Ok(List::Nil),
-            x => Err(Error::Type(Type::List, x.get_type())),
+            _ => Err(Error::from_object(Type::List, obj)),
         }
     }
 }
@@ -96,7 +96,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
         match obj {
             Object::Cons(cons) => Ok(Some(List::Cons(!cons))),
             Object::Nil => Ok(None),
-            x => Err(Error::Type(Type::List, x.get_type())),
+            _ => Err(Error::from_object(Type::List, obj)),
         }
     }
 }

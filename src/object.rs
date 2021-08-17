@@ -250,7 +250,7 @@ impl<'ob> Object<'ob> {
         use crate::error::{Error, Type};
         match self {
             Object::Symbol(x) => Ok(x.get()),
-            x => anyhow::bail!(Error::Type(Type::Symbol, x.get_type())),
+            _ => anyhow::bail!(Error::from_object(Type::Symbol, self)),
         }
     }
 }

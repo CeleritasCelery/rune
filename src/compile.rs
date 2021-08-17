@@ -169,7 +169,7 @@ fn into_iter(obj: Object) -> Result<ConsIter> {
     match obj.val() {
         Value::Cons(cons) => Ok(cons.into_iter()),
         Value::Nil => Ok(ConsIter::empty()),
-        x => Err(Error::Type(Type::List, x.get_type()).into()),
+        _ => Err(Error::from_object(Type::List, obj).into()),
     }
 }
 
@@ -266,11 +266,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn compile_let(&mut self, form: Object<'ob>) -> Result<()> {
+    fn compile_let(&mut self, form: Object<'ob>, parallel: bool) -> Result<()> {
         let mut iter = into_iter(form)?;
         let num_binding_forms = match iter.next() {
             // (let x ...)
-            Some(x) => self.let_bind(x?)?,
+            Some(x) => self.let_bind(x?, parallel)?,
             // (let)
             None => bail!(Error::ArgCount(1, 0)),
         };
@@ -303,42 +303,55 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn let_bind_call(&mut self, cons: &'ob Cons<'ob>) -> Result<()> {
-        let var: Symbol = cons.car().try_into()?;
+    fn let_bind_call(&mut self, cons: &'ob Cons<'ob>) -> Result<Symbol> {
         let mut iter = into_iter(cons.cdr())?;
         match iter.next() {
             // (let ((x y)))
-            Some(value) => {
-                self.compile_form(value?)?;
-                let last = self.vars.last_mut();
-                let tos = last.expect("stack empty after compile form");
-                *tos = Some(var);
-            }
+            Some(value) => self.compile_form(value?)?,
             // (let ((x)))
-            None => self.const_ref(Object::Nil, Some(var))?,
+            None => self.const_ref(Object::Nil, None)?,
         };
         let rest = iter.count();
         // (let ((x y z ..)))
         ensure!(rest == 0, CompError::LetValueCount(rest + 1));
-        Ok(())
+        Ok(cons.car().try_into()?)
     }
 
     fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
         self.const_ref(Object::Nil, Some(sym))
     }
 
-    fn let_bind(&mut self, obj: Object<'ob>) -> Result<usize> {
+    fn let_bind(&mut self, obj: Object<'ob>, parallel: bool) -> Result<usize> {
         let bindings = into_iter(obj)?;
         let mut len = 0;
+        let mut let_bindings = Vec::new();
         for binding in bindings {
-            match binding?.val() {
+            let binding = binding?;
+            match binding.val() {
                 // (let ((x y)))
-                Value::Cons(cons) => self.let_bind_call(cons)?,
+                Value::Cons(cons) => {
+                    let let_bound_var = self.let_bind_call(cons)?;
+                    if parallel {
+                        let_bindings.push(Some(let_bound_var));
+                    } else {
+                        let last = self.vars.last_mut();
+                        let tos = last.expect("stack empty after compile form");
+                        *tos = Some(let_bound_var);
+                    }
+                }
                 // (let (x))
                 Value::Symbol(sym) => self.let_bind_nil(sym)?,
-                x => bail!(Error::Type(Type::Cons, x.get_type())),
+                _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
+        }
+        if parallel {
+            let num_unbound_vars = let_bindings.len();
+            let stack_size = self.vars.len();
+            debug_assert!(stack_size >= num_unbound_vars);
+            let binding_start = stack_size - num_unbound_vars;
+            self.vars.drain(binding_start..);
+            self.vars.append(&mut let_bindings);
         }
         Ok(len)
     }
@@ -653,7 +666,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             "setq" => self.setq(forms),
             "defvar" => self.compile_defvar(forms),
             "cond" => self.compile_cond(forms),
-            "let" => self.compile_let(forms),
+            "let" => self.compile_let(forms, true),
+            "let*" => self.compile_let(forms, false),
             "if" => self.compile_if(forms),
             _ => self.compile_funcall(name, forms),
         }
@@ -884,7 +898,7 @@ mod test {
             [Constant0, Duplicate, VarSet1, Ret],
             [false, intern("foo")]
         );
-        check_error("(let (foo 1))", Error::Type(Type::Cons, Type::Int));
+        check_error("(let (foo 1))", Error::from_object(Type::Cons, 1.into()));
     }
 
     const fn get_jump_slots(offset: i16) -> (u8, u8) {
@@ -1056,7 +1070,7 @@ mod test {
             [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
             [intern("foo"), intern("bar"), 1, intern("baz")]
         );
-        check_error("(foo . 1)", Error::Type(Type::List, Type::Int));
+        check_error("(foo . 1)", Error::from_object(Type::List, 1.into()));
     }
 
     fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
@@ -1147,22 +1161,31 @@ mod test {
             [1, 2, func]
         );
 
-        check_error("(lambda (x 1) x)", Error::Type(Type::Symbol, Type::Int));
+        check_error(
+            "(lambda (x 1) x)",
+            Error::from_object(Type::Symbol, 1.into()),
+        );
     }
 
     #[test]
     fn errors() {
-        check_error("(\"foo\")", Error::Type(Type::Symbol, Type::String));
+        check_error(
+            "(\"foo\")",
+            Error::Type(Type::Symbol, Type::String, "\"foo\"".to_owned()),
+        );
         check_error("(quote)", Error::ArgCount(1, 0));
         check_error("(quote 1 2)", Error::ArgCount(1, 2));
     }
 
     #[test]
     fn let_errors() {
-        check_error("(let (1))", Error::Type(Type::Cons, Type::Int));
+        check_error("(let (1))", Error::from_object(Type::Cons, 1.into()));
         check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
-        check_error("(let ((foo . 1)))", Error::Type(Type::List, Type::Int));
-        check_error("(let (()))", Error::Type(Type::Cons, Type::Nil));
+        check_error(
+            "(let ((foo . 1)))",
+            Error::from_object(Type::List, 1.into()),
+        );
+        check_error("(let (()))", Error::from_object(Type::Cons, Object::Nil));
         check_error("(let)", Error::ArgCount(1, 0));
     }
 }
