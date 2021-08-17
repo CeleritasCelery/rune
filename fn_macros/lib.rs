@@ -24,10 +24,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
-    let name = match spec.name {
-        Some(x) => x,
-        None => subr_name,
-    };
+    let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
     let (required, optional, rest) = get_call_signature(&function.args, spec.required);
     let arg_conversion = get_arg_conversion(function.args);
     let returns_result = match function.output {
@@ -47,7 +44,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[doc(hidden)]
         #[allow(non_upper_case_globals)]
         const #struct_name: crate::object::SubrFn = crate::object::SubrFn {
-            name: #name,
+            name: #lisp_name,
             subr: #func_name,
             args: crate::object::FnArgs {
                 required: #required,
@@ -239,6 +236,15 @@ fn get_signature_return_type(output: &syn::ReturnType) -> Result<syn::Type, Erro
             "Lisp Function must return a value",
         )),
     }
+}
+
+fn map_function_name(name: String) -> String {
+    name.chars()
+        .map(|c| match c {
+            '_' => '-',
+            c => c,
+        })
+        .collect()
 }
 
 #[derive(Default, PartialEq, Debug, FromMeta)]
