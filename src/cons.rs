@@ -169,17 +169,14 @@ defsubr!(car, cdr, cons, setcar, setcdr);
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $arena:expr) => {
-        crate::cons::Cons::new(
-            crate::object::IntoObject::into_obj($car, $arena),
-            crate::object::IntoObject::into_obj($cdr, $arena),
-        )
+        $arena.add(crate::cons::Cons::new($arena.add($car), $arena.add($cdr)))
     };
     ($car:expr; $arena:expr) => {
         #[allow(unused_qualifications)]
-        crate::cons::Cons::new(
-            crate::object::IntoObject::into_obj($car, $arena),
+        $arena.add(crate::cons::Cons::new(
+            $arena.add($car),
             crate::object::Object::Nil,
-        )
+        ))
     };
 }
 
@@ -206,9 +203,7 @@ mod test {
     fn cons() {
         let arena = &Arena::new();
         assert_eq!(16, size_of::<Cons>());
-        let cons = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
-
-        let x: Object = cons.into_obj(arena);
+        let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
         let cons1 = MutCons(as_cons(x).expect("expected cons"));

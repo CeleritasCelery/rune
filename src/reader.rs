@@ -1,5 +1,4 @@
 use crate::arena::Arena;
-use crate::cons::Cons;
 use crate::object::{IntoObject, Object};
 use crate::symbol::{intern, Symbol};
 use std::str;
@@ -292,15 +291,12 @@ fn vector_into_list<'ob>(
     tail: Option<Object<'ob>>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    let mut iter = vec.into_iter().rev();
-    let mut end = match iter.next() {
-        Some(car) => Cons::new(car, tail.into()),
-        None => return Object::Nil,
-    };
-    for obj in iter {
-        end = Cons::new(obj, end.into_obj(arena));
+    if vec.is_empty() {
+        Object::Nil
+    } else {
+        let from_end = vec.into_iter().rev();
+        from_end.fold(tail.into(), |acc, obj| cons!(obj, acc; arena))
     }
-    end.into_obj(arena)
 }
 
 pub(crate) struct Reader<'a> {

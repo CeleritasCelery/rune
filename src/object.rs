@@ -194,6 +194,12 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
     }
 }
 
+impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Object<'ob>> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        self.unwrap_or(Object::Nil)
+    }
+}
+
 impl<'old, 'new> Object<'old> {
     pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self {

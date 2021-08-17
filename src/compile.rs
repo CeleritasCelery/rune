@@ -399,7 +399,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 };
                 self.env.macro_callstack.pop();
                 let func = arena.add(lisp_macro);
-                let def = arena.add(cons!(intern("macro"), func; arena));
+                let def = cons!(intern("macro"), func; arena);
                 crate::data::set_global_function(
                     name,
                     def.try_into().expect("Type should be a valid macro"),
