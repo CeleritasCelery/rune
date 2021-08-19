@@ -175,6 +175,16 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for String {
         Object::String(Data::from_ref(rf))
     }
 }
+
+define_unbox!(Vec, &'ob Vec<Object<'ob>>);
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+        let rf = arena.alloc_vec(self);
+        Object::Vec(Data::from_ref(rf))
+    }
+}
+
 define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {

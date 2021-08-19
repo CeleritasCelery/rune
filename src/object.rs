@@ -150,6 +150,7 @@ pub(crate) enum Object<'ob> {
     True,
     Nil,
     Cons(Data<&'ob Cons<'ob>>),
+    Vec(Data<&'ob Vec<Object<'ob>>>),
     String(Data<&'ob String>),
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
@@ -163,6 +164,7 @@ pub(crate) enum Value<'ob> {
     True,
     Nil,
     Cons(&'ob Cons<'ob>),
+    Vec(&'ob Vec<Object<'ob>>),
     String(&'ob String),
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'ob SubrFn),
@@ -178,6 +180,7 @@ impl<'ob> Value<'ob> {
             Value::Nil => Type::Nil,
             Value::True => Type::True,
             Value::Cons(_) => Type::Cons,
+            Value::Vec(_) => Type::Vec,
             Value::Int(_) => Type::Int,
             Value::LispFn(_) | Value::SubrFn(_) => Type::Func,
         }
@@ -200,6 +203,10 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Object<'ob>> {
     }
 }
 
+fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], arena: &'new Arena) -> Vec<Object<'new>> {
+    vec.iter().map(|x| x.clone_in(arena)).collect()
+}
+
 impl<'old, 'new> Object<'old> {
     pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self {
@@ -212,6 +219,7 @@ impl<'old, 'new> Object<'old> {
             Object::True => Object::True,
             Object::Nil => Object::Nil,
             Object::Float(x) => x.into_obj(arena),
+            Object::Vec(x) => vec_clone_in(x.get(), arena).into_obj(arena),
         }
     }
 }
@@ -228,6 +236,7 @@ impl<'ob> Object<'ob> {
             Object::Nil => Value::Nil,
             Object::True => Value::True,
             Object::Cons(x) => Value::Cons(x.get()),
+            Object::Vec(x) => Value::Vec(x.get()),
             Object::Int(x) => Value::Int(x.get()),
         }
     }
@@ -241,6 +250,7 @@ impl<'ob> Object<'ob> {
             Object::Nil => Type::Nil,
             Object::True => Type::True,
             Object::Cons(_) => Type::Cons,
+            Object::Vec(_) => Type::Vec,
             Object::Int(_) => Type::Int,
             Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
         }
@@ -260,6 +270,7 @@ impl<'ob> fmt::Display for Object<'ob> {
         match self {
             Object::Int(x) => write!(f, "{}", x),
             Object::Cons(x) => write!(f, "{}", x),
+            Object::Vec(x) => write!(f, "{:?}", x),
             Object::String(x) => write!(f, "\"{}\"", x),
             Object::Symbol(x) => write!(f, "{}", x),
             Object::LispFn(x) => write!(f, "(lambda {:?})", x),
@@ -327,6 +338,19 @@ mod test {
         let x: Object = "bar".to_owned().into_obj(arena);
         assert!(matches!(x.val(), Value::String(_)));
         assert_eq!(x.val(), Value::String(&"bar".to_owned()));
+    }
+
+    #[test]
+    fn vector() {
+        let arena = &Arena::new();
+        let vec = vec_into_object![1, 2, 3.4, "foo"; arena];
+        let x: Object = vec.into_obj(arena);
+        assert!(matches!(x, Object::Vec(_)));
+        assert!(matches!(x.val(), Value::Vec(_)));
+        assert_eq!(
+            x.val(),
+            Value::Vec(&vec_into_object![1, 2, 3.4, "foo"; arena])
+        );
     }
 
     #[test]

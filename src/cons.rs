@@ -87,7 +87,7 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-define_unbox!(Cons, Cons, &Cons<'ob>);
+define_unbox!(Cons, &Cons<'ob>);
 
 #[derive(Clone)]
 pub(crate) struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);

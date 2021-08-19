@@ -33,6 +33,7 @@ pub(crate) enum Type {
     True,
     Nil,
     Cons,
+    Vec,
     String,
     Symbol,
     Float,

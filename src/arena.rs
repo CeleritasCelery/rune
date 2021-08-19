@@ -1,5 +1,5 @@
 use crate::cons::Cons;
-use crate::object::{IntoObject, LispFn, SubrFn};
+use crate::object::{IntoObject, LispFn, Object, SubrFn};
 use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
@@ -11,6 +11,7 @@ pub(crate) struct Arena {
 enum OwnedObject<'ob> {
     Float(Box<f64>),
     Cons(Box<Cons<'ob>>),
+    Vec(Box<Vec<Object<'ob>>>),
     String(Box<String>),
     LispFn(Box<LispFn<'ob>>),
     SubrFn(Box<SubrFn>),
@@ -57,6 +58,15 @@ impl<'ob> Arena {
         self.register(OwnedObject::String(Box::new(x)));
         if let Some(OwnedObject::String(x)) = self.objects.borrow().last() {
             unsafe { std::mem::transmute::<&String, &'ob String>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+
+    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob Vec<Object<'ob>> {
+        self.register(OwnedObject::Vec(Box::new(x)));
+        if let Some(OwnedObject::Vec(x)) = self.objects.borrow().last() {
+            unsafe { std::mem::transmute::<&Vec<Object>, &'ob Vec<Object>>(x.as_ref()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
