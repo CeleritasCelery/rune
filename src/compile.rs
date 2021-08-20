@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::cons::{Cons, ConsIter};
+use crate::cons::{into_iter, Cons, ConsIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::eval;
@@ -162,14 +162,6 @@ impl CodeVec {
 
     fn emit_stack_set(&mut self, idx: u16) {
         emit_op!(self, StackSet, idx);
-    }
-}
-
-fn into_iter(obj: Object) -> Result<ConsIter> {
-    match obj.val() {
-        Value::Cons(cons) => Ok(cons.into_iter()),
-        Value::Nil => Ok(ConsIter::empty()),
-        _ => Err(Error::from_object(Type::List, obj).into()),
     }
 }
 
@@ -639,6 +631,32 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    fn compile_combinator(&mut self, forms: Object<'ob>, empty_value: bool) -> Result<()> {
+        let mut conditions = into_iter(forms)?;
+
+        if conditions.is_empty() {
+            return self.const_ref(empty_value.into(), None);
+        }
+
+        let mut final_return_targets = Vec::new();
+        let jump_op = if empty_value {
+            OpCode::JumpNilElsePop
+        } else {
+            OpCode::JumpNotNilElsePop
+        };
+        while let Some(condition) = conditions.next() {
+            self.compile_form(condition?)?;
+            if !conditions.is_empty() {
+                let target = self.jump(jump_op);
+                final_return_targets.push(target);
+            }
+        }
+        for target in final_return_targets {
+            self.codes.set_jump_placeholder(target.0);
+        }
+        Ok(())
+    }
+
     fn compile_cond(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut clauses = into_iter(obj)?;
         // (cond)
@@ -676,6 +694,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             "let" => self.compile_let(forms, true),
             "let*" => self.compile_let(forms, false),
             "if" => self.compile_if(forms),
+            "and" => self.compile_combinator(forms, true),
+            "or" => self.compile_combinator(forms, false),
             _ => self.compile_call(name, forms),
         }
     }
@@ -926,6 +946,8 @@ mod test {
             [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
             [Object::True, 2]
         );
+        check_compiler!("(and)", [Constant0, Ret], [Object::True]);
+        check_compiler!("(or)", [Constant0, Ret], [Object::Nil]);
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 

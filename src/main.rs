@@ -70,6 +70,7 @@ mod lread;
 mod opcode;
 mod reader;
 mod symbol;
+mod fns;
 
 use crate::arena::Arena;
 use crate::compile::compile;

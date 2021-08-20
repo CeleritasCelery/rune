@@ -507,6 +507,12 @@ mod test {
         test_eval!("(cond (nil 2)(3))", 3);
         test_eval!("(cond (nil 2)(3 4))", 4);
         test_eval!("(cond (t 2)(3 4))", 2);
+        test_eval!("(and)", true);
+        test_eval!("(and 1 2 3)", 3);
+        test_eval!("(and 1 nil 3)", false);
+        test_eval!("(or)", false);
+        test_eval!("(or 1 2 3)", 1);
+        test_eval!("(or nil 2 3)", 2);
         test_eval!("(let ((foo 7)) (cond (2)(3)(4)) foo)", 7);
         test_eval!("(let ((foo 7)) (cond (foo 2)(3 4)))", 2);
         test_eval!("(let ((foo 7)) (cond (nil 3)(foo 4)))", 4);

@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::cons::Cons;
+use crate::cons::{Cons, MutCons};
 use crate::error::{Error, Type};
 use crate::object::{Callable, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
@@ -202,6 +202,13 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
 impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_cons(self);
+        Object::Cons(Data::from_ref(rf))
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for MutCons<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+        let rf = arena.alloc_cons(self.inner);
         Object::Cons(Data::from_ref(rf))
     }
 }

@@ -256,6 +256,11 @@ impl<'ob> Object<'ob> {
         }
     }
 
+    pub(crate) fn ptr_eq(self, other: Object) -> bool {
+        use std::mem::transmute;
+        unsafe { transmute::<Self, i64>(self) == transmute::<Object, i64>(other) }
+    }
+
     pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {
         use crate::error::{Error, Type};
         match self {

@@ -1,4 +1,5 @@
 use crate::arena::Arena;
+use crate::fns;
 use crate::object::{IntoObject, Object};
 use crate::symbol::{intern, Symbol};
 use std::str;
@@ -286,19 +287,6 @@ fn escaped(escaped: &mut bool, chr: char) -> bool {
     }
 }
 
-fn vector_into_list<'ob>(
-    vec: Vec<Object<'ob>>,
-    tail: Option<Object<'ob>>,
-    arena: &'ob Arena,
-) -> Object<'ob> {
-    if vec.is_empty() {
-        Object::Nil
-    } else {
-        let from_end = vec.into_iter().rev();
-        from_end.fold(tail.into(), |acc, obj| cons!(obj, acc; arena))
-    }
-}
-
 pub(crate) struct Reader<'a, 'ob> {
     tokens: Tokenizer<'a>,
     arena: &'ob Arena,
@@ -321,10 +309,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
-                Token::CloseParen(_) => return Ok(vector_into_list(objects, None, self.arena)),
+                Token::CloseParen(_) => {
+                    return Ok(fns::vector_into_list(objects, None, self.arena))
+                }
                 Token::Dot(_) => {
                     let cdr = self.read_cdr(delim)?;
-                    return Ok(vector_into_list(objects, Some(cdr), self.arena));
+                    return Ok(fns::vector_into_list(objects, Some(cdr), self.arena));
                 }
                 tok => objects.push(self.read_sexp(tok)?),
             }

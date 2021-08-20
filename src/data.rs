@@ -84,6 +84,11 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
 }
 
 #[defun]
+pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
+    obj1.ptr_eq(obj2)
+}
+
+#[defun]
 pub(crate) fn symbol_function<'ob>(
     symbol: Symbol,
     env: &mut Environment<'ob>,
@@ -115,4 +120,19 @@ pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symb
     feature
 }
 
-defsubr!(set, put, get, defvar, defalias, provide, symbol_function);
+#[defun]
+pub(crate) fn stringp(object: Object) -> bool {
+    matches!(object, Object::String(_))
+}
+
+defsubr!(
+    eq,
+    set,
+    put,
+    get,
+    defvar,
+    defalias,
+    provide,
+    symbol_function,
+    stringp,
+);
