@@ -17,20 +17,19 @@ pub(crate) fn read_from_string<'ob>(
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
-        println!("reading");
         let (obj, new_pos) = match Reader::read(&contents[pos..], arena) {
             Ok((obj, pos)) => (obj, pos),
             Err(Error::EmptyStream) => return Ok(true),
             Err(e) => return Err(anyhow!(e)),
         };
-        println!("-----read-----\n {}", &contents[pos..(new_pos + pos)]);
-        println!("compiling");
+        println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
+        println!("-----READ END-----");
+        println!("-----compiling-----");
         // this will go out of scope
         let exp = compile(obj, env, arena)?;
-        println!("running");
-        println!("codes: {:?}", exp.op_codes);
-        println!("const: {:?}", exp.constants);
+        println!("-----running-----");
         Routine::execute(&exp, env, arena)?;
+        println!("-----run complete-----");
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }

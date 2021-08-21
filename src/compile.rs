@@ -199,6 +199,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
+        match obj.val() {
+            Value::Symbol(sym) if sym.get_name() == "if" => panic!(),
+            _ => {}
+        }
         self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
@@ -255,6 +259,19 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match len {
             1 => self.const_ref(forms.next().unwrap()?, None),
             x => Err(Error::ArgCount(1, x as u16).into()),
+        }
+    }
+
+    fn func_quote(&mut self, value: Object<'ob>) -> Result<()> {
+        let mut forms = into_iter(value)?;
+        let len = forms.clone().count();
+        if len == 1 {
+            match forms.next().unwrap()? {
+                Object::Cons(cons) => self.dispatch_special_form(!cons),
+                sym => self.const_ref(sym, None),
+            }
+        } else {
+            Err(Error::ArgCount(1, len as u16).into())
         }
     }
 
@@ -686,7 +703,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match name.get_name() {
             "lambda" => self.compile_lambda_def(forms),
             "while" => self.compile_loop(forms),
-            "quote" | "function" => self.quote(forms),
+            "quote" | "`" => self.quote(forms),
+            "function" => self.func_quote(forms),
             "progn" => self.progn(forms),
             "setq" => self.setq(forms),
             "defvar" | "defconst" => self.compile_defvar(forms),
@@ -713,8 +731,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_form(&mut self, obj: Object<'ob>) -> Result<()> {
-        // println!("state = {:?}", self.vars);
-        // println!("constants = {:?}", self.constants);
         match obj.val() {
             Value::Cons(cons) => self.dispatch_special_form(cons),
             Value::Symbol(sym) => self.variable_reference(sym),

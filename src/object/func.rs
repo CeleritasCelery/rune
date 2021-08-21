@@ -33,6 +33,10 @@ impl FnArgs {
         }
         Ok(total_args.saturating_sub(args))
     }
+
+    pub(crate) fn rest_args_start(self) -> u16 {
+        self.required + self.optional
+    }
 }
 
 define_unbox!(LispFn, Func, &'ob LispFn<'ob>);

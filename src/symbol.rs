@@ -71,7 +71,7 @@ impl fmt::Debug for Symbol {
 
 impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "'{}", &self.0.name)
+        write!(f, "{}", &self.0.name)
     }
 }
 

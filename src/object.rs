@@ -8,11 +8,12 @@ pub(crate) use convert::*;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::symbol::Symbol;
+use std::cmp::min;
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, Not};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub(crate) struct Data<T> {
     data: [u8; 7],
     marker: PhantomData<T>,
@@ -107,6 +108,16 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.inner(), f)
+    }
+}
+
+impl<T> fmt::Debug for Data<T>
+where
+    T: fmt::Debug + Copy,
+    Data<T>: Inner<T>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner(), f)
     }
 }
 
@@ -295,7 +306,27 @@ impl<'ob> fmt::Display for Object<'ob> {
 
 impl<'ob> fmt::Debug for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self, f)
+        match self {
+            Object::Int(x) => write!(f, "{}", x),
+            Object::Cons(x) => write!(f, "{}", x),
+            Object::Vec(x) => write!(f, "{:?}", x),
+            Object::String(x) => {
+                let len = min(x.len(), 30);
+                write!(f, "\"{}\"", &x[..len])
+            }
+            Object::Symbol(x) => write!(f, "{}", x),
+            Object::LispFn(x) => write!(f, "(lambda {:?})", x),
+            Object::SubrFn(x) => write!(f, "{:?}", x),
+            Object::True => write!(f, "t"),
+            Object::Nil => write!(f, "nil"),
+            Object::Float(x) => {
+                if x.fract() == 0.0_f64 {
+                    write!(f, "{:.1}", x)
+                } else {
+                    write!(f, "{}", x)
+                }
+            }
+        }
     }
 }
 

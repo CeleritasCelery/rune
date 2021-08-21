@@ -154,6 +154,30 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         Ok(())
     }
 
+    fn prepare_arguments(
+        &mut self,
+        func: &'brw LispFn<'ob>,
+        arg_cnt: u16,
+        arena: &'ob Arena,
+    ) -> Result<u16> {
+        let fill_args = func.args.num_of_fill_args(arg_cnt)?;
+        fill_extra_args(&mut self.stack, fill_args);
+        let total_args = arg_cnt + fill_args;
+        let rest_size = total_args - func.args.rest_args_start();
+        if rest_size > 0 {
+            let slice = self.stack.take_slice(rest_size as usize);
+            let mut vec = Vec::new();
+            vec.extend_from_slice(slice);
+            let list = crate::fns::vector_into_list(vec, None, arena);
+            let i = self.stack.from_end(rest_size as usize) + 1;
+            self.stack[i] = list;
+            self.stack.truncate(i + 1);
+            Ok(total_args - rest_size + 1)
+        } else {
+            Ok(total_args)
+        }
+    }
+
     fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx) {
@@ -163,7 +187,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         match sym.get_func(arena) {
             Some(func) => match func {
                 Callable::LispFn(func) => {
-                    self.call_lisp(!func, arg_cnt)?;
+                    self.call_lisp(!func, arg_cnt, arena)?;
                 }
                 Callable::SubrFn(func) => {
                     self.call_subr(*func, arg_cnt, env, arena)?;
@@ -178,7 +202,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     let obj = arena.add(func);
                     crate::data::defalias(sym, obj, env);
                     if let Callable::LispFn(func) = obj.try_into()? {
-                        self.call_lisp(!func, arg_cnt)?;
+                        self.call_lisp(!func, arg_cnt, arena)?;
                     } else {
                         unreachable!("type was no longer lisp fn");
                     }
@@ -190,12 +214,16 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         Ok(())
     }
 
-    fn call_lisp(&mut self, func: &'brw LispFn<'ob>, arg_cnt: u16) -> Result<()> {
-        let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-        fill_extra_args(&mut self.stack, fill_args);
-        let total_args = arg_cnt + fill_args;
+    fn call_lisp(
+        &mut self,
+        func: &'brw LispFn<'ob>,
+        arg_cnt: u16,
+        arena: &'ob Arena,
+    ) -> Result<()> {
+        let total_args = self.prepare_arguments(func, arg_cnt, arena)?;
         self.call_frames.push(self.frame.clone());
-        self.frame = CallFrame::new(&func.body, self.stack.from_end(total_args as usize));
+        let tmp = self.stack.from_end(total_args as usize);
+        self.frame = CallFrame::new(&func.body, tmp);
         Ok(())
     }
 
@@ -227,7 +255,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         #[cfg(debug_assertions)]
         let init_stack_size = self.stack.len();
         loop {
-            println!("{:?}", self.stack);
+            println!("[");
+            for x in &self.stack {
+                println!("    {:?},", x);
+            }
+            println!("]");
             let op = self.frame.ip.next().try_into()?;
             println!("op : {:?}", op);
             match op {
@@ -406,18 +438,17 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
 pub(crate) fn call_lisp<'brw, 'ob>(
     func: &'brw LispFn<'ob>,
-    mut args: Vec<Object<'ob>>,
+    args: Vec<Object<'ob>>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let arg_cnt = args.len() as u16;
-    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-    fill_extra_args(&mut args, fill_args);
     let mut rout = Routine {
         stack: args,
         call_frames: vec![],
         frame: CallFrame::new(&func.body, 0),
     };
+    rout.prepare_arguments(func, arg_cnt, arena)?;
     rout.run(env, arena)
 }
 
@@ -547,6 +578,41 @@ mod test {
                  (middle 7 3 13))",
             224
         );
+
+        test_eval!(
+            "(progn
+                 (defalias 'has_rest #'(lambda (&rest z) (car z)))
+                 (has_rest 7 9 11 13))",
+            7
+        );
+
+        test_eval!(
+            "(progn
+                 (defalias 'has_rest #'(lambda (x &rest z) (car z)))
+                 (has_rest 7 9 11 13))",
+            9
+        );
+
+        test_eval!(
+            "(progn
+                 (defalias 'has_rest #'(lambda (x &optional y &rest z) (car z)))
+                 (has_rest 7 9 11 13))",
+            11
+        );
+
+        test_eval!(
+            "(progn
+                 (defalias 'has_rest #'(lambda (x &optional y &rest z) y))
+                 (has_rest 7 9 11 13))",
+            9
+        );
+
+        test_eval!(
+            "(progn
+                 (defalias 'has_rest #'(lambda (x &optional y &rest z) (car z)))
+                 (has_rest 7))",
+            false
+        );
     }
 
     #[test]
@@ -561,29 +627,6 @@ mod test {
         );
         test_eval_serial!("(test_macro_1 5 1)", 8, env, arena);
         test_eval_serial!("(+ (test_macro_1 2 4) (test_macro_1 4 9))", 12, env, arena);
-    }
-
-    #[test]
-    fn recursive_macro() {
-        let arena = &Arena::new();
-        let env = &mut Environment::default();
-        test_eval_serial!(
-            "(progn (defalias 'recursive_macro_1 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_2 x y)))))
-                    (defalias 'recursive_macro_2 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_3 x y)))))
-                    (defalias 'recursive_macro_3 (cons 'macro #'(lambda (x y) (list '+ x (recursive_macro_1 x y))))))",
-            crate::symbol::intern("recursive_macro_3"),
-            env,
-            arena
-        );
-
-        let obj = Reader::read("(recursive_macro_1 1 5)", arena).unwrap().0;
-        assert_eq!(
-            compile(obj, env, arena)
-                .unwrap_err()
-                .downcast::<crate::compile::CompError>()
-                .unwrap(),
-            crate::compile::CompError::RecursiveMacro
-        );
     }
 
     fn test_eval_error<E>(sexp: &str, error: E)
