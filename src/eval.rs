@@ -567,6 +567,10 @@ mod test {
         test_eval!("(let ((foo 1)) (setq foo 2) foo)", 2);
         test_eval!("(progn (setq foo 2) foo)", 2);
         test_eval!("(progn (defvar foo 1) foo)", 1);
+        test_eval!("(prog1 1 2)", 1);
+        test_eval!("(prog1 1)", 1);
+        test_eval!("(prog2 1 2)", 2);
+        test_eval!("(prog2 1 2 3)", 2);
     }
 
     #[test]

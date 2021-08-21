@@ -299,6 +299,22 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.implicit_progn(into_iter(forms)?)
     }
 
+    fn progx(&mut self, forms: Object<'ob>, returned_form: usize) -> Result<()> {
+        let mut idx = 0;
+        for form in into_iter(forms)? {
+            idx += 1;
+            self.compile_form(form?)?;
+            if idx != returned_form {
+                self.discard();
+            }
+        }
+        if idx < returned_form {
+            Err(Error::ArgCount(returned_form as u16, idx as u16).into())
+        } else {
+            Ok(())
+        }
+    }
+
     fn implicit_progn(&mut self, mut forms: ConsIter<'_, 'ob>) -> Result<()> {
         if let Some(form) = forms.next() {
             self.compile_form(form?)?;
@@ -706,6 +722,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             "quote" | "`" => self.quote(forms),
             "function" => self.func_quote(forms),
             "progn" => self.progn(forms),
+            "prog1" => self.progx(forms, 1),
+            "prog2" => self.progx(forms, 2),
             "setq" => self.setq(forms),
             "defvar" | "defconst" => self.compile_defvar(forms),
             "cond" => self.compile_cond(forms),
