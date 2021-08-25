@@ -107,6 +107,11 @@ pub(crate) fn fboundp(symbol: Symbol) -> bool {
 }
 
 #[defun]
+pub(crate) fn listp(object: Object) -> bool {
+    matches!(object, Object::Nil | Object::Cons(_))
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -138,5 +143,6 @@ defsubr!(
     provide,
     symbol_function,
     fboundp,
+    listp,
     stringp,
 );

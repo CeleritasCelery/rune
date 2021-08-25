@@ -70,6 +70,12 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     }
 }
 
+#[defun]
+pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob> {
+    // TODO: Implement
+    Object::Nil
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -86,4 +92,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq);
+defsubr!(mapcar, assq, make_hash_table);
