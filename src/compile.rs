@@ -474,7 +474,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
                 let lisp_macro = {
                     let func_ident = macro_form.car().as_symbol()?;
-                    match func_ident.get_name() {
+                    match func_ident.name() {
                         "lambda" => compile_lambda(macro_form.cdr(), self.env, arena)?,
                         bad_function => bail!("Invalid Function : {}", bad_function),
                     }
@@ -513,11 +513,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
-        println!("compiling call : {}", name.get_name());
+        println!("compiling call : {}", name.name());
         let callable = crate::data::symbol_function(name, &mut self.env, self.arena);
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
-                Value::Symbol(sym) if sym.get_name() == "macro" => {
+                Value::Symbol(sym) if sym.name() == "macro" => {
                     println!("compiling macro");
                     let form = self.compile_macro_call(name, args, cons.cdr())?;
                     self.compile_form(form)
@@ -756,7 +756,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         println!("car = {}", cons.car());
         let name: Symbol = cons.car().try_into()?;
         let forms = cons.cdr();
-        match name.get_name() {
+        match name.name() {
             "lambda" => self.compile_lambda_def(forms),
             "while" => self.compile_loop(forms),
             "quote" | "`" => self.quote(forms),
@@ -777,7 +777,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
-        if sym.get_name().starts_with(':') {
+        if sym.name().starts_with(':') {
             self.const_ref(sym.into(), None)
         } else {
             match self.vars.iter().rposition(|&x| x == Some(sym)) {
@@ -823,7 +823,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut iter = into_iter(bindings)?;
     while let Some(binding) = iter.next() {
         let sym = binding?.as_symbol()?;
-        match sym.get_name() {
+        match sym.name() {
             "&optional" => arg_type = &mut optional,
             "&rest" => {
                 if let Some(last) = iter.next() {

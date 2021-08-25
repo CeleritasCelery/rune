@@ -18,8 +18,8 @@ pub(crate) enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::VoidFunction(func) => write!(f, "Void function: {}", func.get_name()),
-            Error::VoidVariable(var) => write!(f, "Void variable: {}", var.get_name()),
+            Error::VoidFunction(func) => write!(f, "Void function: {}", func.name()),
+            Error::VoidVariable(var) => write!(f, "Void variable: {}", var.name()),
         }
     }
 }
@@ -182,8 +182,8 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        println!("calling: {}", sym.get_name());
-        match sym.get_func(arena) {
+        println!("calling: {}", sym.name());
+        match sym.func(arena) {
             Some(func) => match func {
                 Callable::LispFn(func) => {
                     self.call_lisp(!func, arg_cnt, arena)?;
@@ -192,7 +192,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     self.call_subr(*func, arg_cnt, env, arena)?;
                 }
                 Callable::Macro(_) => {
-                    bail!("Attempt to call macro {} at runtime", sym.get_name())
+                    bail!("Attempt to call macro {} at runtime", sym.name())
                 }
             },
             None => match env.funcs.get(&sym) {

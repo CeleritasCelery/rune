@@ -46,7 +46,7 @@ impl Symbol {
         ptr.cast()
     }
 
-    pub(crate) const fn get_name(&self) -> &str {
+    pub(crate) const fn name(&self) -> &str {
         self.0.name
     }
 
@@ -54,7 +54,7 @@ impl Symbol {
         self.0.func.load().is_some()
     }
 
-    pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Callable<'_>> {
+    pub(crate) fn func(self, _arena: &'_ Arena) -> Option<Callable<'_>> {
         unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
@@ -242,13 +242,13 @@ mod test {
         let arena = &Arena::new();
         let inner = InnerSymbol::new("foo");
         let sym = Symbol(unsafe { fix_lifetime(&inner) });
-        assert_eq!("foo", sym.get_name());
-        assert!(sym.get_func(arena).is_none());
+        assert_eq!("foo", sym.name());
+        assert!(sym.func(arena).is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
             sym.set_func(func.into_obj(arena));
         }
-        let cell = sym.get_func(arena).unwrap();
+        let cell = sym.func(arena).unwrap();
         let before = match cell {
             Callable::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
@@ -258,7 +258,7 @@ mod test {
         unsafe {
             sym.set_func(func.into_obj(arena));
         }
-        let cell = sym.get_func(arena).unwrap();
+        let cell = sym.func(arena).unwrap();
         let after = match cell {
             Callable::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
@@ -288,7 +288,7 @@ mod test {
             sym.set_func(core_func.into_obj(arena));
         }
 
-        if let Some(Callable::SubrFn(subr)) = sym.get_func(arena) {
+        if let Some(Callable::SubrFn(subr)) = sym.func(arena) {
             assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

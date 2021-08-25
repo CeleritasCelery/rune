@@ -95,7 +95,7 @@ pub(crate) fn symbol_function<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    symbol.get_func(arena).map_or_else(
+    symbol.func(arena).map_or_else(
         || *env.funcs.get(&symbol).unwrap_or(&Object::Nil),
         |func| func.into(),
     )

@@ -22,7 +22,7 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for Callable<'ob> {
     type Error = Error;
     fn try_from(cons: &'ob Cons<'ob>) -> Result<Self, Self::Error> {
         match cons.car() {
-            Object::Symbol(sym) if (!sym).get_name() == "macro" => {
+            Object::Symbol(sym) if (!sym).name() == "macro" => {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
                     Ok(Callable::Macro(Data::from_ref(cons)))
                 } else {
