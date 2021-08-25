@@ -241,10 +241,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
-        match obj.val() {
-            Value::Symbol(sym) if sym.get_name() == "if" => panic!(),
-            _ => {}
-        }
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
         self.grow_stack(var_ref);
@@ -781,13 +777,17 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
-        match self.vars.iter().rposition(|&x| x == Some(sym)) {
-            Some(idx) => self.stack_ref(idx, sym),
-            None => {
-                let idx = self.constants.insert(sym.into())?;
-                self.codes.emit_varref(idx);
-                self.grow_stack(None);
-                Ok(())
+        if sym.get_name().starts_with(':') {
+            self.const_ref(sym.into(), None)
+        } else {
+            match self.vars.iter().rposition(|&x| x == Some(sym)) {
+                Some(idx) => self.stack_ref(idx, sym),
+                None => {
+                    let idx = self.constants.insert(sym.into())?;
+                    self.codes.emit_varref(idx);
+                    self.grow_stack(None);
+                    Ok(())
+                }
             }
         }
     }
