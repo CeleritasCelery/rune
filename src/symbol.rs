@@ -58,6 +58,10 @@ impl Symbol {
         unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
+    pub(crate) fn func_obj(self, _lifetime: Object<'_>) -> Option<Callable<'_>> {
+        unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
+    }
+
     unsafe fn set_func(self, func: Callable) {
         self.0.func.store(Some(coerce_callable_lifetime(func)));
     }

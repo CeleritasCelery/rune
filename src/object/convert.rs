@@ -4,16 +4,34 @@ use crate::error::{Error, Type};
 use crate::object::{Callable, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
 use std::convert::{TryFrom, TryInto};
+use anyhow::anyhow;
 
 use super::Data;
 
 impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
-    type Error = Error;
+    type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            x => Err(Error::from_object(Type::Func, x)),
+            Object::Symbol(sym) => match (!sym).func_obj(obj) {
+                Some(x) => x
+                    .try_into()
+                    .map_err(|_e| anyhow!("Macro `{}' is not valid as a function", sym)),
+                None => Err(anyhow!("Void function: {}", sym)),
+            },
+            x => Err(Error::from_object(Type::Func, x).into()),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
+    type Error = anyhow::Error;
+    fn try_from(obj: Callable<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Callable::LispFn(x) => Ok(Function::LispFn(x)),
+            Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
+            Callable::Macro(_) => Err(anyhow!("Macros are invalid as functions")),
         }
     }
 }

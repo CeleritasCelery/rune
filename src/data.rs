@@ -112,6 +112,16 @@ pub(crate) fn listp(object: Object) -> bool {
 }
 
 #[defun]
+pub(crate) fn symbolp(object: Object) -> bool {
+    matches!(object, Object::Symbol(_))
+}
+
+#[defun]
+pub(crate) fn stringp(object: Object) -> bool {
+    matches!(object, Object::String(_))
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -128,11 +138,6 @@ pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symb
     feature
 }
 
-#[defun]
-pub(crate) fn stringp(object: Object) -> bool {
-    matches!(object, Object::String(_))
-}
-
 defsubr!(
     eq,
     set,
@@ -145,4 +150,5 @@ defsubr!(
     fboundp,
     listp,
     stringp,
+    symbolp,
 );
