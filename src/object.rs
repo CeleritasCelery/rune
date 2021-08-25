@@ -209,7 +209,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Object<'ob>> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        self.unwrap_or(Object::Nil)
+        self.unwrap_or_default()
     }
 }
 
@@ -277,6 +277,12 @@ impl<'ob> Object<'ob> {
             Object::Symbol(x) => Ok(x.get()),
             _ => anyhow::bail!(Error::from_object(Type::Symbol, self)),
         }
+    }
+}
+
+impl<'ob> Default for Object<'ob> {
+    fn default() -> Self {
+        Object::Nil
     }
 }
 

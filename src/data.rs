@@ -107,7 +107,7 @@ pub(crate) fn defvar<'ob>(
     _docstring: Option<&String>,
     env: &mut Environment<'ob>,
 ) -> Object<'ob> {
-    let value = initvalue.unwrap_or(Object::Nil);
+    let value = initvalue.unwrap_or_default();
     set(symbol, value, env)
 }
 
