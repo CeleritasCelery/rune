@@ -166,9 +166,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         let rest_size = total_args - func.args.rest_args_start();
         if rest_size > 0 {
             let slice = self.stack.take_slice(rest_size as usize);
-            let mut vec = Vec::new();
-            vec.extend_from_slice(slice);
-            let list = crate::fns::vector_into_list(vec, None, arena);
+            let list = crate::fns::slice_into_list(slice, None, arena);
             let i = self.stack.from_end(rest_size as usize) + 1;
             self.stack[i] = list;
             self.stack.truncate(i + 1);

@@ -310,11 +310,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         while let Some(token) = self.tokens.next() {
             match token {
                 Token::CloseParen(_) => {
-                    return Ok(fns::vector_into_list(objects, None, self.arena))
+                    return Ok(fns::slice_into_list(&objects, None, self.arena))
                 }
                 Token::Dot(_) => {
                     let cdr = self.read_cdr(delim)?;
-                    return Ok(fns::vector_into_list(objects, Some(cdr), self.arena));
+                    return Ok(fns::slice_into_list(&objects, Some(cdr), self.arena));
                 }
                 tok => objects.push(self.read_sexp(tok)?),
             }

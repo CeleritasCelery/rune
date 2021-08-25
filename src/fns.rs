@@ -5,16 +5,16 @@ use crate::object::{Function, List, Object};
 use anyhow::Result;
 use fn_macros::defun;
 
-pub(crate) fn vector_into_list<'ob>(
-    vec: Vec<Object<'ob>>,
+pub(crate) fn slice_into_list<'ob>(
+    slice: &[Object<'ob>],
     tail: Option<Object<'ob>>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    if vec.is_empty() {
+    if slice.is_empty() {
         Object::Nil
     } else {
-        let from_end = vec.into_iter().rev();
-        from_end.fold(tail.into(), |acc, obj| cons!(obj, acc; arena))
+        let from_end = slice.iter().rev();
+        from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; arena))
     }
 }
 
@@ -48,8 +48,8 @@ pub(crate) fn mapcar<'ob>(
                     Ok(obj) => function.call(vec![obj], env, arena),
                     err => err,
                 })
-                .collect::<Result<_>>()?;
-            Ok(vector_into_list(vec, None, arena))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(slice_into_list(&vec, None, arena))
         }
     }
 }

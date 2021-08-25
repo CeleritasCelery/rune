@@ -94,11 +94,10 @@ pub(crate) fn symbol_function<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    if let Some(func) = symbol.get_func(arena) {
-        func.into()
-    } else {
-        *env.funcs.get(&symbol).unwrap_or(&Object::Nil)
-    }
+    symbol.get_func(arena).map_or_else(
+        || *env.funcs.get(&symbol).unwrap_or(&Object::Nil),
+        |func| func.into(),
+    )
 }
 
 #[defun]
