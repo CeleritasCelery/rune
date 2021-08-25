@@ -101,6 +101,11 @@ pub(crate) fn symbol_function<'ob>(
 }
 
 #[defun]
+pub(crate) fn fboundp(symbol: Symbol) -> bool {
+    symbol.has_func()
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -131,5 +136,6 @@ defsubr!(
     defalias,
     provide,
     symbol_function,
+    fboundp,
     stringp,
 );

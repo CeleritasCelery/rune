@@ -50,6 +50,10 @@ impl Symbol {
         self.0.name
     }
 
+    pub(crate) fn has_func(self) -> bool {
+        self.0.func.load().is_some()
+    }
+
     pub(crate) fn get_func(self, _arena: &'_ Arena) -> Option<Callable<'_>> {
         unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
