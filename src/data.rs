@@ -28,6 +28,7 @@ pub(crate) fn set_global_function<'ob>(
 pub(crate) fn defalias<'ob>(
     symbol: Symbol,
     definition: Object<'ob>,
+    _docstring: Option<&String>,
     env: &mut Environment<'ob>,
 ) -> Symbol {
     match definition.try_into() {

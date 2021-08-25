@@ -182,6 +182,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
+        println!("calling: {}", sym.get_name());
         match sym.get_func(arena) {
             Some(func) => match func {
                 Callable::LispFn(func) => {
@@ -198,7 +199,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 Some(Object::Cons(uncompiled_func)) => {
                     let func = compile_lambda(uncompiled_func.cdr(), env, arena)?;
                     let obj = arena.add(func);
-                    crate::data::defalias(sym, obj, env);
+                    crate::data::defalias(sym, obj, None, env);
                     if let Callable::LispFn(func) = obj.try_into()? {
                         self.call_lisp(!func, arg_cnt, arena)?;
                     } else {
