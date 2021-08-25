@@ -8,7 +8,6 @@ pub(crate) use convert::*;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::symbol::Symbol;
-use std::cmp::min;
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, Not};
@@ -308,11 +307,16 @@ impl<'ob> fmt::Debug for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Object::Int(x) => write!(f, "{}", x),
-            Object::Cons(x) => write!(f, "{}", x),
+            Object::Cons(x) => write!(f, "{:?}", x),
             Object::Vec(x) => write!(f, "{:?}", x),
             Object::String(x) => {
-                let len = min(x.len(), 30);
-                write!(f, "\"{}\"", &x[..len])
+                write!(
+                    f,
+                    "\"{}\"",
+                    x.chars()
+                        .map(|x| if x == '\n' { '↲' } else { x })
+                        .collect::<String>()
+                )
             }
             Object::Symbol(x) => write!(f, "{}", x),
             Object::LispFn(x) => write!(f, "(lambda {:?})", x),

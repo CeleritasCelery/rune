@@ -107,6 +107,8 @@ const JUMP_SLOTS: i16 = 2;
 
 impl CodeVec {
     pub(crate) fn push_op(&mut self, op: OpCode) {
+        #[cfg(debug_bytecode)]
+        println!("op :{}: {:?}", self.len(), op);
         self.push(op.into());
     }
 
@@ -198,29 +200,69 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    fn grow_stack(&mut self, var: Option<Symbol>) {
+        self.vars.push(var);
+        #[cfg(debug_bytecode)]
+        {
+            println!("growing stack: {:?}", var);
+            println!("[");
+            for (idx, x) in self.vars.iter().enumerate() {
+                println!("    {}: {:?},", idx, x);
+            }
+            println!("]");
+        }
+    }
+
+    fn shrink_stack(&mut self) -> Option<Symbol> {
+        let var = self.vars.pop().expect("compile stack should not be empty");
+        #[cfg(debug_bytecode)]
+        {
+            println!("shrinking stack");
+            println!("[");
+            for (idx, x) in self.vars.iter().enumerate() {
+                println!("    {}: {:?},", idx, x);
+            }
+            println!("]");
+        }
+        var
+    }
+
+    fn truncate_stack(&mut self, new_len: usize) {
+        self.vars.truncate(new_len);
+        #[cfg(debug_bytecode)]
+        {
+            println!("truncating stack");
+            println!("[");
+            for (idx, x) in self.vars.iter().enumerate() {
+                println!("    {}: {:?},", idx, x);
+            }
+            println!("]");
+        }
+    }
+
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
         match obj.val() {
             Value::Symbol(sym) if sym.get_name() == "if" => panic!(),
             _ => {}
         }
-        self.vars.push(var_ref);
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
+        self.grow_stack(var_ref);
         Ok(())
     }
 
     fn add_const_lambda(&mut self, func: LispFn<'ob>) -> Result<()> {
-        self.vars.push(None);
         let idx = self.constants.insert_lambda(func, self.arena)?;
         self.codes.emit_const(idx);
+        self.grow_stack(None);
         Ok(())
     }
 
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
-                self.vars.push(Some(var_ref));
                 self.codes.emit_stack_ref(x);
+                self.grow_stack(Some(var_ref));
                 Ok(())
             }
             Err(_) => Err(CompError::StackSizeOverflow.into()),
@@ -230,8 +272,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn stack_set(&mut self, idx: usize) -> Result<(), CompError> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
-                self.vars.pop();
                 self.codes.emit_stack_set(x);
+                self.shrink_stack();
                 Ok(())
             }
             Err(_) => Err(CompError::StackSizeOverflow),
@@ -240,17 +282,17 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn var_set(&mut self, idx: u16) {
         self.codes.emit_varset(idx);
-        self.vars.pop();
+        self.shrink_stack();
     }
 
     fn discard(&mut self) {
         self.codes.push_op(OpCode::Discard);
-        self.vars.pop();
+        self.shrink_stack();
     }
 
     fn duplicate(&mut self) {
         self.codes.push_op(OpCode::Duplicate);
-        self.vars.push(None);
+        self.grow_stack(None);
     }
 
     fn quote(&mut self, value: Object<'ob>) -> Result<()> {
@@ -288,9 +330,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if num_binding_forms > 0 {
             self.codes
                 .push_op_n(OpCode::DiscardNKeepTOS, num_binding_forms as u8);
-            let last = self.vars.pop().expect("empty stack in compile");
-            self.vars.truncate(self.vars.len() - num_binding_forms);
-            self.vars.push(last);
+            let last = self.shrink_stack();
+            self.truncate_stack(self.vars.len() - num_binding_forms);
+            self.grow_stack(last);
         }
         Ok(())
     }
@@ -470,7 +512,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             num_args += 1;
         }
         self.codes.emit_call(num_args as u16);
-        self.vars.truncate(prev_len);
+        self.truncate_stack(prev_len);
         Ok(())
     }
 
@@ -497,7 +539,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             | OpCode::JumpNotNil
             | OpCode::JumpNilElsePop
             | OpCode::JumpNotNilElsePop => {
-                self.vars.pop();
+                self.shrink_stack();
             }
             OpCode::Jump => {}
             x => panic!("invalid jump opcode provided: {:?}", x),
@@ -509,12 +551,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn set_jump_target(&mut self, target: (usize, OpCode)) {
         match target.1 {
-            // add the non-popped conditional back to the stack, since we are
-            // past the "else pop" part of the Code
-            OpCode::JumpNilElsePop | OpCode::JumpNotNilElsePop => {
-                self.vars.push(None);
-            }
-            OpCode::JumpNil | OpCode::JumpNotNil | OpCode::Jump => {}
+            OpCode::JumpNilElsePop
+            | OpCode::JumpNotNilElsePop
+            | OpCode::JumpNil
+            | OpCode::JumpNotNil
+            | OpCode::Jump => {}
             x => panic!("invalid jump opcode provided: {:?}", x),
         }
         self.codes.set_jump_placeholder(target.0);
@@ -550,6 +591,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 let else_nil_target = self.jump(OpCode::JumpNil);
                 // if branch
                 self.compile_form(forms.next().unwrap()?)?;
+                self.shrink_stack();
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
                 self.set_jump_target(else_nil_target);
@@ -572,6 +614,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.discard();
         self.jump_back(OpCode::Jump, top);
         self.set_jump_target(loop_exit);
+        // Add the nil return value
+        self.grow_stack(None);
         Ok(())
     }
 
@@ -625,7 +669,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.compile_form(cond.next().unwrap()?)?;
                 let skip_target = self.jump(OpCode::JumpNil);
                 self.implicit_progn(cond)?;
-                self.vars.pop();
+                self.shrink_stack();
                 let taken_target = self.jump(OpCode::Jump);
                 self.set_jump_target(skip_target);
                 jump_targets.push(taken_target);
@@ -742,7 +786,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             None => {
                 let idx = self.constants.insert(sym.into())?;
                 self.codes.emit_varref(idx);
-                self.vars.push(None);
+                self.grow_stack(None);
                 Ok(())
             }
         }
@@ -765,7 +809,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let mut exp = Compiler::new(vars, env, arena);
         exp.implicit_progn(obj)?;
         exp.codes.push_op(OpCode::Ret);
-        exp.vars.truncate(0);
+        exp.truncate_stack(0);
         Ok(exp)
     }
 }

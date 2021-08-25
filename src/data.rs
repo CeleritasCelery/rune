@@ -95,10 +95,8 @@ pub(crate) fn symbol_function<'ob>(
     arena: &'ob Arena,
 ) -> Object<'ob> {
     if let Some(func) = symbol.get_func(arena) {
-        println!("global function");
         func.into()
     } else {
-        println!("local function");
         *env.funcs.get(&symbol).unwrap_or(&Object::Nil)
     }
 }

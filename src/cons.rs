@@ -4,10 +4,10 @@ use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
 use std::convert::TryFrom;
-use std::fmt::{self, Display, Write};
+use std::fmt::{self, Debug, Display, Write};
 use std::ops::Deref;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone)]
 pub(crate) struct Cons<'ob> {
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
@@ -84,6 +84,13 @@ impl<'ob> Display for Cons<'ob> {
     }
 }
 
+impl<'ob> Debug for Cons<'ob> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_char('(')?;
+        print_rest_debug(self, f)
+    }
+}
+
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     match cons.cdr() {
         Object::Cons(cdr) => {
@@ -92,6 +99,17 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
         }
         Object::Nil => write!(f, "{})", cons.car()),
         cdr => write!(f, "{} . {})", cons.car(), cdr),
+    }
+}
+
+fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
+    match cons.cdr() {
+        Object::Cons(cdr) => {
+            write!(f, "{:?} ", cons.car())?;
+            print_rest(&cdr, f)
+        }
+        Object::Nil => write!(f, "{:?})", cons.car()),
+        cdr => write!(f, "{:?} . {:?})", cons.car(), cdr),
     }
 }
 

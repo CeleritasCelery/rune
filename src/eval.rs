@@ -255,13 +255,17 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         #[cfg(debug_assertions)]
         let init_stack_size = self.stack.len();
         loop {
-            println!("[");
-            for x in &self.stack {
-                println!("    {:?},", x);
-            }
-            println!("]");
             let op = self.frame.ip.next().try_into()?;
-            println!("op : {:?}", op);
+            #[cfg(debug_bytecode)]
+            {
+                println!("[");
+                for (idx, x) in self.stack.iter().enumerate() {
+                    println!("    {}: {:?},", idx, x);
+                }
+                println!("]");
+                let byte_offset = self.frame.ip.ip as i64 - self.frame.ip.range.start as i64 - 1;
+                println!("op :{}: {:?}", byte_offset, op);
+            }
             match op {
                 op::StackRef0 => self.stack.push_ref(0),
                 op::StackRef1 => self.stack.push_ref(1),
@@ -609,6 +613,15 @@ mod test {
                  (defalias 'has_rest #'(lambda (x &optional y &rest z) y))
                  (has_rest 7 9 11 13))",
             9
+        );
+
+        test_eval!(
+            "(progn
+                 (defalias 'test-jump (lambda (name arglist &optional docstring &rest body)
+                     (if docstring nil nil)
+                     (+ arglist name)))
+                 (test-jump 1 2 3 4))",
+            3
         );
 
         test_eval!(
