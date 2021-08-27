@@ -1,6 +1,7 @@
 use crate::arena::Arena;
+use crate::cons::Cons;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, List, Object};
+use crate::object::{Callable, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::defun;
@@ -133,7 +134,7 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
-pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<List>) -> Symbol {
+pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Symbol {
     // TODO: implement
     feature
 }

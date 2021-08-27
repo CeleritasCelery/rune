@@ -3,8 +3,8 @@ use crate::cons::{Cons, MutCons};
 use crate::error::{Error, Type};
 use crate::object::{Callable, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
-use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
+use std::convert::{TryFrom, TryInto};
 
 use super::Data;
 
@@ -103,17 +103,6 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
         match obj {
             Object::Cons(cons) => Ok(List::Cons(!cons)),
             Object::Nil => Ok(List::Nil),
-            _ => Err(Error::from_object(Type::List, obj)),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for Option<List<'ob>> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Cons(cons) => Ok(Some(List::Cons(!cons))),
-            Object::Nil => Ok(None),
             _ => Err(Error::from_object(Type::List, obj)),
         }
     }

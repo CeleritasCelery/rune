@@ -1,4 +1,8 @@
+use std::convert::TryInto;
+
 use crate::arena::Arena;
+use crate::cons::MutCons;
+use crate::data;
 use crate::data::Environment;
 use crate::eval;
 use crate::object::{Function, List, Object};
@@ -61,13 +65,40 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
         List::Cons(cons) => cons
             .into_iter()
             .find(|x| match x {
-                Ok(Object::Cons(cons)) => crate::data::eq(key, cons.car()),
+                Ok(Object::Cons(cons)) => data::eq(key, cons.car()),
                 _ => false,
             })
             .transpose()
             .expect("should never return error value")
             .unwrap_or_default(),
     }
+}
+
+fn next_mut(obj: Object) -> Result<Option<&MutCons>> {
+    match obj {
+        Object::Nil => Ok(None),
+        x => Ok(Some(x.try_into()?)),
+    }
+}
+
+#[defun]
+pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'ob>> {
+    let mut head = list;
+    let mut iter = next_mut(head)?;
+    let mut prev: Option<&MutCons> = None;
+    while let Some(tail) = iter {
+        if data::eq(tail.car(), elt) {
+            if let Some(prev) = prev {
+                prev.set_cdr(tail.cdr());
+            } else {
+                head = tail.cdr();
+            }
+        } else {
+            prev = Some(tail);
+        }
+        iter = next_mut(tail.cdr())?;
+    }
+    Ok(head)
 }
 
 #[defun]
@@ -81,6 +112,14 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_delq() {
+        let arena = &Arena::new();
+        let list = list![1, 2, 3, 1, 4, 1; arena];
+        let res = delq(1.into(), list).unwrap();
+        assert_eq!(res, list![2, 3, 4; arena]);
+    }
+
+    #[test]
     fn test_mapcar() {
         let arena = &Arena::new();
         let element = cons!(5, 6; arena);
@@ -92,4 +131,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table);
+defsubr!(mapcar, assq, make_hash_table, delq);
