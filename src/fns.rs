@@ -117,6 +117,10 @@ mod test {
         let list = list![1, 2, 3, 1, 4, 1; arena];
         let res = delq(1.into(), list).unwrap();
         assert_eq!(res, list![2, 3, 4; arena]);
+
+        let list = list![true, true, true; arena];
+        let res = delq(Object::True, list).unwrap();
+        assert_eq!(res, Object::Nil);
     }
 
     #[test]

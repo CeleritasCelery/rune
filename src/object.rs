@@ -268,7 +268,20 @@ impl<'ob> Object<'ob> {
 
     pub(crate) fn ptr_eq(self, other: Object) -> bool {
         use std::mem::transmute;
-        unsafe { transmute::<Self, i64>(self) == transmute::<Object, i64>(other) }
+        match self {
+            Object::Nil => other == Object::Nil,
+            Object::True => other == Object::True,
+            Object::Int(_)
+                | Object::Float(_)
+                | Object::Symbol(_)
+                | Object::Cons(_)
+                | Object::Vec(_)
+                | Object::String(_)
+                | Object::LispFn(_)
+                | Object::SubrFn(_) => unsafe {
+                    transmute::<Self, i64>(self) == transmute::<Object, i64>(other)
+                },
+        }
     }
 
     pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {

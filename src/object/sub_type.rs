@@ -182,7 +182,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) enum List<'o> {
     Nil,
     Cons(&'o Cons<'o>),
