@@ -103,6 +103,11 @@ pub(crate) fn symbol_function<'ob>(
 }
 
 #[defun]
+pub(crate) fn null(obj: Object) -> bool {
+    matches!(obj, Object::Nil)
+}
+
+#[defun]
 pub(crate) fn fboundp(symbol: Symbol) -> bool {
     symbol.has_func()
 }
@@ -148,6 +153,7 @@ defsubr!(
     defalias,
     provide,
     symbol_function,
+    null,
     fboundp,
     listp,
     stringp,
