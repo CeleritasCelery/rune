@@ -367,6 +367,9 @@ mod test {
             /* data */ size_of::<Object>() + /* discriminant */ size_of::<isize>(),
             size_of::<Value>()
         );
+        unsafe {
+            assert_eq!(0x1700_i64, std::mem::transmute(Object::Int(Data::from_int(0x17))));
+        }
     }
 
     #[test]
