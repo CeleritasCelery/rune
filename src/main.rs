@@ -132,6 +132,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
         r#"
 (progn (load "/home/foco/remac/lisp/byte-run.el")
        (load "/home/foco/remac/lisp/backquote.el")
+       (load "/home/foco/remac/lisp/subr.el")
 )"#,
     );
     match read_from_string(&buffer, arena, env) {
