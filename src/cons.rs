@@ -127,6 +127,18 @@ impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
     }
 }
 
+impl<'ob> IntoIterator for List<'ob> {
+    type Item = Result<Object<'ob>>;
+    type IntoIter = ConsIter<'ob, 'ob>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            List::Nil => ConsIter(None),
+            List::Cons(cons) => ConsIter(Some(cons)),
+        }
+    }
+}
+
 impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
     type Item = Result<Object<'ob>>;
 

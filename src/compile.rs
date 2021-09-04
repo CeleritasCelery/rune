@@ -589,7 +589,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_if(&mut self, obj: Object<'ob>) -> Result<()> {
-        // let list = into_list(obj)?;
         let mut forms = into_iter(obj)?;
         match forms.len() {
             // (if) | (if x)
