@@ -163,6 +163,10 @@ impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
     pub(crate) fn is_empty(&self) -> bool {
         self.0 == None
     }
+
+    pub(crate) fn len(&self) -> usize {
+        self.clone().count()
+    }
 }
 
 #[defun]

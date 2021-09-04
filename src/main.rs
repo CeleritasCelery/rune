@@ -59,6 +59,7 @@ mod macros;
 mod object;
 #[macro_use]
 mod cons;
+mod alloc;
 mod arena;
 mod arith;
 mod compile;

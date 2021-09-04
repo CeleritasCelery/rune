@@ -64,13 +64,19 @@ impl Ip {
     }
 
     fn take_arg(&mut self) -> u8 {
-        self.next()
+        let x = self.next();
+        #[cfg(debug_bytecode)]
+        println!("arg = {}", x);
+        x
     }
 
     fn take_double_arg(&mut self) -> u16 {
         let upper: u16 = self.next().into();
         let lower: u16 = self.next().into();
-        upper << 8 | lower
+        let x = upper << 8 | lower;
+        #[cfg(debug_bytecode)]
+        println!("dbl arg = {}", x);
+        x
     }
 }
 

@@ -6,7 +6,7 @@ use crate::eval;
 use crate::object::{Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{intern, Symbol};
-use anyhow::{bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
 use std::fmt::Display;
@@ -35,11 +35,15 @@ impl std::error::Error for CompError {}
 #[derive(Debug)]
 struct ConstVec<'ob> {
     consts: Vec<Object<'ob>>,
+    upvalue_offset: usize,
 }
 
 impl<'ob> From<Vec<Object<'ob>>> for ConstVec<'ob> {
     fn from(vec: Vec<Object<'ob>>) -> Self {
-        let mut consts = ConstVec { consts: Vec::new() };
+        let mut consts = ConstVec {
+            consts: Vec::new(),
+            upvalue_offset: 0,
+        };
         for x in vec {
             consts.insert_or_get(x);
         }
@@ -54,12 +58,19 @@ impl<'ob> PartialEq for ConstVec<'ob> {
 }
 
 impl<'ob> ConstVec<'ob> {
-    pub(crate) const fn new() -> Self {
-        ConstVec { consts: Vec::new() }
+    pub(crate) fn with_capacity(cap: usize) -> Self {
+        ConstVec {
+            consts: vec![Object::Nil; cap],
+            upvalue_offset: cap,
+        }
     }
 
     fn insert_or_get(&mut self, obj: Object<'ob>) -> usize {
-        match self.consts.iter().position(|&x| obj == x) {
+        let mut iter = match obj {
+            Object::Nil => self.consts[self.upvalue_offset..].iter(),
+            _ => self.consts.iter(),
+        };
+        match iter.position(|&x| obj == x) {
             None => {
                 self.consts.push(obj);
                 self.consts.len() - 1
@@ -172,32 +183,40 @@ struct Compiler<'ob, 'brw> {
     codes: CodeVec,
     constants: ConstVec<'ob>,
     vars: Vec<Option<Symbol>>,
+    parent: Option<&'brw [Option<Symbol>]>,
+    upvalues: Vec<Symbol>,
     env: &'brw mut Environment<'ob>,
     arena: &'ob Arena,
 }
 
-impl<'ob> From<Compiler<'ob, '_>> for Expression<'ob> {
-    fn from(exp: Compiler<'ob, '_>) -> Self {
-        Self {
-            constants: exp.constants.consts,
-            op_codes: exp.codes,
-        }
-    }
-}
+const UPVALUE_RESERVE: usize = 5;
 
 impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn new(
         vars: Vec<Option<Symbol>>,
+        parent: Option<&'brw [Option<Symbol>]>,
         env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Compiler<'ob, 'brw> {
         Self {
             codes: CodeVec::default(),
-            constants: ConstVec::new(),
+            constants: ConstVec::with_capacity(if parent.is_some() { UPVALUE_RESERVE } else { 0 }),
+            upvalues: vec![],
+            parent,
             env,
             vars,
             arena,
         }
+    }
+
+    fn into_sexp(self) -> (Vec<Symbol>, Expression<'ob>) {
+        (
+            self.upvalues,
+            Expression {
+                constants: self.constants.consts,
+                op_codes: self.codes,
+            },
+        )
     }
 
     fn grow_stack(&mut self, var: Option<Symbol>) {
@@ -293,8 +312,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn quote(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
-        let len = forms.clone().count();
-        match len {
+        match forms.len() {
             1 => self.const_ref(forms.next().unwrap()?, None),
             x => Err(Error::ArgCount(1, x as u16).into()),
         }
@@ -302,7 +320,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn func_quote(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
-        let len = forms.clone().count();
+        let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
                 Object::Cons(cons) => self.dispatch_special_form(!cons),
@@ -497,18 +515,22 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    fn emit_call(&mut self, arg_cnt: usize) {
+        self.codes.emit_call(arg_cnt as u16);
+        let new_stack_size = self.vars.len() - arg_cnt;
+        self.truncate_stack(new_stack_size);
+    }
+
     fn compile_func_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
         println!("compiling function");
         self.const_ref(name.into(), None)?;
-        let prev_len = self.vars.len();
         let args = into_iter(args)?;
         let mut num_args = 0;
         for arg in args {
             self.compile_form(arg?)?;
             num_args += 1;
         }
-        self.codes.emit_call(num_args as u16);
-        self.truncate_stack(prev_len);
+        self.emit_call(num_args);
         Ok(())
     }
 
@@ -518,7 +540,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
                 Value::Symbol(sym) if sym.name() == "macro" => {
-                    println!("compiling macro");
+                    println!("compiling macro : {}", name);
                     let form = self.compile_macro_call(name, args, cons.cdr())?;
                     self.compile_form(form)
                 }
@@ -569,10 +591,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn compile_if(&mut self, obj: Object<'ob>) -> Result<()> {
         // let list = into_list(obj)?;
         let mut forms = into_iter(obj)?;
-        let len = forms.clone().count();
-        match len {
+        match forms.len() {
             // (if) | (if x)
-            0 | 1 => Err(Error::ArgCount(2, len as u16).into()),
+            len @ (0 | 1) => Err(Error::ArgCount(2, len as u16).into()),
             // (if x y)
             2 => {
                 self.compile_form(forms.next().unwrap()?)?;
@@ -615,9 +636,41 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    fn closure_is_nested(&self) -> bool {
+        match self.parent {
+            None => false,
+            Some(vars) => vars.iter().any(Option::is_some),
+        }
+    }
+
+    #[allow(clippy::branches_sharing_code)] // bug in clippy #7628
     fn compile_lambda_def(&mut self, obj: Object<'ob>) -> Result<()> {
-        let lambda = compile_lambda(obj, self.env, self.arena)?;
-        self.add_const_lambda(lambda)
+        if self.closure_is_nested() {
+            bail!("Nested closures are not supported in the bootstrap compiler");
+        }
+        let (upvalues, lambda) = if self.vars.iter().any(Option::is_some) {
+            compile_closure(obj, Some(&self.vars), self.env, self.arena)?
+        } else {
+            compile_closure(obj, None, self.env, self.arena)?
+        };
+
+        if upvalues.is_empty() {
+            self.add_const_lambda(lambda)?;
+        } else {
+            self.const_ref(intern("make-closure").into(), None)?;
+            self.add_const_lambda(lambda)?;
+            let len = upvalues.len();
+            for upvalue in upvalues {
+                match self.vars.iter().rposition(|&x| x == Some(upvalue)) {
+                    Some(idx) => self.stack_ref(idx, upvalue)?,
+                    None => {
+                        panic!("upvalue `{}' not found", upvalue);
+                    }
+                }
+            }
+            self.emit_call(len + 1);
+        }
+        Ok(())
     }
 
     fn compile_defvar(&mut self, obj: Object<'ob>) -> Result<()> {
@@ -650,8 +703,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         jump_targets: &mut Vec<(usize, OpCode)>,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
-        let len = cond.clone().count();
-        match len {
+        match cond.len() {
             // (cond ())
             0 => {}
             // (cond (x))
@@ -680,8 +732,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         jump_targets: &mut Vec<(usize, OpCode)>,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
-        let len = cond.clone().count();
-        match len {
+        match cond.len() {
             // (cond ())
             0 => {
                 self.const_ref(Object::Nil, None)?;
@@ -776,6 +827,34 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    fn is_upvalue(&self, sym: Symbol) -> bool {
+        match self.parent {
+            None => false,
+            Some(vars) => vars.iter().any(|&x| x == Some(sym)),
+        }
+    }
+
+    fn add_upvalue(&mut self, sym: Symbol) -> Result<()> {
+        let idx = match self.upvalues.iter().position(|&x| x == sym) {
+            Some(i) => i,
+            None => {
+                let len = self.upvalues.len();
+                ensure!(
+                    len < UPVALUE_RESERVE,
+                    anyhow!(
+                        "Bootstrap compiler can only capture {} values in a closure",
+                        UPVALUE_RESERVE
+                    )
+                );
+                self.upvalues.push(sym);
+                len
+            }
+        };
+        self.codes.emit_const(idx as u16);
+        self.grow_stack(None);
+        Ok(())
+    }
+
     fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
         if sym.name().starts_with(':') {
             self.const_ref(sym.into(), None)
@@ -783,10 +862,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             match self.vars.iter().rposition(|&x| x == Some(sym)) {
                 Some(idx) => self.stack_ref(idx, sym),
                 None => {
-                    let idx = self.constants.insert(sym.into())?;
-                    self.codes.emit_varref(idx);
-                    self.grow_stack(None);
-                    Ok(())
+                    if self.is_upvalue(sym) {
+                        self.add_upvalue(sym)
+                    } else {
+                        let idx = self.constants.insert(sym.into())?;
+                        self.codes.emit_varref(idx);
+                        self.grow_stack(None);
+                        Ok(())
+                    }
                 }
             }
         }
@@ -803,10 +886,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn compile_func_body(
         obj: ConsIter<'_, 'ob>,
         vars: Vec<Option<Symbol>>,
+        parent: Option<&'brw [Option<Symbol>]>,
         env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<Self> {
-        let mut exp = Compiler::new(vars, env, arena);
+        let mut exp = Compiler::new(vars, parent, env, arena);
         exp.implicit_progn(obj)?;
         exp.codes.push_op(OpCode::Ret);
         exp.truncate_stack(0);
@@ -844,27 +928,37 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     Ok((required, optional, rest, args))
 }
 
+fn compile_closure<'ob>(
+    obj: Object<'ob>,
+    parent: Option<&[Option<Symbol>]>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<(Vec<Symbol>, LispFn<'ob>)> {
+    let mut iter = into_iter(obj)?;
+
+    let (required, optional, rest, args) = match iter.next() {
+        // (lambda ())
+        None => return Ok((Vec::new(), LispFn::default())),
+        // (lambda (x ...) ...)
+        Some(bindings) => parse_fn_binding(bindings?)?,
+    };
+    if iter.is_empty() {
+        Ok((Vec::new(), LispFn::default()))
+    } else {
+        let func_args = args.into_iter().map(Some).collect();
+        let compiler = Compiler::compile_func_body(iter, func_args, parent, env, arena)?;
+        let (upvalues, exp) = compiler.into_sexp();
+        let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
+        Ok((upvalues, func))
+    }
+}
+
 pub(crate) fn compile_lambda<'ob>(
     obj: Object<'ob>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<LispFn<'ob>> {
-    let mut iter = into_iter(obj)?;
-
-    let (required, optional, rest, args) = match iter.next() {
-        // (lambda ())
-        None => return Ok(LispFn::default()),
-        // (lambda (x ...) ...)
-        Some(bindings) => parse_fn_binding(bindings?)?,
-    };
-    if iter.is_empty() {
-        Ok(LispFn::default())
-    } else {
-        let func_args = args.into_iter().map(Some).collect();
-        let exp: Expression<'ob> = Compiler::compile_func_body(iter, func_args, env, arena)?.into();
-        let func = LispFn::new(exp.op_codes, exp.constants, required, optional, rest);
-        Ok(func)
-    }
+    compile_closure(obj, None, env, arena).map(|x| x.1)
 }
 
 pub(crate) fn compile<'ob>(
@@ -873,7 +967,7 @@ pub(crate) fn compile<'ob>(
     arena: &'ob Arena,
 ) -> Result<Expression<'ob>> {
     let cons = Cons::new(obj, Object::Nil);
-    Compiler::compile_func_body(cons.into_iter(), vec![], env, arena).map(|x| x.into())
+    Compiler::compile_func_body(cons.into_iter(), vec![], None, env, arena).map(|x| x.into_sexp().1)
 }
 
 #[cfg(test)]
@@ -1261,17 +1355,63 @@ mod test {
             arena,
         );
 
-        let func = LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false);
-        check_compiler!(
-            "(let ((x 1)(y 2)) (lambda (x) x))",
-            [Constant0, Constant1, Constant2, DiscardNKeepTOS, 2, Ret],
-            [1, 2, func]
-        );
-
         check_error(
             "(lambda (x 1) x)",
             Error::from_object(Type::Symbol, 1.into()),
         );
+    }
+
+    #[test]
+    fn test_closure() {
+        let func = LispFn::new(
+            vec_into![Constant0, Ret].into(),
+            vec![Object::Nil; 5],
+            0,
+            0,
+            false,
+        );
+        check_compiler!(
+            "(let ((x 1)(y 2)) (lambda () x))",
+            [
+                Constant0,
+                Constant1,
+                Constant2,
+                Constant3,
+                StackRef3,
+                Call2,
+                DiscardNKeepTOS,
+                2,
+                Ret
+            ],
+            [1, 2, intern("make-closure"), func]
+        );
+
+        let mut consts = vec![Object::Nil; 5];
+        consts.push(intern("+").into());
+        let func = LispFn::new(
+            vec_into![Constant5, Constant0, Constant1, Call2, Ret].into(),
+            consts,
+            0,
+            0,
+            false,
+        );
+        check_compiler!(
+            "(let ((x 1)(y 2)) (lambda () (+ y x)))",
+            [
+                Constant0,
+                Constant1,
+                Constant2,
+                Constant3,
+                StackRef2,
+                StackRef4,
+                Call3,
+                DiscardNKeepTOS,
+                2,
+                Ret
+            ],
+            [1, 2, intern("make-closure"), func]
+        );
+
     }
 
     #[test]

@@ -216,6 +216,7 @@ lazy_static! {
             crate::lread::DEFSUBR,
             crate::data::DEFSUBR,
             crate::fns::DEFSUBR,
+            crate::alloc::DEFSUBR,
         )
     });
 }

@@ -272,15 +272,15 @@ impl<'ob> Object<'ob> {
             Object::Nil => other == Object::Nil,
             Object::True => other == Object::True,
             Object::Int(_)
-                | Object::Float(_)
-                | Object::Symbol(_)
-                | Object::Cons(_)
-                | Object::Vec(_)
-                | Object::String(_)
-                | Object::LispFn(_)
-                | Object::SubrFn(_) => unsafe {
-                    transmute::<Self, i64>(self) == transmute::<Object, i64>(other)
-                },
+            | Object::Float(_)
+            | Object::Symbol(_)
+            | Object::Cons(_)
+            | Object::Vec(_)
+            | Object::String(_)
+            | Object::LispFn(_)
+            | Object::SubrFn(_) => unsafe {
+                transmute::<Self, i64>(self) == transmute::<Object, i64>(other)
+            },
         }
     }
 
@@ -368,7 +368,10 @@ mod test {
             size_of::<Value>()
         );
         unsafe {
-            assert_eq!(0x1700_i64, std::mem::transmute(Object::Int(Data::from_int(0x17))));
+            assert_eq!(
+                0x1700_i64,
+                std::mem::transmute(Object::Int(Data::from_int(0x17)))
+            );
         }
     }
 
