@@ -25,4 +25,9 @@ fn make_closure<'ob>(prototype: &LispFn<'ob>, closure_vars: &[Object<'ob>]) -> R
     })
 }
 
-defsubr!(make_closure);
+#[defun]
+fn purecopy(obj: Object) -> Object {
+    obj
+}
+
+defsubr!(make_closure, purecopy);
