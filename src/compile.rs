@@ -118,7 +118,7 @@ const JUMP_SLOTS: i16 = 2;
 
 impl CodeVec {
     pub(crate) fn push_op(&mut self, op: OpCode) {
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         println!("op :{}: {:?}", self.len(), op);
         self.push(op.into());
     }
@@ -221,7 +221,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn grow_stack(&mut self, var: Option<Symbol>) {
         self.vars.push(var);
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         {
             println!("growing stack: {:?}", var);
             println!("[");
@@ -234,7 +234,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn shrink_stack(&mut self) -> Option<Symbol> {
         let var = self.vars.pop().expect("compile stack should not be empty");
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         {
             println!("shrinking stack");
             println!("[");
@@ -248,7 +248,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn truncate_stack(&mut self, new_len: usize) {
         self.vars.truncate(new_len);
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         {
             println!("truncating stack");
             println!("[");
@@ -1411,7 +1411,6 @@ mod test {
             ],
             [1, 2, intern("make-closure"), func]
         );
-
     }
 
     #[test]

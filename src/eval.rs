@@ -65,7 +65,7 @@ impl Ip {
 
     fn take_arg(&mut self) -> u8 {
         let x = self.next();
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         println!("arg = {}", x);
         x
     }
@@ -74,7 +74,7 @@ impl Ip {
         let upper: u16 = self.next().into();
         let lower: u16 = self.next().into();
         let x = upper << 8 | lower;
-        #[cfg(debug_bytecode)]
+        #[cfg(feature = "debug_bytecode")]
         println!("dbl arg = {}", x);
         x
     }
@@ -261,7 +261,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         let init_stack_size = self.stack.len();
         loop {
             let op = self.frame.ip.next().try_into()?;
-            #[cfg(debug_bytecode)]
+            #[cfg(feature = "debug_bytecode")]
             {
                 println!("[");
                 for (idx, x) in self.stack.iter().enumerate() {

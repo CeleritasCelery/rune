@@ -1,6 +1,6 @@
+use crate::object::{Expression, LispFn, Object};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
-use crate::object::{Expression, LispFn, Object};
 
 #[defun]
 fn make_closure<'ob>(prototype: &LispFn<'ob>, closure_vars: &[Object<'ob>]) -> Result<LispFn<'ob>> {
