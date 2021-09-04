@@ -128,7 +128,12 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 }
 
 fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
-    let buffer = String::from(r#"(load "/home/foco/remac/lisp/byte-run.el")"#);
+    let buffer = String::from(
+        r#"
+(progn (load "/home/foco/remac/lisp/byte-run.el")
+       (load "/home/foco/remac/lisp/backquote.el")
+)"#,
+    );
     match read_from_string(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
         Err(e) => println!("Error: {}", e),
