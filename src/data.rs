@@ -139,12 +139,12 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(object: Object<'ob>, arena: &'ob Arena) ->Object<'ob> {
+pub(crate) fn indirect_function<'ob>(object: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
     match object {
         Object::Symbol(sym) => match (!sym).func(arena) {
             Some(func) => func.into(),
             None => Object::Nil,
-        }
+        },
         x => x,
     }
 }

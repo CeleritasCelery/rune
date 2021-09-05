@@ -1,11 +1,11 @@
 use crate::arena::Arena;
+use crate::error::{Error, Type};
 use crate::object::{List, Object, Value};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Write};
-use std::ops::Deref;
 
 #[derive(PartialEq, Clone)]
 pub(crate) struct Cons<'ob> {
@@ -13,42 +13,11 @@ pub(crate) struct Cons<'ob> {
     cdr: Cell<Object<'ob>>,
 }
 
-#[repr(transparent)]
-#[derive(PartialEq, Debug, Clone)]
-pub(crate) struct MutCons<'ob> {
-    pub(crate) inner: Cons<'ob>,
-}
-
-impl<'ob> MutCons<'ob> {
-    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
-        self.inner.car.set(new_car);
-    }
-
-    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
-        self.inner.cdr.set(new_cdr);
-    }
-
-    unsafe fn make_mut(cons: &'ob Cons<'ob>) -> &Self {
-        let ptr: *const Cons = cons;
-        &*ptr.cast::<MutCons>()
-    }
-}
-
-impl<'ob> Deref for MutCons<'ob> {
-    type Target = Cons<'ob>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-use crate::error::{Error, Type};
-
-impl<'ob> TryFrom<Object<'ob>> for &'ob MutCons<'ob> {
+impl<'ob> TryFrom<Object<'ob>> for &'ob mut Cons<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(x) => Ok(unsafe { MutCons::make_mut(!x) }),
+            Object::Cons(x) => Ok(unsafe { x.inner_mut() }),
             _ => Err(Error::from_object(Type::Cons, obj)),
         }
     }
@@ -74,6 +43,14 @@ impl<'ob> Cons<'ob> {
 
     pub(crate) fn cdr(&self) -> Object<'ob> {
         self.cdr.get()
+    }
+
+    pub(crate) fn set_car(&mut self, new_car: Object<'ob>) {
+        self.car.set(new_car);
+    }
+
+    pub(crate) fn set_cdr(&mut self, new_cdr: Object<'ob>) {
+        self.cdr.set(new_cdr);
     }
 }
 
@@ -214,13 +191,13 @@ fn cdr_safe(object: Object) -> Object {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &'ob MutCons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
+fn setcar<'ob>(cell: &'ob mut Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &'ob MutCons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
+fn setcdr<'ob>(cell: &'ob mut Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
@@ -272,7 +249,7 @@ mod test {
         let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
         assert!(matches!(x.val(), Value::Cons(_)));
 
-        let cons1: &MutCons = x.try_into().expect("expected cons");
+        let cons1: &mut Cons = x.try_into().expect("expected cons");
 
         let start_str = "start".to_owned();
         assert_eq!(Value::String(&start_str), cons1.car().val());

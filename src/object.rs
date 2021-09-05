@@ -67,6 +67,14 @@ impl<'a, T> Inner<&'a T> for Data<&'a T> {
     }
 }
 
+impl<'a> Data<&'a Cons<'a>> {
+    pub(crate) unsafe fn inner_mut(self) -> &'a mut Cons<'a> {
+        let bits = self.expand();
+        let ptr = bits as *mut Cons<'a>;
+        &mut *ptr
+    }
+}
+
 impl Inner<i64> for Fixnum {
     fn inner(self) -> i64 {
         self.expand()

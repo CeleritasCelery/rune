@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
 use crate::arena::Arena;
-use crate::cons::MutCons;
+use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
 use crate::eval;
@@ -74,7 +74,7 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     }
 }
 
-fn next_mut(obj: Object) -> Result<Option<&MutCons>> {
+fn next_mut(obj: Object) -> Result<Option<&mut Cons>> {
     match obj {
         Object::Nil => Ok(None),
         x => Ok(Some(x.try_into()?)),
@@ -85,10 +85,11 @@ fn next_mut(obj: Object) -> Result<Option<&MutCons>> {
 pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'ob>> {
     let mut head = list;
     let mut iter = next_mut(head)?;
-    let mut prev: Option<&MutCons> = None;
+    let mut prev: Option<&mut Cons> = None;
     while let Some(tail) = iter {
+        let next = tail.cdr();
         if data::eq(tail.car(), elt) {
-            if let Some(prev) = prev {
+            if let Some(ref mut prev) = prev {
                 prev.set_cdr(tail.cdr());
             } else {
                 head = tail.cdr();
@@ -96,7 +97,7 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'o
         } else {
             prev = Some(tail);
         }
-        iter = next_mut(tail.cdr())?;
+        iter = next_mut(next)?;
     }
     Ok(head)
 }
