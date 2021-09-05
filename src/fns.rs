@@ -130,6 +130,16 @@ pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob>
     Object::Nil
 }
 
+#[defun]
+pub(crate) fn puthash<'ob>(
+    _key: Object<'ob>,
+    value: Object<'ob>,
+    _table: Object<'ob>,
+) -> Object<'ob> {
+    // TODO: Implement
+    value
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -158,4 +168,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table, delq, apply);
+defsubr!(mapcar, assq, make_hash_table, puthash, delq, apply);
