@@ -31,17 +31,23 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-impl<'ob> Function<'ob> {
+impl<'ob> Callable<'ob> {
     #[cfg(miri)]
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            Function::LispFn(x) => {
+            Callable::LispFn(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Function::SubrFn(x) => {
+            Callable::SubrFn(x) => {
+                let ptr: *const _ = &x;
+                unsafe {
+                    miri_static_root(ptr as _);
+                }
+            }
+            Callable::Macro(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);

@@ -180,7 +180,7 @@ impl SymbolMap {
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: Callable) {
         let obj: Object = func.clone_in(&self.arena);
-        let new_func = obj.try_into().expect("return type was not type we put in");
+        let new_func: Callable = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();
         unsafe {
@@ -196,7 +196,7 @@ macro_rules! create_symbolmap {
         let arena = Arena::new();
         $(for func in $arr.iter() {
             let func = func;
-            let func_obj = func.into_obj(&arena);
+            let func_obj: Callable = func.into_obj(&arena);
             #[cfg(miri)]
             func_obj.set_as_miri_root();
             let name: &'static str = func.name;
