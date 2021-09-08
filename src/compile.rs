@@ -318,6 +318,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    fn backquote(&mut self, sym: Symbol, value: Object<'ob>) -> Result<()> {
+        if sym.func_obj(value).is_some() {
+            self.compile_call(sym, value)
+        } else {
+            self.quote(value)
+        }
+    }
+
     fn func_quote(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
         let len = forms.len();
@@ -809,7 +817,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match name.name() {
             "lambda" => self.compile_lambda_def(forms),
             "while" => self.compile_loop(forms),
-            "quote" | "`" => self.quote(forms),
+            "quote"=> self.quote(forms),
+            "`" => self.backquote(name, forms),
             "function" => self.func_quote(forms),
             "progn" => self.progn(forms),
             "prog1" => self.progx(forms, 1),

@@ -308,10 +308,13 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_cdr(&mut self, delim: usize) -> Result<Object<'ob>, Error> {
         match self.tokens.next() {
             Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
-            Some(sexp) => match self.tokens.next() {
-                Some(Token::CloseParen(_)) => self.read_sexp(sexp),
-                Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
-                None => Err(Error::MissingCloseParen(delim)),
+            Some(sexp) => {
+                let obj = self.read_sexp(sexp);
+                match self.tokens.next() {
+                    Some(Token::CloseParen(_)) => obj,
+                    Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
+                    None => Err(Error::MissingCloseParen(delim)),
+                }
             },
             None => Err(Error::MissingCloseParen(delim)),
         }
@@ -487,6 +490,7 @@ baz""#
             cons!(1, cons!(1.5, "foo"; arena); arena),
             "(1 1.5 . \"foo\")"
         );
+        check_reader!(list!("foo", cons!(1, 1.5; arena); arena), "(\"foo\" (1 . 1.5))");
         check_reader!(list!(1, 1.5; arena), "(1 1.5)");
         check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)");
     }
