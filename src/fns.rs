@@ -103,6 +103,18 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'o
 }
 
 #[defun]
+pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
+    let val = list.into_iter().by_cons().find(|x| match x {
+        Ok(obj) => data::eq(obj.car(), elt),
+        Err(_) => true,
+    });
+    match val {
+        Some(elem) => elem.map(List::Cons),
+        None => Ok(List::Nil),
+    }
+}
+
+#[defun]
 pub(crate) fn apply<'ob>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
@@ -169,4 +181,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table, puthash, delq, apply);
+defsubr!(mapcar, assq, make_hash_table, puthash, delq, memq, apply);

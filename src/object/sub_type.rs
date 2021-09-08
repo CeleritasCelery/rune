@@ -194,6 +194,15 @@ pub(crate) enum List<'o> {
     Cons(&'o Cons<'o>),
 }
 
+impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        match self {
+            List::Nil => Object::Nil,
+            List::Cons(cons) => Object::Cons(Data::from_ref(cons)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

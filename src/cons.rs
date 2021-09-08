@@ -93,64 +93,77 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 define_unbox!(Cons, &Cons<'ob>);
 
 #[derive(Clone)]
+pub(crate) struct ElemIter<'borrow, 'ob>(ConsIter<'borrow, 'ob>);
+
+#[derive(Clone)]
 pub(crate) struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
 
 impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
     type Item = Result<Object<'ob>>;
-    type IntoIter = ConsIter<'borrow, 'ob>;
+    type IntoIter = ElemIter<'borrow, 'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ConsIter(Some(self))
+        ElemIter(ConsIter(Some(self)))
     }
 }
 
 impl<'ob> IntoIterator for List<'ob> {
     type Item = Result<Object<'ob>>;
-    type IntoIter = ConsIter<'ob, 'ob>;
+    type IntoIter = ElemIter<'ob, 'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            List::Nil => ConsIter(None),
-            List::Cons(cons) => ConsIter(Some(cons)),
+            List::Nil => ElemIter(ConsIter(None)),
+            List::Cons(cons) => ElemIter(ConsIter(Some(cons))),
         }
     }
 }
 
 impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
-    type Item = Result<Object<'ob>>;
+    type Item = Result<&'borrow Cons<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
             Some(cons) => {
-                let val = cons.car();
-                let next = match cons.cdr().val() {
+                (*self).0 = match cons.cdr().val() {
                     Value::Cons(next) => Some(next),
                     Value::Nil => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
-                *self = ConsIter(next);
-                Some(Ok(val))
+                Some(Ok(cons))
             }
             None => None,
         }
     }
 }
 
-pub(crate) fn into_iter(obj: Object) -> Result<ConsIter> {
+impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
+    type Item = Result<Object<'ob>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|result| result.map(Cons::car))
+    }
+}
+
+pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
     match obj.val() {
         Value::Cons(cons) => Ok(cons.into_iter()),
-        Value::Nil => Ok(ConsIter::empty()),
+        Value::Nil => Ok(ElemIter::empty()),
         _ => Err(Error::from_object(Type::List, obj).into()),
     }
 }
 
-impl<'borrow, 'ob> ConsIter<'borrow, 'ob> {
+impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
+    pub(crate) fn by_cons(self) -> ConsIter<'borrow, 'ob> {
+        self.0
+    }
+
     pub(crate) const fn empty() -> Self {
-        ConsIter(None)
+        ElemIter(ConsIter(None))
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.0 == None
+        self.0 .0 == None
     }
 
     pub(crate) fn len(&self) -> usize {

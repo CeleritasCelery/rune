@@ -315,7 +315,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                     Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
                     None => Err(Error::MissingCloseParen(delim)),
                 }
-            },
+            }
             None => Err(Error::MissingCloseParen(delim)),
         }
     }
@@ -341,14 +341,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
-                Token::CloseBracket(_) => {
-                    return Ok(self.arena.add(objects))
-                }
+                Token::CloseBracket(_) => return Ok(self.arena.add(objects)),
                 tok => objects.push(self.read_sexp(tok)?),
             }
         }
         Err(Error::MissingCloseBracket(delim))
-
     }
 
     fn quote_item(&mut self, pos: usize, symbol_name: &str) -> Result<Object<'ob>, Error> {
@@ -490,7 +487,10 @@ baz""#
             cons!(1, cons!(1.5, "foo"; arena); arena),
             "(1 1.5 . \"foo\")"
         );
-        check_reader!(list!("foo", cons!(1, 1.5; arena); arena), "(\"foo\" (1 . 1.5))");
+        check_reader!(
+            list!("foo", cons!(1, 1.5; arena); arena),
+            "(\"foo\" (1 . 1.5))"
+        );
         check_reader!(list!(1, 1.5; arena), "(1 1.5)");
         check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)");
     }
@@ -525,7 +525,6 @@ baz""#
         check_reader!(vec_into![1, 2], "[1 2]");
         check_reader!(vec_into![1, 2, 3], "[1 2 3]");
     }
-
 
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();

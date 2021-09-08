@@ -1,5 +1,5 @@
 use crate::arena::Arena;
-use crate::cons::{into_iter, Cons, ConsIter};
+use crate::cons::{into_iter, Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::eval;
@@ -379,7 +379,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn implicit_progn(&mut self, mut forms: ConsIter<'_, 'ob>) -> Result<()> {
+    fn implicit_progn(&mut self, mut forms: ElemIter<'_, 'ob>) -> Result<()> {
         if let Some(form) = forms.next() {
             self.compile_form(form?)?;
         } else {
@@ -817,7 +817,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match name.name() {
             "lambda" => self.compile_lambda_def(forms),
             "while" => self.compile_loop(forms),
-            "quote"=> self.quote(forms),
+            "quote" => self.quote(forms),
             "`" => self.backquote(name, forms),
             "function" => self.func_quote(forms),
             "progn" => self.progn(forms),
@@ -892,7 +892,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_func_body(
-        obj: ConsIter<'_, 'ob>,
+        obj: ElemIter<'_, 'ob>,
         vars: Vec<Option<Symbol>>,
         parent: Option<&'brw [Option<Symbol>]>,
         env: &'brw mut Environment<'ob>,
