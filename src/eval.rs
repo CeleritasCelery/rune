@@ -173,7 +173,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         if rest_size > 0 {
             let slice = self.stack.take_slice(rest_size as usize);
             let list = crate::fns::slice_into_list(slice, None, arena);
-            let i = self.stack.from_end(rest_size as usize) + 1;
+            let i = self.stack.from_end(rest_size as usize - 1);
             self.stack[i] = list;
             self.stack.truncate(i + 1);
             Ok(total_args - rest_size + 1)
