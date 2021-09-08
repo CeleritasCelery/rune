@@ -128,6 +128,21 @@ pub(crate) fn stringp(object: Object) -> bool {
 }
 
 #[defun]
+pub(crate) fn vectorp(object: Object) -> bool {
+    matches!(object, Object::Vec(_))
+}
+
+#[defun]
+pub(crate) fn consp(object: Object) -> bool {
+    matches!(object, Object::Cons(_))
+}
+
+#[defun]
+pub(crate) fn atom(object: Object) -> bool {
+    !consp(object)
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
@@ -169,5 +184,8 @@ defsubr!(
     listp,
     stringp,
     symbolp,
+    vectorp,
+    consp,
+    atom,
     indirect_function,
 );

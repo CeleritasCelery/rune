@@ -40,6 +40,15 @@
 
 ;; function and macro versions of backquote-list*
 
+(defmacro unless (cond &rest body)
+  "If COND yields nil, do BODY, else return nil.
+When COND yields nil, eval BODY forms sequentially and return
+value of last one, or nil if there are none.
+
+\(fn COND BODY...)"
+  (declare (indent 1) (debug t))
+  (cons 'if (cons cond (cons nil body))))
+
 (defun backquote-list*-function (first &rest list)
   "Like `list' but the last argument is the tail of the new list.
 
