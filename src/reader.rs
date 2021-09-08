@@ -8,6 +8,7 @@ use std::{fmt, iter::Peekable, str::CharIndices};
 #[derive(PartialEq, Debug)]
 pub(crate) enum Error {
     MissingCloseParen(usize),
+    MissingCloseBracket(usize),
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
     ExtraItemInCdr(usize),
@@ -15,6 +16,7 @@ pub(crate) enum Error {
     // translate that to '(1 \.)
     MissingCdr(usize),
     ExtraCloseParen(usize),
+    ExtraCloseBracket(usize),
     MissingQuotedItem(usize),
     UnknownMacroCharacter(char, usize),
     EmptyStream,
@@ -24,8 +26,10 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::MissingCloseParen(i) => write!(f, "Missing close paren: at {}", i),
+            Error::MissingCloseBracket(i) => write!(f, "Missing close bracket: at {}", i),
             Error::MissingStringDel(i) => write!(f, "Missing closing string quote: at {}", i),
-            Error::ExtraCloseParen(i) => write!(f, "Extra Closing Paren: at {}", i),
+            Error::ExtraCloseParen(i) => write!(f, "Extra Closing paren: at {}", i),
+            Error::ExtraCloseBracket(i) => write!(f, "Extra Closing brace: at {}", i),
             Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {}: at {}", chr, i),
             Error::EmptyStream => write!(f, "Empty Stream"),
             Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
@@ -45,8 +49,10 @@ impl Error {
         match self {
             Error::MissingQuotedItem(x)
             | Error::MissingCloseParen(x)
+            | Error::MissingCloseBracket(x)
             | Error::MissingStringDel(x)
             | Error::ExtraCloseParen(x)
+            | Error::ExtraCloseBracket(x)
             | Error::ExtraItemInCdr(x)
             | Error::MissingCdr(x)
             | Error::UnexpectedChar(_, x)
@@ -60,6 +66,8 @@ impl Error {
 enum Token<'a> {
     OpenParen(usize),
     CloseParen(usize),
+    OpenBracket(usize),
+    CloseBracket(usize),
     Quote(usize),
     Backquote(usize),
     Unquote(usize),
@@ -103,6 +111,8 @@ impl<'a> Tokenizer<'a> {
         match token {
             Token::OpenParen(x)
             | Token::CloseParen(x)
+            | Token::OpenBracket(x)
+            | Token::CloseBracket(x)
             | Token::Quote(x)
             | Token::Backquote(x)
             | Token::Unquote(x)
@@ -196,11 +206,13 @@ impl<'a> Iterator for Tokenizer<'a> {
         let (idx, chr) = self.iter.next()?;
         let token = match chr {
             '(' => Token::OpenParen(idx),
+            ')' => Token::CloseParen(idx),
+            '[' => Token::OpenBracket(idx),
+            ']' => Token::CloseBracket(idx),
             '\'' => Token::Quote(idx),
             ',' => self.get_macro_char(idx),
             '`' => Token::Backquote(idx),
             '#' => Token::Sharp(idx),
-            ')' => Token::CloseParen(idx),
             '.' => Token::Dot(idx),
             '"' => self.get_string(idx),
             other if symbol_char(other) => self.get_symbol(idx, other),
@@ -322,6 +334,20 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Err(Error::MissingCloseParen(delim))
     }
 
+    fn read_vec(&mut self, delim: usize) -> Result<Object<'ob>, Error> {
+        let mut objects = Vec::new();
+        while let Some(token) = self.tokens.next() {
+            match token {
+                Token::CloseBracket(_) => {
+                    return Ok(self.arena.add(objects))
+                }
+                tok => objects.push(self.read_sexp(tok)?),
+            }
+        }
+        Err(Error::MissingCloseBracket(delim))
+
+    }
+
     fn quote_item(&mut self, pos: usize, symbol_name: &str) -> Result<Object<'ob>, Error> {
         let obj = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
@@ -355,6 +381,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         match token {
             Token::OpenParen(i) => self.read_list(i),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
+            Token::OpenBracket(i) => self.read_vec(i),
+            Token::CloseBracket(i) => Err(Error::ExtraCloseBracket(i)),
             Token::Quote(i) => self.quote_item(i, "quote"),
             Token::Unquote(i) => self.quote_item(i, ","),
             Token::Splice(i) => self.quote_item(i, ",@"),
@@ -485,6 +513,15 @@ baz""#
         assert_error("#'", Error::MissingQuotedItem(0));
         assert_error("#a", Error::UnknownMacroCharacter('a', 0));
     }
+
+    #[test]
+    fn test_read_vec() {
+        check_reader!(vec![], "[]");
+        check_reader!(vec_into![1], "[1]");
+        check_reader!(vec_into![1, 2], "[1 2]");
+        check_reader!(vec_into![1, 2, 3], "[1 2 3]");
+    }
+
 
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
