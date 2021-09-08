@@ -476,9 +476,14 @@ pub(crate) fn call_subr<'ob>(
 #[defun]
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,
+    lexical: Option<Object<'ob>>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
+    match lexical {
+        Some(Object::True) | None => {},
+        Some(x) => bail!("Only lexical = t is currently supported: found {}", x),
+    }
     let func = compile(form, env, arena)?;
     Routine::execute(&func, env, arena)
 }
