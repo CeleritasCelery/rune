@@ -34,6 +34,7 @@ pub(crate) enum Type {
     Nil,
     Cons,
     Vec,
+    Sequence,
     String,
     Symbol,
     Float,

@@ -150,6 +150,18 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 }
 
 #[defun]
+pub(crate) fn length(sequence: Object) -> Result<i64> {
+    use crate::error::{Error, Type};
+    let size = match sequence {
+        Object::Cons(x) => x.into_iter().len(),
+        Object::Vec(x) => x.len(),
+        Object::String(x) => x.len(),
+        obj => bail!(Error::from_object(Type::Sequence, obj)),
+    };
+    Ok(size.try_into().expect("conversion from usize to isize should never fail"))
+}
+
+#[defun]
 pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob> {
     // TODO: Implement
     Object::Nil
@@ -193,4 +205,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table, puthash, concat, delq, memq, apply);
+defsubr!(mapcar, assq, make_hash_table, puthash, length, concat, delq, memq, apply);
