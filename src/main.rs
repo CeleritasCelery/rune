@@ -132,6 +132,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
         r#"
 (progn (load "/home/foco/remac/lisp/byte-run.el")
        (load "/home/foco/remac/lisp/backquote.el")
+       (load "/home/foco/remac/lisp/byte-run.el")
        (load "/home/foco/remac/lisp/subr.el")
 )"#,
     );
@@ -144,7 +145,8 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 fn main() {
     let arena = &Arena::new();
     let env = &mut Environment::default();
-    env.vars.insert(crate::symbol::intern("lexical-binding"), true.into());
+    env.vars
+        .insert(crate::symbol::intern("lexical-binding"), true.into());
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),
         Some(arg) if arg == "--load" => load(env, arena),

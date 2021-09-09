@@ -1,12 +1,12 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{Callable, Function, IntoObject, List, Number, Object};
+use crate::object::{FuncCell, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
 use anyhow::anyhow;
 use std::convert::{TryFrom, TryInto};
 
-use super::Data;
+use super::{Callable, Data};
 
 impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = anyhow::Error;
@@ -14,7 +14,7 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Object::Symbol(sym) => match (!sym).func_obj(obj) {
+            Object::Symbol(sym) => match (!sym).resolved_func() {
                 Some(x) => x
                     .try_into()
                     .map_err(|_e| anyhow!("Macro `{}' is not valid as a function", sym)),
@@ -36,13 +36,25 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
     }
 }
 
-impl<'ob> TryFrom<&'ob Cons<'ob>> for Callable<'ob> {
+impl<'ob> TryFrom<FuncCell<'ob>> for Callable<'ob> {
+    type Error = anyhow::Error;
+    fn try_from(obj: FuncCell<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            FuncCell::LispFn(x) => Ok(Callable::LispFn(x)),
+            FuncCell::SubrFn(x) => Ok(Callable::SubrFn(x)),
+            FuncCell::Macro(x) => Ok(Callable::Macro(x)),
+            FuncCell::Symbol(_) => Err(anyhow!("Symbols are not callable")),
+        }
+    }
+}
+
+impl<'ob> TryFrom<&'ob Cons<'ob>> for FuncCell<'ob> {
     type Error = Error;
     fn try_from(cons: &'ob Cons<'ob>) -> Result<Self, Self::Error> {
         match cons.car() {
             Object::Symbol(sym) if (!sym).name() == "macro" => {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
-                    Ok(Callable::Macro(Data::from_ref(cons)))
+                    Ok(FuncCell::Macro(Data::from_ref(cons)))
                 } else {
                     Err(Error::from_object(Type::Func, cons.car()))
                 }
@@ -52,13 +64,14 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for Callable<'ob> {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
+impl<'ob> TryFrom<Object<'ob>> for FuncCell<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::LispFn(x) => Ok(Callable::LispFn(x)),
-            Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
-            Object::Cons(cons) => (cons.get()).try_into(),
+            Object::LispFn(x) => Ok(FuncCell::LispFn(x)),
+            Object::SubrFn(x) => Ok(FuncCell::SubrFn(x)),
+            Object::Symbol(x) => Ok(FuncCell::Symbol(x)),
+            Object::Cons(cons) => cons.get().try_into(),
             _ => Err(Error::from_object(Type::Func, obj)),
         }
     }

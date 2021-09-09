@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, IntoObject, Object};
+use crate::object::{Callable, FuncCell, IntoObject, Object};
 use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
 use std::convert::TryInto;
@@ -11,9 +11,9 @@ use std::sync::Mutex;
 #[derive(Debug)]
 struct InnerSymbol {
     name: &'static str,
-    func: AtomicCell<Option<Callable<'static>>>,
+    func: AtomicCell<Option<FuncCell<'static>>>,
 }
-unsafe fn coerce_callable_lifetime<'a, 'b>(x: Callable<'a>) -> Callable<'b> {
+unsafe fn coerce_callable_lifetime<'a, 'b>(x: FuncCell<'a>) -> FuncCell<'b> {
     transmute(x)
 }
 
@@ -54,15 +54,21 @@ impl Symbol {
         self.0.func.load().is_some()
     }
 
-    pub(crate) fn func(self, _arena: &'_ Arena) -> Option<Callable<'_>> {
+    pub(crate) fn func<'a>(self) -> Option<FuncCell<'a>> {
         unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
-    pub(crate) fn func_obj(self, _lifetime: Object<'_>) -> Option<Callable<'_>> {
-        unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
+    pub(crate) fn resolved_func<'a>(self) -> Option<Callable<'a>> {
+        match self.func() {
+            Some(FuncCell::Symbol(sym)) => (!sym).resolved_func(),
+            Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
+            Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
+            Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
+            None => None,
+        }
     }
 
-    unsafe fn set_func(self, func: Callable) {
+    unsafe fn set_func(self, func: FuncCell) {
         self.0.func.store(Some(coerce_callable_lifetime(func)));
     }
 
@@ -178,9 +184,9 @@ impl SymbolMap {
         self.map.intern(name)
     }
 
-    pub(crate) fn set_func(&self, symbol: Symbol, func: Callable) {
+    pub(crate) fn set_func(&self, symbol: Symbol, func: FuncCell) {
         let obj: Object = func.clone_in(&self.arena);
-        let new_func: Callable = obj.try_into().expect("return type was not type we put in");
+        let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();
         unsafe {
@@ -196,7 +202,7 @@ macro_rules! create_symbolmap {
         let arena = Arena::new();
         $(for func in $arr.iter() {
             let func = func;
-            let func_obj: Callable = func.into_obj(&arena);
+            let func_obj: FuncCell = func.into_obj(&arena);
             #[cfg(miri)]
             func_obj.set_as_miri_root();
             let name: &'static str = func.name;
@@ -248,14 +254,14 @@ mod test {
         let inner = InnerSymbol::new("foo");
         let sym = Symbol(unsafe { fix_lifetime(&inner) });
         assert_eq!("foo", sym.name());
-        assert!(sym.func(arena).is_none());
+        assert!(sym.func().is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
             sym.set_func(func.into_obj(arena));
         }
-        let cell = sym.func(arena).unwrap();
+        let cell = sym.func().unwrap();
         let before = match cell {
-            Callable::LispFn(x) => !x,
+            FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
@@ -263,9 +269,9 @@ mod test {
         unsafe {
             sym.set_func(func.into_obj(arena));
         }
-        let cell = sym.func(arena).unwrap();
+        let cell = sym.func().unwrap();
         let after = match cell {
-            Callable::LispFn(x) => !x,
+            FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
@@ -293,7 +299,7 @@ mod test {
             sym.set_func(core_func.into_obj(arena));
         }
 
-        if let Some(Callable::SubrFn(subr)) = sym.func(arena) {
+        if let Some(FuncCell::SubrFn(subr)) = sym.func() {
             assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

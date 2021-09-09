@@ -1,7 +1,6 @@
-use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, Object};
+use crate::object::{FuncCell, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use fn_macros::defun;
@@ -17,7 +16,7 @@ pub(crate) struct Environment<'ob> {
 
 pub(crate) fn set_global_function<'ob>(
     symbol: Symbol,
-    func: Callable<'ob>,
+    func: FuncCell<'ob>,
     env: &mut Environment<'ob>,
 ) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
@@ -91,12 +90,8 @@ pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(
-    symbol: Symbol,
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Object<'ob> {
-    symbol.func(arena).map_or_else(
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -> Object<'ob> {
+    symbol.func().map_or_else(
         || *env.funcs.get(&symbol).unwrap_or(&Object::Nil),
         |func| func.into(),
     )
@@ -156,7 +151,7 @@ pub(crate) fn defvar<'ob>(
 #[defun]
 pub(crate) fn indirect_function(object: Object) -> Object {
     match object {
-        Object::Symbol(sym) => match (!sym).func_obj(object) {
+        Object::Symbol(sym) => match (!sym).resolved_func() {
             Some(func) => func.into(),
             None => Object::Nil,
         },

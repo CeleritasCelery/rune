@@ -1,6 +1,7 @@
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
+use crate::symbol::Symbol;
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
@@ -31,23 +32,23 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-impl<'ob> Callable<'ob> {
+impl<'ob> FuncCell<'ob> {
     #[cfg(miri)]
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            Callable::LispFn(x) => {
+            FuncCell::LispFn(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Callable::SubrFn(x) => {
+            FuncCell::SubrFn(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Callable::Macro(x) => {
+            FuncCell::Macro(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
@@ -63,33 +64,81 @@ extern "Rust" {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub(crate) enum FuncCell<'ob> {
+    LispFn(Data<&'ob LispFn<'ob>>),
+    SubrFn(Data<&'ob SubrFn>),
+    Macro(Data<&'ob Cons<'ob>>),
+    Symbol(Data<Symbol>),
+}
+
+impl<'ob> IntoObject<'ob, FuncCell<'ob>> for LispFn<'ob> {
+    fn into_obj(self, arena: &'ob Arena) -> FuncCell<'ob> {
+        let x: Function = self.into_obj(arena);
+        x.into()
+    }
+}
+
+impl<'ob> IntoObject<'ob, FuncCell<'ob>> for SubrFn {
+    fn into_obj(self, arena: &'ob Arena) -> FuncCell<'ob> {
+        let x: Function = self.into_obj(arena);
+        x.into()
+    }
+}
+
+impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
+    fn from(x: Function<'ob>) -> Self {
+        match x {
+            Function::LispFn(x) => FuncCell::LispFn(x),
+            Function::SubrFn(x) => FuncCell::SubrFn(x),
+        }
+    }
+}
+
+impl<'ob> From<FuncCell<'ob>> for Object<'ob> {
+    fn from(x: FuncCell<'ob>) -> Self {
+        match x {
+            FuncCell::LispFn(x) => Object::LispFn(x),
+            FuncCell::SubrFn(x) => Object::SubrFn(x),
+            FuncCell::Macro(x) => Object::Cons(x),
+            FuncCell::Symbol(x) => Object::Symbol(x),
+        }
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for FuncCell<'ob> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        self.into()
+    }
+}
+
+impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        match self {
+            Some(FuncCell::LispFn(x)) => Object::LispFn(x),
+            Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
+            Some(FuncCell::Macro(x)) => Object::Cons(x),
+            Some(FuncCell::Symbol(x)) => Object::Symbol(x),
+            None => Object::Nil,
+        }
+    }
+}
+
+impl<'a> FuncCell<'a> {
+    pub(crate) fn clone_in(self, arena: &Arena) -> Object {
+        match self {
+            FuncCell::LispFn(x) => x.clone_in(arena).into_obj(arena),
+            FuncCell::SubrFn(x) => x.into_obj(arena),
+            FuncCell::Macro(x) => x.clone_in(arena).into_obj(arena),
+            FuncCell::Symbol(x) => (!x).into(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Cons<'ob>>),
-}
-
-impl<'ob> IntoObject<'ob, Callable<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> Callable<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, Callable<'ob>> for SubrFn {
-    fn into_obj(self, arena: &'ob Arena) -> Callable<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
-    }
-}
-
-impl<'ob> From<Function<'ob>> for Callable<'ob> {
-    fn from(x: Function<'ob>) -> Self {
-        match x {
-            Function::LispFn(x) => Callable::LispFn(x),
-            Function::SubrFn(x) => Callable::SubrFn(x),
-        }
-    }
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -98,33 +147,6 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
             Callable::LispFn(x) => Object::LispFn(x),
             Callable::SubrFn(x) => Object::SubrFn(x),
             Callable::Macro(x) => Object::Cons(x),
-        }
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for Callable<'ob> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        self.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Callable<'ob>> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        match self {
-            Some(Callable::LispFn(x)) => Object::LispFn(x),
-            Some(Callable::SubrFn(x)) => Object::SubrFn(x),
-            Some(Callable::Macro(x)) => Object::Cons(x),
-            None => Object::Nil,
-        }
-    }
-}
-
-impl<'a> Callable<'a> {
-    pub(crate) fn clone_in(self, arena: &Arena) -> Object {
-        match self {
-            Callable::LispFn(x) => x.clone_in(arena).into_obj(arena),
-            Callable::SubrFn(x) => x.into_obj(arena),
-            Callable::Macro(x) => x.clone_in(arena).into_obj(arena),
         }
     }
 }

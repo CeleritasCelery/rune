@@ -319,7 +319,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn backquote(&mut self, sym: Symbol, value: Object<'ob>) -> Result<()> {
-        if sym.func_obj(value).is_some() {
+        if sym.func().is_some() {
             self.compile_call(sym, value)
         } else {
             self.quote(value)
@@ -544,7 +544,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn compile_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
         println!("compiling call : {}", name.name());
-        let callable = crate::data::symbol_function(name, &mut self.env, self.arena);
+        let callable = crate::data::symbol_function(name, &mut self.env);
         if let Object::Cons(cons) = callable {
             match cons.car().val() {
                 Value::Symbol(sym) if sym.name() == "macro" => {

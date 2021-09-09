@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::compile::{compile, compile_lambda};
 use crate::data::Environment;
-use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
+use crate::object::{Callable, Expression, FuncCell, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
@@ -189,7 +189,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
         println!("calling: {}", sym.name());
-        match sym.func(arena) {
+        match sym.resolved_func() {
             Some(func) => match func {
                 Callable::LispFn(func) => {
                     self.call_lisp(!func, arg_cnt, arena)?;
@@ -206,13 +206,17 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     let func = compile_lambda(uncompiled_func.cdr(), env, arena)?;
                     let obj = arena.add(func);
                     crate::data::defalias(sym, obj, None, env);
-                    if let Callable::LispFn(func) = obj.try_into()? {
+                    if let FuncCell::LispFn(func) = obj.try_into()? {
                         self.call_lisp(!func, arg_cnt, arena)?;
                     } else {
                         unreachable!("type was no longer lisp fn");
                     }
                 }
-                Some(other) => bail!("Type {:?} is not a valid function", other.get_type()),
+                Some(other) => bail!(
+                    "Type {:?} is not a valid function: {}",
+                    other.get_type(),
+                    other
+                ),
                 None => bail!(Error::VoidFunction(sym)),
             },
         };
@@ -481,7 +485,7 @@ pub(crate) fn eval<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match lexical {
-        Some(Object::True) | None => {},
+        Some(Object::True) | None => {}
         Some(x) => bail!("Only lexical = t is currently supported: found {}", x),
     }
     let func = compile(form, env, arena)?;
