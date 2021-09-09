@@ -98,6 +98,11 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -
 }
 
 #[defun]
+pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
+    symbol.name()
+}
+
+#[defun]
 pub(crate) fn null(obj: Object) -> bool {
     matches!(obj, Object::Nil)
 }
@@ -174,6 +179,7 @@ defsubr!(
     defalias,
     provide,
     symbol_function,
+    symbol_name,
     null,
     fboundp,
     listp,

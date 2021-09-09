@@ -46,7 +46,7 @@ impl Symbol {
         ptr.cast()
     }
 
-    pub(crate) const fn name(&self) -> &str {
+    pub(crate) const fn name(self) -> &'static str {
         self.0.name
     }
 

@@ -6,7 +6,7 @@ use crate::data;
 use crate::data::Environment;
 use crate::eval;
 use crate::object::{Function, List, Object};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use fn_macros::defun;
 
 pub(crate) fn slice_into_list<'ob>(
@@ -138,6 +138,18 @@ pub(crate) fn apply<'ob>(
 }
 
 #[defun]
+pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
+    let mut concat = String::new();
+    for elt in sequences {
+        match elt {
+            Object::String(string) => concat.push_str(string),
+            _ => bail!("Currently only concatenating strings are supported"),
+        }
+    }
+    Ok(concat)
+}
+
+#[defun]
 pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob> {
     // TODO: Implement
     Object::Nil
@@ -181,4 +193,4 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table, puthash, delq, memq, apply);
+defsubr!(mapcar, assq, make_hash_table, puthash, concat, delq, memq, apply);

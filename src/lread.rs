@@ -3,6 +3,7 @@ use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
 use crate::reader::{Error, Reader};
+use crate::symbol::Symbol;
 use fn_macros::defun;
 
 use anyhow::{anyhow, Result};
@@ -36,13 +37,17 @@ pub(crate) fn read_from_string<'ob>(
 }
 
 #[defun]
-#[allow(clippy::ptr_arg)]
-fn load<'ob>(file: &String, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
+fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
     read_from_string(&file_contents, arena, env)
 }
 
-defsubr!(load);
+#[defun]
+pub(crate) fn intern(string: &str) -> Symbol {
+    crate::symbol::intern(string)
+}
+
+defsubr!(load, intern);
 
 #[cfg(test)]
 mod test {

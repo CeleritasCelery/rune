@@ -188,6 +188,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
 }
 
 define_unbox!(String, &'ob String);
+define_unbox!(String, &'ob str);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
