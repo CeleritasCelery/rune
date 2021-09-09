@@ -331,7 +331,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) => self.dispatch_special_form(!cons),
+                Object::Cons(cons) => self.dispatch_special_form(&*cons),
                 sym => self.const_ref(sym, None),
             }
         } else {
@@ -514,7 +514,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     self.env,
                 );
                 if let Object::LispFn(func) = func {
-                    eval::call_lisp(!func, arg_list, self.env, arena)
+                    eval::call_lisp(&func, arg_list, self.env, arena)
                 } else {
                     unreachable!("Compiled function was not lisp fn");
                 }

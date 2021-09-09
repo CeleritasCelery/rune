@@ -139,8 +139,8 @@ impl<'a, T> Deref for Data<&'a T> {
 
 impl<'a, T> AsRef<T> for Data<&'a T> {
     #[inline(always)]
-    fn as_ref(&self) -> &T {
-        &*self
+    fn as_ref<'b>(&'b self) -> &'a T {
+        self.inner()
     }
 }
 

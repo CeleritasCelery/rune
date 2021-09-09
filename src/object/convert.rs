@@ -58,7 +58,7 @@ impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Callable::LispFn(x)),
             Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
-            Object::Cons(cons) => (!cons).try_into(),
+            Object::Cons(cons) => (cons.get()).try_into(),
             _ => Err(Error::from_object(Type::Func, obj)),
         }
     }
@@ -101,7 +101,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(cons) => Ok(List::Cons(!cons)),
+            Object::Cons(cons) => Ok(List::Cons(cons.get())),
             Object::Nil => Ok(List::Nil),
             _ => Err(Error::from_object(Type::List, obj)),
         }

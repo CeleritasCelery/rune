@@ -30,8 +30,8 @@ impl<'ob> Function<'ob> {
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
-            Function::LispFn(f) => eval::call_lisp(!f, args, env, arena),
-            Function::SubrFn(f) => eval::call_subr(*!f, args, env, arena),
+            Function::LispFn(f) => eval::call_lisp(&f, args, env, arena),
+            Function::SubrFn(f) => eval::call_subr(*f, args, env, arena),
         }
     }
 }
