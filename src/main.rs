@@ -148,6 +148,8 @@ fn main() {
     let env = &mut Environment::default();
     env.vars
         .insert(crate::symbol::intern("lexical-binding"), true.into());
+    env.vars
+        .insert(crate::symbol::intern("system-type"), arena.add("gnu/linux"));
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),
         Some(arg) if arg == "--load" => load(env, arena),
