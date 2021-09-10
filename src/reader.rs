@@ -13,9 +13,6 @@ pub(crate) enum Error {
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
     ExtraItemInCdr(String, usize),
-    // Emacs does not have this error. If the reader is given '(1 .) it will
-    // translate that to '(1 \.)
-    MissingCdr(usize),
     ExtraCloseParen(usize),
     ExtraCloseBracket(usize),
     MissingQuotedItem(usize),
@@ -35,7 +32,6 @@ impl Display for Error {
             Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {}: at {}", chr, i),
             Error::EmptyStream => write!(f, "Empty Stream"),
             Error::ExtraItemInCdr(item, i) => write!(f, "Extra item in cdr '{}': at {}", item, i),
-            Error::MissingCdr(i) => write!(f, "Missing cdr: at {}", i),
             Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
             Error::InvalidRadix(radix, i) => {
                 write!(f, "invalid character for radix {}: at {}", radix, i)
@@ -59,7 +55,6 @@ impl Error {
             | Error::ExtraCloseParen(x)
             | Error::ExtraCloseBracket(x)
             | Error::ExtraItemInCdr(_, x)
-            | Error::MissingCdr(x)
             | Error::UnexpectedChar(_, x)
             | Error::InvalidRadix(_, x)
             | Error::UnknownMacroCharacter(_, x) => *x,
@@ -74,7 +69,6 @@ impl Error {
             | Error::MissingStringDel(i)
             | Error::UnexpectedChar(_, i)
             | Error::ExtraItemInCdr(_, i)
-            | Error::MissingCdr(i)
             | Error::ExtraCloseParen(i)
             | Error::ExtraCloseBracket(i)
             | Error::MissingQuotedItem(i)
@@ -102,7 +96,6 @@ enum Token<'a> {
     Unquote(usize),
     Splice(usize),
     Sharp(usize),
-    Dot(usize),
     QuestionMark(usize),
     Ident(&'a str),
     String(&'a str),
@@ -121,7 +114,6 @@ impl<'a> Display for Token<'a> {
             Token::Unquote(_) => write!(f, ","),
             Token::Splice(_) => write!(f, ",@"),
             Token::Sharp(_) => write!(f, "#"),
-            Token::Dot(_) => write!(f, "."),
             Token::QuestionMark(_) => write!(f, "?"),
             Token::Ident(x) => write!(f, "{}", x),
             Token::String(x) => write!(f, "\"{}\"", x),
@@ -145,6 +137,7 @@ impl From<TokenError> for Error {
     }
 }
 
+#[derive(Clone)]
 struct Tokenizer<'a> {
     slice: &'a str,
     iter: Peekable<CharIndices<'a>>,
@@ -169,8 +162,7 @@ impl<'a> Tokenizer<'a> {
             | Token::Unquote(x)
             | Token::Splice(x)
             | Token::Sharp(x)
-            | Token::QuestionMark(x)
-            | Token::Dot(x) => x,
+            | Token::QuestionMark(x) => x,
             Token::Ident(slice) | Token::String(slice) => {
                 let beg = self.slice.as_ptr() as usize;
                 let end = slice.as_ptr() as usize;
@@ -265,7 +257,6 @@ impl<'a> Iterator for Tokenizer<'a> {
             ',' => self.get_macro_char(idx),
             '`' => Token::Backquote(idx),
             '#' => Token::Sharp(idx),
-            '.' => Token::Dot(idx),
             '?' => Token::QuestionMark(idx),
             '"' => self.get_string(idx),
             other if symbol_char(other) => self.get_symbol(idx, other),
@@ -358,13 +349,13 @@ pub(crate) struct Reader<'a, 'ob> {
 }
 
 impl<'a, 'ob> Reader<'a, 'ob> {
-    fn read_cdr(&mut self, delim: usize) -> Result<Object<'ob>, Error> {
+    fn read_cdr(&mut self, delim: usize) -> Result<Option<Object<'ob>>, Error> {
         match self.tokens.next() {
-            Some(Token::CloseParen(i)) => Err(Error::MissingCdr(i)),
+            Some(Token::CloseParen(_)) => Ok(None),
             Some(sexp) => {
                 let obj = self.read_sexp(sexp);
                 match self.tokens.next() {
-                    Some(Token::CloseParen(_)) => obj,
+                    Some(Token::CloseParen(_)) => obj.map(Some),
                     Some(token) => Err(Error::ExtraItemInCdr(
                         format!("{}", token),
                         self.tokens.position(token),
@@ -383,9 +374,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                 Token::CloseParen(_) => {
                     return Ok(fns::slice_into_list(&objects, None, self.arena))
                 }
-                Token::Dot(_) => {
+                Token::Ident(".") => {
                     let cdr = self.read_cdr(delim)?;
-                    return Ok(fns::slice_into_list(&objects, Some(cdr), self.arena));
+                    if cdr.is_none() {
+                        objects.push(parse_symbol(".", self.arena));
+                    }
+                    return Ok(fns::slice_into_list(&objects, cdr, self.arena));
                 }
                 tok => objects.push(self.read_sexp(tok)?),
             }
@@ -470,7 +464,6 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Splice(i) => self.quote_item(i, ",@"),
             Token::Backquote(i) => self.quote_item(i, "`"),
             Token::Sharp(i) => self.read_sharp(i),
-            Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
             Token::QuestionMark(i) => self.read_char_quote(i),
             Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
             Token::String(x) => Ok(unescape_string(x).into_obj(self.arena)),
@@ -501,7 +494,7 @@ mod test {
         assert_eq!(iter.next(), Some(Token::Ident("foo")));
         assert_eq!(iter.next(), Some(Token::OpenParen(6)));
         assert_eq!(iter.next(), Some(Token::String("bar")));
-        assert_eq!(iter.next(), Some(Token::Dot(13)));
+        assert_eq!(iter.next(), Some(Token::Ident(".")));
         assert_eq!(iter.next(), Some(Token::Ident("1.3")));
         assert_eq!(iter.next(), Some(Token::CloseParen(18)));
         assert_eq!(iter.next(), None);
@@ -580,6 +573,8 @@ baz""#
         );
         check_reader!(list!(1, 1.5; arena), "(1 1.5)");
         check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)");
+        check_reader!(list!(1, 1.5, intern("."); arena), "(1 1.5 .)");
+        check_reader!(list!(1, 1.5, intern("..."), 2; arena), "(1 1.5 ... 2)");
     }
 
     #[test]
@@ -627,7 +622,6 @@ baz""#
         assert_error("  (1 (2 3 4", Error::MissingCloseParen(5));
         assert_error(" \"foo", Error::MissingStringDel(1));
         assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr("4".to_owned(), 9));
-        assert_error("(1 2 . )", Error::MissingCdr(7));
         assert_error("(1 3 )", Error::UnexpectedChar('', 5));
         assert_error(" '", Error::MissingQuotedItem(1));
         assert_error(" )", Error::ExtraCloseParen(1));
