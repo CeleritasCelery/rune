@@ -25,10 +25,9 @@ pub(crate) fn set_global_function<'ob>(
 }
 
 #[defun]
-pub(crate) fn defalias<'ob>(
+pub(crate) fn fset<'ob>(
     symbol: Symbol,
     definition: Object<'ob>,
-    _docstring: Option<&String>,
     env: &mut Environment<'ob>,
 ) -> Symbol {
     match definition.try_into() {
@@ -41,6 +40,17 @@ pub(crate) fn defalias<'ob>(
         }
     };
     symbol
+}
+
+
+#[defun]
+pub(crate) fn defalias<'ob>(
+    symbol: Symbol,
+    definition: Object<'ob>,
+    _docstring: Option<&String>,
+    env: &mut Environment<'ob>,
+) -> Symbol {
+    fset(symbol, definition, env)
 }
 
 #[defun]
@@ -176,6 +186,7 @@ defsubr!(
     put,
     get,
     defvar,
+    fset,
     defalias,
     provide,
     symbol_function,

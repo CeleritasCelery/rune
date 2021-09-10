@@ -530,7 +530,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_func_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
-        println!("compiling function");
         self.const_ref(name.into(), None)?;
         let args = into_iter(args)?;
         let mut num_args = 0;
@@ -811,7 +810,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
-        println!("car = {}", cons.car());
         let name: Symbol = cons.car().try_into()?;
         let forms = cons.cdr();
         match name.name() {
