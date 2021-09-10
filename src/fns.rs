@@ -114,6 +114,7 @@ pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> 
     }
 }
 
+// eval.c
 #[defun]
 pub(crate) fn apply<'ob>(
     function: Function<'ob>,
@@ -135,6 +136,17 @@ pub(crate) fn apply<'ob>(
         }
     };
     function.call(args, env, arena)
+}
+
+// eval.c
+#[defun]
+pub(crate) fn funcall<'ob>(
+    function: Function<'ob>,
+    arguments: &[Object<'ob>],
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    function.call(arguments.to_vec(), env, arena)
 }
 
 #[defun]
@@ -216,5 +228,6 @@ defsubr!(
     concat,
     delq,
     memq,
-    apply
+    apply,
+    funcall,
 );

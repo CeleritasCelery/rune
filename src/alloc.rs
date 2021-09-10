@@ -26,8 +26,13 @@ fn make_closure<'ob>(prototype: &LispFn<'ob>, closure_vars: &[Object<'ob>]) -> R
 }
 
 #[defun]
+fn make_vector(length: usize, init: Object) -> Vec<Object> {
+    vec![init; length]
+}
+
+#[defun]
 fn purecopy(obj: Object) -> Object {
     obj
 }
 
-defsubr!(make_closure, purecopy);
+defsubr!(make_closure, make_vector, purecopy);

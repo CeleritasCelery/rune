@@ -76,6 +76,16 @@ impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for usize {
+    type Error = Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Int(x) => Ok(!x as usize),
+            _ => Err(Error::from_object(Type::Int, obj)),
+        }
+    }
+}
+
 impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
