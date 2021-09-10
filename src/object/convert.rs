@@ -36,18 +36,6 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
     }
 }
 
-impl<'ob> TryFrom<FuncCell<'ob>> for Callable<'ob> {
-    type Error = anyhow::Error;
-    fn try_from(obj: FuncCell<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            FuncCell::LispFn(x) => Ok(Callable::LispFn(x)),
-            FuncCell::SubrFn(x) => Ok(Callable::SubrFn(x)),
-            FuncCell::Macro(x) => Ok(Callable::Macro(x)),
-            FuncCell::Symbol(_) => Err(anyhow!("Symbols are not callable")),
-        }
-    }
-}
-
 impl<'ob> TryFrom<&'ob Cons<'ob>> for FuncCell<'ob> {
     type Error = Error;
     fn try_from(cons: &'ob Cons<'ob>) -> Result<Self, Self::Error> {

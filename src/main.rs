@@ -73,6 +73,7 @@ mod lread;
 mod opcode;
 mod reader;
 mod symbol;
+mod keymap;
 
 use crate::arena::Arena;
 use crate::compile::compile;

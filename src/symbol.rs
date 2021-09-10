@@ -223,6 +223,7 @@ lazy_static! {
             crate::data::DEFSUBR,
             crate::fns::DEFSUBR,
             crate::alloc::DEFSUBR,
+            crate::keymap::DEFSUBR,
         )
     });
 }
