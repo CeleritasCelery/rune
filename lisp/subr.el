@@ -156,78 +156,6 @@ of previous VARs.
       (push `(set-default ',(pop args) ,(pop args)) exps))
     `(progn . ,(nreverse exps))))
 
-(defmacro setq-local (&rest pairs)
-  "Make variables in PAIRS buffer-local and assign them the corresponding values.
-
-PAIRS is a list of variable/value pairs.  For each variable, make
-it buffer-local and assign it the corresponding value.  The
-variables are literal symbols and should not be quoted.
-
-The second VALUE is not computed until after the first VARIABLE
-is set, and so on; each VALUE can use the new value of variables
-set earlier in the ‘setq-local’.  The return value of the
-‘setq-local’ form is the value of the last VALUE.
-
-\(fn [VARIABLE VALUE]...)"
-  (declare (debug setq))
-  (unless (zerop (mod (length pairs) 2))
-    (error "PAIRS must have an even number of variable/value members"))
-  (let ((expr nil))
-    (while pairs
-      (unless (symbolp (car pairs))
-        (error "Attempting to set a non-symbol: %s" (car pairs)))
-      ;; Can't use backquote here, it's too early in the bootstrap.
-      (setq expr
-            (cons
-             (list 'set
-                   (list 'make-local-variable (list 'quote (car pairs)))
-                   (car (cdr pairs)))
-             expr))
-      (setq pairs (cdr (cdr pairs))))
-    (macroexp-progn (nreverse expr))))
-
-(defmacro defvar-local (var val &optional docstring)
-  "Define VAR as a buffer-local variable with default value VAL.
-Like `defvar' but additionally marks the variable as being automatically
-buffer-local wherever it is set."
-  (declare (debug defvar) (doc-string 3))
-  ;; Can't use backquote here, it's too early in the bootstrap.
-  (list 'progn (list 'defvar var val docstring)
-        (list 'make-variable-buffer-local (list 'quote var))))
-
-(defmacro push (newelt place)
-  "Add NEWELT to the list stored in the generalized variable PLACE.
-This is morally equivalent to (setf PLACE (cons NEWELT PLACE)),
-except that PLACE is evaluated only once (after NEWELT)."
-  (declare (debug (form gv-place)))
-  (if (symbolp place)
-      ;; Important special case, to avoid triggering GV too early in
-      ;; the bootstrap.
-      (list 'setq place
-            (list 'cons newelt place))
-    (require 'macroexp)
-    (macroexp-let2 macroexp-copyable-p x newelt
-      (gv-letplace (getter setter) place
-        (funcall setter `(cons ,x ,getter))))))
-
-(defmacro pop (place)
-  "Return the first element of PLACE's value, and remove it from the list.
-PLACE must be a generalized variable whose value is a list.
-If the value is nil, `pop' returns nil but does not actually
-change the list."
-  (declare (debug (gv-place)))
-  ;; We use `car-safe' here instead of `car' because the behavior is the same
-  ;; (if it's not a cons cell, the `cdr' would have signaled an error already),
-  ;; but `car-safe' is total, so the byte-compiler can safely remove it if the
-  ;; result is not used.
-  `(car-safe
-    ,(if (symbolp place)
-         ;; So we can use `pop' in the bootstrap before `gv' can be used.
-         (list 'prog1 place (list 'setq place (list 'cdr place)))
-       (gv-letplace (getter setter) place
-         (macroexp-let2 macroexp-copyable-p x getter
-           `(prog1 ,x ,(funcall setter `(cdr ,x))))))))
-
 (defmacro when (cond &rest body)
   "If COND yields non-nil, do BODY, else return nil.
 When COND yields non-nil, eval BODY forms sequentially and return
@@ -780,6 +708,80 @@ argument VECP, this copies vectors as well as conses."
 	    (aset tree i (copy-tree (aref tree i) vecp)))
 	  tree)
       tree)))
+
+(require 'macroexp)
+
+(defmacro pop (place)
+  "Return the first element of PLACE's value, and remove it from the list.
+PLACE must be a generalized variable whose value is a list.
+If the value is nil, `pop' returns nil but does not actually
+change the list."
+  (declare (debug (gv-place)))
+  ;; We use `car-safe' here instead of `car' because the behavior is the same
+  ;; (if it's not a cons cell, the `cdr' would have signaled an error already),
+  ;; but `car-safe' is total, so the byte-compiler can safely remove it if the
+  ;; result is not used.
+  `(car-safe
+    ,(if (symbolp place)
+         ;; So we can use `pop' in the bootstrap before `gv' can be used.
+         (list 'prog1 place (list 'setq place (list 'cdr place)))
+       (gv-letplace (getter setter) place
+         (macroexp-let2 macroexp-copyable-p x getter
+           `(prog1 ,x ,(funcall setter `(cdr ,x))))))))
+
+(defmacro setq-local (&rest pairs)
+  "Make variables in PAIRS buffer-local and assign them the corresponding values.
+
+PAIRS is a list of variable/value pairs.  For each variable, make
+it buffer-local and assign it the corresponding value.  The
+variables are literal symbols and should not be quoted.
+
+The second VALUE is not computed until after the first VARIABLE
+is set, and so on; each VALUE can use the new value of variables
+set earlier in the ‘setq-local’.  The return value of the
+‘setq-local’ form is the value of the last VALUE.
+
+\(fn [VARIABLE VALUE]...)"
+  (declare (debug setq))
+  (unless (zerop (mod (length pairs) 2))
+    (error "PAIRS must have an even number of variable/value members"))
+  (let ((expr nil))
+    (while pairs
+      (unless (symbolp (car pairs))
+        (error "Attempting to set a non-symbol: %s" (car pairs)))
+      ;; Can't use backquote here, it's too early in the bootstrap.
+      (setq expr
+            (cons
+             (list 'set
+                   (list 'make-local-variable (list 'quote (car pairs)))
+                   (car (cdr pairs)))
+             expr))
+      (setq pairs (cdr (cdr pairs))))
+    (macroexp-progn (nreverse expr))))
+
+(defmacro defvar-local (var val &optional docstring)
+  "Define VAR as a buffer-local variable with default value VAL.
+Like `defvar' but additionally marks the variable as being automatically
+buffer-local wherever it is set."
+  (declare (debug defvar) (doc-string 3))
+  ;; Can't use backquote here, it's too early in the bootstrap.
+  (list 'progn (list 'defvar var val docstring)
+        (list 'make-variable-buffer-local (list 'quote var))))
+
+(defmacro push (newelt place)
+  "Add NEWELT to the list stored in the generalized variable PLACE.
+This is morally equivalent to (setf PLACE (cons NEWELT PLACE)),
+except that PLACE is evaluated only once (after NEWELT)."
+  (declare (debug (form gv-place)))
+  (if (symbolp place)
+      ;; Important special case, to avoid triggering GV too early in
+      ;; the bootstrap.
+      (list 'setq place
+            (list 'cons newelt place))
+    (macroexp-let2 macroexp-copyable-p x newelt
+      (gv-letplace (getter setter) place
+        (funcall setter `(cons ,x ,getter))))))
+
 
 ;;;; Various list-search functions.
 
