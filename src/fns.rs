@@ -209,6 +209,11 @@ pub(crate) fn length(sequence: Object) -> Result<i64> {
 }
 
 #[defun]
+pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
+    list.into_iter().nth(n).unwrap_or(Ok(Object::Nil))
+}
+
+#[defun]
 pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob> {
     // TODO: Implement
     Object::Nil
@@ -258,6 +263,7 @@ defsubr!(
     make_hash_table,
     puthash,
     length,
+    nth,
     concat,
     delq,
     memq,

@@ -705,20 +705,6 @@ test of free variables in the following ways:
        (message "Eager macro-expansion failure: %S" err)
        form)))))
 
-;; ¡¡¡ Big Ugly Hack !!!
-;; src/bootstrap-emacs is mostly used to compile .el files, so it needs
-;; macroexp, bytecomp, cconv, and byte-opt to be fast.  Generally this is done
-;; by compiling those files first, but this only makes a difference if those
-;; files are not preloaded.  But macroexp.el is preloaded so we reload it if
-;; the current version is interpreted and there's a compiled version available.
-(eval-when-compile
-  (add-hook 'emacs-startup-hook
-            (lambda ()
-              (and (not (byte-code-function-p
-                         (symbol-function 'macroexpand-all)))
-                   (locate-library "macroexp.elc")
-                   (load "macroexp.elc")))))
-
 (provide 'macroexp)
 
 ;;; macroexp.el ends here
