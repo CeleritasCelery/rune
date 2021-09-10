@@ -3,7 +3,7 @@ use crate::cons::{into_iter, Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::eval;
-use crate::object::{Expression, IntoObject, LispFn, Object, Value};
+use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{intern, Symbol};
 use anyhow::{anyhow, bail, ensure, Result};
@@ -320,7 +320,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn backquote(&mut self, sym: Symbol, value: Object<'ob>) -> Result<()> {
         if sym.func().is_some() {
-            self.compile_call(sym, value)
+            self.compile_call(sym.into(), value)
         } else {
             self.quote(value)
         }
@@ -484,6 +484,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         args: Object<'ob>,
         body: Object<'ob>,
     ) -> Result<Object<'ob>> {
+        println!("compiling macro : {}", name);
         let arena = self.arena;
         let mut arg_list = vec![];
         for arg in into_iter(args)? {
@@ -529,8 +530,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.truncate_stack(new_stack_size);
     }
 
-    fn compile_func_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
-        self.const_ref(name.into(), None)?;
+    fn compile_func_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
+        println!("compiling call : {}", func);
+        self.const_ref(func.into_obj(self.arena), None)?;
         let args = into_iter(args)?;
         let mut num_args = 0;
         for arg in args {
@@ -541,21 +543,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn compile_call(&mut self, name: Symbol, args: Object<'ob>) -> Result<()> {
-        println!("compiling call : {}", name.name());
-        let callable = crate::data::symbol_function(name, &mut self.env);
-        if let Object::Cons(cons) = callable {
-            match cons.car().val() {
-                Value::Symbol(sym) if sym.name() == "macro" => {
-                    println!("compiling macro : {}", name);
-                    let form = self.compile_macro_call(name, args, cons.cdr())?;
-                    self.compile_form(form)
-                }
-                _ => self.compile_func_call(name, args),
+    fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
+        if let Object::Symbol(name) = func {
+            if let Some(Callable::Macro(cons)) = (!name).resolved_func() {
+                let form = self.compile_macro_call(!name, args, cons.cdr())?;
+                return self.compile_form(form);
             }
-        } else {
-            self.compile_func_call(name, args)
         }
+        self.compile_func_call(func, args)
     }
 
     fn jump(&mut self, jump_code: OpCode) -> (usize, OpCode) {
@@ -810,26 +805,28 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
-        let name: Symbol = cons.car().try_into()?;
         let forms = cons.cdr();
-        match name.name() {
-            "lambda" => self.compile_lambda_def(forms),
-            "while" => self.compile_loop(forms),
-            "quote" => self.quote(forms),
-            "`" => self.backquote(name, forms),
-            "function" => self.func_quote(forms),
-            "progn" => self.progn(forms),
-            "prog1" => self.progx(forms, 1),
-            "prog2" => self.progx(forms, 2),
-            "setq" => self.setq(forms),
-            "defvar" | "defconst" => self.compile_defvar(forms),
-            "cond" => self.compile_cond(forms),
-            "let" => self.compile_let(forms, true),
-            "let*" => self.compile_let(forms, false),
-            "if" => self.compile_if(forms),
-            "and" => self.compile_combinator(forms, true),
-            "or" => self.compile_combinator(forms, false),
-            _ => self.compile_call(name, forms),
+        match cons.car() {
+            Object::Symbol(name) => match (!name).name() {
+                "lambda" => self.compile_lambda_def(forms),
+                "while" => self.compile_loop(forms),
+                "quote" => self.quote(forms),
+                "`" => self.backquote(!name, forms),
+                "function" => self.func_quote(forms),
+                "progn" => self.progn(forms),
+                "prog1" => self.progx(forms, 1),
+                "prog2" => self.progx(forms, 2),
+                "setq" => self.setq(forms),
+                "defvar" | "defconst" => self.compile_defvar(forms),
+                "cond" => self.compile_cond(forms),
+                "let" => self.compile_let(forms, true),
+                "let*" => self.compile_let(forms, false),
+                "if" => self.compile_if(forms),
+                "and" => self.compile_combinator(forms, true),
+                "or" => self.compile_combinator(forms, false),
+                _ => self.compile_call(cons.car(), forms),
+            },
+            other => self.compile_call(other, forms),
         }
     }
 
@@ -1421,16 +1418,8 @@ mod test {
 
     #[test]
     fn errors() {
-        check_error(
-            "(\"foo\")",
-            Error::Type(Type::Symbol, Type::String, "\"foo\"".to_owned()),
-        );
         check_error("(quote)", Error::ArgCount(1, 0));
         check_error("(quote 1 2)", Error::ArgCount(1, 2));
-    }
-
-    #[test]
-    fn let_errors() {
         check_error("(let (1))", Error::from_object(Type::Cons, 1.into()));
         check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
         check_error(
