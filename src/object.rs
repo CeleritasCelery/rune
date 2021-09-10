@@ -75,6 +75,14 @@ impl<'a> Data<&'a Cons<'a>> {
     }
 }
 
+impl<'a> Data<&'a Vec<Object<'a>>> {
+    unsafe fn inner_mut(self) -> &'a mut Vec<Object<'a>> {
+        let bits = self.expand();
+        let ptr = bits as *mut Vec<Object<'a>>;
+        &mut *ptr
+    }
+}
+
 impl Inner<i64> for Fixnum {
     fn inner(self) -> i64 {
         self.expand()

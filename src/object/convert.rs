@@ -204,6 +204,16 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for &'ob mut Vec<Object<'ob>> {
+    type Error = Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Vec(x) => Ok(unsafe { x.inner_mut() }),
+            _ => Err(Error::from_object(Type::Vec, obj)),
+        }
+    }
+}
+
 define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
