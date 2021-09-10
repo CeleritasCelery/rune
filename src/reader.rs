@@ -19,6 +19,7 @@ pub(crate) enum Error {
     ExtraCloseBracket(usize),
     MissingQuotedItem(usize),
     UnknownMacroCharacter(char, usize),
+    InvalidRadix(u8, usize),
     EmptyStream,
 }
 
@@ -35,6 +36,9 @@ impl fmt::Display for Error {
             Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
             Error::MissingCdr(i) => write!(f, "Missing cdr: at {}", i),
             Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
+            Error::InvalidRadix(radix, i) => {
+                write!(f, "invalid character for radix {}: at {}", radix, i)
+            }
             Error::UnknownMacroCharacter(chr, i) => {
                 write!(f, "Unkown reader macro character {}: at {}", chr, i)
             }
@@ -56,6 +60,7 @@ impl Error {
             | Error::ExtraItemInCdr(x)
             | Error::MissingCdr(x)
             | Error::UnexpectedChar(_, x)
+            | Error::InvalidRadix(_, x)
             | Error::UnknownMacroCharacter(_, x) => *x,
             Error::EmptyStream => 0,
         }
@@ -196,6 +201,23 @@ impl<'a> Tokenizer<'a> {
     fn read_char(&mut self) -> Option<char> {
         self.iter.next().map(|x| x.1)
     }
+
+    // fn read_sharp(&mut self, idx: usize) -> Self {
+    //     match self.iter.next_if(|(_, x)| *x == 'o') {
+    //         Some(_) => {
+    //             let num = 0;
+    //             while let Some((idx, chr)) = self.iter.next_if(|(_ , x)| matches!(x, '0'..='9')) {
+    //                 match chr.to_digit(8) {
+    //                     Some(x) => todo!(),
+    //                     None => return Token::Error(),
+    //                 }
+
+    //             }
+    //             Token::Sharp(idx)
+    //         }
+    //         _ => Token::Sharp(idx),
+    //     }
+    // }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -357,6 +379,22 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Ok(quoted.into_obj(self.arena))
     }
 
+    fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>, Error> {
+        match self.tokens.next() {
+            Some(Token::Ident(ident)) => {
+                let mut accum = 0;
+                for chr in ident.chars() {
+                    match chr.to_digit(8) {
+                        Some(digit) => accum = (accum * 8) + digit,
+                        None => return Err(Error::InvalidRadix(8, pos)),
+                    }
+                }
+                Ok(self.arena.add(i64::from(accum)))
+            }
+            _ => Err(Error::InvalidRadix(8, pos)),
+        }
+    }
+
     fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>, Error> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
@@ -372,6 +410,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
+            Some('o') => self.read_octal(pos),
             Some(chr) => Err(Error::UnknownMacroCharacter(chr, pos)),
             None => Err(Error::MissingQuotedItem(pos)),
         }
@@ -441,6 +480,9 @@ mod test {
         check_reader!(-3.0, "-3.0");
         check_reader!(1, "+1");
         check_reader!(1, "001");
+        check_reader!(1, "#o001");
+        check_reader!(8, "#o10");
+        check_reader!(2385, "#o4521");
     }
 
     #[test]
