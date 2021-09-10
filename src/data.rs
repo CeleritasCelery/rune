@@ -164,6 +164,12 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
+pub(crate) fn make_variable_buffer_local(variable: Symbol ) -> Symbol {
+    // TODO: Implement
+    variable
+}
+
+#[defun]
 pub(crate) fn aset<'ob>(
     array: &mut Vec<Object<'ob>>,
     idx: usize,
@@ -204,6 +210,7 @@ defsubr!(
     put,
     get,
     defvar,
+    make_variable_buffer_local,
     fset,
     aset,
     defalias,

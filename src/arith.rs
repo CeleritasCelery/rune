@@ -3,7 +3,7 @@ use crate::object::{IntOrMarker, Number, NumberValue};
 use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 fn arith(
     cur: NumberValue,
@@ -62,6 +62,13 @@ impl Div for NumberValue {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         arith(self, rhs, Div::div, Div::div)
+    }
+}
+
+impl Rem for NumberValue {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self::Output {
+        arith(self, rhs, Rem::rem, Rem::rem)
     }
 }
 
@@ -187,6 +194,11 @@ pub(crate) fn logior(ints_or_markers: &[IntOrMarker]) -> i64 {
     ints_or_markers.iter().fold(0, |acc, x| acc | !x.int)
 }
 
+#[defun(name = "mod")]
+pub(crate) fn modulo(x: Number, y: Number) -> NumberValue {
+    x.val() % y.val()
+}
+
 defsubr!(
     add,
     sub,
@@ -201,6 +213,7 @@ defsubr!(
     greater_than,
     greater_than_or_eq,
     logior,
+    modulo,
 );
 
 #[cfg(test)]
