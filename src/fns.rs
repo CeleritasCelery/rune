@@ -6,7 +6,7 @@ use crate::data;
 use crate::data::Environment;
 use crate::eval;
 use crate::object::{Function, List, Object};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use fn_macros::defun;
 
 pub(crate) fn slice_into_list<'ob>(
@@ -158,7 +158,9 @@ pub(crate) fn length(sequence: Object) -> Result<i64> {
         Object::String(x) => x.len(),
         obj => bail!(Error::from_object(Type::Sequence, obj)),
     };
-    Ok(size.try_into().expect("conversion from usize to isize should never fail"))
+    Ok(size
+        .try_into()
+        .expect("conversion from usize to isize should never fail"))
 }
 
 #[defun]
@@ -205,4 +207,14 @@ mod test {
     }
 }
 
-defsubr!(mapcar, assq, make_hash_table, puthash, length, concat, delq, memq, apply);
+defsubr!(
+    mapcar,
+    assq,
+    make_hash_table,
+    puthash,
+    length,
+    concat,
+    delq,
+    memq,
+    apply
+);

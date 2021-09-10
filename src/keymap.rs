@@ -1,4 +1,3 @@
-
 use fn_macros::defun;
 
 use crate::object::Object;
@@ -16,7 +15,11 @@ pub(crate) fn make_sparse_keymap(_string: Option<&String>) -> Object {
 }
 
 #[defun]
-pub(crate) fn define_key<'ob>(_keymap: Object<'ob>, _key: Object<'ob>, _def: Object<'ob>) -> Object<'ob> {
+pub(crate) fn define_key<'ob>(
+    _keymap: Object<'ob>,
+    _key: Object<'ob>,
+    _def: Object<'ob>,
+) -> Object<'ob> {
     // TODO: implement
     Object::Nil
 }

@@ -69,11 +69,11 @@ mod eval;
 mod fns;
 mod forms;
 mod hashmap;
+mod keymap;
 mod lread;
 mod opcode;
 mod reader;
 mod symbol;
-mod keymap;
 
 use crate::arena::Arena;
 use crate::compile::compile;

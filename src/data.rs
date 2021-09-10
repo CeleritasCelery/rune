@@ -42,7 +42,6 @@ pub(crate) fn fset<'ob>(
     symbol
 }
 
-
 #[defun]
 pub(crate) fn defalias<'ob>(
     symbol: Symbol,
