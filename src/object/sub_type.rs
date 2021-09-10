@@ -3,6 +3,8 @@ use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
 
+use super::Bits;
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
@@ -157,6 +159,14 @@ pub(crate) enum Number<'ob> {
     Float(Data<&'ob f64>),
 }
 
+impl<'ob> Bits for Number<'ob> {
+    fn bits(self) -> u64 {
+        unsafe {
+            std::mem::transmute::<Self, u64>(self)
+        }
+    }
+}
+
 impl<'ob> From<i64> for Number<'ob> {
     fn from(x: i64) -> Self {
         Number::Int(Data::from_int(x))
@@ -182,6 +192,26 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
         let rf = arena.alloc_f64(self);
         Number::Float(Data::from_ref(rf))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct IntOrMarker {
+    _padding: u8,
+    pub(crate) int: Data<i64>,
+}
+
+impl Bits for IntOrMarker {
+    fn bits(self) -> u64 {
+        unsafe {
+            std::mem::transmute::<Self, u64>(self)
+        }
+    }
+}
+
+impl IntOrMarker {
+    pub(crate) fn new(int: Data<i64>) -> Self {
+        Self{int, _padding: 0}
     }
 }
 

@@ -3,7 +3,7 @@ use crate::hashmap::HashMap;
 use crate::object::{FuncCell, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::convert::TryInto;
 
@@ -164,12 +164,20 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
-pub(crate) fn aset<'ob>(array: &mut Vec<Object<'ob>>, idx: usize, newlet: Object<'ob>) -> Result<Object<'ob>> {
+pub(crate) fn aset<'ob>(
+    array: &mut Vec<Object<'ob>>,
+    idx: usize,
+    newlet: Object<'ob>,
+) -> Result<Object<'ob>> {
     if idx < array.len() {
         array[idx] = newlet;
         Ok(newlet)
     } else {
-        Err(anyhow!("index {} is out of bounds. Length was {}", idx, array.len()))
+        Err(anyhow!(
+            "index {} is out of bounds. Length was {}",
+            idx,
+            array.len()
+        ))
     }
 }
 

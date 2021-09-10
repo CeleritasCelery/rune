@@ -1,5 +1,5 @@
 use crate::object::NumberValue::{Float, Int};
-use crate::object::{Number, NumberValue};
+use crate::object::{IntOrMarker, Number, NumberValue};
 use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
@@ -182,6 +182,11 @@ pub(crate) fn greater_than_or_eq(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::ge)
 }
 
+#[defun]
+pub(crate) fn logior(ints_or_markers: &[IntOrMarker]) -> i64 {
+    ints_or_markers.iter().fold(0, |acc, x| acc | !x.int)
+}
+
 defsubr!(
     add,
     sub,
@@ -194,7 +199,8 @@ defsubr!(
     less_than,
     less_than_or_eq,
     greater_than,
-    greater_than_or_eq
+    greater_than_or_eq,
+    logior,
 );
 
 #[cfg(test)]

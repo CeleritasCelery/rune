@@ -213,6 +213,18 @@ impl<'ob> Value<'ob> {
     }
 }
 
+pub(crate) trait Bits {
+    fn bits(self) -> u64;
+}
+
+impl<'ob> Bits for Object<'ob> {
+    fn bits(self) -> u64 {
+        unsafe {
+            std::mem::transmute::<Self, u64>(self)
+        }
+    }
+}
+
 pub(crate) trait IntoObject<'ob, T> {
     fn into_obj(self, arena: &'ob Arena) -> T;
 }

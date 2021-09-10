@@ -6,7 +6,7 @@ use crate::symbol::Symbol;
 use anyhow::anyhow;
 use std::convert::{TryFrom, TryInto};
 
-use super::{Callable, Data};
+use super::{Bits, Callable, Data, IntOrMarker};
 
 impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = anyhow::Error;
@@ -76,6 +76,18 @@ impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
+    type Error = Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Int(x) => Ok(Some(Number::Int(x))),
+            Object::Float(x) => Ok(Some(Number::Float(x))),
+            Object::Nil => Ok(None),
+            _ => Err(Error::from_object(Type::Number, obj)),
+        }
+    }
+}
+
 impl<'ob> TryFrom<Object<'ob>> for usize {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
@@ -86,14 +98,12 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
+impl<'ob> TryFrom<Object<'ob>> for IntOrMarker {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Int(x) => Ok(Some(Number::Int(x))),
-            Object::Float(x) => Ok(Some(Number::Float(x))),
-            Object::Nil => Ok(None),
-            _ => Err(Error::from_object(Type::Number, obj)),
+            Object::Int(int) => Ok(IntOrMarker::new(int)),
+            _ => Err(Error::from_object(Type::Int, obj)),
         }
     }
 }
@@ -120,20 +130,16 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
 }
 
 // This is required because we have no specialization yet
-pub(crate) fn try_from_slice<'borrow, 'ob>(
-    slice: &'borrow [Object<'ob>],
-) -> Result<&'borrow [Number<'ob>], Error> {
+pub(crate) fn try_from_slice<'brw, 'ob, T>(
+    slice: &'brw [Object<'ob>],
+) -> Result<&'brw [T], Error>
+where T: TryFrom<Object<'ob>, Error = Error> + Bits  {
     for x in slice.iter() {
-        let num: Number = TryFrom::try_from(*x)?;
-        unsafe {
-            // ensure they have the same bit representation
-            debug_assert_eq!(
-                std::mem::transmute::<Number, i64>(num),
-                std::mem::transmute(*x)
-            );
-        }
+        let num: T = TryFrom::try_from(*x)?;
+        // ensure they have the same bit representation
+        debug_assert_eq!(num.bits(), x.bits());
     }
-    let ptr = slice.as_ptr().cast::<Number>();
+    let ptr = slice.as_ptr().cast::<T>();
     let len = slice.len();
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
