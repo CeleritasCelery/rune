@@ -79,6 +79,7 @@ enum Token<'a> {
     Splice(usize),
     Sharp(usize),
     Dot(usize),
+    QuestionMark(usize),
     Ident(&'a str),
     String(&'a str),
     Error(TokenError),
@@ -123,6 +124,7 @@ impl<'a> Tokenizer<'a> {
             | Token::Unquote(x)
             | Token::Splice(x)
             | Token::Sharp(x)
+            | Token::QuestionMark(x)
             | Token::Dot(x) => x,
             Token::Ident(slice) | Token::String(slice) => {
                 let beg = self.slice.as_ptr() as usize;
@@ -201,23 +203,6 @@ impl<'a> Tokenizer<'a> {
     fn read_char(&mut self) -> Option<char> {
         self.iter.next().map(|x| x.1)
     }
-
-    // fn read_sharp(&mut self, idx: usize) -> Self {
-    //     match self.iter.next_if(|(_, x)| *x == 'o') {
-    //         Some(_) => {
-    //             let num = 0;
-    //             while let Some((idx, chr)) = self.iter.next_if(|(_ , x)| matches!(x, '0'..='9')) {
-    //                 match chr.to_digit(8) {
-    //                     Some(x) => todo!(),
-    //                     None => return Token::Error(),
-    //                 }
-
-    //             }
-    //             Token::Sharp(idx)
-    //         }
-    //         _ => Token::Sharp(idx),
-    //     }
-    // }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -236,6 +221,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             '`' => Token::Backquote(idx),
             '#' => Token::Sharp(idx),
             '.' => Token::Dot(idx),
+            '?' => Token::QuestionMark(idx),
             '"' => self.get_string(idx),
             other if symbol_char(other) => self.get_symbol(idx, other),
             unknown => Token::Error(TokenError::UnexpectedChar(unknown, idx)),
@@ -379,6 +365,15 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Ok(quoted.into_obj(self.arena))
     }
 
+    fn read_char_quote(&mut self, pos: usize) -> Result<Object<'ob>, Error> {
+        match self.tokens.next() {
+            // TODO: Implement actual parsing
+            Some(Token::Ident(_)) => Ok(0.into()),
+            Some(tok) => Err(Error::MissingQuotedItem(self.tokens.position(tok))),
+            None => Err(Error::MissingQuotedItem(pos)),
+        }
+    }
+
     fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>, Error> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => {
@@ -428,6 +423,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Backquote(i) => self.quote_item(i, "`"),
             Token::Sharp(i) => self.read_sharp(i),
             Token::Dot(i) => Err(Error::UnexpectedChar('.', i)),
+            Token::QuestionMark(i) => self.read_char_quote(i),
             Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
             Token::String(x) => Ok(unescape_string(x).into_obj(self.arena)),
             Token::Error(e) => Err(e.into()),
