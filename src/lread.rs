@@ -6,7 +6,7 @@ use crate::reader::{Error, Reader};
 use crate::symbol::Symbol;
 use fn_macros::defun;
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 
 use std::fs;
 
@@ -21,7 +21,10 @@ pub(crate) fn read_from_string<'ob>(
         let (obj, new_pos) = match Reader::read(&contents[pos..], arena) {
             Ok((obj, pos)) => (obj, pos),
             Err(Error::EmptyStream) => return Ok(true),
-            Err(e) => return Err(anyhow!(e)),
+            Err(mut e) => {
+                e.update_pos(pos);
+                bail!(e);
+            }
         };
         println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
         println!("-----READ END-----");

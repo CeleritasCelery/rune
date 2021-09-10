@@ -2,6 +2,7 @@ use crate::arena::Arena;
 use crate::fns;
 use crate::object::{IntoObject, Object};
 use crate::symbol::{intern, Symbol};
+use std::fmt::Display;
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
 
@@ -11,7 +12,7 @@ pub(crate) enum Error {
     MissingCloseBracket(usize),
     MissingStringDel(usize),
     UnexpectedChar(char, usize),
-    ExtraItemInCdr(usize),
+    ExtraItemInCdr(String, usize),
     // Emacs does not have this error. If the reader is given '(1 .) it will
     // translate that to '(1 \.)
     MissingCdr(usize),
@@ -23,7 +24,7 @@ pub(crate) enum Error {
     EmptyStream,
 }
 
-impl fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::MissingCloseParen(i) => write!(f, "Missing close paren: at {}", i),
@@ -33,7 +34,7 @@ impl fmt::Display for Error {
             Error::ExtraCloseBracket(i) => write!(f, "Extra Closing brace: at {}", i),
             Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {}: at {}", chr, i),
             Error::EmptyStream => write!(f, "Empty Stream"),
-            Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
+            Error::ExtraItemInCdr(item, i) => write!(f, "Extra item in cdr '{}': at {}", item, i),
             Error::MissingCdr(i) => write!(f, "Missing cdr: at {}", i),
             Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
             Error::InvalidRadix(radix, i) => {
@@ -57,12 +58,35 @@ impl Error {
             | Error::MissingStringDel(x)
             | Error::ExtraCloseParen(x)
             | Error::ExtraCloseBracket(x)
-            | Error::ExtraItemInCdr(x)
+            | Error::ExtraItemInCdr(_, x)
             | Error::MissingCdr(x)
             | Error::UnexpectedChar(_, x)
             | Error::InvalidRadix(_, x)
             | Error::UnknownMacroCharacter(_, x) => *x,
             Error::EmptyStream => 0,
+        }
+    }
+
+    fn mut_pos(&mut self) -> Option<&mut usize> {
+        match self {
+            Error::MissingCloseParen(i)
+            | Error::MissingCloseBracket(i)
+            | Error::MissingStringDel(i)
+            | Error::UnexpectedChar(_, i)
+            | Error::ExtraItemInCdr(_, i)
+            | Error::MissingCdr(i)
+            | Error::ExtraCloseParen(i)
+            | Error::ExtraCloseBracket(i)
+            | Error::MissingQuotedItem(i)
+            | Error::UnknownMacroCharacter(_, i)
+            | Error::InvalidRadix(_, i) => Some(i),
+            Error::EmptyStream => None,
+        }
+    }
+
+    pub(crate) fn update_pos(&mut self, offset: usize) {
+        if let Some(pos) = self.mut_pos() {
+            *pos += offset;
         }
     }
 }
@@ -83,6 +107,27 @@ enum Token<'a> {
     Ident(&'a str),
     String(&'a str),
     Error(TokenError),
+}
+
+impl<'a> Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::OpenParen(_) => write!(f, "("),
+            Token::CloseParen(_) => write!(f, ")"),
+            Token::OpenBracket(_) => write!(f, "["),
+            Token::CloseBracket(_) => write!(f, "]"),
+            Token::Quote(_) => write!(f, "'"),
+            Token::Backquote(_) => write!(f, "`"),
+            Token::Unquote(_) => write!(f, ","),
+            Token::Splice(_) => write!(f, ",@"),
+            Token::Sharp(_) => write!(f, "#"),
+            Token::Dot(_) => write!(f, "."),
+            Token::QuestionMark(_) => write!(f, "?"),
+            Token::Ident(x) => write!(f, "{}", x),
+            Token::String(x) => write!(f, "\"{}\"", x),
+            Token::Error(_) => write!(f, "error"),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Copy, Clone)]
@@ -320,7 +365,10 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                 let obj = self.read_sexp(sexp);
                 match self.tokens.next() {
                     Some(Token::CloseParen(_)) => obj,
-                    Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
+                    Some(token) => Err(Error::ExtraItemInCdr(
+                        format!("{}", token),
+                        self.tokens.position(token),
+                    )),
                     None => Err(Error::MissingCloseParen(delim)),
                 }
             }
@@ -498,6 +546,7 @@ mod test {
         check_reader!(intern("+1"), "\\+1");
         check_reader!(intern(" x"), "\\ x");
         check_reader!(intern("\\x"), "\\\\x");
+        check_reader!(intern("x.y"), "x.y");
         check_reader!(intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)");
         check_reader!(intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}");
     }
@@ -577,7 +626,7 @@ baz""#
         assert_error("  (1 (2 3) 4", Error::MissingCloseParen(2));
         assert_error("  (1 (2 3 4", Error::MissingCloseParen(5));
         assert_error(" \"foo", Error::MissingStringDel(1));
-        assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr(9));
+        assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr("4".to_owned(), 9));
         assert_error("(1 2 . )", Error::MissingCdr(7));
         assert_error("(1 3 )", Error::UnexpectedChar('', 5));
         assert_error(" '", Error::MissingQuotedItem(1));

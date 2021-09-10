@@ -151,7 +151,11 @@ pub(crate) fn funcall<'ob>(
 }
 
 #[defun]
-pub(crate) fn defvaralias(new_alias: Symbol, _base_variable: Symbol, _docstring: Option<&str>) -> Symbol {
+pub(crate) fn defvaralias(
+    new_alias: Symbol,
+    _base_variable: Symbol,
+    _docstring: Option<&str>,
+) -> Symbol {
     // TODO: implement
     new_alias
 }
@@ -163,7 +167,13 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 }
 
 #[defun]
-fn require<'ob>(feature: Symbol, _filename: Option<&str>, _noerror: Option<Object<'ob>>, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<Symbol> {
+fn require<'ob>(
+    feature: Symbol,
+    _filename: Option<&str>,
+    _noerror: Option<Object<'ob>>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Symbol> {
     if feature.name() == "macroexp" {
         crate::lread::load("/home/foco/remac/lisp/macroexp.el", arena, env)?;
         Ok(feature)

@@ -1,4 +1,7 @@
-use crate::{object::{Expression, LispFn, Object}, symbol::Symbol};
+use crate::{
+    object::{Expression, LispFn, Object},
+    symbol::Symbol,
+};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
