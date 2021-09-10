@@ -130,13 +130,14 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
 }
 
 // This is required because we have no specialization yet
-pub(crate) fn try_from_slice<'brw, 'ob, T>(
-    slice: &'brw [Object<'ob>],
-) -> Result<&'brw [T], Error>
-where T: TryFrom<Object<'ob>, Error = Error> + Bits  {
+pub(crate) fn try_from_slice<'brw, 'ob, T>(slice: &'brw [Object<'ob>]) -> Result<&'brw [T], Error>
+where
+    T: TryFrom<Object<'ob>, Error = Error> + Bits,
+{
     for x in slice.iter() {
         let num: T = TryFrom::try_from(*x)?;
         // ensure they have the same bit representation
+        debug_assert_eq!(std::mem::size_of::<Object>(), std::mem::size_of::<T>());
         debug_assert_eq!(num.bits(), x.bits());
     }
     let ptr = slice.as_ptr().cast::<T>();

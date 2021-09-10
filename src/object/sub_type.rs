@@ -161,9 +161,7 @@ pub(crate) enum Number<'ob> {
 
 impl<'ob> Bits for Number<'ob> {
     fn bits(self) -> u64 {
-        unsafe {
-            std::mem::transmute::<Self, u64>(self)
-        }
+        unsafe { std::mem::transmute::<Self, u64>(self) }
     }
 }
 
@@ -203,15 +201,13 @@ pub(crate) struct IntOrMarker {
 
 impl Bits for IntOrMarker {
     fn bits(self) -> u64 {
-        unsafe {
-            std::mem::transmute::<Self, u64>(self)
-        }
+        unsafe { std::mem::transmute::<Self, u64>(self) }
     }
 }
 
 impl IntOrMarker {
     pub(crate) fn new(int: Data<i64>) -> Self {
-        Self{int, _padding: 0}
+        Self { int, _padding: 0 }
     }
 }
 

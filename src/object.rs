@@ -219,9 +219,7 @@ pub(crate) trait Bits {
 
 impl<'ob> Bits for Object<'ob> {
     fn bits(self) -> u64 {
-        unsafe {
-            std::mem::transmute::<Self, u64>(self)
-        }
+        unsafe { std::mem::transmute::<Self, u64>(self) }
     }
 }
 

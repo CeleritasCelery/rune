@@ -37,7 +37,7 @@ pub(crate) fn read_from_string<'ob>(
 }
 
 #[defun]
-fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
+pub(crate) fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
     read_from_string(&file_contents, arena, env)
 }

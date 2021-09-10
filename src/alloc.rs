@@ -1,4 +1,4 @@
-use crate::object::{Expression, LispFn, Object};
+use crate::{object::{Expression, LispFn, Object}, symbol::Symbol};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -35,4 +35,9 @@ fn purecopy(obj: Object) -> Object {
     obj
 }
 
-defsubr!(make_closure, make_vector, purecopy);
+#[defun]
+fn make_symbol(name: &str) -> Symbol {
+    crate::symbol::intern(name)
+}
+
+defsubr!(make_closure, make_vector, purecopy, make_symbol);
