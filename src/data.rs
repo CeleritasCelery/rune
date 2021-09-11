@@ -108,6 +108,11 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -
 }
 
 #[defun]
+pub(crate) fn symbol_value<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -> Option<Object<'ob>> {
+    env.vars.get(&symbol).copied()
+}
+
+#[defun]
 pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
     symbol.name()
 }
@@ -123,6 +128,16 @@ pub(crate) fn fboundp(symbol: Symbol) -> bool {
 }
 
 #[defun]
+pub(crate) fn boundp(symbol: Symbol, env: &mut Environment) -> bool {
+    env.vars.get(&symbol).is_some()
+}
+
+#[defun]
+pub(crate) fn default_boundp(symbol: Symbol, env: &mut Environment) -> bool {
+    env.vars.get(&symbol).is_some()
+}
+
+#[defun]
 pub(crate) fn listp(object: Object) -> bool {
     matches!(object, Object::Nil | Object::Cons(_))
 }
@@ -133,8 +148,18 @@ pub(crate) fn symbolp(object: Object) -> bool {
 }
 
 #[defun]
+pub(crate) fn functionp(object: Object) -> bool {
+    matches!(object, Object::LispFn(_) | Object::SubrFn(_))
+}
+
+#[defun]
 pub(crate) fn stringp(object: Object) -> bool {
     matches!(object, Object::String(_))
+}
+
+#[defun]
+pub(crate) fn numberp(object: Object) -> bool {
+    matches!(object, Object::Int(_) | Object::Float(_))
 }
 
 #[defun]
@@ -216,13 +241,18 @@ defsubr!(
     defalias,
     provide,
     symbol_function,
+    symbol_value,
     symbol_name,
     null,
     fboundp,
+    boundp,
+    default_boundp,
     listp,
     stringp,
     symbolp,
+    functionp,
     vectorp,
+    numberp,
     consp,
     atom,
     indirect_function,
