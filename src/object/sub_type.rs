@@ -56,6 +56,7 @@ impl<'ob> FuncCell<'ob> {
                     miri_static_root(ptr as _);
                 }
             }
+            FuncCell::Symbol(_) => { }
         }
     }
 }

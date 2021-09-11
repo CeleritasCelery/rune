@@ -60,6 +60,19 @@ pub(crate) fn mapcar<'ob>(
 }
 
 #[defun]
+pub(crate) fn nreverse(seq: Object) -> Result<Object> {
+    let mut iter = next_mut(seq)?;
+    let mut prev = Object::Nil;
+    while let Some(tail) = iter {
+        let next = tail.cdr();
+        tail.set_cdr(prev);
+        prev = tail.into();
+        iter = next_mut(next)?;
+    }
+    Ok(prev)
+}
+
+#[defun]
 pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     match alist {
         List::Nil => Object::Nil,
@@ -231,6 +244,8 @@ pub(crate) fn puthash<'ob>(
 
 #[cfg(test)]
 mod test {
+    use crate::object::IntoObject;
+
     use super::*;
 
     #[test]
@@ -243,6 +258,18 @@ mod test {
         let list = list![true, true, true; arena];
         let res = delq(Object::True, list).unwrap();
         assert_eq!(res, Object::Nil);
+    }
+
+    #[test]
+    fn test_nreverse() {
+        let arena = &Arena::new();
+        let list = list![1, 2, 3, 4; arena];
+        let res = nreverse(list).unwrap().into_obj(arena);
+        assert_eq!(res, list![4, 3, 2, 1; arena]);
+
+        let list = list![1; arena];
+        let res = nreverse(list).unwrap().into_obj(arena);
+        assert_eq!(res, list![1; arena]);
     }
 
     #[test]
@@ -259,6 +286,7 @@ mod test {
 
 defsubr!(
     mapcar,
+    nreverse,
     assq,
     make_hash_table,
     puthash,

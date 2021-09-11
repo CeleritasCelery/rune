@@ -228,7 +228,6 @@ macro_rules! cons {
         $arena.add(crate::cons::Cons::new($arena.add($car), $arena.add($cdr)))
     };
     ($car:expr; $arena:expr) => {
-        #[allow(unused_qualifications)]
         $arena.add(crate::cons::Cons::new(
             $arena.add($car),
             crate::object::Object::Nil,

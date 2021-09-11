@@ -242,6 +242,18 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     }
 }
 
+impl<'ob> From<&'ob Cons<'ob>> for Object<'ob> {
+    fn from(cons: &'ob Cons<'ob>) -> Self {
+        Object::Cons(Data::from_ref(cons))
+    }
+}
+
+impl<'ob> From<&'ob mut Cons<'ob>> for Object<'ob> {
+    fn from(cons: &'ob mut Cons<'ob>) -> Self {
+        Object::Cons(Data::from_ref(cons))
+    }
+}
+
 impl<'ob, T> From<Option<T>> for Object<'ob>
 where
     T: Into<Object<'ob>>,

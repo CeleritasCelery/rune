@@ -164,7 +164,7 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
-pub(crate) fn make_variable_buffer_local(variable: Symbol ) -> Symbol {
+pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
     // TODO: Implement
     variable
 }
