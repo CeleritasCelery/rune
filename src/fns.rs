@@ -128,6 +128,18 @@ pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> 
     }
 }
 
+#[defun]
+pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
+    let val = list.into_iter().by_cons().find(|x| match x {
+        Ok(obj) => obj.car() == elt,
+        Err(_) => true,
+    });
+    match val {
+        Some(elem) => elem.map(List::Cons),
+        None => Ok(List::Nil),
+    }
+}
+
 // eval.c
 #[defun]
 pub(crate) fn apply<'ob>(
@@ -295,6 +307,7 @@ defsubr!(
     concat,
     delq,
     memq,
+    member,
     apply,
     funcall,
     defvaralias,

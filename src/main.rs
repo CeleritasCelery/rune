@@ -80,6 +80,7 @@ use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
 use crate::lread::read_from_string;
+use crate::object::Object;
 use crate::reader::Reader;
 use std::env;
 use std::io::{self, Write};
@@ -129,6 +130,12 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 }
 
 fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
+    env.vars
+        .insert(crate::symbol::intern("lexical-binding"), Object::True);
+    env.vars
+        .insert(crate::symbol::intern("system-type"), arena.add("gnu/linux"));
+    env.vars
+        .insert(crate::symbol::intern("minibuffer-local-map"), Object::Nil);
     let buffer = String::from(
         r#"
 (progn (load "/home/foco/remac/lisp/byte-run.el")
@@ -146,10 +153,6 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 fn main() {
     let arena = &Arena::new();
     let env = &mut Environment::default();
-    env.vars
-        .insert(crate::symbol::intern("lexical-binding"), true.into());
-    env.vars
-        .insert(crate::symbol::intern("system-type"), arena.add("gnu/linux"));
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),
         Some(arg) if arg == "--load" => load(env, arena),

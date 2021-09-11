@@ -21,6 +21,12 @@ pub(crate) fn use_global_map(_keymap: Object) -> Object {
 }
 
 #[defun]
+pub(crate) fn set_keymap_parent<'ob>(_keymap: Object<'ob>, _parent: Object<'ob>) -> Object<'ob> {
+    // TODO: implement
+    Object::Nil
+}
+
+#[defun]
 pub(crate) fn define_key<'ob>(
     _keymap: Object<'ob>,
     _key: Object<'ob>,
@@ -30,4 +36,4 @@ pub(crate) fn define_key<'ob>(
     Object::Nil
 }
 
-defsubr!(make_keymap, make_sparse_keymap, use_global_map, define_key);
+defsubr!(make_keymap, make_sparse_keymap, use_global_map, set_keymap_parent, define_key);

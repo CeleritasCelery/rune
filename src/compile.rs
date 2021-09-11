@@ -189,7 +189,7 @@ struct Compiler<'ob, 'brw> {
     arena: &'ob Arena,
 }
 
-const UPVALUE_RESERVE: usize = 5;
+const UPVALUE_RESERVE: usize = 8;
 
 impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn new(
