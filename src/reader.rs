@@ -399,8 +399,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        let quoted = list!(intern(symbol_name), obj; self.arena);
-        Ok(quoted.into_obj(self.arena))
+        Ok(list!(intern(symbol_name), obj; self.arena))
     }
 
     fn read_char_quote(&mut self, pos: usize) -> Result<Object<'ob>> {
@@ -433,13 +432,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
                     let list = self.read_list(i)?;
-                    let quoted = list!(intern("function"), list; self.arena);
-                    Ok(quoted.into_obj(self.arena))
+                    Ok(list!(intern("function"), list; self.arena))
                 }
                 Some(token) => {
                     let obj = self.read_sexp(token)?;
-                    let quoted = list!(intern("function"), obj; self.arena);
-                    Ok(quoted.into_obj(self.arena))
+                    Ok(list!(intern("function"), obj; self.arena))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
