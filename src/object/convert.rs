@@ -3,7 +3,7 @@ use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{FuncCell, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use std::convert::{TryFrom, TryInto};
 
 use super::{Bits, Callable, Data, IntOrMarker};
@@ -89,11 +89,14 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
 }
 
 impl<'ob> TryFrom<Object<'ob>> for usize {
-    type Error = Error;
+    type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Int(x) => Ok(!x as usize),
-            _ => Err(Error::from_object(Type::Int, obj)),
+            Object::Int(x) => x
+                .get()
+                .try_into()
+                .with_context(|| format!("Integer must be positive, but was {}", !x)),
+            _ => Err(Error::from_object(Type::Int, obj).into()),
         }
     }
 }

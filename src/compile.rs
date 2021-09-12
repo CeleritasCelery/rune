@@ -1368,7 +1368,7 @@ mod test {
     fn test_closure() {
         let func = LispFn::new(
             vec_into![Constant0, Ret].into(),
-            vec![Object::Nil; 5],
+            vec![Object::Nil; UPVALUE_RESERVE],
             0,
             0,
             false,
@@ -1389,10 +1389,10 @@ mod test {
             [1, 2, intern("make-closure"), func]
         );
 
-        let mut consts = vec![Object::Nil; 5];
+        let mut consts = vec![Object::Nil; UPVALUE_RESERVE];
         consts.push(intern("+").into());
         let func = LispFn::new(
-            vec_into![Constant5, Constant0, Constant1, Call2, Ret].into(),
+            vec_into![ConstantN, 8, Constant0, Constant1, Call2, Ret].into(),
             consts,
             0,
             0,
