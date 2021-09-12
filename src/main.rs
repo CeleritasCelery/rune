@@ -28,6 +28,7 @@
     clippy::print_stdout,
     clippy::as_conversions,
     clippy::similar_names,
+    clippy::shadow_reuse,
     clippy::missing_docs_in_private_items,
     clippy::needless_pass_by_value,
     clippy::implicit_return,
@@ -79,7 +80,6 @@ use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
-use crate::lread::read_from_string;
 use crate::object::Object;
 use crate::reader::Reader;
 use std::env;
@@ -144,7 +144,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
        (load "/home/foco/remac/lisp/subr.el")
 )"#,
     );
-    match read_from_string(&buffer, arena, env) {
+    match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
         Err(e) => println!("Error: {}", e),
     }

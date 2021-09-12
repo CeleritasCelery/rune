@@ -36,4 +36,10 @@ pub(crate) fn define_key<'ob>(
     Object::Nil
 }
 
-defsubr!(make_keymap, make_sparse_keymap, use_global_map, set_keymap_parent, define_key);
+defsubr!(
+    make_keymap,
+    make_sparse_keymap,
+    use_global_map,
+    set_keymap_parent,
+    define_key
+);

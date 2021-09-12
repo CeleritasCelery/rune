@@ -2,16 +2,63 @@ use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::eval::Routine;
+use crate::object::Object;
 use crate::reader::{Error, Reader};
 use crate::symbol::Symbol;
 use fn_macros::defun;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 
 use std::fs;
 
-#[allow(clippy::panic_in_result_fn)]
+fn check_lower_bounds(idx: Option<i64>, len: usize) -> Result<usize> {
+    let len = len as i64;
+    let idx = idx.unwrap_or(0);
+    ensure!(
+        -len <= idx && idx < len,
+        "start index of {} is out of bounds for string of length {}",
+        idx,
+        len
+    );
+    let idx = if idx < 0 { len + idx } else { idx };
+    Ok(idx as usize)
+}
+
+fn check_upper_bounds(idx: Option<i64>, len: usize) -> Result<usize> {
+    let len = len as i64;
+    let idx = idx.unwrap_or(len);
+    ensure!(
+        -len <= idx && idx <= len,
+        "end index of {} is out of bounds for string of length {}",
+        idx,
+        len
+    );
+    let idx = if idx < 0 { len + idx } else { idx };
+    Ok(idx as usize)
+}
+
+#[defun]
 pub(crate) fn read_from_string<'ob>(
+    string: &str,
+    start: Option<i64>,
+    end: Option<i64>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    let len = string.len();
+    let start = check_lower_bounds(start, len)?;
+    let end = check_upper_bounds(end, len)?;
+
+    let (obj, new_pos) = match Reader::read(&string[start..end], arena) {
+        Ok((obj, pos)) => (obj, pos),
+        Err(mut e) => {
+            e.update_pos(start);
+            bail!(e);
+        }
+    };
+    Ok(cons!(obj, new_pos as i64; arena))
+}
+
+pub(crate) fn load_internal<'ob>(
     contents: &str,
     arena: &'ob Arena,
     env: &mut Environment<'ob>,
@@ -42,7 +89,7 @@ pub(crate) fn read_from_string<'ob>(
 #[defun]
 pub(crate) fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
     let file_contents = fs::read_to_string(file)?;
-    read_from_string(&file_contents, arena, env)
+    load_internal(&file_contents, arena, env)
 }
 
 #[defun]
@@ -50,7 +97,7 @@ pub(crate) fn intern(string: &str) -> Symbol {
     crate::symbol::intern(string)
 }
 
-defsubr!(load, intern);
+defsubr!(load, read_from_string, intern);
 
 #[cfg(test)]
 mod test {
@@ -62,7 +109,7 @@ mod test {
     fn test_load() {
         let arena = &Arena::new();
         let env = &mut Environment::default();
-        read_from_string("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
+        load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
         println!("{:?}", env);
         println!("{:?}", arena);
 

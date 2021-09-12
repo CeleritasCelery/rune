@@ -23,6 +23,11 @@ pub(crate) fn slice_into_list<'ob>(
     }
 }
 
+#[defun]
+pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> String {
+    format!("{}", object)
+}
+
 impl<'ob> Function<'ob> {
     pub(crate) fn call(
         self,
@@ -245,6 +250,12 @@ pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob>
 }
 
 #[defun]
+pub(crate) fn hash_table_p<'ob>(_obj: Object) -> Object<'ob> {
+    // TODO: Implement
+    Object::Nil
+}
+
+#[defun]
 pub(crate) fn puthash<'ob>(
     _key: Object<'ob>,
     value: Object<'ob>,
@@ -301,6 +312,7 @@ defsubr!(
     nreverse,
     assq,
     make_hash_table,
+    hash_table_p,
     puthash,
     length,
     nth,
@@ -313,4 +325,5 @@ defsubr!(
     defvaralias,
     featurep,
     require,
+    prin1_to_string,
 );
