@@ -114,6 +114,12 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for FuncCell<'ob> {
     }
 }
 
+impl<'ob> From<&'static SubrFn> for FuncCell<'ob> {
+    fn from(x: &'static SubrFn) -> Self {
+        FuncCell::SubrFn(Data::from_ref(x))
+    }
+}
+
 impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         match self {

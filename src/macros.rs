@@ -12,7 +12,7 @@ macro_rules! count {
 macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
         #[allow(unused_qualifications)]
-        pub(crate) const DEFSUBR: [crate::object::SubrFn; count!($($x)+)] = [$(paste::paste!{[<S $x>]}),+];
+        pub(crate) static DEFSUBR: [(crate::object::SubrFn, &crate::symbol::GlobalSymbol); count!($($x)+)] = [$((paste::paste!{[<S $x>]}, &paste::paste!{[<$x:upper>]})),+];
     );
 }
 

@@ -24,6 +24,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
+    let symbol_name = format_ident!("{}", subr_name.to_ascii_uppercase());
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
     let (required, optional, rest) = get_call_signature(&function.args, spec.required);
     let arg_conversion = get_arg_conversion(function.args);
@@ -64,6 +65,9 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }
+
+        #[doc(hidden)]
+        static #symbol_name: crate::symbol::GlobalSymbol = crate::symbol::GlobalSymbol::new(#lisp_name);
 
         #body
     }

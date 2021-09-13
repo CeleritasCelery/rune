@@ -28,7 +28,7 @@ type Fixnum = Data<i64>;
 
 impl<T> Data<T> {
     #[inline(always)]
-    fn expand(self) -> i64 {
+    const fn expand(self) -> i64 {
         let data = self.data;
         let whole = [
             0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],

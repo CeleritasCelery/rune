@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, IntoObject, Object};
+use crate::object::{Callable, FuncCell, Object};
 use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
 use std::convert::TryInto;
@@ -37,7 +37,7 @@ impl Hash for GlobalSymbol {
 }
 
 impl GlobalSymbol {
-    fn new(name: &'static str) -> Self {
+    pub(crate) const fn new(name: &'static str) -> Self {
         GlobalSymbol {
             name,
             func: AtomicCell::new(None),
@@ -97,6 +97,10 @@ impl SymbolBox {
         let ptr = Box::into_raw(Box::new(inner));
         Self(ptr)
     }
+
+    fn from_static(inner: &'static GlobalSymbol) -> Self {
+        Self(inner)
+    }
 }
 
 impl AsRef<GlobalSymbol> for SymbolBox {
@@ -151,6 +155,13 @@ impl InnerSymbolMap {
             }
         }
     }
+
+    fn pre_init(&mut self, sym: &'static GlobalSymbol) {
+        self.map.insert(
+            sym.to_string(),
+            SymbolBox::from_static(sym),
+        );
+    }
 }
 
 impl SymbolMap {
@@ -171,24 +182,19 @@ impl SymbolMap {
 
 macro_rules! create_symbolmap {
     ($($arr:expr),+ $(,)?) => ({
-        const SIZE: usize = 0_usize $(+ $arr.len())+;
-        let mut map = InnerSymbolMap::with_capacity(SIZE);
-        let arena = Arena::new();
-        $(for func in $arr.iter() {
-            let func = func;
-            let func_obj: FuncCell = func.into_obj(&arena);
-            #[cfg(miri)]
-            func_obj.set_as_miri_root();
-            let name: &'static str = func.name;
-            unsafe {map.intern(name).set_func(func_obj);}
+        let size: usize = 0_usize $(+ $arr.len())+;
+        let mut map = InnerSymbolMap::with_capacity(size);
+        $(for (func, sym) in $arr.iter() {
+            sym.func.store(Some(func.into()));
+            map.pre_init(sym);
         })+;
-        SymbolMap{ map, arena }
+        map
     })
 }
 
 lazy_static! {
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
-        create_symbolmap!(
+        let map = create_symbolmap!(
             crate::arith::DEFSUBR,
             crate::eval::DEFSUBR,
             crate::forms::DEFSUBR,
@@ -198,7 +204,11 @@ lazy_static! {
             crate::fns::DEFSUBR,
             crate::alloc::DEFSUBR,
             crate::keymap::DEFSUBR,
-        )
+        );
+        SymbolMap {
+            map,
+            arena: Arena::new(),
+        }
     });
 }
 
