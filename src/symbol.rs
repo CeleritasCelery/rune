@@ -5,62 +5,58 @@ use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
 use std::convert::TryInto;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::mem::transmute;
 use std::sync::Mutex;
 
 #[derive(Debug)]
-struct InnerSymbol {
-    name: &'static str,
+pub(crate) struct GlobalSymbol {
+    pub(crate) name: &'static str,
     func: AtomicCell<Option<FuncCell<'static>>>,
 }
+
+pub(crate) type Symbol = &'static GlobalSymbol;
+
 unsafe fn coerce_callable_lifetime<'a, 'b>(x: FuncCell<'a>) -> FuncCell<'b> {
     transmute(x)
 }
 
-impl PartialEq for InnerSymbol {
+impl PartialEq for GlobalSymbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(&*self, &*other)
     }
 }
 
-impl InnerSymbol {
+impl Eq for GlobalSymbol {}
+
+impl Hash for GlobalSymbol {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let ptr: *const Self = self;
+        ptr.hash(state);
+    }
+}
+
+impl GlobalSymbol {
     fn new(name: &'static str) -> Self {
-        InnerSymbol {
+        GlobalSymbol {
             name,
             func: AtomicCell::new(None),
         }
     }
-}
 
-#[derive(Copy, Clone)]
-pub(crate) struct Symbol(&'static InnerSymbol);
-
-impl Symbol {
-    pub(crate) unsafe fn from_raw(ptr: *const u8) -> Symbol {
-        let inner = ptr.cast::<InnerSymbol>();
-        Symbol(&*inner)
+    pub(crate) fn has_func(&self) -> bool {
+        self.func.load().is_some()
     }
 
-    pub(crate) const fn as_ptr(self) -> *const u8 {
-        let ptr: *const _ = self.0;
-        ptr.cast()
+    // TODO: unbounded lifetime is unsound
+    pub(crate) fn func<'a>(&self) -> Option<FuncCell<'a>> {
+        unsafe { self.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
-    pub(crate) const fn name(self) -> &'static str {
-        self.0.name
-    }
-
-    pub(crate) fn has_func(self) -> bool {
-        self.0.func.load().is_some()
-    }
-
-    pub(crate) fn func<'a>(self) -> Option<FuncCell<'a>> {
-        unsafe { self.0.func.load().map(|x| coerce_callable_lifetime(x)) }
-    }
-
-    pub(crate) fn resolved_func<'a>(self) -> Option<Callable<'a>> {
+    // TODO: unbounded lifetime is unsound
+    pub(crate) fn resolved_func<'a>(&self) -> Option<Callable<'a>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => (!sym).resolved_func(),
+            Some(FuncCell::Symbol(sym)) => sym.resolved_func(),
             Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
             Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
             Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
@@ -68,40 +64,18 @@ impl Symbol {
         }
     }
 
-    unsafe fn set_func(self, func: FuncCell) {
-        self.0.func.store(Some(coerce_callable_lifetime(func)));
+    unsafe fn set_func(&self, func: FuncCell) {
+        self.func.store(Some(coerce_callable_lifetime(func)));
     }
 
-    pub(crate) fn unbind_func(self) {
-        self.0.func.store(None);
+    pub(crate) fn unbind_func(&self) {
+        self.func.store(None);
     }
 }
 
-impl fmt::Debug for Symbol {
+impl fmt::Display for GlobalSymbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0.name)
-    }
-}
-
-impl PartialEq for Symbol {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(&*self.0, &*other.0)
-    }
-}
-
-impl Eq for Symbol {}
-
-impl std::hash::Hash for Symbol {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let inner: *const _ = self.0;
-        let bits = inner as u64;
-        bits.hash(state);
+        write!(f, "{}", &self.name)
     }
 }
 
@@ -115,18 +89,18 @@ Box needs to follow rust's aliasing rules (references can't outlive the borrow).
 Miri checks for this. But we have a requirement for this in our current design.
 So we use this work around that I found on the forum.
 */
-struct SymbolBox(*const InnerSymbol);
+struct SymbolBox(*const GlobalSymbol);
 unsafe impl Send for SymbolBox {}
 
 impl SymbolBox {
-    fn new(inner: InnerSymbol) -> Self {
+    fn new(inner: GlobalSymbol) -> Self {
         let ptr = Box::into_raw(Box::new(inner));
         Self(ptr)
     }
 }
 
-impl AsRef<InnerSymbol> for SymbolBox {
-    fn as_ref(&self) -> &InnerSymbol {
+impl AsRef<GlobalSymbol> for SymbolBox {
+    fn as_ref(&self) -> &GlobalSymbol {
         unsafe { &*self.0 }
     }
 }
@@ -134,7 +108,7 @@ impl AsRef<InnerSymbol> for SymbolBox {
 impl Drop for SymbolBox {
     fn drop(&mut self) {
         unsafe {
-            Box::from_raw(self.0 as *mut InnerSymbol);
+            Box::from_raw(self.0 as *mut GlobalSymbol);
         }
     }
 }
@@ -155,23 +129,23 @@ impl InnerSymbolMap {
         // no methods to remove items from SymbolMap and SymbolMap has a private
         // constructor, so the only one that exists is the one we create in this
         // module, which is static.
-        unsafe { Symbol::from_raw(self.get_symbol(name).cast()) }
+        unsafe { &*self.get_symbol(name) }
     }
 
     // This is my work around for there being no Entry API that takes a
     // reference.
     // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
-    fn get_symbol(&mut self, name: &str) -> *const InnerSymbol {
+    fn get_symbol(&mut self, name: &str) -> *const GlobalSymbol {
         match self.map.get(name) {
             Some(x) => x.0,
             None => {
                 let name = name.to_owned();
                 let sym = {
                     let ptr = unsafe { transmute::<&str, &'static str>(name.as_str()) };
-                    let inner = InnerSymbol::new(ptr);
+                    let inner = GlobalSymbol::new(ptr);
                     SymbolBox::new(inner)
                 };
-                let ptr: *const InnerSymbol = sym.as_ref();
+                let ptr: *const GlobalSymbol = sym.as_ref();
                 self.map.insert(name, sym);
                 ptr
             }
@@ -243,18 +217,19 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
+        assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
     }
 
-    unsafe fn fix_lifetime(inner: &InnerSymbol) -> &'static InnerSymbol {
-        transmute::<&'_ InnerSymbol, &'static InnerSymbol>(inner)
+    unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
+        transmute::<&'_ GlobalSymbol, &'static GlobalSymbol>(inner)
     }
 
     #[test]
     fn symbol_func() {
         let arena = &Arena::new();
-        let inner = InnerSymbol::new("foo");
-        let sym = Symbol(unsafe { fix_lifetime(&inner) });
-        assert_eq!("foo", sym.name());
+        let inner = GlobalSymbol::new("foo");
+        let sym = unsafe { fix_lifetime(&inner) };
+        assert_eq!("foo", sym.name);
         assert!(sym.func().is_none());
         let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
@@ -293,8 +268,8 @@ mod test {
     fn subr() {
         let arena = &Arena::new();
 
-        let inner = InnerSymbol::new("bar");
-        let sym = Symbol(unsafe { fix_lifetime(&inner) });
+        let inner = GlobalSymbol::new("bar");
+        let sym = unsafe { fix_lifetime(&inner) };
         let core_func = SubrFn::new("bar", dummy, 0, 0, false);
         unsafe {
             sym.set_func(core_func.into_obj(arena));

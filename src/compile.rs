@@ -501,7 +501,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
                 let lisp_macro = {
                     let func_ident = macro_form.car().as_symbol()?;
-                    match func_ident.name() {
+                    match func_ident.name {
                         "lambda" => compile_lambda(macro_form.cdr(), self.env, arena)?,
                         bad_function => bail!("Invalid Function : {}", bad_function),
                     }
@@ -545,7 +545,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         if let Object::Symbol(name) = func {
-            if let Some(Callable::Macro(cons)) = (!name).resolved_func() {
+            if let Some(Callable::Macro(cons)) = name.resolved_func() {
                 let form = self.compile_macro_call(!name, args, cons.cdr())?;
                 return self.compile_form(form);
             }
@@ -807,7 +807,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
         let forms = cons.cdr();
         match cons.car() {
-            Object::Symbol(name) => match (!name).name() {
+            Object::Symbol(name) => match name.name {
                 "lambda" => self.compile_lambda_def(forms),
                 "while" => self.compile_loop(forms),
                 "quote" => self.quote(forms),
@@ -859,7 +859,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
-        if sym.name().starts_with(':') {
+        if sym.name.starts_with(':') {
             self.const_ref(sym.into(), None)
         } else {
             match self.vars.iter().rposition(|&x| x == Some(sym)) {
@@ -910,7 +910,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut iter = into_iter(bindings)?;
     while let Some(binding) = iter.next() {
         let sym = binding?.as_symbol()?;
-        match sym.name() {
+        match sym.name {
             "&optional" => arg_type = &mut optional,
             "&rest" => {
                 if let Some(last) = iter.next() {

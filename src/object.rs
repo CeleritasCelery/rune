@@ -89,12 +89,6 @@ impl Inner<i64> for Fixnum {
     }
 }
 
-impl Inner<Symbol> for Data<Symbol> {
-    fn inner(self) -> Symbol {
-        unsafe { Symbol::from_raw(self.expand() as *const u8) }
-    }
-}
-
 impl<T> Not for Data<T>
 where
     Data<T>: Inner<T>,
@@ -155,16 +149,6 @@ impl<'a, T> AsRef<T> for Data<&'a T> {
 impl Fixnum {
     fn get(self) -> i64 {
         self.inner()
-    }
-}
-
-impl Data<Symbol> {
-    fn get(self) -> Symbol {
-        self.inner()
-    }
-
-    fn from_symbol(x: Symbol) -> Self {
-        Data::from_int(x.as_ptr() as i64)
     }
 }
 

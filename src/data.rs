@@ -114,7 +114,7 @@ pub(crate) fn symbol_value<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -> O
 
 #[defun]
 pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
-    symbol.name()
+    symbol.name
 }
 
 #[defun]
@@ -215,7 +215,7 @@ pub(crate) fn aset<'ob>(
 #[defun]
 pub(crate) fn indirect_function(object: Object) -> Object {
     match object {
-        Object::Symbol(sym) => match (!sym).resolved_func() {
+        Object::Symbol(sym) => match sym.resolved_func() {
             Some(func) => func.into(),
             None => Object::Nil,
         },

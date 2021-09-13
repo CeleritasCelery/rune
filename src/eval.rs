@@ -18,8 +18,8 @@ pub(crate) enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::VoidFunction(func) => write!(f, "Void function: {}", func.name()),
-            Error::VoidVariable(var) => write!(f, "Void variable: {}", var.name()),
+            Error::VoidFunction(func) => write!(f, "Void function: {}", func.name),
+            Error::VoidVariable(var) => write!(f, "Void variable: {}", var.name),
         }
     }
 }
@@ -141,7 +141,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Object::Symbol(sym) = symbol {
-            let value = match env.vars.get(&!sym) {
+            let value = match env.vars.get(!sym) {
                 Some(x) => x,
                 None => bail!(Error::VoidVariable(!sym)),
             };
@@ -188,7 +188,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        println!("calling: {}", sym.name());
+        println!("calling: {}", sym.name);
         match sym.resolved_func() {
             Some(func) => match func {
                 Callable::LispFn(func) => {
@@ -198,7 +198,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     self.call_subr(*func, arg_cnt, env, arena)?;
                 }
                 Callable::Macro(_) => {
-                    bail!("Attempt to call macro {} at runtime", sym.name())
+                    bail!("Attempt to call macro {} at runtime", sym.name)
                 }
             },
             None => match env.funcs.get(&sym) {

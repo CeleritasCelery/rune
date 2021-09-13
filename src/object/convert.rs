@@ -40,7 +40,7 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for FuncCell<'ob> {
     type Error = Error;
     fn try_from(cons: &'ob Cons<'ob>) -> Result<Self, Self::Error> {
         match cons.car() {
-            Object::Symbol(sym) if (!sym).name() == "macro" => {
+            Object::Symbol(sym) if sym.name == "macro" => {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
                     Ok(FuncCell::Macro(Data::from_ref(cons)))
                 } else {
@@ -228,7 +228,7 @@ define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
-        Object::Symbol(Data::from_symbol(s))
+        Object::Symbol(Data::from_ref(s))
     }
 }
 
