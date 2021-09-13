@@ -118,7 +118,7 @@ impl Drop for SymbolBox {
 }
 
 struct InnerSymbolMap {
-    map: HashMap<String, SymbolBox>,
+    map: HashMap<&'static str, SymbolBox>,
 }
 
 impl InnerSymbolMap {
@@ -144,13 +144,15 @@ impl InnerSymbolMap {
             Some(x) => x.0,
             None => {
                 let name = name.to_owned();
-                let sym = {
-                    let ptr = unsafe { transmute::<&str, &'static str>(name.as_str()) };
-                    let inner = GlobalSymbol::new(ptr);
-                    SymbolBox::new(inner)
+                // Leak the memory so that it is static
+                let static_name: &'static str = unsafe {
+                    let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
+                    &*name_ptr
                 };
+                let inner = GlobalSymbol::new(static_name);
+                let sym = SymbolBox::new(inner);
                 let ptr: *const GlobalSymbol = sym.as_ref();
-                self.map.insert(name, sym);
+                self.map.insert(static_name, sym);
                 ptr
             }
         }
@@ -158,7 +160,7 @@ impl InnerSymbolMap {
 
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
         self.map.insert(
-            sym.to_string(),
+            sym.name,
             SymbolBox::from_static(sym),
         );
     }
