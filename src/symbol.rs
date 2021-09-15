@@ -159,10 +159,7 @@ impl InnerSymbolMap {
     }
 
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
-        self.map.insert(
-            sym.name,
-            SymbolBox::from_static(sym),
-        );
+        self.map.insert(sym.name, SymbolBox::from_static(sym));
     }
 }
 
@@ -196,7 +193,7 @@ macro_rules! create_symbolmap {
 
 lazy_static! {
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
-        let map = create_symbolmap!(
+        let mut map = create_symbolmap!(
             crate::arith::DEFSUBR,
             crate::eval::DEFSUBR,
             crate::forms::DEFSUBR,
@@ -207,6 +204,18 @@ lazy_static! {
             crate::alloc::DEFSUBR,
             crate::keymap::DEFSUBR,
         );
+        map.pre_init(&sym::FUNCTION);
+        map.pre_init(&sym::QUOTE);
+        map.pre_init(&sym::MACRO);
+        map.pre_init(&sym::UNQUOTE);
+        map.pre_init(&sym::SPLICE);
+        map.pre_init(&sym::BACKQUOTE);
+        #[cfg(test)]
+        {
+            map.pre_init(&sym::test::FOO);
+            map.pre_init(&sym::test::BAR);
+            map.pre_init(&sym::test::BAZ);
+        }
         SymbolMap {
             map,
             arena: Arena::new(),
@@ -216,6 +225,25 @@ lazy_static! {
 
 pub(crate) fn intern(name: &str) -> Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
+}
+
+pub(crate) mod sym {
+    use super::GlobalSymbol;
+
+    pub(crate) static FUNCTION: GlobalSymbol = GlobalSymbol::new("function");
+    pub(crate) static QUOTE: GlobalSymbol = GlobalSymbol::new("quote");
+    pub(crate) static MACRO: GlobalSymbol = GlobalSymbol::new("macro");
+    pub(crate) static UNQUOTE: GlobalSymbol = GlobalSymbol::new(",");
+    pub(crate) static SPLICE: GlobalSymbol = GlobalSymbol::new(",@");
+    pub(crate) static BACKQUOTE: GlobalSymbol = GlobalSymbol::new("`");
+
+    #[cfg(test)]
+    pub(crate) mod test {
+        use super::*;
+        pub(crate) static FOO: GlobalSymbol = GlobalSymbol::new("foo");
+        pub(crate) static BAR: GlobalSymbol = GlobalSymbol::new("bar");
+        pub(crate) static BAZ: GlobalSymbol = GlobalSymbol::new("baz");
+    }
 }
 
 #[cfg(test)]

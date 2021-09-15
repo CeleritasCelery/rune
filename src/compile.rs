@@ -5,7 +5,7 @@ use crate::error::{Error, Type};
 use crate::eval;
 use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
-use crate::symbol::{intern, Symbol};
+use crate::symbol::{sym, Symbol};
 use anyhow::{anyhow, bail, ensure, Result};
 use paste::paste;
 use std::convert::TryInto;
@@ -508,7 +508,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 };
                 self.env.macro_callstack.pop();
                 let func = arena.add(lisp_macro);
-                let def = cons!(intern("macro"), func; arena);
+                let def = cons!(&sym::MACRO, func; arena);
                 crate::data::set_global_function(
                     name,
                     def.try_into().expect("Type should be a valid macro"),
@@ -658,7 +658,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if upvalues.is_empty() {
             self.add_const_lambda(lambda)?;
         } else {
-            self.const_ref(intern("make-closure").into(), None)?;
+            self.const_ref((&crate::alloc::MAKE_CLOSURE).into(), None)?;
             self.add_const_lambda(lambda)?;
             let len = upvalues.len();
             for upvalue in upvalues {
@@ -977,7 +977,6 @@ pub(crate) fn compile<'ob>(
 mod test {
 
     use super::*;
-    use crate::arena::Arena;
     use crate::reader::Reader;
     use crate::symbol::intern;
     #[allow(clippy::enum_glob_use)]
@@ -1018,7 +1017,7 @@ mod test {
     fn test_basic() {
         let arena = &Arena::new();
         check_compiler!("1", [Constant0, Ret], [1]);
-        check_compiler!("'foo", [Constant0, Ret], [intern("foo")]);
+        check_compiler!("'foo", [Constant0, Ret], [&sym::test::FOO]);
         check_compiler!("'(1 2)", [Constant0, Ret], [list!(1, 2; arena)]);
         check_compiler!("\"foo\"", [Constant0, Ret], ["foo"]);
     }
@@ -1049,12 +1048,12 @@ mod test {
             [Constant0, StackRef0, DiscardNKeepTOS, 1, Ret],
             [1]
         );
-        check_compiler!("foo", [VarRef0, Ret], [intern("foo")]);
+        check_compiler!("foo", [VarRef0, Ret], [&sym::test::FOO]);
         check_compiler!("(progn)", [Constant0, Ret], [false]);
         check_compiler!(
             "(progn (set 'foo 5) foo)",
             [Constant0, Constant1, Constant2, Call2, Discard, VarRef1, Ret],
-            [intern("set"), intern("foo"), 5]
+            [intern("set"), &sym::test::FOO, 5]
         );
         check_compiler!(
             "(let ((foo 1)) (setq foo 2) foo)",
@@ -1074,7 +1073,7 @@ mod test {
         check_compiler!(
             "(progn (setq foo 2) foo)",
             [Constant0, Duplicate, VarSet1, Discard, VarRef1, Ret],
-            [2, intern("foo")]
+            [2, &sym::test::FOO]
         );
         check_compiler!(
             "(let ((bar 4)) (+ foo bar))",
@@ -1088,17 +1087,17 @@ mod test {
                 1,
                 Ret
             ],
-            [4, intern("+"), intern("foo")]
+            [4, intern("+"), &sym::test::FOO]
         );
         check_compiler!(
             "(defvar foo 1)",
             [Constant0, Duplicate, VarSet1, Ret],
-            [1, intern("foo")]
+            [1, &sym::test::FOO]
         );
         check_compiler!(
             "(defvar foo)",
             [Constant0, Duplicate, VarSet1, Ret],
-            [false, intern("foo")]
+            [false, &sym::test::FOO]
         );
         check_error("(let (foo 1))", Error::from_object(Type::Cons, 1.into()));
     }
@@ -1258,21 +1257,21 @@ mod test {
 
     #[test]
     fn function() {
-        check_compiler!("(foo)", [Constant0, Call0, Ret], [intern("foo")]);
+        check_compiler!("(foo)", [Constant0, Call0, Ret], [&sym::test::FOO]);
         check_compiler!(
             "(foo 1 2)",
             [Constant0, Constant1, Constant2, Call2, Ret],
-            [intern("foo"), 1, 2]
+            [&sym::test::FOO, 1, 2]
         );
         check_compiler!(
             "(foo (bar 1) 2)",
             [Constant0, Constant1, Constant2, Call1, Constant3, Call2, Ret],
-            [intern("foo"), intern("bar"), 1, 2]
+            [&sym::test::FOO, &sym::test::BAR, 1, 2]
         );
         check_compiler!(
             "(foo (bar 1) (baz 1))",
             [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
-            [intern("foo"), intern("bar"), 1, intern("baz")]
+            [&sym::test::FOO, &sym::test::BAR, 1, &sym::test::BAZ]
         );
         check_error("(foo . 1)", Error::from_object(Type::List, 1.into()));
     }
@@ -1386,7 +1385,7 @@ mod test {
                 2,
                 Ret
             ],
-            [1, 2, intern("make-closure"), func]
+            [1, 2, &crate::alloc::MAKE_CLOSURE, func]
         );
 
         let mut consts = vec![Object::Nil; UPVALUE_RESERVE];
@@ -1412,7 +1411,7 @@ mod test {
                 2,
                 Ret
             ],
-            [1, 2, intern("make-closure"), func]
+            [1, 2, &crate::alloc::MAKE_CLOSURE, func]
         );
     }
 

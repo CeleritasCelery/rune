@@ -500,6 +500,7 @@ mod test {
     use crate::arena::Arena;
     use crate::object::IntoObject;
     use crate::reader::Reader;
+    use crate::symbol::intern;
 
     macro_rules! test_eval {
         ($sexp:expr, $expect:expr) => {{
@@ -652,7 +653,7 @@ mod test {
         let env = &mut Environment::default();
         test_eval_serial!(
             "(defalias 'test_macro_1 (cons 'macro #'(lambda (x y) (list '+ x 3))))",
-            crate::symbol::intern("test_macro_1"),
+            intern("test_macro_1"),
             env,
             arena
         );
@@ -675,7 +676,6 @@ mod test {
     #[test]
     fn errors() {
         use crate::error::Error::ArgCount;
-        use crate::symbol::intern;
         test_eval_error(
             "(bad-function-name)",
             Error::VoidFunction(intern("bad-function-name")),

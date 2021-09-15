@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::fns;
 use crate::object::{IntoObject, Object};
-use crate::symbol::{intern, Symbol};
+use crate::symbol::{intern, sym, Symbol};
 use std::fmt::Display;
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
@@ -123,21 +123,6 @@ impl<'a> Display for Token<'a> {
         }
     }
 }
-
-// #[derive(PartialEq, Debug, Copy, Clone)]
-// enum TokenError {
-//     MissingStringDel(usize),
-//     UnexpectedChar(char, usize),
-// }
-
-// impl From<TokenError> for Error {
-//     fn from(e: TokenError) -> Self {
-//         match e {
-//             TokenError::MissingStringDel(i) => Error::MissingStringDel(i),
-//             TokenError::UnexpectedChar(c, i) => Error::UnexpectedChar(c, i),
-//         }
-//     }
-// }
 
 #[derive(Clone)]
 struct Tokenizer<'a> {
@@ -394,12 +379,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Err(Error::MissingCloseBracket(delim))
     }
 
-    fn quote_item(&mut self, pos: usize, symbol_name: &str) -> Result<Object<'ob>> {
+    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
         let obj = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        Ok(list!(intern(symbol_name), obj; self.arena))
+        Ok(list!(symbol, obj; self.arena))
     }
 
     fn read_char_quote(&mut self, pos: usize) -> Result<Object<'ob>> {
@@ -432,11 +417,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
                     let list = self.read_list(i)?;
-                    Ok(list!(intern("function"), list; self.arena))
+                    Ok(list!(&sym::FUNCTION, list; self.arena))
                 }
                 Some(token) => {
                     let obj = self.read_sexp(token)?;
-                    Ok(list!(intern("function"), obj; self.arena))
+                    Ok(list!(&sym::FUNCTION, obj; self.arena))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
@@ -452,10 +437,10 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
             Token::OpenBracket(i) => self.read_vec(i),
             Token::CloseBracket(i) => Err(Error::ExtraCloseBracket(i)),
-            Token::Quote(i) => self.quote_item(i, "quote"),
-            Token::Unquote(i) => self.quote_item(i, ","),
-            Token::Splice(i) => self.quote_item(i, ",@"),
-            Token::Backquote(i) => self.quote_item(i, "`"),
+            Token::Quote(i) => self.quote_item(i, &sym::QUOTE),
+            Token::Unquote(i) => self.quote_item(i, &sym::UNQUOTE),
+            Token::Splice(i) => self.quote_item(i, &sym::SPLICE),
+            Token::Backquote(i) => self.quote_item(i, &sym::BACKQUOTE),
             Token::Sharp(i) => self.read_sharp(i),
             Token::QuestionMark(i) => self.read_char_quote(i),
             Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
@@ -524,7 +509,7 @@ mod test {
 
     #[test]
     fn test_read_symbol() {
-        check_reader!(intern("foo"), "foo");
+        check_reader!(&sym::test::FOO, "foo");
         check_reader!(intern("--1"), "--1");
         check_reader!(intern("1"), "\\1");
         check_reader!(intern("3.0.0"), "3.0.0");
@@ -573,19 +558,19 @@ baz""#
     #[test]
     fn read_quote() {
         let arena = &Arena::new();
-        let quote = intern("quote");
-        check_reader!(list!(quote, intern("foo"); arena), "(quote foo)");
-        check_reader!(list!(quote, intern("foo"); arena), "'foo");
+        let quote = &sym::QUOTE;
+        check_reader!(list!(quote, &sym::test::FOO; arena), "(quote foo)");
+        check_reader!(list!(quote, &sym::test::FOO; arena), "'foo");
         check_reader!(list!(quote, list!(1, 2, 3; arena); arena), "'(1 2 3)");
     }
 
     #[test]
     fn read_sharp() {
         let arena = &Arena::new();
-        let quote = intern("function");
-        check_reader!(list!(quote, intern("foo"); arena), "#'foo");
+        let quote = &sym::FUNCTION;
+        check_reader!(list!(quote, &sym::test::FOO; arena), "#'foo");
         check_reader!(
-            list!(quote, list!(intern("lambda"), intern("foo"), false, false; arena); arena),
+            list!(quote, list!(intern("lambda"), &sym::test::FOO, false, false; arena); arena),
             "#'(lambda foo () nil)"
         );
         assert_error("#", Error::MissingQuotedItem(0));

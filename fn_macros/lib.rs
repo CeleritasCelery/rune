@@ -67,7 +67,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         }
 
         #[doc(hidden)]
-        static #symbol_name: crate::symbol::GlobalSymbol = crate::symbol::GlobalSymbol::new(#lisp_name);
+        pub(crate) static #symbol_name: crate::symbol::GlobalSymbol = crate::symbol::GlobalSymbol::new(#lisp_name);
 
         #body
     }
