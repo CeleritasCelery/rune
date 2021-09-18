@@ -169,7 +169,8 @@ impl SymbolMap {
     }
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: FuncCell) {
-        let obj: Object = func.clone_in(&self.arena);
+        let mut obj: Object = func.clone_in(&self.arena);
+        obj.make_read_only();
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();

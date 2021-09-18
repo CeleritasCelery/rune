@@ -14,11 +14,11 @@ pub(crate) struct Cons<'ob> {
 }
 
 impl<'ob> TryFrom<Object<'ob>> for &'ob mut Cons<'ob> {
-    type Error = Error;
+    type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(x) => Ok(unsafe { x.inner_mut() }),
-            _ => Err(Error::from_object(Type::Cons, obj)),
+            Object::Cons(x) => x.inner_mut().ok_or_else(|| anyhow!("Object is immutable")),
+            _ => Err(Error::from_object(Type::Cons, obj).into()),
         }
     }
 }
@@ -51,6 +51,11 @@ impl<'ob> Cons<'ob> {
 
     pub(crate) fn set_cdr(&mut self, new_cdr: Object<'ob>) {
         self.cdr.set(new_cdr);
+    }
+
+    pub(crate) fn make_read_only(&mut self) {
+        self.car.get_mut().make_read_only();
+        self.cdr.get_mut().make_read_only();
     }
 }
 

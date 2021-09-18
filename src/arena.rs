@@ -23,6 +23,8 @@ impl<'ob> OwnedObject<'ob> {
     }
 }
 
+// This is safe here because we will never return mutable overlapping borrows
+#[allow(clippy::mut_from_ref)]
 impl<'ob> Arena {
     pub(crate) const fn new() -> Self {
         Arena {
@@ -30,61 +32,65 @@ impl<'ob> Arena {
         }
     }
 
-    fn register(&'ob self, obj: OwnedObject<'ob>) {
-        self.objects
-            .borrow_mut()
-            .push(unsafe { obj.coerce_lifetime() });
+    fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject<'ob>) {
+        objects.push(unsafe { obj.coerce_lifetime() });
     }
 
-    pub(crate) fn alloc_f64(&'ob self, x: f64) -> &'ob f64 {
-        self.register(OwnedObject::Float(Box::new(x)));
-        if let Some(OwnedObject::Float(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&f64, &'ob f64>(x.as_ref()) }
+    pub(crate) fn alloc_f64(&'ob self, x: f64) -> &'ob mut f64 {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::Float(Box::new(x)));
+        if let Some(OwnedObject::Float(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut f64, &'ob mut f64>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_cons(&'ob self, x: Cons<'ob>) -> &'ob Cons<'ob> {
-        self.register(OwnedObject::Cons(Box::new(x)));
-        if let Some(OwnedObject::Cons(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&Cons, &'ob Cons>(x.as_ref()) }
+    pub(crate) fn alloc_cons(&'ob self, x: Cons<'ob>) -> &'ob mut Cons<'ob> {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::Cons(Box::new(x)));
+        if let Some(OwnedObject::Cons(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut Cons, &'ob mut Cons>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_string(&'ob self, x: String) -> &'ob String {
-        self.register(OwnedObject::String(Box::new(x)));
-        if let Some(OwnedObject::String(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&String, &'ob String>(x.as_ref()) }
+    pub(crate) fn alloc_string(&'ob self, x: String) -> &'ob mut String {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::String(Box::new(x)));
+        if let Some(OwnedObject::String(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut String, &'ob mut String>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob Vec<Object<'ob>> {
-        self.register(OwnedObject::Vec(Box::new(x)));
-        if let Some(OwnedObject::Vec(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&Vec<Object>, &'ob Vec<Object>>(x.as_ref()) }
+    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob mut Vec<Object<'ob>> {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::Vec(Box::new(x)));
+        if let Some(OwnedObject::Vec(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut Vec<Object>, &'ob mut Vec<Object>>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_lisp_fn(&'ob self, x: LispFn<'ob>) -> &'ob LispFn<'ob> {
-        self.register(OwnedObject::LispFn(Box::new(x)));
-        if let Some(OwnedObject::LispFn(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&LispFn, &'ob LispFn>(x.as_ref()) }
+    pub(crate) fn alloc_lisp_fn(&'ob self, x: LispFn<'ob>) -> &'ob mut LispFn<'ob> {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::LispFn(Box::new(x)));
+        if let Some(OwnedObject::LispFn(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut LispFn, &'ob mut LispFn>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&'ob self, x: SubrFn) -> &'ob SubrFn {
-        self.register(OwnedObject::SubrFn(Box::new(x)));
-        if let Some(OwnedObject::SubrFn(x)) = self.objects.borrow().last() {
-            unsafe { std::mem::transmute::<&SubrFn, &'ob SubrFn>(x.as_ref()) }
+    pub(crate) fn alloc_subr_fn(&'ob self, x: SubrFn) -> &'ob mut SubrFn {
+        let mut objects = self.objects.borrow_mut();
+        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(x)));
+        if let Some(OwnedObject::SubrFn(x)) = objects.last_mut() {
+            unsafe { std::mem::transmute::<&mut SubrFn, &'ob mut SubrFn>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }

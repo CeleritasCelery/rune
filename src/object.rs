@@ -33,12 +33,26 @@ impl<T> Data<T> {
         let whole = [
             0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
         ];
-        i64::from_le_bytes(whole) >> 8
+        i64::from_le_bytes(whole) >> 9
+    }
+
+    #[inline(always)]
+    const fn expand_mut(self) -> (i64, bool) {
+        let data = self.data;
+        let whole = [
+            0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
+        ];
+        let bits = i64::from_le_bytes(whole) >> 8;
+        // This 1 bit flag indicates if this object reference is immutable
+        let mutable = (bits & 0x1) == 0;
+        (bits >> 1, mutable)
     }
 
     #[inline(always)]
     fn from_int(data: i64) -> Self {
-        let bytes = data.to_le_bytes();
+        // This 1 bit flag indicates if this object reference is immutable
+        let shifted = (data << 1) | 0x1;
+        let bytes = shifted.to_le_bytes();
         Data {
             data: [
                 bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
@@ -46,16 +60,40 @@ impl<T> Data<T> {
             marker: PhantomData,
         }
     }
+
+    #[inline(always)]
+    fn from_ptr_mut(ptr: *mut u8) -> Self {
+        let data = ptr as i64;
+        let shifted = data << 1;
+        let bytes = shifted.to_le_bytes();
+        Data {
+            data: [
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+            ],
+            marker: PhantomData,
+        }
+    }
+
+    fn make_read_only(&mut self) {
+        self.data[0] |= 0x1;
+    }
 }
 
 impl<'a, T> Data<&'a T> {
-    fn from_ref(rf: &'a T) -> Self {
+    fn from_immut_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
         Self::from_int(ptr as i64)
     }
 
     fn get(self) -> &'a T {
         self.inner()
+    }
+}
+
+impl<'a, T> Data<&'a T> {
+    fn from_mut_ref(rf: &'a mut T) -> Self {
+        let ptr: *mut T = rf;
+        Self::from_ptr_mut(ptr.cast())
     }
 }
 
@@ -67,19 +105,15 @@ impl<'a, T> Inner<&'a T> for Data<&'a T> {
     }
 }
 
-impl<'a> Data<&'a Cons<'a>> {
-    pub(crate) unsafe fn inner_mut(self) -> &'a mut Cons<'a> {
-        let bits = self.expand();
-        let ptr = bits as *mut Cons<'a>;
-        &mut *ptr
-    }
-}
-
-impl<'a> Data<&'a Vec<Object<'a>>> {
-    unsafe fn inner_mut(self) -> &'a mut Vec<Object<'a>> {
-        let bits = self.expand();
-        let ptr = bits as *mut Vec<Object<'a>>;
-        &mut *ptr
+impl<'a, T> Data<&'a T> {
+    pub(crate) fn inner_mut(self) -> Option<&'a mut T> {
+        let (bits, mutable) = self.expand_mut();
+        let ptr = bits as *mut T;
+        if mutable {
+            unsafe { Some(&mut *ptr) }
+        } else {
+            None
+        }
     }
 }
 
@@ -276,6 +310,37 @@ impl<'ob> Object<'ob> {
         }
     }
 
+    pub(crate) fn make_read_only(&mut self) {
+        match self {
+            Object::Int(_) | Object::Symbol(_) | Object::True | Object::Nil => {}
+            Object::Float(x) => x.make_read_only(),
+            Object::Cons(cons_obj) => {
+                if let Some(cons) = cons_obj.inner_mut() {
+                    cons.make_read_only();
+                }
+                cons_obj.make_read_only();
+            }
+            Object::Vec(vec_obj) => {
+                if let Some(vec) = vec_obj.inner_mut() {
+                    for elem in vec {
+                        elem.make_read_only();
+                    }
+                }
+                vec_obj.make_read_only();
+            }
+            Object::String(x) => x.make_read_only(),
+            Object::LispFn(func_obj) => {
+                if let Some(func) = func_obj.inner_mut() {
+                    for elem in &mut func.body.constants {
+                        elem.make_read_only();
+                    }
+                }
+                func_obj.make_read_only();
+            }
+            Object::SubrFn(x) => x.make_read_only(),
+        }
+    }
+
     pub(crate) fn ptr_eq(self, other: Object) -> bool {
         use std::mem::transmute;
         match self {
@@ -367,7 +432,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
 mod test {
     use super::*;
     use crate::symbol::intern;
-    use std::mem::size_of;
+    use std::{convert::TryInto, mem::size_of};
 
     #[test]
     fn sizes() {
@@ -379,7 +444,7 @@ mod test {
         );
         unsafe {
             assert_eq!(
-                0x1700_i64,
+                ((0x1700_i64 << 1) | 0x100),
                 std::mem::transmute(Object::Int(Data::from_int(0x17)))
             );
         }
@@ -448,5 +513,30 @@ mod test {
         let x: Object = symbol.into();
         assert!(matches!(x.val(), Value::Symbol(_)));
         assert_eq!(x.val(), Value::Symbol(symbol));
+    }
+
+    #[test]
+    fn mutuality() {
+        let arena = &Arena::new();
+        let inner_cons = Cons::new(1.into(), 4.into());
+        let vec = vec_into_object![inner_cons, 2, 3, 4; arena];
+        let mut obj = Cons::new(1.into(), arena.add(vec)).into_obj(arena);
+        let result: Result<&mut Cons, _> = obj.try_into();
+        assert!(result.is_ok());
+        obj.make_read_only();
+        let result: Result<&mut Cons, _> = obj.try_into();
+        assert!(result.is_err());
+        if let Object::Cons(cons) = obj {
+            let result: Result<&mut Vec<_>, _> = cons.cdr().try_into();
+            assert!(result.is_err());
+            if let Object::Vec(vec) = cons.cdr() {
+                let result: Result<&mut Vec<_>, _> = vec[0].try_into();
+                assert!(result.is_err());
+            } else {
+                unreachable!("object should be vec");
+            }
+        } else {
+            unreachable!("object should be cons");
+        }
     }
 }

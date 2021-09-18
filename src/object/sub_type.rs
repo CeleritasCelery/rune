@@ -23,14 +23,14 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
 impl<'ob> IntoObject<'ob, Function<'ob>> for LispFn<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         let rf = arena.alloc_lisp_fn(self);
-        Function::LispFn(Data::from_ref(rf))
+        Function::LispFn(Data::from_mut_ref(rf))
     }
 }
 
 impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         let rf = arena.alloc_subr_fn(self);
-        Function::SubrFn(Data::from_ref(rf))
+        Function::SubrFn(Data::from_mut_ref(rf))
     }
 }
 
@@ -116,7 +116,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for FuncCell<'ob> {
 
 impl<'ob> From<&'static SubrFn> for FuncCell<'ob> {
     fn from(x: &'static SubrFn) -> Self {
-        FuncCell::SubrFn(Data::from_ref(x))
+        FuncCell::SubrFn(Data::from_immut_ref(x))
     }
 }
 
@@ -196,7 +196,7 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for i64 {
 impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
         let rf = arena.alloc_f64(self);
-        Number::Float(Data::from_ref(rf))
+        Number::Float(Data::from_mut_ref(rf))
     }
 }
 
@@ -253,7 +253,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         match self {
             List::Nil => Object::Nil,
-            List::Cons(cons) => Object::Cons(Data::from_ref(cons)),
+            List::Cons(cons) => Object::Cons(Data::from_immut_ref(cons)),
         }
     }
 }

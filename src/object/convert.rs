@@ -42,7 +42,7 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for FuncCell<'ob> {
         match cons.car() {
             Object::Symbol(sym) if sym.name == "macro" => {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
-                    Ok(FuncCell::Macro(Data::from_ref(cons)))
+                    Ok(FuncCell::Macro(Data::from_immut_ref(cons)))
                 } else {
                     Err(Error::from_object(Type::Func, cons.car()))
                 }
@@ -191,7 +191,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
 impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_string(self.to_owned());
-        Object::String(Data::from_ref(rf))
+        Object::String(Data::from_mut_ref(rf))
     }
 }
 
@@ -201,7 +201,7 @@ define_unbox!(String, &'ob str);
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_string(self);
-        Object::String(Data::from_ref(rf))
+        Object::String(Data::from_mut_ref(rf))
     }
 }
 
@@ -210,16 +210,16 @@ define_unbox!(Vec, &'ob Vec<Object<'ob>>);
 impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_vec(self);
-        Object::Vec(Data::from_ref(rf))
+        Object::Vec(Data::from_mut_ref(rf))
     }
 }
 
 impl<'ob> TryFrom<Object<'ob>> for &'ob mut Vec<Object<'ob>> {
-    type Error = Error;
+    type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Vec(x) => Ok(unsafe { x.inner_mut() }),
-            _ => Err(Error::from_object(Type::Vec, obj)),
+            Object::Vec(x) => x.inner_mut().ok_or_else(|| anyhow!("Object is immutable")),
+            _ => Err(Error::from_object(Type::Vec, obj).into()),
         }
     }
 }
@@ -228,7 +228,7 @@ define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
-        Object::Symbol(Data::from_ref(s))
+        Object::Symbol(Data::from_immut_ref(s))
     }
 }
 
@@ -241,19 +241,19 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
 impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_cons(self);
-        Object::Cons(Data::from_ref(rf))
+        Object::Cons(Data::from_mut_ref(rf))
     }
 }
 
 impl<'ob> From<&'ob Cons<'ob>> for Object<'ob> {
     fn from(cons: &'ob Cons<'ob>) -> Self {
-        Object::Cons(Data::from_ref(cons))
+        Object::Cons(Data::from_immut_ref(cons))
     }
 }
 
 impl<'ob> From<&'ob mut Cons<'ob>> for Object<'ob> {
     fn from(cons: &'ob mut Cons<'ob>) -> Self {
-        Object::Cons(Data::from_ref(cons))
+        Object::Cons(Data::from_mut_ref(cons))
     }
 }
 
