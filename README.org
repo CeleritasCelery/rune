@@ -1,0 +1,24 @@
+* Rune
+*R* ust *UN* der *E* macs
+
+This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase  and explores using rust as an host language.
+** Status
+The goal of this project is to eventually bootstrap [[https://github.com/emacs-mirror/emacs/commits/master/lisp/emacs-lisp/bytecomp.el][bytecomp.el]], which would enable this project to use the same byte compiler as Emacs. This would let me fuzz my vm against emacs byte code to help find issues. The project currently features a minimal byte-code VM modeled after Emacs. The project has no lisp interpreter, instead relying on emitting byte code before evaluation.  The files bootstrapped so far are:
+- ~byte-run.el~
+- ~backquote.el~
+- ~subr.el~
+
+Development on this project is driven by trying to add new elisp files and seeing where things break. Most of the time, it is just missing builtin functions, but occasionally new functionality needs to be added.
+
+** Running
+The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl with no elisp files loaded. Running with no arguments will load the bootstrapped elisp and then open to a REPL. This is equivalent to ~--load --repl~.
+
+** Exploring this repo
+This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
+- [[file:src/object.rs][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types are also found here.
+- [[file:src/reader.rs][reader]] :: The emacs lisp reader that translates a string to a cons cell. Due to the simple nature of lisp syntax, the reader is hand rolled and does not rely on any parsing libraries.
+- [[file:src/compile.rs][compile]] :: The bootstrap compiler. This compiler is single-pass and contains no optimizations. The goal is to only add enough to this compiler to bootstrap bytecomp.el, at which point that compiler can be used instead.
+- [[file:src/bytecode.rs][bytecode]] :: The core byte-code vm. The goal is to have this eventually support every opcode that Emacs does, but at this point is only supports a subset. The behavior should exactly match that of the Emacs byte-code interpreter.
+- [[file:src/symbol.rs][symbol]] :: The global obarray. Symbols are always interned and shared between threads. Currently function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them. Time will tell if this experiment will be successful.
+- [[file:src/arena.rs][arena]] :: Contains that start of an arena allocator. Currently this interpreter does not leak memory, but it doesn't free it either. When a garbage collector is added, it will use the same interface as the arena allocator.
+- [[file:src/fns.rs][fns]], [[file:src/data.rs][data]], [[file:src/alloc.rs][alloc]] :: These modules contain definitions of builtin in functions. Some of these are just stubbed out until the functionality is actually needed.

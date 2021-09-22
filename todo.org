@@ -1,19 +1,14 @@
-#+title: Next steps for Remac
-* Don't leak memory
-This is a pre-req for adding GC. Basically make sure that we don't loose track of any memory, if we don't collect it right now.
+#+title: Next steps for Rune
 * GC
 ** create a rooted generic object to register things as roots
 Moving a reference into root should be safe to fix the lifetime
 ** look into mutable strings and soundness
-* VM
-** make functions thread local
-Or at least add an option for it
 * define sexp macro
 Not sure if this can be done with just a regular macro or would require a proc macro. But this would let us decouple our tests from the reader in a clean way.
 * define benchmarks
 * Add reader macro hooks
 * Steps to add a new object
-- define in area.rs
+- define in arena.rs
 - add boxing function
 - define in object
 - implement intoObject

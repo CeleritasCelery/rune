@@ -4,7 +4,7 @@ use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
-use crate::eval;
+use crate::bytecode;
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
 use anyhow::{bail, Result};
@@ -36,8 +36,8 @@ impl<'ob> Function<'ob> {
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
-            Function::LispFn(f) => eval::call_lisp(&f, args, env, arena),
-            Function::SubrFn(f) => eval::call_subr(*f, args, env, arena),
+            Function::LispFn(f) => bytecode::call_lisp(&f, args, env, arena),
+            Function::SubrFn(f) => bytecode::call_subr(*f, args, env, arena),
         }
     }
 }

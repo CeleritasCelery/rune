@@ -196,7 +196,7 @@ lazy_static! {
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         let mut map = create_symbolmap!(
             crate::arith::DEFSUBR,
-            crate::eval::DEFSUBR,
+            crate::bytecode::DEFSUBR,
             crate::forms::DEFSUBR,
             crate::cons::DEFSUBR,
             crate::lread::DEFSUBR,

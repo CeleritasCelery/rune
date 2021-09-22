@@ -1,7 +1,7 @@
 use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
-use crate::eval::Routine;
+use crate::bytecode::Routine;
 use crate::object::Object;
 use crate::reader::{Error, Reader};
 use crate::symbol::Symbol;
