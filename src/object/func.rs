@@ -27,7 +27,7 @@ impl FnArgs {
         if args < self.required {
             bail!(Error::ArgCount(self.required, args));
         }
-        let total_args = self.required + self.optional + (self.rest as u16);
+        let total_args = self.optional + (self.rest as u16);
         if !self.rest && (args > total_args) {
             bail!(Error::ArgCount(total_args, args));
         }
@@ -35,7 +35,7 @@ impl FnArgs {
     }
 
     pub(crate) fn rest_args_start(self) -> u16 {
-        self.required + self.optional
+        self.optional
     }
 }
 

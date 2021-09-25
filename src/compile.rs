@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::bytecode;
-use crate::cons::{into_iter, Cons, ElemIter};
+use crate::cons::{Cons, ElemIter, into_iter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
@@ -929,7 +929,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
             }
         }
     }
-    Ok((required, optional, rest, args))
+    Ok((required, required + optional, rest, args))
 }
 
 fn compile_closure<'ob>(
@@ -1304,38 +1304,38 @@ mod test {
 
         check_lambda(
             "(lambda (x) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
 
         check_lambda(
             "(lambda (x &optional) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
         check_lambda(
             "(lambda (x &optional y) x)",
-            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 1, false),
-            arena,
-        );
-        check_lambda(
-            "(lambda (x &optional y z) y)",
             LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
             arena,
         );
         check_lambda(
+            "(lambda (x &optional y z) y)",
+            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 3, false),
+            arena,
+        );
+        check_lambda(
             "(lambda (x &optional y &optional z) z)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 2, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 3, false),
             arena,
         );
         check_lambda(
             "(lambda (x &rest) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
         check_lambda(
             "(lambda (x &rest y) y)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, true),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, true),
             arena,
         );
 
@@ -1352,7 +1352,7 @@ mod test {
                 vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
                 vec_into![intern("+")],
                 2,
-                0,
+                2,
                 false,
             ),
             arena,
