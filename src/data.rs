@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{FuncCell, Object};
@@ -5,52 +7,37 @@ use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
-use std::convert::TryInto;
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Environment<'ob> {
     pub(crate) vars: HashMap<Symbol, Object<'ob>>,
-    pub(crate) funcs: HashMap<Symbol, Object<'ob>>,
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
     pub(crate) macro_callstack: Vec<Symbol>,
 }
 
-pub(crate) fn set_global_function<'ob>(
-    symbol: Symbol,
-    func: FuncCell<'ob>,
-    env: &mut Environment<'ob>,
-) {
+pub(crate) fn set_global_function(symbol: Symbol, func: FuncCell) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
-    env.funcs.remove(&symbol);
     map.set_func(symbol, func);
 }
 
 #[defun]
-pub(crate) fn fset<'ob>(
-    symbol: Symbol,
-    definition: Object<'ob>,
-    env: &mut Environment<'ob>,
-) -> Symbol {
-    match definition.try_into() {
-        Ok(func) => {
-            set_global_function(symbol, func, env);
-        }
-        Err(_) => {
-            symbol.unbind_func();
-            env.funcs.insert(symbol, definition);
-        }
-    };
-    symbol
+pub(crate) fn fset(symbol: Symbol, definition: Object) -> Result<Symbol> {
+    if matches!(definition, Object::Nil) {
+        symbol.unbind_func();
+    } else {
+        let func = definition.try_into()?;
+        set_global_function(symbol, func);
+    }
+    Ok(symbol)
 }
 
 #[defun]
-pub(crate) fn defalias<'ob>(
+pub(crate) fn defalias(
     symbol: Symbol,
-    definition: Object<'ob>,
+    definition: Object,
     _docstring: Option<&String>,
-    env: &mut Environment<'ob>,
-) -> Symbol {
-    fset(symbol, definition, env)
+) -> Result<Symbol> {
+    fset(symbol, definition)
 }
 
 #[defun]
@@ -100,11 +87,11 @@ pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -> Object<'ob> {
-    symbol.func().map_or_else(
-        || *env.funcs.get(&symbol).unwrap_or(&Object::Nil),
-        |func| func.into(),
-    )
+pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
+    match symbol.func() {
+        Some(f) => f.into(),
+        None => Object::Nil,
+    }
 }
 
 #[defun]
@@ -125,6 +112,12 @@ pub(crate) fn null(obj: Object) -> bool {
 #[defun]
 pub(crate) fn fboundp(symbol: Symbol) -> bool {
     symbol.has_func()
+}
+
+#[defun]
+pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
+    symbol.unbind_func();
+    symbol
 }
 
 #[defun]
@@ -244,6 +237,7 @@ defsubr!(
     symbol_value,
     symbol_name,
     null,
+    fmakunbound,
     fboundp,
     boundp,
     default_boundp,

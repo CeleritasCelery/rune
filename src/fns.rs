@@ -1,10 +1,10 @@
 use std::convert::TryInto;
 
 use crate::arena::Arena;
+use crate::bytecode;
 use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
-use crate::bytecode;
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
 use anyhow::{bail, Result};

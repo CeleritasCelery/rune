@@ -1,13 +1,13 @@
 use crate::arena::Arena;
-use crate::compile::{compile, compile_lambda};
+use crate::compile::compile;
 use crate::data::Environment;
-use crate::object::{Callable, Expression, FuncCell, LispFn, Object, SubrFn};
+use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
 use std::convert::TryInto;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
@@ -141,12 +141,13 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Object::Symbol(sym) = symbol {
-            let value = match env.vars.get(!sym) {
-                Some(x) => x,
-                None => bail!(Error::VoidVariable(!sym)),
-            };
-            self.stack.push(*value);
-            Ok(())
+            match env.vars.get(!sym) {
+                Some(x) => {
+                    self.stack.push(*x);
+                    Ok(())
+                }
+                None => Err(anyhow!(Error::VoidVariable(!sym))),
+            }
         } else {
             unreachable!("Varref was not a symbol: {:?}", symbol);
         }
@@ -191,36 +192,12 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         println!("calling: {}", sym.name);
         match sym.resolved_func() {
             Some(func) => match func {
-                Callable::LispFn(func) => {
-                    self.call_lisp(!func, arg_cnt, arena)?;
-                }
-                Callable::SubrFn(func) => {
-                    self.call_subr(*func, arg_cnt, env, arena)?;
-                }
-                Callable::Macro(_) => {
-                    bail!("Attempt to call macro {} at runtime", sym.name)
-                }
+                Callable::LispFn(func) => self.call_lisp(!func, arg_cnt, arena),
+                Callable::SubrFn(func) => self.call_subr(*func, arg_cnt, env, arena),
+                Callable::Macro(_) => Err(anyhow!("Attempt to call macro {} at runtime", sym.name)),
             },
-            None => match env.funcs.get(&sym) {
-                Some(Object::Cons(uncompiled_func)) => {
-                    let func = compile_lambda(uncompiled_func.cdr(), env, arena)?;
-                    let obj = arena.add(func);
-                    crate::data::defalias(sym, obj, None, env);
-                    if let FuncCell::LispFn(func) = obj.try_into()? {
-                        self.call_lisp(!func, arg_cnt, arena)?;
-                    } else {
-                        unreachable!("type was no longer lisp fn");
-                    }
-                }
-                Some(other) => bail!(
-                    "Type {:?} is not a valid function: {}",
-                    other.get_type(),
-                    other
-                ),
-                None => bail!(Error::VoidFunction(sym)),
-            },
-        };
-        Ok(())
+            None => Err(anyhow!(Error::VoidFunction(sym))),
+        }
     }
 
     fn call_lisp(

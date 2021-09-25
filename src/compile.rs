@@ -1,8 +1,8 @@
 use crate::arena::Arena;
+use crate::bytecode;
 use crate::cons::{into_iter, Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::bytecode;
 use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{sym, Symbol};
@@ -492,7 +492,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
         match body.val() {
             Value::LispFn(lisp_macro) => bytecode::call_lisp(lisp_macro, arg_list, self.env, arena),
-            Value::SubrFn(lisp_macro) => bytecode::call_subr(*lisp_macro, arg_list, self.env, arena),
+            Value::SubrFn(lisp_macro) => {
+                bytecode::call_subr(*lisp_macro, arg_list, self.env, arena)
+            }
             Value::Cons(macro_form) => {
                 if self.env.macro_callstack.iter().any(|&x| x == name) {
                     bail!(CompError::RecursiveMacro);
@@ -512,7 +514,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 crate::data::set_global_function(
                     name,
                     def.try_into().expect("Type should be a valid macro"),
-                    self.env,
                 );
                 if let Object::LispFn(func) = func {
                     bytecode::call_lisp(&func, arg_list, self.env, arena)
