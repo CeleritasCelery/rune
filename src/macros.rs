@@ -16,6 +16,21 @@ macro_rules! defsubr {
     );
 }
 
+macro_rules! symbol_match {
+    ($v:expr; $($a:ident => $b:expr,)* @ $wildcard:ident => $e:expr $(,)?) => {
+        match $v {
+            $(v if v == &crate::symbol::sym::$a => $b,)*
+            $wildcard => $e,
+        }
+    };
+    ($v:expr; $($a:ident => $b:expr ,)* _ => $e:expr $(,)?) => {
+        match $v {
+            $(v if v == &crate::symbol::sym::$a => $b,)*
+            _ => $e,
+        }
+    };
+}
+
 macro_rules! define_unbox {
     ($ident:ident, $ty:ty) => {
         define_unbox!($ident, $ident, $ty);

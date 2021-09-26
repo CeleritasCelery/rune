@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::bytecode;
-use crate::cons::{Cons, ElemIter, into_iter};
+use crate::cons::{into_iter, Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
@@ -503,9 +503,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
                 let lisp_macro = {
                     let func_ident = macro_form.car().as_symbol()?;
-                    match func_ident.name {
-                        "lambda" => compile_lambda(macro_form.cdr(), self.env, arena)?,
-                        bad_function => bail!("Invalid Function : {}", bad_function),
+                    symbol_match! { func_ident;
+                        LAMBDA => compile_lambda(macro_form.cdr(), self.env, arena)?,
+                        @ bad_function => bail!("Invalid Function : {}", bad_function),
                     }
                 };
                 self.env.macro_callstack.pop();
@@ -910,10 +910,9 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut arg_type = &mut required;
     let mut iter = into_iter(bindings)?;
     while let Some(binding) = iter.next() {
-        let sym = binding?.as_symbol()?;
-        match sym.name {
-            "&optional" => arg_type = &mut optional,
-            "&rest" => {
+        symbol_match! { binding?.as_symbol()?;
+            AND_OPTIONAL => arg_type = &mut optional,
+            AND_REST => {
                 if let Some(last) = iter.next() {
                     rest = true;
                     args.push(last?.as_symbol()?);
@@ -922,8 +921,8 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
                         "Found multiple arguments after &rest"
                     );
                 }
-            }
-            _ => {
+            },
+            @ sym => {
                 *arg_type += 1;
                 args.push(sym);
             }

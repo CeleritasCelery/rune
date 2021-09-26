@@ -211,6 +211,10 @@ lazy_static! {
         map.pre_init(&sym::UNQUOTE);
         map.pre_init(&sym::SPLICE);
         map.pre_init(&sym::BACKQUOTE);
+        map.pre_init(&sym::NIL);
+        map.pre_init(&sym::AND_OPTIONAL);
+        map.pre_init(&sym::AND_REST);
+        map.pre_init(&sym::LAMBDA);
         #[cfg(test)]
         {
             map.pre_init(&sym::test::FOO);
@@ -237,6 +241,10 @@ pub(crate) mod sym {
     pub(crate) static UNQUOTE: GlobalSymbol = GlobalSymbol::new(",");
     pub(crate) static SPLICE: GlobalSymbol = GlobalSymbol::new(",@");
     pub(crate) static BACKQUOTE: GlobalSymbol = GlobalSymbol::new("`");
+    pub(crate) static NIL: GlobalSymbol = GlobalSymbol::new("nil");
+    pub(crate) static AND_OPTIONAL: GlobalSymbol = GlobalSymbol::new("&optional");
+    pub(crate) static AND_REST: GlobalSymbol = GlobalSymbol::new("&rest");
+    pub(crate) static LAMBDA: GlobalSymbol = GlobalSymbol::new("lambda");
 
     #[cfg(test)]
     pub(crate) mod test {
