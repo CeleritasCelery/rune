@@ -1,9 +1,16 @@
-use crate::{
-    object::{Expression, LispFn, Object},
-    symbol::Symbol,
-};
+use crate::{arena::Arena, symbol::Symbol};
+use crate::object::{Expression, LispFn, Object};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
+
+#[defun]
+pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
+    let mut head = Object::Nil;
+    for object in objects.iter().rev() {
+        head = cons!(object, head; arena);
+    }
+    head
+}
 
 #[defun]
 fn make_closure<'ob>(prototype: &LispFn<'ob>, closure_vars: &[Object<'ob>]) -> Result<LispFn<'ob>> {
@@ -43,4 +50,4 @@ fn make_symbol(name: &str) -> Symbol {
     crate::symbol::intern(name)
 }
 
-defsubr!(make_closure, make_vector, purecopy, make_symbol);
+defsubr!(list, make_closure, make_vector, purecopy, make_symbol);

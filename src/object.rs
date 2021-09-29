@@ -251,6 +251,12 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
     }
 }
 
+impl<'ob> IntoObject<'ob, Object<'ob>> for &Object<'ob> {
+    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+        *self
+    }
+}
+
 impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Object<'ob>> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self.unwrap_or_default()

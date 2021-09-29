@@ -68,7 +68,6 @@ mod compile;
 mod data;
 mod error;
 mod fns;
-mod forms;
 mod hashmap;
 mod keymap;
 mod lread;

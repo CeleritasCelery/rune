@@ -111,9 +111,7 @@ impl AsRef<GlobalSymbol> for SymbolBox {
 
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        unsafe {
-            Box::from_raw(self.0 as *mut GlobalSymbol);
-        }
+        panic!("Tried to drop {:?}", unsafe {&*self.0});
     }
 }
 
@@ -197,7 +195,6 @@ lazy_static! {
         let mut map = create_symbolmap!(
             crate::arith::DEFSUBR,
             crate::bytecode::DEFSUBR,
-            crate::forms::DEFSUBR,
             crate::cons::DEFSUBR,
             crate::lread::DEFSUBR,
             crate::data::DEFSUBR,
@@ -212,9 +209,22 @@ lazy_static! {
         map.pre_init(&sym::SPLICE);
         map.pre_init(&sym::BACKQUOTE);
         map.pre_init(&sym::NIL);
+        map.pre_init(&sym::TRUE);
         map.pre_init(&sym::AND_OPTIONAL);
         map.pre_init(&sym::AND_REST);
         map.pre_init(&sym::LAMBDA);
+        map.pre_init(&sym::WHILE);
+        map.pre_init(&sym::PROGN);
+        map.pre_init(&sym::PROG1);
+        map.pre_init(&sym::PROG2);
+        map.pre_init(&sym::SETQ);
+        map.pre_init(&sym::DEFCONST);
+        map.pre_init(&sym::COND);
+        map.pre_init(&sym::LET);
+        map.pre_init(&sym::LET_STAR);
+        map.pre_init(&sym::IF);
+        map.pre_init(&sym::AND);
+        map.pre_init(&sym::OR);
         #[cfg(test)]
         {
             map.pre_init(&sym::test::FOO);
@@ -235,6 +245,8 @@ pub(crate) fn intern(name: &str) -> Symbol {
 pub(crate) mod sym {
     use super::GlobalSymbol;
 
+    pub(crate) use crate::data::DEFVAR;
+
     pub(crate) static FUNCTION: GlobalSymbol = GlobalSymbol::new("function");
     pub(crate) static QUOTE: GlobalSymbol = GlobalSymbol::new("quote");
     pub(crate) static MACRO: GlobalSymbol = GlobalSymbol::new("macro");
@@ -242,9 +254,22 @@ pub(crate) mod sym {
     pub(crate) static SPLICE: GlobalSymbol = GlobalSymbol::new(",@");
     pub(crate) static BACKQUOTE: GlobalSymbol = GlobalSymbol::new("`");
     pub(crate) static NIL: GlobalSymbol = GlobalSymbol::new("nil");
+    pub(crate) static TRUE: GlobalSymbol = GlobalSymbol::new("t");
     pub(crate) static AND_OPTIONAL: GlobalSymbol = GlobalSymbol::new("&optional");
     pub(crate) static AND_REST: GlobalSymbol = GlobalSymbol::new("&rest");
     pub(crate) static LAMBDA: GlobalSymbol = GlobalSymbol::new("lambda");
+    pub(crate) static WHILE: GlobalSymbol = GlobalSymbol::new("while");
+    pub(crate) static PROGN: GlobalSymbol = GlobalSymbol::new("progn");
+    pub(crate) static PROG1: GlobalSymbol = GlobalSymbol::new("prog1");
+    pub(crate) static PROG2: GlobalSymbol = GlobalSymbol::new("prog2");
+    pub(crate) static SETQ: GlobalSymbol = GlobalSymbol::new("setq");
+    pub(crate) static DEFCONST: GlobalSymbol = GlobalSymbol::new("defconst");
+    pub(crate) static COND: GlobalSymbol = GlobalSymbol::new("cond");
+    pub(crate) static LET: GlobalSymbol = GlobalSymbol::new("let");
+    pub(crate) static LET_STAR: GlobalSymbol = GlobalSymbol::new("let*");
+    pub(crate) static IF: GlobalSymbol = GlobalSymbol::new("if");
+    pub(crate) static AND: GlobalSymbol = GlobalSymbol::new("and");
+    pub(crate) static OR: GlobalSymbol = GlobalSymbol::new("or");
 
     #[cfg(test)]
     pub(crate) mod test {

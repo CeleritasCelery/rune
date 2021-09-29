@@ -318,7 +318,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn backquote(&mut self, sym: Symbol, value: Object<'ob>) -> Result<()> {
+    fn backquote(&mut self, value: Object<'ob>) -> Result<()> {
+        let sym = &crate::symbol::sym::BACKQUOTE;
         if sym.func().is_some() {
             self.compile_call(sym.into(), value)
         } else {
@@ -808,23 +809,24 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
         let forms = cons.cdr();
         match cons.car() {
-            Object::Symbol(name) => match name.name {
-                "lambda" => self.compile_lambda_def(forms),
-                "while" => self.compile_loop(forms),
-                "quote" => self.quote(forms),
-                "`" => self.backquote(!name, forms),
-                "function" => self.func_quote(forms),
-                "progn" => self.progn(forms),
-                "prog1" => self.progx(forms, 1),
-                "prog2" => self.progx(forms, 2),
-                "setq" => self.setq(forms),
-                "defvar" | "defconst" => self.compile_defvar(forms),
-                "cond" => self.compile_cond(forms),
-                "let" => self.compile_let(forms, true),
-                "let*" => self.compile_let(forms, false),
-                "if" => self.compile_if(forms),
-                "and" => self.compile_combinator(forms, true),
-                "or" => self.compile_combinator(forms, false),
+            Object::Symbol(form) => symbol_match! {!form;
+                LAMBDA => self.compile_lambda_def(forms),
+                WHILE => self.compile_loop(forms),
+                QUOTE => self.quote(forms),
+                BACKQUOTE => self.backquote(forms),
+                FUNCTION => self.func_quote(forms),
+                PROGN => self.progn(forms),
+                PROG1 => self.progx(forms, 1),
+                PROG2 => self.progx(forms, 2),
+                SETQ => self.setq(forms),
+                DEFVAR  => self.compile_defvar(forms),
+                DEFCONST => self.compile_defvar(forms),
+                COND => self.compile_cond(forms),
+                LET => self.compile_let(forms, true),
+                LET_STAR => self.compile_let(forms, false),
+                IF => self.compile_if(forms),
+                AND => self.compile_combinator(forms, true),
+                OR => self.compile_combinator(forms, false),
                 _ => self.compile_call(cons.car(), forms),
             },
             other => self.compile_call(other, forms),
