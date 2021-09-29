@@ -17,6 +17,8 @@ pub(crate) enum CompError {
     LetValueCount(usize),
     StackSizeOverflow,
     RecursiveMacro,
+    InvalidMacro(String),
+    InvalidFunction(String),
 }
 
 impl Display for CompError {
@@ -26,6 +28,8 @@ impl Display for CompError {
             CompError::LetValueCount(_) => write!(f, "Let forms can only have 1 value"),
             CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
             CompError::RecursiveMacro => write!(f, "Recursive macros are not supported"),
+            CompError::InvalidMacro(x) => write!(f, "Invalid macro type: {}", x),
+            CompError::InvalidFunction(x) => write!(f, "Invalid Function : {}", x),
         }
     }
 }
@@ -491,12 +495,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         for arg in into_iter(args)? {
             arg_list.push(arg?);
         }
-        match body.val() {
-            Value::LispFn(lisp_macro) => bytecode::call_lisp(lisp_macro, arg_list, self.env, arena),
-            Value::SubrFn(lisp_macro) => {
+        match body {
+            Object::LispFn(lisp_macro) => bytecode::call_lisp(&lisp_macro, arg_list, self.env, arena),
+            Object::SubrFn(lisp_macro) => {
                 bytecode::call_subr(*lisp_macro, arg_list, self.env, arena)
             }
-            Value::Cons(macro_form) => {
+            Object::Cons(macro_form) => {
                 if self.env.macro_callstack.iter().any(|&x| x == name) {
                     bail!(CompError::RecursiveMacro);
                 }
@@ -506,7 +510,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     let func_ident = macro_form.car().as_symbol()?;
                     symbol_match! { func_ident;
                         LAMBDA => compile_lambda(macro_form.cdr(), self.env, arena)?,
-                        @ bad_function => bail!("Invalid Function : {}", bad_function),
+                        @ bad_function => bail!(CompError::InvalidFunction(bad_function.to_string())),
                     }
                 };
                 self.env.macro_callstack.pop();
@@ -522,7 +526,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     unreachable!("Compiled function was not lisp fn");
                 }
             }
-            x => bail!("Invalid macro type: {:?}", x.get_type()),
+            x => bail!(CompError::InvalidMacro(x.to_string())),
         }
     }
 
