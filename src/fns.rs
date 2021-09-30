@@ -145,41 +145,6 @@ pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>
     }
 }
 
-// eval.c
-#[defun]
-pub(crate) fn apply<'ob>(
-    function: Function<'ob>,
-    arguments: &[Object<'ob>],
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Result<Object<'ob>> {
-    let args = match arguments.len() {
-        0 => Vec::new(),
-        len => {
-            let end = len - 1;
-            let last = arguments[end];
-            let mut args = arguments[..end].to_vec();
-            let list: List = last.try_into()?;
-            for element in list {
-                args.push(element?);
-            }
-            args
-        }
-    };
-    function.call(args, env, arena)
-}
-
-// eval.c
-#[defun]
-pub(crate) fn funcall<'ob>(
-    function: Function<'ob>,
-    arguments: &[Object<'ob>],
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Result<Object<'ob>> {
-    function.call(arguments.to_vec(), env, arena)
-}
-
 #[defun]
 pub(crate) fn defvaralias(
     new_alias: Symbol,
@@ -320,8 +285,6 @@ defsubr!(
     delq,
     memq,
     member,
-    apply,
-    funcall,
     defvaralias,
     featurep,
     require,
