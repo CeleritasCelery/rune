@@ -111,7 +111,7 @@ impl AsRef<GlobalSymbol> for SymbolBox {
 
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        panic!("Tried to drop {:?}", unsafe {&*self.0});
+        panic!("Tried to drop {:?}", unsafe { &*self.0 });
     }
 }
 

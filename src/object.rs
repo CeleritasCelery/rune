@@ -214,23 +214,6 @@ pub(crate) enum Value<'ob> {
     SubrFn(&'ob SubrFn),
 }
 
-impl<'ob> Value<'ob> {
-    pub(crate) const fn get_type(&self) -> crate::error::Type {
-        use crate::error::Type;
-        match self {
-            Value::Symbol(_) => Type::Symbol,
-            Value::Float(_) => Type::Float,
-            Value::String(_) => Type::String,
-            Value::Nil => Type::Nil,
-            Value::True => Type::True,
-            Value::Cons(_) => Type::Cons,
-            Value::Vec(_) => Type::Vec,
-            Value::Int(_) => Type::Int,
-            Value::LispFn(_) | Value::SubrFn(_) => Type::Func,
-        }
-    }
-}
-
 pub(crate) trait Bits {
     fn bits(self) -> u64;
 }

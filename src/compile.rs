@@ -11,21 +11,30 @@ use paste::paste;
 use std::convert::TryInto;
 use std::fmt::Display;
 
+/// Errors that can occur during compilation
 #[derive(Debug, PartialEq)]
 pub(crate) enum CompError {
+    /// The index into the constant vector is u16, so if more then U16_MAX items
+    /// are added it will trigger this error
     ConstOverflow,
-    LetValueCount(usize),
+    /// A let form with more then 1 value i.e. (let ((x y z)))
+    LetValueCount,
+    /// The stack reference index is a u16, so if stack grows larger then
+    /// U16_MAX in a single function call it will trigger this error
     StackSizeOverflow,
+    /// Recursive Macro's are not supported in the bootsrap compiler
     RecursiveMacro,
-    InvalidMacro(String),
-    InvalidFunction(String),
+    /// Expected a function object, but found a different type for a macro call
+    InvalidMacro(Box<str>),
+    /// Expected a function object, but found a different type for a function call
+    InvalidFunction(Box<str>),
 }
 
 impl Display for CompError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CompError::ConstOverflow => write!(f, "Too many constants declared in fuction"),
-            CompError::LetValueCount(_) => write!(f, "Let forms can only have 1 value"),
+            CompError::LetValueCount => write!(f, "Let forms can only have 1 value"),
             CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
             CompError::RecursiveMacro => write!(f, "Recursive macros are not supported"),
             CompError::InvalidMacro(x) => write!(f, "Invalid macro type: {}", x),
@@ -36,9 +45,13 @@ impl Display for CompError {
 
 impl std::error::Error for CompError {}
 
+/// The constant vector for a function. The first N items of the vector are
+/// reserved for upvalue slots to be populated by [`crate::alloc::make_closure`]
 #[derive(Debug)]
 struct ConstVec<'ob> {
+    /// constant vector
     consts: Vec<Object<'ob>>,
+    /// The index for the start of constants that are not upvalues
     upvalue_offset: usize,
 }
 
@@ -62,13 +75,14 @@ impl<'ob> PartialEq for ConstVec<'ob> {
 }
 
 impl<'ob> ConstVec<'ob> {
-    pub(crate) fn with_capacity(cap: usize) -> Self {
+    fn with_capacity(cap: usize) -> Self {
         ConstVec {
             consts: vec![Object::Nil; cap],
             upvalue_offset: cap,
         }
     }
 
+    /// Return the index of object in the constant vector, otherwise insert it
     fn insert_or_get(&mut self, obj: Object<'ob>) -> usize {
         let mut iter = match obj {
             Object::Nil => self.consts[self.upvalue_offset..].iter(),
@@ -83,21 +97,12 @@ impl<'ob> ConstVec<'ob> {
         }
     }
 
+    /// insert object into constant vector. If object is already present, The
+    /// index will be reused
     fn insert(&mut self, obj: Object<'ob>) -> Result<u16, CompError> {
-        let idx = self.insert_or_get(obj);
-        match idx.try_into() {
-            Ok(x) => Ok(x),
-            Err(_) => Err(CompError::ConstOverflow),
-        }
-    }
-
-    fn insert_lambda(&mut self, func: LispFn<'ob>, arena: &'ob Arena) -> Result<u16, CompError> {
-        let obj: Object = func.into_obj(arena);
-        self.consts.push(obj);
-        match (self.consts.len() - 1).try_into() {
-            Ok(x) => Ok(x),
-            Err(_) => Err(CompError::ConstOverflow),
-        }
+        self.insert_or_get(obj)
+            .try_into()
+            .map_err(|_e| CompError::ConstOverflow)
     }
 }
 
@@ -121,23 +126,28 @@ macro_rules! emit_op {
 const JUMP_SLOTS: i16 = 2;
 
 impl CodeVec {
-    pub(crate) fn push_op(&mut self, op: OpCode) {
+    /// Push opcode into code vector
+    fn push_op(&mut self, op: OpCode) {
         #[cfg(feature = "debug_bytecode")]
         println!("op :{}: {:?}", self.len(), op);
         self.push(op.into());
     }
 
+    /// Push opcode + 1 byte argument
     fn push_op_n(&mut self, op: OpCode, arg: u8) {
         self.push_op(op);
         self.push(arg);
     }
 
+    /// Push opcode + 2 byte argument
     fn push_op_n2(&mut self, op: OpCode, arg: u16) {
         self.push_op(op);
         self.push((arg >> 8) as u8);
         self.push(arg as u8);
     }
 
+    /// Push a 2-byte placeholder to store the jump address once it has been
+    /// computed
     fn push_jump_placeholder(&mut self) -> usize {
         let idx = self.len();
         self.push(0);
@@ -145,12 +155,16 @@ impl CodeVec {
         idx
     }
 
+    /// Set the previously reserved jump placeholder to an offset in the code
+    /// vector. index should be the index of in the vector of where to jump to.
     fn set_jump_placeholder(&mut self, index: usize) {
         let offset = self.len() as i16 - index as i16 - JUMP_SLOTS;
         self[index] = (offset >> 8) as u8;
         self[index + 1] = offset as u8;
     }
 
+    /// Push a backward's jump offset. This does not need a placeholder because a
+    /// backwards jump can be calculated ahead of time.
     fn push_back_jump(&mut self, index: usize) {
         let offset = index as i16 - self.len() as i16 - JUMP_SLOTS;
         self.push((offset >> 8) as u8);
@@ -182,17 +196,35 @@ impl CodeVec {
     }
 }
 
+/// Object containg compiler state for the current function. All expressions are
+/// treated as part of some function, even if it is implicit
 #[derive(Debug, PartialEq)]
 struct Compiler<'ob, 'brw> {
+    /// function byte codes
     codes: CodeVec,
+    /// function constants
     constants: ConstVec<'ob>,
+    /// Emulates the runtime stack for correctly calculating stack references.
+    /// If an element is Some(X) then the stack slot represents a binding for
+    /// variable X.
     vars: Vec<Option<Symbol>>,
+    ///  A reference  to  the parent's  variables. This  is  used for  resolving
+    /// upvalues  in closures. If  a variable cannot  be found in  this function
+    /// frame then it's parent is searched as well. A root function has no parent.
     parent: Option<&'brw [Option<Symbol>]>,
+    /// Upvalues that are used in this closure. Not that at this time, the
+    /// bootstrap compiler binds *value* and not *variables*.
     upvalues: Vec<Symbol>,
+    /// A reference to the current runtime environment
     env: &'brw mut Environment<'ob>,
+    /// A reference to the current allocation arean
     arena: &'ob Arena,
 }
 
+/// The maximum number of upvalues a function can store. This is a limitation of
+/// only having a single pass compiler. Most of these slots will be wasted. We
+/// need to put the upvalues at the start of the constant vector so they can be
+/// replaced by their values in [`crate::alloc::make_closure`].
 const UPVALUE_RESERVE: usize = 8;
 
 impl<'ob, 'brw> Compiler<'ob, 'brw> {
@@ -223,6 +255,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         )
     }
 
+    /// Add a value to the emulated stack
     fn grow_stack(&mut self, var: Option<Symbol>) {
         self.vars.push(var);
         #[cfg(feature = "debug_bytecode")]
@@ -236,6 +269,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// pop the top of the emulated stack
     fn shrink_stack(&mut self) -> Option<Symbol> {
         let var = self.vars.pop().expect("compile stack should not be empty");
         #[cfg(feature = "debug_bytecode")]
@@ -250,6 +284,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         var
     }
 
+    /// Truncate stack to a new length
     fn truncate_stack(&mut self, new_len: usize) {
         self.vars.truncate(new_len);
         #[cfg(feature = "debug_bytecode")]
@@ -263,6 +298,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// emit the opcode to reference object in the constant vector
     fn const_ref(&mut self, obj: Object<'ob>, var_ref: Option<Symbol>) -> Result<()> {
         let idx = self.constants.insert(obj)?;
         self.codes.emit_const(idx);
@@ -270,13 +306,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn add_const_lambda(&mut self, func: LispFn<'ob>) -> Result<()> {
-        let idx = self.constants.insert_lambda(func, self.arena)?;
-        self.codes.emit_const(idx);
-        self.grow_stack(None);
-        Ok(())
-    }
-
+    /// emit the opcode to reference the value at idx and bind it to a Symbol
     fn stack_ref(&mut self, idx: usize, var_ref: Symbol) -> Result<()> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
@@ -288,6 +318,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// emit the opcode to set a value on the stack at idx
     fn stack_set(&mut self, idx: usize) -> Result<(), CompError> {
         match (self.vars.len() - idx - 1).try_into() {
             Ok(x) => {
@@ -299,21 +330,25 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// Set a global variable
     fn var_set(&mut self, idx: u16) {
         self.codes.emit_varset(idx);
         self.shrink_stack();
     }
 
+    /// Discard the top of stack
     fn discard(&mut self) {
         self.codes.push_op(OpCode::Discard);
         self.shrink_stack();
     }
 
+    /// duplicate the top of stack
     fn duplicate(&mut self) {
         self.codes.push_op(OpCode::Duplicate);
         self.grow_stack(None);
     }
 
+    /// add the quoted object to the constant vector
     fn quote(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
         match forms.len() {
@@ -322,6 +357,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// If backquote is defined then emit a call to the macro, otherwise treat
+    /// this as a normal quote. This is a hack needed because backquote is used
+    /// in functions before it is defined. The bootstrap compiler does not
+    /// support lazy macro expansion.
     fn backquote(&mut self, value: Object<'ob>) -> Result<()> {
         let sym = &crate::symbol::sym::BACKQUOTE;
         if sym.func().is_some() {
@@ -331,12 +370,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
-    fn func_quote(&mut self, value: Object<'ob>) -> Result<()> {
+    /// Process a function quote `(function foo)`. If value is a cons, compile it. Otherwise
+    /// treat it as a constant reference.
+    fn function(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(value)?;
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) => self.dispatch_special_form(&*cons),
+                Object::Cons(cons) => self.compile_sexp(&*cons),
                 sym => self.const_ref(sym, None),
             }
         } else {
@@ -368,22 +409,24 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.implicit_progn(into_iter(forms)?)
     }
 
+    /// Compile prog1 or prog2 special forms
     fn progx(&mut self, forms: Object<'ob>, returned_form: usize) -> Result<()> {
-        let mut idx = 0;
+        let mut form_idx = 0;
         for form in into_iter(forms)? {
-            idx += 1;
+            form_idx += 1;
             self.compile_form(form?)?;
-            if idx != returned_form {
+            if form_idx != returned_form {
                 self.discard();
             }
         }
-        if idx < returned_form {
-            Err(Error::ArgCount(returned_form as u16, idx as u16).into())
-        } else {
-            Ok(())
-        }
+        ensure!(
+            form_idx >= returned_form,
+            Error::ArgCount(returned_form as u16, form_idx as u16)
+        );
+        Ok(())
     }
 
+    /// Compile implicit progn generally seen in function bodies
     fn implicit_progn(&mut self, mut forms: ElemIter<'_, 'ob>) -> Result<()> {
         if let Some(form) = forms.next() {
             self.compile_form(form?)?;
@@ -397,7 +440,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    fn let_bind_call(&mut self, cons: &'ob Cons<'ob>) -> Result<Symbol> {
+    /// Compile the value of a let binding.
+    /// ```lisp
+    /// (let ((var (val))) ...)
+    ///            ^^^^^
+    /// ```
+    fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<Symbol> {
         let mut iter = into_iter(cons.cdr())?;
         match iter.next() {
             // (let ((x y)))
@@ -405,16 +453,16 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             // (let ((x)))
             None => self.const_ref(Object::Nil, None)?,
         };
-        let rest = iter.count();
         // (let ((x y z ..)))
-        ensure!(rest == 0, CompError::LetValueCount(rest + 1));
+        ensure!(iter.next().is_none(), CompError::LetValueCount);
         Ok(cons.car().try_into()?)
     }
 
-    fn let_bind_nil(&mut self, sym: Symbol) -> Result<()> {
-        self.const_ref(Object::Nil, Some(sym))
-    }
-
+    /// Compile all let bindings.
+    /// ```lisp
+    /// (let (x y (z a)) ...)
+    ///      ^^^^^^^^^^^
+    /// ```
     fn let_bind(&mut self, obj: Object<'ob>, parallel: bool) -> Result<usize> {
         let bindings = into_iter(obj)?;
         let mut len = 0;
@@ -424,7 +472,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             match binding.val() {
                 // (let ((x y)))
                 Value::Cons(cons) => {
-                    let let_bound_var = self.let_bind_call(cons)?;
+                    let let_bound_var = self.let_bind_value(cons)?;
                     if parallel {
                         let_bindings.push(Some(let_bound_var));
                     } else {
@@ -434,7 +482,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     }
                 }
                 // (let (x))
-                Value::Symbol(sym) => self.let_bind_nil(sym)?,
+                Value::Symbol(sym) => self.const_ref(Object::Nil, Some(sym))?,
                 _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
@@ -450,6 +498,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(len)
     }
 
+    /// Compile setq special form.
     fn setq(&mut self, obj: Object<'ob>) -> Result<()> {
         let mut forms = into_iter(obj)?;
         let mut args_processed = 0;
@@ -483,6 +532,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    /// Compile a call to a macro.
     fn compile_macro_call(
         &mut self,
         name: Symbol,
@@ -496,7 +546,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             arg_list.push(arg?);
         }
         match body {
-            Object::LispFn(lisp_macro) => bytecode::call_lisp(&lisp_macro, arg_list, self.env, arena),
+            Object::LispFn(lisp_macro) => {
+                bytecode::call_lisp(&lisp_macro, arg_list, self.env, arena)
+            }
             Object::SubrFn(lisp_macro) => {
                 bytecode::call_subr(*lisp_macro, arg_list, self.env, arena)
             }
@@ -510,7 +562,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     let func_ident = macro_form.car().as_symbol()?;
                     symbol_match! { func_ident;
                         LAMBDA => compile_lambda(macro_form.cdr(), self.env, arena)?,
-                        @ bad_function => bail!(CompError::InvalidFunction(bad_function.to_string())),
+                        @ bad_function => bail!(CompError::InvalidFunction(bad_function.to_string().into())),
                     }
                 };
                 self.env.macro_callstack.pop();
@@ -526,10 +578,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     unreachable!("Compiled function was not lisp fn");
                 }
             }
-            x => bail!(CompError::InvalidMacro(x.to_string())),
+            x => bail!(CompError::InvalidMacro(x.to_string().into())),
         }
     }
 
+    /// Emit the bytecode for a function call
     fn emit_call(&mut self, arg_cnt: usize) {
         self.codes.emit_call(arg_cnt as u16);
         let new_stack_size = self.vars.len() - arg_cnt;
@@ -549,6 +602,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         if let Object::Symbol(name) = func {
             if let Some(Callable::Macro(cons)) = name.resolved_func() {
@@ -559,7 +613,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.compile_func_call(func, args)
     }
 
-    fn jump(&mut self, jump_code: OpCode) -> (usize, OpCode) {
+    /// Emit a jump instruction and reserve a offset placeholder.
+    fn jump(&mut self, jump_code: OpCode) -> usize {
         match jump_code {
             OpCode::JumpNil
             | OpCode::JumpNotNil
@@ -572,28 +627,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
         self.codes.push_op(jump_code);
         let place = self.codes.push_jump_placeholder();
-        (place, jump_code)
+        place
     }
 
-    fn set_jump_target(&mut self, target: (usize, OpCode)) {
-        match target.1 {
-            OpCode::JumpNilElsePop
-            | OpCode::JumpNotNilElsePop
-            | OpCode::JumpNil
-            | OpCode::JumpNotNil
-            | OpCode::Jump => {}
-            x => panic!("invalid jump opcode provided: {:?}", x),
-        }
-        self.codes.set_jump_placeholder(target.0);
-    }
-
-    fn jump_back(&mut self, jump_code: OpCode, location: usize) {
-        if matches!(jump_code, OpCode::Jump) {
-            self.codes.push_op(OpCode::Jump);
-            self.codes.push_back_jump(location);
-        } else {
-            panic!("invalid back jump opcode provided: {:?}", jump_code);
-        }
+    /// Emit a backwards jump
+    fn jump_back(&mut self, location: usize) {
+        self.codes.push_op(OpCode::Jump);
+        self.codes.push_back_jump(location);
     }
 
     fn compile_if(&mut self, obj: Object<'ob>) -> Result<()> {
@@ -606,7 +646,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.compile_form(forms.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNilElsePop);
                 self.compile_form(forms.next().unwrap()?)?;
-                self.set_jump_target(target);
+                self.codes.set_jump_placeholder(target);
                 Ok(())
             }
             // (if x y z ...)
@@ -618,9 +658,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.shrink_stack();
                 let jump_to_end_target = self.jump(OpCode::Jump);
                 // else branch
-                self.set_jump_target(else_nil_target);
+                self.codes.set_jump_placeholder(else_nil_target);
                 self.implicit_progn(forms)?;
-                self.set_jump_target(jump_to_end_target);
+                self.codes.set_jump_placeholder(jump_to_end_target);
                 Ok(())
             }
         }
@@ -636,13 +676,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let loop_exit = self.jump(OpCode::JumpNilElsePop);
         self.implicit_progn(forms)?;
         self.discard();
-        self.jump_back(OpCode::Jump, top);
-        self.set_jump_target(loop_exit);
+        self.jump_back(top);
+        self.codes.set_jump_placeholder(loop_exit);
         // Add the nil return value
         self.grow_stack(None);
         Ok(())
     }
 
+    /// Return true if this closure is contained inside another closure.
     fn closure_is_nested(&self) -> bool {
         match self.parent {
             None => false,
@@ -651,7 +692,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     #[allow(clippy::branches_sharing_code)] // bug in clippy #7628
-    fn compile_lambda_def(&mut self, obj: Object<'ob>) -> Result<()> {
+    fn compile_lambda(&mut self, obj: Object<'ob>) -> Result<()> {
         if self.closure_is_nested() {
             bail!("Nested closures are not supported in the bootstrap compiler");
         }
@@ -662,10 +703,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         };
 
         if upvalues.is_empty() {
-            self.add_const_lambda(lambda)?;
+            self.const_ref(lambda.into_obj(self.arena), None)?;
         } else {
             self.const_ref((&crate::alloc::MAKE_CLOSURE).into(), None)?;
-            self.add_const_lambda(lambda)?;
+            self.const_ref(lambda.into_obj(self.arena), None)?;
             let len = upvalues.len();
             for upvalue in upvalues {
                 match self.vars.iter().rposition(|&x| x == Some(upvalue)) {
@@ -704,10 +745,15 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// Compile a cond clause
+    /// ```lisp
+    /// (cond (x y) (a b))
+    ///       ^^^^^
+    /// ```
     fn compile_cond_clause(
         &mut self,
         clause: Object<'ob>,
-        jump_targets: &mut Vec<(usize, OpCode)>,
+        jump_targets: &mut Vec<usize>,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
         match cond.len() {
@@ -726,17 +772,23 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.implicit_progn(cond)?;
                 self.shrink_stack();
                 let taken_target = self.jump(OpCode::Jump);
-                self.set_jump_target(skip_target);
+                self.codes.set_jump_placeholder(skip_target);
                 jump_targets.push(taken_target);
             }
         }
         Ok(())
     }
 
+    /// Compile the last cond clause. This differs from [`compile_cond_clause`]
+    /// by the way jumps are resolved.
+    /// ```lisp
+    /// (cond (x y) (a b))
+    ///             ^^^^^
+    /// ```
     fn compile_last_cond_clause(
         &mut self,
         clause: Object<'ob>,
-        jump_targets: &mut Vec<(usize, OpCode)>,
+        jump_targets: &mut Vec<usize>,
     ) -> Result<()> {
         let mut cond = into_iter(clause)?;
         match cond.len() {
@@ -762,6 +814,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    /// Compile a combinator like and/or. `empty_value` determines what the
+    /// value should be if no arguments are given (e.g. `(and)`). This is also
+    /// used to determine how forms are combined.
     fn compile_combinator(&mut self, forms: Object<'ob>, empty_value: bool) -> Result<()> {
         let mut conditions = into_iter(forms)?;
 
@@ -783,7 +838,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             }
         }
         for target in final_return_targets {
-            self.codes.set_jump_placeholder(target.0);
+            self.codes.set_jump_placeholder(target);
         }
         Ok(())
     }
@@ -805,20 +860,23 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
 
         for target in final_return_targets {
-            self.codes.set_jump_placeholder(target.0);
+            self.codes.set_jump_placeholder(*target);
         }
         Ok(())
     }
 
-    fn dispatch_special_form(&mut self, cons: &Cons<'ob>) -> Result<()> {
+    /// The main dispatch function for all forms. Looks at the symbol in the
+    /// form to determine if it is a special form that needs handling by the
+    /// compiler or if it is macro. Otherwise it is compiled as a function call.
+    fn compile_sexp(&mut self, cons: &Cons<'ob>) -> Result<()> {
         let forms = cons.cdr();
         match cons.car() {
             Object::Symbol(form) => symbol_match! {!form;
-                LAMBDA => self.compile_lambda_def(forms),
+                LAMBDA => self.compile_lambda(forms),
                 WHILE => self.compile_loop(forms),
                 QUOTE => self.quote(forms),
                 BACKQUOTE => self.backquote(forms),
-                FUNCTION => self.func_quote(forms),
+                FUNCTION => self.function(forms),
                 PROGN => self.progn(forms),
                 PROG1 => self.progx(forms, 1),
                 PROG2 => self.progx(forms, 2),
@@ -837,6 +895,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// Determine if a symbol is captured by a closure.
     fn is_upvalue(&self, sym: Symbol) -> bool {
         match self.parent {
             None => false,
@@ -844,6 +903,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         }
     }
 
+    /// Add an upvalue to the start of the constant vector.
     fn add_upvalue(&mut self, sym: Symbol) -> Result<()> {
         let idx = match self.upvalues.iter().position(|&x| x == sym) {
             Some(i) => i,
@@ -865,6 +925,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
+    /// Emit a variable reference. A variables value can be found in the following places
+    /// 1. Self quoted (if the variable starts with `:`)
+    /// 2. Stack
+    /// 3. Parent frames stack (upvalue)
+    /// 4. Globals
     fn variable_reference(&mut self, sym: Symbol) -> Result<()> {
         if sym.name.starts_with(':') {
             self.const_ref(sym.into(), None)
@@ -887,7 +952,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn compile_form(&mut self, obj: Object<'ob>) -> Result<()> {
         match obj.val() {
-            Value::Cons(cons) => self.dispatch_special_form(cons),
+            Value::Cons(cons) => self.compile_sexp(cons),
             Value::Symbol(sym) => self.variable_reference(sym),
             _ => self.const_ref(obj, None),
         }
@@ -908,6 +973,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 }
 
+/// Parse the function bindings in a lambda.
+/// ```lisp
+/// (x &optional y &rest z)
+/// ```
 fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut args: Vec<Symbol> = vec![];
     let mut required = 0;
@@ -962,6 +1031,7 @@ fn compile_closure<'ob>(
     }
 }
 
+/// Compile a lambda.
 pub(crate) fn compile_lambda<'ob>(
     obj: Object<'ob>,
     env: &mut Environment<'ob>,
@@ -970,6 +1040,7 @@ pub(crate) fn compile_lambda<'ob>(
     compile_closure(obj, None, env, arena).map(|x| x.1)
 }
 
+/// Compile a lisp object.
 pub(crate) fn compile<'ob>(
     obj: Object<'ob>,
     env: &mut Environment<'ob>,
@@ -1426,7 +1497,7 @@ mod test {
         check_error("(quote)", Error::ArgCount(1, 0));
         check_error("(quote 1 2)", Error::ArgCount(1, 2));
         check_error("(let (1))", Error::from_object(Type::Cons, 1.into()));
-        check_error("(let ((foo 1 2)))", CompError::LetValueCount(2));
+        check_error("(let ((foo 1 2)))", CompError::LetValueCount);
         check_error(
             "(let ((foo . 1)))",
             Error::from_object(Type::List, 1.into()),

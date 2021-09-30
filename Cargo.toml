@@ -1,5 +1,5 @@
 [package]
-name = "remac"
+name = "rune"
 version = "0.1.0"
 authors = ["foco"]
 edition = "2018"

@@ -1,5 +1,5 @@
-use crate::{arena::Arena, symbol::Symbol};
 use crate::object::{Expression, LispFn, Object};
+use crate::{arena::Arena, symbol::Symbol};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -12,8 +12,13 @@ pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'o
     head
 }
 
+/// Convert a function to closure by replacing the first N elements with their
+/// closure values.
 #[defun]
-fn make_closure<'ob>(prototype: &LispFn<'ob>, closure_vars: &[Object<'ob>]) -> Result<LispFn<'ob>> {
+pub(crate) fn make_closure<'ob>(
+    prototype: &LispFn<'ob>,
+    closure_vars: &[Object<'ob>],
+) -> Result<LispFn<'ob>> {
     let const_len = prototype.body.constants.len();
     let vars = closure_vars.len();
     ensure!(

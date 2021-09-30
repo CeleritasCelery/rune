@@ -205,7 +205,7 @@ fn require<'ob>(
     arena: &'ob Arena,
 ) -> Result<Symbol> {
     if feature.name == "macroexp" {
-        crate::lread::load("/home/foco/remac/lisp/macroexp.el", arena, env)?;
+        crate::lread::load("lisp/macroexp.el", arena, env)?;
         Ok(feature)
     } else {
         bail!("require is only implemented for macroexp");
