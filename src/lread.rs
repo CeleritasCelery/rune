@@ -3,7 +3,7 @@ use crate::bytecode::Routine;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::object::Object;
-use crate::reader::{Error, Reader};
+use crate::reader;
 use crate::symbol::Symbol;
 use fn_macros::defun;
 
@@ -48,7 +48,7 @@ pub(crate) fn read_from_string<'ob>(
     let start = check_lower_bounds(start, len)?;
     let end = check_upper_bounds(end, len)?;
 
-    let (obj, new_pos) = match Reader::read(&string[start..end], arena) {
+    let (obj, new_pos) = match reader::read(&string[start..end], arena) {
         Ok((obj, pos)) => (obj, pos),
         Err(mut e) => {
             e.update_pos(start);
@@ -65,9 +65,9 @@ pub(crate) fn load_internal<'ob>(
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
-        let (obj, new_pos) = match Reader::read(&contents[pos..], arena) {
+        let (obj, new_pos) = match reader::read(&contents[pos..], arena) {
             Ok((obj, pos)) => (obj, pos),
-            Err(Error::EmptyStream) => return Ok(true),
+            Err(reader::Error::EmptyStream) => return Ok(true),
             Err(mut e) => {
                 e.update_pos(pos);
                 bail!(e);
@@ -113,7 +113,7 @@ mod test {
         println!("{:?}", env);
         println!("{:?}", arena);
 
-        let obj = Reader::read("(+ foo bar baz)", arena).unwrap().0;
+        let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         let func = compile(obj, env, arena).unwrap();
         let val = Routine::execute(&func, env, arena).unwrap();
         assert_eq!(val, 4.5.into_obj(arena));

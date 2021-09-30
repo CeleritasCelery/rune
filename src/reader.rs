@@ -1,3 +1,6 @@
+//! Lisp reader that reads an object from a string. Note that currently reader
+//! macros are not supported, but could be implemented in the future.
+
 use crate::arena::Arena;
 use crate::fns;
 use crate::object::{IntoObject, Object};
@@ -8,16 +11,17 @@ use std::{fmt, iter::Peekable, str::CharIndices};
 
 type Result<T> = std::result::Result<T, Error>;
 
+/// Errors that can occur during reading a sexp from a string
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub(crate) enum Error {
     MissingCloseParen(usize),
     MissingCloseBracket(usize),
     MissingStringDel(usize),
-    UnexpectedChar(char, usize),
+    MissingQuotedItem(usize),
     ExtraItemInCdr(usize),
     ExtraCloseParen(usize),
     ExtraCloseBracket(usize),
-    MissingQuotedItem(usize),
+    UnexpectedChar(char, usize),
     UnknownMacroCharacter(char, usize),
     InvalidRadix(u8, usize),
     EmptyStream,
@@ -138,6 +142,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Given a [`Token`] calculate it's position relative to this `Tokenizer`.
     fn position(&self, token: Token<'a>) -> usize {
         match token {
             Token::OpenParen(x)
@@ -159,6 +164,8 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Return the current position of the Tokenizer. This is the index of the
+    /// next character.
     fn cur_pos(&mut self) -> usize {
         match self.iter.peek() {
             Some((idx, _)) => *idx,
@@ -166,6 +173,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Skip characters until the closure returns true.
     fn skip_till(&mut self, mut func: impl FnMut(char) -> bool) -> usize {
         while self.iter.next_if(|x| !func(x.1)).is_some() {}
         match self.iter.peek() {
@@ -174,6 +182,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Skip whitespace and comments until the next valid read character.
     fn skip_till_char(&mut self) {
         let mut in_comment = false;
         let valid_char = |chr: char| {
@@ -211,6 +220,7 @@ impl<'a> Tokenizer<'a> {
         Token::Ident(&self.slice[beg..end])
     }
 
+    /// After having found a `,`, see if the next token is a `@` or not.
     fn get_macro_char(&mut self, idx: usize) -> Token<'a> {
         match self.iter.peek() {
             Some((_, '@')) => {
@@ -271,6 +281,8 @@ fn intern_symbol(symbol: &str) -> Symbol {
     }
 }
 
+/// Parse a symbol from a string. This will either by a true symbol or a number
+/// literal.
 fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
     match slice.parse::<i64>() {
         Ok(num) => num.into_obj(arena),
@@ -285,12 +297,14 @@ fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
     }
 }
 
-// TODO: Handle unicode, hex, and octal escapes
+/// process escape characters in the string slice and return the resulting
+/// string.
 fn unescape_string(string: &str) -> String {
     let mut escaped = false;
     let unescape = |c: char| {
         if escaped {
             escaped = false;
+            // TODO: Handle unicode, hex, and octal escapes
             match c {
                 'n' => Some('\n'),
                 't' => Some('\t'),
@@ -305,9 +319,10 @@ fn unescape_string(string: &str) -> String {
             Some(c)
         }
     };
-    string.chars().filter_map(unescape).collect::<String>()
+    string.chars().filter_map(unescape).collect()
 }
 
+/// Return true if `chr` is a valid symbol character.
 const fn symbol_char(chr: char) -> bool {
     !matches!(
         chr,
@@ -327,12 +342,20 @@ fn escaped(escaped: &mut bool, chr: char) -> bool {
     }
 }
 
-pub(crate) struct Reader<'a, 'ob> {
+/// State of the reader.
+struct Reader<'a, 'ob> {
+    /// The iterator over the tokens in the current slice.
     tokens: Tokenizer<'a>,
+    /// New objects are allocated in the arena.
     arena: &'ob Arena,
 }
 
 impl<'a, 'ob> Reader<'a, 'ob> {
+    /// Read the cdr of a literal list.
+    /// ```lisp
+    /// '(1 2 3 . 45)
+    ///           ^^^
+    /// ```
     fn read_cdr(&mut self, delim: usize) -> Result<Option<Object<'ob>>> {
         match self.tokens.next() {
             Some(Token::CloseParen(_)) => Ok(None),
@@ -379,6 +402,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Err(Error::MissingCloseBracket(delim))
     }
 
+    /// Quote an item using `symbol`.
     fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
         let obj = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
@@ -387,6 +411,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Ok(list!(symbol, obj; self.arena))
     }
 
+    /// read a quoted character (e.g. `?a`)
     fn read_char_quote(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.next() {
             // TODO: Implement actual parsing
@@ -396,6 +421,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
+    /// Read an octal escape (e.g. `#0759`)
     fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => {
@@ -412,6 +438,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
+    /// read a sharp quoted character. This could be used for reader macro's in
+    /// the future, but right now it just handles the special cases from elisp.
     fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
@@ -448,16 +476,18 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Error(e) => Err(e),
         }
     }
+}
 
-    pub(crate) fn read(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize)> {
-        let mut reader = Reader {
-            tokens: Tokenizer::new(slice),
-            arena,
-        };
-        match reader.tokens.next() {
-            Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
-            None => Err(Error::EmptyStream),
-        }
+/// read a lisp object from `slice`. Return the object and index of next
+/// remaining character in the slice.
+pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize)> {
+    let mut reader = Reader {
+        tokens: Tokenizer::new(slice),
+        arena,
+    };
+    match reader.tokens.next() {
+        Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
+        None => Err(Error::EmptyStream),
     }
 }
 
@@ -482,7 +512,7 @@ mod test {
         ($expect:expr, $compare:expr) => {{
             let read_arena = &Arena::new();
             let obj: Object = $expect.into_obj(read_arena);
-            assert_eq!(obj, Reader::read($compare, &read_arena).unwrap().0)
+            assert_eq!(obj, read($compare, &read_arena).unwrap().0)
         }};
     }
 
@@ -588,7 +618,7 @@ baz""#
 
     fn assert_error(input: &str, error: Error) {
         let arena = &Arena::new();
-        let result = Reader::read(input, arena).err().unwrap();
+        let result = read(input, arena).err().unwrap();
         assert_eq!(result, error);
     }
 

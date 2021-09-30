@@ -1,3 +1,11 @@
+//! Compile a lisp object into bytecode. The returned bytecode is an implicit
+//! lambda function that executes the top level code.
+//!
+//! Note that all functions that compile a special form only take the body of
+//! that form. For example, if `compile_if` is called on the form `(if x y z)`,
+//! then value passed to the function should be `(x y z)`. The leading symbol is
+//! removed. It is assumed that the caller has properly dispatched the on the first symbol.
+
 use crate::arena::Arena;
 use crate::bytecode;
 use crate::cons::{into_iter, Cons, ElemIter};
@@ -779,7 +787,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    /// Compile the last cond clause. This differs from [`compile_cond_clause`]
+    /// Compile the last cond clause. This differs from [`Self::compile_cond_clause`]
     /// by the way jumps are resolved.
     /// ```lisp
     /// (cond (x y) (a b))
@@ -1054,7 +1062,7 @@ pub(crate) fn compile<'ob>(
 mod test {
 
     use super::*;
-    use crate::reader::Reader;
+    use crate::reader::read;
     use crate::symbol::intern;
     #[allow(clippy::enum_glob_use)]
     use OpCode::*;
@@ -1065,7 +1073,7 @@ mod test {
     {
         let arena = &Arena::new();
         let env = &mut Environment::default();
-        let obj = Reader::read(compare, arena).unwrap().0;
+        let obj = read(compare, arena).unwrap().0;
         assert_eq!(
             compile(obj, env, arena)
                 .err()
@@ -1081,7 +1089,7 @@ mod test {
             let comp_arena = &Arena::new();
             let comp_env = &mut Environment::default();
             println!("Test String: {}", $compare);
-            let obj = Reader::read($compare, comp_arena).unwrap().0;
+            let obj = read($compare, comp_arena).unwrap().0;
             let expect = Expression {
                 op_codes: vec_into![$($op),+].into(),
                 constants: vec_into_object![$($const),+; comp_arena],
@@ -1355,7 +1363,7 @@ mod test {
 
     fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
         println!("Test String: {}", sexp);
-        let obj = Reader::read(sexp, comp_arena).unwrap().0;
+        let obj = read(sexp, comp_arena).unwrap().0;
         let env = &mut Environment::default();
         let lambda = match obj {
             Object::Cons(cons) => cons.cdr(),
@@ -1415,7 +1423,7 @@ mod test {
             arena,
         );
 
-        let obj = Reader::read("(lambda (x &rest y z) y)", arena).unwrap().0;
+        let obj = read("(lambda (x &rest y z) y)", arena).unwrap().0;
         assert!(compile(obj, env, arena)
             .err()
             .unwrap()

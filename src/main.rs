@@ -80,7 +80,6 @@ use crate::bytecode::Routine;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::object::Object;
-use crate::reader::Reader;
 use std::env;
 use std::io::{self, Write};
 
@@ -104,7 +103,7 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
         if !parens_closed(&buffer) {
             continue;
         }
-        let (obj, _) = match Reader::read(&buffer, arena) {
+        let (obj, _) = match reader::read(&buffer, arena) {
             Ok(obj) => obj,
             Err(e) => {
                 println!("Error: {}", e);

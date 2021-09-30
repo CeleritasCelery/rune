@@ -476,7 +476,7 @@ mod test {
     use super::*;
     use crate::arena::Arena;
     use crate::object::IntoObject;
-    use crate::reader::Reader;
+    use crate::reader::read;
     use crate::symbol::intern;
 
     macro_rules! test_eval {
@@ -484,7 +484,7 @@ mod test {
             println!("Test String: {}", $sexp);
             let arena = &Arena::new();
             let env = &mut Environment::default();
-            let obj = Reader::read($sexp, arena).unwrap().0;
+            let obj = read($sexp, arena).unwrap().0;
             let exp = compile(obj, env, arena).unwrap();
             println!("codes: {:?}", exp.op_codes);
             println!("const: {:?}", exp.constants);
@@ -496,7 +496,7 @@ mod test {
     macro_rules! test_eval_serial {
         ($sexp:expr, $expect:expr, $env:expr, $arena:expr) => {{
             println!("Test String: {}", $sexp);
-            let obj = Reader::read($sexp, $arena).unwrap().0;
+            let obj = read($sexp, $arena).unwrap().0;
             let exp = compile(obj, $env, $arena).unwrap();
             println!("codes: {:?}", exp.op_codes);
             println!("const: {:?}", exp.constants);
@@ -644,7 +644,7 @@ mod test {
     {
         let arena = &Arena::new();
         let env = &mut Environment::default();
-        let obj = Reader::read(sexp, arena).unwrap().0;
+        let obj = read(sexp, arena).unwrap().0;
         let exp = compile(obj, env, arena).unwrap();
         let val = Routine::execute(&exp, env, arena);
         assert_eq!(val.err().unwrap().downcast::<E>().unwrap(), (error));
