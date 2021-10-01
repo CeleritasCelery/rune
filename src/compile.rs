@@ -150,8 +150,8 @@ impl CodeVec {
     /// Push opcode + 2 byte argument
     fn push_op_n2(&mut self, op: OpCode, arg: u16) {
         self.push_op(op);
-        self.push((arg >> 8) as u8);
         self.push(arg as u8);
+        self.push((arg >> 8) as u8);
     }
 
     /// Push a 2-byte placeholder to store the jump address once it has been
@@ -167,16 +167,16 @@ impl CodeVec {
     /// vector. index should be the index of in the vector of where to jump to.
     fn set_jump_placeholder(&mut self, index: usize) {
         let offset = self.len() as i16 - index as i16 - JUMP_SLOTS;
-        self[index] = (offset >> 8) as u8;
-        self[index + 1] = offset as u8;
+        self[index] = offset as u8;
+        self[index + 1] = (offset >> 8) as u8;
     }
 
     /// Push a backward's jump offset. This does not need a placeholder because a
     /// backwards jump can be calculated ahead of time.
     fn push_back_jump(&mut self, index: usize) {
         let offset = index as i16 - self.len() as i16 - JUMP_SLOTS;
-        self.push((offset >> 8) as u8);
         self.push(offset as u8);
+        self.push((offset >> 8) as u8);
     }
 
     fn emit_const(&mut self, idx: u16) {
@@ -1188,7 +1188,7 @@ mod test {
     }
 
     const fn get_jump_slots(offset: i16) -> (u8, u8) {
-        ((offset >> 8) as u8, offset as u8)
+        (offset as u8, (offset >> 8) as u8)
     }
 
     #[test]
@@ -1212,16 +1212,17 @@ mod test {
 
     #[test]
     fn cond_stmt() {
+        let (high1, low1) = get_jump_slots(1);
         check_compiler!("(cond)", [Constant0, Ret], [Object::Nil]);
         check_compiler!("(cond ())", [Constant0, Ret], [Object::Nil]);
         check_compiler!(
             "(cond (1))",
-            [Constant0, JumpNotNilElsePop, 0, 1, Constant1, Ret],
+            [Constant0, JumpNotNilElsePop, high1, low1, Constant1, Ret],
             [1, false]
         );
         check_compiler!(
             "(cond (1 2))",
-            [Constant0, JumpNilElsePop, 0, 1, Constant1, Ret],
+            [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
             [1, 2]
         );
         check_compiler!(
@@ -1229,16 +1230,16 @@ mod test {
             [
                 Constant0,
                 JumpNil,
-                0,
                 4,
+                0,
                 Constant1,
                 Jump,
-                0,
                 5,
+                0,
                 Constant2,
                 JumpNilElsePop,
-                0,
-                1,
+                high1,
+                low1,
                 Constant3,
                 Ret
             ],
@@ -1249,12 +1250,12 @@ mod test {
             [
                 Constant0,
                 JumpNotNilElsePop,
-                0,
                 5,
+                0,
                 Constant1,
                 JumpNotNilElsePop,
-                0,
                 1,
+                0,
                 Constant2,
                 Ret
             ],

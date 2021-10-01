@@ -1,3 +1,5 @@
+//! The main bytecode interpeter.
+
 use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
@@ -9,6 +11,7 @@ use std::convert::TryInto;
 
 use anyhow::{anyhow, bail, Result};
 
+/// Errors that can occur during runtime.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
     VoidFunction(Symbol),
@@ -26,16 +29,12 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-#[derive(Clone)]
-struct CallFrame<'brw, 'ob> {
-    ip: Ip,
-    code: &'brw Expression<'ob>,
-    start: usize,
-}
-
+/// An instruction pointer. This is implemented as a bound checked range pointer.
 #[derive(Clone)]
 struct Ip {
+    /// Valid range for this instruction pointer.
     range: std::ops::Range<*const u8>,
+    /// Points to the next instruction.
     ip: *const u8,
 }
 
@@ -47,15 +46,6 @@ impl Ip {
         }
     }
 
-    fn next(&mut self) -> u8 {
-        unsafe {
-            debug_assert!(self.range.contains(&self.ip));
-            let x = *self.ip;
-            self.ip = self.ip.add(1);
-            x
-        }
-    }
-
     fn jump(&mut self, offset: i16) {
         unsafe {
             self.ip = self.ip.offset(offset as isize);
@@ -63,21 +53,33 @@ impl Ip {
         }
     }
 
-    fn take_arg(&mut self) -> u8 {
-        let x = self.next();
-        #[cfg(feature = "debug_bytecode")]
-        println!("arg = {}", x);
-        x
+    /// Take the next byte in the stream
+    fn next(&mut self) -> u8 {
+        unsafe {
+            debug_assert!(self.range.contains(&self.ip));
+            let value = *self.ip;
+            self.ip = self.ip.add(1);
+            value
+        }
     }
 
-    fn take_double_arg(&mut self) -> u16 {
-        let upper: u16 = self.next().into();
+    /// Take the next two bytes in the stream as u16.
+    fn next2(&mut self) -> u16 {
         let lower: u16 = self.next().into();
-        let x = upper << 8 | lower;
-        #[cfg(feature = "debug_bytecode")]
-        println!("dbl arg = {}", x);
-        x
+        let upper: u16 = self.next().into();
+        upper << 8 | lower
     }
+}
+
+/// A function call frame. This represents the state of the current executing
+/// function as well as all it's associated constants.
+#[derive(Clone)]
+struct CallFrame<'brw, 'ob> {
+    ip: Ip,
+    code: &'brw Expression<'ob>,
+    /// The index where this call frame starts on the stack. The interpreter
+    /// should not access elements beyond this index.
+    start: usize,
 }
 
 impl<'brw, 'ob> CallFrame<'brw, 'ob> {
@@ -90,7 +92,11 @@ impl<'brw, 'ob> CallFrame<'brw, 'ob> {
     }
 
     fn get_const(&self, i: usize) -> Object<'ob> {
-        self.code.constants[i]
+        *self
+            .code
+            .constants
+            .get(i)
+            .expect("constant had invalid index")
     }
 }
 
@@ -109,14 +115,20 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     }
 
     fn push_ref(&mut self, i: usize) {
+        #[cfg(feature = "debug_bytecode")]
+        println!("arg = {}", i);
         self.push(self.ref_at(i));
     }
 
     fn set_ref(&mut self, i: usize) {
+        #[cfg(feature = "debug_bytecode")]
+        println!("arg = {}", i);
         self.swap_remove(self.from_end(i));
     }
 
     fn ref_at(&self, i: usize) -> Object<'ob> {
+        #[cfg(feature = "debug_bytecode")]
+        println!("arg = {}", i);
         self[self.from_end(i)]
     }
 
@@ -125,29 +137,33 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
     }
 }
 
-pub(crate) struct Routine<'brw, 'ob> {
-    stack: Vec<Object<'ob>>,
-    call_frames: Vec<CallFrame<'brw, 'ob>>,
-    frame: CallFrame<'brw, 'ob>,
-}
-
+/// Fill extra arguments on the stack so that every slot hold a valid object.
+/// Used for `&optional` and `&rest`.
 fn fill_extra_args(stack: &mut Vec<Object>, fill_args: u16) {
     for _ in 0..fill_args {
         stack.push(Object::Nil);
     }
 }
 
+/// An execution routine. This holds all the state of the current interpreter,
+/// and could be used to support coroutines.
+pub(crate) struct Routine<'brw, 'ob> {
+    stack: Vec<Object<'ob>>,
+    call_frames: Vec<CallFrame<'brw, 'ob>>,
+    /// The current call frame.
+    frame: CallFrame<'brw, 'ob>,
+}
+
 impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Object::Symbol(sym) = symbol {
-            match env.vars.get(!sym) {
-                Some(x) => {
-                    self.stack.push(*x);
-                    Ok(())
-                }
-                None => Err(anyhow!(Error::VoidVariable(!sym))),
-            }
+            let var = *env
+                .vars
+                .get(!sym)
+                .ok_or(anyhow!(Error::VoidVariable(!sym)))?;
+            self.stack.push(var);
+            Ok(())
         } else {
             unreachable!("Varref was not a symbol: {:?}", symbol);
         }
@@ -161,7 +177,10 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         Ok(())
     }
 
-    fn prepare_arguments(
+    /// Prepare the arguments for lisp function call. This means filling all
+    /// needed stack slots with `nil` and moving all the `&rest` arguments into
+    /// a list.
+    fn prepare_lisp_args(
         &mut self,
         func: &'brw LispFn<'ob>,
         arg_cnt: u16,
@@ -206,7 +225,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         arg_cnt: u16,
         arena: &'ob Arena,
     ) -> Result<()> {
-        let total_args = self.prepare_arguments(func, arg_cnt, arena)?;
+        let total_args = self.prepare_lisp_args(func, arg_cnt, arena)?;
         self.call_frames.push(self.frame.clone());
         let tmp = self.stack.from_end(total_args as usize);
         self.frame = CallFrame::new(&func.body, tmp);
@@ -232,6 +251,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     }
 
     #[allow(clippy::too_many_lines)]
+    /// The main bytecode execution loop.
     pub(crate) fn run(
         &mut self,
         env: &mut Environment<'ob>,
@@ -260,11 +280,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::StackRef4 => self.stack.push_ref(4),
                 op::StackRef5 => self.stack.push_ref(5),
                 op::StackRefN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.stack.push_ref(idx.into());
                 }
                 op::StackRefN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.stack.push_ref(idx.into());
                 }
                 op::StackSet0 => self.stack.set_ref(0),
@@ -274,11 +294,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::StackSet4 => self.stack.set_ref(4),
                 op::StackSet5 => self.stack.set_ref(5),
                 op::StackSetN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.stack.set_ref(idx.into());
                 }
                 op::StackSetN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.stack.set_ref(idx.into());
                 }
                 op::Constant0 => self.stack.push(self.frame.get_const(0)),
@@ -288,11 +308,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::Constant4 => self.stack.push(self.frame.get_const(4)),
                 op::Constant5 => self.stack.push(self.frame.get_const(5)),
                 op::ConstantN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.stack.push(self.frame.get_const(idx.into()));
                 }
                 op::ConstantN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.stack.push(self.frame.get_const(idx.into()));
                 }
                 op::VarRef0 => self.varref(0, env)?,
@@ -302,11 +322,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::VarRef4 => self.varref(4, env)?,
                 op::VarRef5 => self.varref(5, env)?,
                 op::VarRefN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.varref(idx.into(), env)?;
                 }
                 op::VarRefN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.varref(idx.into(), env)?;
                 }
                 op::VarSet0 => self.varset(0, env)?,
@@ -316,11 +336,11 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::VarSet4 => self.varset(4, env)?,
                 op::VarSet5 => self.varset(5, env)?,
                 op::VarSetN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.varset(idx.into(), env)?;
                 }
                 op::VarSetN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.varset(idx.into(), env)?;
                 }
                 op::Call0 => self.call(0, env, arena)?,
@@ -330,18 +350,18 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::Call4 => self.call(4, env, arena)?,
                 op::Call5 => self.call(5, env, arena)?,
                 op::CallN => {
-                    let idx = self.frame.ip.take_arg();
+                    let idx = self.frame.ip.next();
                     self.call(idx.into(), env, arena)?;
                 }
                 op::CallN2 => {
-                    let idx = self.frame.ip.take_double_arg();
+                    let idx = self.frame.ip.next2();
                     self.call(idx, env, arena)?;
                 }
                 op::Discard => {
                     self.stack.pop();
                 }
                 op::DiscardN => {
-                    let num: usize = self.frame.ip.take_arg().into();
+                    let num: usize = self.frame.ip.next().into();
                     let cur_len = self.stack.len();
                     self.stack.truncate(cur_len - num);
                 }
@@ -350,7 +370,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                         .stack
                         .pop()
                         .expect("stack was empty when discard called");
-                    let num: usize = self.frame.ip.take_arg().into();
+                    let num: usize = self.frame.ip.next().into();
                     let cur_len = self.stack.len();
                     self.stack.truncate(cur_len - num);
                     self.stack.push(tos);
@@ -360,26 +380,26 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     self.stack.push(value);
                 }
                 op::Jump => {
-                    let offset = self.frame.ip.take_double_arg();
+                    let offset = self.frame.ip.next2();
                     self.frame.ip.jump(offset as i16);
                 }
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let offset = self.frame.ip.next2();
                     if cond == Object::Nil {
                         self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNotNil => {
                     let cond = self.stack.pop().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let offset = self.frame.ip.next2();
                     if cond != Object::Nil {
                         self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = self.stack.last().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let offset = self.frame.ip.next2();
                     if *cond == Object::Nil {
                         self.frame.ip.jump(offset as i16);
                     } else {
@@ -388,7 +408,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 }
                 op::JumpNotNilElsePop => {
                     let cond = self.stack.last().unwrap();
-                    let offset = self.frame.ip.take_double_arg();
+                    let offset = self.frame.ip.next2();
                     if *cond == Object::Nil {
                         self.stack.pop();
                     } else {
@@ -412,6 +432,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         }
     }
 
+    /// Execute the given expression.
     pub(crate) fn execute(
         exp: &Expression<'ob>,
         env: &mut Environment<'ob>,
@@ -438,7 +459,7 @@ pub(crate) fn call_lisp<'brw, 'ob>(
         call_frames: vec![],
         frame: CallFrame::new(&func.body, 0),
     };
-    rout.prepare_arguments(func, arg_cnt, arena)?;
+    rout.prepare_lisp_args(func, arg_cnt, arena)?;
     rout.run(env, arena)
 }
 
@@ -454,6 +475,7 @@ pub(crate) fn call_subr<'ob>(
     (func.subr)(&args, env, arena)
 }
 
+/// Compile then execute the lisp object.
 #[defun]
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,

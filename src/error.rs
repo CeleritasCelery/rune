@@ -2,9 +2,13 @@ use std::fmt::Display;
 
 use crate::object::Object;
 
+/// Errors the are used in more then 1 module.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
+    /// The function or form has the wrong number of arguments. First number is
+    /// the expected number, second is the actual.
     ArgCount(u16, u16),
+    /// Object was the wrong type.
     Type(Type, Type, String),
 }
 
@@ -22,8 +26,9 @@ impl Display for Error {
 }
 
 impl Error {
+    /// Get a type error from an object.
     pub(crate) fn from_object(exp: Type, obj: Object) -> Self {
-        Error::Type(exp, obj.get_type(), format!("{}", obj))
+        Error::Type(exp, obj.get_type(), obj.to_string())
     }
 }
 
