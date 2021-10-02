@@ -11,7 +11,7 @@ use crate::bytecode;
 use crate::cons::{into_iter, Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::object::{Callable, Expression, IntoObject, LispFn, Object, Value};
+use crate::object::{Callable, Expression, IntoObject, LispFn, Object};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{sym, Symbol};
 use anyhow::{anyhow, bail, ensure, Result};
@@ -477,10 +477,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let mut let_bindings = Vec::new();
         for binding in bindings {
             let binding = binding?;
-            match binding.val() {
+            match binding {
                 // (let ((x y)))
-                Value::Cons(cons) => {
-                    let let_bound_var = self.let_bind_value(cons)?;
+                Object::Cons(cons) => {
+                    let let_bound_var = self.let_bind_value(!cons)?;
                     if parallel {
                         let_bindings.push(Some(let_bound_var));
                     } else {
@@ -490,7 +490,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     }
                 }
                 // (let (x))
-                Value::Symbol(sym) => self.const_ref(Object::Nil, Some(sym))?,
+                Object::Symbol(sym) => self.const_ref(Object::Nil, Some(!sym))?,
                 _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
@@ -959,9 +959,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_form(&mut self, obj: Object<'ob>) -> Result<()> {
-        match obj.val() {
-            Value::Cons(cons) => self.compile_sexp(cons),
-            Value::Symbol(sym) => self.variable_reference(sym),
+        match obj {
+            Object::Cons(cons) => self.compile_sexp(&cons),
+            Object::Symbol(sym) => self.variable_reference(!sym),
             _ => self.const_ref(obj, None),
         }
     }

@@ -42,7 +42,7 @@ impl<'ob> TryFrom<&'ob Cons<'ob>> for FuncCell<'ob> {
         match cons.car() {
             Object::Symbol(sym) if sym.name == "macro" => {
                 if matches!(cons.cdr(), Object::LispFn(_)) {
-                    Ok(FuncCell::Macro(Data::from_immut_ref(cons)))
+                    Ok(FuncCell::Macro(Data::from_ref(cons)))
                 } else {
                     Err(Error::from_object(Type::Func, cons.car()))
                 }
@@ -59,7 +59,7 @@ impl<'ob> TryFrom<Object<'ob>> for FuncCell<'ob> {
             Object::LispFn(x) => Ok(FuncCell::LispFn(x)),
             Object::SubrFn(x) => Ok(FuncCell::SubrFn(x)),
             Object::Symbol(x) => Ok(FuncCell::Symbol(x)),
-            Object::Cons(cons) => cons.get().try_into(),
+            Object::Cons(cons) => (!cons).try_into(),
             _ => Err(Error::from_object(Type::Func, obj)),
         }
     }
@@ -92,8 +92,7 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
     type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Int(x) => x
-                .get()
+            Object::Int(x) => (!x)
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {}", !x)),
             _ => Err(Error::from_object(Type::Int, obj).into()),
@@ -125,7 +124,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(cons) => Ok(List::Cons(cons.get())),
+            Object::Cons(cons) => Ok(List::Cons(!cons)),
             Object::Nil => Ok(List::Nil),
             _ => Err(Error::from_object(Type::List, obj)),
         }
@@ -163,7 +162,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
     }
 }
 
-define_unbox!(Float, f64);
+define_unbox!(Float, &'ob f64);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
@@ -228,7 +227,7 @@ define_unbox!(Symbol, Symbol);
 
 impl<'ob> From<Symbol> for Object<'ob> {
     fn from(s: Symbol) -> Self {
-        Object::Symbol(Data::from_immut_ref(s))
+        Object::Symbol(Data::from_ref(s))
     }
 }
 
@@ -247,7 +246,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
 
 impl<'ob> From<&'ob Cons<'ob>> for Object<'ob> {
     fn from(cons: &'ob Cons<'ob>) -> Self {
-        Object::Cons(Data::from_immut_ref(cons))
+        Object::Cons(Data::from_ref(cons))
     }
 }
 

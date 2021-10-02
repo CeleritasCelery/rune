@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::error::{Error, Type};
-use crate::object::{List, Object, Value};
+use crate::object::{List, Object};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
@@ -130,9 +130,9 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
             Some(cons) => {
-                (*self).0 = match cons.cdr().val() {
-                    Value::Cons(next) => Some(next),
-                    Value::Nil => None,
+                (*self).0 = match cons.cdr() {
+                    Object::Cons(next) => Some(!next),
+                    Object::Nil => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons))
@@ -151,9 +151,9 @@ impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
 }
 
 pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
-    match obj.val() {
-        Value::Cons(cons) => Ok(cons.into_iter()),
-        Value::Nil => Ok(ElemIter::empty()),
+    match obj {
+        Object::Cons(cons) => Ok((!cons).into_iter()),
+        Object::Nil => Ok(ElemIter::empty()),
         _ => Err(Error::from_object(Type::List, obj).into()),
     }
 }
@@ -194,16 +194,16 @@ fn cdr(list: List) -> Object {
 
 #[defun]
 fn car_safe(object: Object) -> Object {
-    match object.val() {
-        Value::Cons(cons) => cons.car(),
+    match object {
+        Object::Cons(cons) => cons.car(),
         _ => Object::Nil,
     }
 }
 
 #[defun]
 fn cdr_safe(object: Object) -> Object {
-    match object.val() {
-        Value::Cons(cons) => cons.cdr(),
+    match object {
+        Object::Cons(cons) => cons.cdr(),
         _ => Object::Nil,
     }
 }
@@ -253,8 +253,8 @@ mod test {
     use std::{convert::TryInto, mem::size_of};
 
     fn as_cons(obj: Object) -> Option<&Cons> {
-        match obj.val() {
-            Value::Cons(x) => Some(x),
+        match obj {
+            Object::Cons(x) => Some(!x),
             _ => None,
         }
     }
@@ -264,23 +264,26 @@ mod test {
         let arena = &Arena::new();
         assert_eq!(16, size_of::<Cons>());
         let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
-        assert!(matches!(x.val(), Value::Cons(_)));
+        assert!(matches!(x, Object::Cons(_)));
 
         let cons1: &mut Cons = x.try_into().expect("expected cons");
 
         let start_str = "start".to_owned();
-        assert_eq!(Value::String(&start_str), cons1.car().val());
+        assert_eq!(start_str.into_obj(arena), cons1.car());
         cons1.set_car("start2".into_obj(arena));
         let start2_str = "start2".to_owned();
-        assert_eq!(Value::String(&start2_str), cons1.car().val());
+        assert_eq!(start2_str.into_obj(arena), cons1.car());
 
         let cons2 = as_cons(cons1.cdr()).expect("expected cons");
 
-        assert_eq!(Value::Int(7), cons2.car().val());
+        let cmp: Object = 7.into();
+        assert_eq!(cmp, cons2.car());
 
         let cons3 = as_cons(cons2.cdr()).expect("expected cons");
-        assert_eq!(Value::Int(5), cons3.car().val());
-        assert_eq!(Value::Int(9), cons3.cdr().val());
+        let cmp: Object = 5.into();
+        assert_eq!(cmp, cons3.car());
+        let cmp: Object = 9.into();
+        assert_eq!(cmp, cons3.cdr());
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));

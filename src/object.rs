@@ -1,3 +1,14 @@
+//! The core object defintions.
+//!
+//! Objects are implemented as rust enum with at max a 56 bit payload. This
+//! means that it will always be 64 bits. 32 bit systems are not supported.
+//! Because of this it gives us more flexibility in the amount of information we
+//! can encode in the object header. For example, we can have 255 variants of
+//! objects before we need to box the object header. We are making the
+//! assumption that pointers are no bigger then 56 bits and that they are word
+//! aligned. All objects should be bound to a lifetime to ensure sound operation
+//! of the vm.
+
 pub(crate) mod sub_type;
 pub(crate) use sub_type::*;
 pub(crate) mod func;
@@ -12,60 +23,45 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, Not};
 
+/// The inner data type that hold the value for an object variant. This type
+/// should be no larger then 56 bits. The lowest bit of data is used to encode
+/// the mutability flag: 1 if immutable, 0 if mutable. This should be stored in
+/// the alignment bits that bottom of the pointer.
 #[derive(Copy, Clone)]
 pub(crate) struct Data<T> {
     data: [u8; 7],
     marker: PhantomData<T>,
 }
 
+/// A trait to access the inner value of a [`Data`]
 pub(crate) trait Inner<T> {
     fn inner(self) -> T;
 }
 
+// We still need to determine when this is sound. Sending a data across threads
+// is not safe unless the values are copied with it. Maybe there is a better way
+// to encode that in the type system.
 unsafe impl<T> Send for Data<T> {}
 
 type Fixnum = Data<i64>;
 
 impl<T> Data<T> {
     #[inline(always)]
-    const fn expand(self) -> i64 {
+    const fn into_int(self) -> i64 {
         let data = self.data;
+        // This operation will take the 56 bit data and left shift it so that
+        // the bottom byte is zeroed.
         let whole = [
             0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
         ];
-        i64::from_le_bytes(whole) >> 9
-    }
-
-    #[inline(always)]
-    const fn expand_mut(self) -> (i64, bool) {
-        let data = self.data;
-        let whole = [
-            0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
-        ];
-        let bits = i64::from_le_bytes(whole) >> 8;
-        // This 1 bit flag indicates if this object reference is immutable
-        let mutable = (bits & 0x1) == 0;
-        (bits >> 1, mutable)
+        // We shift it back down so that original value is reconstructed.
+        i64::from_le_bytes(whole) >> 8
     }
 
     #[inline(always)]
     fn from_int(data: i64) -> Self {
-        // This 1 bit flag indicates if this object reference is immutable
-        let shifted = (data << 1) | 0x1;
-        let bytes = shifted.to_le_bytes();
-        Data {
-            data: [
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-            ],
-            marker: PhantomData,
-        }
-    }
-
-    #[inline(always)]
-    fn from_ptr_mut(ptr: *mut u8) -> Self {
-        let data = ptr as i64;
-        let shifted = data << 1;
-        let bytes = shifted.to_le_bytes();
+        let bytes = data.to_le_bytes();
+        // Notice bytes[7] is missing. That is the top byte that is removed.
         Data {
             data: [
                 bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
@@ -80,35 +76,25 @@ impl<T> Data<T> {
 }
 
 impl<'a, T> Data<&'a T> {
-    fn from_immut_ref(rf: &'a T) -> Self {
+    #[inline(always)]
+    fn from_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
-        Self::from_int(ptr as i64)
+        let bits = ((ptr as i64) << 1) | 0x1;
+        Self::from_int(bits)
     }
 
-    fn get(self) -> &'a T {
-        self.inner()
-    }
-}
-
-impl<'a, T> Data<&'a T> {
+    #[inline(always)]
     fn from_mut_ref(rf: &'a mut T) -> Self {
         let ptr: *mut T = rf;
-        Self::from_ptr_mut(ptr.cast())
+        let bits = (ptr as i64) << 1;
+        Self::from_int(bits)
     }
-}
 
-impl<'a, T> Inner<&'a T> for Data<&'a T> {
-    fn inner(self) -> &'a T {
-        let bits = self.expand();
-        let ptr = bits as *const T;
-        unsafe { &*ptr }
-    }
-}
-
-impl<'a, T> Data<&'a T> {
+    #[inline(always)]
     pub(crate) fn inner_mut(self) -> Option<&'a mut T> {
-        let (bits, mutable) = self.expand_mut();
-        let ptr = bits as *mut T;
+        let bits = self.into_int();
+        let mutable = (bits & 0x1) == 0;
+        let ptr = (bits >> 1) as *mut T;
         if mutable {
             unsafe { Some(&mut *ptr) }
         } else {
@@ -117,9 +103,20 @@ impl<'a, T> Data<&'a T> {
     }
 }
 
+impl<'a, T> Inner<&'a T> for Data<&'a T> {
+    #[inline(always)]
+    fn inner(self) -> &'a T {
+        // shift by 1 to remove the mutability flag
+        let bits = self.into_int() >> 1;
+        let ptr = bits as *const T;
+        unsafe { &*ptr }
+    }
+}
+
 impl Inner<i64> for Fixnum {
+    #[inline(always)]
     fn inner(self) -> i64 {
-        self.expand()
+        self.into_int()
     }
 }
 
@@ -129,6 +126,7 @@ where
 {
     type Output = T;
 
+    #[inline(always)]
     fn not(self) -> Self::Output {
         self.inner()
     }
@@ -180,12 +178,6 @@ impl<'a, T> AsRef<T> for Data<&'a T> {
     }
 }
 
-impl Fixnum {
-    fn get(self) -> i64 {
-        self.inner()
-    }
-}
-
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Object<'ob> {
     Int(Fixnum),
@@ -198,20 +190,6 @@ pub(crate) enum Object<'ob> {
     String(Data<&'ob String>),
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum Value<'ob> {
-    Symbol(Symbol),
-    Int(i64),
-    Float(f64),
-    True,
-    Nil,
-    Cons(&'ob Cons<'ob>),
-    Vec(&'ob Vec<Object<'ob>>),
-    String(&'ob String),
-    LispFn(&'ob LispFn<'ob>),
-    SubrFn(&'ob SubrFn),
 }
 
 pub(crate) trait Bits {
@@ -253,37 +231,21 @@ fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], arena: &'new Arena) -> Vec<Obj
 impl<'old, 'new> Object<'old> {
     pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
         match self {
-            Object::Int(x) => x.get().into(),
+            Object::Int(x) => (!x).into(),
             Object::Cons(x) => x.clone_in(arena).into_obj(arena),
-            Object::String(x) => x.get().clone().into_obj(arena),
-            Object::Symbol(x) => x.get().into(),
+            Object::String(x) => (!x).clone().into_obj(arena),
+            Object::Symbol(x) => x.inner().into(),
             Object::LispFn(x) => x.clone_in(arena).into_obj(arena),
             Object::SubrFn(x) => (*x).into_obj(arena),
             Object::True => Object::True,
             Object::Nil => Object::Nil,
             Object::Float(x) => x.into_obj(arena),
-            Object::Vec(x) => vec_clone_in(x.get(), arena).into_obj(arena),
+            Object::Vec(x) => vec_clone_in(&x, arena).into_obj(arena),
         }
     }
 }
 
 impl<'ob> Object<'ob> {
-    #[inline(always)]
-    pub(crate) fn val(self) -> Value<'ob> {
-        match self {
-            Object::Symbol(x) => Value::Symbol(x.get()),
-            Object::Float(x) => Value::Float(*x),
-            Object::String(x) => Value::String(x.get()),
-            Object::LispFn(x) => Value::LispFn(x.get()),
-            Object::SubrFn(x) => Value::SubrFn(x.get()),
-            Object::Nil => Value::Nil,
-            Object::True => Value::True,
-            Object::Cons(x) => Value::Cons(x.get()),
-            Object::Vec(x) => Value::Vec(x.get()),
-            Object::Int(x) => Value::Int(x.get()),
-        }
-    }
-
     pub(crate) const fn get_type(self) -> crate::error::Type {
         use crate::error::Type;
         match self {
@@ -351,7 +313,7 @@ impl<'ob> Object<'ob> {
     pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {
         use crate::error::{Error, Type};
         match self {
-            Object::Symbol(x) => Ok(x.get()),
+            Object::Symbol(x) => Ok(!x),
             _ => anyhow::bail!(Error::from_object(Type::Symbol, self)),
         }
     }
@@ -420,21 +382,16 @@ impl<'ob> fmt::Debug for Object<'ob> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::symbol::intern;
     use std::{convert::TryInto, mem::size_of};
 
     #[test]
     fn sizes() {
         assert_eq!(size_of::<isize>(), size_of::<Object>());
         assert_eq!(size_of::<Object>(), size_of::<Option<Object>>());
-        assert_eq!(
-            /* data */ size_of::<Object>() + /* discriminant */ size_of::<isize>(),
-            size_of::<Value>()
-        );
         unsafe {
             assert_eq!(
-                ((0x1700_i64 << 1) | 0x100),
-                std::mem::transmute(Object::Int(Data::from_int(0x17)))
+                0x1800_i64,
+                std::mem::transmute(Object::Int(Data::from_int(0x18)))
             );
         }
     }
@@ -443,30 +400,33 @@ mod test {
     fn integer() {
         let arena = &Arena::new();
         let int: Object = 3.into_obj(arena);
-        assert!(matches!(int.val(), Value::Int(_)));
-        assert_eq!(int.val(), Value::Int(3));
+        assert!(matches!(int, Object::Int(_)));
+        assert_eq!(int, Object::Int(Data::from_int(3)));
         let int: Object = 0.into_obj(arena);
-        assert_eq!(int.val(), Value::Int(0));
+        assert_eq!(int, Object::Int(Data::from_int(0)));
     }
 
     #[test]
     fn float() {
         let arena = &Arena::new();
         let x: Object = 1.3.into_obj(arena);
-        assert!(matches!(x.val(), Value::Float(_)));
-        assert_eq!(x.val(), Value::Float(1.3));
+        assert!(matches!(x, Object::Float(_)));
+        let float = 1.3;
+        assert_eq!(x, Object::Float(Data::from_ref(&float)));
     }
 
     #[test]
     fn string() {
         let arena = &Arena::new();
         let x: Object = "foo".into_obj(arena);
-        assert!(matches!(x.val(), Value::String(_)));
-        assert_eq!(x.val(), Value::String(&"foo".to_owned()));
+        assert!(matches!(x, Object::String(_)));
+        let cmp = "foo".to_owned();
+        assert_eq!(x, Object::String(Data::from_ref(&cmp)));
 
         let x: Object = "bar".to_owned().into_obj(arena);
-        assert!(matches!(x.val(), Value::String(_)));
-        assert_eq!(x.val(), Value::String(&"bar".to_owned()));
+        assert!(matches!(x, Object::String(_)));
+        let cmp = "bar".to_owned();
+        assert_eq!(x, Object::String(Data::from_ref(&cmp)));
     }
 
     #[test]
@@ -475,33 +435,34 @@ mod test {
         let vec = vec_into_object![1, 2, 3.4, "foo"; arena];
         let x: Object = vec.into_obj(arena);
         assert!(matches!(x, Object::Vec(_)));
-        assert!(matches!(x.val(), Value::Vec(_)));
         assert_eq!(
-            x.val(),
-            Value::Vec(&vec_into_object![1, 2, 3.4, "foo"; arena])
+            x,
+            Object::Vec(Data::from_ref(
+                &vec_into_object![1, 2, 3.4, "foo"; arena]
+            ))
         );
     }
 
     #[test]
     fn other() {
         let t = Object::True;
-        matches!(t.val(), Value::True);
         assert!(t != Object::Nil);
         let n = Object::Nil;
         assert!(n == Object::Nil);
 
         let bool_true: Object = true.into();
-        matches!(bool_true.val(), Value::True);
+        assert!(bool_true == Object::True);
         let bool_false: Object = false.into();
         assert!(bool_false == Object::Nil);
     }
 
     #[test]
     fn symbol() {
-        let symbol = intern("foo");
+        use crate::symbol::sym::test;
+        let symbol = &test::FOO;
         let x: Object = symbol.into();
-        assert!(matches!(x.val(), Value::Symbol(_)));
-        assert_eq!(x.val(), Value::Symbol(symbol));
+        assert!(matches!(x, Object::Symbol(_)));
+        assert_eq!(x, Object::Symbol(Data::from_ref(&test::FOO)));
     }
 
     #[test]

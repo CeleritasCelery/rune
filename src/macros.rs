@@ -40,8 +40,8 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-                match obj.val() {
-                    crate::object::Value::$ident(x) => Ok(x),
+                match obj {
+                    crate::object::Object::$ident(x) => Ok(!x),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
@@ -53,9 +53,9 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-                match obj.val() {
-                    crate::object::Value::$ident(x) => Ok(Some(x)),
-                    crate::object::Value::Nil => Ok(None),
+                match obj {
+                    crate::object::Object::$ident(x) => Ok(Some(!x)),
+                    crate::object::Object::Nil => Ok(None),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
