@@ -94,8 +94,8 @@ impl<'a, T> Data<&'a T> {
     pub(crate) fn inner_mut(self) -> Option<&'a mut T> {
         let bits = self.into_int();
         let mutable = (bits & 0x1) == 0;
-        let ptr = (bits >> 1) as *mut T;
         if mutable {
+            let ptr = (bits >> 1) as *mut T;
             unsafe { Some(&mut *ptr) }
         } else {
             None
