@@ -36,7 +36,7 @@ mod data {
         data: [u8; 7],
         marker: PhantomData<T>,
     }
-    pub(super) const ZERO: Data<()> = Data::from_raw(0);
+    pub(super) const UNUSED: Data<()> = Data::from_raw(0);
 
     /// A trait to access the inner value of a [`Data`]
     pub(crate) trait Inner<T> {
@@ -76,7 +76,7 @@ mod data {
 
     impl<'a, T> Data<&'a T> {
         /// mark the pointer as immutable. This is done by shifting
-        /// the value and setting the LSB to 1. 
+        /// the value and setting the LSB to 1.
         fn immut_bit_pattern(ptr: *const T) -> i64 {
             ((ptr as i64) << 1) | 0x1
         }
@@ -274,8 +274,8 @@ impl<'old, 'new> Object<'old> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) const TRUE: Object<'ob> = Object::True(data::ZERO);
-    pub(crate) const NIL: Object<'ob> = Object::Nil(data::ZERO);
+    pub(crate) const TRUE: Object<'ob> = Object::True(data::UNUSED);
+    pub(crate) const NIL: Object<'ob> = Object::Nil(data::UNUSED);
 
     /// Return the type of an object
     pub(crate) const fn get_type(self) -> crate::error::Type {
@@ -410,14 +410,12 @@ mod test {
 
     #[test]
     fn sizes() {
+        assert_eq!(isize::BITS, 64);
         assert_eq!(size_of::<isize>(), size_of::<Object>());
         assert_eq!(size_of::<Object>(), size_of::<Option<Object>>());
-        unsafe {
-            assert_eq!(
-                0x1800_i64,
-                std::mem::transmute(Object::Int(Data::from_int(0x18)))
-            );
-        }
+        assert_eq!(0x1800_i64, unsafe {
+            std::mem::transmute(Object::Int(Data::from_int(0x18)))
+        });
     }
 
     #[test]

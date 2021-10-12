@@ -23,7 +23,7 @@ pub(crate) enum Error {
     ExtraCloseBracket(usize),
     UnexpectedChar(char, usize),
     UnknownMacroCharacter(char, usize),
-    InvalidRadix(u8, usize),
+    ParseInt(u8, usize),
     EmptyStream,
 }
 
@@ -39,7 +39,7 @@ impl Display for Error {
             Error::EmptyStream => write!(f, "Empty Stream"),
             Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
             Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
-            Error::InvalidRadix(radix, i) => {
+            Error::ParseInt(radix, i) => {
                 write!(f, "invalid character for radix {}: at {}", radix, i)
             }
             Error::UnknownMacroCharacter(chr, i) => {
@@ -62,7 +62,7 @@ impl Error {
             | Error::ExtraCloseBracket(x)
             | Error::ExtraItemInCdr(x)
             | Error::UnexpectedChar(_, x)
-            | Error::InvalidRadix(_, x)
+            | Error::ParseInt(_, x)
             | Error::UnknownMacroCharacter(_, x) => *x,
             Error::EmptyStream => 0,
         }
@@ -79,7 +79,7 @@ impl Error {
             | Error::ExtraCloseBracket(i)
             | Error::MissingQuotedItem(i)
             | Error::UnknownMacroCharacter(_, i)
-            | Error::InvalidRadix(_, i) => Some(i),
+            | Error::ParseInt(_, i) => Some(i),
             Error::EmptyStream => None,
         }
     }
@@ -222,13 +222,10 @@ impl<'a> Tokenizer<'a> {
 
     /// After having found a `,`, see if the next token is a `@` or not.
     fn get_macro_char(&mut self, idx: usize) -> Token<'a> {
-        match self.iter.peek() {
-            Some((_, '@')) => {
-                self.iter.next();
-                Token::Splice(idx)
-            }
-            _ => Token::Unquote(idx),
-        }
+        match self.iter.next_if(|(_, chr)| *chr == '@') {
+            Some(_) => Token::Splice(idx),
+            None => Token::Unquote(idx),
+        }  
     }
 
     fn read_char(&mut self) -> Option<char> {
@@ -425,16 +422,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => {
-                let mut accum = 0;
-                for chr in ident.chars() {
-                    match chr.to_digit(8) {
-                        Some(digit) => accum = (accum * 8) + digit,
-                        None => return Err(Error::InvalidRadix(8, pos)),
-                    }
+                match usize::from_str_radix(ident, 8) {
+                    Ok(x) => Ok(self.arena.add(x as i64)),
+                    Err(_) => Err(Error::ParseInt(8, pos)),
                 }
-                Ok(self.arena.add(i64::from(accum)))
             }
-            _ => Err(Error::InvalidRadix(8, pos)),
+            _ => Err(Error::ParseInt(8, pos)),
         }
     }
 
