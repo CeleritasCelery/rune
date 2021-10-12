@@ -15,9 +15,9 @@ mod func;
 mod sub_type;
 
 pub(crate) use convert::*;
+use data::{Data, Inner};
 pub(crate) use func::*;
 pub(crate) use sub_type::*;
-use data::{Data, Inner};
 
 use crate::arena::Arena;
 use crate::cons::Cons;
