@@ -82,7 +82,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
         match obj {
             Object::Int(x) => Ok(Some(Number::Int(x))),
             Object::Float(x) => Ok(Some(Number::Float(x))),
-            Object::Nil => Ok(None),
+            Object::Nil(_) => Ok(None),
             _ => Err(Error::from_object(Type::Number, obj)),
         }
     }
@@ -114,7 +114,7 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj {
-            Object::Nil => Ok(false),
+            Object::Nil(_) => Ok(false),
             _ => Ok(true),
         }
     }
@@ -125,7 +125,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
             Object::Cons(cons) => Ok(List::Cons(!cons)),
-            Object::Nil => Ok(List::Nil),
+            Object::Nil(_) => Ok(List::Nil),
             _ => Err(Error::from_object(Type::List, obj)),
         }
     }
@@ -174,9 +174,9 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
 impl<'ob> From<bool> for Object<'ob> {
     fn from(b: bool) -> Self {
         if b {
-            Object::True
+            Object::TRUE
         } else {
-            Object::Nil
+            Object::NIL
         }
     }
 }
@@ -263,7 +263,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => Object::Nil,
+            None => Object::NIL,
         }
     }
 }

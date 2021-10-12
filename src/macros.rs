@@ -55,7 +55,7 @@ macro_rules! define_unbox {
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj {
                     crate::object::Object::$ident(x) => Ok(Some(!x)),
-                    crate::object::Object::Nil => Ok(None),
+                    crate::object::Object::Nil(_) => Ok(None),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,

@@ -79,7 +79,7 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{} ", cons.car())?;
             print_rest(&cdr, f)
         }
-        Object::Nil => write!(f, "{})", cons.car()),
+        Object::Nil(_) => write!(f, "{})", cons.car()),
         cdr => write!(f, "{} . {})", cons.car(), cdr),
     }
 }
@@ -90,7 +90,7 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{:?} ", cons.car())?;
             print_rest(&cdr, f)
         }
-        Object::Nil => write!(f, "{:?})", cons.car()),
+        Object::Nil(_) => write!(f, "{:?})", cons.car()),
         cdr => write!(f, "{:?} . {:?})", cons.car(), cdr),
     }
 }
@@ -132,7 +132,7 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
             Some(cons) => {
                 (*self).0 = match cons.cdr() {
                     Object::Cons(next) => Some(!next),
-                    Object::Nil => None,
+                    Object::Nil(_) => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons))
@@ -153,7 +153,7 @@ impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
 pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
     match obj {
         Object::Cons(cons) => Ok((!cons).into_iter()),
-        Object::Nil => Ok(ElemIter::empty()),
+        Object::Nil(_) => Ok(ElemIter::empty()),
         _ => Err(Error::from_object(Type::List, obj).into()),
     }
 }
@@ -180,7 +180,7 @@ impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
 fn car(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.car(),
-        List::Nil => Object::Nil,
+        List::Nil => Object::NIL,
     }
 }
 
@@ -188,7 +188,7 @@ fn car(list: List) -> Object {
 fn cdr(list: List) -> Object {
     match list {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => Object::Nil,
+        List::Nil => Object::NIL,
     }
 }
 
@@ -196,7 +196,7 @@ fn cdr(list: List) -> Object {
 fn car_safe(object: Object) -> Object {
     match object {
         Object::Cons(cons) => cons.car(),
-        _ => Object::Nil,
+        _ => Object::NIL,
     }
 }
 
@@ -204,7 +204,7 @@ fn car_safe(object: Object) -> Object {
 fn cdr_safe(object: Object) -> Object {
     match object {
         Object::Cons(cons) => cons.cdr(),
-        _ => Object::Nil,
+        _ => Object::NIL,
     }
 }
 
@@ -235,7 +235,7 @@ macro_rules! cons {
     ($car:expr; $arena:expr) => {
         $arena.add(crate::cons::Cons::new(
             $arena.add($car),
-            crate::object::Object::Nil,
+            crate::object::Object::NIL,
         ))
     };
 }

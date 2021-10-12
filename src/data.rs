@@ -22,7 +22,7 @@ pub(crate) fn set_global_function(symbol: Symbol, func: FuncCell) {
 
 #[defun]
 pub(crate) fn fset(symbol: Symbol, definition: Object) -> Result<Symbol> {
-    if matches!(definition, Object::Nil) {
+    if matches!(definition, Object::Nil(_)) {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
@@ -75,9 +75,9 @@ pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>)
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => *val,
-            None => Object::Nil,
+            None => Object::NIL,
         },
-        None => Object::Nil,
+        None => Object::NIL,
     }
 }
 
@@ -90,7 +90,7 @@ pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
 pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
     match symbol.func() {
         Some(f) => f.into(),
-        None => Object::Nil,
+        None => Object::NIL,
     }
 }
 
@@ -106,7 +106,7 @@ pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
 
 #[defun]
 pub(crate) fn null(obj: Object) -> bool {
-    matches!(obj, Object::Nil)
+    matches!(obj, Object::Nil(_))
 }
 
 #[defun]
@@ -132,7 +132,7 @@ pub(crate) fn default_boundp(symbol: Symbol, env: &mut Environment) -> bool {
 
 #[defun]
 pub(crate) fn listp(object: Object) -> bool {
-    matches!(object, Object::Nil | Object::Cons(_))
+    matches!(object, Object::Nil(_) | Object::Cons(_))
 }
 
 #[defun]
@@ -210,7 +210,7 @@ pub(crate) fn indirect_function(object: Object) -> Object {
     match object {
         Object::Symbol(sym) => match sym.resolved_func() {
             Some(func) => func.into(),
-            None => Object::Nil,
+            None => Object::NIL,
         },
         x => x,
     }

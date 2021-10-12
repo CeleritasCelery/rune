@@ -59,7 +59,7 @@ impl<T> Data<T> {
     }
 
     #[inline(always)]
-    fn from_int(data: i64) -> Self {
+    const fn from_int(data: i64) -> Self {
         let bytes = data.to_le_bytes();
         // Notice bytes[7] is missing. That is the top byte that is removed.
         Data {
@@ -142,6 +142,12 @@ where
     }
 }
 
+impl PartialEq for Data<()> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 impl<T> fmt::Display for Data<T>
 where
     T: fmt::Display + Copy,
@@ -183,8 +189,8 @@ pub(crate) enum Object<'ob> {
     Int(Fixnum),
     Float(Data<&'ob f64>),
     Symbol(Data<Symbol>),
-    True,
-    Nil,
+    True(Data<()>),
+    Nil(Data<()>),
     Cons(Data<&'ob Cons<'ob>>),
     Vec(Data<&'ob Vec<Object<'ob>>>),
     String(Data<&'ob String>),
@@ -229,7 +235,9 @@ fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], arena: &'new Arena) -> Vec<Obj
 }
 
 impl<'old, 'new> Object<'old> {
+    /// Clone object in a new arena
     pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
+        // TODO: Handle pointers to the same object
         match self {
             Object::Int(x) => (!x).into(),
             Object::Cons(x) => x.clone_in(arena).into_obj(arena),
@@ -237,8 +245,8 @@ impl<'old, 'new> Object<'old> {
             Object::Symbol(x) => x.inner().into(),
             Object::LispFn(x) => x.clone_in(arena).into_obj(arena),
             Object::SubrFn(x) => (*x).into_obj(arena),
-            Object::True => Object::True,
-            Object::Nil => Object::Nil,
+            Object::True(_) => Object::TRUE,
+            Object::Nil(_) => Object::NIL,
             Object::Float(x) => x.into_obj(arena),
             Object::Vec(x) => vec_clone_in(&x, arena).into_obj(arena),
         }
@@ -246,14 +254,19 @@ impl<'old, 'new> Object<'old> {
 }
 
 impl<'ob> Object<'ob> {
+    const ZERO: Data<()> = Data::from_int(0);
+    pub(crate) const TRUE: Object<'ob> = Object::True(Self::ZERO);
+    pub(crate) const NIL: Object<'ob> = Object::Nil(Self::ZERO);
+
+    /// Return the type of an object
     pub(crate) const fn get_type(self) -> crate::error::Type {
         use crate::error::Type;
         match self {
             Object::Symbol(_) => Type::Symbol,
             Object::Float(_) => Type::Float,
             Object::String(_) => Type::String,
-            Object::Nil => Type::Nil,
-            Object::True => Type::True,
+            Object::Nil(_) => Type::Nil,
+            Object::True(_) => Type::True,
             Object::Cons(_) => Type::Cons,
             Object::Vec(_) => Type::Vec,
             Object::Int(_) => Type::Int,
@@ -263,7 +276,7 @@ impl<'ob> Object<'ob> {
 
     pub(crate) fn make_read_only(&mut self) {
         match self {
-            Object::Int(_) | Object::Symbol(_) | Object::True | Object::Nil => {}
+            Object::Int(_) | Object::Symbol(_) | Object::True(_) | Object::Nil(_) => {}
             Object::Float(x) => x.make_read_only(),
             Object::Cons(cons_obj) => {
                 if let Some(cons) = cons_obj.inner_mut() {
@@ -295,9 +308,9 @@ impl<'ob> Object<'ob> {
     pub(crate) fn ptr_eq(self, other: Object) -> bool {
         use std::mem::transmute;
         match self {
-            Object::Nil => other == Object::Nil,
-            Object::True => other == Object::True,
-            Object::Int(_)
+            Object::Nil(_)
+            | Object::True(_)
+            | Object::Int(_)
             | Object::Float(_)
             | Object::Symbol(_)
             | Object::Cons(_)
@@ -309,19 +322,11 @@ impl<'ob> Object<'ob> {
             },
         }
     }
-
-    pub(crate) fn as_symbol(self) -> anyhow::Result<Symbol> {
-        use crate::error::{Error, Type};
-        match self {
-            Object::Symbol(x) => Ok(!x),
-            _ => anyhow::bail!(Error::from_object(Type::Symbol, self)),
-        }
-    }
 }
 
 impl<'ob> Default for Object<'ob> {
     fn default() -> Self {
-        Object::Nil
+        Object::NIL
     }
 }
 
@@ -335,8 +340,8 @@ impl<'ob> fmt::Display for Object<'ob> {
             Object::Symbol(x) => write!(f, "{}", x),
             Object::LispFn(x) => write!(f, "(lambda {:?})", x),
             Object::SubrFn(x) => write!(f, "{:?}", x),
-            Object::True => write!(f, "t"),
-            Object::Nil => write!(f, "nil"),
+            Object::True(_) => write!(f, "t"),
+            Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{:.1}", x)
@@ -366,8 +371,8 @@ impl<'ob> fmt::Debug for Object<'ob> {
             Object::Symbol(x) => write!(f, "{}", x),
             Object::LispFn(x) => write!(f, "(lambda {:?})", x),
             Object::SubrFn(x) => write!(f, "{:?}", x),
-            Object::True => write!(f, "t"),
-            Object::Nil => write!(f, "nil"),
+            Object::True(_) => write!(f, "t"),
+            Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{:.1}", x)
@@ -445,15 +450,15 @@ mod test {
 
     #[test]
     fn other() {
-        let t = Object::True;
-        assert!(t != Object::Nil);
-        let n = Object::Nil;
-        assert!(n == Object::Nil);
+        let t = Object::TRUE;
+        assert!(t != Object::NIL);
+        let n = Object::NIL;
+        assert!(n == Object::NIL);
 
         let bool_true: Object = true.into();
-        assert!(bool_true == Object::True);
+        assert!(bool_true == Object::TRUE);
         let bool_false: Object = false.into();
-        assert!(bool_false == Object::Nil);
+        assert!(bool_false == Object::NIL);
     }
 
     #[test]

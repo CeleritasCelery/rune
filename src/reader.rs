@@ -289,8 +289,8 @@ fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
         Err(_) => match slice.parse::<f64>() {
             Ok(num) => num.into_obj(arena),
             Err(_) => match slice {
-                "nil" => Object::Nil,
-                "t" => Object::True,
+                "nil" => Object::NIL,
+                "t" => Object::TRUE,
                 _ => intern_symbol(slice).into_obj(arena),
             },
         },

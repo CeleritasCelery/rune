@@ -16,7 +16,7 @@ pub(crate) fn slice_into_list<'ob>(
     arena: &'ob Arena,
 ) -> Object<'ob> {
     if slice.is_empty() {
-        Object::Nil
+        Object::NIL
     } else {
         let from_end = slice.iter().rev();
         from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; arena))
@@ -50,7 +50,7 @@ pub(crate) fn mapcar<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
-        List::Nil => Ok(Object::Nil),
+        List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
             let iter = cons.into_iter();
             let vec = iter
@@ -67,7 +67,7 @@ pub(crate) fn mapcar<'ob>(
 #[defun]
 pub(crate) fn nreverse(seq: Object) -> Result<Object> {
     let mut iter = next_mut(seq)?;
-    let mut prev = Object::Nil;
+    let mut prev = Object::NIL;
     while let Some(tail) = iter {
         let next = tail.cdr();
         tail.set_cdr(prev);
@@ -80,7 +80,7 @@ pub(crate) fn nreverse(seq: Object) -> Result<Object> {
 #[defun]
 pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     match alist {
-        List::Nil => Object::Nil,
+        List::Nil => Object::NIL,
         List::Cons(cons) => cons
             .into_iter()
             .find(|x| match x {
@@ -95,7 +95,7 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
 
 fn next_mut(obj: Object) -> Result<Option<&mut Cons>> {
     match obj {
-        Object::Nil => Ok(None),
+        Object::Nil(_) => Ok(None),
         x => Ok(Some(x.try_into()?)),
     }
 }
@@ -205,19 +205,19 @@ pub(crate) fn length(sequence: Object) -> Result<i64> {
 
 #[defun]
 pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
-    list.into_iter().nth(n).unwrap_or(Ok(Object::Nil))
+    list.into_iter().nth(n).unwrap_or(Ok(Object::NIL))
 }
 
 #[defun]
 pub(crate) fn make_hash_table<'ob>(_keyword_args: &[Object<'ob>]) -> Object<'ob> {
     // TODO: Implement
-    Object::Nil
+    Object::NIL
 }
 
 #[defun]
 pub(crate) fn hash_table_p<'ob>(_obj: Object) -> Object<'ob> {
     // TODO: Implement
-    Object::Nil
+    Object::NIL
 }
 
 #[defun]
@@ -244,8 +244,8 @@ mod test {
         assert_eq!(res, list![2, 3, 4; arena]);
 
         let list = list![true, true, true; arena];
-        let res = delq(Object::True, list).unwrap();
-        assert_eq!(res, Object::Nil);
+        let res = delq(Object::TRUE, list).unwrap();
+        assert_eq!(res, Object::NIL);
     }
 
     #[test]

@@ -5,7 +5,7 @@ use fn_macros::defun;
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
-    let mut head = Object::Nil;
+    let mut head = Object::NIL;
     for object in objects.iter().rev() {
         head = cons!(object, head; arena);
     }

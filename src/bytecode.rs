@@ -141,7 +141,7 @@ impl<'ob> LispStack<Object<'ob>> for Vec<Object<'ob>> {
 /// Used for `&optional` and `&rest`.
 fn fill_extra_args(stack: &mut Vec<Object>, fill_args: u16) {
     for _ in 0..fill_args {
-        stack.push(Object::Nil);
+        stack.push(Object::NIL);
     }
 }
 
@@ -386,21 +386,21 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::JumpNil => {
                     let cond = self.stack.pop().unwrap();
                     let offset = self.frame.ip.next2();
-                    if cond == Object::Nil {
+                    if cond == Object::NIL {
                         self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNotNil => {
                     let cond = self.stack.pop().unwrap();
                     let offset = self.frame.ip.next2();
-                    if cond != Object::Nil {
+                    if cond != Object::NIL {
                         self.frame.ip.jump(offset as i16);
                     }
                 }
                 op::JumpNilElsePop => {
                     let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.next2();
-                    if *cond == Object::Nil {
+                    if *cond == Object::NIL {
                         self.frame.ip.jump(offset as i16);
                     } else {
                         self.stack.pop();
@@ -409,7 +409,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 op::JumpNotNilElsePop => {
                     let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.next2();
-                    if *cond == Object::Nil {
+                    if *cond == Object::NIL {
                         self.stack.pop();
                     } else {
                         self.frame.ip.jump(offset as i16);
@@ -484,7 +484,7 @@ pub(crate) fn eval<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match lexical {
-        Some(Object::True) | None => {}
+        Some(Object::True(_)) | None => {}
         Some(x) => bail!("Only lexical = t is currently supported: found {}", x),
     }
     let func = compile(form, env, arena)?;

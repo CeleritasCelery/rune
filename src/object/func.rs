@@ -99,7 +99,7 @@ impl<'ob> Default for LispFn<'ob> {
     fn default() -> Self {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![Object::Nil],
+            vec![Object::NIL],
             0,
             0,
             false,

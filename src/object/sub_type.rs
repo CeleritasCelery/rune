@@ -127,7 +127,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
             Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
             Some(FuncCell::Macro(x)) => Object::Cons(x),
             Some(FuncCell::Symbol(x)) => Object::Symbol(x),
-            None => Object::Nil,
+            None => Object::NIL,
         }
     }
 }
@@ -252,7 +252,7 @@ pub(crate) enum List<'o> {
 impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         match self {
-            List::Nil => Object::Nil,
+            List::Nil => Object::NIL,
             List::Cons(cons) => Object::Cons(Data::from_ref(cons)),
         }
     }

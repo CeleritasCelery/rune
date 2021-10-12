@@ -85,7 +85,7 @@ impl<'ob> PartialEq for ConstVec<'ob> {
 impl<'ob> ConstVec<'ob> {
     fn with_capacity(cap: usize) -> Self {
         ConstVec {
-            consts: vec![Object::Nil; cap],
+            consts: vec![Object::NIL; cap],
             upvalue_offset: cap,
         }
     }
@@ -93,7 +93,7 @@ impl<'ob> ConstVec<'ob> {
     /// Return the index of object in the constant vector, otherwise insert it
     fn insert_or_get(&mut self, obj: Object<'ob>) -> usize {
         let mut iter = match obj {
-            Object::Nil => self.consts[self.upvalue_offset..].iter(),
+            Object::Nil(_) => self.consts[self.upvalue_offset..].iter(),
             _ => self.consts.iter(),
         };
         match iter.position(|&x| obj == x) {
@@ -439,7 +439,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if let Some(form) = forms.next() {
             self.compile_form(form?)?;
         } else {
-            return self.const_ref(Object::Nil, None);
+            return self.const_ref(Object::NIL, None);
         }
         for form in forms {
             self.discard();
@@ -459,7 +459,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             // (let ((x y)))
             Some(value) => self.compile_form(value?)?,
             // (let ((x)))
-            None => self.const_ref(Object::Nil, None)?,
+            None => self.const_ref(Object::NIL, None)?,
         };
         // (let ((x y z ..)))
         ensure!(iter.next().is_none(), CompError::LetValueCount);
@@ -490,7 +490,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     }
                 }
                 // (let (x))
-                Object::Symbol(sym) => self.const_ref(Object::Nil, Some(!sym))?,
+                Object::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
                 _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
@@ -567,7 +567,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.env.macro_callstack.push(name);
 
                 let lisp_macro = {
-                    let func_ident = macro_form.car().as_symbol()?;
+                    let func_ident: Symbol = macro_form.car().try_into()?;
                     symbol_match! { func_ident;
                         LAMBDA => compile_lambda(macro_form.cdr(), self.env, arena)?,
                         @ bad_function => bail!(CompError::InvalidFunction(bad_function.to_string().into())),
@@ -735,13 +735,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match iter.next() {
             // (defvar x ...)
             Some(x) => {
-                let sym = x?.as_symbol()?;
+                let sym: Symbol = x?.try_into()?;
                 // TODO: compile this into a lambda like Emacs does
                 match iter.next() {
                     // (defvar x y)
                     Some(value) => self.compile_form(value?)?,
                     // (defvar x)
-                    None => self.const_ref(Object::Nil, None)?,
+                    None => self.const_ref(Object::NIL, None)?,
                 };
                 self.duplicate();
                 let idx = self.constants.insert(sym.into())?;
@@ -802,13 +802,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         match cond.len() {
             // (cond ())
             0 => {
-                self.const_ref(Object::Nil, None)?;
+                self.const_ref(Object::NIL, None)?;
             }
             // (cond (x))
             1 => {
                 self.compile_form(cond.next().unwrap()?)?;
                 let target = self.jump(OpCode::JumpNotNilElsePop);
-                self.const_ref(Object::Nil, None)?;
+                self.const_ref(Object::NIL, None)?;
                 jump_targets.push(target);
             }
             // (cond (x y ...))
@@ -855,7 +855,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let mut clauses = into_iter(obj)?;
         // (cond)
         if clauses.is_empty() {
-            return self.const_ref(Object::Nil, None);
+            return self.const_ref(Object::NIL, None);
         }
 
         let final_return_targets = &mut Vec::new();
@@ -993,12 +993,12 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut arg_type = &mut required;
     let mut iter = into_iter(bindings)?;
     while let Some(binding) = iter.next() {
-        symbol_match! { binding?.as_symbol()?;
+        symbol_match! { binding?.try_into()?;
             AND_OPTIONAL => arg_type = &mut optional,
             AND_REST => {
                 if let Some(last) = iter.next() {
                     rest = true;
-                    args.push(last?.as_symbol()?);
+                    args.push(last?.try_into()?);
                     ensure!(
                         iter.next().is_none(),
                         "Found multiple arguments after &rest"
@@ -1054,7 +1054,7 @@ pub(crate) fn compile<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<Expression<'ob>> {
-    let cons = Cons::new(obj, Object::Nil);
+    let cons = Cons::new(obj, Object::NIL);
     Compiler::compile_func_body(cons.into_iter(), vec![], None, env, arena).map(|x| x.into_sexp().1)
 }
 
@@ -1198,23 +1198,23 @@ mod test {
         check_compiler!(
             "(if nil 1 2)",
             [Constant0, JumpNil, high4, low4, Constant1, Jump, high1, low1, Constant2, Ret],
-            [Object::Nil, 1, 2]
+            [Object::NIL, 1, 2]
         );
         check_compiler!(
             "(if t 2)",
             [Constant0, JumpNilElsePop, high1, low1, Constant1, Ret],
-            [Object::True, 2]
+            [Object::TRUE, 2]
         );
-        check_compiler!("(and)", [Constant0, Ret], [Object::True]);
-        check_compiler!("(or)", [Constant0, Ret], [Object::Nil]);
+        check_compiler!("(and)", [Constant0, Ret], [Object::TRUE]);
+        check_compiler!("(or)", [Constant0, Ret], [Object::NIL]);
         check_error("(if 1)", Error::ArgCount(2, 1));
     }
 
     #[test]
     fn cond_stmt() {
         let (high1, low1) = get_jump_slots(1);
-        check_compiler!("(cond)", [Constant0, Ret], [Object::Nil]);
-        check_compiler!("(cond ())", [Constant0, Ret], [Object::Nil]);
+        check_compiler!("(cond)", [Constant0, Ret], [Object::NIL]);
+        check_compiler!("(cond ())", [Constant0, Ret], [Object::NIL]);
         check_compiler!(
             "(cond (1))",
             [Constant0, JumpNotNilElsePop, high1, low1, Constant1, Ret],
@@ -1281,7 +1281,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [Object::True, Object::Nil]
+            [Object::TRUE, Object::NIL]
         );
 
         check_compiler!(
@@ -1298,7 +1298,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [Object::True, 1]
+            [Object::TRUE, 1]
         );
 
         check_compiler!(
@@ -1315,7 +1315,7 @@ mod test {
                 low_9,
                 Ret
             ],
-            [Object::Nil, 2]
+            [Object::NIL, 2]
         );
 
         let (high7, low7) = get_jump_slots(7);
@@ -1336,7 +1336,7 @@ mod test {
                 low_11,
                 Ret
             ],
-            [Object::Nil, 2, 3]
+            [Object::NIL, 2, 3]
         );
         check_error("(while)", Error::ArgCount(1, 0));
     }
@@ -1453,7 +1453,7 @@ mod test {
     fn test_closure() {
         let func = LispFn::new(
             vec_into![Constant0, Ret].into(),
-            vec![Object::Nil; UPVALUE_RESERVE],
+            vec![Object::NIL; UPVALUE_RESERVE],
             0,
             0,
             false,
@@ -1474,7 +1474,7 @@ mod test {
             [1, 2, &crate::alloc::MAKE_CLOSURE, func]
         );
 
-        let mut consts = vec![Object::Nil; UPVALUE_RESERVE];
+        let mut consts = vec![Object::NIL; UPVALUE_RESERVE];
         consts.push(intern("+").into());
         let func = LispFn::new(
             vec_into![ConstantN, 8, Constant0, Constant1, Call2, Ret].into(),
@@ -1511,7 +1511,7 @@ mod test {
             "(let ((foo . 1)))",
             Error::from_object(Type::List, 1.into()),
         );
-        check_error("(let (()))", Error::from_object(Type::Cons, Object::Nil));
+        check_error("(let (()))", Error::from_object(Type::Cons, Object::NIL));
         check_error("(let)", Error::ArgCount(1, 0));
     }
 }
