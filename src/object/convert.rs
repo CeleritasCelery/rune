@@ -1,3 +1,7 @@
+//! This module holds implementation of conversion functions. Much of
+//! this code could be replaced with macros or specialized generics if 
+//! those are ever stabalized.
+
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
@@ -131,7 +135,11 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     }
 }
 
-// This is required because we have no specialization yet
+/// This function is required because we have no specialization yet. 
+/// Essentially this let's us convert one type to another "in place"
+/// without the need to allocate a new slice. We ensure that the two
+/// types have the exact same representation, so that no writes
+/// actually need to be performed.
 pub(crate) fn try_from_slice<'brw, 'ob, T>(slice: &'brw [Object<'ob>]) -> Result<&'brw [T], Error>
 where
     T: TryFrom<Object<'ob>, Error = Error> + Bits,

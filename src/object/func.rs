@@ -7,15 +7,29 @@ use std::fmt;
 
 use anyhow::{bail, Result};
 
+/// Argument requirments to a function.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct FnArgs {
+    /// a &rest argument.
     pub(crate) rest: bool,
+    /// minimum required arguments.
     pub(crate) required: u16,
+    /// &optional arguments.
     pub(crate) optional: u16,
-    pub(crate) max_stack_usage: u16,
+    /// If this function is advised.
     pub(crate) advice: bool,
 }
 
+/// Represents the body of a function that has been byte compiled. Note that
+/// this can represent any top level expression, not just functions.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Expression<'ob> {
+    pub(crate) op_codes: CodeVec,
+    pub(crate) constants: Vec<Object<'ob>>,
+}
+
+/// A function implemented in lisp. Note that all functions are byte compiled,
+/// so this contains the byte-code representation of the function.
 #[derive(Debug, PartialEq)]
 pub(crate) struct LispFn<'ob> {
     pub(crate) body: Expression<'ob>,
@@ -23,6 +37,10 @@ pub(crate) struct LispFn<'ob> {
 }
 
 impl FnArgs {
+    /// Number of arguments needed to fill out the remaining slots on the stack.
+    /// If a function has 3 required args and 2 optional, and it is called with 
+    /// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
+    /// argument should be added to the stack.
     pub(crate) fn num_of_fill_args(self, args: u16) -> Result<u16> {
         if args < self.required {
             bail!(Error::ArgCount(self.required, args));
@@ -41,12 +59,6 @@ impl FnArgs {
 
 define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
 
-#[derive(Debug, PartialEq)]
-pub(crate) struct Expression<'ob> {
-    pub(crate) op_codes: CodeVec,
-    pub(crate) constants: Vec<Object<'ob>>,
-}
-
 impl<'ob> LispFn<'ob> {
     pub(crate) fn new(
         op_codes: CodeVec,
@@ -64,7 +76,6 @@ impl<'ob> LispFn<'ob> {
                 required,
                 optional,
                 rest,
-                max_stack_usage: 0,
                 advice: false,
             },
         }
@@ -137,7 +148,6 @@ impl SubrFn {
                 required,
                 optional,
                 rest,
-                max_stack_usage: 0,
                 advice: false,
             },
         }

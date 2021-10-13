@@ -179,10 +179,10 @@ impl SymbolMap {
 }
 
 macro_rules! create_symbolmap {
-    ($($arr:expr),+ $(,)?) => ({
-        let size: usize = 0_usize $(+ $arr.len())+;
+    ($($subr:expr),+ $(,)?) => ({
+        let size: usize = 0_usize $(+ $subr.len())+;
         let mut map = InnerSymbolMap::with_capacity(size);
-        $(for (func, sym) in $arr.iter() {
+        $(for (func, sym) in $subr.iter() {
             sym.func.store(Some(func.into()));
             map.pre_init(sym);
         })+;
