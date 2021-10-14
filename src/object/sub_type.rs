@@ -5,6 +5,7 @@ use crate::symbol::Symbol;
 
 use super::Bits;
 
+#[repr(align(8))]
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
@@ -66,6 +67,7 @@ extern "Rust" {
     fn miri_static_root(ptr: *const u8);
 }
 
+#[repr(align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum FuncCell<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
@@ -143,6 +145,7 @@ impl<'a> FuncCell<'a> {
     }
 }
 
+#[repr(align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
@@ -160,6 +163,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
     }
 }
 
+#[repr(align(8))]
 #[derive(Copy, Clone)]
 pub(crate) enum Number<'ob> {
     Int(Data<i64>),
@@ -261,13 +265,18 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::mem::size_of;
+    use std::mem::{size_of, align_of};
 
     #[test]
     fn sub_type_size() {
         assert_eq!(size_of::<Object>(), size_of::<Function>());
+        assert_eq!(size_of::<Object>(), size_of::<FuncCell>());
         assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Function>>());
         assert_eq!(size_of::<Object>(), size_of::<Number>());
         assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Number>>());
+        assert_eq!(align_of::<Object>(), align_of::<Function>());
+        assert_eq!(align_of::<Object>(), align_of::<FuncCell>());
+        assert_eq!(align_of::<Option<Object>>(), align_of::<Option<Function>>());
+        assert_eq!(align_of::<Object>(), align_of::<Number>());
     }
 }

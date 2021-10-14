@@ -6,21 +6,36 @@ use lazy_static::lazy_static;
 use std::convert::TryInto;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::mem::transmute;
 use std::sync::Mutex;
 
+/// The allocation of a global symbol. This is shared
+/// between threads, so the interned value of a symbol
+/// will be the same location no matter which thread
+/// interned it. Functions are safe to share between
+/// threads because they are marked immutable by
+/// [`SymbolMap::set_func`] and they can only be replaced atomically.
+/// In order to garbage collect the function we need to
+/// halt all running threads. This has not been implemented
+/// yet.
 #[derive(Debug)]
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
     func: AtomicCell<Option<FuncCell<'static>>>,
 }
 
+/// A static reference to a [`GlobalSymbol`]. These
+/// references are shared between threads because
+/// `GlobalSymbol` is thread safe. This makes comparing
+/// Symbols cheap since it is just a pointer comparison.
+/// There are no uninterned symbols.
 pub(crate) type Symbol = &'static GlobalSymbol;
 
 unsafe fn coerce_callable_lifetime<'a, 'b>(x: FuncCell<'a>) -> FuncCell<'b> {
-    transmute(x)
+    std::mem::transmute(x)
 }
 
+// Since global symbols are globally unique we can
+// compare them with a pointer equal test.
 impl PartialEq for GlobalSymbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(&*self, &*other)
@@ -48,12 +63,11 @@ impl GlobalSymbol {
         self.func.load().is_some()
     }
 
-    // TODO: unbounded lifetime is unsound
     pub(crate) fn func<'a>(&self) -> Option<FuncCell<'a>> {
         unsafe { self.func.load().map(|x| coerce_callable_lifetime(x)) }
     }
 
-    // TODO: unbounded lifetime is unsound
+    /// Follow the chain of symbols to find the function at the end, if any.
     pub(crate) fn resolved_func<'a>(&self) -> Option<Callable<'a>> {
         match self.func() {
             Some(FuncCell::Symbol(sym)) => sym.resolved_func(),
@@ -64,6 +78,10 @@ impl GlobalSymbol {
         }
     }
 
+    /// Set the function for this symbol. This function is unsafe to call and
+    /// requires that the caller:
+    /// 1. Has marked the entire function as read only
+    /// 2. Has cloned the function into the `SymbolMap` arena
     unsafe fn set_func(&self, func: FuncCell) {
         self.func.store(Some(coerce_callable_lifetime(func)));
     }
@@ -84,11 +102,9 @@ pub(crate) struct SymbolMap {
     arena: Arena,
 }
 
-/*
-Box needs to follow rust's aliasing rules (references can't outlive the borrow).
-Miri checks for this. But we have a requirement for this in our current design.
-So we use this work around that I found on the forum.
-*/
+/// Box needs to follow rust's aliasing rules (references can't outlive the borrow).
+/// Miri checks for this. But we have a requirement for this in our current design.
+/// So we use this work around that I found on the forum.
 struct SymbolBox(*const GlobalSymbol);
 unsafe impl Send for SymbolBox {}
 
@@ -109,6 +125,8 @@ impl AsRef<GlobalSymbol> for SymbolBox {
     }
 }
 
+// `SymbolBox` should not be dropped until we
+// have a garbage collector
 impl Drop for SymbolBox {
     fn drop(&mut self) {
         panic!("Tried to drop {:?}", unsafe { &*self.0 });
@@ -172,6 +190,8 @@ impl SymbolMap {
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();
+        // SAFETY: The object is marked read-only and we have cloned
+        // in the map's arena, so calling this function is safe.
         unsafe {
             symbol.set_func(new_func);
         }
@@ -203,6 +223,7 @@ macro_rules! declare_symbols {
         $(pub(crate) static $sym: GlobalSymbol = GlobalSymbol::new($name);)+
     )
 }
+
 lazy_static! {
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
         let map = create_symbolmap!(
@@ -235,10 +256,13 @@ lazy_static! {
     });
 }
 
+/// Intern a new symbol based on `name`
 pub(crate) fn intern(name: &str) -> Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name)
 }
 
+/// This module holds public symbols for use in the code base.
+/// This avoids calls to [`intern`] for commonly used symbols.
 pub(crate) mod sym {
     use super::GlobalSymbol;
 
@@ -292,11 +316,13 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
+        assert_eq!(size_of::<isize>(), size_of::<FuncCell>());
         assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
+        assert!(AtomicCell::<Option<FuncCell>>::is_lock_free());
     }
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
-        transmute::<&'_ GlobalSymbol, &'static GlobalSymbol>(inner)
+        std::mem::transmute::<&'_ GlobalSymbol, &'static GlobalSymbol>(inner)
     }
 
     #[test]

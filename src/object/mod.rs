@@ -24,6 +24,7 @@ use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::fmt;
 
+#[repr(align(8))]
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Object<'ob> {
     Int(Data<i64>),
@@ -226,12 +227,14 @@ impl<'ob> fmt::Debug for Object<'ob> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{convert::TryInto, mem::size_of};
+    use std::convert::TryInto;
+    use std::mem::{size_of, align_of};
 
     #[test]
     fn sizes() {
         assert_eq!(isize::BITS, 64);
         assert_eq!(size_of::<isize>(), size_of::<Object>());
+        assert_eq!(align_of::<isize>(), align_of::<Object>());
         assert_eq!(size_of::<Object>(), size_of::<Option<Object>>());
         assert_eq!(0x1800_i64, unsafe {
             std::mem::transmute(Object::Int(Data::from_int(0x18)))
