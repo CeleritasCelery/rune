@@ -129,12 +129,13 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 }
 
 fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
+    use crate::symbol::sym;
     env.vars
-        .insert(crate::symbol::intern("lexical-binding"), Object::TRUE);
+        .insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars
-        .insert(crate::symbol::intern("system-type"), arena.add("gnu/linux"));
+        .insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars
-        .insert(crate::symbol::intern("minibuffer-local-map"), Object::NIL);
+        .insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
     let buffer = String::from(
         r#"
 (progn (load "lisp/byte-run.el")
