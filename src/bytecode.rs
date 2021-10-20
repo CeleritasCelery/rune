@@ -258,7 +258,6 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         use OpCode as op;
-        #[cfg(debug_assertions)]
         let init_stack_size = self.stack.len();
         loop {
             let op = self.frame.ip.next().try_into()?;
