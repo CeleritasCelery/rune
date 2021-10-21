@@ -65,9 +65,7 @@ impl Ip {
 
     /// Take the next two bytes in the stream as u16.
     fn next2(&mut self) -> u16 {
-        let lower: u16 = self.next().into();
-        let upper: u16 = self.next().into();
-        upper << 8 | lower
+        u16::from_le_bytes([self.next(), self.next()])
     }
 }
 
