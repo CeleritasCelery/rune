@@ -225,7 +225,7 @@ impl<'a> Tokenizer<'a> {
         match self.iter.next_if(|(_, chr)| *chr == '@') {
             Some(_) => Token::Splice(idx),
             None => Token::Unquote(idx),
-        }  
+        }
     }
 
     fn read_char(&mut self) -> Option<char> {
@@ -421,12 +421,10 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     /// Read an octal escape (e.g. `#0759`)
     fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.next() {
-            Some(Token::Ident(ident)) => {
-                match usize::from_str_radix(ident, 8) {
-                    Ok(x) => Ok(self.arena.add(x as i64)),
-                    Err(_) => Err(Error::ParseInt(8, pos)),
-                }
-            }
+            Some(Token::Ident(ident)) => match usize::from_str_radix(ident, 8) {
+                Ok(x) => Ok(self.arena.add(x as i64)),
+                Err(_) => Err(Error::ParseInt(8, pos)),
+            },
             _ => Err(Error::ParseInt(8, pos)),
         }
     }

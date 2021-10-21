@@ -228,7 +228,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
 mod test {
     use super::*;
     use std::convert::TryInto;
-    use std::mem::{size_of, align_of};
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn sizes() {

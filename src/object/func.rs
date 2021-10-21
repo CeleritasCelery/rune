@@ -38,7 +38,7 @@ pub(crate) struct LispFn<'ob> {
 
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.
-    /// If a function has 3 required args and 2 optional, and it is called with 
+    /// If a function has 3 required args and 2 optional, and it is called with
     /// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
     /// argument should be added to the stack.
     pub(crate) fn num_of_fill_args(self, args: u16) -> Result<u16> {

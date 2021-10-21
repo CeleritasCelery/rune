@@ -1,5 +1,5 @@
 //! This module holds implementation of conversion functions. Much of
-//! this code could be replaced with macros or specialized generics if 
+//! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
 use crate::arena::Arena;
@@ -135,7 +135,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     }
 }
 
-/// This function is required because we have no specialization yet. 
+/// This function is required because we have no specialization yet.
 /// Essentially this let's us convert one type to another "in place"
 /// without the need to allocate a new slice. We ensure that the two
 /// types have the exact same representation, so that no writes

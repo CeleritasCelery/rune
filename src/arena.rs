@@ -2,11 +2,22 @@ use crate::cons::Cons;
 use crate::object::{IntoObject, LispFn, Object, SubrFn};
 use std::cell::RefCell;
 
+/// Owns all allocations and creates objects. All objects have
+/// a lifetime tied to the borrow of their `Arena`. When the
+/// `Arena` goes out of scope, no objects should be accessible.
+/// Interior mutability is used to ensure that `&mut` references
+/// don't invalid objects.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Arena {
     objects: RefCell<Vec<OwnedObject<'static>>>,
 }
 
+/// The owner of an object allocation. No references to
+/// the object can outlive this. This type should not be
+/// public, but needs to be marked that way so it can be
+/// part of a generic public interface. So long as no
+/// functions in this module reference it that should not
+/// cause a problem.
 #[derive(Debug, PartialEq)]
 enum OwnedObject<'ob> {
     Float(Box<f64>),

@@ -265,7 +265,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::mem::{size_of, align_of};
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn sub_type_size() {
