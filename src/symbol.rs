@@ -1,11 +1,11 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Callable, FuncCell, Object};
-use crossbeam_utils::atomic::AtomicCell;
 use lazy_static::lazy_static;
 use std::convert::TryInto;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
 
 /// The allocation of a global symbol. This is shared
@@ -20,7 +20,7 @@ use std::sync::Mutex;
 #[derive(Debug)]
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
-    func: AtomicCell<Option<FuncCell<'static>>>,
+    func: AtomicI64,
 }
 
 /// A static reference to a [`GlobalSymbol`]. These
@@ -29,10 +29,6 @@ pub(crate) struct GlobalSymbol {
 /// Symbols cheap since it is just a pointer comparison.
 /// There are no uninterned symbols.
 pub(crate) type Symbol = &'static GlobalSymbol;
-
-unsafe fn coerce_callable_lifetime<'a, 'b>(x: FuncCell<'a>) -> FuncCell<'b> {
-    std::mem::transmute(x)
-}
 
 // Since global symbols are globally unique we can
 // compare them with a pointer equal test.
@@ -55,16 +51,19 @@ impl GlobalSymbol {
     pub(crate) const fn new(name: &'static str) -> Self {
         GlobalSymbol {
             name,
-            func: AtomicCell::new(None),
+            func: AtomicI64::new(0),
         }
     }
 
     pub(crate) fn has_func(&self) -> bool {
-        self.func.load().is_some()
+        self.func.load(Ordering::Acquire) != 0
     }
 
     pub(crate) fn func<'a>(&self) -> Option<FuncCell<'a>> {
-        unsafe { self.func.load().map(|x| coerce_callable_lifetime(x)) }
+        match self.func.load(Ordering::Acquire) {
+            0 => None,
+            x => Some(unsafe { std::mem::transmute(x) }),
+        }
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
@@ -83,11 +82,12 @@ impl GlobalSymbol {
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` arena
     unsafe fn set_func(&self, func: FuncCell) {
-        self.func.store(Some(coerce_callable_lifetime(func)));
+        let val = std::mem::transmute(func);
+        self.func.store(val, Ordering::Release);
     }
 
     pub(crate) fn unbind_func(&self) {
-        self.func.store(None);
+        self.func.store(0, Ordering::Release);
     }
 }
 
@@ -206,7 +206,9 @@ macro_rules! create_symbolmap {
         let size: usize = count!($($symbols)+) $(+ $subr.len())+;
         let mut map = InnerSymbolMap::with_capacity(size);
         $(for (func, sym) in $subr.iter() {
-            sym.func.store(Some(func.into()));
+            let cell: FuncCell = func.into();
+            let val = unsafe { std::mem::transmute(cell) };
+            sym.func.store(val, Ordering::Release);
             map.pre_init(sym);
         })+;
         $(map.pre_init(&sym::$symbols);)+
@@ -323,7 +325,6 @@ mod test {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
         assert_eq!(size_of::<isize>(), size_of::<FuncCell>());
         assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
-        assert!(AtomicCell::<Option<FuncCell>>::is_lock_free());
     }
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
