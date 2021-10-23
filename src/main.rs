@@ -139,6 +139,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
        (load "lisp/backquote.el")
        (load "lisp/byte-run.el")
        (load "lisp/subr.el")
+       (load "lisp/macroexp.el")
 )"#,
     );
     match crate::lread::load_internal(&buffer, arena, env) {
