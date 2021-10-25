@@ -3,10 +3,8 @@ use fn_macros::defun;
 use crate::{
     arena::Arena,
     data::Environment,
-    object::{Function, List, Object},
+    object::{Function, Object},
 };
-use std::convert::TryInto;
-
 use anyhow::Result;
 
 #[defun]
@@ -22,8 +20,7 @@ pub(crate) fn apply<'ob>(
             let end = len - 1;
             let last = arguments[end];
             let mut args = arguments[..end].to_vec();
-            let list: List = last.try_into()?;
-            for element in list {
+            for element in last.as_list()? {
                 args.push(element?);
             }
             args

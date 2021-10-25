@@ -8,7 +8,6 @@ use crate::error::{Error, Type};
 use crate::object::{FuncCell, Function, IntoObject, List, Number, Object};
 use crate::symbol::Symbol;
 use anyhow::{anyhow, Context};
-use std::convert::{TryFrom, TryInto};
 
 use super::{Bits, Callable, Data, IntOrMarker};
 
@@ -128,7 +127,7 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj {
-            Object::Cons(cons) => Ok(List::Cons(!cons)),
+            Object::Cons(cons) => Ok(List::Cons(cons)),
             Object::Nil(_) => Ok(List::Nil),
             _ => Err(Error::from_object(Type::List, obj)),
         }
@@ -252,12 +251,6 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     }
 }
 
-impl<'ob> From<&'ob Cons<'ob>> for Object<'ob> {
-    fn from(cons: &'ob Cons<'ob>) -> Self {
-        Object::Cons(Data::from_ref(cons))
-    }
-}
-
 impl<'ob> From<&'ob mut Cons<'ob>> for Object<'ob> {
     fn from(cons: &'ob mut Cons<'ob>) -> Self {
         Object::Cons(Data::from_mut_ref(cons))
@@ -279,7 +272,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::convert::TryInto;
 
     fn wrapper(args: &[Object]) -> Result<i64, Error> {
         Ok(inner(

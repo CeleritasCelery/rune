@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{FuncCell, Object};

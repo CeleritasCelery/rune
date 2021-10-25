@@ -7,7 +7,6 @@ use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
 use fn_macros::defun;
-use std::convert::TryInto;
 
 use anyhow::{anyhow, bail, Result};
 

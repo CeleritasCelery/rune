@@ -2,7 +2,6 @@ use crate::arena::Arena;
 use crate::hashmap::HashMap;
 use crate::object::{Callable, FuncCell, Object};
 use lazy_static::lazy_static;
-use std::convert::TryInto;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -270,8 +269,8 @@ pub(crate) fn intern(name: &str) -> Symbol {
 pub(crate) mod sym {
     use super::GlobalSymbol;
 
-    pub(crate) use crate::data::DEFVAR;
     pub(crate) use crate::alloc::MAKE_CLOSURE;
+    pub(crate) use crate::data::DEFVAR;
 
     declare_symbols!(
         FUNCTION => "function",

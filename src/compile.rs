@@ -8,7 +8,7 @@
 
 use crate::arena::Arena;
 use crate::bytecode;
-use crate::cons::{into_iter, Cons, ElemIter};
+use crate::cons::{Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Callable, Expression, IntoObject, LispFn, Object};
@@ -16,7 +16,6 @@ use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{sym, Symbol};
 use anyhow::{anyhow, bail, ensure, Result};
 use paste::paste;
-use std::convert::TryInto;
 use std::fmt::Display;
 
 /// Errors that can occur during compilation
@@ -364,7 +363,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// add the quoted object to the constant vector
     fn quote(&mut self, value: Object<'ob>) -> Result<()> {
-        let mut forms = into_iter(value)?;
+        let mut forms = value.as_list()?;
         match forms.len() {
             1 => self.const_ref(forms.next().unwrap()?, None),
             x => Err(Error::ArgCount(1, x as u16).into()),
@@ -387,7 +386,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// Process a function quote `(function foo)`. If value is a cons, compile it. Otherwise
     /// treat it as a constant reference.
     fn function(&mut self, value: Object<'ob>) -> Result<()> {
-        let mut forms = into_iter(value)?;
+        let mut forms = value.as_list()?;
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
@@ -400,7 +399,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_let(&mut self, form: Object<'ob>, parallel: bool) -> Result<()> {
-        let mut iter = into_iter(form)?;
+        let mut iter = form.as_list()?;
         let num_binding_forms = match iter.next() {
             // (let x ...)
             Some(x) => self.let_bind(x?, parallel)?,
@@ -420,13 +419,13 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn progn(&mut self, forms: Object<'ob>) -> Result<()> {
-        self.implicit_progn(into_iter(forms)?)
+        self.implicit_progn(forms.as_list()?)
     }
 
     /// Compile prog1 or prog2 special forms
     fn progx(&mut self, forms: Object<'ob>, returned_form: usize) -> Result<()> {
         let mut form_idx = 0;
-        for form in into_iter(forms)? {
+        for form in forms.as_list()? {
             form_idx += 1;
             self.compile_form(form?)?;
             if form_idx != returned_form {
@@ -460,7 +459,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     ///            ^^^^^
     /// ```
     fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<Symbol> {
-        let mut iter = into_iter(cons.cdr())?;
+        let mut iter = cons.cdr().as_list()?;
         match iter.next() {
             // (let ((x y)))
             Some(value) => self.compile_form(value?)?,
@@ -478,7 +477,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     ///      ^^^^^^^^^^^
     /// ```
     fn let_bind(&mut self, obj: Object<'ob>, parallel: bool) -> Result<usize> {
-        let bindings = into_iter(obj)?;
+        let bindings = obj.as_list()?;
         let mut len = 0;
         let mut let_bindings = Vec::new();
         for binding in bindings {
@@ -514,7 +513,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// Compile setq special form.
     fn setq(&mut self, obj: Object<'ob>) -> Result<()> {
-        let mut forms = into_iter(obj)?;
+        let mut forms = obj.as_list()?;
         let mut args_processed = 0;
         // (setq)
         ensure!(!forms.is_empty(), Error::ArgCount(2, 0));
@@ -556,7 +555,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         println!("compiling macro : {}", name);
         let arena = self.arena;
         let mut arg_list = vec![];
-        for arg in into_iter(args)? {
+        for arg in args.as_list()? {
             arg_list.push(arg?);
         }
         match body {
@@ -606,7 +605,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn compile_func_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         println!("compiling call : {}", func);
         self.const_ref(func.into_obj(self.arena), None)?;
-        let args = into_iter(args)?;
+        let args = args.as_list()?;
         let mut num_args = 0;
         for arg in args {
             self.compile_form(arg?)?;
@@ -651,7 +650,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_if(&mut self, obj: Object<'ob>) -> Result<()> {
-        let mut forms = into_iter(obj)?;
+        let mut forms = obj.as_list()?;
         match forms.len() {
             // (if) | (if x)
             len @ (0 | 1) => Err(Error::ArgCount(2, len as u16).into()),
@@ -681,7 +680,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_loop(&mut self, obj: Object<'ob>) -> Result<()> {
-        let mut forms = into_iter(obj)?;
+        let mut forms = obj.as_list()?;
         let top = self.codes.len();
         match forms.next() {
             Some(form) => self.compile_form(form?)?,
@@ -698,7 +697,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_lambda(&mut self, obj: Object<'ob>) -> Result<()> {
-        let values = Upvalues{ vars: &self.vars, parent: self.parent};
+        let values = Upvalues {
+            vars: &self.vars,
+            parent: self.parent,
+        };
         let (upvalues, lambda) = compile_closure(obj, Some(&values), self.env, self.arena)?;
 
         if upvalues.is_empty() {
@@ -716,7 +718,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_defvar(&mut self, obj: Object<'ob>) -> Result<()> {
-        let mut iter = into_iter(obj)?;
+        let mut iter = obj.as_list()?;
 
         match iter.next() {
             // (defvar x ...)
@@ -749,7 +751,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         clause: Object<'ob>,
         jump_targets: &mut Vec<usize>,
     ) -> Result<()> {
-        let mut cond = into_iter(clause)?;
+        let mut cond = clause.as_list()?;
         match cond.len() {
             // (cond ())
             0 => {}
@@ -784,7 +786,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         clause: Object<'ob>,
         jump_targets: &mut Vec<usize>,
     ) -> Result<()> {
-        let mut cond = into_iter(clause)?;
+        let mut cond = clause.as_list()?;
         match cond.len() {
             // (cond ())
             0 => {
@@ -812,7 +814,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// value should be if no arguments are given (e.g. `(and)`). This is also
     /// used to determine how forms are combined.
     fn compile_combinator(&mut self, forms: Object<'ob>, empty_value: bool) -> Result<()> {
-        let mut conditions = into_iter(forms)?;
+        let mut conditions = forms.as_list()?;
 
         if conditions.is_empty() {
             return self.const_ref(empty_value.into(), None);
@@ -838,7 +840,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_cond(&mut self, obj: Object<'ob>) -> Result<()> {
-        let mut clauses = into_iter(obj)?;
+        let mut clauses = obj.as_list()?;
         // (cond)
         if clauses.is_empty() {
             return self.const_ref(Object::NIL, None);
@@ -986,7 +988,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     let mut optional = 0;
     let mut rest = false;
     let mut arg_type = &mut required;
-    let mut iter = into_iter(bindings)?;
+    let mut iter = bindings.as_list()?;
     while let Some(binding) = iter.next() {
         symbol_match! { binding?.try_into()?;
             AND_OPTIONAL => arg_type = &mut optional,
@@ -1015,7 +1017,7 @@ fn compile_closure<'ob, 'brw>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<(Vec<Symbol>, LispFn<'ob>)> {
-    let mut iter = into_iter(obj)?;
+    let mut iter = obj.as_list()?;
 
     let (required, optional, rest, args) = match iter.next() {
         // (lambda ())

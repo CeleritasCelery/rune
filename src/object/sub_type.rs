@@ -250,15 +250,57 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum List<'o> {
     Nil,
-    Cons(&'o Cons<'o>),
+    Cons(Data<&'o Cons<'o>>),
+}
+
+impl<'ob> From<List<'ob>> for Object<'ob> {
+    fn from(val: List<'ob>) -> Self {
+        match val {
+            List::Nil => Object::NIL,
+            List::Cons(cons) => Object::Cons(cons),
+        }
+    }
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        match self {
-            List::Nil => Object::NIL,
-            List::Cons(cons) => Object::Cons(Data::from_ref(cons)),
+        self.into()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct ListIter<'ob>(List<'ob>);
+
+impl<'ob> Iterator for ListIter<'ob> {
+    type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            List::Nil => None,
+            List::Cons(cons) => {
+                self.0 = match cons.cdr() {
+                    Object::Cons(next) => List::Cons(next),
+                    Object::Nil(_) => List::Nil,
+                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
+                };
+                Some(Ok(cons))
+            }
         }
+    }
+}
+
+impl<'ob> IntoIterator for List<'ob> {
+    type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
+    type IntoIter = ListIter<'ob>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ListIter(self)
+    }
+}
+
+impl<'ob> List<'ob> {
+    pub(crate) fn conses(self) -> ListIter<'ob> {
+        self.into_iter()
     }
 }
 

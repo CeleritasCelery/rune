@@ -4,10 +4,9 @@ use crate::object::{List, Object};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
-use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Write};
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq)]
 pub(crate) struct Cons<'ob> {
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
@@ -98,34 +97,28 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 define_unbox!(Cons, &Cons<'ob>);
 
 #[derive(Clone)]
-pub(crate) struct ElemIter<'borrow, 'ob>(ConsIter<'borrow, 'ob>);
-
-#[derive(Clone)]
-pub(crate) struct ConsIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
+pub(crate) struct ElemIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
 
 impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
     type Item = Result<Object<'ob>>;
     type IntoIter = ElemIter<'borrow, 'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ElemIter(ConsIter(Some(self)))
+        ElemIter(Some(self))
     }
 }
 
-impl<'ob> IntoIterator for List<'ob> {
-    type Item = Result<Object<'ob>>;
-    type IntoIter = ElemIter<'ob, 'ob>;
-
-    fn into_iter(self) -> Self::IntoIter {
+impl<'ob> List<'ob> {
+    pub(crate) fn elements(&self) -> ElemIter<'_, 'ob> {
         match self {
-            List::Nil => ElemIter(ConsIter(None)),
-            List::Cons(cons) => ElemIter(ConsIter(Some(cons))),
+            List::Nil => ElemIter(None),
+            List::Cons(cons) => ElemIter(Some(cons)),
         }
     }
 }
 
-impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
-    type Item = Result<&'borrow Cons<'ob>>;
+impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
+    type Item = Result<Object<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
@@ -135,40 +128,34 @@ impl<'borrow, 'ob> Iterator for ConsIter<'borrow, 'ob> {
                     Object::Nil(_) => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Some(Ok(cons))
+                Some(Ok(cons.car()))
             }
             None => None,
         }
     }
 }
 
-impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
-    type Item = Result<Object<'ob>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|result| result.map(Cons::car))
+impl<'ob> Object<'ob> {
+    pub(crate) fn as_list(self) -> Result<ElemIter<'ob, 'ob>> {
+        match self {
+            Object::Cons(cons) => Ok((!cons).into_iter()),
+            Object::Nil(_) => Ok(ElemIter(None)),
+            _ => Err(Error::from_object(Type::List, self).into()),
+        }
     }
 }
 
-pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
-    match obj {
-        Object::Cons(cons) => Ok((!cons).into_iter()),
-        Object::Nil(_) => Ok(ElemIter::empty()),
-        _ => Err(Error::from_object(Type::List, obj).into()),
-    }
-}
+// pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
+//     match obj {
+//         Object::Cons(cons) => Ok((!cons).into_iter()),
+//         Object::Nil(_) => Ok(ElemIter(None)),
+//         _ => Err(Error::from_object(Type::List, obj).into()),
+//     }
+// }
 
 impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
-    pub(crate) fn by_cons(self) -> ConsIter<'borrow, 'ob> {
-        self.0
-    }
-
-    pub(crate) const fn empty() -> Self {
-        ElemIter(ConsIter(None))
-    }
-
     pub(crate) fn is_empty(&self) -> bool {
-        self.0 .0 == None
+        self.0 == None
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -250,7 +237,7 @@ macro_rules! list {
 mod test {
     use super::*;
     use crate::object::IntoObject;
-    use std::{convert::TryInto, mem::size_of};
+    use std::mem::size_of;
 
     fn as_cons(obj: Object) -> Option<&Cons> {
         match obj {

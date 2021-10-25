@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::arena::Arena;
 use crate::bytecode;
 use crate::cons::Cons;
@@ -52,14 +50,32 @@ pub(crate) fn mapcar<'ob>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let iter = cons.into_iter();
-            let vec = iter
+            let vec = cons
+                .into_iter()
                 .map(|x| match x {
                     Ok(obj) => function.call(vec![obj], env, arena),
                     err => err,
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(slice_into_list(&vec, None, arena))
+        }
+    }
+}
+
+#[defun]
+pub(crate) fn mapc<'ob>(
+    function: Function<'ob>,
+    sequence: List<'ob>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    match sequence {
+        List::Nil => Ok(Object::NIL),
+        List::Cons(cons) => {
+            for elem in !cons {
+                function.call(vec![elem?], env, arena)?;
+            }
+            Ok(sequence.into())
         }
     }
 }
@@ -123,19 +139,20 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'o
 
 #[defun]
 pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
-    let val = list.into_iter().by_cons().find(|x| match x {
+    let val = list.conses().find(|x| match x {
         Ok(obj) => data::eq(obj.car(), elt),
         Err(_) => true,
     });
     match val {
-        Some(elem) => elem.map(List::Cons),
+        Some(Ok(elem)) => Ok(List::Cons(elem)),
+        Some(Err(e)) => Err(e),
         None => Ok(List::Nil),
     }
 }
 
 #[defun]
 pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
-    let val = list.into_iter().by_cons().find(|x| match x {
+    let val = list.conses().find(|x| match x {
         Ok(obj) => obj.car() == elt,
         Err(_) => true,
     });
@@ -205,7 +222,7 @@ pub(crate) fn length(sequence: Object) -> Result<i64> {
 
 #[defun]
 pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
-    list.into_iter().nth(n).unwrap_or(Ok(Object::NIL))
+    list.elements().nth(n).unwrap_or(Ok(Object::NIL))
 }
 
 #[defun]
@@ -266,7 +283,7 @@ mod test {
         let element = cons!(5, 6; arena);
         let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
         if let Object::Cons(cons) = list {
-            let result = assq(5.into(), List::Cons(!cons));
+            let result = assq(5.into(), List::Cons(cons));
             assert_eq!(result, element);
         }
     }
@@ -274,6 +291,7 @@ mod test {
 
 defsubr!(
     mapcar,
+    mapc,
     nreverse,
     assq,
     make_hash_table,
