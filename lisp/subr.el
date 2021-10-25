@@ -4958,100 +4958,98 @@ Return nil if there isn't one."
 	      load-elt (and loads (car loads)))))
     load-elt))
 
-;; Commenting this out until I solve recursive macros
+(defun eval-after-load (file form)
+  "Arrange that if FILE is loaded, FORM will be run immediately afterwards.
+If FILE is already loaded, evaluate FORM right now.
+FORM can be an Elisp expression (in which case it's passed to `eval'),
+or a function (in which case it's passed to `funcall' with no argument).
 
-;; (defun eval-after-load (file form)
-;;   "Arrange that if FILE is loaded, FORM will be run immediately afterwards.
-;; If FILE is already loaded, evaluate FORM right now.
-;; FORM can be an Elisp expression (in which case it's passed to `eval'),
-;; or a function (in which case it's passed to `funcall' with no argument).
+If a matching file is loaded again, FORM will be evaluated again.
 
-;; If a matching file is loaded again, FORM will be evaluated again.
+If FILE is a string, it may be either an absolute or a relative file
+name, and may have an extension (e.g. \".el\") or may lack one, and
+additionally may or may not have an extension denoting a compressed
+format (e.g. \".gz\").
 
-;; If FILE is a string, it may be either an absolute or a relative file
-;; name, and may have an extension (e.g. \".el\") or may lack one, and
-;; additionally may or may not have an extension denoting a compressed
-;; format (e.g. \".gz\").
+When FILE is absolute, this first converts it to a true name by chasing
+symbolic links.  Only a file of this name (see next paragraph regarding
+extensions) will trigger the evaluation of FORM.  When FILE is relative,
+a file whose absolute true name ends in FILE will trigger evaluation.
 
-;; When FILE is absolute, this first converts it to a true name by chasing
-;; symbolic links.  Only a file of this name (see next paragraph regarding
-;; extensions) will trigger the evaluation of FORM.  When FILE is relative,
-;; a file whose absolute true name ends in FILE will trigger evaluation.
+When FILE lacks an extension, a file name with any extension will trigger
+evaluation.  Otherwise, its extension must match FILE's.  A further
+extension for a compressed format (e.g. \".gz\") on FILE will not affect
+this name matching.
 
-;; When FILE lacks an extension, a file name with any extension will trigger
-;; evaluation.  Otherwise, its extension must match FILE's.  A further
-;; extension for a compressed format (e.g. \".gz\") on FILE will not affect
-;; this name matching.
+Alternatively, FILE can be a feature (i.e. a symbol), in which case FORM
+is evaluated at the end of any file that `provide's this feature.
+If the feature is provided when evaluating code not associated with a
+file, FORM is evaluated immediately after the provide statement.
 
-;; Alternatively, FILE can be a feature (i.e. a symbol), in which case FORM
-;; is evaluated at the end of any file that `provide's this feature.
-;; If the feature is provided when evaluating code not associated with a
-;; file, FORM is evaluated immediately after the provide statement.
+Usually FILE is just a library name like \"font-lock\" or a feature name
+like `font-lock'.
 
-;; Usually FILE is just a library name like \"font-lock\" or a feature name
-;; like `font-lock'.
+This function makes or adds to an entry on `after-load-alist'.
 
-;; This function makes or adds to an entry on `after-load-alist'.
+See also `with-eval-after-load'."
+  (declare (indent 1)
+           (compiler-macro
+            (lambda (whole)
+              (if (eq 'quote (car-safe form))
+                  ;; Quote with lambda so the compiler can look inside.
+                  `(eval-after-load ,file (lambda () ,(nth 1 form)))
+                whole))))
+  ;; Add this FORM into after-load-alist (regardless of whether we'll be
+  ;; evaluating it now).
+  (let* ((regexp-or-feature
+	  (if (stringp file)
+              (setq file (purecopy (load-history-regexp file)))
+            file))
+	 (elt (assoc regexp-or-feature after-load-alist))
+         (func
+          (if (functionp form) form
+            ;; Try to use the "current" lexical/dynamic mode for `form'.
+            (eval `(lambda () ,form) lexical-binding))))
+    (unless elt
+      (setq elt (list regexp-or-feature))
+      (push elt after-load-alist))
+    ;; Is there an already loaded file whose name (or `provide' name)
+    ;; matches FILE?
+    (prog1 (if (if (stringp file)
+		   (load-history-filename-element regexp-or-feature)
+		 (featurep file))
+	       (funcall func))
+      (let ((delayed-func
+             (if (not (symbolp regexp-or-feature)) func
+               ;; For features, the after-load-alist elements get run when
+               ;; `provide' is called rather than at the end of the file.
+               ;; So add an indirection to make sure that `func' is really run
+               ;; "after-load" in case the provide call happens early.
+               (lambda ()
+                 (if (not load-file-name)
+                     ;; Not being provided from a file, run func right now.
+                     (funcall func)
+                   (let ((lfn load-file-name)
+                         ;; Don't use letrec, because equal (in
+                         ;; add/remove-hook) could get trapped in a cycle
+                         ;; (bug#46326).
+                         (fun (make-symbol "eval-after-load-helper")))
+                     (fset fun (lambda (file)
+                                 (when (equal file lfn)
+                                   (remove-hook 'after-load-functions fun)
+                                   (funcall func))))
+                     (add-hook 'after-load-functions fun 'append)))))))
+        ;; Add FORM to the element unless it's already there.
+        (unless (member delayed-func (cdr elt))
+          (nconc elt (list delayed-func)))))))
 
-;; See also `with-eval-after-load'."
-;;   (declare (indent 1)
-;;            (compiler-macro
-;;             (lambda (whole)
-;;               (if (eq 'quote (car-safe form))
-;;                   ;; Quote with lambda so the compiler can look inside.
-;;                   `(eval-after-load ,file (lambda () ,(nth 1 form)))
-;;                 whole))))
-;;   ;; Add this FORM into after-load-alist (regardless of whether we'll be
-;;   ;; evaluating it now).
-;;   (let* ((regexp-or-feature
-;; 	  (if (stringp file)
-;;               (setq file (purecopy (load-history-regexp file)))
-;;             file))
-;; 	 (elt (assoc regexp-or-feature after-load-alist))
-;;          (func
-;;           (if (functionp form) form
-;;             ;; Try to use the "current" lexical/dynamic mode for `form'.
-;;             (eval `(lambda () ,form) lexical-binding))))
-;;     (unless elt
-;;       (setq elt (list regexp-or-feature))
-;;       (push elt after-load-alist))
-;;     ;; Is there an already loaded file whose name (or `provide' name)
-;;     ;; matches FILE?
-;;     (prog1 (if (if (stringp file)
-;; 		   (load-history-filename-element regexp-or-feature)
-;; 		 (featurep file))
-;; 	       (funcall func))
-;;       (let ((delayed-func
-;;              (if (not (symbolp regexp-or-feature)) func
-;;                ;; For features, the after-load-alist elements get run when
-;;                ;; `provide' is called rather than at the end of the file.
-;;                ;; So add an indirection to make sure that `func' is really run
-;;                ;; "after-load" in case the provide call happens early.
-;;                (lambda ()
-;;                  (if (not load-file-name)
-;;                      ;; Not being provided from a file, run func right now.
-;;                      (funcall func)
-;;                    (let ((lfn load-file-name)
-;;                          ;; Don't use letrec, because equal (in
-;;                          ;; add/remove-hook) could get trapped in a cycle
-;;                          ;; (bug#46326).
-;;                          (fun (make-symbol "eval-after-load-helper")))
-;;                      (fset fun (lambda (file)
-;;                                  (when (equal file lfn)
-;;                                    (remove-hook 'after-load-functions fun)
-;;                                    (funcall func))))
-;;                      (add-hook 'after-load-functions fun 'append)))))))
-;;         ;; Add FORM to the element unless it's already there.
-;;         (unless (member delayed-func (cdr elt))
-;;           (nconc elt (list delayed-func)))))))
-
-;; (defmacro with-eval-after-load (file &rest body)
-;;   "Execute BODY after FILE is loaded.
-;; FILE is normally a feature name, but it can also be a file name,
-;; in case that file does not provide any feature.  See `eval-after-load'
-;; for more details about the different forms of FILE and their semantics."
-;;   (declare (indent 1) (debug (form def-body)))
-;;   `(eval-after-load ,file (lambda () ,@body)))
+(defmacro with-eval-after-load (file &rest body)
+  "Execute BODY after FILE is loaded.
+FILE is normally a feature name, but it can also be a file name,
+in case that file does not provide any feature.  See `eval-after-load'
+for more details about the different forms of FILE and their semantics."
+  (declare (indent 1) (debug (form def-body)))
+  `(eval-after-load ,file (lambda () ,@body)))
 
 (defvar after-load-functions nil
   "Special hook run after loading a file.
