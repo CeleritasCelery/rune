@@ -204,6 +204,12 @@ impl CodeVec {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct Upvalues<'brw> {
+    vars: &'brw [Option<Symbol>],
+    parent: Option<&'brw Upvalues<'brw>>,
+}
+
 /// Object containg compiler state for the current function. All expressions are
 /// treated as part of some function, even if it is implicit
 #[derive(Debug, PartialEq)]
@@ -219,7 +225,7 @@ struct Compiler<'ob, 'brw> {
     ///  A reference  to  the parent's  variables. This  is  used for  resolving
     /// upvalues  in closures. If  a variable cannot  be found in  this function
     /// frame then it's parent is searched as well. A root function has no parent.
-    parent: Option<&'brw [Option<Symbol>]>,
+    parent: Option<&'brw Upvalues<'brw>>,
     /// Upvalues that are used in this closure. Not that at this time, the
     /// bootstrap compiler binds *value* and not *variables*.
     upvalues: Vec<Symbol>,
@@ -238,7 +244,7 @@ const UPVALUE_RESERVE: usize = 8;
 impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn new(
         vars: Vec<Option<Symbol>>,
-        parent: Option<&'brw [Option<Symbol>]>,
+        parent: Option<&'brw Upvalues<'brw>>,
         env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Compiler<'ob, 'brw> {
@@ -691,40 +697,20 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(())
     }
 
-    /// Return true if this closure is contained inside another closure.
-    fn closure_is_nested(&self) -> bool {
-        match self.parent {
-            None => false,
-            Some(vars) => vars.iter().any(Option::is_some),
-        }
-    }
-
-    #[allow(clippy::branches_sharing_code)] // bug in clippy #7628
     fn compile_lambda(&mut self, obj: Object<'ob>) -> Result<()> {
-        if self.closure_is_nested() {
-            bail!("Nested closures are not supported in the bootstrap compiler");
-        }
-        let (upvalues, lambda) = if self.vars.iter().any(Option::is_some) {
-            compile_closure(obj, Some(&self.vars), self.env, self.arena)?
-        } else {
-            compile_closure(obj, None, self.env, self.arena)?
-        };
+        let values = Upvalues{ vars: &self.vars, parent: self.parent};
+        let (upvalues, lambda) = compile_closure(obj, Some(&values), self.env, self.arena)?;
 
         if upvalues.is_empty() {
             self.const_ref(lambda.into_obj(self.arena), None)?;
         } else {
-            self.const_ref((&crate::alloc::MAKE_CLOSURE).into(), None)?;
+            self.const_ref((&sym::MAKE_CLOSURE).into(), None)?;
             self.const_ref(lambda.into_obj(self.arena), None)?;
-            let len = upvalues.len();
-            for upvalue in upvalues {
-                match self.vars.iter().rposition(|&x| x == Some(upvalue)) {
-                    Some(idx) => self.stack_ref(idx, upvalue)?,
-                    None => {
-                        panic!("upvalue `{}' not found", upvalue);
-                    }
-                }
+            for upvalue in &upvalues {
+                self.variable_reference(upvalue)?;
             }
-            self.emit_call(len + 1);
+            // Add 1 for the lambda argument
+            self.emit_call(upvalues.len() + 1);
         }
         Ok(())
     }
@@ -905,9 +891,18 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// Determine if a symbol is captured by a closure.
     fn is_upvalue(&self, sym: Symbol) -> bool {
-        match self.parent {
-            None => false,
-            Some(vars) => vars.iter().any(|&x| x == Some(sym)),
+        let mut scope = self.parent;
+        // wish I could do this with recursion
+        loop {
+            if let Some(upvalues) = scope {
+                // does this scope contain the variable we are looking for?
+                if upvalues.vars.iter().any(|&x| x == Some(sym)) {
+                    return true;
+                }
+                scope = upvalues.parent;
+            } else {
+                return false;
+            }
         }
     }
 
@@ -969,7 +964,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn compile_func_body(
         obj: ElemIter<'_, 'ob>,
         vars: Vec<Option<Symbol>>,
-        parent: Option<&'brw [Option<Symbol>]>,
+        parent: Option<&'brw Upvalues<'brw>>,
         env: &'brw mut Environment<'ob>,
         arena: &'ob Arena,
     ) -> Result<Self> {
@@ -1014,9 +1009,9 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
     Ok((required, required + optional, rest, args))
 }
 
-fn compile_closure<'ob>(
+fn compile_closure<'ob, 'brw>(
     obj: Object<'ob>,
-    parent: Option<&[Option<Symbol>]>,
+    parent: Option<&'brw Upvalues<'brw>>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<(Vec<Symbol>, LispFn<'ob>)> {
@@ -1045,7 +1040,9 @@ pub(crate) fn compile_lambda<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<LispFn<'ob>> {
-    compile_closure(obj, None, env, arena).map(|x| x.1)
+    let (upvalues, func) = compile_closure(obj, None, env, arena)?;
+    debug_assert!(upvalues.is_empty());
+    Ok(func)
 }
 
 /// Compile a lisp object.

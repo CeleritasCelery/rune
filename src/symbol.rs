@@ -271,6 +271,7 @@ pub(crate) mod sym {
     use super::GlobalSymbol;
 
     pub(crate) use crate::data::DEFVAR;
+    pub(crate) use crate::alloc::MAKE_CLOSURE;
 
     declare_symbols!(
         FUNCTION => "function",
