@@ -5,7 +5,7 @@ use crate::data;
 use crate::data::Environment;
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use fn_macros::defun;
 
 pub(crate) fn slice_into_list<'ob>(
@@ -80,15 +80,17 @@ pub(crate) fn mapc<'ob>(
     }
 }
 
+fn cons_err() -> anyhow::Error {
+    anyhow!("attempt to modify immutable list")
+}
+
 #[defun]
-pub(crate) fn nreverse(seq: Object) -> Result<Object> {
-    let mut iter = next_mut(seq)?;
+pub(crate) fn nreverse(seq: List) -> Result<Object> {
     let mut prev = Object::NIL;
-    while let Some(tail) = iter {
-        let next = tail.cdr();
-        tail.set_cdr(prev);
-        prev = tail.into();
-        iter = next_mut(next)?;
+    for tail in seq.conses() {
+        let mut_tail = tail?.inner_mut().ok_or_else(cons_err)?;
+        mut_tail.set_cdr(prev);
+        prev = mut_tail.into();
     }
     Ok(prev)
 }
@@ -109,20 +111,12 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     }
 }
 
-fn next_mut(obj: Object) -> Result<Option<&mut Cons>> {
-    match obj {
-        Object::Nil(_) => Ok(None),
-        x => Ok(Some(x.try_into()?)),
-    }
-}
-
 #[defun]
-pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'ob>> {
-    let mut head = list;
-    let mut iter = next_mut(head)?;
+pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+    let mut head = list.into();
     let mut prev: Option<&mut Cons> = None;
-    while let Some(tail) = iter {
-        let next = tail.cdr();
+    for tail in list.conses() {
+        let tail = tail?;
         if data::eq(tail.car(), elt) {
             if let Some(ref mut prev) = prev {
                 prev.set_cdr(tail.cdr());
@@ -130,9 +124,8 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: Object<'ob>) -> Result<Object<'o
                 head = tail.cdr();
             }
         } else {
-            prev = Some(tail);
+            prev = Some(tail.inner_mut().ok_or_else(cons_err)?);
         }
-        iter = next_mut(next)?;
     }
     Ok(head)
 }
@@ -157,7 +150,8 @@ pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>
         Err(_) => true,
     });
     match val {
-        Some(elem) => elem.map(List::Cons),
+        Some(Ok(elem)) => Ok(List::Cons(elem)),
+        Some(Err(e)) => Err(e),
         None => Ok(List::Nil),
     }
 }
@@ -257,11 +251,11 @@ mod test {
     fn test_delq() {
         let arena = &Arena::new();
         let list = list![1, 2, 3, 1, 4, 1; arena];
-        let res = delq(1.into(), list).unwrap();
+        let res = delq(1.into(), list.try_into().unwrap()).unwrap();
         assert_eq!(res, list![2, 3, 4; arena]);
 
         let list = list![true, true, true; arena];
-        let res = delq(Object::TRUE, list).unwrap();
+        let res = delq(Object::TRUE, list.try_into().unwrap()).unwrap();
         assert_eq!(res, Object::NIL);
     }
 
@@ -269,11 +263,11 @@ mod test {
     fn test_nreverse() {
         let arena = &Arena::new();
         let list = list![1, 2, 3, 4; arena];
-        let res = nreverse(list).unwrap().into_obj(arena);
+        let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
         assert_eq!(res, list![4, 3, 2, 1; arena]);
 
         let list = list![1; arena];
-        let res = nreverse(list).unwrap().into_obj(arena);
+        let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
         assert_eq!(res, list![1; arena]);
     }
 
