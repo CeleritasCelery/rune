@@ -300,7 +300,7 @@ impl<'ob> Iterator for ListIterMut<'ob> {
             Some(Ok(x)) => match x.inner_mut() {
                 Some(x) => Some(Ok(x)),
                 None => Some(Err(anyhow::anyhow!("attempt to modify immutable list"))),
-            }
+            },
             Some(Err(e)) => Some(Err(e)),
             None => None,
         }

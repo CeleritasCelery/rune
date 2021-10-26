@@ -3,6 +3,7 @@ use crate::bytecode;
 use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
+use crate::error::{Error, Type};
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
 use anyhow::{bail, Result};
@@ -198,7 +199,6 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 
 #[defun]
 pub(crate) fn length(sequence: Object) -> Result<i64> {
-    use crate::error::{Error, Type};
     let size = match sequence {
         Object::Cons(x) => x.into_iter().len(),
         Object::Vec(x) => x.len(),
@@ -235,6 +235,16 @@ pub(crate) fn puthash<'ob>(
 ) -> Object<'ob> {
     // TODO: Implement
     value
+}
+
+#[defun]
+fn copy_sequence<'ob>(arg: Object<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
+    match arg {
+        Object::String(_) | Object::Vec(_) | Object::Nil(_) | Object::Cons(_) => {
+            Ok(arg.clone_in(arena))
+        }
+        _ => Err(Error::from_object(Type::Sequence, arg).into()),
+    }
 }
 
 #[cfg(test)]
@@ -297,4 +307,5 @@ defsubr!(
     featurep,
     require,
     prin1_to_string,
+    copy_sequence,
 );
