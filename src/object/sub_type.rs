@@ -269,9 +269,9 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 }
 
 #[derive(Clone)]
-pub(crate) struct ListIter<'ob>(List<'ob>);
+pub(crate) struct ListIterData<'ob>(List<'ob>);
 
-impl<'ob> Iterator for ListIter<'ob> {
+impl<'ob> Iterator for ListIterData<'ob> {
     type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -289,18 +289,40 @@ impl<'ob> Iterator for ListIter<'ob> {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct ListIterMut<'ob>(ListIterData<'ob>);
+
+impl<'ob> Iterator for ListIterMut<'ob> {
+    type Item = anyhow::Result<&'ob mut Cons<'ob>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some(Ok(x)) => match x.inner_mut() {
+                Some(x) => Some(Ok(x)),
+                None => Some(Err(anyhow::anyhow!("attempt to modify immutable list"))),
+            }
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
+    }
+}
+
 impl<'ob> IntoIterator for List<'ob> {
     type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
-    type IntoIter = ListIter<'ob>;
+    type IntoIter = ListIterData<'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ListIter(self)
+        ListIterData(self)
     }
 }
 
 impl<'ob> List<'ob> {
-    pub(crate) fn conses(self) -> ListIter<'ob> {
-        self.into_iter()
+    pub(crate) fn conses_mut(self) -> ListIterMut<'ob> {
+        ListIterMut(ListIterData(self))
+    }
+
+    pub(crate) fn conses(self) -> ListIterData<'ob> {
+        ListIterData(self)
     }
 }
 

@@ -85,6 +85,11 @@ pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
 }
 
 #[defun]
+pub(crate) fn equal<'ob>(obj1: Object<'ob>, obj2: Object<'ob>) -> bool {
+    obj1 == obj2
+}
+
+#[defun]
 pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
     match symbol.func() {
         Some(f) => f.into(),
@@ -222,6 +227,7 @@ pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Sym
 
 defsubr!(
     eq,
+    equal,
     set,
     put,
     get,

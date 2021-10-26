@@ -5,7 +5,7 @@ use crate::data;
 use crate::data::Environment;
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use fn_macros::defun;
 
 pub(crate) fn slice_into_list<'ob>(
@@ -80,17 +80,13 @@ pub(crate) fn mapc<'ob>(
     }
 }
 
-fn cons_err() -> anyhow::Error {
-    anyhow!("attempt to modify immutable list")
-}
-
 #[defun]
 pub(crate) fn nreverse(seq: List) -> Result<Object> {
     let mut prev = Object::NIL;
-    for tail in seq.conses() {
-        let mut_tail = tail?.inner_mut().ok_or_else(cons_err)?;
-        mut_tail.set_cdr(prev);
-        prev = mut_tail.into();
+    for tail in seq.conses_mut() {
+        let tail = tail?;
+        tail.set_cdr(prev);
+        prev = tail.into();
     }
     Ok(prev)
 }
@@ -115,45 +111,45 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
 pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&mut Cons> = None;
-    for tail in list.conses() {
+    for tail in list.conses_mut() {
         let tail = tail?;
         if data::eq(tail.car(), elt) {
-            if let Some(ref mut prev) = prev {
+            if let Some(prev) = &mut prev {
                 prev.set_cdr(tail.cdr());
             } else {
                 head = tail.cdr();
             }
         } else {
-            prev = Some(tail.inner_mut().ok_or_else(cons_err)?);
+            prev = Some(tail);
         }
     }
     Ok(head)
 }
 
-#[defun]
-pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
+fn member_of_list<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    eq_fn: fn(Object<'ob>, Object<'ob>) -> bool,
+) -> Result<Object<'ob>> {
     let val = list.conses().find(|x| match x {
-        Ok(obj) => data::eq(obj.car(), elt),
+        Ok(obj) => eq_fn(obj.car(), elt),
         Err(_) => true,
     });
     match val {
-        Some(Ok(elem)) => Ok(List::Cons(elem)),
+        Some(Ok(elem)) => Ok(Object::Cons(elem)),
         Some(Err(e)) => Err(e),
-        None => Ok(List::Nil),
+        None => Ok(Object::NIL),
     }
 }
 
 #[defun]
-pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<List<'ob>> {
-    let val = list.conses().find(|x| match x {
-        Ok(obj) => obj.car() == elt,
-        Err(_) => true,
-    });
-    match val {
-        Some(Ok(elem)) => Ok(List::Cons(elem)),
-        Some(Err(e)) => Err(e),
-        None => Ok(List::Nil),
-    }
+pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+    member_of_list(elt, list, data::eq)
+}
+
+#[defun]
+pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+    member_of_list(elt, list, data::equal)
 }
 
 #[defun]
