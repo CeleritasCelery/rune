@@ -83,6 +83,7 @@ use crate::bytecode::Routine;
 use crate::compile::compile;
 use crate::data::Environment;
 use crate::object::Object;
+use crate::symbol::intern;
 use std::env;
 use std::io::{self, Write};
 
@@ -135,8 +136,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    env.vars.insert(&sym::RUNE_REQUIRED, arena.add(Vec::new()));
+    crate::data::defalias(intern("not"), (&sym::NULL).into(), None).expect("null should be defined");
     let buffer = String::from(
         r#"
 (progn 

@@ -494,8 +494,8 @@ pub(crate) fn eval<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match lexical {
-        Some(Object::True(_)) | None => {}
-        Some(x) => bail!("Only lexical = t is currently supported: found {}", x),
+        Some(Object::True(_) | Object::Nil(_)) | None => {}
+        Some(x) => bail!("lexical enviroments are not yet supported: found {}", x),
     }
     let func = compile(form, env, arena)?;
     Routine::execute(&func, env, arena)

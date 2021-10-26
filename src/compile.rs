@@ -401,10 +401,16 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let mut iter = form.as_list()?;
         let num_binding_forms = match iter.next() {
             // (let x ...)
-            Some(x) => self.let_bind(x?, parallel)?,
+            Some(x) => {
+                if parallel {
+                    self.let_bind_parallel(x?)
+                } else {
+                    self.let_bind_serial(x?)
+                }
+            },
             // (let)
             None => bail!(Error::ArgCount(1, 0)),
-        };
+        }?;
         self.implicit_progn(iter)?;
         // Remove let bindings from the stack
         if num_binding_forms > 0 {
@@ -472,12 +478,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         Ok(cons.car().try_into()?)
     }
 
-    /// Compile all let bindings.
+    /// Compile all `let` bindings.
     /// ```lisp
     /// (let (x y (z a)) ...)
     ///      ^^^^^^^^^^^
     /// ```
-    fn let_bind(&mut self, obj: Object<'ob>, parallel: bool) -> Result<usize> {
+    fn let_bind_parallel(&mut self, obj: Object<'ob>) -> Result<usize> {
         let bindings = obj.as_list()?;
         let mut len = 0;
         let mut let_bindings = Vec::new();
@@ -487,19 +493,11 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 // (let ((x y)))
                 Object::Cons(cons) => {
                     let let_bound_var = self.let_bind_value(!cons)?;
-                    if parallel {
-                        let_bindings.push(Some(let_bound_var));
-                    } else {
-                        let last = self.vars.last_mut();
-                        let tos = last.expect("stack empty after compile form");
-                        *tos = Some(let_bound_var);
-                    }
+                    let_bindings.push(Some(let_bound_var));
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    if parallel {
-                        let_bindings.push(Some(!sym));
-                    }
+                    let_bindings.push(Some(!sym));
                     self.const_ref(Object::NIL, Some(!sym))?;
                 },
                 _ => bail!(Error::from_object(Type::Cons, binding)),
@@ -507,13 +505,38 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             len += 1;
         }
         // bind all parallel bindings
-        if parallel {
-            let num_unbound_vars = let_bindings.len();
-            let stack_size = self.vars.len();
-            debug_assert!(stack_size >= num_unbound_vars);
-            let binding_start = stack_size - num_unbound_vars;
-            self.vars.drain(binding_start..);
-            self.vars.append(&mut let_bindings);
+        let num_unbound_vars = let_bindings.len();
+        let stack_size = self.vars.len();
+        debug_assert!(stack_size >= num_unbound_vars);
+        let binding_start = stack_size - num_unbound_vars;
+        self.vars.drain(binding_start..);
+        self.vars.append(&mut let_bindings);
+        Ok(len)
+    }
+
+    /// Compile all `let*` bindings.
+    /// ```lisp
+    /// (let* (x y (z a)) ...)
+    ///      ^^^^^^^^^^^
+    /// ```
+    fn let_bind_serial(&mut self, obj: Object<'ob>) -> Result<usize> {
+        let bindings = obj.as_list()?;
+        let mut len = 0;
+        for binding in bindings {
+            let binding = binding?;
+            match binding {
+                // (let ((x y)))
+                Object::Cons(cons) => {
+                    let let_bound_var = self.let_bind_value(!cons)?;
+                    let last = self.vars.last_mut();
+                    let tos = last.expect("stack empty after compile form");
+                    *tos = Some(let_bound_var);
+                }
+                // (let (x))
+                Object::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
+                _ => bail!(Error::from_object(Type::Cons, binding)),
+            }
+            len += 1;
         }
         Ok(len)
     }

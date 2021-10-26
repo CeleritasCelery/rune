@@ -374,6 +374,7 @@ pub(crate) mod sym {
     pub(crate) use crate::alloc::MAKE_CLOSURE;
     pub(crate) use crate::data::DEFALIAS;
     pub(crate) use crate::data::DEFVAR;
+    pub(crate) use crate::data::NULL;
 
     declare_symbols!(
         FUNCTION => "function",
