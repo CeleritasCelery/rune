@@ -73,14 +73,21 @@ pub(crate) fn load_internal<'ob>(
                 bail!(e);
             }
         };
-        println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
-        println!("-----READ END-----");
-        println!("-----compiling-----");
+        if crate::debug::debug_enabled() {
+            println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
+            println!("-----READ END-----");
+            println!("-----compiling-----");
+        }
         // this will go out of scope
         let exp = compile(obj, env, arena)?;
-        println!("-----running-----");
+
+        if crate::debug::debug_enabled() {
+            println!("-----running-----");
+        }
         Routine::execute(&exp, env, arena)?;
-        println!("-----run complete-----");
+        if crate::debug::debug_enabled() {
+            println!("-----run complete-----");
+        }
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }

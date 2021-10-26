@@ -336,6 +336,7 @@ lazy_static! {
                 crate::lread::DEFSUBR,
                 crate::data::DEFSUBR,
                 crate::fns::DEFSUBR,
+                crate::search::DEFSUBR,
                 crate::eval::DEFSUBR,
                 crate::alloc::DEFSUBR,
                 crate::keymap::DEFSUBR,

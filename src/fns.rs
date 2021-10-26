@@ -116,13 +116,14 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     }
 }
 
-#[defun]
-pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+type EqFunc = for<'ob> fn(Object<'ob>, Object<'ob>) -> bool;
+
+fn delete_from_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
     for tail in list.conses() {
         let tail = tail?;
-        if data::eq(tail.car(), elt) {
+        if eq_fn(tail.car(), elt) {
             if let Some(prev) = &mut prev {
                 prev.set_cdr(tail.cdr())?;
             } else {
@@ -137,26 +138,18 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>
 
 #[defun]
 pub(crate) fn delete<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
-    let mut head = list.into();
-    let mut prev: Option<&'ob Cons> = None;
-    for tail in list.conses() {
-        let tail = tail?;
-        if data::equal(tail.car(), elt) {
-            if let Some(prev) = &mut prev {
-                prev.set_cdr(tail.cdr())?;
-            } else {
-                head = tail.cdr();
-            }
-        } else {
-            prev = Some(tail);
-        }
-    }
-    Ok(head)
+    delete_from_list(elt, list, data::equal)
 }
+
+#[defun]
+pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+    delete_from_list(elt, list, data::eq)
+}
+
 fn member_of_list<'ob>(
     elt: Object<'ob>,
     list: List<'ob>,
-    eq_fn: fn(Object<'ob>, Object<'ob>) -> bool,
+    eq_fn: EqFunc,
 ) -> Result<Object<'ob>> {
     let val = list.conses().find(|x| match x {
         Ok(obj) => eq_fn(obj.car(), elt),

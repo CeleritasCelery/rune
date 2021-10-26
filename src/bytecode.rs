@@ -205,7 +205,9 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        println!("calling: {}", sym.name);
+        if crate::debug::debug_enabled() {
+            print!("calling: ({} ", sym.name);
+        }
         match sym.resolved_callable(env, arena)? {
             Some(func) => match func {
                 Callable::LispFn(func) => self.call_lisp(!func, arg_cnt, arena),
@@ -225,6 +227,12 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         let total_args = self.prepare_lisp_args(func, arg_cnt, arena)?;
         self.call_frames.push(self.frame.clone());
         let tmp = self.stack.from_end(total_args as usize);
+        if crate::debug::debug_enabled() {
+            for i in tmp..=self.stack.len() {
+                print!("{} ", i);
+            }
+            println!(")");
+        }
         self.frame = CallFrame::new(&func.body, tmp);
         Ok(())
     }
@@ -241,6 +249,12 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         let total_args = (arg_cnt + fill_args) as usize;
         let i = self.stack.from_end(total_args);
         let slice = self.stack.take_slice(total_args);
+        if crate::debug::debug_enabled() {
+            for i in slice {
+                print!("{} ", i);
+            }
+            println!(")");
+        }
         let result = (func.subr)(slice, env, arena)?;
         self.stack[i] = result;
         self.stack.truncate(i + 1);
@@ -534,6 +548,7 @@ mod test {
     fn let_form() {
         test_eval!("(let ((foo 5) (bar 8)) (+ foo bar))", 13);
         test_eval!("(let ((foo 5) (bar 8)) (+ 1 bar))", 9);
+        test_eval!("(let ((foo 5)) (let ((baz foo) bob guz) baz))", 5);
     }
 
     #[test]

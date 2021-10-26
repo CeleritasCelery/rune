@@ -454,8 +454,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// Compile the value of a let binding.
     /// ```lisp
-    /// (let ((var (val))) ...)
-    ///            ^^^^^
+    /// (let ((var (val)) ...) ...)
+    ///       ^^^^^^^^^^^
+    /// (let ((var val) ...) ...)
+    ///       ^^^^^^^^^
     /// ```
     fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<Symbol> {
         let mut iter = cons.cdr().as_list()?;
@@ -494,11 +496,17 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     }
                 }
                 // (let (x))
-                Object::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
+                Object::Symbol(sym) => {
+                    if parallel {
+                        let_bindings.push(Some(!sym));
+                    }
+                    self.const_ref(Object::NIL, Some(!sym))?;
+                },
                 _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
         }
+        // bind all parallel bindings
         if parallel {
             let num_unbound_vars = let_bindings.len();
             let stack_size = self.vars.len();
@@ -551,7 +559,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         args: Object<'ob>,
         body: Function<'ob>,
     ) -> Result<Object<'ob>> {
-        println!("compiling macro : {}", name);
+        if crate::debug::debug_enabled() {
+            println!("compiling macro : {}", name);
+        }
         let arena = self.arena;
         let mut arg_list = vec![];
         for arg in args.as_list()? {
@@ -568,7 +578,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_func_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
-        println!("compiling call : {}", func);
+        if crate::debug::debug_enabled() {
+            println!("compiling call : {}", func);
+        }
         self.const_ref(func.into_obj(self.arena), None)?;
         let args = args.as_list()?;
         let mut num_args = 0;
@@ -1116,6 +1128,11 @@ mod test {
             "(let ((foo 1)) foo)",
             [Constant0, StackRef0, DiscardNKeepTOS, 1, Ret],
             [1]
+        );
+        check_compiler!(
+            "(let ((foo 1)) (let ((bar foo) baz) bar))",
+            [Constant0, StackRef0, Constant1, StackRef1, DiscardNKeepTOS, 2, DiscardNKeepTOS, 1, Ret],
+            [1, false]
         );
         check_compiler!("foo", [VarRef0, Ret], [&sym::test::FOO]);
         check_compiler!("(progn)", [Constant0, Ret], [false]);
