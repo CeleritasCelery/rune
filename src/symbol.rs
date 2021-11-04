@@ -72,6 +72,7 @@ impl GlobalSymbol {
             Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
             Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
             Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
+            Some(FuncCell::Uncompiled(x)) => Some(Callable::Uncompiled(x)),
             None => None,
         }
     }

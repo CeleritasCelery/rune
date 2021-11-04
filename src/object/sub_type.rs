@@ -73,6 +73,7 @@ pub(crate) enum FuncCell<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Cons<'ob>>),
+    Uncompiled(Data<&'ob Cons<'ob>>),
     Symbol(Data<Symbol>),
 }
 
@@ -104,7 +105,7 @@ impl<'ob> From<FuncCell<'ob>> for Object<'ob> {
         match x {
             FuncCell::LispFn(x) => Object::LispFn(x),
             FuncCell::SubrFn(x) => Object::SubrFn(x),
-            FuncCell::Macro(x) => Object::Cons(x),
+            FuncCell::Macro(x) | FuncCell::Uncompiled(x) => Object::Cons(x),
             FuncCell::Symbol(x) => Object::Symbol(x),
         }
     }
@@ -127,7 +128,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
         match self {
             Some(FuncCell::LispFn(x)) => Object::LispFn(x),
             Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
-            Some(FuncCell::Macro(x)) => Object::Cons(x),
+            Some(FuncCell::Macro(x) | FuncCell::Uncompiled(x)) => Object::Cons(x),
             Some(FuncCell::Symbol(x)) => Object::Symbol(x),
             None => Object::NIL,
         }
@@ -140,6 +141,7 @@ impl<'a> FuncCell<'a> {
             FuncCell::LispFn(x) => x.clone_in(arena).into_obj(arena),
             FuncCell::SubrFn(x) => x.into_obj(arena),
             FuncCell::Macro(x) => x.clone_in(arena).into_obj(arena),
+            FuncCell::Uncompiled(x) => x.clone_in(arena).into_obj(arena),
             FuncCell::Symbol(x) => (!x).into(),
         }
     }
@@ -151,6 +153,7 @@ pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Cons<'ob>>),
+    Uncompiled(Data<&'ob Cons<'ob>>),
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -158,7 +161,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
         match x {
             Callable::LispFn(x) => Object::LispFn(x),
             Callable::SubrFn(x) => Object::SubrFn(x),
-            Callable::Macro(x) => Object::Cons(x),
+            Callable::Macro(x) | Callable::Uncompiled(x) => Object::Cons(x),
         }
     }
 }

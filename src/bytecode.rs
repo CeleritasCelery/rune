@@ -210,6 +210,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             Some(func) => match func {
                 Callable::LispFn(func) => self.call_lisp(!func, arg_cnt, arena),
                 Callable::SubrFn(func) => self.call_subr(*func, arg_cnt, env, arena),
+                Callable::Uncompiled(_) => unimplemented!("need to implement dynamic compiling"),
                 Callable::Macro(_) => Err(anyhow!("Attempt to call macro {} at runtime", sym.name)),
             },
             None => Err(anyhow!(Error::VoidFunction(sym))),
