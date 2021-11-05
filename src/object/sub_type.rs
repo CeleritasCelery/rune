@@ -140,8 +140,7 @@ impl<'a> FuncCell<'a> {
         match self {
             FuncCell::LispFn(x) => x.clone_in(arena).into_obj(arena),
             FuncCell::SubrFn(x) => x.into_obj(arena),
-            FuncCell::Macro(x) => x.clone_in(arena).into_obj(arena),
-            FuncCell::Uncompiled(x) => x.clone_in(arena).into_obj(arena),
+            FuncCell::Macro(x) | FuncCell::Uncompiled(x) => x.clone_in(arena).into_obj(arena),
             FuncCell::Symbol(x) => (!x).into(),
         }
     }

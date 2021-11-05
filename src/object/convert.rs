@@ -34,7 +34,9 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
         match obj {
             Callable::LispFn(x) => Ok(Function::LispFn(x)),
             Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Callable::Uncompiled(_) => unimplemented!("need to determine how this conversion will work"),
+            Callable::Uncompiled(_) => {
+                unimplemented!("need to determine how this conversion will work")
+            }
             Callable::Macro(_) => Err(anyhow!("Macros are invalid as functions")),
         }
     }

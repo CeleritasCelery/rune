@@ -97,8 +97,8 @@ impl fmt::Display for GlobalSymbol {
     }
 }
 
-pub(crate) struct SymbolMap {
-    map: InnerSymbolMap,
+pub(crate) struct ObjectMap {
+    map: SymbolMap,
     arena: Arena,
 }
 
@@ -133,11 +133,11 @@ impl Drop for SymbolBox {
     }
 }
 
-struct InnerSymbolMap {
+struct SymbolMap {
     map: HashMap<&'static str, SymbolBox>,
 }
 
-impl InnerSymbolMap {
+impl SymbolMap {
     fn with_capacity(cap: usize) -> Self {
         Self {
             map: HashMap::with_capacity_and_hasher(cap, std::hash::BuildHasherDefault::default()),
@@ -179,7 +179,7 @@ impl InnerSymbolMap {
     }
 }
 
-impl SymbolMap {
+impl ObjectMap {
     pub(crate) fn intern(&mut self, name: &str) -> Symbol {
         self.map.intern(name)
     }
@@ -199,22 +199,20 @@ impl SymbolMap {
 }
 
 macro_rules! create_symbolmap {
-    (SUBR => {$($subr:expr),+ $(,)?}
-     SYMBOLS => {$($symbols:ident),+ $(,)?}
-     TEST_SYMBOLS => {$($test_symbols:ident),+ $(,)?}
+    (SUBR => {$($subr:expr),* $(,)?}
+     SYMBOLS => {$($symbols:ident),* $(,)?}
+     TEST_SYMBOLS => {$($test_symbols:ident),* $(,)?}
     ) => ({
-        let size: usize = count!($($symbols)+) $(+ $subr.len())+;
-        let mut map = InnerSymbolMap::with_capacity(size);
+        let size: usize = count!($($symbols)*) $(+ $subr.len())*;
+        let mut map = SymbolMap::with_capacity(size);
         $(for (func, sym) in $subr.iter() {
-            let cell: FuncCell = func.into();
-            let val = unsafe { std::mem::transmute(cell) };
-            sym.func.store(val, Ordering::Release);
+            unsafe { sym.set_func(func.into()); }
             map.pre_init(sym);
-        })+;
-        $(map.pre_init(&sym::$symbols);)+
+        })*;
+        $(map.pre_init(&sym::$symbols);)*
         #[cfg(test)]
         {
-            $(map.pre_init(&sym::test::$test_symbols);)+
+            $(map.pre_init(&sym::test::$test_symbols);)*
         }
         map
     })
@@ -227,7 +225,7 @@ macro_rules! declare_symbols {
 }
 
 lazy_static! {
-    pub(crate) static ref INTERNED_SYMBOLS: Mutex<SymbolMap> = Mutex::new({
+    pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
         let map = create_symbolmap!(
             SUBR => {
                 crate::arith::DEFSUBR,
@@ -253,7 +251,7 @@ lazy_static! {
                 FOO, BAR, BAZ
             }
         );
-        SymbolMap {
+        ObjectMap {
             map,
             arena: Arena::new(),
         }
