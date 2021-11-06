@@ -135,12 +135,12 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
     let buffer = String::from(
         r#"
-(progn (load "lisp/byte-run.el")
-       (load "lisp/backquote.el")
-       (load "lisp/byte-run.el")
-       (load "lisp/subr.el")
-       (load "lisp/macroexp.el")
-       (load "lisp/cl-lib.el")
+(progn 
+    (load "lisp/byte-run.el")
+    (load "lisp/backquote.el")
+    (load "lisp/byte-run.el")
+    (load "lisp/subr.el")
+    (load "lisp/macroexp.el")
 )"#,
     );
     match crate::lread::load_internal(&buffer, arena, env) {

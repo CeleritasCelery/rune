@@ -7,7 +7,7 @@ use crate::reader;
 use crate::symbol::Symbol;
 use fn_macros::defun;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 
 use std::fs;
 
@@ -88,7 +88,8 @@ pub(crate) fn load_internal<'ob>(
 
 #[defun]
 pub(crate) fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
-    let file_contents = fs::read_to_string(file)?;
+    let file_contents =
+        fs::read_to_string(file).with_context(|| format!("Couldn't open file {}", file))?;
     load_internal(&file_contents, arena, env)
 }
 

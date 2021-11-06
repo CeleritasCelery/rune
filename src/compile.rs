@@ -390,7 +390,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) => self.compile_sexp(&*cons),
+                Object::Cons(cons) => match cons.car() {
+                    Object::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
+                    _ => self.const_ref(Object::Cons(cons), None),
+                },
                 sym => self.const_ref(sym, None),
             }
         } else {
@@ -868,7 +871,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let forms = cons.cdr();
         match cons.car() {
             Object::Symbol(form) => symbol_match! {!form;
-                LAMBDA => self.compile_lambda(forms),
                 WHILE => self.compile_loop(forms),
                 QUOTE => self.quote(forms),
                 BACKQUOTE => self.backquote(forms),
@@ -1366,7 +1368,13 @@ mod test {
         let obj = read(sexp, comp_arena).unwrap().0;
         let env = &mut Environment::default();
         let lambda = match obj {
-            Object::Cons(cons) => cons.cdr(),
+            Object::Cons(function) => match function.cdr() {
+                Object::Cons(lambda) => match lambda.car() {
+                    Object::Cons(body) => body.cdr(),
+                    x => panic!("expected cons, found {}", x),
+                },
+                x => panic!("expected cons, found {}", x),
+            },
             x => panic!("expected cons, found {}", x),
         };
         assert_eq!(compile_lambda(lambda, env, comp_arena).unwrap(), func);
@@ -1376,54 +1384,56 @@ mod test {
     fn lambda() {
         let arena = &Arena::new();
         let env = &mut Environment::default();
-        check_lambda("(lambda)", LispFn::default(), arena);
-        check_lambda("(lambda ())", LispFn::default(), arena);
-        check_lambda("(lambda () nil)", LispFn::default(), arena);
+        check_lambda("#'(lambda)", LispFn::default(), arena);
+        check_lambda("#'(lambda ())", LispFn::default(), arena);
+        check_lambda("#'(lambda () nil)", LispFn::default(), arena);
 
         check_lambda(
-            "(lambda () 1)",
+            "#'(lambda () 1)",
             LispFn::new(vec_into![Constant0, Ret].into(), vec_into![1], 0, 0, false),
             arena,
         );
 
         check_lambda(
-            "(lambda (x) x)",
+            "#'(lambda (x) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
 
         check_lambda(
-            "(lambda (x &optional) x)",
+            "#'(lambda (x &optional) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
         check_lambda(
-            "(lambda (x &optional y) x)",
+            "#'(lambda (x &optional y) x)",
             LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
             arena,
         );
         check_lambda(
-            "(lambda (x &optional y z) y)",
+            "#'(lambda (x &optional y z) y)",
             LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 3, false),
             arena,
         );
         check_lambda(
-            "(lambda (x &optional y &optional z) z)",
+            "#'(lambda (x &optional y &optional z) z)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 3, false),
             arena,
         );
         check_lambda(
-            "(lambda (x &rest) x)",
+            "#'(lambda (x &rest) x)",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
             arena,
         );
         check_lambda(
-            "(lambda (x &rest y) y)",
+            "(function (lambda (x &rest y) y))",
             LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, true),
             arena,
         );
 
-        let obj = read("(lambda (x &rest y z) y)", arena).unwrap().0;
+        let obj = read("(function (lambda (x &rest y z) y))", arena)
+            .unwrap()
+            .0;
         assert!(compile(obj, env, arena)
             .err()
             .unwrap()
@@ -1431,7 +1441,7 @@ mod test {
             .is_ok());
 
         check_lambda(
-            "(lambda (x y) (+ x y))",
+            "(function (lambda (x y) (+ x y)))",
             LispFn::new(
                 vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
                 vec_into![intern("+")],
@@ -1443,7 +1453,7 @@ mod test {
         );
 
         check_error(
-            "(lambda (x 1) x)",
+            "(function (lambda (x 1) x))",
             Error::from_object(Type::Symbol, 1.into()),
         );
     }
@@ -1458,7 +1468,7 @@ mod test {
             false,
         );
         check_compiler!(
-            "(let ((x 1)(y 2)) (lambda () x))",
+            "(let ((x 1)(y 2)) #'(lambda () x))",
             [
                 Constant0,
                 Constant1,
@@ -1483,7 +1493,7 @@ mod test {
             false,
         );
         check_compiler!(
-            "(let ((x 1)(y 2)) (lambda () (+ y x)))",
+            "(let ((x 1)(y 2)) #'(lambda () (+ y x)))",
             [
                 Constant0,
                 Constant1,

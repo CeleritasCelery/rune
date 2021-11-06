@@ -627,7 +627,7 @@ mod test {
 
         test_eval!(
             "(progn
-                 (defalias 'test-jump (lambda (name arglist &optional docstring &rest body)
+                 (defalias 'test-jump #'(lambda (name arglist &optional docstring &rest body)
                      (if docstring nil nil)
                      (+ arglist name)))
                  (test-jump 1 2 3 4))",
