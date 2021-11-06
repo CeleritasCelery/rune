@@ -66,14 +66,28 @@ impl GlobalSymbol {
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolved_func<'a>(&self) -> Option<Callable<'a>> {
+    pub(crate) fn resolved_func<'a>(&self) -> anyhow::Result<Option<Callable<'a>>> {
         match self.func() {
             Some(FuncCell::Symbol(sym)) => sym.resolved_func(),
-            Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
-            Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
-            Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
-            Some(FuncCell::Uncompiled(x)) => Some(Callable::Uncompiled(x)),
-            None => None,
+            Some(FuncCell::LispFn(x)) => Ok(Some(Callable::LispFn(x))),
+            Some(FuncCell::SubrFn(x)) => Ok(Some(Callable::SubrFn(x))),
+            Some(FuncCell::Macro(x)) => Ok(Some(Callable::Macro(x))),
+            Some(FuncCell::Uncompiled(obj)) => {
+                {
+                    let arena = crate::arena::Arena::new();
+                    let env = &mut crate::data::Environment::new();
+                    let obj: Object = unsafe { std::mem::transmute(Object::Cons(obj)) };
+                    let func = crate::compile::compile_lambda(obj, env, &arena)?;
+                    let cell: FuncCell = arena.add(func);
+                    INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
+                }
+                if let Some(FuncCell::LispFn(func)) = self.func() {
+                    Ok(Some(Callable::LispFn(func)))
+                } else {
+                    unreachable!("type was not the type we just inserted");
+                }
+            }
+            None => Ok(None),
         }
     }
 
@@ -184,7 +198,7 @@ impl ObjectMap {
         self.map.intern(name)
     }
 
-    pub(crate) fn set_func(&self, symbol: Symbol, func: FuncCell) {
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
         let mut obj: Object = func.clone_in(&self.arena);
         obj.make_read_only();
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");

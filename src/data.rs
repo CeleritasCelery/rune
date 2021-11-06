@@ -13,6 +13,16 @@ pub(crate) struct Environment<'ob> {
     pub(crate) macro_callstack: Vec<Symbol>,
 }
 
+impl<'ob> Environment<'ob> {
+    pub(crate) fn new() -> Self {
+        Self {
+            vars: HashMap::default(),
+            props: HashMap::default(),
+            macro_callstack: Vec::new(),
+        }
+    }
+}
+
 pub(crate) fn set_global_function(symbol: Symbol, func: FuncCell) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
     map.set_func(symbol, func);
@@ -20,7 +30,7 @@ pub(crate) fn set_global_function(symbol: Symbol, func: FuncCell) {
 
 #[defun]
 pub(crate) fn fset(symbol: Symbol, definition: Object) -> Result<Symbol> {
-    if matches!(definition, Object::Nil(_)) {
+    if definition == Object::NIL {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
@@ -209,13 +219,13 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function(object: Object) -> Object {
+pub(crate) fn indirect_function(object: Object) -> Result<Object> {
     match object {
-        Object::Symbol(sym) => match sym.resolved_func() {
-            Some(func) => func.into(),
-            None => Object::NIL,
+        Object::Symbol(sym) => match sym.resolved_func()? {
+            Some(func) => Ok(func.into()),
+            None => Ok(Object::NIL),
         },
-        x => x,
+        x => Ok(x),
     }
 }
 

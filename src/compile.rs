@@ -618,7 +618,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         if let Object::Symbol(name) = func {
-            if let Some(Callable::Macro(cons)) = name.resolved_func() {
+            if let Some(Callable::Macro(cons)) = name.resolved_func()? {
                 let form = self.compile_macro_call(!name, args, cons.cdr())?;
                 return self.compile_form(form);
             }

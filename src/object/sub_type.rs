@@ -152,7 +152,6 @@ pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Cons<'ob>>),
-    Uncompiled(Data<&'ob Cons<'ob>>),
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -160,7 +159,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
         match x {
             Callable::LispFn(x) => Object::LispFn(x),
             Callable::SubrFn(x) => Object::SubrFn(x),
-            Callable::Macro(x) | Callable::Uncompiled(x) => Object::Cons(x),
+            Callable::Macro(x) => Object::Cons(x),
         }
     }
 }
