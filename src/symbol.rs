@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Object};
+use crate::object::{Callable, FuncCell, Macro, Object};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -88,6 +88,34 @@ impl GlobalSymbol {
                 }
             }
             None => Ok(None),
+        }
+    }
+
+    pub(crate) fn as_macro<'a>(&self) -> anyhow::Result<Option<&'a Macro<'a>>> {
+        match self.func() {
+            Some(FuncCell::Symbol(sym)) => sym.as_macro(),
+            Some(FuncCell::Macro(x)) => Ok(Some(!x)),
+            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
+                Object::Symbol(sym) if sym == &sym::MACRO => {
+                    let arena = crate::arena::Arena::new();
+                    let cell = {
+                        let env = &mut crate::data::Environment::new();
+                        let obj: Object = unsafe { std::mem::transmute(obj.cdr()) };
+                        let func = crate::compile::compile_lambda(obj, env, &arena)?;
+                        let sym: Object = (&sym::MACRO).into();
+                        let cons: Object = cons!(sym, func; arena);
+                        cons.try_into().expect("conversion should be infallible")
+                    };
+                    INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
+                    if let Some(FuncCell::Macro(func)) = self.func() {
+                        Ok(Some(!func))
+                    } else {
+                        unreachable!("type was not the type we just inserted");
+                    }
+                }
+                _ => Ok(None),
+            },
+            Some(_) | None => Ok(None),
         }
     }
 
@@ -255,7 +283,7 @@ lazy_static! {
             SYMBOLS => {
                 FUNCTION, QUOTE, UNQUOTE, BACKQUOTE,
                 NIL, TRUE, AND_OPTIONAL, AND_REST,
-                LAMBDA, WHILE, PROGN, PROG1,
+                LAMBDA, MACRO, WHILE, PROGN, PROG1,
                 PROG2, SETQ, DEFCONST, COND,
                 LET, LET_STAR, IF, AND, OR,
                 LEXICAL_BINDING, SYSTEM_TYPE,

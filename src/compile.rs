@@ -11,7 +11,7 @@ use crate::bytecode;
 use crate::cons::{Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::object::{Callable, Expression, IntoObject, LispFn, Object};
+use crate::object::{Expression, Function, IntoObject, LispFn, Object};
 use crate::opcode::{CodeVec, OpCode};
 use crate::symbol::{sym, Symbol};
 use anyhow::{anyhow, bail, ensure, Result};
@@ -29,10 +29,6 @@ pub(crate) enum CompError {
     /// The stack reference index is a u16, so if stack grows larger then
     /// U16_MAX in a single function call it will trigger this error
     StackSizeOverflow,
-    /// Recursive Macro's are not supported in the bootsrap compiler
-    RecursiveMacro,
-    /// Expected a function object, but found a different type for a macro call
-    InvalidMacro(Box<str>),
     /// Expected a function object, but found a different type for a function call
     InvalidFunction(Box<str>),
 }
@@ -43,8 +39,6 @@ impl Display for CompError {
             CompError::ConstOverflow => write!(f, "Too many constants declared in fuction"),
             CompError::LetValueCount => write!(f, "Let forms can only have 1 value"),
             CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
-            CompError::RecursiveMacro => write!(f, "Recursive macros are not supported"),
-            CompError::InvalidMacro(x) => write!(f, "Invalid macro type: {}", x),
             CompError::InvalidFunction(x) => write!(f, "Invalid Function : {}", x),
         }
     }
@@ -553,7 +547,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         &mut self,
         name: Symbol,
         args: Object<'ob>,
-        body: Object<'ob>,
+        body: Function<'ob>,
     ) -> Result<Object<'ob>> {
         println!("compiling macro : {}", name);
         let arena = self.arena;
@@ -562,39 +556,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             arg_list.push(arg?);
         }
         match body {
-            Object::LispFn(lisp_macro) => {
+            Function::LispFn(lisp_macro) => {
                 bytecode::call_lisp(&lisp_macro, arg_list, self.env, arena)
             }
-            Object::SubrFn(lisp_macro) => {
+            Function::SubrFn(lisp_macro) => {
                 bytecode::call_subr(*lisp_macro, arg_list, self.env, arena)
             }
-            Object::Cons(macro_form) => {
-                if self.env.macro_callstack.iter().any(|&x| x == name) {
-                    bail!(CompError::RecursiveMacro);
-                }
-                self.env.macro_callstack.push(name);
-
-                let lisp_macro = {
-                    let func_ident: Symbol = macro_form.car().try_into()?;
-                    symbol_match! { func_ident;
-                        LAMBDA => compile_lambda(macro_form.cdr(), self.env, arena)?,
-                        @ bad_function => bail!(CompError::InvalidFunction(bad_function.to_string().into())),
-                    }
-                };
-                self.env.macro_callstack.pop();
-                let func = arena.add(lisp_macro);
-                let def = cons!(&sym::MACRO, func; arena);
-                crate::data::set_global_function(
-                    name,
-                    def.try_into().expect("Type should be a valid macro"),
-                );
-                if let Object::LispFn(func) = func {
-                    bytecode::call_lisp(&func, arg_list, self.env, arena)
-                } else {
-                    unreachable!("Compiled function was not lisp fn");
-                }
-            }
-            x => bail!(CompError::InvalidMacro(x.to_string().into())),
         }
     }
 
@@ -620,13 +587,16 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
-        if let Object::Symbol(name) = func {
-            if let Some(Callable::Macro(cons)) = name.resolved_func()? {
-                let form = self.compile_macro_call(!name, args, cons.cdr())?;
-                return self.compile_form(form);
-            }
+        match func {
+            Object::Symbol(name) => match name.as_macro()? {
+                Some(lisp_macro) => {
+                    let form = self.compile_macro_call(!name, args, lisp_macro.get())?;
+                    self.compile_form(form)
+                }
+                None => self.compile_func_call(func, args),
+            },
+            _ => self.compile_func_call(func, args),
         }
-        self.compile_func_call(func, args)
     }
 
     /// Emit a jump instruction and reserve a offset placeholder.
@@ -1044,9 +1014,17 @@ pub(crate) fn compile_lambda<'ob>(
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
 ) -> Result<LispFn<'ob>> {
-    let (upvalues, func) = compile_closure(obj, None, env, arena)?;
-    debug_assert!(upvalues.is_empty());
-    Ok(func)
+    match obj {
+        Object::Cons(sexp) => match sexp.car() {
+            Object::Symbol(sym) if sym == &sym::LAMBDA => {
+                let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
+                debug_assert!(upvalues.is_empty());
+                Ok(func)
+            }
+            x => Err(anyhow!(CompError::InvalidFunction(x.to_string().into()))),
+        },
+        x => Err(anyhow!(CompError::InvalidFunction(x.to_string().into()))),
+    }
 }
 
 /// Compile a lisp object.
@@ -1369,10 +1347,7 @@ mod test {
         let env = &mut Environment::default();
         let lambda = match obj {
             Object::Cons(function) => match function.cdr() {
-                Object::Cons(lambda) => match lambda.car() {
-                    Object::Cons(body) => body.cdr(),
-                    x => panic!("expected cons, found {}", x),
-                },
+                Object::Cons(lambda) => lambda.car(),
                 x => panic!("expected cons, found {}", x),
             },
             x => panic!("expected cons, found {}", x),

@@ -136,6 +136,16 @@ where
     }
 }
 
+impl<T> PartialEq<T> for Data<T>
+where
+    T: PartialEq + Copy,
+    Data<T>: Inner<T>,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.inner() == *other
+    }
+}
+
 impl PartialEq for Data<()> {
     fn eq(&self, _: &Self) -> bool {
         true

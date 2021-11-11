@@ -41,15 +41,9 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
 
 impl<'ob> From<&'ob Cons<'ob>> for FuncCell<'ob> {
     fn from(cons: &'ob Cons<'ob>) -> Self {
-        match cons.car() {
-            Object::Symbol(sym) if sym.name == "macro" => {
-                if matches!(cons.cdr(), Object::LispFn(_)) {
-                    FuncCell::Macro(Data::from_ref(cons))
-                } else {
-                    FuncCell::Uncompiled(Data::from_ref(cons))
-                }
-            }
-            _ => FuncCell::Uncompiled(Data::from_ref(cons)),
+        match cons.try_into() {
+            Ok(x) => FuncCell::Macro(Data::from_ref(x)),
+            Err(_) => FuncCell::Uncompiled(Data::from_ref(cons)),
         }
     }
 }

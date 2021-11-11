@@ -145,14 +145,6 @@ impl<'ob> Object<'ob> {
     }
 }
 
-// pub(crate) fn into_iter(obj: Object) -> Result<ElemIter> {
-//     match obj {
-//         Object::Cons(cons) => Ok((!cons).into_iter()),
-//         Object::Nil(_) => Ok(ElemIter(None)),
-//         _ => Err(Error::from_object(Type::List, obj).into()),
-//     }
-// }
-
 impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
     pub(crate) fn is_empty(&self) -> bool {
         self.0 == None
