@@ -24,14 +24,14 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
 impl<'ob> IntoObject<'ob, Function<'ob>> for LispFn<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         let rf = arena.alloc_lisp_fn(self);
-        Function::LispFn(Data::from_mut_ref(rf))
+        Function::LispFn(Data::from_ref(rf))
     }
 }
 
 impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
         let rf = arena.alloc_subr_fn(self);
-        Function::SubrFn(Data::from_mut_ref(rf))
+        Function::SubrFn(Data::from_ref(rf))
     }
 }
 
@@ -207,7 +207,7 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for i64 {
 impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
         let rf = arena.alloc_f64(self);
-        Number::Float(Data::from_mut_ref(rf))
+        Number::Float(Data::from_ref(rf))
     }
 }
 
@@ -279,7 +279,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 pub(crate) struct ListIterData<'ob>(List<'ob>);
 
 impl<'ob> Iterator for ListIterData<'ob> {
-    type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
+    type Item = anyhow::Result<&'ob Cons<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
@@ -290,32 +290,14 @@ impl<'ob> Iterator for ListIterData<'ob> {
                     Object::Nil(_) => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Some(Ok(cons))
+                Some(Ok(!cons))
             }
         }
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct ListIterMut<'ob>(ListIterData<'ob>);
-
-impl<'ob> Iterator for ListIterMut<'ob> {
-    type Item = anyhow::Result<&'ob mut Cons<'ob>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(Ok(x)) => match x.inner_mut() {
-                Some(x) => Some(Ok(x)),
-                None => Some(Err(anyhow::anyhow!("attempt to modify immutable list"))),
-            },
-            Some(Err(e)) => Some(Err(e)),
-            None => None,
-        }
-    }
-}
-
 impl<'ob> IntoIterator for List<'ob> {
-    type Item = anyhow::Result<Data<&'ob Cons<'ob>>>;
+    type Item = anyhow::Result<&'ob Cons<'ob>>;
     type IntoIter = ListIterData<'ob>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -324,10 +306,6 @@ impl<'ob> IntoIterator for List<'ob> {
 }
 
 impl<'ob> List<'ob> {
-    pub(crate) fn conses_mut(self) -> ListIterMut<'ob> {
-        ListIterMut(ListIterData(self))
-    }
-
     pub(crate) fn conses(self) -> ListIterData<'ob> {
         ListIterData(self)
     }

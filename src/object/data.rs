@@ -50,53 +50,23 @@ impl<T> Data<T> {
 }
 
 impl<'a, T> Data<&'a T> {
-    /// mark the pointer as immutable. This is done by shifting
-    /// the value and setting the LSB to 1.
-    fn immut_bit_pattern(ptr: *const T) -> i64 {
-        ((ptr as i64) << 1) | 0x1
-    }
-
-    fn mut_bit_pattern(ptr: *const T) -> i64 {
-        (ptr as i64) << 1
-    }
-
     #[inline(always)]
     pub(super) fn from_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
-        let bits = Self::immut_bit_pattern(ptr);
-        Self::from_raw(bits)
+        Self::from_raw(ptr as i64)
     }
+}
 
-    #[inline(always)]
-    pub(super) fn from_mut_ref(rf: &'a mut T) -> Self {
-        let ptr: *mut T = rf;
-        let bits = Self::mut_bit_pattern(ptr);
-        Self::from_raw(bits)
-    }
-
-    #[inline(always)]
-    pub(crate) fn inner_mut(self) -> Option<&'a mut T> {
-        let bits = self.into_raw();
-        let mutable = (bits & 0x1) == 0;
-        if mutable {
-            let ptr = (bits >> 1) as *mut T;
-            unsafe { Some(&mut *ptr) }
-        } else {
-            None
-        }
-    }
-
-    pub(super) fn make_read_only(&mut self) {
-        self.data[0] |= 0x1;
+impl<'a, T> From<&'a T> for Data<&'a T> {
+    fn from(x: &'a T) -> Self {
+        Data::from_ref(x)
     }
 }
 
 impl<'a, T> Inner<&'a T> for Data<&'a T> {
     #[inline(always)]
     fn inner(self) -> &'a T {
-        // shift by 1 to remove the mutability flag
-        let bits = self.into_raw() >> 1;
-        let ptr = bits as *const T;
+        let ptr = self.into_raw() as *const T;
         unsafe { &*ptr }
     }
 }

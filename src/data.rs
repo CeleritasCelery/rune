@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{FuncCell, Object};
@@ -202,18 +204,19 @@ pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
 
 #[defun]
 pub(crate) fn aset<'ob>(
-    array: &mut Vec<Object<'ob>>,
+    array: &RefCell<Vec<Object<'ob>>>,
     idx: usize,
     newlet: Object<'ob>,
 ) -> Result<Object<'ob>> {
-    if idx < array.len() {
-        array[idx] = newlet;
+    let mut vec = array.try_borrow_mut()?;
+    if idx < vec.len() {
+        vec[idx] = newlet;
         Ok(newlet)
     } else {
         Err(anyhow!(
             "index {} is out of bounds. Length was {}",
             idx,
-            array.len()
+            vec.len()
         ))
     }
 }

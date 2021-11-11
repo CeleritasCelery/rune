@@ -227,8 +227,7 @@ impl ObjectMap {
     }
 
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
-        let mut obj: Object = func.clone_in(&self.arena);
-        obj.make_read_only();
+        let obj: Object = func.clone_in(&self.arena);
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
         #[cfg(miri)]
         new_func.set_as_miri_root();
@@ -295,7 +294,7 @@ lazy_static! {
         );
         ObjectMap {
             map,
-            arena: Arena::new(),
+            arena: Arena::new_const(),
         }
     });
 }

@@ -84,10 +84,10 @@ pub(crate) fn mapc<'ob>(
 #[defun]
 pub(crate) fn nreverse(seq: List) -> Result<Object> {
     let mut prev = Object::NIL;
-    for tail in seq.conses_mut() {
+    for tail in seq.conses() {
         let tail = tail?;
-        tail.set_cdr(prev);
-        prev = tail.into();
+        tail.set_cdr(prev)?;
+        prev = Object::Cons(tail.into());
     }
     Ok(prev)
 }
@@ -111,12 +111,12 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
 #[defun]
 pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     let mut head = list.into();
-    let mut prev: Option<&mut Cons> = None;
-    for tail in list.conses_mut() {
+    let mut prev: Option<&'ob Cons> = None;
+    for tail in list.conses() {
         let tail = tail?;
         if data::eq(tail.car(), elt) {
             if let Some(prev) = &mut prev {
-                prev.set_cdr(tail.cdr());
+                prev.set_cdr(tail.cdr())?;
             } else {
                 head = tail.cdr();
             }
@@ -137,7 +137,7 @@ fn member_of_list<'ob>(
         Err(_) => true,
     });
     match val {
-        Some(Ok(elem)) => Ok(Object::Cons(elem)),
+        Some(Ok(elem)) => Ok(Object::Cons(elem.into())),
         Some(Err(e)) => Err(e),
         None => Ok(Object::NIL),
     }
@@ -201,7 +201,7 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 pub(crate) fn length(sequence: Object) -> Result<i64> {
     let size = match sequence {
         Object::Cons(x) => x.into_iter().len(),
-        Object::Vec(x) => x.len(),
+        Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
         obj => bail!(Error::from_object(Type::Sequence, obj)),
     };

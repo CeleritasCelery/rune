@@ -10,6 +10,7 @@ use std::cell::RefCell;
 #[derive(Debug, PartialEq)]
 pub(crate) struct Arena {
     objects: RefCell<Vec<OwnedObject<'static>>>,
+    is_const: bool,
 }
 
 /// The owner of an object allocation. No references to
@@ -22,7 +23,7 @@ pub(crate) struct Arena {
 enum OwnedObject<'ob> {
     Float(Box<f64>),
     Cons(Box<Cons<'ob>>),
-    Vec(Box<Vec<Object<'ob>>>),
+    Vec(Box<RefCell<Vec<Object<'ob>>>>),
     String(Box<String>),
     LispFn(Box<LispFn<'ob>>),
     SubrFn(Box<SubrFn>),
@@ -40,6 +41,14 @@ impl<'ob> Arena {
     pub(crate) const fn new() -> Self {
         Arena {
             objects: RefCell::new(Vec::new()),
+            is_const: false,
+        }
+    }
+
+    pub(crate) const fn new_const() -> Self {
+        Arena {
+            objects: RefCell::new(Vec::new()),
+            is_const: true,
         }
     }
 
@@ -57,7 +66,10 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_cons(&'ob self, x: Cons<'ob>) -> &'ob mut Cons<'ob> {
+    pub(crate) fn alloc_cons(&'ob self, mut x: Cons<'ob>) -> &'ob mut Cons<'ob> {
+        if self.is_const {
+            x.make_const();
+        }
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Cons(Box::new(x)));
         if let Some(OwnedObject::Cons(x)) = objects.last_mut() {
@@ -77,11 +89,20 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob mut Vec<Object<'ob>> {
+    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob mut RefCell<Vec<Object<'ob>>> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::Vec(Box::new(x)));
+        let ref_cell = RefCell::new(x);
+        if self.is_const {
+            // Leak a borrow so that the vector cannot be borrowed mutably
+            std::mem::forget(ref_cell.borrow());
+        }
+        Self::register(&mut objects, OwnedObject::Vec(Box::new(ref_cell)));
         if let Some(OwnedObject::Vec(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut Vec<Object>, &'ob mut Vec<Object>>(x.as_mut()) }
+            unsafe {
+                std::mem::transmute::<&mut RefCell<Vec<Object>>, &'ob mut RefCell<Vec<Object>>>(
+                    x.as_mut(),
+                )
+            }
         } else {
             unreachable!("object was not the type we just inserted");
         }

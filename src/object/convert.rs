@@ -2,6 +2,8 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
+use std::cell::RefCell;
+
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
@@ -190,7 +192,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
 impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_string(self.to_owned());
-        Object::String(Data::from_mut_ref(rf))
+        Object::String(Data::from_ref(rf))
     }
 }
 
@@ -200,26 +202,16 @@ define_unbox!(String, &'ob str);
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_string(self);
-        Object::String(Data::from_mut_ref(rf))
+        Object::String(Data::from_ref(rf))
     }
 }
 
-define_unbox!(Vec, &'ob Vec<Object<'ob>>);
+define_unbox!(Vec, &'ob RefCell<Vec<Object<'ob>>>);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_vec(self);
-        Object::Vec(Data::from_mut_ref(rf))
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for &'ob mut Vec<Object<'ob>> {
-    type Error = anyhow::Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Vec(x) => x.inner_mut().ok_or_else(|| anyhow!("Object is immutable")),
-            _ => Err(Error::from_object(Type::Vec, obj).into()),
-        }
+        Object::Vec(Data::from_ref(rf))
     }
 }
 
@@ -240,13 +232,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
 impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
     fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
         let rf = arena.alloc_cons(self);
-        Object::Cons(Data::from_mut_ref(rf))
-    }
-}
-
-impl<'ob> From<&'ob mut Cons<'ob>> for Object<'ob> {
-    fn from(cons: &'ob mut Cons<'ob>) -> Self {
-        Object::Cons(Data::from_mut_ref(cons))
+        Object::Cons(Data::from_ref(rf))
     }
 }
 

@@ -22,6 +22,7 @@ pub(crate) use sub_type::*;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::symbol::Symbol;
+use std::cell::RefCell;
 use std::fmt;
 
 #[repr(align(8))]
@@ -33,7 +34,7 @@ pub(crate) enum Object<'ob> {
     True(Data<()>),
     Nil(Data<()>),
     Cons(Data<&'ob Cons<'ob>>),
-    Vec(Data<&'ob Vec<Object<'ob>>>),
+    Vec(Data<&'ob RefCell<Vec<Object<'ob>>>>),
     String(Data<&'ob String>),
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
@@ -89,7 +90,7 @@ impl<'old, 'new> Object<'old> {
             Object::True(_) => Object::TRUE,
             Object::Nil(_) => Object::NIL,
             Object::Float(x) => x.into_obj(arena),
-            Object::Vec(x) => vec_clone_in(&x, arena).into_obj(arena),
+            Object::Vec(x) => vec_clone_in(&x.borrow(), arena).into_obj(arena),
         }
     }
 }
@@ -111,37 +112,6 @@ impl<'ob> Object<'ob> {
             Object::Vec(_) => Type::Vec,
             Object::Int(_) => Type::Int,
             Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
-        }
-    }
-
-    pub(crate) fn make_read_only(&mut self) {
-        match self {
-            Object::Int(_) | Object::Symbol(_) | Object::True(_) | Object::Nil(_) => {}
-            Object::Float(x) => x.make_read_only(),
-            Object::Cons(cons_obj) => {
-                if let Some(cons) = cons_obj.inner_mut() {
-                    cons.make_read_only();
-                }
-                cons_obj.make_read_only();
-            }
-            Object::Vec(vec_obj) => {
-                if let Some(vec) = vec_obj.inner_mut() {
-                    for elem in vec {
-                        elem.make_read_only();
-                    }
-                }
-                vec_obj.make_read_only();
-            }
-            Object::String(x) => x.make_read_only(),
-            Object::LispFn(func_obj) => {
-                if let Some(func) = func_obj.inner_mut() {
-                    for elem in &mut func.body.constants {
-                        elem.make_read_only();
-                    }
-                }
-                func_obj.make_read_only();
-            }
-            Object::SubrFn(x) => x.make_read_only(),
         }
     }
 
@@ -226,6 +196,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     use std::mem::{align_of, size_of};
 
@@ -281,7 +252,9 @@ mod test {
         assert!(matches!(x, Object::Vec(_)));
         assert_eq!(
             x,
-            Object::Vec(Data::from_ref(&vec_into_object![1, 2, 3.4, "foo"; arena]))
+            Object::Vec(Data::from_ref(&RefCell::new(
+                vec_into_object![1, 2, 3.4, "foo"; arena]
+            )))
         );
     }
 
@@ -309,26 +282,26 @@ mod test {
 
     #[test]
     fn mutuality() {
-        let arena = &Arena::new();
+        let arena = &Arena::new_const();
         let inner_cons = Cons::new(1.into(), 4.into());
         let vec = vec_into_object![inner_cons, 2, 3, 4; arena];
-        let mut obj = Cons::new(1.into(), arena.add(vec)).into_obj(arena);
-        let result: Result<&mut Cons, _> = obj.try_into();
-        assert!(result.is_ok());
-        obj.make_read_only();
-        let result: Result<&mut Cons, _> = obj.try_into();
-        assert!(result.is_err());
+        let obj = Cons::new(1.into(), arena.add(vec)).into_obj(arena);
         if let Object::Cons(cons) = obj {
-            let result: Result<&mut Vec<_>, _> = cons.cdr().try_into();
-            assert!(result.is_err());
+            assert!(cons.set_car(Object::NIL).is_err());
+            assert!(cons.set_cdr(Object::NIL).is_err());
             if let Object::Vec(vec) = cons.cdr() {
-                let result: Result<&mut Vec<_>, _> = vec[0].try_into();
-                assert!(result.is_err());
+                assert!(vec.try_borrow_mut().is_err());
+                if let Object::Cons(inner) = vec.try_borrow().unwrap().get(0).unwrap() {
+                    assert!(inner.set_car(Object::NIL).is_err());
+                    assert!(inner.set_cdr(Object::NIL).is_err());
+                } else {
+                    unreachable!("Type should be cons");
+                }
             } else {
-                unreachable!("object should be vec");
+                unreachable!("Type should be vector");
             }
         } else {
-            unreachable!("object should be cons");
+            unreachable!("Type should be cons");
         }
     }
 }
