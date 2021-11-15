@@ -19,12 +19,7 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Object::Symbol(sym) => match (!sym).resolved_func()? {
-                Some(x) => x
-                    .try_into()
-                    .map_err(|_e| anyhow!("Macro `{}' is not valid as a function", sym)),
-                None => Err(anyhow!("Void function: {}", sym)),
-            },
+            Object::Symbol(x) => Ok(Function::Symbol(x)),
             x => Err(Error::from_object(Type::Func, x).into()),
         }
     }

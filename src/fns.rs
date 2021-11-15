@@ -6,7 +6,7 @@ use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use fn_macros::defun;
 
 pub(crate) fn slice_into_list<'ob>(
@@ -37,6 +37,14 @@ impl<'ob> Function<'ob> {
         match self {
             Function::LispFn(f) => bytecode::call_lisp(&f, args, env, arena),
             Function::SubrFn(f) => bytecode::call_subr(*f, args, env, arena),
+            Function::Symbol(sym) => match sym.resolve_func(env, arena)? {
+                Some(func) => match func {
+                    Function::LispFn(f) => bytecode::call_lisp(&f, args, env, arena),
+                    Function::SubrFn(f) => bytecode::call_subr(*f, args, env, arena),
+                    Function::Symbol(s) => unreachable!("Symbol {} should be resolved", s),
+                },
+                None => Err(anyhow!("Void Function: {}", sym)),
+            },
         }
     }
 }

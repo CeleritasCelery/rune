@@ -3,6 +3,8 @@ use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
 
+use anyhow::Result;
+
 use super::{Bits, Macro};
 
 #[repr(align(8))]
@@ -10,6 +12,7 @@ use super::{Bits, Macro};
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
+    Symbol(Data<Symbol>),
 }
 
 impl<'ob> From<Function<'ob>> for Object<'ob> {
@@ -17,6 +20,7 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
         match x {
             Function::LispFn(x) => Object::LispFn(x),
             Function::SubrFn(x) => Object::SubrFn(x),
+            Function::Symbol(x) => Object::Symbol(x),
         }
     }
 }
@@ -96,6 +100,7 @@ impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
         match x {
             Function::LispFn(x) => FuncCell::LispFn(x),
             Function::SubrFn(x) => FuncCell::SubrFn(x),
+            Function::Symbol(x) => FuncCell::Symbol(x),
         }
     }
 }
@@ -279,7 +284,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 pub(crate) struct ListIterData<'ob>(List<'ob>);
 
 impl<'ob> Iterator for ListIterData<'ob> {
-    type Item = anyhow::Result<&'ob Cons<'ob>>;
+    type Item = Result<&'ob Cons<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.0 {
@@ -297,7 +302,7 @@ impl<'ob> Iterator for ListIterData<'ob> {
 }
 
 impl<'ob> IntoIterator for List<'ob> {
-    type Item = anyhow::Result<&'ob Cons<'ob>>;
+    type Item = Result<&'ob Cons<'ob>>;
     type IntoIter = ListIterData<'ob>;
 
     fn into_iter(self) -> Self::IntoIter {

@@ -143,6 +143,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     (load "lisp/macroexp.el")
 )"#,
     );
+
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
         Err(e) => println!("Error: {}", e),

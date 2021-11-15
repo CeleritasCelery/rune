@@ -206,7 +206,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
         println!("calling: {}", sym.name);
-        match sym.resolved_func()? {
+        match sym.resolved_callable(env, arena)? {
             Some(func) => match func {
                 Callable::LispFn(func) => self.call_lisp(!func, arg_cnt, arena),
                 Callable::SubrFn(func) => self.call_subr(*func, arg_cnt, env, arena),

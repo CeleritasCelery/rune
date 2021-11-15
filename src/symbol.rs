@@ -1,11 +1,14 @@
 use crate::arena::Arena;
+use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Macro, Object};
+use crate::object::{Callable, FuncCell, Function, Macro, Object};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
+
+use anyhow::{anyhow, Result};
 
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
@@ -66,42 +69,91 @@ impl GlobalSymbol {
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolved_func<'a>(&self) -> anyhow::Result<Option<Callable<'a>>> {
+    pub(crate) fn resolve_func<'ob>(
+        &self,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Option<Function<'ob>>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.resolved_func(),
+            Some(FuncCell::Symbol(sym)) => sym.resolve_func(env, arena),
+            Some(FuncCell::LispFn(x)) => Ok(Some(Function::LispFn(x))),
+            Some(FuncCell::SubrFn(x)) => Ok(Some(Function::SubrFn(x))),
+            Some(FuncCell::Macro(_)) => Err(anyhow!("Macro's are invalid as functions")),
+            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
+                Object::Symbol(sym) if sym == &sym::MACRO => {
+                    Err(anyhow!("Macro's are invalid as functions"))
+                }
+                _ => {
+                    let obj: Object = unsafe { std::mem::transmute(Object::Cons(obj)) };
+                    let func = crate::compile::compile_lambda(obj, env, arena)?;
+                    let cell: FuncCell = arena.add(func);
+                    INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
+                    if let Some(FuncCell::LispFn(func)) = self.func() {
+                        Ok(Some(Function::LispFn(func)))
+                    } else {
+                        unreachable!("type was not the type we just inserted");
+                    }
+                }
+            },
+            None => Ok(None),
+        }
+    }
+    /// Follow the chain of symbols to find the function at the end, if any.
+    pub(crate) fn resolved_callable<'ob>(
+        &self,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Option<Callable<'ob>>> {
+        match self.func() {
+            Some(FuncCell::Symbol(sym)) => sym.resolved_callable(env, arena),
             Some(FuncCell::LispFn(x)) => Ok(Some(Callable::LispFn(x))),
             Some(FuncCell::SubrFn(x)) => Ok(Some(Callable::SubrFn(x))),
             Some(FuncCell::Macro(x)) => Ok(Some(Callable::Macro(x))),
-            Some(FuncCell::Uncompiled(obj)) => {
-                {
-                    let arena = crate::arena::Arena::new();
-                    let env = &mut crate::data::Environment::new();
+            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
+                Object::Symbol(sym) if sym == &sym::MACRO => {
+                    let cell = {
+                        let obj: Object = unsafe { std::mem::transmute(obj.cdr()) };
+                        let func = crate::compile::compile_lambda(obj, env, arena)?;
+                        let sym: Object = (&sym::MACRO).into();
+                        let cons: Object = cons!(sym, func; arena);
+                        cons.try_into().expect("conversion should be infallible")
+                    };
+                    INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
+                    if let Some(FuncCell::Macro(func)) = self.func() {
+                        Ok(Some(Callable::Macro(func)))
+                    } else {
+                        unreachable!("type was not the type we just inserted");
+                    }
+                }
+                _ => {
                     let obj: Object = unsafe { std::mem::transmute(Object::Cons(obj)) };
-                    let func = crate::compile::compile_lambda(obj, env, &arena)?;
+                    let func = crate::compile::compile_lambda(obj, env, arena)?;
                     let cell: FuncCell = arena.add(func);
                     INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
+                    if let Some(FuncCell::LispFn(func)) = self.func() {
+                        Ok(Some(Callable::LispFn(func)))
+                    } else {
+                        unreachable!("type was not the type we just inserted");
+                    }
                 }
-                if let Some(FuncCell::LispFn(func)) = self.func() {
-                    Ok(Some(Callable::LispFn(func)))
-                } else {
-                    unreachable!("type was not the type we just inserted");
-                }
-            }
+            },
             None => Ok(None),
         }
     }
 
-    pub(crate) fn as_macro<'a>(&self) -> anyhow::Result<Option<&'a Macro<'a>>> {
+    pub(crate) fn as_macro<'ob>(
+        &self,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Option<&'ob Macro<'ob>>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.as_macro(),
+            Some(FuncCell::Symbol(sym)) => sym.as_macro(env, arena),
             Some(FuncCell::Macro(x)) => Ok(Some(!x)),
             Some(FuncCell::Uncompiled(obj)) => match obj.car() {
                 Object::Symbol(sym) if sym == &sym::MACRO => {
-                    let arena = crate::arena::Arena::new();
                     let cell = {
-                        let env = &mut crate::data::Environment::new();
                         let obj: Object = unsafe { std::mem::transmute(obj.cdr()) };
-                        let func = crate::compile::compile_lambda(obj, env, &arena)?;
+                        let func = crate::compile::compile_lambda(obj, env, arena)?;
                         let sym: Object = (&sym::MACRO).into();
                         let cons: Object = cons!(sym, func; arena);
                         cons.try_into().expect("conversion should be infallible")
@@ -241,22 +293,22 @@ impl ObjectMap {
 
 macro_rules! create_symbolmap {
     (SUBR => {$($subr:expr),* $(,)?}
-     SYMBOLS => {$($symbols:ident),* $(,)?}
-     TEST_SYMBOLS => {$($test_symbols:ident),* $(,)?}
-    ) => ({
-        let size: usize = count!($($symbols)*) $(+ $subr.len())*;
-        let mut map = SymbolMap::with_capacity(size);
-        $(for (func, sym) in $subr.iter() {
-            unsafe { sym.set_func(func.into()); }
-            map.pre_init(sym);
-        })*;
-        $(map.pre_init(&sym::$symbols);)*
-        #[cfg(test)]
-        {
-            $(map.pre_init(&sym::test::$test_symbols);)*
-        }
-        map
-    })
+    SYMBOLS => {$($symbols:ident),* $(,)?}
+    TEST_SYMBOLS => {$($test_symbols:ident),* $(,)?}
+) => ({
+    let size: usize = count!($($symbols)*) $(+ $subr.len())*;
+    let mut map = SymbolMap::with_capacity(size);
+    $(for (func, sym) in $subr.iter() {
+        unsafe { sym.set_func(func.into()); }
+        map.pre_init(sym);
+    })*;
+    $(map.pre_init(&sym::$symbols);)*
+    #[cfg(test)]
+    {
+        $(map.pre_init(&sym::test::$test_symbols);)*
+    }
+    map
+})
 }
 
 macro_rules! declare_symbols {
@@ -310,6 +362,7 @@ pub(crate) mod sym {
     use super::GlobalSymbol;
 
     pub(crate) use crate::alloc::MAKE_CLOSURE;
+    pub(crate) use crate::data::DEFALIAS;
     pub(crate) use crate::data::DEFVAR;
 
     declare_symbols!(
@@ -406,7 +459,7 @@ mod test {
         vars: &[Object<'ob>],
         _map: &mut Environment,
         _arena: &'ob Arena,
-    ) -> anyhow::Result<Object<'ob>> {
+    ) -> Result<Object<'ob>> {
         Ok(vars[0])
     }
 

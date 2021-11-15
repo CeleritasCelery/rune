@@ -7,7 +7,6 @@
 //! removed. It is assumed that the caller has properly dispatched the on the first symbol.
 
 use crate::arena::Arena;
-use crate::bytecode;
 use crate::cons::{Cons, ElemIter};
 use crate::data::Environment;
 use crate::error::{Error, Type};
@@ -224,7 +223,9 @@ struct Compiler<'ob, 'brw> {
     upvalues: Vec<Symbol>,
     /// A reference to the current runtime environment
     env: &'brw mut Environment<'ob>,
-    /// A reference to the current allocation arean
+    /// How many layers deep we are in lazy evaluation of functions
+    lazy_eval: usize,
+    /// A reference to the current allocation arena
     arena: &'ob Arena,
 }
 
@@ -248,6 +249,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             parent,
             env,
             vars,
+            lazy_eval: 0,
             arena,
         }
     }
@@ -379,12 +381,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     /// Process a function quote `(function foo)`. If value is a cons, compile it. Otherwise
     /// treat it as a constant reference.
-    fn function(&mut self, value: Object<'ob>) -> Result<()> {
+    fn compile_function(&mut self, value: Object<'ob>) -> Result<()> {
         let mut forms = value.as_list()?;
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) => match cons.car() {
+                Object::Cons(cons) if self.lazy_eval == 0 => match cons.car() {
                     Object::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
                     _ => self.const_ref(Object::Cons(cons), None),
                 },
@@ -555,14 +557,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         for arg in args.as_list()? {
             arg_list.push(arg?);
         }
-        match body {
-            Function::LispFn(lisp_macro) => {
-                bytecode::call_lisp(&lisp_macro, arg_list, self.env, arena)
-            }
-            Function::SubrFn(lisp_macro) => {
-                bytecode::call_subr(*lisp_macro, arg_list, self.env, arena)
-            }
-        }
+        body.call(arg_list, self.env, arena)
     }
 
     /// Emit the bytecode for a function call
@@ -588,7 +583,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         match func {
-            Object::Symbol(name) => match name.as_macro()? {
+            Object::Symbol(name) => match name.as_macro(self.env, self.arena)? {
                 Some(lisp_macro) => {
                     let form = self.compile_macro_call(!name, args, lisp_macro.get())?;
                     self.compile_form(form)
@@ -687,6 +682,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             // Add 1 for the lambda argument
             self.emit_call(upvalues.len() + 1);
         }
+        Ok(())
+    }
+
+    fn compile_defalias(&mut self, caller: Symbol, obj: Object<'ob>) -> Result<()> {
+        println!("----------defalias--------------");
+        self.lazy_eval += 1;
+        self.compile_func_call(caller.into(), obj)?;
+        self.lazy_eval -= 1;
         Ok(())
     }
 
@@ -844,7 +847,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 WHILE => self.compile_loop(forms),
                 QUOTE => self.quote(forms),
                 BACKQUOTE => self.backquote(forms),
-                FUNCTION => self.function(forms),
+                DEFALIAS => self.compile_defalias(!form, forms),
+                FUNCTION => self.compile_function(forms),
                 PROGN => self.progn(forms),
                 PROG1 => self.progx(forms, 1),
                 PROG2 => self.progx(forms, 2),
@@ -1016,6 +1020,7 @@ pub(crate) fn compile_lambda<'ob>(
 ) -> Result<LispFn<'ob>> {
     match obj {
         Object::Cons(sexp) => match sexp.car() {
+            Object::Symbol(sym) if sym == &sym::FUNCTION => compile_lambda(sexp.cdr(), env, arena),
             Object::Symbol(sym) if sym == &sym::LAMBDA => {
                 let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
                 debug_assert!(upvalues.is_empty());

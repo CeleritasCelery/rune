@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::hashmap::HashMap;
 use crate::object::{FuncCell, Object};
@@ -15,17 +16,7 @@ pub(crate) struct Environment<'ob> {
     pub(crate) macro_callstack: Vec<Symbol>,
 }
 
-impl<'ob> Environment<'ob> {
-    pub(crate) fn new() -> Self {
-        Self {
-            vars: HashMap::default(),
-            props: HashMap::default(),
-            macro_callstack: Vec::new(),
-        }
-    }
-}
-
-pub(crate) fn set_global_function(symbol: Symbol, func: FuncCell) {
+fn set_global_function(symbol: Symbol, func: FuncCell) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
     map.set_func(symbol, func);
 }
@@ -222,9 +213,13 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function(object: Object) -> Result<Object> {
+pub(crate) fn indirect_function<'ob>(
+    object: Object<'ob>,
+    env: &mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
     match object {
-        Object::Symbol(sym) => match sym.resolved_func()? {
+        Object::Symbol(sym) => match sym.resolved_callable(env, arena)? {
             Some(func) => Ok(func.into()),
             None => Ok(Object::NIL),
         },
