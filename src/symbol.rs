@@ -151,11 +151,11 @@ impl GlobalSymbol {
                 Object::Symbol(sym) if sym == &sym::MACRO => {
                     let func = self.compile_macro(!obj, env, arena)?;
                     Ok(Some(Callable::Macro(func.into())))
-                },
+                }
                 _ => {
                     let lisp_macro = self.compile_function(!obj, env, arena)?;
                     Ok(Some(Callable::LispFn(lisp_macro.into())))
-                },
+                }
             },
             None => Ok(None),
         }
@@ -347,7 +347,7 @@ lazy_static! {
                 PROG2, SETQ, DEFCONST, COND,
                 LET, LET_STAR, IF, AND, OR,
                 LEXICAL_BINDING, SYSTEM_TYPE,
-                MINIBUFFER_LOCAL_MAP,
+                MINIBUFFER_LOCAL_MAP, RUNE_REQUIRED,
             }
             TEST_SYMBOLS => {
                 FOO, BAR, BAZ
@@ -401,6 +401,7 @@ pub(crate) mod sym {
         LEXICAL_BINDING => "lexical-binding",
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
+        RUNE_REQUIRED => "rune-required",
     );
 
     #[cfg(test)]

@@ -133,6 +133,8 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
+    env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
+    env.vars.insert(&sym::RUNE_REQUIRED, arena.add(Vec::new()));
     let buffer = String::from(
         r#"
 (progn 
@@ -141,6 +143,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     (load "lisp/byte-run.el")
     (load "lisp/subr.el")
     (load "lisp/macroexp.el")
+    (load "lisp/cl-lib.el")
 )"#,
     );
 

@@ -1,19 +1,27 @@
 use std::cell::RefCell;
+use std::sync::Mutex;
 
 use crate::arena::Arena;
 use crate::cons::Cons;
-use crate::hashmap::HashMap;
+use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
+use lazy_static::lazy_static;
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Environment<'ob> {
     pub(crate) vars: HashMap<Symbol, Object<'ob>>,
     props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
     pub(crate) macro_callstack: Vec<Symbol>,
+}
+
+lazy_static! {
+    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol>> = Mutex::new({
+        HashSet::with_capacity_and_hasher(0, std::hash::BuildHasherDefault::default())
+    });
 }
 
 fn set_global_function(symbol: Symbol, func: FuncCell) {
@@ -228,8 +236,8 @@ pub(crate) fn indirect_function<'ob>(
 }
 
 #[defun]
-pub(crate) const fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Symbol {
-    // TODO: implement
+pub(crate) fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Symbol {
+    FEATURES.lock().unwrap().insert(feature);
     feature
 }
 

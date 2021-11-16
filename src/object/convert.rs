@@ -113,6 +113,16 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Option<bool> {
+    type Error = Error;
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Nil(_) => Ok(None),
+            _ => Ok(Some(true)),
+        }
+    }
+}
+
 impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {

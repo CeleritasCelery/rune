@@ -87,10 +87,22 @@ pub(crate) fn load_internal<'ob>(
 }
 
 #[defun]
-pub(crate) fn load<'ob>(file: &str, arena: &'ob Arena, env: &mut Environment<'ob>) -> Result<bool> {
-    let file_contents =
-        fs::read_to_string(file).with_context(|| format!("Couldn't open file {}", file))?;
-    load_internal(&file_contents, arena, env)
+pub(crate) fn load<'ob>(
+    file: &str,
+    noerror: Option<bool>,
+    _nomessage: Option<bool>,
+    _nosuffix: Option<bool>,
+    _must_suffix: Option<bool>,
+    arena: &'ob Arena,
+    env: &mut Environment<'ob>,
+) -> Result<bool> {
+    match fs::read_to_string(file).with_context(|| format!("Couldn't open file {}", file)) {
+        Ok(content) => load_internal(&content, arena, env),
+        Err(e) => match noerror {
+            Some(_) => Ok(false),
+            None => Err(e),
+        },
+    }
 }
 
 #[defun]

@@ -135,6 +135,24 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>
     Ok(head)
 }
 
+#[defun]
+pub(crate) fn delete<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
+    let mut head = list.into();
+    let mut prev: Option<&'ob Cons> = None;
+    for tail in list.conses() {
+        let tail = tail?;
+        if data::equal(tail.car(), elt) {
+            if let Some(prev) = &mut prev {
+                prev.set_cdr(tail.cdr())?;
+            } else {
+                head = tail.cdr();
+            }
+        } else {
+            prev = Some(tail);
+        }
+    }
+    Ok(head)
+}
 fn member_of_list<'ob>(
     elt: Object<'ob>,
     list: List<'ob>,
@@ -180,16 +198,26 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 #[defun]
 fn require<'ob>(
     feature: Symbol,
-    _filename: Option<&str>,
-    _noerror: Option<Object<'ob>>,
+    filename: Option<&str>,
+    noerror: Option<bool>,
     env: &mut Environment<'ob>,
     arena: &'ob Arena,
-) -> Result<Symbol> {
-    if feature.name == "macroexp" {
-        crate::lread::load("lisp/macroexp.el", arena, env)?;
-        Ok(feature)
-    } else {
-        bail!("require is only implemented for macroexp");
+) -> Result<Object<'ob>> {
+    if crate::data::FEATURES.lock().unwrap().contains(feature) {
+        return Ok(feature.into());
+    }
+    let file = match filename {
+        Some(file) => file.to_owned(),
+        None => {
+            format!("lisp/{}.el", feature.name)
+        }
+    };
+    match crate::lread::load(&file, None, None, None, None, arena, env) {
+        Ok(_) => Ok(feature.into()),
+        Err(e) => match noerror {
+            Some(_) => Ok(Object::NIL),
+            None => Err(e),
+        },
     }
 }
 
@@ -309,6 +337,7 @@ defsubr!(
     nth,
     concat,
     delq,
+    delete,
     memq,
     member,
     defvaralias,
