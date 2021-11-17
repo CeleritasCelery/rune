@@ -348,7 +348,7 @@ lazy_static! {
                 PROG2, SETQ, DEFCONST, COND,
                 LET, LET_STAR, IF, AND, OR,
                 LEXICAL_BINDING, SYSTEM_TYPE,
-                MINIBUFFER_LOCAL_MAP, RUNE_REQUIRED,
+                MINIBUFFER_LOCAL_MAP,
             }
             TEST_SYMBOLS => {
                 FOO, BAR, BAZ
@@ -403,7 +403,6 @@ pub(crate) mod sym {
         LEXICAL_BINDING => "lexical-binding",
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
-        RUNE_REQUIRED => "rune-required",
     );
 
     #[cfg(test)]
