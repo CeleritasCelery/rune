@@ -100,6 +100,29 @@ pub(crate) fn nreverse(seq: List) -> Result<Object> {
     Ok(prev)
 }
 
+fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>) -> Result<()> {
+    match seq {
+        List::Cons(cons) => {
+            for elt in !cons {
+                list.push(elt?);
+            }
+        }
+        List::Nil => {},
+    }
+    Ok(())
+}
+
+#[defun]
+pub(crate) fn append<'ob>(append: Object<'ob>, sequences: &[Object<'ob>], arena: &'ob Arena) -> Result<Object<'ob>> {
+    let mut list = Vec::new();
+    join(&mut list, append.try_into()?)?;
+    for seq in sequences {
+        join(&mut list, (*seq).try_into()?)?;
+    }
+    Ok(slice_into_list(&list, None, arena))
+
+}
+
 #[defun]
 pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
     match alist {
@@ -329,6 +352,7 @@ defsubr!(
     length,
     nth,
     concat,
+    append,
     delq,
     delete,
     memq,
