@@ -721,7 +721,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     }
 
     fn compile_defalias(&mut self, caller: Symbol, obj: Object<'ob>) -> Result<()> {
-        println!("----------defalias--------------");
         self.lazy_eval += 1;
         self.compile_func_call(caller.into(), obj)?;
         self.lazy_eval -= 1;
