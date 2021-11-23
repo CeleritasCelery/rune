@@ -66,16 +66,17 @@ mod arith;
 mod bytecode;
 mod compile;
 mod data;
+mod debug;
 mod error;
 mod eval;
 mod fns;
-mod search;
-mod debug;
 mod hashmap;
+mod interpreter;
 mod keymap;
 mod lread;
 mod opcode;
 mod reader;
+mod search;
 mod symbol;
 
 use crate::arena::Arena;
@@ -101,8 +102,11 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
         print!("> ");
         io::stdout().flush().unwrap();
         stdin.read_line(&mut buffer).unwrap();
-        if buffer == "exit\n" {
+        if buffer.trim() == "exit" {
             return;
+        }
+        if buffer.trim().is_empty() {
+            continue;
         }
         if !parens_closed(&buffer) {
             continue;
@@ -136,19 +140,35 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    crate::data::defalias(intern("not"), (&sym::NULL).into(), None).expect("null should be defined");
+    crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
+        .expect("null should be defined");
     let buffer = String::from(
         r#"
 (progn 
     (load "lisp/byte-run.el")
     (load "lisp/backquote.el")
-    (load "lisp/byte-run.el")
-    (load "lisp/subr.el")
-    (load "lisp/macroexp.el")
-    (load "lisp/cl-lib.el")
 )"#,
     );
 
+    match crate::lread::load_internal(&buffer, arena, env) {
+        Ok(val) => println!("{}", val),
+        Err(e) => {
+            println!("Error: {}", e);
+            return;
+        }
+    }
+    crate::debug::enable_debug();
+
+    let buffer = String::from(
+        r#"
+(progn 
+    (load "lisp/byte-run.el")
+    (load "lisp/subr.el")
+)"#,
+    );
+
+    // (load "lisp/macroexp.el")
+    // (load "lisp/cl-lib.el")
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
         Err(e) => println!("Error: {}", e),

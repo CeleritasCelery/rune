@@ -107,20 +107,23 @@ fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>) -> Result<()> {
                 list.push(elt?);
             }
         }
-        List::Nil => {},
+        List::Nil => {}
     }
     Ok(())
 }
 
 #[defun]
-pub(crate) fn append<'ob>(append: Object<'ob>, sequences: &[Object<'ob>], arena: &'ob Arena) -> Result<Object<'ob>> {
+pub(crate) fn append<'ob>(
+    append: Object<'ob>,
+    sequences: &[Object<'ob>],
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
     let mut list = Vec::new();
     join(&mut list, append.try_into()?)?;
     for seq in sequences {
         join(&mut list, (*seq).try_into()?)?;
     }
     Ok(slice_into_list(&list, None, arena))
-
 }
 
 #[defun]
@@ -169,11 +172,7 @@ pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>
     delete_from_list(elt, list, data::eq)
 }
 
-fn member_of_list<'ob>(
-    elt: Object<'ob>,
-    list: List<'ob>,
-    eq_fn: EqFunc,
-) -> Result<Object<'ob>> {
+fn member_of_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
     let val = list.conses().find(|x| match x {
         Ok(obj) => eq_fn(obj.car(), elt),
         Err(_) => true,

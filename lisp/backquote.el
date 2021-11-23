@@ -40,15 +40,6 @@
 
 ;; function and macro versions of backquote-list*
 
-(defmacro unless (cond &rest body)
-  "If COND yields nil, do BODY, else return nil.
-When COND yields nil, eval BODY forms sequentially and return
-value of last one, or nil if there are none.
-
-\(fn COND BODY...)"
-  (declare (indent 1) (debug t))
-  (cons 'if (cons cond (cons nil body))))
-
 (defun backquote-list*-function (first &rest list)
   "Like `list' but the last argument is the tail of the new list.
 
@@ -112,7 +103,10 @@ b              => (ba bb bc)		; assume b has this value
 \\=`(a ,b c)      => (a (ba bb bc) c)	; insert the value of b
 \\=`(a ,@b c)     => (a ba bb bc c)	; splice in the value of b
 
-Vectors work just like lists.  Nested backquotes are permitted."
+Vectors work just like lists.  Nested backquotes are permitted.
+
+Note that some macros, such as `pcase', use this symbol for other
+purposes."
   (cdr (backquote-process structure)))
 
 ;; GNU Emacs has no reader macros

@@ -122,6 +122,18 @@ impl PartialEq for Data<()> {
     }
 }
 
+impl<T> IntoIterator for Data<T>
+where
+    T: IntoIterator,
+    Data<T>: Inner<T>,
+{
+    type Item = T::Item;
+    type IntoIter = T::IntoIter;
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner().into_iter()
+    }
+}
+
 impl<T> fmt::Display for Data<T>
 where
     T: fmt::Display + Copy,
