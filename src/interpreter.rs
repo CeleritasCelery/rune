@@ -49,7 +49,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         let forms = cons.cdr();
         match cons.car() {
             Object::Symbol(sym) => symbol_match! {!sym;
-                QUOTE => self.quote(forms),
+                QUOTE => Self::quote(forms),
                 LET => self.eval_let(forms, true),
                 LET_STAR => self.eval_let(forms, false),
                 IF => self.eval_if(forms),
@@ -124,6 +124,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Some(x) => x?,
             None => bail!(Error::ArgCount(2, 1)),
         };
+        #[allow(clippy::if_not_else)]
         if condition != Object::NIL {
             self.eval_form(true_branch)
         } else {
@@ -143,11 +144,15 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 Some((other, Some(_))) => bail!(Error::from_object(Type::Symbol, other)),
                 Some((_, None)) => bail!(Error::ArgCount(arg_cnt, arg_cnt + 1)),
                 None => {
-                    // last_value will be None if froms is empty. In that case throw an error
-                    break last_value.ok_or(Error::ArgCount(2, 0).into());
+                    break;
                 }
             };
             arg_cnt += 2;
+        }
+        match last_value {
+            Some(x) => Ok(x),
+            // last_value will be None if forms is empty. In that case throw an error
+            None => Err(Error::ArgCount(2, 0).into()),
         }
     }
 
@@ -177,7 +182,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         }
     }
 
-    fn quote(&self, value: Object<'ob>) -> Result<Object<'ob>> {
+    fn quote(value: Object<'ob>) -> Result<Object<'ob>> {
         let mut forms = value.as_list()?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
