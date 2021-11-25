@@ -57,11 +57,31 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 OR => self.eval_or(forms),
                 COND => self.eval_cond(forms),
                 WHILE => self.eval_while(forms),
+                PROGN => self.eval_progn(forms),
+                PROG1 => self.eval_progx(forms, 1),
+                PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
                 _ => todo!("eval symbol function call"),
             },
             _ => todo!("eval function call"),
         }
+    }
+
+    fn eval_progx(&mut self, obj: Object<'ob>, prog_num: u16) -> Result<Object<'ob>> {
+        let mut count = 0;
+        let mut returned_form = None;
+        for form in obj.as_list()? {
+            let value = self.eval_form(form?)?;
+            count += 1;
+            if prog_num == count {
+                returned_form = Some(value);
+            }
+        }
+        returned_form.ok_or_else(|| Error::ArgCount(prog_num, count).into())
+    }
+
+    fn eval_progn(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        self.implicit_progn(obj.as_list()?)
     }
 
     fn eval_while(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
@@ -149,11 +169,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             };
             arg_cnt += 2;
         }
-        match last_value {
-            Some(x) => Ok(x),
-            // last_value will be None if forms is empty. In that case throw an error
-            None => Err(Error::ArgCount(2, 0).into()),
-        }
+        // last_value will be None if forms is empty. In that case throw an error
+        last_value.ok_or_else(|| Error::ArgCount(2, 0).into())
     }
 
     fn pairs(iter: &mut ElemIter<'_, 'ob>) -> Result<Option<(Object<'ob>, Option<Object<'ob>>)>> {
@@ -335,5 +352,12 @@ mod test {
         check_interpreter!("(cond (1 2))", 2);
         check_interpreter!("(cond (nil 1) (2 3))", 3);
         check_interpreter!("(cond (nil 1) (2 3) (4 5))", 3);
+    }
+
+    #[test]
+    fn progn() {
+        check_interpreter!("(prog1 1 2 3)", 1);
+        check_interpreter!("(prog2 1 2 3)", 2);
+        check_interpreter!("(progn 1 2 3 4)", 4);
     }
 }
