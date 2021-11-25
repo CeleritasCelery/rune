@@ -55,11 +55,24 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 AND => self.eval_and(forms),
                 OR => self.eval_or(forms),
                 COND => self.eval_cond(forms),
+                WHILE => self.eval_while(forms),
                 SETQ => self.setq(forms),
                 _ => todo!("eval symbol function call"),
             },
             _ => todo!("eval function call"),
         }
+    }
+
+    fn eval_while(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut forms = obj.as_list()?;
+        let condition = match forms.next() {
+            Some(cond) => cond?,
+            None => bail!(Error::ArgCount(1, 0)),
+        };
+        while self.eval_form(condition)? != Object::NIL {
+            self.implicit_progn(forms.clone())?;
+        }
+        Ok(Object::NIL)
     }
 
     fn eval_cond(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
