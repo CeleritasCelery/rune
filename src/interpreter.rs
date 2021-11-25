@@ -54,11 +54,28 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 IF => self.eval_if(forms),
                 AND => self.eval_and(forms),
                 OR => self.eval_or(forms),
+                COND => self.eval_cond(forms),
                 SETQ => self.setq(forms),
                 _ => todo!("eval symbol function call"),
             },
             _ => todo!("eval function call"),
         }
+    }
+
+    fn eval_cond(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut last = Object::NIL;
+        for form in obj.as_list()? {
+            let mut clause = (form?).as_list()?;
+            let first = clause.next().unwrap_or(Ok(Object::NIL))?;
+            last = self.eval_form(first)?;
+            if last != Object::NIL {
+                if !clause.is_empty() {
+                    last = self.implicit_progn(clause)?;
+                }
+                break;
+            }
+        }
+        Ok(last)
     }
 
     fn eval_and(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
@@ -268,8 +285,16 @@ mod test {
         check_interpreter!("(and 1)", 1);
         check_interpreter!("(and 1 2)", 2);
         check_interpreter!("(and 1 nil)", false);
+        check_interpreter!("(and nil 1)", false);
         check_interpreter!("(or)", false);
         check_interpreter!("(or nil)", false);
         check_interpreter!("(or nil 1)", 1);
+        check_interpreter!("(or 1 2)", 1);
+        check_interpreter!("(cond)", false);
+        check_interpreter!("(cond nil)", false);
+        check_interpreter!("(cond (1))", 1);
+        check_interpreter!("(cond (1 2))", 2);
+        check_interpreter!("(cond (nil 1) (2 3))", 3);
+        check_interpreter!("(cond (nil 1) (2 3) (4 5))", 3);
     }
 }
