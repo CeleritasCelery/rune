@@ -51,6 +51,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Object::Symbol(sym) => symbol_match! {!sym;
                 QUOTE => self.quote(forms),
                 LET => self.eval_let(forms, true),
+                LET_STAR => self.eval_let(forms, false),
                 IF => self.eval_if(forms),
                 AND => self.eval_and(forms),
                 OR => self.eval_or(forms),
@@ -191,10 +192,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             // (let x ...)
             Some(x) => {
                 if parallel {
-                    let mut vars = self.let_bind_parallel(x?)?;
-                    self.vars.append(&mut vars);
+                    self.let_bind_parallel(x?)?;
                 } else {
-                    todo!("implement let*");
+                    self.let_bind_serial(x?)?;
                 }
             }
             // (let)
@@ -205,10 +205,28 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(obj)
     }
 
-    fn let_bind_parallel(&mut self, form: Object<'ob>) -> Result<Vec<Variable<'ob>>> {
-        let bindings = form.as_list()?;
+    fn let_bind_serial(&mut self, form: Object<'ob>) -> Result<()> {
+        for binding in form.as_list()? {
+            match binding? {
+                // (let ((x y)))
+                Object::Cons(cons) => {
+                    let var = self.let_bind_value(!cons)?;
+                    self.vars.push(var);
+                }
+                // (let (x))
+                Object::Symbol(sym) => {
+                    self.vars.push((!sym, Object::NIL));
+                }
+                // (let (1))
+                x => bail!(Error::from_object(Type::Cons, x)),
+            }
+        }
+        Ok(())
+    }
+
+    fn let_bind_parallel(&mut self, form: Object<'ob>) -> Result<()> {
         let mut let_bindings = Vec::new();
-        for binding in bindings {
+        for binding in form.as_list()? {
             match binding? {
                 // (let ((x y)))
                 Object::Cons(cons) => {
@@ -223,7 +241,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 x => bail!(Error::from_object(Type::Cons, x)),
             }
         }
-        Ok(let_bindings)
+        self.vars.append(&mut let_bindings);
+        Ok(())
     }
 
     fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<Variable<'ob>> {
@@ -285,6 +304,8 @@ mod test {
         check_interpreter!("(let ((x 1)) (let ((x 3)) x))", 3);
         check_interpreter!("(let ((x 1)) (let ((y 3)) x))", 1);
         check_interpreter!("(let ((x 1)) (setq x 2) x)", 2);
+        check_interpreter!("(let* ())", false);
+        check_interpreter!("(let* ((x 1) (y x)) y)", 1);
     }
 
     #[test]
