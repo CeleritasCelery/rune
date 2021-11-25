@@ -52,6 +52,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 QUOTE => self.quote(forms),
                 LET => self.eval_let(forms, true),
                 IF => self.eval_if(forms),
+                AND => self.eval_and(forms),
+                OR => self.eval_or(forms),
                 SETQ => self.setq(forms),
                 _ => todo!("eval symbol function call"),
             },
@@ -59,24 +61,43 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         }
     }
 
+    fn eval_and(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut last = Object::TRUE;
+        for form in obj.as_list()? {
+            last = self.eval_form(form?)?;
+            if last == Object::NIL {
+                break;
+            }
+        }
+        Ok(last)
+    }
+
+    fn eval_or(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut last = Object::NIL;
+        for form in obj.as_list()? {
+            last = self.eval_form(form?)?;
+            if last != Object::NIL {
+                break;
+            }
+        }
+        Ok(last)
+    }
+
     fn eval_if(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
         let mut forms = obj.as_list()?;
-        match forms.len() {
-            // (if) | (if x)
-            len @ (0 | 1) => Err(Error::ArgCount(2, len as u16).into()),
-            // (if x y z ...)
-            _ => {
-                let condition = self.eval_form(forms.next().unwrap()?)?;
-                let true_cond = forms.next().unwrap()?;
-                if condition != Object::NIL {
-                    self.eval_form(true_cond)
-                } else {
-                    self.implicit_progn(forms)
-                }
-            }
-
+        let condition = match forms.next() {
+            Some(x) => x?,
+            None => bail!(Error::ArgCount(2, 0)),
+        };
+        let true_branch = match forms.next() {
+            Some(x) => x?,
+            None => bail!(Error::ArgCount(2, 1)),
+        };
+        if condition != Object::NIL {
+            self.eval_form(true_branch)
+        } else {
+            self.implicit_progn(forms)
         }
-
     }
 
     fn setq(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
@@ -120,7 +141,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Some(value) => {
                 *value = new_value;
                 new_value
-            },
+            }
             None => todo!("set global and closure variables"),
         }
     }
@@ -243,5 +264,12 @@ mod test {
         check_interpreter!("(if nil 1 2)", 2);
         check_interpreter!("(if t 1 2)", 1);
         check_interpreter!("(if nil 1 2 3)", 3);
+        check_interpreter!("(and)", true);
+        check_interpreter!("(and 1)", 1);
+        check_interpreter!("(and 1 2)", 2);
+        check_interpreter!("(and 1 nil)", false);
+        check_interpreter!("(or)", false);
+        check_interpreter!("(or nil)", false);
+        check_interpreter!("(or nil 1)", 1);
     }
 }
