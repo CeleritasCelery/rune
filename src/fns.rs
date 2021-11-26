@@ -14,12 +14,8 @@ pub(crate) fn slice_into_list<'ob>(
     tail: Option<Object<'ob>>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    if slice.is_empty() {
-        Object::NIL
-    } else {
-        let from_end = slice.iter().rev();
-        from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; arena))
-    }
+    let from_end = slice.iter().rev();
+    from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; arena))
 }
 
 #[defun]

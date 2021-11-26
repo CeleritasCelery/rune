@@ -401,11 +401,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// Quote an item using `symbol`.
     fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
-        let obj = match self.tokens.next() {
+        let obj: Object = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        Ok(list!(symbol, obj; self.arena))
+        let ret: Object = list!(symbol, obj; self.arena);
+        Ok(ret)
     }
 
     /// read a quoted character (e.g. `?a`)

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use crate::error::{Error, Type};
+use crate::symbol::sym;
 use crate::{
     arena::Arena,
     cons::{Cons, ElemIter},
@@ -9,10 +10,8 @@ use crate::{
 };
 use anyhow::{bail, ensure, Result};
 
-type Variable<'ob> = (Symbol, Object<'ob>);
-
 struct Interpreter<'ob, 'brw> {
-    vars: Vec<Variable<'ob>>,
+    vars: Vec<&'ob Cons<'ob>>,
     env: &'brw mut Environment<'ob>,
     arena: &'ob Arena,
 }
@@ -61,9 +60,37 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 PROG1 => self.eval_progx(forms, 1),
                 PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
+                FUNCTION => self.eval_function(forms),
                 _ => todo!("eval symbol function call"),
             },
             _ => todo!("eval function call"),
+        }
+    }
+
+    fn eval_function(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        match obj {
+            Object::Cons(cons) => match cons.car() {
+                Object::Cons(cons) => {
+                    if cons.car() == (&sym::LAMBDA).into() {
+                        let env = {
+                            // TODO: remove temp vector
+                            let env: Vec<_> =
+                                self.vars.iter().map(|&x| Object::Cons(x.into())).collect();
+                            crate::fns::slice_into_list(
+                                env.as_slice(),
+                                Some(cons!(true; self.arena)),
+                                self.arena,
+                            )
+                        };
+                        let end: Object = cons!(env, cons.cdr(); self.arena);
+                        Ok(cons!(&sym::CLOSURE, end; self.arena))
+                    } else {
+                        Ok(obj)
+                    }
+                }
+                _ => Ok(obj),
+            },
+            _ => Ok(obj),
         }
     }
 
@@ -182,17 +209,17 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn var_ref(&self, name: Symbol) -> Result<Object<'ob>> {
         let mut iter = self.vars.iter().rev();
-        match iter.find_map(|(sym, val)| (sym == &name).then(|| val)) {
-            Some(value) => Ok(*value),
+        match iter.find_map(|cons| (cons.car() == name.into()).then(|| cons.cdr())) {
+            Some(value) => Ok(value),
             None => todo!("global and closure variables"),
         }
     }
 
     fn var_set(&mut self, name: Symbol, new_value: Object<'ob>) -> Object<'ob> {
-        let mut iter = self.vars.iter_mut().rev();
-        match iter.find_map(|(sym, val)| (sym == &name).then(|| val)) {
+        let mut iter = self.vars.iter().rev();
+        match iter.find(|cons| (cons.car() == name.into())) {
             Some(value) => {
-                *value = new_value;
+                value.set_cdr(new_value).expect("env should be mutable");
                 new_value
             }
             None => todo!("set global and closure variables"),
@@ -229,15 +256,17 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn let_bind_serial(&mut self, form: Object<'ob>) -> Result<()> {
         for binding in form.as_list()? {
-            match binding? {
+            let binding = binding?;
+            match binding {
                 // (let ((x y)))
                 Object::Cons(cons) => {
                     let var = self.let_bind_value(!cons)?;
                     self.vars.push(var);
                 }
                 // (let (x))
-                Object::Symbol(sym) => {
-                    self.vars.push((!sym, Object::NIL));
+                Object::Symbol(_) => {
+                    let val = cons!(binding; self.arena);
+                    self.vars.push(val.try_into().unwrap());
                 }
                 // (let (1))
                 x => bail!(Error::from_object(Type::Cons, x)),
@@ -247,17 +276,19 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 
     fn let_bind_parallel(&mut self, form: Object<'ob>) -> Result<()> {
-        let mut let_bindings = Vec::new();
+        let mut let_bindings: Vec<&'ob Cons<'ob>> = Vec::new();
         for binding in form.as_list()? {
-            match binding? {
+            let binding = binding?;
+            match binding {
                 // (let ((x y)))
                 Object::Cons(cons) => {
                     let var = self.let_bind_value(!cons)?;
                     let_bindings.push(var);
                 }
                 // (let (x))
-                Object::Symbol(sym) => {
-                    let_bindings.push((!sym, Object::NIL));
+                Object::Symbol(_) => {
+                    let val: Object = cons!(binding; self.arena);
+                    let_bindings.push(val.try_into().unwrap());
                 }
                 // (let (1))
                 x => bail!(Error::from_object(Type::Cons, x)),
@@ -267,7 +298,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(())
     }
 
-    fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<Variable<'ob>> {
+    fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<&'ob Cons<'ob>> {
         let mut iter = cons.cdr().as_list()?;
         let value = match iter.len() {
             // (let ((x)))
@@ -277,8 +308,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             // (let ((x y z ..)))
             _ => bail!("Let binding forms can only have 1 value"),
         };
-        let name = cons.car().try_into()?;
-        Ok((name, value))
+        let name: Symbol = cons.car().try_into()?;
+        let val = cons!(name, value; self.arena);
+        Ok(val.try_into().unwrap())
     }
 
     fn implicit_progn(&mut self, forms: ElemIter<'_, 'ob>) -> Result<Object<'ob>> {
@@ -292,6 +324,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
 #[cfg(test)]
 mod test {
+    use crate::symbol::intern;
+
     use super::*;
 
     macro_rules! check_interpreter {
@@ -300,7 +334,7 @@ mod test {
             let comp_env = &mut Environment::default();
             println!("Test String: {}", $compare);
             let obj = crate::reader::read($compare, comp_arena).unwrap().0;
-            let expect = comp_arena.add($expect);
+            let expect: Object = comp_arena.add($expect);
             assert_eq!(eval(obj, None, comp_env, comp_arena).unwrap(), expect);
         }};
     }
@@ -359,5 +393,24 @@ mod test {
         check_interpreter!("(prog1 1 2 3)", 1);
         check_interpreter!("(prog2 1 2 3)", 2);
         check_interpreter!("(progn 1 2 3 4)", 4);
+    }
+
+    #[test]
+    fn test_functions() {
+        let arena = &Arena::new();
+        check_interpreter!(
+            "(function (lambda))",
+            list![&sym::CLOSURE, list![true; arena]; arena]
+        );
+        let x = intern("x");
+        let y = intern("y");
+        check_interpreter!(
+            "(function (lambda (x) x))",
+            list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena]
+        );
+        check_interpreter!(
+            "(let ((y 1)) (function (lambda (x) x)))",
+            list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena]
+        );
     }
 }

@@ -344,7 +344,7 @@ lazy_static! {
             SYMBOLS => {
                 FUNCTION, QUOTE, UNQUOTE, BACKQUOTE,
                 NIL, TRUE, AND_OPTIONAL, AND_REST,
-                LAMBDA, MACRO, WHILE, PROGN, PROG1,
+                LAMBDA, CLOSURE, MACRO, WHILE, PROGN, PROG1,
                 PROG2, SETQ, DEFCONST, COND,
                 LET, LET_STAR, IF, AND, OR,
                 LEXICAL_BINDING, SYSTEM_TYPE,
@@ -388,6 +388,7 @@ pub(crate) mod sym {
         AND_OPTIONAL => "&optional",
         AND_REST => "&rest",
         LAMBDA => "lambda",
+        CLOSURE => "closure",
         WHILE => "while",
         PROGN => "progn",
         PROG1 => "prog1",
