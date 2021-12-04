@@ -12,7 +12,7 @@ use super::{Bits, Macro};
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
-    Symbol(Data<Symbol>),
+    Uncompiled(Data<&'ob Cons<'ob>>),
 }
 
 impl<'ob> From<Function<'ob>> for Object<'ob> {
@@ -20,7 +20,7 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
         match x {
             Function::LispFn(x) => Object::LispFn(x),
             Function::SubrFn(x) => Object::SubrFn(x),
-            Function::Symbol(x) => Object::Symbol(x),
+            Function::Uncompiled(x) => Object::Cons(x),
         }
     }
 }
@@ -100,7 +100,7 @@ impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
         match x {
             Function::LispFn(x) => FuncCell::LispFn(x),
             Function::SubrFn(x) => FuncCell::SubrFn(x),
-            Function::Symbol(x) => FuncCell::Symbol(x),
+            Function::Uncompiled(x) => FuncCell::Uncompiled(x),
         }
     }
 }
@@ -163,6 +163,7 @@ pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob LispFn<'ob>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Macro<'ob>>),
+    Uncompiled(Data<&'ob Cons<'ob>>),
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -171,6 +172,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
             Callable::LispFn(x) => Object::LispFn(x),
             Callable::SubrFn(x) => Object::SubrFn(x),
             Callable::Macro(x) => Object::Cons(x.into()),
+            Callable::Uncompiled(x) => Object::Cons(x),
         }
     }
 }

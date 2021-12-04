@@ -1,8 +1,6 @@
 use crate::arena::Arena;
-use crate::cons::Cons;
-use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Function, LispFn, Macro, Object};
+use crate::object::{Callable, FuncCell, Function, Macro, Object};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -69,114 +67,34 @@ impl GlobalSymbol {
         }
     }
 
-    fn compile_function<'ob, 'other>(
-        &self,
-        obj: &'other Cons<'other>,
-        env: &mut Environment<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<&'ob LispFn<'ob>> {
-        let obj: Object =
-            unsafe { std::mem::transmute::<Object<'other>, Object<'ob>>(Object::Cons(obj.into())) };
-        let func = crate::compile::compile_lambda(obj, env, arena)?;
-        let cell: FuncCell = arena.add(func);
-        INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
-        if let Some(FuncCell::LispFn(func)) = self.func() {
-            Ok(!func)
-        } else {
-            unreachable!("type was not the type we just inserted");
-        }
-    }
-
-    fn compile_macro<'ob, 'other>(
-        &self,
-        obj: &Cons<'other>,
-        env: &mut Environment<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<&'ob Macro<'ob>> {
-        match obj.car() {
-            Object::Symbol(sym) if sym == &sym::MACRO => {
-                let cell = {
-                    let obj: Object = unsafe { std::mem::transmute(obj.cdr()) };
-                    let func = crate::compile::compile_lambda(obj, env, arena)?;
-                    let sym: Object = (&sym::MACRO).into();
-                    let cons: Object = cons!(sym, func; arena);
-                    cons.try_into().expect("conversion should be infallible")
-                };
-                INTERNED_SYMBOLS.lock().unwrap().set_func(self, cell);
-                if let Some(FuncCell::Macro(func)) = self.func() {
-                    Ok(!func)
-                } else {
-                    unreachable!("type was not the type we just inserted");
-                }
-            }
-            other => Err(anyhow!("Form was not a macro: {}", other)),
-        }
-    }
-
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_func<'ob>(
-        &self,
-        env: &mut Environment<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<Option<Function<'ob>>> {
+    pub(crate) fn resolve_func<'ob>(&self) -> Result<Option<Function<'ob>>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.resolve_func(env, arena),
+            Some(FuncCell::Symbol(sym)) => sym.resolve_func(),
             Some(FuncCell::LispFn(x)) => Ok(Some(Function::LispFn(x))),
             Some(FuncCell::SubrFn(x)) => Ok(Some(Function::SubrFn(x))),
             Some(FuncCell::Macro(_)) => Err(anyhow!("Macro's are invalid as functions")),
-            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
-                Object::Symbol(sym) if sym == &sym::MACRO => {
-                    Err(anyhow!("Macro's are invalid as functions"))
-                }
-                _ => {
-                    let func = self.compile_function(!obj, env, arena)?;
-                    Ok(Some(Function::LispFn(func.into())))
-                }
-            },
+            Some(FuncCell::Uncompiled(x)) => Ok(Some(Function::Uncompiled(x))),
             None => Ok(None),
         }
     }
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolved_callable<'ob>(
-        &self,
-        env: &mut Environment<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<Option<Callable<'ob>>> {
+    pub(crate) fn resolve_callable<'ob>(&self) -> Option<Callable<'ob>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.resolved_callable(env, arena),
-            Some(FuncCell::LispFn(x)) => Ok(Some(Callable::LispFn(x))),
-            Some(FuncCell::SubrFn(x)) => Ok(Some(Callable::SubrFn(x))),
-            Some(FuncCell::Macro(x)) => Ok(Some(Callable::Macro(x))),
-            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
-                Object::Symbol(sym) if sym == &sym::MACRO => {
-                    let func = self.compile_macro(!obj, env, arena)?;
-                    Ok(Some(Callable::Macro(func.into())))
-                }
-                _ => {
-                    let lisp_macro = self.compile_function(!obj, env, arena)?;
-                    Ok(Some(Callable::LispFn(lisp_macro.into())))
-                }
-            },
-            None => Ok(None),
+            Some(FuncCell::Symbol(sym)) => sym.resolve_callable(),
+            Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
+            Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
+            Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
+            Some(FuncCell::Uncompiled(obj)) => Some(Callable::Uncompiled(obj)),
+            None => None,
         }
     }
 
-    pub(crate) fn as_macro<'ob>(
-        &self,
-        env: &mut Environment<'ob>,
-        arena: &'ob Arena,
-    ) -> Result<Option<&'ob Macro<'ob>>> {
+    pub(crate) fn as_macro<'ob>(&self) -> Option<&'ob Macro<'ob>> {
         match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.as_macro(env, arena),
-            Some(FuncCell::Macro(x)) => Ok(Some(!x)),
-            Some(FuncCell::Uncompiled(obj)) => match obj.car() {
-                Object::Symbol(sym) if sym == &sym::MACRO => {
-                    let lisp_macro = self.compile_macro(!obj, env, arena)?;
-                    Ok(Some(lisp_macro))
-                }
-                _ => Ok(None),
-            },
-            Some(_) | None => Ok(None),
+            Some(FuncCell::Symbol(sym)) => sym.as_macro(),
+            Some(FuncCell::Macro(x)) => Some(!x),
+            Some(_) | None => None,
         }
     }
 
@@ -372,7 +290,6 @@ pub(crate) mod sym {
     use super::GlobalSymbol;
 
     pub(crate) use crate::alloc::MAKE_CLOSURE;
-    pub(crate) use crate::data::DEFALIAS;
     pub(crate) use crate::data::DEFVAR;
     pub(crate) use crate::data::NULL;
 

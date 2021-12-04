@@ -24,6 +24,7 @@
 // Enable all clippy lints, and then selectivly disable the ones we don't want
 #![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![allow(
+    clippy::todo,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
     clippy::as_conversions,

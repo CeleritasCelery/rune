@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -221,17 +220,13 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(
-    object: Object<'ob>,
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Result<Object<'ob>> {
+pub(crate) fn indirect_function(object: Object) -> Object {
     match object {
-        Object::Symbol(sym) => match sym.resolved_callable(env, arena)? {
-            Some(func) => Ok(func.into()),
-            None => Ok(Object::NIL),
+        Object::Symbol(sym) => match sym.resolve_callable() {
+            Some(func) => func.into(),
+            None => Object::NIL,
         },
-        x => Ok(x),
+        x => x,
     }
 }
 

@@ -140,6 +140,12 @@ impl<'ob> Default for Object<'ob> {
     }
 }
 
+impl<'ob> Default for &Object<'ob> {
+    fn default() -> Self {
+        &Object::NIL
+    }
+}
+
 impl<'ob> fmt::Display for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

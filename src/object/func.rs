@@ -12,7 +12,7 @@ use anyhow::{bail, Result};
 use super::data::Data;
 
 /// Argument requirments to a function.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub(crate) struct FnArgs {
     /// a &rest argument.
     pub(crate) rest: bool,
@@ -184,10 +184,9 @@ pub(crate) struct Macro<'ob>(Cons<'ob>);
 
 impl<'ob> Macro<'ob> {
     pub(crate) fn get(&self) -> Function<'ob> {
-        match self.0.cdr() {
-            Object::LispFn(x) => Function::LispFn(x),
-            Object::SubrFn(x) => Function::SubrFn(x),
-            _ => unreachable!("Macro should only contain a valid function"),
+        match self.0.cdr().try_into() {
+            Ok(f) => f,
+            Err(_) => unreachable!("Macro should only contain a valid function"),
         }
     }
 }
@@ -197,13 +196,13 @@ impl<'ob> TryFrom<&Cons<'ob>> for &Macro<'ob> {
 
     fn try_from(value: &Cons<'ob>) -> Result<Self, Self::Error> {
         match value.car() {
-            Object::Symbol(sym) if !sym == &sym::MACRO => match value.cdr() {
-                Object::LispFn(_) | Object::SubrFn(_) => unsafe {
+            Object::Symbol(sym) if !sym == &sym::MACRO => {
+                let _: Function = value.cdr().try_into()?;
+                unsafe {
                     let ptr: *const Cons = value;
                     Ok(&*ptr.cast::<Macro>())
-                },
-                x => Err(Error::from_object(Type::Func, x).into()),
-            },
+                }
+            }
             x => Err(Error::from_object(Type::Symbol, x).into()),
         }
     }

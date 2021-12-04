@@ -28,8 +28,6 @@ pub(crate) enum CompError {
     /// The stack reference index is a u16, so if stack grows larger then
     /// U16_MAX in a single function call it will trigger this error
     StackSizeOverflow,
-    /// Expected a function object, but found a different type for a function call
-    InvalidFunction(Box<str>),
 }
 
 impl Display for CompError {
@@ -38,7 +36,6 @@ impl Display for CompError {
             CompError::ConstOverflow => write!(f, "Too many constants declared in fuction"),
             CompError::LetValueCount => write!(f, "Let forms can only have 1 value"),
             CompError::StackSizeOverflow => write!(f, "Stack size overflow"),
-            CompError::InvalidFunction(x) => write!(f, "Invalid Function : {}", x),
         }
     }
 }
@@ -386,7 +383,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) if self.lazy_eval == 0 => match cons.car() {
+                Object::Cons(cons) => match cons.car() {
                     Object::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
                     _ => self.const_ref(Object::Cons(cons), None),
                 },
@@ -611,7 +608,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         match func {
-            Object::Symbol(name) => match name.as_macro(self.env, self.arena)? {
+            Object::Symbol(name) => match name.as_macro() {
                 Some(lisp_macro) => {
                     let form = self.compile_macro_call(args, lisp_macro.get())?;
                     self.compile_form(form)
@@ -710,13 +707,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             // Add 1 for the lambda argument
             self.emit_call(upvalues.len() + 1);
         }
-        Ok(())
-    }
-
-    fn compile_defalias(&mut self, caller: Symbol, obj: Object<'ob>) -> Result<()> {
-        self.lazy_eval += 1;
-        self.compile_func_call(caller.into(), obj)?;
-        self.lazy_eval -= 1;
         Ok(())
     }
 
@@ -874,7 +864,6 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 WHILE => self.compile_loop(forms),
                 QUOTE => self.quote(forms),
                 BACKQUOTE => self.backquote(forms),
-                DEFALIAS => self.compile_defalias(!form, forms),
                 FUNCTION => self.compile_function(forms),
                 PROGN => self.progn(forms),
                 PROG1 => self.progx(forms, 1),
@@ -1039,26 +1028,6 @@ fn compile_closure<'ob, 'brw>(
     }
 }
 
-/// Compile a lambda.
-pub(crate) fn compile_lambda<'ob>(
-    obj: Object<'ob>,
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Result<LispFn<'ob>> {
-    match obj {
-        Object::Cons(sexp) => match sexp.car() {
-            Object::Symbol(sym) if sym == &sym::FUNCTION => compile_lambda(sexp.cdr(), env, arena),
-            Object::Symbol(sym) if sym == &sym::LAMBDA => {
-                let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
-                debug_assert!(upvalues.is_empty());
-                Ok(func)
-            }
-            x => Err(anyhow!(CompError::InvalidFunction(x.to_string().into()))),
-        },
-        x => Err(anyhow!(CompError::InvalidFunction(x.to_string().into()))),
-    }
-}
-
 /// Compile a lisp object.
 pub(crate) fn compile<'ob>(
     obj: Object<'ob>,
@@ -1077,6 +1046,28 @@ mod test {
     use crate::symbol::intern;
     #[allow(clippy::enum_glob_use)]
     use OpCode::*;
+
+    /// Compile a lambda.
+    fn compile_lambda<'ob>(
+        obj: Object<'ob>,
+        env: &mut Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<LispFn<'ob>> {
+        match obj {
+            Object::Cons(sexp) => match sexp.car() {
+                Object::Symbol(sym) if sym == &sym::FUNCTION => {
+                    compile_lambda(sexp.cdr(), env, arena)
+                }
+                Object::Symbol(sym) if sym == &sym::LAMBDA => {
+                    let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
+                    debug_assert!(upvalues.is_empty());
+                    Ok(func)
+                }
+                x => Err(anyhow!("Invalid Function: {}", x)),
+            },
+            x => Err(anyhow!("Invalid Function: {}", x)),
+        }
+    }
 
     fn check_error<E>(compare: &str, expect: E)
     where

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use crate::error::{Error, Type};
+use crate::object::Callable;
 use crate::symbol::sym;
 use crate::{
     arena::Arena,
@@ -8,7 +9,7 @@ use crate::{
     object::Object,
     symbol::Symbol,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 
 struct Interpreter<'ob, 'brw> {
     vars: Vec<&'ob Cons<'ob>>,
@@ -16,7 +17,7 @@ struct Interpreter<'ob, 'brw> {
     arena: &'ob Arena,
 }
 
-pub(crate) fn eval<'ob, 'brw>(
+fn eval<'ob, 'brw>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
     env: &'brw mut Environment<'ob>,
@@ -33,6 +34,20 @@ pub(crate) fn eval<'ob, 'brw>(
         arena,
     };
     interpreter.eval_form(form)
+}
+
+pub(crate) fn call<'ob, 'brw>(
+    form: Object<'ob>,
+    args: Vec<Object<'ob>>,
+    env: &'brw mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    let mut frame = Interpreter {
+        vars: Vec::new(),
+        env,
+        arena,
+    };
+    frame.call_closure(form.try_into()?, args)
 }
 
 impl<'ob, 'brw> Interpreter<'ob, 'brw> {
@@ -60,14 +75,171 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 PROG1 => self.eval_progx(forms, 1),
                 PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
-                FUNCTION => self.eval_function(forms),
-                _ => todo!("eval symbol function call"),
+                FUNCTION => Ok(self.eval_function(forms)),
+                @ func => self.eval_call(func, forms),
             },
-            _ => todo!("eval function call"),
+            other => Err(anyhow!("Invalid Function 1: {}", other)),
         }
     }
 
-    fn eval_function(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn parse_closure_env(obj: Object<'ob>) -> Result<Vec<&'ob Cons<'ob>>> {
+        let forms = obj.as_list()?;
+        let mut env = Vec::new();
+        for form in forms {
+            match form? {
+                Object::Cons(pair) => {
+                    env.push(!pair);
+                }
+                Object::True(_) => return Ok(env),
+                x => bail!("Invalid closure environment member: {}", x),
+            }
+        }
+        Err(anyhow!("Closure env did not end with `t`"))
+    }
+
+    fn parse_arg_list(bindings: Object) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+        let mut required = Vec::new();
+        let mut optional = Vec::new();
+        let mut rest = None;
+        let mut arg_type = &mut required;
+        let mut iter = bindings.as_list()?;
+        while let Some(binding) = iter.next() {
+            symbol_match! {
+                binding?.try_into()?;
+                AND_OPTIONAL => arg_type = &mut optional,
+                AND_REST => {
+                    if let Some(last) = iter.next() {
+                        rest = Some(last?.try_into()?);
+                        ensure!(
+                            iter.next().is_none(),
+                            "Found multiple arguments after &rest"
+                        );
+                    }
+                },
+                @ sym => {
+                    arg_type.push(sym);
+                }
+            }
+        }
+        Ok((required, optional, rest))
+    }
+
+    fn bind_args(
+        &self,
+        arg_list: Object,
+        args: Vec<Object<'ob>>,
+        vars: &mut Vec<&'ob Cons<'ob>>,
+    ) -> Result<()> {
+        let (required, optional, rest) = Self::parse_arg_list(arg_list)?;
+
+        let num_required_args = required.len() as u16;
+        let num_optional_args = optional.len() as u16;
+        let num_actual_args = args.len() as u16;
+        // Ensure the minimum number of arguments is present
+        ensure!(
+            num_actual_args >= num_required_args,
+            Error::ArgCount(num_required_args, num_actual_args)
+        );
+
+        let mut arg_values = args.into_iter();
+
+        for name in required {
+            let val = arg_values.next().unwrap();
+            vars.push(cons!(name, val; self.arena).try_into().unwrap());
+        }
+
+        for name in optional {
+            let val = arg_values.next().unwrap_or_default();
+            vars.push(cons!(name, val; self.arena).try_into().unwrap());
+        }
+
+        if let Some(rest_name) = rest {
+            let values = arg_values.as_slice();
+            let list = crate::fns::slice_into_list(values, None, self.arena);
+            vars.push(cons!(rest_name, list; self.arena).try_into().unwrap());
+        } else {
+            // Ensure too many args were not provided
+            ensure!(
+                arg_values.next().is_none(),
+                Error::ArgCount(num_required_args + num_optional_args, num_actual_args)
+            );
+        }
+        Ok(())
+    }
+
+    fn bind_variables(
+        &self,
+        forms: &mut ElemIter<'_, 'ob>,
+        args: Vec<Object<'ob>>,
+    ) -> Result<Vec<&'ob Cons<'ob>>> {
+        // Add closure environment to variables
+        // (closure ((x . 1) (y . 2) t) ...)
+        //          ^^^^^^^^^^^^^^^^^^^
+        let env = forms
+            .next()
+            .ok_or_else(|| anyhow!("Closure missing environment"))??;
+        let mut vars = Self::parse_closure_env(env)?;
+
+        // Add function arguments to variables
+        // (closure (t) (x y &rest z) ...)
+        //              ^^^^^^^^^^^^^
+        let arg_list = forms
+            .next()
+            .ok_or_else(|| anyhow!("Closure missing argument list"))??;
+        self.bind_args(arg_list, args, &mut vars)?;
+        Ok(vars)
+    }
+
+    fn call_closure(
+        &mut self,
+        closure: &'ob Cons<'ob>,
+        args: Vec<Object<'ob>>,
+    ) -> Result<Object<'ob>> {
+        match closure.car() {
+            Object::Symbol(sym) if !sym == &sym::CLOSURE => {
+                let mut forms = closure.cdr().as_list()?;
+                let vars = self.bind_variables(&mut forms, args)?;
+
+                let mut call_frame = Interpreter {
+                    vars,
+                    env: self.env,
+                    arena: self.arena,
+                };
+                call_frame.implicit_progn(forms)
+            }
+            other => Err(Error::from_object(Type::Func, other).into()),
+        }
+    }
+
+    fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
+        use crate::bytecode;
+        let func = match name.resolve_callable() {
+            Some(x) => x,
+            None => bail!("Invalid function 2: {}", name),
+        };
+
+        let mut eval_args =
+            || -> Result<Vec<_>> { obj.as_list()?.map(|x| self.eval_form(x?)).collect() };
+        let macro_args = || -> Result<Vec<_>> { obj.as_list()?.collect() };
+
+        match func {
+            Callable::LispFn(func) => {
+                bytecode::call_lisp(&func, eval_args()?, self.env, self.arena)
+            }
+            Callable::SubrFn(func) => {
+                bytecode::call_subr(*func, eval_args()?, self.env, self.arena)
+            }
+            Callable::Macro(mcro) => mcro.get().call(macro_args()?, self.env, self.arena),
+            Callable::Uncompiled(form) => match form.car() {
+                Object::Symbol(sym) if !sym == &sym::CLOSURE => {
+                    let args = eval_args()?;
+                    self.call_closure(form.cdr().try_into()?, args)
+                }
+                other => Err(anyhow!("Invalid Function 3: {}", other)),
+            },
+        }
+    }
+    fn eval_function(&mut self, obj: Object<'ob>) -> Object<'ob> {
         match obj {
             Object::Cons(cons) => match cons.car() {
                 Object::Cons(cons) => {
@@ -83,14 +255,14 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                             )
                         };
                         let end: Object = cons!(env, cons.cdr(); self.arena);
-                        Ok(cons!(&sym::CLOSURE, end; self.arena))
+                        cons!(&sym::CLOSURE, end; self.arena)
                     } else {
-                        Ok(obj)
+                        obj
                     }
                 }
-                _ => Ok(obj),
+                _ => obj,
             },
-            _ => Ok(obj),
+            _ => obj,
         }
     }
 
@@ -322,6 +494,16 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 }
 
+fn eval_function_body<'ob, 'brw>(
+    forms: ElemIter<'_, 'ob>,
+    vars: Vec<&'ob Cons<'ob>>,
+    env: &'brw mut Environment<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    let mut call_frame = Interpreter { vars, env, arena };
+    call_frame.implicit_progn(forms)
+}
+
 #[cfg(test)]
 mod test {
     use crate::symbol::intern;
@@ -412,5 +594,10 @@ mod test {
             "(let ((y 1)) (function (lambda (x) x)))",
             list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena]
         );
+    }
+
+    #[test]
+    fn test_call() {
+        check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
     }
 }

@@ -19,7 +19,11 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Object::Symbol(x) => Ok(Function::Symbol(x)),
+            Object::Cons(x) => Ok(Function::Uncompiled(x)),
+            Object::Symbol(sym) => match sym.resolve_func()? {
+                Some(x) => Ok(x),
+                None => Err(anyhow!("Void Function: {}", sym)),
+            },
             x => Err(Error::from_object(Type::Func, x).into()),
         }
     }
@@ -32,6 +36,7 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
             Callable::LispFn(x) => Ok(Function::LispFn(x)),
             Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
             Callable::Macro(_) => Err(anyhow!("Macros are invalid as functions")),
+            Callable::Uncompiled(x) => Ok(Function::Uncompiled(x)),
         }
     }
 }
