@@ -273,10 +273,10 @@ mod test {
         assert_eq!(cmp, cons2.car());
 
         let cons3 = as_cons(cons2.cdr()).expect("expected cons");
-        let cmp: Object = 5.into();
-        assert_eq!(cmp, cons3.car());
-        let cmp: Object = 9.into();
-        assert_eq!(cmp, cons3.cdr());
+        let cmp1: Object = 5.into();
+        assert_eq!(cmp1, cons3.car());
+        let cmp2: Object = 9.into();
+        assert_eq!(cmp2, cons3.cdr());
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));

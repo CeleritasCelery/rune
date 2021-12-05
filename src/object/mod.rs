@@ -175,11 +175,12 @@ impl<'ob> fmt::Debug for Object<'ob> {
             Object::Int(x) => write!(f, "{}", x),
             Object::Cons(x) => write!(f, "{:?}", x),
             Object::Vec(x) => write!(f, "{:?}", x),
-            Object::String(x) => {
+            Object::String(string) => {
                 write!(
                     f,
                     "\"{}\"",
-                    x.chars()
+                    string
+                        .chars()
                         .map(|x| if x == '\n' { '↲' } else { x })
                         .collect::<String>()
                 )
@@ -200,31 +201,35 @@ impl<'ob> fmt::Debug for Object<'ob> {
     }
 }
 
+#[allow(clippy::assertions_on_constants)]
+mod const_assertions {
+    use super::{Data, Object};
+    use std::mem::{align_of, size_of};
+    const _: () = assert!(isize::BITS == 64);
+    const _: () = assert!(size_of::<isize>() == size_of::<Object>());
+    const _: () = assert!(align_of::<isize>() == align_of::<Object>());
+    const _: () = assert!(size_of::<Object>() == size_of::<Option<Object>>());
+    const _: () =
+        assert!(0x1800_i64 == unsafe { std::mem::transmute(Object::Int(Data::from_int(0x18))) });
+}
+
 #[cfg(test)]
 mod test {
 
     use super::*;
-    use std::mem::{align_of, size_of};
-
-    #[test]
-    fn sizes() {
-        assert_eq!(isize::BITS, 64);
-        assert_eq!(size_of::<isize>(), size_of::<Object>());
-        assert_eq!(align_of::<isize>(), align_of::<Object>());
-        assert_eq!(size_of::<Object>(), size_of::<Option<Object>>());
-        assert_eq!(0x1800_i64, unsafe {
-            std::mem::transmute(Object::Int(Data::from_int(0x18)))
-        });
-    }
 
     #[test]
     fn integer() {
         let arena = &Arena::new();
-        let int: Object = 3.into_obj(arena);
-        assert!(matches!(int, Object::Int(_)));
-        assert_eq!(int, Object::Int(Data::from_int(3)));
-        let int: Object = 0.into_obj(arena);
-        assert_eq!(int, Object::Int(Data::from_int(0)));
+        {
+            let int: Object = 3.into_obj(arena);
+            assert!(matches!(int, Object::Int(_)));
+            assert_eq!(int, Object::Int(Data::from_int(3)));
+        }
+        {
+            let int: Object = 0.into_obj(arena);
+            assert_eq!(int, Object::Int(Data::from_int(0)));
+        }
     }
 
     #[test]
@@ -239,15 +244,18 @@ mod test {
     #[test]
     fn string() {
         let arena = &Arena::new();
-        let x: Object = "foo".into_obj(arena);
-        assert!(matches!(x, Object::String(_)));
-        let cmp = "foo".to_owned();
-        assert_eq!(x, Object::String(Data::from_ref(&cmp)));
-
-        let x: Object = "bar".to_owned().into_obj(arena);
-        assert!(matches!(x, Object::String(_)));
-        let cmp = "bar".to_owned();
-        assert_eq!(x, Object::String(Data::from_ref(&cmp)));
+        {
+            let x: Object = "foo".into_obj(arena);
+            assert!(matches!(x, Object::String(_)));
+            let cmp = "foo".to_owned();
+            assert_eq!(x, Object::String(Data::from_ref(&cmp)));
+        }
+        {
+            let x: Object = "bar".to_owned().into_obj(arena);
+            assert!(matches!(x, Object::String(_)));
+            let cmp = "bar".to_owned();
+            assert_eq!(x, Object::String(Data::from_ref(&cmp)));
+        }
     }
 
     #[test]
@@ -295,9 +303,9 @@ mod test {
         if let Object::Cons(cons) = obj {
             assert!(cons.set_car(Object::NIL).is_err());
             assert!(cons.set_cdr(Object::NIL).is_err());
-            if let Object::Vec(vec) = cons.cdr() {
-                assert!(vec.try_borrow_mut().is_err());
-                if let Object::Cons(inner) = vec.try_borrow().unwrap().get(0).unwrap() {
+            if let Object::Vec(inner_vec) = cons.cdr() {
+                assert!(inner_vec.try_borrow_mut().is_err());
+                if let Object::Cons(inner) = inner_vec.try_borrow().unwrap().get(0).unwrap() {
                     assert!(inner.set_car(Object::NIL).is_err());
                     assert!(inner.set_cdr(Object::NIL).is_err());
                 } else {

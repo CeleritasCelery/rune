@@ -228,8 +228,8 @@ mod test {
     fn function() {
         let arena = &Arena::new();
         let constant: Object = 1.into_obj(arena);
-        let func = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
-        let obj: Object = func.into_obj(arena);
+        let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
+        let obj: Object = lisp_fn.into_obj(arena);
         assert!(matches!(obj, Object::LispFn(_)));
         format!("{}", obj);
         let func = match obj {

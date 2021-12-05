@@ -143,7 +143,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Given a [`Token`] calculate it's position relative to this `Tokenizer`.
-    fn position(&self, token: Token<'a>) -> usize {
+    fn relative_pos(&self, token: Token<'a>) -> usize {
         match token {
             Token::OpenParen(x)
             | Token::CloseParen(x)
@@ -216,7 +216,7 @@ impl<'a> Tokenizer<'a> {
 
     fn get_symbol(&mut self, beg: usize, chr: char) -> Token<'a> {
         let mut skip = chr == '\\';
-        let end = self.skip_till(|chr| !escaped(&mut skip, chr) && !symbol_char(chr));
+        let end = self.skip_till(|c| !escaped(&mut skip, c) && !symbol_char(c));
         Token::Ident(&self.slice[beg..end])
     }
 
@@ -360,7 +360,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                 let obj = self.read_sexp(sexp);
                 match self.tokens.next() {
                     Some(Token::CloseParen(_)) => obj.map(Some),
-                    Some(token) => Err(Error::ExtraItemInCdr(self.tokens.position(token))),
+                    Some(token) => Err(Error::ExtraItemInCdr(self.tokens.relative_pos(token))),
                     None => Err(Error::MissingCloseParen(delim)),
                 }
             }
@@ -414,7 +414,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         match self.tokens.next() {
             // TODO: Implement actual parsing
             Some(Token::Ident(_)) => Ok(0.into()),
-            Some(tok) => Err(Error::MissingQuotedItem(self.tokens.position(tok))),
+            Some(tok) => Err(Error::MissingQuotedItem(self.tokens.relative_pos(tok))),
             None => Err(Error::MissingQuotedItem(pos)),
         }
     }

@@ -56,9 +56,9 @@ impl<'ob> Arena {
         objects.push(unsafe { obj.coerce_lifetime() });
     }
 
-    pub(crate) fn alloc_f64(&'ob self, x: f64) -> &'ob mut f64 {
+    pub(crate) fn alloc_f64(&'ob self, obj: f64) -> &'ob mut f64 {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::Float(Box::new(x)));
+        Self::register(&mut objects, OwnedObject::Float(Box::new(obj)));
         if let Some(OwnedObject::Float(x)) = objects.last_mut() {
             unsafe { std::mem::transmute::<&mut f64, &'ob mut f64>(x.as_mut()) }
         } else {
@@ -66,12 +66,12 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_cons(&'ob self, mut x: Cons<'ob>) -> &'ob mut Cons<'ob> {
+    pub(crate) fn alloc_cons(&'ob self, mut obj: Cons<'ob>) -> &'ob mut Cons<'ob> {
         if self.is_const {
-            x.make_const();
+            obj.make_const();
         }
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::Cons(Box::new(x)));
+        Self::register(&mut objects, OwnedObject::Cons(Box::new(obj)));
         if let Some(OwnedObject::Cons(x)) = objects.last_mut() {
             unsafe { std::mem::transmute::<&mut Cons, &'ob mut Cons>(x.as_mut()) }
         } else {
@@ -79,9 +79,9 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_string(&'ob self, x: String) -> &'ob mut String {
+    pub(crate) fn alloc_string(&'ob self, obj: String) -> &'ob mut String {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::String(Box::new(x)));
+        Self::register(&mut objects, OwnedObject::String(Box::new(obj)));
         if let Some(OwnedObject::String(x)) = objects.last_mut() {
             unsafe { std::mem::transmute::<&mut String, &'ob mut String>(x.as_mut()) }
         } else {
@@ -89,9 +89,12 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_vec(&'ob self, x: Vec<Object<'ob>>) -> &'ob mut RefCell<Vec<Object<'ob>>> {
+    pub(crate) fn alloc_vec(
+        &'ob self,
+        obj: Vec<Object<'ob>>,
+    ) -> &'ob mut RefCell<Vec<Object<'ob>>> {
         let mut objects = self.objects.borrow_mut();
-        let ref_cell = RefCell::new(x);
+        let ref_cell = RefCell::new(obj);
         if self.is_const {
             // Leak a borrow so that the vector cannot be borrowed mutably
             std::mem::forget(ref_cell.borrow());
@@ -108,9 +111,9 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_lisp_fn(&'ob self, x: LispFn<'ob>) -> &'ob mut LispFn<'ob> {
+    pub(crate) fn alloc_lisp_fn(&'ob self, obj: LispFn<'ob>) -> &'ob mut LispFn<'ob> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::LispFn(Box::new(x)));
+        Self::register(&mut objects, OwnedObject::LispFn(Box::new(obj)));
         if let Some(OwnedObject::LispFn(x)) = objects.last_mut() {
             unsafe { std::mem::transmute::<&mut LispFn, &'ob mut LispFn>(x.as_mut()) }
         } else {
@@ -118,9 +121,9 @@ impl<'ob> Arena {
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&'ob self, x: SubrFn) -> &'ob mut SubrFn {
+    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob mut SubrFn {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(x)));
+        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
         if let Some(OwnedObject::SubrFn(x)) = objects.last_mut() {
             unsafe { std::mem::transmute::<&mut SubrFn, &'ob mut SubrFn>(x.as_mut()) }
         } else {

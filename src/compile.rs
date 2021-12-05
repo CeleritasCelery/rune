@@ -1473,54 +1473,57 @@ mod test {
 
     #[test]
     fn test_closure() {
-        let func = LispFn::new(
-            vec_into![Constant0, Ret].into(),
-            vec![Object::NIL; UPVALUE_RESERVE],
-            0,
-            0,
-            false,
-        );
-        check_compiler!(
-            "(let ((x 1)(y 2)) #'(lambda () x))",
-            [
-                Constant0,
-                Constant1,
-                Constant2,
-                Constant3,
-                StackRef3,
-                Call2,
-                DiscardNKeepTOS,
-                2,
-                Ret
-            ],
-            [1, 2, &crate::alloc::MAKE_CLOSURE, func]
-        );
-
-        let mut consts = vec![Object::NIL; UPVALUE_RESERVE];
-        consts.push(intern("+").into());
-        let func = LispFn::new(
-            vec_into![ConstantN, 8, Constant0, Constant1, Call2, Ret].into(),
-            consts,
-            0,
-            0,
-            false,
-        );
-        check_compiler!(
-            "(let ((x 1)(y 2)) #'(lambda () (+ y x)))",
-            [
-                Constant0,
-                Constant1,
-                Constant2,
-                Constant3,
-                StackRef2,
-                StackRef4,
-                Call3,
-                DiscardNKeepTOS,
-                2,
-                Ret
-            ],
-            [1, 2, &crate::alloc::MAKE_CLOSURE, func]
-        );
+        {
+            let func = LispFn::new(
+                vec_into![Constant0, Ret].into(),
+                vec![Object::NIL; UPVALUE_RESERVE],
+                0,
+                0,
+                false,
+            );
+            check_compiler!(
+                "(let ((x 1)(y 2)) #'(lambda () x))",
+                [
+                    Constant0,
+                    Constant1,
+                    Constant2,
+                    Constant3,
+                    StackRef3,
+                    Call2,
+                    DiscardNKeepTOS,
+                    2,
+                    Ret
+                ],
+                [1, 2, &crate::alloc::MAKE_CLOSURE, func]
+            );
+        }
+        {
+            let mut consts = vec![Object::NIL; UPVALUE_RESERVE];
+            consts.push(intern("+").into());
+            let func = LispFn::new(
+                vec_into![ConstantN, 8, Constant0, Constant1, Call2, Ret].into(),
+                consts,
+                0,
+                0,
+                false,
+            );
+            check_compiler!(
+                "(let ((x 1)(y 2)) #'(lambda () (+ y x)))",
+                [
+                    Constant0,
+                    Constant1,
+                    Constant2,
+                    Constant3,
+                    StackRef2,
+                    StackRef4,
+                    Call3,
+                    DiscardNKeepTOS,
+                    2,
+                    Ret
+                ],
+                [1, 2, &crate::alloc::MAKE_CLOSURE, func]
+            );
+        }
     }
 
     #[test]

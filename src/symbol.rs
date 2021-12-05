@@ -360,22 +360,22 @@ mod test {
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
         assert!(sym.func().is_none());
-        let func = LispFn::new(vec![1].into(), vec![], 0, 0, false);
+        let func1 = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func.into_obj(arena));
+            sym.set_func(func1.into_obj(arena));
         }
-        let cell = sym.func().unwrap();
-        let before = match cell {
+        let cell1 = sym.func().unwrap();
+        let before = match cell1 {
             FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
-        let func = LispFn::new(vec![7].into(), vec![], 0, 0, false);
+        let func2 = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func.into_obj(arena));
+            sym.set_func(func2.into_obj(arena));
         }
-        let cell = sym.func().unwrap();
-        let after = match cell {
+        let cell2 = sym.func().unwrap();
+        let after = match cell2 {
             FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };

@@ -258,7 +258,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
         fill_extra_args(&mut self.stack, fill_args);
         let total_args = (arg_cnt + fill_args) as usize;
-        let i = self.stack.from_end(total_args);
+        let frame_start_idx = self.stack.from_end(total_args);
         let slice = self.stack.take_slice(total_args);
         if crate::debug::debug_enabled() {
             for i in slice {
@@ -267,8 +267,8 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             println!(")");
         }
         let result = (func.subr)(slice, env, arena)?;
-        self.stack[i] = result;
-        self.stack.truncate(i + 1);
+        self.stack[frame_start_idx] = result;
+        self.stack.truncate(frame_start_idx + 1);
         Ok(())
     }
 
@@ -446,7 +446,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                     self.stack.truncate(self.frame.start + 1);
                     self.frame = self.call_frames.pop().unwrap();
                 }
-                op @ op::Unknown => {
+                op::Unknown => {
                     panic!("Unimplemented opcode: {:?}", op);
                 }
             }

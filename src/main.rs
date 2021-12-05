@@ -44,7 +44,7 @@
     clippy::cast_precision_loss,
     clippy::float_arithmetic,
     clippy::default_numeric_fallback,
-    clippy::box_vec,
+    clippy::box_collection,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
@@ -143,7 +143,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
-    let buffer = String::from(
+    let mut buffer = String::from(
         r#"
 (progn 
     (load "lisp/byte-run.el")
@@ -160,7 +160,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     }
     crate::debug::enable_debug();
 
-    let buffer = String::from(
+    buffer = String::from(
         r#"
 (progn 
     (load "lisp/byte-run.el")

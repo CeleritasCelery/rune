@@ -68,14 +68,8 @@ pub(crate) enum OpCode {
     Unknown,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Default)]
 pub(crate) struct CodeVec(Vec<u8>);
-
-impl Default for CodeVec {
-    fn default() -> Self {
-        CodeVec(Vec::new())
-    }
-}
 
 impl From<Vec<u8>> for CodeVec {
     fn from(vec: Vec<u8>) -> Self {

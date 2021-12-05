@@ -79,7 +79,7 @@ impl Inner<i64> for Data<i64> {
 }
 
 impl Data<i64> {
-    pub(super) fn from_int(data: i64) -> Self {
+    pub(super) const fn from_int(data: i64) -> Self {
         Data::from_raw(data)
     }
 }

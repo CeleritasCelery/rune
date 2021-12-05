@@ -122,7 +122,7 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
         List::Cons(cons) => cons
             .into_iter()
             .find(|x| match x {
-                Ok(Object::Cons(cons)) => data::eq(key, cons.car()),
+                Ok(Object::Cons(elem)) => data::eq(key, elem.car()),
                 _ => false,
             })
             .transpose()
@@ -139,8 +139,8 @@ fn delete_from_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Re
     for tail in list.conses() {
         let tail = tail?;
         if eq_fn(tail.car(), elt) {
-            if let Some(prev) = &mut prev {
-                prev.set_cdr(tail.cdr())?;
+            if let Some(prev_tail) = &mut prev {
+                prev_tail.set_cdr(tail.cdr())?;
             } else {
                 head = tail.cdr();
             }
@@ -296,25 +296,31 @@ mod test {
     #[test]
     fn test_delq() {
         let arena = &Arena::new();
-        let list = list![1, 2, 3, 1, 4, 1; arena];
-        let res = delq(1.into(), list.try_into().unwrap()).unwrap();
-        assert_eq!(res, list![2, 3, 4; arena]);
-
-        let list = list![true, true, true; arena];
-        let res = delq(Object::TRUE, list.try_into().unwrap()).unwrap();
-        assert_eq!(res, Object::NIL);
+        {
+            let list = list![1, 2, 3, 1, 4, 1; arena];
+            let res = delq(1.into(), list.try_into().unwrap()).unwrap();
+            assert_eq!(res, list![2, 3, 4; arena]);
+        }
+        {
+            let list = list![true, true, true; arena];
+            let res = delq(Object::TRUE, list.try_into().unwrap()).unwrap();
+            assert_eq!(res, Object::NIL);
+        }
     }
 
     #[test]
     fn test_nreverse() {
         let arena = &Arena::new();
-        let list = list![1, 2, 3, 4; arena];
-        let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
-        assert_eq!(res, list![4, 3, 2, 1; arena]);
-
-        let list = list![1; arena];
-        let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
-        assert_eq!(res, list![1; arena]);
+        {
+            let list = list![1, 2, 3, 4; arena];
+            let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            assert_eq!(res, list![4, 3, 2, 1; arena]);
+        }
+        {
+            let list = list![1; arena];
+            let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            assert_eq!(res, list![1; arena]);
+        }
     }
 
     #[test]
