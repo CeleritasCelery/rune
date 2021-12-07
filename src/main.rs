@@ -156,7 +156,6 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     buffer = String::from(
         r#"
 (progn 
-    (load "lisp/byte-run.el")
     (load "lisp/subr.el")
 )"#,
     );

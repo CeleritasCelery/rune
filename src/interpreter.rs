@@ -77,10 +77,31 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 PROG1 => self.eval_progx(forms, 1),
                 PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
+                DEFVAR => self.defvar(forms),
                 FUNCTION => Ok(self.eval_function(forms)),
                 @ func => self.eval_call(func, forms),
             },
             other => Err(anyhow!("Invalid Function 1: {}", other)),
+        }
+    }
+
+    fn defvar(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut forms = obj.as_list()?;
+
+        match forms.next() {
+            // (defvar x ...)
+            Some(x) => {
+                let name: Symbol = x?.try_into()?;
+                let value = match forms.next() {
+                    // (defvar x y)
+                    Some(value) => self.eval_form(value?)?,
+                    // (defvar x)
+                    None => Object::NIL,
+                };
+                Ok(self.var_set(name, value))
+            }
+            // (defvar)
+            None => Err(Error::ArgCount(1, 0).into()),
         }
     }
 
@@ -626,7 +647,10 @@ mod test {
     fn test_call() {
         check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
         check_interpreter!("(let ((x #'(lambda () 3))) (funcall x))", 3);
-        check_interpreter!("(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))", 10);
+        check_interpreter!(
+            "(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))",
+            10
+        );
         // Test closures
         check_interpreter!("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7);
         check_interpreter!("(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))", 10);
