@@ -61,6 +61,12 @@ impl<'ob> FuncCell<'ob> {
                     miri_static_root(ptr as _);
                 }
             }
+            FuncCell::Uncompiled(x) => {
+                let ptr: *const _ = &x;
+                unsafe {
+                    miri_static_root(ptr as _);
+                }
+            }
             FuncCell::Symbol(_) => {}
         }
     }
