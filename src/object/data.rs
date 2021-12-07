@@ -25,25 +25,18 @@ unsafe impl<T> Send for Data<T> {}
 
 impl<T> Data<T> {
     #[inline(always)]
-    const fn into_raw(self) -> i64 {
-        let data = self.data;
-        // This operation will take the 56 bit data and left shift it so that
-        // the bottom byte is zeroed.
-        let whole = [
-            0, data[0], data[1], data[2], data[3], data[4], data[5], data[6],
-        ];
-        // We shift it back down so that original value is reconstructed.
-        i64::from_le_bytes(whole) >> 8
+    const fn into_raw(self) -> u64 {
+        let x = self.data;
+        let whole = [x[0], x[1], x[2], x[3], x[4], x[5], x[6], 0];
+        u64::from_le_bytes(whole)
     }
 
     #[inline(always)]
-    const fn from_raw(data: i64) -> Self {
-        let bytes = data.to_le_bytes();
-        // Notice bytes[7] is missing. That is the top byte that is removed.
+    const fn from_raw(data: u64) -> Self {
+        let x = data.to_le_bytes();
+        // x[7] (the top byte) is removed to make room for the tag
         Data {
-            data: [
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-            ],
+            data: [x[0], x[1], x[2], x[3], x[4], x[5], x[6]],
             marker: PhantomData,
         }
     }
@@ -53,7 +46,7 @@ impl<'a, T> Data<&'a T> {
     #[inline(always)]
     pub(super) fn from_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
-        Self::from_raw(ptr as i64)
+        Self::from_raw(ptr as u64)
     }
 }
 
@@ -74,13 +67,13 @@ impl<'a, T> Inner<&'a T> for Data<&'a T> {
 impl Inner<i64> for Data<i64> {
     #[inline(always)]
     fn inner(self) -> i64 {
-        self.into_raw()
+        self.into_raw() as i64
     }
 }
 
 impl Data<i64> {
     pub(super) const fn from_int(data: i64) -> Self {
-        Data::from_raw(data)
+        Data::from_raw(data as u64)
     }
 }
 
