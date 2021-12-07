@@ -599,5 +599,7 @@ mod test {
     #[test]
     fn test_call() {
         check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
+        check_interpreter!("(let ((x #'(lambda () 3))) (funcall x))", 3);
+        check_interpreter!("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7);
     }
 }

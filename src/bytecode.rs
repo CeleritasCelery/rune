@@ -194,6 +194,9 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
             self.stack[i] = list;
             self.stack.truncate(i + 1);
             Ok(total_args - rest_size + 1)
+        } else if func.args.rest {
+            self.stack.push(Object::NIL);
+            Ok(total_args + 1)
         } else {
             Ok(total_args)
         }
