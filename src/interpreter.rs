@@ -215,6 +215,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
         use crate::bytecode;
+        if crate::debug::debug_enabled() {
+            println!("calling: {}", name);
+        }
         let func = match name.resolve_callable() {
             Some(x) => x,
             None => bail!("Invalid function 2: {}", name),
@@ -235,7 +238,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Callable::Uncompiled(form) => match form.car() {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                     let args = eval_args()?;
-                    self.call_closure(form.cdr().try_into()?, args)
+                    self.call_closure(!form, args)
                 }
                 other => Err(anyhow!("Invalid Function 3: {}", other)),
             },
@@ -623,10 +626,11 @@ mod test {
     fn test_call() {
         check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
         check_interpreter!("(let ((x #'(lambda () 3))) (funcall x))", 3);
+        check_interpreter!("(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))", 10);
         // Test closures
         check_interpreter!("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7);
         check_interpreter!("(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))", 10);
-        // Test taht closures capture their enviroments
+        // Test that closures capture their environments
         check_interpreter!(
             "(progn (setq func (let ((x 3)) #'(lambda (y) (+ y x)))) (funcall func 5))",
             8
@@ -635,5 +639,8 @@ mod test {
         check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16);
         // Test that closures close over variables
         check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9);
+        // Test that closures in global function close over values and not
+        // variables
+        check_interpreter!("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8);
     }
 }
