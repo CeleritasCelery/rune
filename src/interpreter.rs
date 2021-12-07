@@ -371,7 +371,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             None => bail!(Error::ArgCount(2, 1)),
         };
         #[allow(clippy::if_not_else)]
-        if condition != Object::NIL {
+        if self.eval_form(condition)? != Object::NIL {
             self.eval_form(true_branch)
         } else {
             self.implicit_progn(forms)
@@ -612,6 +612,9 @@ mod test {
         check_interpreter!("(progn 1 2 3 4)", 4);
         check_interpreter!("(function 1)", 1);
         check_interpreter!("(quote 1)", 1);
+        check_interpreter!("(if 1 2 3)", 2);
+        check_interpreter!("(if nil 2 3)", 3);
+        check_interpreter!("(if (and 1 nil) 2 3)", 3);
     }
 
     #[test]
