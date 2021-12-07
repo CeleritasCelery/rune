@@ -166,7 +166,7 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
         panic!("`min` is larger then arguments provided");
     }
 
-    let optional = len;
+    let optional = len - required;
 
     (required as u16, optional as u16, rest)
 }

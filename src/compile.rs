@@ -1000,7 +1000,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
             }
         }
     }
-    Ok((required, required + optional, rest, args))
+    Ok((required, optional, rest, args))
 }
 
 fn compile_closure<'ob, 'brw>(
@@ -1409,38 +1409,38 @@ mod test {
 
         check_lambda(
             "#'(lambda (x) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
             arena,
         );
 
         check_lambda(
             "#'(lambda (x &optional) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
             arena,
         );
         check_lambda(
             "#'(lambda (x &optional y) x)",
-            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
+            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 1, false),
             arena,
         );
         check_lambda(
             "#'(lambda (x &optional y z) y)",
-            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 3, false),
+            LispFn::new(vec_into![StackRef1, Ret].into(), vec![], 1, 2, false),
             arena,
         );
         check_lambda(
             "#'(lambda (x &optional y &optional z) z)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 3, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 2, false),
             arena,
         );
         check_lambda(
             "#'(lambda (x &rest) x)",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, false),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, false),
             arena,
         );
         check_lambda(
             "(function (lambda (x &rest y) y))",
-            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 1, true),
+            LispFn::new(vec_into![StackRef0, Ret].into(), vec![], 1, 0, true),
             arena,
         );
 
@@ -1459,7 +1459,7 @@ mod test {
                 vec_into![Constant0, StackRef2, StackRef2, Call2, Ret].into(),
                 vec_into![intern("+")],
                 2,
-                2,
+                0,
                 false,
             ),
             arena,
