@@ -78,7 +78,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
                 DEFVAR => self.defvar(forms),
-                FUNCTION => Ok(self.eval_function(forms)),
+                FUNCTION => self.eval_function(forms),
                 @ func => self.eval_call(func, forms),
             },
             other => Err(anyhow!("Invalid Function 1: {}", other)),
@@ -265,30 +265,31 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             },
         }
     }
-    fn eval_function(&mut self, obj: Object<'ob>) -> Object<'ob> {
-        match obj {
-            Object::Cons(cons) => match cons.car() {
-                Object::Cons(cons) => {
-                    if cons.car() == (&sym::LAMBDA).into() {
-                        let env = {
-                            // TODO: remove temp vector
-                            let env: Vec<_> =
-                                self.vars.iter().map(|&x| Object::Cons(x.into())).collect();
-                            crate::fns::slice_into_list(
-                                env.as_slice(),
-                                Some(cons!(true; self.arena)),
-                                self.arena,
-                            )
-                        };
-                        let end: Object = cons!(env, cons.cdr(); self.arena);
-                        cons!(&sym::CLOSURE, end; self.arena)
-                    } else {
-                        obj
-                    }
+    fn eval_function(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+        let mut forms = obj.as_list()?;
+        let len = forms.len() as u16;
+        ensure!(len == 1, Error::ArgCount(1, len));
+
+        match forms.next().unwrap()? {
+            Object::Cons(cons) => {
+                if cons.car() == (&sym::LAMBDA).into() {
+                    let env = {
+                        // TODO: remove temp vector
+                        let env: Vec<_> =
+                            self.vars.iter().map(|&x| Object::Cons(x.into())).collect();
+                        crate::fns::slice_into_list(
+                            env.as_slice(),
+                            Some(cons!(true; self.arena)),
+                            self.arena,
+                        )
+                    };
+                    let end: Object = cons!(env, cons.cdr(); self.arena);
+                    Ok(cons!(&sym::CLOSURE, end; self.arena))
+                } else {
+                    Ok(Object::Cons(cons))
                 }
-                _ => obj,
-            },
-            _ => obj,
+            }
+            value => Ok(value),
         }
     }
 
@@ -605,10 +606,12 @@ mod test {
     }
 
     #[test]
-    fn progn() {
+    fn special_forms() {
         check_interpreter!("(prog1 1 2 3)", 1);
         check_interpreter!("(prog2 1 2 3)", 2);
         check_interpreter!("(progn 1 2 3 4)", 4);
+        check_interpreter!("(function 1)", 1);
+        check_interpreter!("(quote 1)", 1);
     }
 
     #[test]
