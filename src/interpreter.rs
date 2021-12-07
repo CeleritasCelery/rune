@@ -358,6 +358,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         loop {
             match Self::pairs(&mut forms)? {
                 Some((Object::Symbol(var), Some(val))) => {
+                    let val = self.eval_form(val)?;
                     last_value = Some(self.var_set(!var, val));
                 }
                 Some((other, Some(_))) => bail!(Error::from_object(Type::Symbol, other)),
@@ -383,7 +384,10 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         let mut iter = self.vars.iter().rev();
         match iter.find_map(|cons| (cons.car() == name.into()).then(|| cons.cdr())) {
             Some(value) => Ok(value),
-            None => todo!("global and closure variables"),
+            None => match self.env.vars.get(name) {
+                Some(&v) => Ok(v),
+                None => Err(anyhow!("Void variable: {}", name)),
+            },
         }
     }
 
@@ -392,10 +396,12 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         match iter.find(|cons| (cons.car() == name.into())) {
             Some(value) => {
                 value.set_cdr(new_value).expect("env should be mutable");
-                new_value
             }
-            None => todo!("set global and closure variables"),
+            None => {
+                self.env.vars.insert(name, new_value);
+            }
         }
+        new_value
     }
 
     fn quote(value: Object<'ob>) -> Result<Object<'ob>> {
@@ -594,12 +600,36 @@ mod test {
             "(let ((y 1)) (function (lambda (x) x)))",
             list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena]
         );
+
+        check_interpreter!(
+            "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5))",
+            list!(5, false; arena)
+        );
+        check_interpreter!(
+            "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7))",
+            list!(5, 7; arena)
+        );
+        check_interpreter!(
+            "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
+            list!(5, 7, 11; arena)
+        );
     }
 
     #[test]
     fn test_call() {
         check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
         check_interpreter!("(let ((x #'(lambda () 3))) (funcall x))", 3);
+        // Test closures
         check_interpreter!("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7);
+        check_interpreter!("(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))", 10);
+        // Test taht closures capture their enviroments
+        check_interpreter!(
+            "(progn (setq func (let ((x 3)) #'(lambda (y) (+ y x)))) (funcall func 5))",
+            8
+        );
+        // Test multiple closures
+        check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16);
+        // Test that closures close over variables
+        check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9);
     }
 }
