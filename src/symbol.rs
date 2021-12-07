@@ -249,7 +249,7 @@ lazy_static! {
         let map = create_symbolmap!(
             SUBR => {
                 crate::arith::DEFSUBR,
-                crate::bytecode::DEFSUBR,
+                crate::interpreter::DEFSUBR,
                 crate::cons::DEFSUBR,
                 crate::lread::DEFSUBR,
                 crate::data::DEFSUBR,

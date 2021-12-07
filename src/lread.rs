@@ -1,7 +1,6 @@
 use crate::arena::Arena;
-use crate::bytecode::Routine;
-use crate::compile::compile;
 use crate::data::Environment;
+use crate::interpreter;
 use crate::object::Object;
 use crate::reader;
 use crate::symbol::Symbol;
@@ -76,18 +75,11 @@ pub(crate) fn load_internal<'ob>(
         if crate::debug::debug_enabled() {
             println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
             println!("-----READ END-----");
-            println!("-----compiling-----");
         }
-        // this will go out of scope
-        let exp = compile(obj, env, arena)?;
-
         if crate::debug::debug_enabled() {
             println!("-----running-----");
         }
-        Routine::execute(&exp, env, arena)?;
-        if crate::debug::debug_enabled() {
-            println!("-----run complete-----");
-        }
+        interpreter::eval(obj, None, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
@@ -134,8 +126,7 @@ mod test {
         println!("{:?}", arena);
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
-        let func = compile(obj, env, arena).unwrap();
-        let val = Routine::execute(&func, env, arena).unwrap();
+        let val = interpreter::eval(obj, None, env, arena).unwrap();
         assert_eq!(val, 4.5.into_obj(arena));
     }
 }

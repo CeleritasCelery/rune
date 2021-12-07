@@ -10,6 +10,7 @@ use crate::{
     symbol::Symbol,
 };
 use anyhow::{anyhow, bail, ensure, Result};
+use fn_macros::defun;
 
 struct Interpreter<'ob, 'brw> {
     vars: Vec<&'ob Cons<'ob>>,
@@ -17,7 +18,8 @@ struct Interpreter<'ob, 'brw> {
     arena: &'ob Arena,
 }
 
-fn eval<'ob, 'brw>(
+#[defun]
+pub(crate) fn eval<'ob, 'brw>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
     env: &'brw mut Environment<'ob>,
@@ -509,6 +511,8 @@ fn eval_function_body<'ob, 'brw>(
     let mut call_frame = Interpreter { vars, env, arena };
     call_frame.implicit_progn(forms)
 }
+
+defsubr!(eval);
 
 #[cfg(test)]
 mod test {

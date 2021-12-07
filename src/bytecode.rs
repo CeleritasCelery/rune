@@ -1,4 +1,5 @@
 //! The main bytecode interpeter.
+#![allow(dead_code)]
 
 use crate::arena::Arena;
 use crate::compile::compile;
@@ -6,7 +7,6 @@ use crate::data::Environment;
 use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;
-use fn_macros::defun;
 
 use anyhow::{anyhow, bail, Result};
 
@@ -500,7 +500,6 @@ pub(crate) fn call_subr<'ob>(
 }
 
 /// Compile then execute the lisp object.
-#[defun]
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
@@ -514,8 +513,6 @@ pub(crate) fn eval<'ob>(
     let func = compile(form, env, arena)?;
     Routine::execute(&func, env, arena)
 }
-
-defsubr!(eval);
 
 #[cfg(test)]
 mod test {

@@ -80,14 +80,12 @@ mod reader;
 mod search;
 mod symbol;
 
-use crate::arena::Arena;
-use crate::bytecode::Routine;
-use crate::compile::compile;
-use crate::data::Environment;
-use crate::object::Object;
-use crate::symbol::intern;
+use arena::Arena;
+use data::Environment;
+use object::Object;
 use std::env;
 use std::io::{self, Write};
+use symbol::intern;
 
 fn parens_closed(buffer: &str) -> bool {
     let open = buffer.chars().filter(|&x| x == '(').count();
@@ -120,15 +118,8 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
                 continue;
             }
         };
-        let func = match compile(obj, env, arena) {
-            Ok(obj) => obj,
-            Err(e) => {
-                println!("Error: {}", e);
-                buffer.clear();
-                continue;
-            }
-        };
-        match Routine::execute(&func, env, arena) {
+
+        match interpreter::eval(obj, None, env, arena) {
             Ok(val) => println!("{}", val),
             Err(e) => println!("Error: {}", e),
         }
@@ -143,6 +134,9 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
+
+    crate::debug::enable_debug();
+
     let mut buffer = String::from(
         r#"
 (progn 
@@ -158,7 +152,6 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
             return;
         }
     }
-    crate::debug::enable_debug();
 
     buffer = String::from(
         r#"
