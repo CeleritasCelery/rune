@@ -78,6 +78,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 PROG2 => self.eval_progx(forms, 2),
                 SETQ => self.setq(forms),
                 DEFVAR => self.defvar(forms),
+                DEFCONST => self.defvar(forms),
                 FUNCTION => self.eval_function(forms),
                 @ func => self.eval_call(func, forms),
             },

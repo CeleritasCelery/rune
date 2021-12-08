@@ -135,8 +135,6 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 
-    crate::debug::enable_debug();
-
     let mut buffer = String::from(
         r#"
 (progn 
@@ -144,6 +142,8 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     (load "lisp/backquote.el")
 )"#,
     );
+
+    crate::debug::enable_debug();
 
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
