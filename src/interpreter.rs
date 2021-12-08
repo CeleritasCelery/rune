@@ -246,7 +246,6 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
         let mut eval_args =
             || -> Result<Vec<_>> { obj.as_list()?.map(|x| self.eval_form(x?)).collect() };
-        let macro_args = || -> Result<Vec<_>> { obj.as_list()?.collect() };
 
         match func {
             Callable::LispFn(func) => {
@@ -255,7 +254,11 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Callable::SubrFn(func) => {
                 bytecode::call_subr(*func, eval_args()?, self.env, self.arena)
             }
-            Callable::Macro(mcro) => mcro.get().call(macro_args()?, self.env, self.arena),
+            Callable::Macro(mcro) => {
+                let macro_args = obj.as_list()?.collect::<Result<Vec<_>>>()?;
+                let value = mcro.get().call(macro_args, self.env, self.arena)?;
+                self.eval_form(value)
+            },
             Callable::Uncompiled(form) => match form.car() {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                     let args = eval_args()?;
