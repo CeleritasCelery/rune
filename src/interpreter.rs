@@ -407,14 +407,18 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         }
     }
 
-    fn var_ref(&self, name: Symbol) -> Result<Object<'ob>> {
-        let mut iter = self.vars.iter().rev();
-        match iter.find_map(|cons| (cons.car() == name.into()).then(|| cons.cdr())) {
-            Some(value) => Ok(value),
-            None => match self.env.vars.get(name) {
-                Some(&v) => Ok(v),
-                None => Err(anyhow!("Void variable: {}", name)),
-            },
+    fn var_ref(&self, sym: Symbol) -> Result<Object<'ob>> {
+        if sym.name.starts_with(':') {
+            Ok(sym.into())
+        } else {
+            let mut iter = self.vars.iter().rev();
+            match iter.find_map(|cons| (cons.car() == sym.into()).then(|| cons.cdr())) {
+                Some(value) => Ok(value),
+                None => match self.env.vars.get(sym) {
+                    Some(&v) => Ok(v),
+                    None => Err(anyhow!("Void variable: {}", sym)),
+                },
+            }
         }
     }
 
