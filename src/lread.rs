@@ -76,9 +76,6 @@ pub(crate) fn load_internal<'ob>(
             println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
             println!("-----READ END-----");
         }
-        if crate::debug::debug_enabled() {
-            println!("-----running-----");
-        }
         interpreter::eval(obj, None, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
