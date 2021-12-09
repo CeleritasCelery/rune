@@ -1,6 +1,6 @@
 ;;; byte-run.el --- byte-compiler support for inlining  -*- lexical-binding: t -*-
 
-;; Copyright (C) 1992, 2001-2021 Free Software Foundation, Inc.
+;; Copyright (C) 1992, 2001-2020 Free Software Foundation, Inc.
 
 ;; Author: Jamie Zawinski <jwz@lucid.com>
 ;;	Hallvard Furuseth <hbf@ulrik.uio.no>
@@ -82,105 +82,65 @@ The return value of this function is not used."
 
 ;; We define macro-declaration-alist here because it is needed to
 ;; handle declarations in macro definitions and this is the first file
-;; loaded by loadup.el that uses declarations in macros.  We specify
-;; the values as named aliases so that `describe-variable' prints
-;; something useful; cf. Bug#40491.  We can only use backquotes inside
-;; the lambdas and not for those properties that are used by functions
-;; loaded before backquote.el.
-
-(defalias 'byte-run--set-advertised-calling-convention
-  #'(lambda (f _args arglist when)
-      (list 'set-advertised-calling-convention
-            (list 'quote f) (list 'quote arglist) (list 'quote when))))
-
-(defalias 'byte-run--set-obsolete
-  #'(lambda (f _args new-name when)
-      (list 'make-obsolete
-            (list 'quote f) (list 'quote new-name) (list 'quote when))))
-
-(defalias 'byte-run--set-interactive-only
-  #'(lambda (f _args instead)
-      (list 'function-put (list 'quote f)
-            ''interactive-only (list 'quote instead))))
-
-(defalias 'byte-run--set-pure
-  #'(lambda (f _args val)
-      (list 'function-put (list 'quote f)
-            ''pure (list 'quote val))))
-
-(defalias 'byte-run--set-side-effect-free
-  #'(lambda (f _args val)
-      (list 'function-put (list 'quote f)
-            ''side-effect-free (list 'quote val))))
-
-(put 'compiler-macro 'edebug-declaration-spec
-     '(&or symbolp ("lambda" &define lambda-list lambda-doc def-body)))
-
-(defalias 'byte-run--set-compiler-macro
-  #'(lambda (f args compiler-function)
-      (if (not (eq (car-safe compiler-function) 'lambda))
-          `(eval-and-compile
-             (function-put ',f 'compiler-macro #',compiler-function))
-        (let ((cfname (intern (concat (symbol-name f) "--anon-cmacro")))
-              ;; Avoid cadr/cddr so we can use `compiler-macro' before
-              ;; defining cadr/cddr.
-              (data (cdr compiler-function)))
-          `(progn
-             (eval-and-compile
-               (function-put ',f 'compiler-macro #',cfname))
-             ;; Don't autoload the compiler-macro itself, since the
-             ;; macroexpander will find this file via `f's autoload,
-             ;; if needed.
-             :autoload-end
-             (eval-and-compile
-               (defun ,cfname (,@(car data) ,@args)
-                 ,@(cdr data))))))))
-
-(defalias 'byte-run--set-doc-string
-  #'(lambda (f _args pos)
-      (list 'function-put (list 'quote f)
-            ''doc-string-elt (list 'quote pos))))
-
-(defalias 'byte-run--set-indent
-  #'(lambda (f _args val)
-      (list 'function-put (list 'quote f)
-            ''lisp-indent-function (list 'quote val))))
-
-(defalias 'byte-run--set-speed
-  #'(lambda (f _args val)
-      (list 'function-put (list 'quote f)
-            ''speed (list 'quote val))))
-
-(defalias 'byte-run--set-completion
-  #'(lambda (f _args val)
-      (list 'function-put (list 'quote f)
-            ''completion-predicate (list 'function val))))
-
-(defalias 'byte-run--set-modes
-  #'(lambda (f _args &rest val)
-      (list 'function-put (list 'quote f)
-            ''command-modes (list 'quote val))))
+;; loaded by loadup.el that uses declarations in macros.
 
 ;; Add any new entries to info node `(elisp)Declare Form'.
 (defvar defun-declarations-alist
   (list
+   ;; We can only use backquotes inside the lambdas and not for those
+   ;; properties that are used by functions loaded before backquote.el.
    (list 'advertised-calling-convention
-         #'byte-run--set-advertised-calling-convention)
-   (list 'obsolete #'byte-run--set-obsolete)
-   (list 'interactive-only #'byte-run--set-interactive-only)
+         #'(lambda (f _args arglist when)
+             (list 'set-advertised-calling-convention
+                   (list 'quote f) (list 'quote arglist) (list 'quote when))))
+   (list 'obsolete
+         #'(lambda (f _args new-name when)
+             (list 'make-obsolete
+                   (list 'quote f) (list 'quote new-name) (list 'quote when))))
+   (list 'interactive-only
+         #'(lambda (f _args instead)
+             (list 'function-put (list 'quote f)
+                   ''interactive-only (list 'quote instead))))
    ;; FIXME: Merge `pure' and `side-effect-free'.
-   (list 'pure #'byte-run--set-pure
+   (list 'pure
+         #'(lambda (f _args val)
+             (list 'function-put (list 'quote f)
+                   ''pure (list 'quote val)))
          "If non-nil, the compiler can replace calls with their return value.
 This may shift errors from run-time to compile-time.")
-   (list 'side-effect-free #'byte-run--set-side-effect-free
+   (list 'side-effect-free
+         #'(lambda (f _args val)
+             (list 'function-put (list 'quote f)
+                   ''side-effect-free (list 'quote val)))
          "If non-nil, calls can be ignored if their value is unused.
 If `error-free', drop calls even if `byte-compile-delete-errors' is nil.")
-   (list 'compiler-macro #'byte-run--set-compiler-macro)
-   (list 'doc-string #'byte-run--set-doc-string)
-   (list 'indent #'byte-run--set-indent)
-   (list 'speed #'byte-run--set-speed)
-   (list 'completion #'byte-run--set-completion)
-   (list 'modes #'byte-run--set-modes))
+   (list 'compiler-macro
+         #'(lambda (f args compiler-function)
+             (if (not (eq (car-safe compiler-function) 'lambda))
+                 `(eval-and-compile
+                    (function-put ',f 'compiler-macro #',compiler-function))
+               (let ((cfname (intern (concat (symbol-name f) "--anon-cmacro")))
+                     ;; Avoid cadr/cddr so we can use `compiler-macro' before
+                     ;; defining cadr/cddr.
+                     (data (cdr compiler-function)))
+                 `(progn
+                    (eval-and-compile
+                      (function-put ',f 'compiler-macro #',cfname))
+                    ;; Don't autoload the compiler-macro itself, since the
+                    ;; macroexpander will find this file via `f's autoload,
+                    ;; if needed.
+                    :autoload-end
+                    (eval-and-compile
+                      (defun ,cfname (,@(car data) ,@args)
+                        ,@(cdr data))))))))
+   (list 'doc-string
+         #'(lambda (f _args pos)
+             (list 'function-put (list 'quote f)
+                   ''doc-string-elt (list 'quote pos))))
+   (list 'indent
+         #'(lambda (f _args val)
+             (list 'function-put (list 'quote f)
+                   ''lisp-indent-function (list 'quote val)))))
   "List associating function properties to their macro expansion.
 Each element of the list takes the form (PROP FUN) where FUN is
 a function.  For each (PROP . VALUES) in a function's declaration,
@@ -190,22 +150,18 @@ to set this property.
 
 This is used by `declare'.")
 
-(defalias 'byte-run--set-debug
-  #'(lambda (name _args spec)
-      (list 'progn :autoload-end
-	    (list 'put (list 'quote name)
-		  ''edebug-form-spec (list 'quote spec)))))
-
-(defalias 'byte-run--set-no-font-lock-keyword
-  #'(lambda (name _args val)
-      (list 'function-put (list 'quote name)
-	    ''no-font-lock-keyword (list 'quote val))))
-
 (defvar macro-declarations-alist
   (cons
-   (list 'debug #'byte-run--set-debug)
+   (list 'debug
+	 #'(lambda (name _args spec)
+	     (list 'progn :autoload-end
+		   (list 'put (list 'quote name)
+			 ''edebug-form-spec (list 'quote spec)))))
    (cons
-    (list 'no-font-lock-keyword #'byte-run--set-no-font-lock-keyword)
+    (list 'no-font-lock-keyword
+	  #'(lambda (name _args val)
+	      (list 'function-put (list 'quote name)
+		    ''no-font-lock-keyword (list 'quote val))))
     defun-declarations-alist))
   "List associating properties of macros to their macro expansion.
 Each element of the list takes the form (PROP FUN) where FUN is a function.
@@ -253,11 +209,8 @@ The return value is undefined.
 		  #'(lambda (x)
 		      (let ((f (cdr (assq (car x) macro-declarations-alist))))
 			(if f (apply (car f) name arglist (cdr x))
-			  (macroexp-warn-and-return
-			   (format-message
-			    "Unknown macro property %S in %S"
-			    (car x) name)
-			   nil))))
+			  (message "Warning: Unknown macro property %S in %S"
+				   (car x) name))))
 		  decls)))
 	   ;; Refresh font-lock if this is a new macro, or it is an
 	   ;; existing macro whose 'no-font-lock-keyword declaration
@@ -325,12 +278,9 @@ The return value is undefined.
                                 (cdr body)
                               body)))
                     nil)
-                   (t
-                    (macroexp-warn-and-return
-                     (format-message "Unknown defun property `%S' in %S"
-                                     (car x) name)
-                     nil)))))
-            decls))
+                   (t (message "Warning: Unknown defun property `%S' in %S"
+                               (car x) name)))))
+                   decls))
           (def (list 'defalias
                      (list 'quote name)
                      (list 'function
@@ -380,17 +330,13 @@ You don't need this.  (See bytecomp.el commentary for more details.)
   "Define an inline function.  The syntax is just like that of `defun'.
 
 \(fn NAME ARGLIST &optional DOCSTRING DECL &rest BODY)"
-  (declare (debug defun) (doc-string 3) (indent 2))
+  (declare (debug defun) (doc-string 3))
   (or (memq (get name 'byte-optimizer)
 	    '(nil byte-compile-inline-expand))
       (error "`%s' is a primitive" name))
   `(prog1
        (defun ,name ,arglist ,@body)
      (eval-and-compile
-       ;; Never native-compile defsubsts as we need the byte
-       ;; definition in `byte-compile-unfold-bcf' to perform the
-       ;; inlining (Bug#42664, Bug#43280, Bug#44209).
-       ,(byte-run--set-speed name nil -1)
        (put ',name 'byte-optimizer 'byte-compile-inline-expand))))
 
 (defvar advertised-signature-table (make-hash-table :test 'eq :weakness 'key))
@@ -403,7 +349,7 @@ convention was modified."
   (puthash (indirect-function function) signature
            advertised-signature-table))
 
-(defun make-obsolete (obsolete-name current-name when)
+(defun make-obsolete (obsolete-name current-name &optional when)
   "Make the byte-compiler warn that function OBSOLETE-NAME is obsolete.
 OBSOLETE-NAME should be a function name or macro name (a symbol).
 
@@ -412,35 +358,39 @@ If CURRENT-NAME is a string, that is the `use instead' message
 \(it should end with a period, and not start with a capital).
 WHEN should be a string indicating when the function
 was first made obsolete, for example a date or a release number."
+  (declare (advertised-calling-convention
+            ;; New code should always provide the `when' argument.
+            (obsolete-name current-name when) "23.1"))
   (put obsolete-name 'byte-obsolete-info
        ;; The second entry used to hold the `byte-compile' handler, but
        ;; is not used any more nowadays.
        (purecopy (list current-name nil when)))
   obsolete-name)
 
-(defmacro define-obsolete-function-alias ( obsolete-name current-name when
-                                           &optional docstring)
+(defmacro define-obsolete-function-alias (obsolete-name current-name
+						   &optional when docstring)
   "Set OBSOLETE-NAME's function definition to CURRENT-NAME and mark it obsolete.
 
-\(define-obsolete-function-alias \\='old-fun \\='new-fun \"28.1\" \
-\"old-fun's doc.\")
+\(define-obsolete-function-alias \\='old-fun \\='new-fun \"22.1\" \"old-fun's doc.\")
 
 is equivalent to the following two lines of code:
 
 \(defalias \\='old-fun \\='new-fun \"old-fun's doc.\")
-\(make-obsolete \\='old-fun \\='new-fun \"28.1\")
+\(make-obsolete \\='old-fun \\='new-fun \"22.1\")
 
 WHEN should be a string indicating when the function was first
 made obsolete, for example a date or a release number.
 
 See the docstrings of `defalias' and `make-obsolete' for more details."
-  (declare (doc-string 4) (indent defun))
+  (declare (doc-string 4)
+           (advertised-calling-convention
+            ;; New code should always provide the `when' argument.
+            (obsolete-name current-name when &optional docstring) "23.1"))
   `(progn
      (defalias ,obsolete-name ,current-name ,docstring)
      (make-obsolete ,obsolete-name ,current-name ,when)))
 
-(defun make-obsolete-variable ( obsolete-name current-name when
-                                &optional access-type)
+(defun make-obsolete-variable (obsolete-name current-name &optional when access-type)
   "Make the byte-compiler warn that OBSOLETE-NAME is obsolete.
 The warning will say that CURRENT-NAME should be used instead.
 If CURRENT-NAME is a string, that is the `use instead' message.
@@ -448,24 +398,18 @@ WHEN should be a string indicating when the variable
 was first made obsolete, for example a date or a release number.
 ACCESS-TYPE if non-nil should specify the kind of access that will trigger
   obsolescence warnings; it can be either `get' or `set'."
+  (declare (advertised-calling-convention
+            ;; New code should always provide the `when' argument.
+            (obsolete-name current-name when &optional access-type) "23.1"))
   (put obsolete-name 'byte-obsolete-variable
        (purecopy (list current-name access-type when)))
   obsolete-name)
 
 
-(defmacro define-obsolete-variable-alias ( obsolete-name current-name when
-                                           &optional docstring)
+(defmacro define-obsolete-variable-alias (obsolete-name current-name
+						 &optional when docstring)
   "Make OBSOLETE-NAME a variable alias for CURRENT-NAME and mark it obsolete.
-
-WHEN should be a string indicating when the variable was first
-made obsolete, for example a date or a release number.
-
-This macro evaluates all its parameters, and both OBSOLETE-NAME
-and CURRENT-NAME should be symbols, so a typical usage would look like:
-
-  (define-obsolete-variable-alias 'foo-thing 'bar-thing \"28.1\")
-
-This macro uses `defvaralias' and `make-obsolete-variable' (which see).
+This uses `defvaralias' and `make-obsolete-variable' (which see).
 See the Info node `(elisp)Variable Aliases' for more details.
 
 If CURRENT-NAME is a defcustom or a defvar (more generally, any variable
@@ -479,11 +423,17 @@ dumped with Emacs).  This is so that any user customizations are
 applied before the defcustom tries to initialize the
 variable (this is due to the way `defvaralias' works).
 
+WHEN should be a string indicating when the variable was first
+made obsolete, for example a date or a release number.
+
 For the benefit of Customize, if OBSOLETE-NAME has
 any of the following properties, they are copied to
 CURRENT-NAME, if it does not already have them:
 `saved-value', `saved-variable-comment'."
-  (declare (doc-string 4) (indent defun))
+  (declare (doc-string 4)
+           (advertised-calling-convention
+            ;; New code should always provide the `when' argument.
+            (obsolete-name current-name when &optional docstring) "23.1"))
   `(progn
      (defvaralias ,obsolete-name ,current-name ,docstring)
      ;; See Bug#4706.
@@ -530,11 +480,11 @@ is enabled."
   (list 'quote (eval (cons 'progn body) lexical-binding)))
 
 (defmacro eval-and-compile (&rest body)
-  "Like `progn', but evaluates the body at compile time and at load time.
-In interpreted code, this is entirely equivalent to `progn',
-except that the value of the expression may be (but is not
-necessarily) computed at load time if eager macro expansion is
-enabled."
+  "Like `progn', but evaluates the body at compile time and at
+load time.  In interpreted code, this is entirely equivalent to
+`progn', except that the value of the expression may be (but is
+not necessarily) computed at load time if eager macro expansion
+is enabled."
   (declare (debug (&rest def-form)) (indent 0))
   ;; When the byte-compiler expands code, this macro is not used, so we're
   ;; either about to run `body' (plain interpretation) or we're doing eager
@@ -603,26 +553,13 @@ Otherwise, return nil.  For internal use only."
                         (mapconcat (lambda (char) (format "`?\\%c'" char))
                                    sorted ", ")))))
 
-(defun byte-compile-info (string &optional message type)
-  "Format STRING in a way that looks pleasing in the compilation output.
-If MESSAGE, output the message, too.
-
-If TYPE, it should be a string that says what the information
-type is.  This defaults to \"INFO\"."
-  (let ((string (format "  %-9s%s" (or type "INFO") string)))
-    (when message
-      (message "%s" string))
-    string))
-
 (defun byte-compile-info-string (&rest args)
   "Format ARGS in a way that looks pleasing in the compilation output."
-  (declare (obsolete byte-compile-info "28.1"))
-  (byte-compile-info (apply #'format args)))
+  (format "  %-9s%s" "INFO" (apply #'format args)))
 
 (defun byte-compile-info-message (&rest args)
   "Message format ARGS in a way that looks pleasing in the compilation output."
-  (declare (obsolete byte-compile-info "28.1"))
-  (byte-compile-info (apply #'format args) t))
+  (message "%s" (apply #'byte-compile-info-string args)))
 
 
 ;; I nuked this because it's not a good idea for users to think of using it.

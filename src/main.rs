@@ -144,7 +144,6 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 )"#,
     );
 
-    crate::debug::enable_debug();
 
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
@@ -153,6 +152,8 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
             return;
         }
     }
+
+    // crate::debug::enable_debug();
 
     buffer = String::from(
         r#"
