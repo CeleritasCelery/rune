@@ -46,6 +46,11 @@ fn make_vector(length: usize, init: Object) -> Vec<Object> {
 }
 
 #[defun]
+fn vector<'ob>(objects: &[Object<'ob>]) -> Vec<Object<'ob>> {
+    objects.into()
+}
+
+#[defun]
 fn purecopy(obj: Object) -> Object {
     obj
 }
@@ -55,4 +60,4 @@ fn make_symbol(name: &str) -> Symbol {
     crate::symbol::intern(name)
 }
 
-defsubr!(list, make_closure, make_vector, purecopy, make_symbol);
+defsubr!(list, make_closure, make_vector, vector, purecopy, make_symbol);
