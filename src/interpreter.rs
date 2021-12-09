@@ -264,7 +264,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 }
                 let value = mcro.get().call(macro_args, self.env, self.arena)?;
                 self.eval_form(value)
-            },
+            }
             Callable::Uncompiled(form) => match form.car() {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                     let args = eval_args()?;

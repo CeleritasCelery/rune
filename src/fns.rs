@@ -287,6 +287,17 @@ fn copy_sequence<'ob>(arg: Object<'ob>, arena: &'ob Arena) -> Result<Object<'ob>
     }
 }
 
+#[defun]
+fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
+    let new_string = match (from, to) {
+        (None, None) => string,
+        (None, Some(t)) => &string[..t],
+        (Some(f), None) => &string[f..],
+        (Some(f), Some(t)) => &string[f..t],
+    };
+    new_string.to_owned()
+}
+
 #[cfg(test)]
 mod test {
     use crate::object::IntoObject;
@@ -355,5 +366,6 @@ defsubr!(
     featurep,
     require,
     prin1_to_string,
+    substring,
     copy_sequence,
 );
