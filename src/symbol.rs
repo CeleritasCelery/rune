@@ -260,13 +260,13 @@ lazy_static! {
                 crate::keymap::DEFSUBR,
             }
             SYMBOLS => {
-                FUNCTION, QUOTE, UNQUOTE, BACKQUOTE,
+                FUNCTION, QUOTE, UNQUOTE, BACKQUOTE, SPLICE,
                 NIL, TRUE, AND_OPTIONAL, AND_REST,
                 LAMBDA, CLOSURE, MACRO, WHILE, PROGN, PROG1,
                 PROG2, SETQ, DEFCONST, COND,
                 LET, LET_STAR, IF, AND, OR,
                 LEXICAL_BINDING, SYSTEM_TYPE,
-                MINIBUFFER_LOCAL_MAP,
+                MINIBUFFER_LOCAL_MAP, EMACS_VERSION,
             }
             TEST_SYMBOLS => {
                 FOO, BAR, BAZ
@@ -319,6 +319,7 @@ pub(crate) mod sym {
         AND => "and",
         OR => "or",
         LEXICAL_BINDING => "lexical-binding",
+        EMACS_VERSION => "emacs-version",
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
     );

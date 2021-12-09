@@ -82,7 +82,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 FUNCTION => self.eval_function(forms),
                 @ func => self.eval_call(func, forms),
             },
-            other => Err(anyhow!("Invalid Function 1: {}", other)),
+            other => Err(anyhow!("Invalid Function: {}", other)),
         }
     }
 
@@ -237,12 +237,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
         use crate::bytecode;
-        if crate::debug::debug_enabled() {
-            println!("calling: {}", name);
-        }
         let func = match name.resolve_callable() {
             Some(x) => x,
-            None => bail!("Invalid function 2: {}", name),
+            None => bail!("Invalid function: {}", name),
         };
 
         let mut eval_args =
@@ -250,22 +247,33 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
         match func {
             Callable::LispFn(func) => {
-                bytecode::call_lisp(&func, eval_args()?, self.env, self.arena)
+                let args = eval_args()?;
+                bytecode::call_lisp(&func, args, self.env, self.arena)
             }
             Callable::SubrFn(func) => {
-                bytecode::call_subr(*func, eval_args()?, self.env, self.arena)
+                let args = eval_args()?;
+                if crate::debug::debug_enabled() {
+                    println!("({} {:?})", name, args);
+                }
+                bytecode::call_subr(*func, args, self.env, self.arena)
             }
             Callable::Macro(mcro) => {
                 let macro_args = obj.as_list()?.collect::<Result<Vec<_>>>()?;
+                if crate::debug::debug_enabled() {
+                    println!("(macro: {} {:?})", name, macro_args);
+                }
                 let value = mcro.get().call(macro_args, self.env, self.arena)?;
                 self.eval_form(value)
             },
             Callable::Uncompiled(form) => match form.car() {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                     let args = eval_args()?;
+                    if crate::debug::debug_enabled() {
+                        println!("({} {:?})", name, args);
+                    }
                     self.call_closure(!form, args)
                 }
-                other => Err(anyhow!("Invalid Function 3: {}", other)),
+                other => Err(anyhow!("Invalid Function: {}", other)),
             },
         }
     }

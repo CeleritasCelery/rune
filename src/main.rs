@@ -129,6 +129,7 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 
 fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     use crate::symbol::sym;
+    env.vars.insert(&sym::EMACS_VERSION, arena.add("28.1"));
     env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
