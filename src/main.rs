@@ -79,6 +79,7 @@ mod opcode;
 mod reader;
 mod search;
 mod symbol;
+mod editfns;
 
 use arena::Arena;
 use data::Environment;
@@ -141,9 +142,9 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
 (progn 
     (load "lisp/byte-run.el")
     (load "lisp/backquote.el")
+    (load "lisp/subr.el")
 )"#,
     );
-
 
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
@@ -153,17 +154,15 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
         }
     }
 
-    // crate::debug::enable_debug();
+    crate::debug::enable_debug();
 
     buffer = String::from(
         r#"
-(progn 
-    (load "lisp/subr.el")
+(progn
+    (load "lisp/gv.el")
 )"#,
     );
 
-    // (load "lisp/macroexp.el")
-    // (load "lisp/cl-lib.el")
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{}", val),
         Err(e) => println!("Error: {}", e),

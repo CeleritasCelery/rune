@@ -98,6 +98,22 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
+    type Error = anyhow::Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::Int(x) => match (!x).try_into() {
+                Ok(x) => Ok(Some(x)),
+                Err(e) => {
+                    Err(e).with_context(|| format!("Integer must be positive, but was {}", !x))
+                }
+            },
+            Object::Nil(_) => Ok(None),
+            _ => Err(Error::from_object(Type::Int, obj).into()),
+        }
+    }
+}
+
 impl<'ob> TryFrom<Object<'ob>> for IntOrMarker {
     type Error = Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {

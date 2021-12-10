@@ -257,6 +257,7 @@ lazy_static! {
                 crate::search::DEFSUBR,
                 crate::eval::DEFSUBR,
                 crate::alloc::DEFSUBR,
+                crate::editfns::DEFSUBR,
                 crate::keymap::DEFSUBR,
             }
             SYMBOLS => {
