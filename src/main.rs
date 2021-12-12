@@ -68,6 +68,7 @@ mod bytecode;
 mod compile;
 mod data;
 mod debug;
+mod editfns;
 mod error;
 mod eval;
 mod fns;
@@ -79,7 +80,6 @@ mod opcode;
 mod reader;
 mod search;
 mod symbol;
-mod editfns;
 
 use arena::Arena;
 use data::Environment;

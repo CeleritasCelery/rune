@@ -220,81 +220,65 @@ impl ObjectMap {
 
 macro_rules! create_symbolmap {
     (SUBR => {$($subr:expr),* $(,)?}
-    SYMBOLS => {$($symbols:ident),* $(,)?}
-    TEST_SYMBOLS => {$($test_symbols:ident),* $(,)?}
-) => ({
-    let size: usize = count!($($symbols)*) $(+ $subr.len())*;
-    let mut map = SymbolMap::with_capacity(size);
-    $(for (func, sym) in $subr.iter() {
-        unsafe { sym.set_func(func.into()); }
-        map.pre_init(sym);
-    })*;
-    $(map.pre_init(&sym::$symbols);)*
-    #[cfg(test)]
-    {
-        $(map.pre_init(&sym::test::$test_symbols);)*
-    }
-    map
-})
-}
+     EXPORT => {$($export:path),* $(,)?}
+     SYMBOLS => {$($sym:ident => $name:expr),* $(,)?}
+     TEST_SYMBOLS => {$($test_sym:ident => $test_name:expr),* $(,)?}
+    ) => (
+        pub(crate) mod sym {
+            $(pub(crate) use $export;)*
 
-macro_rules! declare_symbols {
-    ($($sym:ident => $name:expr),+ $(,)?) => (
-        $(pub(crate) static $sym: GlobalSymbol = GlobalSymbol::new($name);)+
+            use super::GlobalSymbol;
+            $(pub(crate) static $sym: GlobalSymbol = GlobalSymbol::new($name);)*
+
+            #[cfg(test)]
+            pub(crate) mod test {
+                use super::GlobalSymbol;
+                $(pub(crate) static $test_sym: GlobalSymbol = GlobalSymbol::new($test_name);)*
+            }
+        }
+
+        lazy_static! {
+            pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
+                let size: usize = count!($($sym)*) $(+ $subr.len())*;
+                let mut map = SymbolMap::with_capacity(size);
+                $(for (func, sym) in $subr.iter() {
+                    unsafe { sym.set_func(func.into()); }
+                    map.pre_init(sym);
+                })*;
+                $(map.pre_init(&sym::$sym);)*
+                #[cfg(test)]
+                {
+                    $(map.pre_init(&sym::test::$test_sym);)*
+                }
+                ObjectMap {
+                    map,
+                    arena: Arena::new_const(),
+                }
+            });
+        }
     )
 }
 
-lazy_static! {
-    pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
-        let map = create_symbolmap!(
-            SUBR => {
-                crate::arith::DEFSUBR,
-                crate::interpreter::DEFSUBR,
-                crate::cons::DEFSUBR,
-                crate::lread::DEFSUBR,
-                crate::data::DEFSUBR,
-                crate::fns::DEFSUBR,
-                crate::search::DEFSUBR,
-                crate::eval::DEFSUBR,
-                crate::alloc::DEFSUBR,
-                crate::editfns::DEFSUBR,
-                crate::keymap::DEFSUBR,
-            }
-            SYMBOLS => {
-                FUNCTION, QUOTE, UNQUOTE, BACKQUOTE, SPLICE,
-                NIL, TRUE, AND_OPTIONAL, AND_REST,
-                LAMBDA, CLOSURE, MACRO, WHILE, PROGN, PROG1,
-                PROG2, SETQ, DEFCONST, COND,
-                LET, LET_STAR, IF, AND, OR,
-                LEXICAL_BINDING, SYSTEM_TYPE,
-                MINIBUFFER_LOCAL_MAP, EMACS_VERSION,
-            }
-            TEST_SYMBOLS => {
-                FOO, BAR, BAZ
-            }
-        );
-        ObjectMap {
-            map,
-            arena: Arena::new_const(),
-        }
-    });
-}
-
-/// Intern a new symbol based on `name`
-pub(crate) fn intern(name: &str) -> Symbol {
-    INTERNED_SYMBOLS.lock().unwrap().intern(name)
-}
-
-/// This module holds public symbols for use in the code base.
-/// This avoids calls to [`intern`] for commonly used symbols.
-pub(crate) mod sym {
-    use super::GlobalSymbol;
-
-    pub(crate) use crate::alloc::MAKE_CLOSURE;
-    pub(crate) use crate::data::DEFVAR;
-    pub(crate) use crate::data::NULL;
-
-    declare_symbols!(
+create_symbolmap!(
+    SUBR => {
+        crate::arith::DEFSUBR,
+        crate::interpreter::DEFSUBR,
+        crate::cons::DEFSUBR,
+        crate::lread::DEFSUBR,
+        crate::data::DEFSUBR,
+        crate::fns::DEFSUBR,
+        crate::search::DEFSUBR,
+        crate::eval::DEFSUBR,
+        crate::alloc::DEFSUBR,
+        crate::editfns::DEFSUBR,
+        crate::keymap::DEFSUBR,
+    }
+    EXPORT => {
+        crate::alloc::MAKE_CLOSURE,
+        crate::data::DEFVAR,
+        crate::data::NULL,
+    }
+    SYMBOLS => {
         FUNCTION => "function",
         QUOTE => "quote",
         MACRO => "macro",
@@ -323,17 +307,17 @@ pub(crate) mod sym {
         EMACS_VERSION => "emacs-version",
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
-    );
-
-    #[cfg(test)]
-    pub(crate) mod test {
-        use super::*;
-        declare_symbols!(
-            FOO => "foo",
-            BAR => "bar",
-            BAZ => "baz",
-        );
     }
+    TEST_SYMBOLS => {
+        FOO => "foo",
+        BAR => "bar",
+        BAZ => "baz",
+    }
+);
+
+/// Intern a new symbol based on `name`
+pub(crate) fn intern(name: &str) -> Symbol {
+    INTERNED_SYMBOLS.lock().unwrap().intern(name)
 }
 
 #[cfg(test)]
