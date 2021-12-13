@@ -149,6 +149,11 @@ pub(crate) fn listp(object: Object) -> bool {
 }
 
 #[defun]
+pub(crate) fn nlistp(object: Object) -> bool {
+    !listp(object)
+}
+
+#[defun]
 pub(crate) fn symbolp(object: Object) -> bool {
     matches!(object, Object::Symbol(_))
 }
@@ -257,6 +262,7 @@ defsubr!(
     boundp,
     default_boundp,
     listp,
+    nlistp,
     stringp,
     symbolp,
     functionp,

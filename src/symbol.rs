@@ -307,6 +307,7 @@ create_symbolmap!(
         EMACS_VERSION => "emacs-version",
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
+        CURRENT_LOAD_LIST => "current-load-list",
     }
     TEST_SYMBOLS => {
         FOO => "foo",

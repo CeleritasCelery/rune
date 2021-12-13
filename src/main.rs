@@ -134,6 +134,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
     env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
     env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
+    env.vars.insert(&sym::CURRENT_LOAD_LIST, Object::NIL);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 
