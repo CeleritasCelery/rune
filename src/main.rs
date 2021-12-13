@@ -159,7 +159,7 @@ fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     buffer = String::from(
         r#"
 (progn
-    (load "lisp/gv.el")
+    (load "lisp/pcase.el")
 )"#,
     );
 
