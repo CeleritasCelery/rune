@@ -64,8 +64,6 @@ mod cons;
 mod alloc;
 mod arena;
 mod arith;
-mod bytecode;
-mod compile;
 mod data;
 mod debug;
 mod editfns;

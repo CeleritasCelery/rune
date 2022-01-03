@@ -1,5 +1,4 @@
 use crate::arena::Arena;
-use crate::bytecode;
 use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
@@ -31,8 +30,8 @@ impl<'ob> Function<'ob> {
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
-            Function::LispFn(f) => bytecode::call_lisp(&f, args, env, arena),
-            Function::SubrFn(f) => bytecode::call_subr(*f, args, env, arena),
+            Function::LispFn(_) => todo!("call lisp functions"),
+            Function::SubrFn(f) => (*f).call(args, env, arena),
             Function::Uncompiled(f) => crate::interpreter::call(Object::Cons(f), args, env, arena),
         }
     }

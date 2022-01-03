@@ -236,7 +236,6 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 
     fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
-        use crate::bytecode;
         let func = match name.resolve_callable() {
             Some(x) => x,
             None => bail!("Invalid function: {}", name),
@@ -246,16 +245,13 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             || -> Result<Vec<_>> { obj.as_list()?.map(|x| self.eval_form(x?)).collect() };
 
         match func {
-            Callable::LispFn(func) => {
-                let args = eval_args()?;
-                bytecode::call_lisp(&func, args, self.env, self.arena)
-            }
+            Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
                 let args = eval_args()?;
                 if crate::debug::debug_enabled() {
                     println!("({} {:?})", name, args);
                 }
-                bytecode::call_subr(*func, args, self.env, self.arena)
+                (*func).call(args, self.env, self.arena)
             }
             Callable::Macro(mcro) => {
                 let macro_args = obj.as_list()?.collect::<Result<Vec<_>>>()?;

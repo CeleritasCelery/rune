@@ -55,10 +55,6 @@ impl FnArgs {
         }
         Ok(total.saturating_sub(args))
     }
-
-    pub(crate) fn rest_args_start(self) -> u16 {
-        self.required + self.optional
-    }
 }
 
 define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
@@ -136,25 +132,39 @@ pub(crate) struct SubrFn {
 }
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
-#[cfg(test)]
 impl SubrFn {
-    pub(crate) fn new(
-        name: &'static str,
-        subr: BuiltInFn,
-        required: u16,
-        optional: u16,
-        rest: bool,
-    ) -> Self {
-        Self {
-            name,
-            subr,
-            args: FnArgs {
-                required,
-                optional,
-                rest,
-                advice: false,
-            },
+    pub(crate) fn call<'ob>(
+        &self,
+        mut args: Vec<Object<'ob>>,
+        env: &mut crate::data::Environment<'ob>,
+        arena: &'ob Arena,
+    ) -> Result<Object<'ob>> {
+        let arg_cnt = args.len() as u16;
+        let fill_args = self.args.num_of_fill_args(arg_cnt)?;
+        for _ in 0..fill_args {
+            args.push(Object::NIL);
         }
+        (self.subr)(&args, env, arena)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn new_subr(
+    name: &'static str,
+    subr: BuiltInFn,
+    required: u16,
+    optional: u16,
+    rest: bool,
+) -> SubrFn {
+    SubrFn {
+        name,
+        subr,
+        args: FnArgs {
+            required,
+            optional,
+            rest,
+            advice: false,
+        },
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Function, Macro, Object};
+use crate::object::{Callable, FuncCell, Function, Object};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -87,14 +87,6 @@ impl GlobalSymbol {
             Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
             Some(FuncCell::Uncompiled(obj)) => Some(Callable::Uncompiled(obj)),
             None => None,
-        }
-    }
-
-    pub(crate) fn as_macro<'ob>(&self) -> Option<&'ob Macro<'ob>> {
-        match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.as_macro(),
-            Some(FuncCell::Macro(x)) => Some(!x),
-            Some(_) | None => None,
         }
     }
 
@@ -274,7 +266,6 @@ create_symbolmap!(
         crate::keymap::DEFSUBR,
     }
     EXPORT => {
-        crate::alloc::MAKE_CLOSURE,
         crate::data::DEFVAR,
         crate::data::NULL,
     }
@@ -324,9 +315,10 @@ pub(crate) fn intern(name: &str) -> Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
+
     use crate::arena::Arena;
     use crate::data::Environment;
-    use crate::object::{IntoObject, LispFn, Object, SubrFn};
+    use crate::object::{IntoObject, LispFn, Object};
     use std::mem::size_of;
 
     #[test]
@@ -386,13 +378,13 @@ mod test {
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };
-        let core_func = SubrFn::new("bar", dummy, 0, 0, false);
+        let core_func = crate::object::new_subr("bar", dummy, 0, 0, false);
         unsafe {
             sym.set_func(core_func.into_obj(arena));
         }
 
         if let Some(FuncCell::SubrFn(subr)) = sym.func() {
-            assert_eq!(*subr, SubrFn::new("bar", dummy, 0, 0, false));
+            assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");
         }

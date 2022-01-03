@@ -487,18 +487,6 @@ pub(crate) fn call_lisp<'brw, 'ob>(
     rout.run(env, arena)
 }
 
-pub(crate) fn call_subr<'ob>(
-    func: SubrFn,
-    mut args: Vec<Object<'ob>>,
-    env: &mut Environment<'ob>,
-    arena: &'ob Arena,
-) -> Result<Object<'ob>> {
-    let arg_cnt = args.len() as u16;
-    let fill_args = func.args.num_of_fill_args(arg_cnt)?;
-    fill_extra_args(&mut args, fill_args);
-    (func.subr)(&args, env, arena)
-}
-
 /// Compile then execute the lisp object.
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,
