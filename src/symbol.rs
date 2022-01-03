@@ -372,7 +372,6 @@ mod test {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)] // crashes Miri
     fn subr() {
         let arena = &Arena::new();
 
