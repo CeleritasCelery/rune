@@ -92,7 +92,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
+fn repl(env: &mut Environment, arena: &Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -126,13 +126,13 @@ fn repl<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
     }
 }
 
-fn load<'ob>(env: &mut Environment<'ob>, arena: &'ob Arena) {
+fn load(env: &mut Environment, arena: &Arena) {
     use crate::symbol::sym;
-    env.vars.insert(&sym::EMACS_VERSION, arena.add("28.1"));
-    env.vars.insert(&sym::LEXICAL_BINDING, Object::TRUE);
-    env.vars.insert(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-    env.vars.insert(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    env.vars.insert(&sym::CURRENT_LOAD_LIST, Object::NIL);
+    env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
+    env.set_var(&sym::LEXICAL_BINDING, Object::TRUE);
+    env.set_var(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
+    env.set_var(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
+    env.set_var(&sym::CURRENT_LOAD_LIST, Object::NIL);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 

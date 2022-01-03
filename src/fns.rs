@@ -26,7 +26,7 @@ impl<'ob> Function<'ob> {
     pub(crate) fn call(
         self,
         args: Vec<Object<'ob>>,
-        env: &mut Environment<'ob>,
+        env: &mut Environment,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
@@ -41,7 +41,7 @@ impl<'ob> Function<'ob> {
 pub(crate) fn mapcar<'ob>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -63,7 +63,7 @@ pub(crate) fn mapcar<'ob>(
 pub(crate) fn mapc<'ob>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -203,7 +203,7 @@ fn require<'ob>(
     feature: Symbol,
     filename: Option<&str>,
     noerror: Option<bool>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {

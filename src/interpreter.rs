@@ -14,7 +14,7 @@ use fn_macros::defun;
 
 struct Interpreter<'ob, 'brw> {
     vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Environment<'ob>,
+    env: &'brw mut Environment,
     arena: &'ob Arena,
 }
 
@@ -22,7 +22,7 @@ struct Interpreter<'ob, 'brw> {
 pub(crate) fn eval<'ob, 'brw>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &'brw mut Environment<'ob>,
+    env: &'brw mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     ensure!(
@@ -41,7 +41,7 @@ pub(crate) fn eval<'ob, 'brw>(
 pub(crate) fn call<'ob, 'brw>(
     form: Object<'ob>,
     args: Vec<Object<'ob>>,
-    env: &'brw mut Environment<'ob>,
+    env: &'brw mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let mut frame = Interpreter {
@@ -423,7 +423,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             match iter.find_map(|cons| (cons.car() == sym.into()).then(|| cons.cdr())) {
                 Some(value) => Ok(value),
                 None => match self.env.vars.get(sym) {
-                    Some(&v) => Ok(v),
+                    Some(v) => Ok(v.get(self.arena)),
                     None => Err(anyhow!("Void variable: {}", sym)),
                 },
             }
@@ -437,7 +437,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 value.set_cdr(new_value).expect("env should be mutable");
             }
             None => {
-                self.env.vars.insert(name, new_value);
+                self.env.set_var(name, new_value);
             }
         }
         new_value
@@ -542,7 +542,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 fn eval_function_body<'ob, 'brw>(
     forms: ElemIter<'_, 'ob>,
     vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Environment<'ob>,
+    env: &'brw mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let mut call_frame = Interpreter { vars, env, arena };

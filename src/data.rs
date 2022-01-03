@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
+use crate::arena::{GcRoot, Arena};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -11,10 +12,17 @@ use fn_macros::defun;
 use lazy_static::lazy_static;
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct Environment<'ob> {
-    pub(crate) vars: HashMap<Symbol, Object<'ob>>,
-    props: HashMap<Symbol, Vec<(Symbol, Object<'ob>)>>,
-    pub(crate) macro_callstack: Vec<Symbol>,
+pub(crate) struct Environment {
+    pub(crate) vars: HashMap<Symbol, GcRoot>,
+    props: HashMap<Symbol, Vec<(Symbol, GcRoot)>>,
+}
+
+impl Environment {
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: Object) {
+        unsafe {
+            self.vars.insert(sym, GcRoot::new(value));
+        }
+    }
 }
 
 lazy_static! {
@@ -52,9 +60,9 @@ pub(crate) fn defalias(
 pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: Object<'ob>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
 ) -> Object<'ob> {
-    env.vars.insert(place, newlet);
+    env.set_var(place, newlet);
     newlet
 }
 
@@ -63,15 +71,16 @@ pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: Object<'ob>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
 ) -> Object<'ob> {
+    let rooted = unsafe {GcRoot::new(value)};
     match env.props.get_mut(&symbol) {
         Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
-            Some(x) => x.1 = value,
-            None => plist.push((propname, value)),
+            Some(x) => x.1 = rooted,
+            None => plist.push((propname, rooted)),
         },
         None => {
-            let plist = vec![(propname, value)];
+            let plist = vec![(propname, rooted)];
             env.props.insert(symbol, plist);
         }
     }
@@ -79,10 +88,10 @@ pub(crate) fn put<'ob>(
 }
 
 #[defun]
-pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment<'ob>) -> Object<'ob> {
+pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment, arena: &'ob Arena) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
-            Some((_, val)) => *val,
+            Some((_, val)) => val.get(arena),
             None => Object::NIL,
         },
         None => Object::NIL,
@@ -108,8 +117,8 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
 }
 
 #[defun]
-pub(crate) fn symbol_value<'ob>(symbol: Symbol, env: &mut Environment<'ob>) -> Option<Object<'ob>> {
-    env.vars.get(&symbol).copied()
+pub(crate) fn symbol_value<'ob>(symbol: Symbol, env: &mut Environment, arena: &'ob Arena) -> Option<Object<'ob>> {
+    env.vars.get(&symbol).map(|x| x.get(arena))
 }
 
 #[defun]
@@ -193,7 +202,7 @@ pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
     _docstring: Option<&String>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
 ) -> Object<'ob> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env)

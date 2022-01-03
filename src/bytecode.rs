@@ -152,7 +152,7 @@ pub(crate) struct Routine<'brw, 'ob> {
 }
 
 impl<'ob, 'brw> Routine<'brw, 'ob> {
-    fn varref(&mut self, idx: usize, env: &Environment<'ob>) -> Result<()> {
+    fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
         let symbol = self.frame.get_const(idx);
         if let Object::Symbol(sym) = symbol {
             let var = *env
@@ -166,7 +166,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         }
     }
 
-    fn varset(&mut self, idx: usize, env: &mut Environment<'ob>) -> Result<()> {
+    fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
         let obj: Object = self.frame.get_const(idx);
         let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
@@ -202,7 +202,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         }
     }
 
-    fn call(&mut self, arg_cnt: u16, env: &mut Environment<'ob>, arena: &'ob Arena) -> Result<()> {
+    fn call(&mut self, arg_cnt: u16, env: &mut Environment, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx) {
             Object::Symbol(x) => !x,
@@ -255,7 +255,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
         &mut self,
         func: SubrFn,
         arg_cnt: u16,
-        env: &mut Environment<'ob>,
+        env: &mut Environment,
         arena: &'ob Arena,
     ) -> Result<()> {
         let fill_args = func.args.num_of_fill_args(arg_cnt)?;
@@ -279,7 +279,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     /// The main bytecode execution loop.
     pub(crate) fn run(
         &mut self,
-        env: &mut Environment<'ob>,
+        env: &mut Environment,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         use OpCode as op;
@@ -459,7 +459,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     /// Execute the given expression.
     pub(crate) fn execute(
         exp: &Expression<'ob>,
-        env: &mut Environment<'ob>,
+        env: &mut Environment,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         let mut rout = Routine {
@@ -474,7 +474,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 pub(crate) fn call_lisp<'brw, 'ob>(
     func: &'brw LispFn<'ob>,
     args: Vec<Object<'ob>>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let arg_cnt = args.len() as u16;
@@ -491,7 +491,7 @@ pub(crate) fn call_lisp<'brw, 'ob>(
 pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match lexical {

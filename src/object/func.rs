@@ -120,7 +120,7 @@ impl<'ob> Default for LispFn<'ob> {
 
 pub(crate) type BuiltInFn = for<'ob> fn(
     &[Object<'ob>],
-    &mut crate::data::Environment<'ob>,
+    &mut crate::data::Environment,
     &'ob Arena,
 ) -> Result<Object<'ob>>;
 
@@ -136,7 +136,7 @@ impl SubrFn {
     pub(crate) fn call<'ob>(
         &self,
         mut args: Vec<Object<'ob>>,
-        env: &mut crate::data::Environment<'ob>,
+        env: &mut crate::data::Environment,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         let arg_cnt = args.len() as u16;

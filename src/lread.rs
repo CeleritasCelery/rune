@@ -60,7 +60,7 @@ pub(crate) fn read_from_string<'ob>(
 pub(crate) fn load_internal<'ob>(
     contents: &str,
     arena: &'ob Arena,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -90,7 +90,7 @@ pub(crate) fn load<'ob>(
     _nosuffix: Option<bool>,
     _must_suffix: Option<bool>,
     arena: &'ob Arena,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
 ) -> Result<bool> {
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {}", file)) {
         Ok(content) => load_internal(&content, arena, env),

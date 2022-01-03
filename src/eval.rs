@@ -11,7 +11,7 @@ use anyhow::Result;
 pub(crate) fn apply<'ob>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let args = match arguments.len() {
@@ -33,7 +33,7 @@ pub(crate) fn apply<'ob>(
 pub(crate) fn funcall<'ob>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     function.call(arguments.to_vec(), env, arena)

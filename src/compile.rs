@@ -219,7 +219,7 @@ struct Compiler<'ob, 'brw> {
     /// bootstrap compiler binds *value* and not *variables*.
     upvalues: Vec<Symbol>,
     /// A reference to the current runtime environment
-    env: &'brw mut Environment<'ob>,
+    env: &'brw mut Environment,
     /// How many layers deep we are in lazy evaluation of functions
     lazy_eval: usize,
     /// A reference to the current allocation arena
@@ -236,7 +236,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn new(
         vars: Vec<Option<Symbol>>,
         parent: Option<&'brw Upvalues<'brw>>,
-        env: &'brw mut Environment<'ob>,
+        env: &'brw mut Environment,
         arena: &'ob Arena,
     ) -> Compiler<'ob, 'brw> {
         Self {
@@ -959,7 +959,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         obj: ElemIter<'_, 'ob>,
         vars: Vec<Option<Symbol>>,
         parent: Option<&'brw Upvalues<'brw>>,
-        env: &'brw mut Environment<'ob>,
+        env: &'brw mut Environment,
         arena: &'ob Arena,
     ) -> Result<Self> {
         let mut exp = Compiler::new(vars, parent, env, arena);
@@ -1006,7 +1006,7 @@ fn parse_fn_binding(bindings: Object) -> Result<(u16, u16, bool, Vec<Symbol>)> {
 fn compile_closure<'ob, 'brw>(
     obj: Object<'ob>,
     parent: Option<&'brw Upvalues<'brw>>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<(Vec<Symbol>, LispFn<'ob>)> {
     let mut iter = obj.as_list()?;
@@ -1031,7 +1031,7 @@ fn compile_closure<'ob, 'brw>(
 /// Compile a lisp object.
 pub(crate) fn compile<'ob>(
     obj: Object<'ob>,
-    env: &mut Environment<'ob>,
+    env: &mut Environment,
     arena: &'ob Arena,
 ) -> Result<Expression<'ob>> {
     let cons = Cons::new(obj, Object::NIL);
@@ -1050,7 +1050,7 @@ mod test {
     /// Compile a lambda.
     fn compile_lambda<'ob>(
         obj: Object<'ob>,
-        env: &mut Environment<'ob>,
+        env: &mut Environment,
         arena: &'ob Arena,
     ) -> Result<LispFn<'ob>> {
         match obj {

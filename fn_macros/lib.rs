@@ -59,7 +59,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob>(
             args: &[crate::object::Object<'ob>],
-            env: &mut crate::data::Environment<'ob>,
+            env: &mut crate::data::Environment,
             arena: &'ob crate::arena::Arena,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call

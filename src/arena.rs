@@ -2,6 +2,27 @@ use crate::cons::Cons;
 use crate::object::{IntoObject, LispFn, Object, SubrFn};
 use std::cell::RefCell;
 
+
+#[repr(transparent)]
+#[derive(Debug, PartialEq)]
+pub(crate) struct GcRoot {
+    inner: Object<'static>
+}
+
+impl GcRoot {
+    pub(crate) fn get<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
+        unsafe {
+            std::mem::transmute::<Object<'static>, Object<'ob>>(self.inner)
+        }
+    }
+
+    pub(crate) unsafe fn new<'ob>(obj: Object<'ob>) -> Self {
+        Self {
+            inner: std::mem::transmute::<Object<'ob>, Object<'static>>(obj)
+        }
+    }
+}
+
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Arena`. When the
 /// `Arena` goes out of scope, no objects should be accessible.
