@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::{GcRoot, Arena};
+use crate::arena::{Arena, GcRoot};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -57,11 +57,7 @@ pub(crate) fn defalias(
 }
 
 #[defun]
-pub(crate) fn set<'ob>(
-    place: Symbol,
-    newlet: Object<'ob>,
-    env: &mut Environment,
-) -> Object<'ob> {
+pub(crate) fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment) -> Object<'ob> {
     env.set_var(place, newlet);
     newlet
 }
@@ -73,7 +69,7 @@ pub(crate) fn put<'ob>(
     value: Object<'ob>,
     env: &mut Environment,
 ) -> Object<'ob> {
-    let rooted = unsafe {GcRoot::new(value)};
+    let rooted = unsafe { GcRoot::new(value) };
     match env.props.get_mut(&symbol) {
         Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
             Some(x) => x.1 = rooted,
@@ -88,7 +84,12 @@ pub(crate) fn put<'ob>(
 }
 
 #[defun]
-pub(crate) fn get<'ob>(symbol: Symbol, propname: Symbol, env: &Environment, arena: &'ob Arena) -> Object<'ob> {
+pub(crate) fn get<'ob>(
+    symbol: Symbol,
+    propname: Symbol,
+    env: &Environment,
+    arena: &'ob Arena,
+) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some((_, val)) => val.get(arena),
@@ -117,7 +118,11 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
 }
 
 #[defun]
-pub(crate) fn symbol_value<'ob>(symbol: Symbol, env: &mut Environment, arena: &'ob Arena) -> Option<Object<'ob>> {
+pub(crate) fn symbol_value<'ob>(
+    symbol: Symbol,
+    env: &mut Environment,
+    arena: &'ob Arena,
+) -> Option<Object<'ob>> {
     env.vars.get(&symbol).map(|x| x.get(arena))
 }
 

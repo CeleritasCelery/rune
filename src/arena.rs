@@ -1,25 +1,106 @@
 use crate::cons::Cons;
-use crate::object::{IntoObject, LispFn, Object, SubrFn};
-use std::cell::RefCell;
+use crate::object::{IntoObject, LispFn, Object, SubrFn, Bits};
+use anyhow::Result;
+use std::cell::{Cell, RefCell};
+use std::fmt::Debug;
+use std::mem::transmute;
 
+pub(crate) trait ConstrainLifetime<'new, T>
+where
+    T: 'new,
+{
+    fn constrain_lifetime(self, cx: &'new Arena) -> T;
+}
+
+impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
+    fn constrain_lifetime(self, _cx: &'new Arena) -> Object<'new> {
+        unsafe { transmute::<Object<'old>, Object<'new>>(self) }
+    }
+}
+
+impl<'old, 'new, T> ConstrainLifetime<'new, &'new T> for &'old T {
+    fn constrain_lifetime(self, _cx: &'new Arena) -> &'new T {
+        unsafe { transmute::<&'old T, &'new T>(self) }
+    }
+}
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq)]
 pub(crate) struct GcRoot {
-    inner: Object<'static>
+    inner: Object<'static>,
 }
 
 impl GcRoot {
-    pub(crate) fn get<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
-        unsafe {
-            std::mem::transmute::<Object<'static>, Object<'ob>>(self.inner)
+    pub(crate) unsafe fn new<'ob>(obj: Object<'ob>) -> Self {
+        Self {
+            inner: transmute::<Object<'ob>, Object<'static>>(obj),
         }
     }
 
+    pub(crate) fn get<'ob>(&self, cx: &'ob Arena) -> Object<'ob> {
+        self.inner.constrain_lifetime(cx)
+    }
+
+    pub(crate) fn as_gc<'ob>(&'ob self) -> Gc<Object<'ob>> {
+        Gc {
+            inner: unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) },
+        }
+    }
+
+    pub(crate) fn as_gc_slice<'ob>(slice: &'ob [Self]) -> &'ob [Gc<Object<'ob>>] {
+        let ptr = slice.as_ptr().cast::<Gc<Object<'ob>>>();
+        let len = slice.len();
+        unsafe { std::slice::from_raw_parts(ptr, len) }
+    }
+}
+
+
+#[repr(transparent)]
+pub(crate) struct GcCell {
+    inner: Cell<Object<'static>>,
+}
+
+impl GcCell {
     pub(crate) unsafe fn new<'ob>(obj: Object<'ob>) -> Self {
         Self {
-            inner: std::mem::transmute::<Object<'ob>, Object<'static>>(obj)
+            inner: Cell::new(transmute::<Object<'ob>, Object<'static>>(obj)),
         }
+    }
+
+    pub(crate) fn get<'ob>(&self, cx: &'ob Arena) -> Object<'ob> {
+        self.inner.get().constrain_lifetime(cx)
+    }
+
+    pub(crate) fn update<'ob>(&self, obj: Object<'ob>) {
+        self.inner
+            .set(unsafe { transmute::<Object<'ob>, Object<'static>>(obj) });
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct Gc<T: Copy> {
+    inner: T,
+}
+
+impl<'ob, T: Copy> Gc<T> {
+    pub(crate) fn get<U: 'ob>(self, cx: &'ob Arena) -> U
+    where
+        T: ConstrainLifetime<'ob, U>,
+    {
+        self.inner.constrain_lifetime(cx)
+    }
+
+    pub(crate) fn try_convert<U: Copy>(self) -> Result<Gc<U>>
+    where
+        U: TryFrom<T, Error = anyhow::Error>,
+    {
+        self.inner.try_into().map(|x| Gc { inner: x })
+    }
+}
+
+impl<T: Copy> Bits for Gc<T> where T: Bits {
+    fn bits(self) -> u64 {
+        self.inner.bits()
     }
 }
 
@@ -52,7 +133,7 @@ enum OwnedObject<'ob> {
 
 impl<'ob> OwnedObject<'ob> {
     unsafe fn coerce_lifetime(self) -> OwnedObject<'static> {
-        std::mem::transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
+        transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
     }
 }
 
@@ -81,7 +162,7 @@ impl<'ob> Arena {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Float(Box::new(obj)));
         if let Some(OwnedObject::Float(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut f64, &'ob mut f64>(x.as_mut()) }
+            unsafe { transmute::<&mut f64, &'ob mut f64>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -94,7 +175,7 @@ impl<'ob> Arena {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Cons(Box::new(obj)));
         if let Some(OwnedObject::Cons(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut Cons, &'ob mut Cons>(x.as_mut()) }
+            unsafe { transmute::<&mut Cons, &'ob mut Cons>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -104,7 +185,7 @@ impl<'ob> Arena {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::String(Box::new(obj)));
         if let Some(OwnedObject::String(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut String, &'ob mut String>(x.as_mut()) }
+            unsafe { transmute::<&mut String, &'ob mut String>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -123,9 +204,7 @@ impl<'ob> Arena {
         Self::register(&mut objects, OwnedObject::Vec(Box::new(ref_cell)));
         if let Some(OwnedObject::Vec(x)) = objects.last_mut() {
             unsafe {
-                std::mem::transmute::<&mut RefCell<Vec<Object>>, &'ob mut RefCell<Vec<Object>>>(
-                    x.as_mut(),
-                )
+                transmute::<&mut RefCell<Vec<Object>>, &'ob mut RefCell<Vec<Object>>>(x.as_mut())
             }
         } else {
             unreachable!("object was not the type we just inserted");
@@ -136,7 +215,7 @@ impl<'ob> Arena {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::LispFn(Box::new(obj)));
         if let Some(OwnedObject::LispFn(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut LispFn, &'ob mut LispFn>(x.as_mut()) }
+            unsafe { transmute::<&mut LispFn, &'ob mut LispFn>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -146,7 +225,7 @@ impl<'ob> Arena {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
         if let Some(OwnedObject::SubrFn(x)) = objects.last_mut() {
-            unsafe { std::mem::transmute::<&mut SubrFn, &'ob mut SubrFn>(x.as_mut()) }
+            unsafe { transmute::<&mut SubrFn, &'ob mut SubrFn>(x.as_mut()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -157,5 +236,29 @@ impl<'ob> Arena {
         Input: IntoObject<'ob, Output>,
     {
         item.into_obj(self)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_gc() {
+        let arena = &Arena::new();
+        let mut obj = Object::NIL;
+        println!("{}", obj);
+        {
+            let inner = arena.add("foo");
+            let root = unsafe { GcRoot::new(inner) };
+            let rf = root.as_gc();
+            obj = rf.get(arena);
+        }
+        println!("{}", obj);
+        if let Object::String(x) = obj {
+            assert_eq!(!x, "foo");
+        } else {
+            unreachable!();
+        }
     }
 }

@@ -118,11 +118,8 @@ impl<'ob> Default for LispFn<'ob> {
     }
 }
 
-pub(crate) type BuiltInFn = for<'ob> fn(
-    &[Object<'ob>],
-    &mut crate::data::Environment,
-    &'ob Arena,
-) -> Result<Object<'ob>>;
+pub(crate) type BuiltInFn =
+    for<'ob> fn(&[Object<'ob>], &mut crate::data::Environment, &'ob Arena) -> Result<Object<'ob>>;
 
 #[derive(Copy, Clone)]
 pub(crate) struct SubrFn {
