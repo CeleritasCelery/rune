@@ -149,20 +149,20 @@ impl<'ob> Default for &Object<'ob> {
 impl<'ob> fmt::Display for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Object::Int(x) => write!(f, "{}", x),
-            Object::Cons(x) => write!(f, "{}", x),
-            Object::Vec(x) => write!(f, "{:?}", x),
-            Object::String(x) => write!(f, "\"{}\"", x),
-            Object::Symbol(x) => write!(f, "{}", x),
-            Object::LispFn(x) => write!(f, "(lambda {:?})", x),
-            Object::SubrFn(x) => write!(f, "{:?}", x),
+            Object::Int(x) => write!(f, "{x}"),
+            Object::Cons(x) => write!(f, "{x}"),
+            Object::Vec(x) => write!(f, "{x:?}"),
+            Object::String(x) => write!(f, "\"{x}\""),
+            Object::Symbol(x) => write!(f, "{x}"),
+            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
+            Object::SubrFn(x) => write!(f, "{x:?}"),
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
-                    write!(f, "{:.1}", x)
+                    write!(f, "{x:.1}")
                 } else {
-                    write!(f, "{}", x)
+                    write!(f, "{x}")
                 }
             }
         }
@@ -172,9 +172,9 @@ impl<'ob> fmt::Display for Object<'ob> {
 impl<'ob> fmt::Debug for Object<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Object::Int(x) => write!(f, "{}", x),
-            Object::Cons(x) => write!(f, "{:?}", x),
-            Object::Vec(x) => write!(f, "{:?}", x),
+            Object::Int(x) => write!(f, "{x}"),
+            Object::Cons(x) => write!(f, "{x:?}"),
+            Object::Vec(x) => write!(f, "{x:?}"),
             Object::String(string) => {
                 write!(
                     f,
@@ -185,16 +185,16 @@ impl<'ob> fmt::Debug for Object<'ob> {
                         .collect::<String>()
                 )
             }
-            Object::Symbol(x) => write!(f, "{}", x),
-            Object::LispFn(x) => write!(f, "(lambda {:?})", x),
-            Object::SubrFn(x) => write!(f, "{:?}", x),
+            Object::Symbol(x) => write!(f, "{x}"),
+            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
+            Object::SubrFn(x) => write!(f, "{x:?}"),
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
-                    write!(f, "{:.1}", x)
+                    write!(f, "{x:.1}")
                 } else {
-                    write!(f, "{}", x)
+                    write!(f, "{x}")
                 }
             }
         }

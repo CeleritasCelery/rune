@@ -5,7 +5,7 @@ use anyhow::{anyhow, ensure, Result};
 
 #[defun]
 fn message(format_string: &str, args: &[Object]) -> String {
-    println!("MESSAGE: {} -> {:?}", format_string, args);
+    println!("MESSAGE: {format_string} -> {args:?}");
     format_string.to_owned()
 }
 
@@ -19,7 +19,7 @@ fn format(string: &str, objects: &[Object]) -> Result<String> {
         let val = iter
             .next()
             .ok_or_else(|| anyhow!("Not enough objects for format string"))?;
-        result.push_str(&format!("{}", val));
+        result.push_str(&format!("{val}"));
         last_end = start + part.len();
     }
     ensure!(

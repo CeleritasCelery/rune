@@ -15,9 +15,7 @@ fn check_lower_bounds(idx: Option<i64>, len: usize) -> Result<usize> {
     let idx = idx.unwrap_or(0);
     ensure!(
         -len <= idx && idx < len,
-        "start index of {} is out of bounds for string of length {}",
-        idx,
-        len
+        "start index of {idx} is out of bounds for string of length {len}"
     );
     let idx = if idx < 0 { len + idx } else { idx };
     Ok(idx as usize)
@@ -28,9 +26,7 @@ fn check_upper_bounds(idx: Option<i64>, len: usize) -> Result<usize> {
     let idx = idx.unwrap_or(len);
     ensure!(
         -len <= idx && idx <= len,
-        "end index of {} is out of bounds for string of length {}",
-        idx,
-        len
+        "end index of {idx} is out of bounds for string of length {len}"
     );
     let idx = if idx < 0 { len + idx } else { idx };
     Ok(idx as usize)
@@ -73,7 +69,8 @@ pub(crate) fn load_internal<'ob>(
             }
         };
         if crate::debug::debug_enabled() {
-            println!("-----READ START-----\n {}", &contents[pos..(new_pos + pos)]);
+            let content = &contents[pos..(new_pos + pos)];
+            println!("-----READ START-----\n {content}");
             println!("-----READ END-----");
         }
         interpreter::eval(obj, None, env, arena)?;
@@ -92,7 +89,7 @@ pub(crate) fn load<'ob>(
     arena: &'ob Arena,
     env: &mut Environment,
 ) -> Result<bool> {
-    match fs::read_to_string(file).with_context(|| format!("Couldn't open file {}", file)) {
+    match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
         Ok(content) => load_internal(&content, arena, env),
         Err(e) => match noerror {
             Some(_) => Ok(false),
@@ -119,8 +116,8 @@ mod test {
         let arena = &Arena::new();
         let env = &mut Environment::default();
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
-        println!("{:?}", env);
-        println!("{:?}", arena);
+        println!("{env:?}");
+        println!("{arena:?}");
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         let val = interpreter::eval(obj, None, env, arena).unwrap();

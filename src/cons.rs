@@ -85,24 +85,26 @@ impl<'ob> Debug for Cons<'ob> {
 }
 
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
+    let car = cons.car();
     match cons.cdr() {
         Object::Cons(cdr) => {
-            write!(f, "{} ", cons.car())?;
+            write!(f, "{car} ")?;
             print_rest(&cdr, f)
         }
-        Object::Nil(_) => write!(f, "{})", cons.car()),
-        cdr => write!(f, "{} . {})", cons.car(), cdr),
+        Object::Nil(_) => write!(f, "{car})"),
+        cdr => write!(f, "{car} . {cdr})"),
     }
 }
 
 fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
+    let car = cons.car();
     match cons.cdr() {
         Object::Cons(cdr) => {
-            write!(f, "{:?} ", cons.car())?;
+            write!(f, "{car:?} ")?;
             print_rest(&cdr, f)
         }
-        Object::Nil(_) => write!(f, "{:?})", cons.car()),
-        cdr => write!(f, "{:?} . {:?})", cons.car(), cdr),
+        Object::Nil(_) => write!(f, "{car:?})"),
+        cdr => write!(f, "{car:?} . {cdr:?})"),
     }
 }
 

@@ -230,11 +230,8 @@ pub(crate) fn aset<'ob>(
         vec[idx] = newlet;
         Ok(newlet)
     } else {
-        Err(anyhow!(
-            "index {} is out of bounds. Length was {}",
-            idx,
-            vec.len()
-        ))
+        let len = vec.len();
+        Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
     }
 }
 

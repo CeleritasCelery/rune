@@ -115,15 +115,15 @@ fn repl(env: &mut Environment, arena: &Arena) {
         let (obj, _) = match reader::read(&buffer, arena) {
             Ok(obj) => obj,
             Err(e) => {
-                println!("Error: {}", e);
+                println!("Error: {e}");
                 buffer.clear();
                 continue;
             }
         };
 
         match interpreter::eval(obj, None, env, arena) {
-            Ok(val) => println!("{}", val),
-            Err(e) => println!("Error: {}", e),
+            Ok(val) => println!("{val}"),
+            Err(e) => println!("Error: {e}"),
         }
         buffer.clear();
     }
@@ -150,9 +150,9 @@ fn load(env: &mut Environment, arena: &Arena) {
     );
 
     match crate::lread::load_internal(&buffer, arena, env) {
-        Ok(val) => println!("{}", val),
+        Ok(val) => println!("{val}"),
         Err(e) => {
-            println!("Error: {}", e);
+            println!("Error: {e}");
             return;
         }
     }
@@ -167,8 +167,8 @@ fn load(env: &mut Environment, arena: &Arena) {
     );
 
     match crate::lread::load_internal(&buffer, arena, env) {
-        Ok(val) => println!("{}", val),
-        Err(e) => println!("Error: {}", e),
+        Ok(val) => println!("{val}"),
+        Err(e) => println!("Error: {e}"),
     }
 }
 
@@ -178,7 +178,7 @@ fn main() {
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),
         Some(arg) if arg == "--load" => load(env, arena),
-        Some(arg) => panic!("unknown arg: {}", arg),
+        Some(arg) => panic!("unknown arg: {arg}"),
         None => {
             load(env, arena);
             repl(env, arena);

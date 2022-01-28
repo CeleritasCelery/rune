@@ -106,7 +106,8 @@ impl GlobalSymbol {
 
 impl fmt::Display for GlobalSymbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.name)
+        let name = &self.name;
+        write!(f, "{name}")
     }
 }
 

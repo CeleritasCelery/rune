@@ -250,14 +250,14 @@ mod test {
     fn test_gc() {
         let arena = &Arena::new();
         let mut obj = Object::NIL;
-        println!("{}", obj);
+        println!("{obj}");
         {
             let inner = arena.add("foo");
             let root = unsafe { GcRoot::new(inner) };
             let rf = root.as_gc();
             obj = rf.get(arena);
         }
-        println!("{}", obj);
+        println!("{obj}");
         if let Object::String(x) = obj {
             assert_eq!(!x, "foo");
         } else {

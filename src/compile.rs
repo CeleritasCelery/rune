@@ -266,10 +266,10 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         self.vars.push(var);
         #[cfg(feature = "debug_bytecode")]
         {
-            println!("growing stack: {:?}", var);
+            println!("growing stack: {var:?}");
             println!("[");
             for (idx, x) in self.vars.iter().enumerate() {
-                println!("    {}: {:?},", idx, x);
+                println!("    {idx}: {x:?},");
             }
             println!("]");
         }
@@ -283,7 +283,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             println!("shrinking stack");
             println!("[");
             for (idx, x) in self.vars.iter().enumerate() {
-                println!("    {}: {:?},", idx, x);
+                println!("    {idx}: {x:?},");
             }
             println!("]");
         }
@@ -298,7 +298,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             println!("truncating stack");
             println!("[");
             for (idx, x) in self.vars.iter().enumerate() {
-                println!("    {}: {:?},", idx, x);
+                println!("    {idx}: {x:?},");
             }
             println!("]");
         }
@@ -629,7 +629,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 self.shrink_stack();
             }
             OpCode::Jump => {}
-            x => panic!("invalid jump opcode provided: {:?}", x),
+            x => panic!("invalid jump opcode provided: {x:?}"),
         }
         self.codes.push_op(jump_code);
         let place = self.codes.push_jump_placeholder();
@@ -1063,9 +1063,9 @@ mod test {
                     debug_assert!(upvalues.is_empty());
                     Ok(func)
                 }
-                x => Err(anyhow!("Invalid Function: {}", x)),
+                x => Err(anyhow!("Invalid Function: {x}")),
             },
-            x => Err(anyhow!("Invalid Function: {}", x)),
+            x => Err(anyhow!("Invalid Function: {x}")),
         }
     }
 
@@ -1380,15 +1380,15 @@ mod test {
     }
 
     fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
-        println!("Test String: {}", sexp);
+        println!("Test String: {sexp}");
         let obj = read(sexp, comp_arena).unwrap().0;
         let env = &mut Environment::default();
         let lambda = match obj {
             Object::Cons(function) => match function.cdr() {
                 Object::Cons(lambda) => lambda.car(),
-                x => panic!("expected cons, found {}", x),
+                x => panic!("expected cons, found {x}"),
             },
-            x => panic!("expected cons, found {}", x),
+            x => panic!("expected cons, found {x}"),
         };
         assert_eq!(compile_lambda(lambda, env, comp_arena).unwrap(), func);
     }

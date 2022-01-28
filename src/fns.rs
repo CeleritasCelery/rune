@@ -19,7 +19,7 @@ pub(crate) fn slice_into_list<'ob>(
 
 #[defun]
 pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> String {
-    format!("{}", object)
+    format!("{object}")
 }
 
 impl<'ob> Function<'ob> {

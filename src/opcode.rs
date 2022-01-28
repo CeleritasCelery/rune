@@ -99,20 +99,23 @@ impl fmt::Debug for CodeVec {
         let mut iter = self.0.iter();
         while let Some(i) = iter.next() {
             let op = (*i).try_into().unwrap_or(Unknown);
-            display.push(format!("{:?}", op));
+            display.push(format!("{op:?}"));
             match op {
                 StackRefN | ConstantN | CallN | VarRefN | VarSetN | DiscardN | DiscardNKeepTOS => {
-                    display.push(format!("{:?}", iter.next().unwrap()));
+                    let n1 = iter.next().unwrap();
+                    display.push(format!("{n1:?}"));
                 }
                 StackRefN2 | ConstantN2 | CallN2 | JumpNil | JumpNotNil | Jump | JumpNilElsePop
                 | JumpNotNilElsePop | VarRefN2 | VarSetN2 => {
-                    display.push(format!("{:?}", iter.next().unwrap()));
-                    display.push(format!("{:?}", iter.next().unwrap()));
+                    let n1 = iter.next().unwrap();
+                    display.push(format!("{n1:?}"));
+                    let n2 = iter.next().unwrap();
+                    display.push(format!("{n2:?}"));
                 }
                 _ => {}
             }
         }
-        write!(f, "{:?}", display)
+        write!(f, "{display:?}")
     }
 }
 
@@ -129,7 +132,7 @@ impl TryFrom<u8> for OpCode {
         if value <= OpCode::Unknown as u8 {
             Ok(unsafe { std::mem::transmute::<u8, OpCode>(value) })
         } else {
-            Err(anyhow::anyhow!("Invalid opcode value: {}", value))
+            Err(anyhow::anyhow!("Invalid opcode value: {value}"))
         }
     }
 }

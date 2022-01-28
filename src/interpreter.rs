@@ -82,7 +82,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 FUNCTION => self.eval_function(forms),
                 @ func => self.eval_call(func, forms),
             },
-            other => Err(anyhow!("Invalid Function: {}", other)),
+            other => Err(anyhow!("Invalid Function: {other}")),
         }
     }
 
@@ -115,7 +115,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                     env.push(!pair);
                 }
                 Object::True(_) => return Ok(env),
-                x => bail!("Invalid closure environment member: {}", x),
+                x => bail!("Invalid closure environment member: {x}"),
             }
         }
         Err(anyhow!("Closure env did not end with `t`"))
@@ -238,7 +238,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
         let func = match name.resolve_callable() {
             Some(x) => x,
-            None => bail!("Invalid function: {}", name),
+            None => bail!("Invalid function: {name}"),
         };
 
         let mut eval_args =
@@ -249,14 +249,14 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Callable::SubrFn(func) => {
                 let args = eval_args()?;
                 if crate::debug::debug_enabled() {
-                    println!("({} {:?})", name, args);
+                    println!("({name} {args:?})");
                 }
                 (*func).call(args, self.env, self.arena)
             }
             Callable::Macro(mcro) => {
                 let macro_args = obj.as_list()?.collect::<Result<Vec<_>>>()?;
                 if crate::debug::debug_enabled() {
-                    println!("(macro: {} {:?})", name, macro_args);
+                    println!("(macro: {name} {macro_args:?})");
                 }
                 let value = mcro.get().call(macro_args, self.env, self.arena)?;
                 self.eval_form(value)
@@ -265,11 +265,11 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                     let args = eval_args()?;
                     if crate::debug::debug_enabled() {
-                        println!("({} {:?})", name, args);
+                        println!("({name} {args:?})");
                     }
                     self.call_closure(!form, args)
                 }
-                other => Err(anyhow!("Invalid Function: {}", other)),
+                other => Err(anyhow!("Invalid Function: {other}")),
             },
         }
     }
@@ -424,7 +424,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 Some(value) => Ok(value),
                 None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.get(self.arena)),
-                    None => Err(anyhow!("Void variable: {}", sym)),
+                    None => Err(anyhow!("Void variable: {sym}")),
                 },
             }
         }

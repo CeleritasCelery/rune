@@ -30,20 +30,20 @@ pub(crate) enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::MissingCloseParen(i) => write!(f, "Missing close paren: at {}", i),
-            Error::MissingCloseBracket(i) => write!(f, "Missing close bracket: at {}", i),
-            Error::MissingStringDel(i) => write!(f, "Missing closing string quote: at {}", i),
-            Error::ExtraCloseParen(i) => write!(f, "Extra Closing paren: at {}", i),
-            Error::ExtraCloseBracket(i) => write!(f, "Extra Closing brace: at {}", i),
-            Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {}: at {}", chr, i),
+            Error::MissingCloseParen(i) => write!(f, "Missing close paren: at {i}"),
+            Error::MissingCloseBracket(i) => write!(f, "Missing close bracket: at {i}"),
+            Error::MissingStringDel(i) => write!(f, "Missing closing string quote: at {i}"),
+            Error::ExtraCloseParen(i) => write!(f, "Extra Closing paren: at {i}"),
+            Error::ExtraCloseBracket(i) => write!(f, "Extra Closing brace: at {i}"),
+            Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {chr}: at {i}"),
             Error::EmptyStream => write!(f, "Empty Stream"),
-            Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {}", i),
-            Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {}", i),
+            Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {i}"),
+            Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {i}"),
             Error::ParseInt(radix, i) => {
-                write!(f, "invalid character for radix {}: at {}", radix, i)
+                write!(f, "invalid character for radix {radix}: at {i}")
             }
             Error::UnknownMacroCharacter(chr, i) => {
-                write!(f, "Unkown reader macro character {}: at {}", chr, i)
+                write!(f, "Unkown reader macro character {chr}: at {i}")
             }
         }
     }
@@ -121,8 +121,8 @@ impl<'a> Display for Token<'a> {
             Token::Splice(_) => write!(f, ",@"),
             Token::Sharp(_) => write!(f, "#"),
             Token::QuestionMark(_) => write!(f, "?"),
-            Token::Ident(x) => write!(f, "{}", x),
-            Token::String(x) => write!(f, "\"{}\"", x),
+            Token::Ident(x) => write!(f, "{x}"),
+            Token::String(x) => write!(f, "\"{x}\""),
             Token::Error(_) => write!(f, "error"),
         }
     }

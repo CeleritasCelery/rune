@@ -17,9 +17,9 @@ impl std::error::Error for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::ArgCount(exp, act) => write!(f, "Expected {} arg(s), found {}", exp, act),
+            Error::ArgCount(exp, act) => write!(f, "Expected {exp} arg(s), found {act}"),
             Error::Type(exp, act, print) => {
-                write!(f, "expected {:?}, found {:?}: {}", exp, act, print)
+                write!(f, "expected {exp:?}, found {act:?}: {print}")
             }
         }
     }
