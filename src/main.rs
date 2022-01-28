@@ -24,6 +24,7 @@
 // Enable all clippy lints, and then selectivly disable the ones we don't want
 #![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![allow(
+    clippy::undocumented_unsafe_blocks, // Will enable this later
     clippy::todo,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
@@ -36,6 +37,8 @@
     clippy::let_and_return,
     clippy::inline_always,
     clippy::wildcard_enum_match_arm,
+    clippy::string_slice,
+    clippy::separated_literal_suffix,
     clippy::unreachable,
     clippy::panic_in_result_fn,
     clippy::integer_arithmetic,

@@ -1,5 +1,6 @@
+#![allow(dead_code)]
 use crate::cons::Cons;
-use crate::object::{IntoObject, LispFn, Object, SubrFn, Bits};
+use crate::object::{Bits, IntoObject, LispFn, Object, SubrFn};
 use anyhow::Result;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -54,7 +55,6 @@ impl GcRoot {
     }
 }
 
-
 #[repr(transparent)]
 pub(crate) struct GcCell {
     inner: Cell<Object<'static>>,
@@ -98,7 +98,10 @@ impl<'ob, T: Copy> Gc<T> {
     }
 }
 
-impl<T: Copy> Bits for Gc<T> where T: Bits {
+impl<T: Copy> Bits for Gc<T>
+where
+    T: Bits,
+{
     fn bits(self) -> u64 {
         self.inner.bits()
     }

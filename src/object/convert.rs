@@ -160,7 +160,9 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
 /// without the need to allocate a new slice. We ensure that the two
 /// types have the exact same representation, so that no writes
 /// actually need to be performed.
-pub(crate) fn try_from_slice<'brw, 'ob, T>(slice: &'brw [Object<'ob>]) -> Result<&'brw [T], anyhow::Error>
+pub(crate) fn try_from_slice<'brw, 'ob, T>(
+    slice: &'brw [Object<'ob>],
+) -> Result<&'brw [T], anyhow::Error>
 where
     T: TryFrom<Object<'ob>, Error = Error> + Bits + 'ob,
 {
@@ -174,24 +176,6 @@ where
     let len = slice.len();
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
-
-use crate::arena::Gc;
-
-pub(crate) fn try_from_gc_slice<'brw, 'ob, T>(slice: &'brw [Gc<Object<'ob>>]) -> Result<&'brw [Gc<T>], anyhow::Error>
-where
-    T: TryFrom<Object<'ob>, Error = anyhow::Error> + Bits + Copy + 'ob,
-{
-    assert_eq!(std::mem::size_of::<Object>(), std::mem::size_of::<T>());
-    for x in slice.iter() {
-        let new: Gc<T> = x.try_convert()?;
-        // ensure they have the same bit representation
-        debug_assert_eq!(new.bits(), x.bits());
-    }
-    let ptr = slice.as_ptr().cast::<Gc<T>>();
-    let len = slice.len();
-    Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
-}
-
 
 define_unbox!(Int, i64);
 

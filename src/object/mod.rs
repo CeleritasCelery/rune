@@ -181,7 +181,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
                     "\"{}\"",
                     string
                         .chars()
-                        .map(|x| if x == '\n' { '↲' } else { x })
+                        .map(|x| if x == '\n' { '<' } else { x })
                         .collect::<String>()
                 )
             }
