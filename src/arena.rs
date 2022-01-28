@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use crate::cons::Cons;
-use crate::object::{Bits, IntoObject, LispFn, Object, SubrFn};
-use anyhow::Result;
+use crate::object::{IntoObject, LispFn, Object, SubrFn};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -38,18 +37,16 @@ impl GcRoot {
         }
     }
 
-    pub(crate) fn get<'ob>(&self, cx: &'ob Arena) -> Object<'ob> {
-        self.inner.constrain_lifetime(cx)
+    pub(crate) fn get<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
+        unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) }
     }
 
-    pub(crate) fn as_gc<'ob>(&'ob self) -> Gc<Object<'ob>> {
-        Gc {
-            inner: unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) },
-        }
+    pub(crate) fn as_gc<'ob>(&'ob self) -> Object<'ob> {
+        unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) }
     }
 
-    pub(crate) fn as_gc_slice<'ob>(slice: &'ob [Self]) -> &'ob [Gc<Object<'ob>>] {
-        let ptr = slice.as_ptr().cast::<Gc<Object<'ob>>>();
+    pub(crate) fn as_obj_slice<'ob>(slice: &'ob [Self]) -> &'ob [Object<'ob>] {
+        let ptr = slice.as_ptr().cast::<Object<'ob>>();
         let len = slice.len();
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -74,36 +71,6 @@ impl GcCell {
     pub(crate) fn update<'ob>(&self, obj: Object<'ob>) {
         self.inner
             .set(unsafe { transmute::<Object<'ob>, Object<'static>>(obj) });
-    }
-}
-
-#[derive(Copy, Clone)]
-pub(crate) struct Gc<T: Copy> {
-    inner: T,
-}
-
-impl<'ob, T: Copy> Gc<T> {
-    pub(crate) fn get<U: 'ob>(self, cx: &'ob Arena) -> U
-    where
-        T: ConstrainLifetime<'ob, U>,
-    {
-        self.inner.constrain_lifetime(cx)
-    }
-
-    pub(crate) fn try_convert<U: Copy>(self) -> Result<Gc<U>>
-    where
-        U: TryFrom<T, Error = anyhow::Error>,
-    {
-        self.inner.try_into().map(|x| Gc { inner: x })
-    }
-}
-
-impl<T: Copy> Bits for Gc<T>
-where
-    T: Bits,
-{
-    fn bits(self) -> u64 {
-        self.inner.bits()
     }
 }
 
@@ -240,6 +207,10 @@ impl<'ob> Arena {
     {
         item.into_obj(self)
     }
+
+    pub(crate) fn bind<'a>(&'ob self, obj: Object<'a>) -> Object<'ob> {
+        obj.constrain_lifetime(self)
+    }
 }
 
 #[cfg(test)]
@@ -250,14 +221,13 @@ mod test {
     fn test_gc() {
         let arena = &Arena::new();
         let mut obj = Object::NIL;
-        println!("{obj}");
+        assert_eq!(obj, Object::NIL);
         {
             let inner = arena.add("foo");
             let root = unsafe { GcRoot::new(inner) };
-            let rf = root.as_gc();
-            obj = rf.get(arena);
+            let gc = root.as_gc();
+            obj = arena.bind(gc);
         }
-        println!("{obj}");
         if let Object::String(x) = obj {
             assert_eq!(!x, "foo");
         } else {
