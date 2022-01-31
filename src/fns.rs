@@ -78,9 +78,9 @@ pub(crate) fn mapc<'ob>(
 }
 
 #[defun]
-pub(crate) fn nreverse(seq: List) -> Result<Object> {
+pub(crate) fn nreverse<'ob>(seq: List<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
     let mut prev = Object::NIL;
-    for tail in seq.conses() {
+    for tail in seq.conses(arena) {
         let tail = tail?;
         tail.set_cdr(prev)?;
         prev = Object::Cons(tail.into());
@@ -140,13 +140,13 @@ fn delete_from_list<'ob>(
 ) -> Result<Object<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
-    for tail in list.conses() {
+    for tail in list.conses(arena) {
         let tail = tail?;
         if eq_fn(tail.car(arena), elt) {
             if let Some(prev_tail) = &mut prev {
-                prev_tail.set_cdr(tail.cdr())?;
+                prev_tail.set_cdr(tail.cdr(arena))?;
             } else {
-                head = tail.cdr();
+                head = tail.cdr(arena);
             }
         } else {
             prev = Some(tail);
@@ -179,7 +179,7 @@ fn member_of_list<'ob>(
     eq_fn: EqFunc,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
-    let val = list.conses().find(|x| match x {
+    let val = list.conses(arena).find(|x| match x {
         Ok(obj) => eq_fn(obj.car(arena), elt),
         Err(_) => true,
     });
@@ -349,12 +349,16 @@ mod test {
         let arena = &Arena::new();
         {
             let list = list![1, 2, 3, 4; arena];
-            let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            let res = nreverse(list.try_into().unwrap(), arena)
+                .unwrap()
+                .into_obj(arena);
             assert_eq!(res, list![4, 3, 2, 1; arena]);
         }
         {
             let list = list![1; arena];
-            let res = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            let res = nreverse(list.try_into().unwrap(), arena)
+                .unwrap()
+                .into_obj(arena);
             assert_eq!(res, list![1; arena]);
         }
     }

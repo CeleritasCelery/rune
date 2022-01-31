@@ -62,7 +62,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 
     pub(crate) fn eval_sexp(&mut self, cons: &Cons<'ob>) -> Result<Object<'ob>> {
-        let forms = cons.cdr();
+        let forms = cons.cdr(self.arena);
         match cons.car(self.arena) {
             Object::Symbol(sym) => symbol_match! {!sym;
                 QUOTE => self.quote(forms),
@@ -224,7 +224,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     ) -> Result<Object<'ob>> {
         match closure.car(self.arena) {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
-                let mut forms = closure.cdr().as_list(self.arena)?;
+                let mut forms = closure.cdr(self.arena).as_list(self.arena)?;
                 let vars = self.bind_variables(&mut forms, args)?;
 
                 let mut call_frame = Interpreter {
@@ -262,7 +262,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 if crate::debug::debug_enabled() {
                     println!("(macro: {name} {macro_args:?})");
                 }
-                let value = mcro.get().call(macro_args, self.env, arena)?;
+                let value = mcro.get(self.arena).call(macro_args, self.env, arena)?;
                 self.eval_form(value)
             }
             Callable::Uncompiled(form) => match form.car(arena) {
@@ -295,7 +295,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                             self.arena,
                         )
                     };
-                    let end: Object = cons!(env, cons.cdr(); self.arena);
+                    let end: Object = cons!(env, cons.cdr(self.arena); self.arena);
                     Ok(cons!(&sym::CLOSURE, end; self.arena))
                 } else {
                     Ok(Object::Cons(cons))
@@ -424,7 +424,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter.find_map(|cons| (cons.car(self.arena) == sym.into()).then(|| cons.cdr())) {
+            match iter
+                .find_map(|cons| (cons.car(self.arena) == sym.into()).then(|| cons.cdr(self.arena)))
+            {
                 Some(value) => Ok(value),
                 None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.bind(self.arena)),
@@ -520,7 +522,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 
     fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<&'ob Cons<'ob>> {
-        let mut iter = cons.cdr().as_list(self.arena)?;
+        let mut iter = cons.cdr(self.arena).as_list(self.arena)?;
         let value = match iter.len() {
             // (let ((x)))
             0 => Object::NIL,

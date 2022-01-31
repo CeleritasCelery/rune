@@ -190,8 +190,8 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
 pub(crate) struct Macro<'ob>(Cons<'ob>);
 
 impl<'ob> Macro<'ob> {
-    pub(crate) fn get(&self) -> Function<'ob> {
-        match self.0.cdr().try_into() {
+    pub(crate) fn get(&self, arena: &'ob Arena) -> Function<'ob> {
+        match self.0.cdr(arena).try_into() {
             Ok(f) => f,
             Err(_) => unreachable!("Macro should only contain a valid function"),
         }
@@ -205,7 +205,7 @@ impl<'ob> TryFrom<&Cons<'ob>> for &Macro<'ob> {
         unsafe {
             match value.car_unchecked() {
                 Object::Symbol(sym) if !sym == &sym::MACRO => {
-                    let _: Function = value.cdr().try_into()?;
+                    let _: Function = value.cdr_unchecked().try_into()?;
                     let ptr: *const Cons = value;
                     Ok(&*ptr.cast::<Macro>())
                 }

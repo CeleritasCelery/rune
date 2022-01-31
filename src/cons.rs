@@ -26,7 +26,10 @@ impl std::error::Error for ConstConsError {}
 
 impl<'old, 'new> Cons<'old> {
     pub(crate) fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
-        Cons::new(self.car(arena).clone_in(arena), self.cdr().clone_in(arena))
+        Cons::new(
+            self.car(arena).clone_in(arena),
+            self.cdr(arena).clone_in(arena),
+        )
     }
 }
 
@@ -47,8 +50,12 @@ impl<'ob> Cons<'ob> {
         std::mem::transmute::<Object<'ob>, Object<'new>>(self.car.get())
     }
 
-    pub(crate) fn cdr(&self) -> Object<'ob> {
-        self.cdr.get()
+    pub(crate) fn cdr<'new>(&self, cx: &'new Arena) -> Object<'new> {
+        self.cdr.get().constrain_lifetime(cx)
+    }
+
+    pub(crate) unsafe fn cdr_unchecked<'new>(&self) -> Object<'new> {
+        std::mem::transmute::<Object<'ob>, Object<'new>>(self.cdr.get())
     }
 
     pub(crate) fn set_car(&self, new_car: Object<'ob>) -> Result<()> {
@@ -153,7 +160,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cons {
             Some(cons) => {
-                (*self).cons = match cons.cdr() {
+                (*self).cons = match cons.cdr(self.arena) {
                     Object::Cons(next) => Some(!next),
                     Object::Nil(_) => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
@@ -200,9 +207,9 @@ fn car<'ob>(list: List, arena: &'ob Arena) -> Object<'ob> {
 }
 
 #[defun]
-fn cdr(list: List) -> Object {
+fn cdr<'ob>(list: List, arena: &'ob Arena) -> Object<'ob> {
     match list {
-        List::Cons(cons) => cons.cdr(),
+        List::Cons(cons) => cons.cdr(arena),
         List::Nil => Object::NIL,
     }
 }
@@ -216,9 +223,9 @@ fn car_safe<'ob>(object: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
 }
 
 #[defun]
-fn cdr_safe(object: Object) -> Object {
+fn cdr_safe<'ob>(object: Object, arena: &'ob Arena) -> Object<'ob> {
     match object {
-        Object::Cons(cons) => cons.cdr(),
+        Object::Cons(cons) => cons.cdr(arena),
         _ => Object::NIL,
     }
 }
@@ -291,16 +298,16 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(start2_str.into_obj(arena), cons1.car(arena));
 
-        let cons2 = as_cons(cons1.cdr()).expect("expected cons");
+        let cons2 = as_cons(cons1.cdr(arena)).expect("expected cons");
 
         let cmp: Object = 7.into();
         assert_eq!(cmp, cons2.car(arena));
 
-        let cons3 = as_cons(cons2.cdr()).expect("expected cons");
+        let cons3 = as_cons(cons2.cdr(arena)).expect("expected cons");
         let cmp1: Object = 5.into();
         assert_eq!(cmp1, cons3.car(arena));
         let cmp2: Object = 9.into();
-        assert_eq!(cmp2, cons3.cdr());
+        assert_eq!(cmp2, cons3.cdr(arena));
 
         assert_eq!(cons!(5, "foo"; arena), cons!(5, "foo"; arena));
         assert_ne!(cons!(5, "foo"; arena), cons!(5, "bar"; arena));

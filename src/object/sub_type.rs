@@ -289,16 +289,19 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
 }
 
 #[derive(Clone)]
-pub(crate) struct ListIterData<'ob>(List<'ob>);
+pub(crate) struct ListIterData<'ob> {
+    list: List<'ob>,
+    arena: &'ob Arena,
+}
 
 impl<'ob> Iterator for ListIterData<'ob> {
     type Item = Result<&'ob Cons<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.0 {
+        match self.list {
             List::Nil => None,
             List::Cons(cons) => {
-                self.0 = match cons.cdr() {
+                self.list = match cons.cdr(self.arena) {
                     Object::Cons(next) => List::Cons(next),
                     Object::Nil(_) => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
@@ -309,18 +312,9 @@ impl<'ob> Iterator for ListIterData<'ob> {
     }
 }
 
-impl<'ob> IntoIterator for List<'ob> {
-    type Item = Result<&'ob Cons<'ob>>;
-    type IntoIter = ListIterData<'ob>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ListIterData(self)
-    }
-}
-
 impl<'ob> List<'ob> {
-    pub(crate) fn conses(self) -> ListIterData<'ob> {
-        ListIterData(self)
+    pub(crate) fn conses(self, arena: &'ob Arena) -> ListIterData<'ob> {
+        ListIterData { list: self, arena }
     }
 }
 
