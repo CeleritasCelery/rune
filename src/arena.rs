@@ -18,12 +18,6 @@ impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
     }
 }
 
-impl<'old, 'new, T> ConstrainLifetime<'new, &'new T> for &'old T {
-    fn constrain_lifetime(self, _cx: &'new Arena) -> &'new T {
-        unsafe { transmute::<&'old T, &'new T>(self) }
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug, PartialEq)]
 pub(crate) struct GcRoot {
@@ -37,7 +31,7 @@ impl GcRoot {
         }
     }
 
-    pub(crate) fn get<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
+    pub(crate) fn bind<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
         unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) }
     }
 

@@ -20,7 +20,7 @@ pub(crate) fn apply<'ob>(
             let end = len - 1;
             let last = arguments[end];
             let mut args = arguments[..end].to_vec();
-            for element in last.as_list()? {
+            for element in last.as_list(arena)? {
                 args.push(element?);
             }
             args

@@ -280,15 +280,16 @@ where
 mod test {
     use super::*;
 
-    fn wrapper(args: &[Object]) -> Result<i64, Error> {
+    fn wrapper(args: &[Object], arena: &Arena) -> Result<i64, Error> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,
+            arena,
         ))
     }
 
-    fn inner(arg0: Option<i64>, arg1: &Cons) -> i64 {
-        let x: i64 = arg1.car().try_into().unwrap();
+    fn inner(arg0: Option<i64>, arg1: &Cons, arena: &Arena) -> i64 {
+        let x: i64 = arg1.car(arena).try_into().unwrap();
         arg0.unwrap() + x
     }
 
@@ -298,7 +299,7 @@ mod test {
         let obj0 = 5.into_obj(arena);
         let obj1 = Cons::new(1.into(), 2.into()).into_obj(arena);
         let vec = vec![obj0, obj1];
-        let res = wrapper(vec.as_slice());
+        let res = wrapper(vec.as_slice(), arena);
         assert_eq!(6, res.unwrap());
     }
 }

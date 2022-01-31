@@ -92,7 +92,7 @@ pub(crate) fn get<'ob>(
 ) -> Object<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
-            Some((_, val)) => val.get(arena),
+            Some((_, val)) => val.bind(arena),
             None => Object::NIL,
         },
         None => Object::NIL,
@@ -123,7 +123,7 @@ pub(crate) fn symbol_value<'ob>(
     env: &mut Environment,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
-    env.vars.get(&symbol).map(|x| x.get(arena))
+    env.vars.get(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]

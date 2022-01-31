@@ -202,15 +202,15 @@ impl<'ob> TryFrom<&Cons<'ob>> for &Macro<'ob> {
     type Error = anyhow::Error;
 
     fn try_from(value: &Cons<'ob>) -> Result<Self, Self::Error> {
-        match value.car() {
-            Object::Symbol(sym) if !sym == &sym::MACRO => {
-                let _: Function = value.cdr().try_into()?;
-                unsafe {
+        unsafe {
+            match value.car_unchecked() {
+                Object::Symbol(sym) if !sym == &sym::MACRO => {
+                    let _: Function = value.cdr().try_into()?;
                     let ptr: *const Cons = value;
                     Ok(&*ptr.cast::<Macro>())
                 }
+                x => Err(Error::from_object(Type::Symbol, x).into()),
             }
-            x => Err(Error::from_object(Type::Symbol, x).into()),
         }
     }
 }

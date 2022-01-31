@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::{Arena, ConstrainLifetime};
 use crate::error::{Error, Type};
 use crate::object::{List, Object};
 use anyhow::{anyhow, Result};
@@ -26,7 +26,7 @@ impl std::error::Error for ConstConsError {}
 
 impl<'old, 'new> Cons<'old> {
     pub(crate) fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
-        Cons::new(self.car().clone_in(arena), self.cdr().clone_in(arena))
+        Cons::new(self.car(arena).clone_in(arena), self.cdr().clone_in(arena))
     }
 }
 
@@ -39,8 +39,12 @@ impl<'ob> Cons<'ob> {
         }
     }
 
-    pub(crate) fn car(&self) -> Object<'ob> {
-        self.car.get()
+    pub(crate) fn car<'new>(&self, cx: &'new Arena) -> Object<'new> {
+        self.car.get().constrain_lifetime(cx)
+    }
+
+    pub(crate) unsafe fn car_unchecked<'new>(&self) -> Object<'new> {
+        std::mem::transmute::<Object<'ob>, Object<'new>>(self.car.get())
     }
 
     pub(crate) fn cdr(&self) -> Object<'ob> {
@@ -70,6 +74,12 @@ impl<'ob> Cons<'ob> {
     }
 }
 
+impl<'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'old Cons<'old> {
+    fn constrain_lifetime(self, _cx: &'new Arena) -> &'new Cons<'new> {
+        unsafe { std::mem::transmute::<&'old Cons<'old>, &'new Cons<'new>>(self) }
+    }
+}
+
 impl<'ob> Display for Cons<'ob> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
@@ -85,8 +95,8 @@ impl<'ob> Debug for Cons<'ob> {
 }
 
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car();
-    match cons.cdr() {
+    let car = cons.car.get();
+    match cons.cdr.get() {
         Object::Cons(cdr) => {
             write!(f, "{car} ")?;
             print_rest(&cdr, f)
@@ -97,8 +107,8 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 }
 
 fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car();
-    match cons.cdr() {
+    let car = cons.car.get();
+    match cons.cdr.get() {
         Object::Cons(cdr) => {
             write!(f, "{car:?} ")?;
             print_rest(&cdr, f)
@@ -111,38 +121,44 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 define_unbox!(Cons, &Cons<'ob>);
 
 #[derive(Clone)]
-pub(crate) struct ElemIter<'borrow, 'ob>(Option<&'borrow Cons<'ob>>);
-
-impl<'borrow, 'ob> IntoIterator for &'borrow Cons<'ob> {
-    type Item = Result<Object<'ob>>;
-    type IntoIter = ElemIter<'borrow, 'ob>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ElemIter(Some(self))
-    }
+pub(crate) struct ElemIter<'ob> {
+    cons: Option<&'ob Cons<'ob>>,
+    arena: &'ob Arena,
 }
 
-impl<'ob> List<'ob> {
-    pub(crate) fn elements(&self) -> ElemIter<'_, 'ob> {
-        match self {
-            List::Nil => ElemIter(None),
-            List::Cons(cons) => ElemIter(Some(cons)),
+impl<'ob> Cons<'ob> {
+    pub(crate) fn elements<'new>(&'ob self, arena: &'new Arena) -> ElemIter<'new> {
+        ElemIter {
+            cons: Some(self.constrain_lifetime(arena)),
+            arena,
         }
     }
 }
 
-impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
+impl<'ob> List<'ob> {
+    pub(crate) fn elements(self, arena: &Arena) -> ElemIter<'_> {
+        match self {
+            List::Nil => ElemIter { cons: None, arena },
+            List::Cons(cons) => ElemIter {
+                cons: Some((!cons).constrain_lifetime(arena)),
+                arena,
+            },
+        }
+    }
+}
+
+impl<'ob> Iterator for ElemIter<'ob> {
     type Item = Result<Object<'ob>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.0 {
+        match self.cons {
             Some(cons) => {
-                (*self).0 = match cons.cdr() {
+                (*self).cons = match cons.cdr() {
                     Object::Cons(next) => Some(!next),
                     Object::Nil(_) => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Some(Ok(cons.car()))
+                Some(Ok(cons.car(self.arena)))
             }
             None => None,
         }
@@ -150,18 +166,24 @@ impl<'borrow, 'ob> Iterator for ElemIter<'borrow, 'ob> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) fn as_list(self) -> Result<ElemIter<'ob, 'ob>> {
+    pub(crate) fn as_list(self, arena: &Arena) -> Result<ElemIter<'_>> {
         match self {
-            Object::Cons(cons) => Ok((!cons).into_iter()),
-            Object::Nil(_) => Ok(ElemIter(None)),
+            Object::Cons(cons) => {
+                let cons = (!cons).constrain_lifetime(arena);
+                Ok(ElemIter {
+                    cons: Some(cons),
+                    arena,
+                })
+            }
+            Object::Nil(_) => Ok(ElemIter { cons: None, arena }),
             _ => Err(Error::from_object(Type::List, self).into()),
         }
     }
 }
 
-impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
+impl<'ob> ElemIter<'ob> {
     pub(crate) fn is_empty(&self) -> bool {
-        self.0 == None
+        self.cons == None
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -170,9 +192,9 @@ impl<'borrow, 'ob> ElemIter<'borrow, 'ob> {
 }
 
 #[defun]
-fn car(list: List) -> Object {
+fn car<'ob>(list: List, arena: &'ob Arena) -> Object<'ob> {
     match list {
-        List::Cons(cons) => cons.car(),
+        List::Cons(cons) => cons.car(arena),
         List::Nil => Object::NIL,
     }
 }
@@ -186,9 +208,9 @@ fn cdr(list: List) -> Object {
 }
 
 #[defun]
-fn car_safe(object: Object) -> Object {
+fn car_safe<'ob>(object: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
     match object {
-        Object::Cons(cons) => cons.car(),
+        Object::Cons(cons) => cons.car(arena),
         _ => Object::NIL,
     }
 }
@@ -264,19 +286,19 @@ mod test {
         };
 
         let start_str = "start".to_owned();
-        assert_eq!(start_str.into_obj(arena), cons1.car());
+        assert_eq!(start_str.into_obj(arena), cons1.car(arena));
         cons1.set_car("start2".into_obj(arena)).unwrap();
         let start2_str = "start2".to_owned();
-        assert_eq!(start2_str.into_obj(arena), cons1.car());
+        assert_eq!(start2_str.into_obj(arena), cons1.car(arena));
 
         let cons2 = as_cons(cons1.cdr()).expect("expected cons");
 
         let cmp: Object = 7.into();
-        assert_eq!(cmp, cons2.car());
+        assert_eq!(cmp, cons2.car(arena));
 
         let cons3 = as_cons(cons2.cdr()).expect("expected cons");
         let cmp1: Object = 5.into();
-        assert_eq!(cmp1, cons3.car());
+        assert_eq!(cmp1, cons3.car(arena));
         let cmp2: Object = 9.into();
         assert_eq!(cmp2, cons3.cdr());
 

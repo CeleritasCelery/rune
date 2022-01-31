@@ -47,8 +47,8 @@ pub(crate) fn mapcar<'ob>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let vec = cons
-                .into_iter()
+            let vec = (!cons)
+                .elements(arena)
                 .map(|x| match x {
                     Ok(obj) => function.call(vec![obj], env, arena),
                     err => err,
@@ -69,7 +69,7 @@ pub(crate) fn mapc<'ob>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            for elem in !cons {
+            for elem in (!cons).elements(arena) {
                 function.call(vec![elem?], env, arena)?;
             }
             Ok(sequence.into())
@@ -88,10 +88,10 @@ pub(crate) fn nreverse(seq: List) -> Result<Object> {
     Ok(prev)
 }
 
-fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>) -> Result<()> {
+fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>, arena: &'ob Arena) -> Result<()> {
     match seq {
         List::Cons(cons) => {
-            for elt in !cons {
+            for elt in (!cons).elements(arena) {
                 list.push(elt?);
             }
         }
@@ -107,21 +107,21 @@ pub(crate) fn append<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let mut list = Vec::new();
-    join(&mut list, append.try_into()?)?;
+    join(&mut list, append.try_into()?, arena)?;
     for seq in sequences {
-        join(&mut list, (*seq).try_into()?)?;
+        join(&mut list, (*seq).try_into()?, arena)?;
     }
     Ok(slice_into_list(&list, None, arena))
 }
 
 #[defun]
-pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
+pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>, arena: &'ob Arena) -> Object<'ob> {
     match alist {
         List::Nil => Object::NIL,
-        List::Cons(cons) => cons
-            .into_iter()
+        List::Cons(cons) => (!cons)
+            .elements(arena)
             .find(|x| match x {
-                Ok(Object::Cons(elem)) => data::eq(key, elem.car()),
+                Ok(Object::Cons(elem)) => data::eq(key, elem.car(arena)),
                 _ => false,
             })
             .transpose()
@@ -132,12 +132,17 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Object<'ob> {
 
 type EqFunc = for<'ob> fn(Object<'ob>, Object<'ob>) -> bool;
 
-fn delete_from_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
+fn delete_from_list<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    eq_fn: EqFunc,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
     for tail in list.conses() {
         let tail = tail?;
-        if eq_fn(tail.car(), elt) {
+        if eq_fn(tail.car(arena), elt) {
             if let Some(prev_tail) = &mut prev {
                 prev_tail.set_cdr(tail.cdr())?;
             } else {
@@ -151,18 +156,31 @@ fn delete_from_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Re
 }
 
 #[defun]
-pub(crate) fn delete<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
-    delete_from_list(elt, list, data::equal)
+pub(crate) fn delete<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    delete_from_list(elt, list, data::equal, arena)
 }
 
 #[defun]
-pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
-    delete_from_list(elt, list, data::eq)
+pub(crate) fn delq<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    delete_from_list(elt, list, data::eq, arena)
 }
 
-fn member_of_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
+fn member_of_list<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    eq_fn: EqFunc,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
     let val = list.conses().find(|x| match x {
-        Ok(obj) => eq_fn(obj.car(), elt),
+        Ok(obj) => eq_fn(obj.car(arena), elt),
         Err(_) => true,
     });
     match val {
@@ -173,13 +191,21 @@ fn member_of_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Resu
 }
 
 #[defun]
-pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
-    member_of_list(elt, list, data::eq)
+pub(crate) fn memq<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    member_of_list(elt, list, data::eq, arena)
 }
 
 #[defun]
-pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
-    member_of_list(elt, list, data::equal)
+pub(crate) fn member<'ob>(
+    elt: Object<'ob>,
+    list: List<'ob>,
+    arena: &'ob Arena,
+) -> Result<Object<'ob>> {
+    member_of_list(elt, list, data::equal, arena)
 }
 
 #[defun]
@@ -237,9 +263,9 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 }
 
 #[defun]
-pub(crate) fn length(sequence: Object) -> Result<i64> {
+pub(crate) fn length<'ob>(sequence: Object<'ob>, arena: &'ob Arena) -> Result<i64> {
     let size = match sequence {
-        Object::Cons(x) => x.into_iter().len(),
+        Object::Cons(x) => (!x).elements(arena).len(),
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
         obj => bail!(Error::from_object(Type::Sequence, obj)),
@@ -250,8 +276,8 @@ pub(crate) fn length(sequence: Object) -> Result<i64> {
 }
 
 #[defun]
-pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
-    list.elements().nth(n).unwrap_or(Ok(Object::NIL))
+pub(crate) fn nth<'ob>(n: usize, list: List<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
+    list.elements(arena).nth(n).unwrap_or(Ok(Object::NIL))
 }
 
 #[defun]
@@ -308,12 +334,12 @@ mod test {
         let arena = &Arena::new();
         {
             let list = list![1, 2, 3, 1, 4, 1; arena];
-            let res = delq(1.into(), list.try_into().unwrap()).unwrap();
+            let res = delq(1.into(), list.try_into().unwrap(), arena).unwrap();
             assert_eq!(res, list![2, 3, 4; arena]);
         }
         {
             let list = list![true, true, true; arena];
-            let res = delq(Object::TRUE, list.try_into().unwrap()).unwrap();
+            let res = delq(Object::TRUE, list.try_into().unwrap(), arena).unwrap();
             assert_eq!(res, Object::NIL);
         }
     }
@@ -339,7 +365,7 @@ mod test {
         let element = cons!(5, 6; arena);
         let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
         if let Object::Cons(cons) = list {
-            let result = assq(5.into(), List::Cons(cons));
+            let result = assq(5.into(), List::Cons(cons), arena);
             assert_eq!(result, element);
         }
     }
