@@ -3,8 +3,6 @@ use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
 
-use anyhow::Result;
-
 use super::{Bits, Macro};
 
 #[repr(align(8))]
@@ -285,36 +283,6 @@ impl<'ob> From<List<'ob>> for Object<'ob> {
 impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
     fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
         self.into()
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct ListIterData<'ob> {
-    list: List<'ob>,
-    arena: &'ob Arena,
-}
-
-impl<'ob> Iterator for ListIterData<'ob> {
-    type Item = Result<&'ob Cons<'ob>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.list {
-            List::Nil => None,
-            List::Cons(cons) => {
-                self.list = match cons.cdr(self.arena) {
-                    Object::Cons(next) => List::Cons(next),
-                    Object::Nil(_) => List::Nil,
-                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
-                };
-                Some(Ok(!cons))
-            }
-        }
-    }
-}
-
-impl<'ob> List<'ob> {
-    pub(crate) fn conses(self, arena: &'ob Arena) -> ListIterData<'ob> {
-        ListIterData { list: self, arena }
     }
 }
 

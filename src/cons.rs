@@ -152,6 +152,10 @@ impl<'ob> List<'ob> {
             },
         }
     }
+
+    pub(crate) fn conses(self, arena: &'ob Arena) -> ConsIter<'ob> {
+        ConsIter { list: self, arena }
+    }
 }
 
 impl<'ob> Iterator for ElemIter<'ob> {
@@ -195,6 +199,30 @@ impl<'ob> ElemIter<'ob> {
 
     pub(crate) fn len(&self) -> usize {
         self.clone().count()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct ConsIter<'ob> {
+    list: List<'ob>,
+    arena: &'ob Arena,
+}
+
+impl<'ob> Iterator for ConsIter<'ob> {
+    type Item = Result<&'ob Cons<'ob>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.list {
+            List::Nil => None,
+            List::Cons(cons) => {
+                self.list = match cons.cdr(self.arena) {
+                    Object::Cons(next) => List::Cons(next),
+                    Object::Nil(_) => List::Nil,
+                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
+                };
+                Some(Ok(!cons))
+            }
+        }
     }
 }
 
