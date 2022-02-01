@@ -81,9 +81,9 @@ impl<'ob> Cons<'ob> {
     }
 }
 
-impl<'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'old Cons<'old> {
+impl<'brw, 'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'brw Cons<'old> {
     fn constrain_lifetime(self, _cx: &'new Arena) -> &'new Cons<'new> {
-        unsafe { std::mem::transmute::<&'old Cons<'old>, &'new Cons<'new>>(self) }
+        unsafe { std::mem::transmute::<&'brw Cons<'old>, &'new Cons<'new>>(self) }
     }
 }
 
@@ -133,8 +133,8 @@ pub(crate) struct ElemIter<'ob> {
     arena: &'ob Arena,
 }
 
-impl<'ob> Cons<'ob> {
-    pub(crate) fn elements<'new>(&'ob self, arena: &'new Arena) -> ElemIter<'new> {
+impl<'brw, 'ob> Cons<'ob> {
+    pub(crate) fn elements<'new>(&'brw self, arena: &'new Arena) -> ElemIter<'new> {
         ElemIter {
             cons: Some(self.constrain_lifetime(arena)),
             arena,

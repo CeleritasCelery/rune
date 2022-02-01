@@ -47,7 +47,7 @@ pub(crate) fn mapcar<'ob>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let vec = (!cons)
+            let vec = cons
                 .elements(arena)
                 .map(|x| match x {
                     Ok(obj) => function.call(vec![obj], env, arena),
@@ -69,7 +69,7 @@ pub(crate) fn mapc<'ob>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            for elem in (!cons).elements(arena) {
+            for elem in cons.elements(arena) {
                 function.call(vec![elem?], env, arena)?;
             }
             Ok(sequence.into())
@@ -91,7 +91,7 @@ pub(crate) fn nreverse<'ob>(seq: List<'ob>, arena: &'ob Arena) -> Result<Object<
 fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>, arena: &'ob Arena) -> Result<()> {
     match seq {
         List::Cons(cons) => {
-            for elt in (!cons).elements(arena) {
+            for elt in cons.elements(arena) {
                 list.push(elt?);
             }
         }
@@ -118,7 +118,7 @@ pub(crate) fn append<'ob>(
 pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>, arena: &'ob Arena) -> Object<'ob> {
     match alist {
         List::Nil => Object::NIL,
-        List::Cons(cons) => (!cons)
+        List::Cons(cons) => cons
             .elements(arena)
             .find(|x| match x {
                 Ok(Object::Cons(elem)) => data::eq(key, elem.car(arena)),
@@ -265,7 +265,7 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 #[defun]
 pub(crate) fn length<'ob>(sequence: Object<'ob>, arena: &'ob Arena) -> Result<i64> {
     let size = match sequence {
-        Object::Cons(x) => (!x).elements(arena).len(),
+        Object::Cons(x) => x.elements(arena).len(),
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
         obj => bail!(Error::from_object(Type::Sequence, obj)),
