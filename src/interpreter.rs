@@ -15,7 +15,7 @@ use fn_macros::defun;
 struct Interpreter<'ob, 'brw> {
     vars: Vec<&'ob Cons<'ob>>,
     env: &'brw mut Environment,
-    arena: &'ob Arena,
+    arena: &'ob Arena<'ob>,
 }
 
 #[defun]
@@ -122,7 +122,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     }
 
     fn parse_arg_list(
-        bindings: Object,
+        bindings: Object<'ob>,
         arena: &'ob Arena,
     ) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
         let mut required = Vec::new();
@@ -153,7 +153,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn bind_args(
         &self,
-        arg_list: Object,
+        arg_list: Object<'ob>,
         args: Vec<Object<'ob>>,
         vars: &mut Vec<&'ob Cons<'ob>>,
     ) -> Result<()> {
@@ -559,13 +559,14 @@ defsubr!(eval);
 
 #[cfg(test)]
 mod test {
-    use crate::symbol::intern;
+    use crate::{arena::RootSet, symbol::intern};
 
     use super::*;
 
     macro_rules! check_interpreter {
         ($compare:expr, $expect:expr) => {{
-            let comp_arena = &Arena::new();
+            let roots = &RootSet::default();
+            let comp_arena = &Arena::new(roots);
             let comp_env = &mut Environment::default();
             println!("Test String: {}", $compare);
             let obj = crate::reader::read($compare, comp_arena).unwrap().0;
@@ -576,7 +577,8 @@ mod test {
 
     #[test]
     fn basic() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         check_interpreter!("1", 1);
         check_interpreter!("1.5", 1.5);
         check_interpreter!("nil", false);
@@ -637,7 +639,8 @@ mod test {
 
     #[test]
     fn test_functions() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         check_interpreter!(
             "(function (lambda))",
             list![&sym::CLOSURE, list![true; arena]; arena]

@@ -278,6 +278,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::arena::RootSet;
+
     use super::*;
 
     fn wrapper(args: &[Object], arena: &Arena) -> Result<i64, Error> {
@@ -295,7 +297,8 @@ mod test {
 
     #[test]
     fn test() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let obj0 = 5.into_obj(arena);
         let obj1 = Cons::new(1.into(), 2.into()).into_obj(arena);
         let vec = vec![obj0, obj1];

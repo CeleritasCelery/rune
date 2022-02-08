@@ -147,7 +147,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
 }
 
 impl<'a> FuncCell<'a> {
-    pub(crate) fn clone_in(self, arena: &Arena) -> Object {
+    pub(crate) fn clone_in<'ob>(self, arena: &'ob Arena) -> Object<'ob> {
         match self {
             FuncCell::LispFn(x) => x.clone_in(arena).into_obj(arena),
             FuncCell::SubrFn(x) => x.into_obj(arena),

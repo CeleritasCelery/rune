@@ -344,7 +344,7 @@ struct Reader<'a, 'ob> {
     /// The iterator over the tokens in the current slice.
     tokens: Tokenizer<'a>,
     /// New objects are allocated in the arena.
-    arena: &'ob Arena,
+    arena: &'ob Arena<'ob>,
 }
 
 impl<'a, 'ob> Reader<'a, 'ob> {
@@ -485,6 +485,8 @@ pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(Object
 
 #[cfg(test)]
 mod test {
+    use crate::arena::RootSet;
+
     use super::*;
 
     #[test]
@@ -502,7 +504,8 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr) => {{
-            let read_arena = &Arena::new();
+            let roots = &RootSet::default();
+            let read_arena = &Arena::new(roots);
             let obj: Object = $expect.into_obj(read_arena);
             assert_eq!(obj, read($compare, &read_arena).unwrap().0)
         }};
@@ -558,7 +561,8 @@ baz""#
 
     #[test]
     fn test_read_cons() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         check_reader!(false, "()");
         check_reader!(cons!(1, 2; arena), "(1 . 2)");
         check_reader!(list!(1; arena), "(1)");
@@ -579,7 +583,8 @@ baz""#
 
     #[test]
     fn read_quote() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let quote = &sym::QUOTE;
         check_reader!(list!(quote, &sym::test::FOO; arena), "(quote foo)");
         check_reader!(list!(quote, &sym::test::FOO; arena), "'foo");
@@ -588,7 +593,8 @@ baz""#
 
     #[test]
     fn read_sharp() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let quote = &sym::FUNCTION;
         check_reader!(list!(quote, &sym::test::FOO; arena), "#'foo");
         check_reader!(
@@ -609,7 +615,8 @@ baz""#
     }
 
     fn assert_error(input: &str, error: Error) {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let result = read(input, arena).err().unwrap();
         assert_eq!(result, error);
     }

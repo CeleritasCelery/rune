@@ -229,11 +229,14 @@ impl<'a, 'ob> From<Data<&'a Macro<'ob>>> for Data<&'a Cons<'ob>> {
 
 #[cfg(test)]
 mod test {
+    use crate::arena::RootSet;
+
     use super::*;
 
     #[test]
     fn function() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let constant: Object = 1.into_obj(arena);
         let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
         let obj: Object = lisp_fn.into_obj(arena);

@@ -325,13 +325,14 @@ fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::object::IntoObject;
+    use crate::{arena::RootSet, object::IntoObject};
 
     use super::*;
 
     #[test]
     fn test_delq() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         {
             let list = list![1, 2, 3, 1, 4, 1; arena];
             let res = delq(1.into(), list.try_into().unwrap(), arena).unwrap();
@@ -346,7 +347,8 @@ mod test {
 
     #[test]
     fn test_nreverse() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         {
             let list = list![1, 2, 3, 4; arena];
             let res = nreverse(list.try_into().unwrap(), arena)
@@ -365,7 +367,8 @@ mod test {
 
     #[test]
     fn test_mapcar() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let element = cons!(5, 6; arena);
         let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
         if let Object::Cons(cons) = list {

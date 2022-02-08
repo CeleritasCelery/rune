@@ -68,14 +68,51 @@ impl GcCell {
     }
 }
 
+pub(crate) struct StackRoot<'rt> {
+    root_set: &'rt RootSet,
+}
+
+pub(crate) struct CellRoot<'rt> {
+    roots: &'rt RootSet,
+    object: Cell<u64>,
+}
+
+impl<'rt> StackRoot<'rt> {
+    unsafe fn new(roots: &'rt RootSet) -> Self {
+        StackRoot { root_set: roots }
+    }
+
+    pub(crate) fn set<'root>(&'root mut self, obj: Object<'_>) -> Object<'root> {
+        unsafe {
+            self.root_set
+                .roots
+                .borrow_mut()
+                .push(transmute::<Object, Object<'static>>(obj));
+            transmute::<Object, Object<'root>>(obj)
+        }
+    }
+}
+
+impl<'rt> Drop for StackRoot<'rt> {
+    fn drop(&mut self) {
+        self.root_set.roots.borrow_mut().pop();
+    }
+}
+
+#[derive(Default, Debug)]
+pub(crate) struct RootSet {
+    roots: RefCell<Vec<Object<'static>>>,
+}
+
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Arena`. When the
 /// `Arena` goes out of scope, no objects should be accessible.
 /// Interior mutability is used to ensure that `&mut` references
 /// don't invalid objects.
 #[derive(Debug)]
-pub(crate) struct Arena {
+pub(crate) struct Arena<'rt> {
     objects: RefCell<Vec<OwnedObject<'static>>>,
+    roots: &'rt RootSet,
     is_const: bool,
 }
 
@@ -108,17 +145,19 @@ extern "Rust" {
 
 // This is safe here because we will never return mutable overlapping borrows
 #[allow(clippy::mut_from_ref)]
-impl<'ob> Arena {
-    pub(crate) const fn new() -> Self {
+impl<'ob, 'rt> Arena<'rt> {
+    pub(crate) const fn new(roots: &'rt RootSet) -> Self {
         Arena {
             objects: RefCell::new(Vec::new()),
+            roots,
             is_const: false,
         }
     }
 
-    pub(crate) const fn new_const() -> Self {
+    pub(crate) const fn new_const(roots: &'rt RootSet) -> Self {
         Arena {
             objects: RefCell::new(Vec::new()),
+            roots,
             is_const: true,
         }
     }
@@ -224,7 +263,8 @@ mod test {
 
     #[test]
     fn test_gc() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let mut obj = Object::NIL;
         assert_eq!(obj, Object::NIL);
         {

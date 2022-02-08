@@ -130,7 +130,7 @@ define_unbox!(Cons, &Cons<'ob>);
 #[derive(Clone)]
 pub(crate) struct ElemIter<'ob> {
     cons: Option<&'ob Cons<'ob>>,
-    arena: &'ob Arena,
+    arena: &'ob Arena<'ob>,
 }
 
 impl<'brw, 'ob> Cons<'ob> {
@@ -143,7 +143,7 @@ impl<'brw, 'ob> Cons<'ob> {
 }
 
 impl<'ob> List<'ob> {
-    pub(crate) fn elements(self, arena: &Arena) -> ElemIter<'_> {
+    pub(crate) fn elements(self, arena: &'ob Arena) -> ElemIter<'ob> {
         match self {
             List::Nil => ElemIter { cons: None, arena },
             List::Cons(cons) => ElemIter {
@@ -177,7 +177,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) fn as_list(self, arena: &Arena) -> Result<ElemIter<'_>> {
+    pub(crate) fn as_list(self, arena: &'ob Arena) -> Result<ElemIter<'ob>> {
         match self {
             Object::Cons(cons) => {
                 let cons = (!cons).constrain_lifetime(arena);
@@ -205,7 +205,7 @@ impl<'ob> ElemIter<'ob> {
 #[derive(Clone)]
 pub(crate) struct ConsIter<'ob> {
     list: List<'ob>,
-    arena: &'ob Arena,
+    arena: &'ob Arena<'ob>,
 }
 
 impl<'ob> Iterator for ConsIter<'ob> {
@@ -299,7 +299,7 @@ macro_rules! list {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::object::IntoObject;
+    use crate::{arena::RootSet, object::IntoObject};
 
     fn as_cons(obj: Object) -> Option<&Cons> {
         match obj {
@@ -310,7 +310,8 @@ mod test {
 
     #[test]
     fn cons() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         // TODO: Need to find a way to solve this
         // assert_eq!(16, size_of::<Cons>());
         let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);

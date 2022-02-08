@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::{Arena, RootSet};
 use crate::hashmap::HashMap;
 use crate::object::{Callable, FuncCell, Function, Object};
 use lazy_static::lazy_static;
@@ -199,7 +199,8 @@ impl ObjectMap {
 
     #[allow(clippy::unused_self)]
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
-        let arena = Arena::new_const();
+        let roots = &RootSet::default();
+        let arena = Arena::new_const(roots);
         let obj: Object = func.clone_in(&arena);
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
         // SAFETY: The object is marked read-only and we have cloned
@@ -207,8 +208,8 @@ impl ObjectMap {
         unsafe {
             symbol.set_func(new_func);
         }
-        // This is a temporary workaround while until we have a global arena
-        // type. Just make sure the data does not get collected
+        // This is a temporary workaround until we have a global arena type.
+        // Just make sure the data does not get dropped
         #[cfg(miri)]
         {
             new_func.set_as_miri_root();
@@ -341,7 +342,8 @@ mod test {
 
     #[test]
     fn symbol_func() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let inner = GlobalSymbol::new("foo");
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
@@ -380,7 +382,8 @@ mod test {
 
     #[test]
     fn subr() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };

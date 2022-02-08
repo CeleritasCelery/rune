@@ -109,11 +109,12 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::object::IntoObject;
+    use crate::{arena::RootSet, object::IntoObject};
 
     #[test]
     fn test_load() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let env = &mut Environment::default();
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
         println!("{env:?}");

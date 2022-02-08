@@ -219,11 +219,12 @@ defsubr!(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::Arena;
+    use crate::arena::{Arena, RootSet};
 
     #[test]
     fn test_add() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; arena);
 
         assert_eq!(add(&[]), Int(0));
@@ -233,7 +234,8 @@ mod test {
 
     #[test]
     fn test_sub() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let int13 = into_objects!(13; arena);
 
         assert_eq!(sub(None, &[]), Int(0));
@@ -243,7 +245,8 @@ mod test {
 
     #[test]
     fn test_mul() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let args = vec_into_object![7, 13; arena];
 
         assert_eq!(mul(&[]), Int(1));
@@ -252,7 +255,8 @@ mod test {
 
     #[test]
     fn test_div() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let (int2, int5, float12) = into_objects!(2, 5, 12.0; arena);
 
         assert_eq!(div(float12, &[]), Float(12.0));
@@ -261,7 +265,8 @@ mod test {
 
     #[test]
     fn test_eq() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let (int1, float1, float1_1) = into_objects![1, 1.0, 1.1; arena];
 
         assert!(num_eq(int1, &[]));
@@ -272,7 +277,8 @@ mod test {
 
     #[test]
     fn test_cmp() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let (int1, int2, float1, float1_1, float2_1) = into_objects![1, 2, 1.0, 1.1, 2.1; arena];
 
         assert!(less_than(int1, &[]));

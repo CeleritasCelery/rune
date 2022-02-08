@@ -81,7 +81,7 @@ mod reader;
 mod search;
 mod symbol;
 
-use arena::Arena;
+use arena::{Arena, RootSet};
 use data::Environment;
 use object::Object;
 use std::env;
@@ -172,7 +172,8 @@ fn load(env: &mut Environment, arena: &Arena) {
 }
 
 fn main() {
-    let arena = &Arena::new();
+    let roots = &RootSet::default();
+    let arena = &Arena::new(roots);
     let env = &mut Environment::default();
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),

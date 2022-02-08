@@ -216,11 +216,14 @@ mod const_assertions {
 #[cfg(test)]
 mod test {
 
+    use crate::arena::RootSet;
+
     use super::*;
 
     #[test]
     fn integer() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         {
             let int: Object = 3.into_obj(arena);
             assert!(matches!(int, Object::Int(_)));
@@ -234,7 +237,8 @@ mod test {
 
     #[test]
     fn float() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let x: Object = 1.3.into_obj(arena);
         assert!(matches!(x, Object::Float(_)));
         let float = 1.3;
@@ -243,7 +247,8 @@ mod test {
 
     #[test]
     fn string() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         {
             let x: Object = "foo".into_obj(arena);
             assert!(matches!(x, Object::String(_)));
@@ -260,7 +265,8 @@ mod test {
 
     #[test]
     fn vector() {
-        let arena = &Arena::new();
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
         let vec = vec_into_object![1, 2, 3.4, "foo"; arena];
         let x: Object = vec.into_obj(arena);
         assert!(matches!(x, Object::Vec(_)));
@@ -296,7 +302,8 @@ mod test {
 
     #[test]
     fn mutuality() {
-        let arena = &Arena::new_const();
+        let roots = &RootSet::default();
+        let arena = &Arena::new_const(roots);
         let inner_cons = Cons::new(1.into(), 4.into());
         let vec = vec_into_object![inner_cons, 2, 3, 4; arena];
         let obj = Cons::new(1.into(), arena.add(vec)).into_obj(arena);
