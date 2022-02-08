@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::arena::RootSet;
 use crate::error::{Error, Type};
 use crate::object::Callable;
 use crate::symbol::sym;
@@ -25,6 +26,8 @@ pub(crate) fn eval<'ob, 'brw>(
     env: &'brw mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
+    let roots = &RootSet::default();
+    let gc = &mut Arena::new(roots);
     ensure!(
         matches!(lexical, Some(Object::True(_) | Object::Nil(_)) | None),
         "lexical enviroments are not yet supported: found {:?}",
@@ -35,7 +38,7 @@ pub(crate) fn eval<'ob, 'brw>(
         env,
         arena,
     };
-    interpreter.eval_form(form)
+    interpreter.eval_form(form, gc)
 }
 
 pub(crate) fn call<'ob, 'brw>(
@@ -44,49 +47,51 @@ pub(crate) fn call<'ob, 'brw>(
     env: &'brw mut Environment,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
+    let roots = &RootSet::default();
+    let gc = &mut Arena::new(roots);
     let mut frame = Interpreter {
         vars: Vec::new(),
         env,
         arena,
     };
-    frame.call_closure(form.try_into()?, args)
+    frame.call_closure(form.try_into()?, args, gc)
 }
 
 impl<'ob, 'brw> Interpreter<'ob, 'brw> {
-    fn eval_form(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_form(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         match obj {
             Object::Symbol(sym) => self.var_ref(!sym),
-            Object::Cons(cons) => self.eval_sexp(&cons),
+            Object::Cons(cons) => self.eval_sexp(&cons, gc),
             other => Ok(other),
         }
     }
 
-    pub(crate) fn eval_sexp(&mut self, cons: &Cons<'ob>) -> Result<Object<'ob>> {
+    pub(crate) fn eval_sexp(&mut self, cons: &Cons<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let forms = cons.cdr(self.arena);
         match cons.car(self.arena) {
             Object::Symbol(sym) => symbol_match! {!sym;
-                QUOTE => self.quote(forms),
-                LET => self.eval_let(forms, true),
-                LET_STAR => self.eval_let(forms, false),
-                IF => self.eval_if(forms),
-                AND => self.eval_and(forms),
-                OR => self.eval_or(forms),
-                COND => self.eval_cond(forms),
-                WHILE => self.eval_while(forms),
-                PROGN => self.eval_progn(forms),
-                PROG1 => self.eval_progx(forms, 1),
-                PROG2 => self.eval_progx(forms, 2),
-                SETQ => self.setq(forms),
-                DEFVAR => self.defvar(forms),
-                DEFCONST => self.defvar(forms),
+                QUOTE => self.quote(forms, self.arena),
+                LET => self.eval_let(forms, true, gc),
+                LET_STAR => self.eval_let(forms, false, gc),
+                IF => self.eval_if(forms, gc),
+                AND => self.eval_and(forms, gc),
+                OR => self.eval_or(forms, gc),
+                COND => self.eval_cond(forms, gc),
+                WHILE => self.eval_while(forms, gc),
+                PROGN => self.eval_progn(forms, gc),
+                PROG1 => self.eval_progx(forms, 1, gc),
+                PROG2 => self.eval_progx(forms, 2, gc),
+                SETQ => self.setq(forms, gc),
+                DEFVAR => self.defvar(forms, gc),
+                DEFCONST => self.defvar(forms, gc),
                 FUNCTION => self.eval_function(forms),
-                @ func => self.eval_call(func, forms),
+                @ func => self.eval_call(func, forms, gc),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
         }
     }
 
-    fn defvar(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn defvar(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
 
         match forms.next() {
@@ -95,7 +100,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 let name: Symbol = x?.try_into()?;
                 let value = match forms.next() {
                     // (defvar x y)
-                    Some(value) => self.eval_form(value?)?,
+                    Some(value) => self.eval_form(value?, gc)?,
                     // (defvar x)
                     None => Object::NIL,
                 };
@@ -221,6 +226,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         &mut self,
         closure: &'ob Cons<'ob>,
         args: Vec<Object<'ob>>,
+        gc: &mut Arena,
     ) -> Result<Object<'ob>> {
         match closure.car(self.arena) {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
@@ -232,21 +238,24 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                     env: self.env,
                     arena: self.arena,
                 };
-                call_frame.implicit_progn(forms)
+                call_frame.implicit_progn(forms, gc)
             }
             other => Err(Error::from_object(Type::Func, other).into()),
         }
     }
 
-    fn eval_call(&mut self, name: Symbol, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_call(&mut self, name: Symbol, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let func = match name.resolve_callable() {
             Some(x) => x,
             None => bail!("Invalid function: {name}"),
         };
         let arena = self.arena;
 
-        let mut eval_args =
-            || -> Result<Vec<_>> { obj.as_list(arena)?.map(|x| self.eval_form(x?)).collect() };
+        let mut eval_args = || -> Result<Vec<_>> {
+            obj.as_list(arena)?
+                .map(|x| self.eval_form(x?, gc))
+                .collect()
+        };
 
         match func {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
@@ -263,7 +272,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                     println!("(macro: {name} {macro_args:?})");
                 }
                 let value = mcro.get(self.arena).call(macro_args, self.env, arena)?;
-                self.eval_form(value)
+                self.eval_form(value, gc)
             }
             Callable::Uncompiled(form) => match form.car(arena) {
                 Object::Symbol(sym) if !sym == &sym::CLOSURE => {
@@ -271,7 +280,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                     if crate::debug::debug_enabled() {
                         println!("({name} {args:?})");
                     }
-                    self.call_closure(!form, args)
+                    self.call_closure(!form, args, gc)
                 }
                 other => Err(anyhow!("Invalid Function: {other}")),
             },
@@ -305,11 +314,16 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         }
     }
 
-    fn eval_progx(&mut self, obj: Object<'ob>, prog_num: u16) -> Result<Object<'ob>> {
+    fn eval_progx(
+        &mut self,
+        obj: Object<'ob>,
+        prog_num: u16,
+        gc: &mut Arena,
+    ) -> Result<Object<'ob>> {
         let mut count = 0;
         let mut returned_form = None;
         for form in obj.as_list(self.arena)? {
-            let value = self.eval_form(form?)?;
+            let value = self.eval_form(form?, gc)?;
             count += 1;
             if prog_num == count {
                 returned_form = Some(value);
@@ -318,31 +332,31 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         returned_form.ok_or_else(|| Error::ArgCount(prog_num, count).into())
     }
 
-    fn eval_progn(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
-        self.implicit_progn(obj.as_list(self.arena)?)
+    fn eval_progn(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+        self.implicit_progn(obj.as_list(self.arena)?, gc)
     }
 
-    fn eval_while(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_while(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let condition = match forms.next() {
             Some(cond) => cond?,
             None => bail!(Error::ArgCount(1, 0)),
         };
-        while self.eval_form(condition)? != Object::NIL {
-            self.implicit_progn(forms.clone())?;
+        while self.eval_form(condition, gc)? != Object::NIL {
+            self.implicit_progn(forms.clone(), gc)?;
         }
         Ok(Object::NIL)
     }
 
-    fn eval_cond(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_cond(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::NIL;
         for form in obj.as_list(self.arena)? {
             let mut clause = (form?).as_list(self.arena)?;
             let first = clause.next().unwrap_or(Ok(Object::NIL))?;
-            last = self.eval_form(first)?;
+            last = self.eval_form(first, gc)?;
             if last != Object::NIL {
                 if !clause.is_empty() {
-                    last = self.implicit_progn(clause)?;
+                    last = self.implicit_progn(clause, gc)?;
                 }
                 break;
             }
@@ -350,10 +364,10 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(last)
     }
 
-    fn eval_and(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_and(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::TRUE;
         for form in obj.as_list(self.arena)? {
-            last = self.eval_form(form?)?;
+            last = self.eval_form(form?, gc)?;
             if last == Object::NIL {
                 break;
             }
@@ -361,10 +375,10 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(last)
     }
 
-    fn eval_or(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_or(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::NIL;
         for form in obj.as_list(self.arena)? {
-            last = self.eval_form(form?)?;
+            last = self.eval_form(form?, gc)?;
             if last != Object::NIL {
                 break;
             }
@@ -372,7 +386,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(last)
     }
 
-    fn eval_if(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn eval_if(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let condition = match forms.next() {
             Some(x) => x?,
@@ -383,21 +397,21 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             None => bail!(Error::ArgCount(2, 1)),
         };
         #[allow(clippy::if_not_else)]
-        if self.eval_form(condition)? != Object::NIL {
-            self.eval_form(true_branch)
+        if self.eval_form(condition, gc)? != Object::NIL {
+            self.eval_form(true_branch, gc)
         } else {
-            self.implicit_progn(forms)
+            self.implicit_progn(forms, gc)
         }
     }
 
-    fn setq(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
+    fn setq(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let mut arg_cnt = 0;
         let mut last_value = None;
         loop {
             match Self::pairs(&mut forms)? {
                 Some((Object::Symbol(var), Some(val))) => {
-                    let val = self.eval_form(val)?;
+                    let val = self.eval_form(val, gc)?;
                     last_value = Some(self.var_set(!var, val));
                 }
                 Some((other, Some(_))) => bail!(Error::from_object(Type::Symbol, other)),
@@ -449,41 +463,46 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         new_value
     }
 
-    fn quote(&self, value: Object<'ob>) -> Result<Object<'ob>> {
-        let mut forms = value.as_list(self.arena)?;
+    fn quote<'a>(&self, value: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {
+        let mut forms = value.as_list(gc)?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
             x => Err(Error::ArgCount(1, x as u16).into()),
         }
     }
 
-    fn eval_let(&mut self, form: Object<'ob>, parallel: bool) -> Result<Object<'ob>> {
+    fn eval_let(
+        &mut self,
+        form: Object<'ob>,
+        parallel: bool,
+        gc: &mut Arena,
+    ) -> Result<Object<'ob>> {
         let mut iter = form.as_list(self.arena)?;
         let prev_len = self.vars.len();
         match iter.next() {
             // (let x ...)
             Some(x) => {
                 if parallel {
-                    self.let_bind_parallel(x?)?;
+                    self.let_bind_parallel(x?, gc)?;
                 } else {
-                    self.let_bind_serial(x?)?;
+                    self.let_bind_serial(x?, gc)?;
                 }
             }
             // (let)
             None => bail!(Error::ArgCount(1, 0)),
         }
-        let obj = self.implicit_progn(iter)?;
+        let obj = self.implicit_progn(iter, gc)?;
         self.vars.truncate(prev_len);
         Ok(obj)
     }
 
-    fn let_bind_serial(&mut self, form: Object<'ob>) -> Result<()> {
+    fn let_bind_serial(&mut self, form: Object<'ob>, gc: &mut Arena) -> Result<()> {
         for binding in form.as_list(self.arena)? {
             let binding = binding?;
             match binding {
                 // (let ((x y)))
                 Object::Cons(cons) => {
-                    let var = self.let_bind_value(!cons)?;
+                    let var = self.let_bind_value(!cons, gc)?;
                     self.vars.push(var);
                 }
                 // (let (x))
@@ -498,14 +517,14 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(())
     }
 
-    fn let_bind_parallel(&mut self, form: Object<'ob>) -> Result<()> {
+    fn let_bind_parallel(&mut self, form: Object<'ob>, gc: &mut Arena) -> Result<()> {
         let mut let_bindings: Vec<&'ob Cons<'ob>> = Vec::new();
         for binding in form.as_list(self.arena)? {
             let binding = binding?;
             match binding {
                 // (let ((x y)))
                 Object::Cons(cons) => {
-                    let var = self.let_bind_value(!cons)?;
+                    let var = self.let_bind_value(!cons, gc)?;
                     let_bindings.push(var);
                 }
                 // (let (x))
@@ -521,13 +540,13 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(())
     }
 
-    fn let_bind_value(&mut self, cons: &'ob Cons<'ob>) -> Result<&'ob Cons<'ob>> {
+    fn let_bind_value(&mut self, cons: &'ob Cons<'ob>, gc: &mut Arena) -> Result<&'ob Cons<'ob>> {
         let mut iter = cons.cdr(self.arena).as_list(self.arena)?;
         let value = match iter.len() {
             // (let ((x)))
             0 => Object::NIL,
             // (let ((x y)))
-            1 => self.eval_form(iter.next().unwrap()?)?,
+            1 => self.eval_form(iter.next().unwrap()?, gc)?,
             // (let ((x y z ..)))
             _ => bail!("Let binding forms can only have 1 value"),
         };
@@ -536,10 +555,10 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         Ok(val.try_into().unwrap())
     }
 
-    fn implicit_progn(&mut self, forms: ElemIter<'ob>) -> Result<Object<'ob>> {
+    fn implicit_progn(&mut self, forms: ElemIter<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::NIL;
         for form in forms {
-            last = self.eval_form(form?)?;
+            last = self.eval_form(form?, gc)?;
         }
         Ok(last)
     }
@@ -550,9 +569,10 @@ fn eval_function_body<'ob, 'brw>(
     vars: Vec<&'ob Cons<'ob>>,
     env: &'brw mut Environment,
     arena: &'ob Arena,
+    gc: &mut Arena,
 ) -> Result<Object<'ob>> {
     let mut call_frame = Interpreter { vars, env, arena };
-    call_frame.implicit_progn(forms)
+    call_frame.implicit_progn(forms, gc)
 }
 
 defsubr!(eval);
