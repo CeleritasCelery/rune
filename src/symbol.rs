@@ -113,7 +113,6 @@ impl fmt::Display for GlobalSymbol {
 
 pub(crate) struct ObjectMap {
     map: SymbolMap,
-    arena: Arena,
 }
 
 /// Box needs to follow rust's aliasing rules (references can't outlive the borrow).
@@ -198,16 +197,24 @@ impl ObjectMap {
         self.map.intern(name)
     }
 
+    #[allow(clippy::unused_self)]
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
-        let obj: Object = func.clone_in(&self.arena);
+        let arena = Arena::new_const();
+        let obj: Object = func.clone_in(&arena);
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
-        #[cfg(miri)]
-        new_func.set_as_miri_root();
         // SAFETY: The object is marked read-only and we have cloned
         // in the map's arena, so calling this function is safe.
         unsafe {
             symbol.set_func(new_func);
         }
+        // This is a temporary workaround while until we have a global arena
+        // type. Just make sure the data does not get collected
+        #[cfg(miri)]
+        {
+            new_func.set_as_miri_root();
+            unsafe { arena.mark_static() };
+        }
+        std::mem::forget(arena);
     }
 }
 
@@ -245,7 +252,6 @@ macro_rules! create_symbolmap {
                 }
                 ObjectMap {
                     map,
-                    arena: Arena::new_const(),
                 }
             });
         }

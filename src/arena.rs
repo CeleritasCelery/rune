@@ -73,7 +73,7 @@ impl GcCell {
 /// `Arena` goes out of scope, no objects should be accessible.
 /// Interior mutability is used to ensure that `&mut` references
 /// don't invalid objects.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct Arena {
     objects: RefCell<Vec<OwnedObject<'static>>>,
     is_const: bool,
@@ -85,7 +85,7 @@ pub(crate) struct Arena {
 /// part of a generic public interface. So long as no
 /// functions in this module reference it that should not
 /// cause a problem.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum OwnedObject<'ob> {
     Float(Box<f64>),
     Cons(Box<Cons<'ob>>),
@@ -99,6 +99,11 @@ impl<'ob> OwnedObject<'ob> {
     unsafe fn coerce_lifetime(self) -> OwnedObject<'static> {
         transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
     }
+}
+
+#[cfg(miri)]
+extern "Rust" {
+    fn miri_static_root(ptr: *const u8);
 }
 
 // This is safe here because we will never return mutable overlapping borrows
@@ -116,6 +121,12 @@ impl<'ob> Arena {
             objects: RefCell::new(Vec::new()),
             is_const: true,
         }
+    }
+
+    #[cfg(miri)]
+    pub(crate) unsafe fn mark_static(&self) {
+        let ptr = self.objects.borrow().as_ptr();
+        miri_static_root(ptr as _);
     }
 
     fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject<'ob>) {
