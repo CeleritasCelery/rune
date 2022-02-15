@@ -40,6 +40,22 @@ pub(crate) enum Object<'ob> {
     SubrFn(Data<&'ob SubrFn>),
 }
 
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct RawObj(u64);
+
+impl Default for RawObj {
+    fn default() -> Self {
+        Object::NIL.into()
+    }
+}
+
+impl<'a> From<Object<'a>> for RawObj {
+    fn from(x: Object<'a>) -> Self {
+        unsafe { std::mem::transmute(x) }
+    }
+}
+
 pub(crate) trait Bits {
     fn bits(self) -> u64;
 }
@@ -131,6 +147,10 @@ impl<'ob> Object<'ob> {
                 transmute::<Self, i64>(self) == transmute::<Object, i64>(other)
             },
         }
+    }
+
+    pub(crate) unsafe fn from_raw(raw: RawObj) -> Self {
+        std::mem::transmute(raw)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::{Arena, GcRoot};
+use crate::arena::{Arena, Gc, GcStore};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -12,15 +12,27 @@ use fn_macros::defun;
 use lazy_static::lazy_static;
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct Environment {
-    pub(crate) vars: HashMap<Symbol, GcRoot>,
-    props: HashMap<Symbol, Vec<(Symbol, GcRoot)>>,
+pub(crate) struct Environment<'rt> {
+    pub(crate) vars: HashMap<Symbol, GcStore<'rt>>,
+    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcStore<'rt>)>>,
 }
 
-impl Environment {
-    pub(crate) fn set_var(&mut self, sym: Symbol, value: Object) {
-        unsafe {
-            self.vars.insert(sym, GcRoot::new(value));
+impl<'rt> Environment<'rt> {
+    pub(crate) fn set_var(&'rt mut self, sym: Symbol, value: GcStore<'rt>) {
+        self.vars.insert(sym, value);
+    }
+
+    pub(crate) fn set_prop(&'rt mut self, symbols: (Symbol, Symbol), value: GcStore<'rt>) {
+        let (symbol, propname) = symbols;
+        match self.props.get_mut(&symbol) {
+            Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
+                Some(x) => x.1 = value,
+                None => plist.push((propname, value)),
+            },
+            None => {
+                let plist = vec![(propname, value)];
+                self.props.insert(symbol, plist);
+            }
         }
     }
 }
@@ -57,8 +69,12 @@ pub(crate) fn defalias(
 }
 
 #[defun]
-pub(crate) fn set<'ob>(place: Symbol, newlet: Object<'ob>, env: &mut Environment) -> Object<'ob> {
-    env.set_var(place, newlet);
+pub(crate) fn set<'ob>(
+    place: Symbol,
+    newlet: Object<'ob>,
+    env: &mut Gc<Environment>,
+) -> Object<'ob> {
+    env.insert(place, newlet, Environment::set_var);
     newlet
 }
 
@@ -67,19 +83,9 @@ pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: Object<'ob>,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
 ) -> Object<'ob> {
-    let rooted = unsafe { GcRoot::new(value) };
-    match env.props.get_mut(&symbol) {
-        Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
-            Some(x) => x.1 = rooted,
-            None => plist.push((propname, rooted)),
-        },
-        None => {
-            let plist = vec![(propname, rooted)];
-            env.props.insert(symbol, plist);
-        }
-    }
+    env.insert((symbol, propname), value, Environment::set_prop);
     value
 }
 
@@ -87,12 +93,15 @@ pub(crate) fn put<'ob>(
 pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    env: &Environment,
+    env: &Gc<Environment>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    match env.props.get(&symbol) {
-        Some(plist) => match plist.iter().find(|x| x.0 == propname) {
-            Some((_, val)) => val.bind(arena),
+    match env.props().get_obj(&symbol) {
+        Some(plist) => match plist.as_slice_of_gc().iter().find(|x| x.0 == propname) {
+            Some(element) => {
+                let (_, val) = element.get();
+                val.bind(arena)
+            }
             None => Object::NIL,
         },
         None => Object::NIL,
@@ -120,10 +129,10 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
 #[defun]
 pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
-    env.vars.get(&symbol).map(|x| x.bind(arena))
+    env.vars().get_obj(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]
@@ -148,12 +157,12 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 }
 
 #[defun]
-pub(crate) fn boundp(symbol: Symbol, env: &mut Environment) -> bool {
+pub(crate) fn boundp(symbol: Symbol, env: &mut Gc<Environment>) -> bool {
     env.vars.get(&symbol).is_some()
 }
 
 #[defun]
-pub(crate) fn default_boundp(symbol: Symbol, env: &mut Environment) -> bool {
+pub(crate) fn default_boundp(symbol: Symbol, env: &mut Gc<Environment>) -> bool {
     env.vars.get(&symbol).is_some()
 }
 
@@ -207,7 +216,7 @@ pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
     _docstring: Option<&String>,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
 ) -> Object<'ob> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env)

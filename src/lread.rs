@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::{Arena, Gc};
 use crate::data::Environment;
 use crate::interpreter;
 use crate::object::Object;
@@ -56,7 +56,7 @@ pub(crate) fn read_from_string<'ob>(
 pub(crate) fn load_internal<'ob>(
     contents: &str,
     arena: &'ob Arena,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -87,7 +87,7 @@ pub(crate) fn load<'ob>(
     _nosuffix: Option<bool>,
     _must_suffix: Option<bool>,
     arena: &'ob Arena,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
 ) -> Result<bool> {
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
         Ok(content) => load_internal(&content, arena, env),
@@ -115,10 +115,8 @@ mod test {
     fn test_load() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let env = &mut Environment::default();
+        let env = &mut unsafe { Gc::new(Environment::default()) };
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
-        println!("{env:?}");
-        println!("{arena:?}");
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         let val = interpreter::eval(obj, None, env, arena).unwrap();

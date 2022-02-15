@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::{Arena, Gc};
 use crate::cons::Cons;
 use crate::data;
 use crate::data::Environment;
@@ -22,11 +22,11 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
     format!("{object}")
 }
 
-impl<'ob> Function<'ob> {
+impl<'ob, 'brw, 'rt> Function<'ob> {
     pub(crate) fn call(
         self,
         args: Vec<Object<'ob>>,
-        env: &mut Environment,
+        env: &'brw mut Gc<Environment<'rt>>,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
@@ -38,10 +38,10 @@ impl<'ob> Function<'ob> {
 }
 
 #[defun]
-pub(crate) fn mapcar<'ob>(
+pub(crate) fn mapcar<'ob, 'brw>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Environment,
+    env: &'brw mut Gc<Environment<'_>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -63,7 +63,7 @@ pub(crate) fn mapcar<'ob>(
 pub(crate) fn mapc<'ob>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -229,7 +229,7 @@ fn require<'ob>(
     feature: Symbol,
     filename: Option<&str>,
     noerror: Option<bool>,
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {

@@ -81,7 +81,7 @@ mod reader;
 mod search;
 mod symbol;
 
-use arena::{Arena, RootSet};
+use arena::{Arena, Gc, RootSet};
 use data::Environment;
 use object::Object;
 use std::env;
@@ -94,7 +94,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Environment, arena: &Arena) {
+fn repl(env: &mut Gc<Environment>, arena: &Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -128,13 +128,22 @@ fn repl(env: &mut Environment, arena: &Arena) {
     }
 }
 
-fn load(env: &mut Environment, arena: &Arena) {
+fn load(env: &mut Gc<Environment>, arena: &Arena) {
     use crate::symbol::sym;
-    env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
-    env.set_var(&sym::LEXICAL_BINDING, Object::TRUE);
-    env.set_var(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-    env.set_var(&sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    env.set_var(&sym::CURRENT_LOAD_LIST, Object::NIL);
+
+    env.insert(&sym::EMACS_VERSION, arena.add("28.1"), Environment::set_var);
+    env.insert(&sym::LEXICAL_BINDING, Object::TRUE, Environment::set_var);
+    env.insert(
+        &sym::SYSTEM_TYPE,
+        arena.add("gnu/linux"),
+        Environment::set_var,
+    );
+    env.insert(
+        &sym::MINIBUFFER_LOCAL_MAP,
+        Object::NIL,
+        Environment::set_var,
+    );
+    env.insert(&sym::CURRENT_LOAD_LIST, Object::NIL, Environment::set_var);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 
@@ -174,7 +183,8 @@ fn load(env: &mut Environment, arena: &Arena) {
 fn main() {
     let roots = &RootSet::default();
     let arena = &Arena::new(roots);
-    let env = &mut Environment::default();
+    let env = unsafe { &mut Gc::new(Environment::default()) };
+
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, arena),
         Some(arg) if arg == "--load" => load(env, arena),

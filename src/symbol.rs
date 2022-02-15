@@ -324,7 +324,7 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use crate::arena::Arena;
+    use crate::arena::{Arena, Gc};
     use crate::data::Environment;
     use crate::object::{IntoObject, LispFn, Object};
     use std::mem::size_of;
@@ -374,7 +374,7 @@ mod test {
     #[allow(clippy::unnecessary_wraps)]
     fn dummy<'ob>(
         vars: &[Object<'ob>],
-        _map: &mut Environment,
+        _map: &mut Gc<Environment>,
         _arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         Ok(vars[0])

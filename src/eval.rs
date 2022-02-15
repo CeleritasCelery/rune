@@ -1,7 +1,7 @@
 use fn_macros::defun;
 
 use crate::{
-    arena::Arena,
+    arena::{Arena, Gc},
     data::Environment,
     object::{Function, Object},
 };
@@ -11,7 +11,7 @@ use anyhow::Result;
 pub(crate) fn apply<'ob>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let args = match arguments.len() {
@@ -33,7 +33,7 @@ pub(crate) fn apply<'ob>(
 pub(crate) fn funcall<'ob>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Environment,
+    env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     function.call(arguments.to_vec(), env, arena)

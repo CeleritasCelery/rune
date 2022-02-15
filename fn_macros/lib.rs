@@ -59,7 +59,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob>(
             args: &[crate::object::Object<'ob>],
-            env: &mut crate::data::Environment,
+            env: &mut crate::arena::Gc<crate::data::Environment<'_>>,
             arena: &'ob crate::arena::Arena,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
@@ -107,13 +107,14 @@ fn is_arena(ty: &syn::Type) -> bool {
 }
 
 fn is_env(ty: &syn::Type) -> bool {
-    match ty {
-        syn::Type::Reference(refer) => match refer.elem.as_ref() {
-            syn::Type::Path(path) => get_path_ident_name(path) == "Environment",
-            _ => false,
-        },
-        _ => false,
+    if let syn::Type::Reference(refer) = ty {
+        if let syn::Type::Path(path) = refer.elem.as_ref() {
+            if let Some(gen_arg) = get_generic_param(path) {
+                return gen_arg == "Environment" && get_path_ident_name(path) == "Gc";
+            }
+        }
     }
+    false
 }
 
 fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
@@ -180,6 +181,16 @@ fn is_slice(arg: &syn::Type) -> bool {
 
 fn get_path_ident_name(type_path: &syn::TypePath) -> String {
     type_path.path.segments.last().unwrap().ident.to_string()
+}
+
+fn get_generic_param(type_path: &syn::TypePath) -> Option<String> {
+    match &type_path.path.segments.last().unwrap().arguments {
+        syn::PathArguments::AngleBracketed(generic) => match generic.args.last().unwrap() {
+            syn::GenericArgument::Type(syn::Type::Path(path)) => Some(get_path_ident_name(path)),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 struct Function {
@@ -294,7 +305,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob>(list: &Cons<'ob>) -> Object<'ob> {
+            fn car<'ob>(list: &Cons<'ob>, env: &mut Gc<Environment>) -> Object<'ob> {
                 list.car()
             }
         };

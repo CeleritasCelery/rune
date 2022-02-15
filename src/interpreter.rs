@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::arena::RootSet;
+use crate::arena::{Gc, RootSet};
 use crate::error::{Error, Type};
 use crate::object::Callable;
 use crate::symbol::sym;
@@ -13,17 +13,17 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 
-struct Interpreter<'ob, 'brw> {
+struct Interpreter<'ob, 'brw, 'rt> {
     vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Environment,
+    env: &'brw mut Gc<Environment<'rt>>,
     arena: &'ob Arena<'ob>,
 }
 
 #[defun]
-pub(crate) fn eval<'ob, 'brw>(
+pub(crate) fn eval<'ob, 'brw, 'rt>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &'brw mut Environment,
+    env: &'brw mut Gc<Environment<'rt>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let roots = &RootSet::default();
@@ -41,10 +41,10 @@ pub(crate) fn eval<'ob, 'brw>(
     interpreter.eval_form(form, gc)
 }
 
-pub(crate) fn call<'ob, 'brw>(
+pub(crate) fn call<'ob, 'brw, 'rt>(
     form: Object<'ob>,
     args: Vec<Object<'ob>>,
-    env: &'brw mut Environment,
+    env: &'brw mut Gc<Environment<'rt>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let roots = &RootSet::default();
@@ -57,7 +57,7 @@ pub(crate) fn call<'ob, 'brw>(
     frame.call_closure(form.try_into()?, args, gc)
 }
 
-impl<'ob, 'brw> Interpreter<'ob, 'brw> {
+impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
     fn eval_form(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         match obj {
             Object::Symbol(sym) => self.var_ref(!sym),
@@ -442,7 +442,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 .find_map(|cons| (cons.car(self.arena) == sym.into()).then(|| cons.cdr(self.arena)))
             {
                 Some(value) => Ok(value),
-                None => match self.env.vars.get(sym) {
+                None => match self.env.vars().get_obj(sym) {
                     Some(v) => Ok(v.bind(self.arena)),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },
@@ -457,12 +457,13 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 value.set_cdr(new_value).expect("env should be mutable");
             }
             None => {
-                self.env.set_var(name, new_value);
+                self.env.insert(name, new_value, Environment::set_var);
             }
         }
         new_value
     }
 
+    #[allow(clippy::unused_self)]
     fn quote<'a>(&self, value: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {
         let mut forms = value.as_list(gc)?;
         match forms.len() {
@@ -567,7 +568,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 fn eval_function_body<'ob, 'brw>(
     forms: ElemIter<'ob>,
     vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Environment,
+    env: &'brw mut Gc<Environment>,
     arena: &'ob Arena,
     gc: &mut Arena,
 ) -> Result<Object<'ob>> {
@@ -587,7 +588,7 @@ mod test {
         ($compare:expr, $expect:expr) => {{
             let roots = &RootSet::default();
             let comp_arena = &Arena::new(roots);
-            let comp_env = &mut Environment::default();
+            let comp_env = &mut unsafe { Gc::new(Environment::default()) };
             println!("Test String: {}", $compare);
             let obj = crate::reader::read($compare, comp_arena).unwrap().0;
             let expect: Object = comp_arena.add($expect);

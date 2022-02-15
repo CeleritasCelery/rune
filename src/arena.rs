@@ -5,6 +5,9 @@ use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
 
+mod store;
+pub(crate) use store::*;
+
 pub(crate) trait ConstrainLifetime<'new, T>
 where
     T: 'new,
@@ -15,34 +18,6 @@ where
 impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
     fn constrain_lifetime(self, _cx: &'new Arena) -> Object<'new> {
         unsafe { transmute::<Object<'old>, Object<'new>>(self) }
-    }
-}
-
-#[repr(transparent)]
-#[derive(Debug, PartialEq)]
-pub(crate) struct GcRoot {
-    inner: Object<'static>,
-}
-
-impl GcRoot {
-    pub(crate) unsafe fn new<'ob>(obj: Object<'ob>) -> Self {
-        Self {
-            inner: transmute::<Object<'ob>, Object<'static>>(obj),
-        }
-    }
-
-    pub(crate) fn bind<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
-        unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) }
-    }
-
-    pub(crate) fn as_gc<'ob>(&'ob self) -> Object<'ob> {
-        unsafe { transmute::<Object<'static>, Object<'ob>>(self.inner) }
-    }
-
-    pub(crate) fn as_obj_slice<'ob>(slice: &'ob [Self]) -> &'ob [Object<'ob>] {
-        let ptr = slice.as_ptr().cast::<Object<'ob>>();
-        let len = slice.len();
-        unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 }
 
@@ -254,29 +229,5 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn bind<'a>(&'ob self, obj: Object<'a>) -> Object<'ob> {
         obj.constrain_lifetime(self)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_gc() {
-        let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let mut obj = Object::NIL;
-        assert_eq!(obj, Object::NIL);
-        {
-            let inner = arena.add("foo");
-            let root = unsafe { GcRoot::new(inner) };
-            let gc = root.as_gc();
-            obj = arena.bind(gc);
-        }
-        if let Object::String(x) = obj {
-            assert_eq!(!x, "foo");
-        } else {
-            unreachable!();
-        }
     }
 }
