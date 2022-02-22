@@ -74,7 +74,7 @@ pub(crate) fn set<'ob>(
     newlet: Object<'ob>,
     env: &mut Gc<Environment>,
 ) -> Object<'ob> {
-    env.insert(place, newlet, Environment::set_var);
+    env.insert_obj(place, newlet, Environment::set_var);
     newlet
 }
 
@@ -85,7 +85,7 @@ pub(crate) fn put<'ob>(
     value: Object<'ob>,
     env: &mut Gc<Environment>,
 ) -> Object<'ob> {
-    env.insert((symbol, propname), value, Environment::set_prop);
+    env.insert_obj((symbol, propname), value, Environment::set_prop);
     value
 }
 
@@ -96,7 +96,7 @@ pub(crate) fn get<'ob>(
     env: &Gc<Environment>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
-    match env.props().get_obj(&symbol) {
+    match env.props().get(&symbol) {
         Some(plist) => match plist.as_slice_of_gc().iter().find(|x| x.0 == propname) {
             Some(element) => {
                 let (_, val) = element.get();
@@ -132,7 +132,7 @@ pub(crate) fn symbol_value<'ob>(
     env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
-    env.vars().get_obj(&symbol).map(|x| x.bind(arena))
+    env.vars().get(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]

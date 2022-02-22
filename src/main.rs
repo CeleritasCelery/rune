@@ -131,19 +131,19 @@ fn repl(env: &mut Gc<Environment>, arena: &Arena) {
 fn load(env: &mut Gc<Environment>, arena: &Arena) {
     use crate::symbol::sym;
 
-    env.insert(&sym::EMACS_VERSION, arena.add("28.1"), Environment::set_var);
-    env.insert(&sym::LEXICAL_BINDING, Object::TRUE, Environment::set_var);
-    env.insert(
+    env.insert_obj(&sym::EMACS_VERSION, arena.add("28.1"), Environment::set_var);
+    env.insert_obj(&sym::LEXICAL_BINDING, Object::TRUE, Environment::set_var);
+    env.insert_obj(
         &sym::SYSTEM_TYPE,
         arena.add("gnu/linux"),
         Environment::set_var,
     );
-    env.insert(
+    env.insert_obj(
         &sym::MINIBUFFER_LOCAL_MAP,
         Object::NIL,
         Environment::set_var,
     );
-    env.insert(&sym::CURRENT_LOAD_LIST, Object::NIL, Environment::set_var);
+    env.insert_obj(&sym::CURRENT_LOAD_LIST, Object::NIL, Environment::set_var);
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 

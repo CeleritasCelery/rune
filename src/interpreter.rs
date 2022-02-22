@@ -442,7 +442,7 @@ impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
                 .find_map(|cons| (cons.car(self.arena) == sym.into()).then(|| cons.cdr(self.arena)))
             {
                 Some(value) => Ok(value),
-                None => match self.env.vars().get_obj(sym) {
+                None => match self.env.vars().get(sym) {
                     Some(v) => Ok(v.bind(self.arena)),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },
@@ -457,7 +457,7 @@ impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
                 value.set_cdr(new_value).expect("env should be mutable");
             }
             None => {
-                self.env.insert(name, new_value, Environment::set_var);
+                self.env.insert_obj(name, new_value, Environment::set_var);
             }
         }
         new_value

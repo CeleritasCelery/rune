@@ -61,7 +61,7 @@ impl<T> Gc<T> {
         func(inner, store);
     }
 
-    pub(crate) fn insert<'ob, 'a, K: 'static>(
+    pub(crate) fn insert_obj<'ob, 'a, K: 'static>(
         &mut self,
         key: K,
         obj: Object<'ob>,
@@ -138,7 +138,7 @@ impl<K, V> Gc<HashMap<K, V>>
 where
     K: Eq + std::hash::Hash,
 {
-    pub(crate) fn get_obj<Q: ?Sized>(&self, k: &Q) -> Option<&Gc<V>>
+    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&Gc<V>>
     where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
@@ -148,7 +148,7 @@ where
             .map(|v| unsafe { &*(v as *const V).cast::<Gc<V>>() })
     }
 
-    pub(crate) fn get_gc<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut Gc<V>>
+    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut Gc<V>>
     where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
@@ -156,6 +156,10 @@ where
         self.data
             .get_mut(k)
             .map(|v| unsafe { &mut *(v as *mut V).cast::<Gc<V>>() })
+    }
+
+    pub(crate) fn insert(&mut self, k: K, v: V) {
+        self.data.insert(k, v);
     }
 }
 
@@ -165,8 +169,16 @@ impl<'rt> Gc<Environment<'rt>> {
         unsafe { &*(&self.data.vars as *const HashMap<_, _>).cast() }
     }
 
+    pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, GcStore<'rt>>> {
+        unsafe { &mut *(&mut self.data.vars as *mut HashMap<_, _>).cast() }
+    }
+
     pub(crate) fn props(&self) -> &Prop<'rt> {
         unsafe { &*(&self.data.props as *const HashMap<_, _>).cast() }
+    }
+
+    pub(crate) fn props_mut(&mut self) -> &mut Prop<'rt> {
+        unsafe { &mut *(&mut self.data.props as *mut HashMap<_, _>).cast() }
     }
 }
 
