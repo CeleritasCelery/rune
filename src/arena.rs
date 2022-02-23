@@ -92,11 +92,7 @@ pub(crate) struct Arena<'rt> {
 }
 
 /// The owner of an object allocation. No references to
-/// the object can outlive this. This type should not be
-/// public, but needs to be marked that way so it can be
-/// part of a generic public interface. So long as no
-/// functions in this module reference it that should not
-/// cause a problem.
+/// the object can outlive this.
 #[derive(Debug)]
 enum OwnedObject<'ob> {
     Float(Box<f64>),

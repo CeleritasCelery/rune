@@ -22,16 +22,20 @@ impl Environment {
         env.vars_mut().insert(sym, value);
     }
 
-    pub(crate) fn set_prop(&mut self, symbols: (Symbol, Symbol), value: GcStore) {
-        let (symbol, propname) = symbols;
-        match self.props.get_mut(&symbol) {
+    pub(crate) fn set_prop(
+        env: &mut Gc<Environment>,
+        symbol: Symbol,
+        propname: Symbol,
+        value: Object,
+    ) {
+        let props = env.props_mut();
+        match props.get_mut(&symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
-                Some(x) => x.1 = value,
+                Some(x) => x.1.set(value),
                 None => plist.push((propname, value)),
             },
             None => {
-                let plist = vec![(propname, value)];
-                self.props.insert(symbol, plist);
+                props.insert(symbol, vec![(propname, value)]);
             }
         }
     }
@@ -85,7 +89,7 @@ pub(crate) fn put<'ob>(
     value: Object<'ob>,
     env: &mut Gc<Environment>,
 ) -> Object<'ob> {
-    env.insert_obj((symbol, propname), value, Environment::set_prop);
+    Environment::set_prop(env, symbol, propname, value);
     value
 }
 
@@ -97,11 +101,8 @@ pub(crate) fn get<'ob>(
     arena: &'ob Arena,
 ) -> Object<'ob> {
     match env.props().get(&symbol) {
-        Some(plist) => match plist.as_slice_of_gc().iter().find(|x| x.0 == propname) {
-            Some(element) => {
-                let (_, val) = element.get();
-                arena.bind(val.obj())
-            }
+        Some(plist) => match plist.iter().find(|x| x.0 == propname) {
+            Some(element) => arena.bind(element.1.obj()),
             None => Object::NIL,
         },
         None => Object::NIL,
@@ -158,12 +159,12 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 
 #[defun]
 pub(crate) fn boundp(symbol: Symbol, env: &mut Gc<Environment>) -> bool {
-    env.vars.get(&symbol).is_some()
+    env.vars().get(&symbol).is_some()
 }
 
 #[defun]
 pub(crate) fn default_boundp(symbol: Symbol, env: &mut Gc<Environment>) -> bool {
-    env.vars.get(&symbol).is_some()
+    env.vars().get(&symbol).is_some()
 }
 
 #[defun]

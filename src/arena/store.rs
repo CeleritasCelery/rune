@@ -1,4 +1,4 @@
-use std::ops::{Deref, IndexMut};
+use std::ops::{Deref, DerefMut, IndexMut};
 use std::{ops::Index, slice::SliceIndex};
 
 use crate::data::Environment;
@@ -13,6 +13,18 @@ pub(crate) trait IntoRoot<T> {
 impl<'ob> IntoRoot<GcStore> for Object<'ob> {
     unsafe fn into_root(self) -> GcStore {
         GcStore::new(self)
+    }
+}
+
+impl<'ob> IntoRoot<(Symbol, GcStore)> for (Symbol, Object<'ob>) {
+    unsafe fn into_root(self) -> (Symbol, GcStore) {
+        (self.0, GcStore::new(self.1))
+    }
+}
+
+impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
+    unsafe fn into_root(self) -> Vec<U> {
+        self.into_iter().map(|x| x.into_root()).collect()
     }
 }
 
@@ -33,11 +45,9 @@ pub(crate) struct Gc<T: ?Sized> {
     inner: T,
 }
 
-impl<T> Deref for Gc<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+impl<T: PartialEq> PartialEq<T> for Gc<T> {
+    fn eq(&self, other: &T) -> bool {
+        self.inner == *other
     }
 }
 
@@ -50,28 +60,6 @@ impl<T> AsRef<T> for Gc<T> {
 impl<T> Gc<T> {
     pub(crate) unsafe fn new(data: T) -> Self {
         Gc { inner: data }
-    }
-
-    pub(crate) fn mutate(&mut self, func: fn(&mut T)) {
-        let inner = &mut self.inner;
-        func(inner);
-    }
-
-    pub(crate) fn add<'ob, 'a>(&mut self, obj: Object<'ob>, func: fn(&'a mut T, GcStore)) {
-        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
-        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore>(obj) };
-        func(inner, store);
-    }
-
-    pub(crate) fn insert_obj<'ob, 'a, K: 'static>(
-        &mut self,
-        key: K,
-        obj: Object<'ob>,
-        func: fn(&'a mut T, K, GcStore),
-    ) {
-        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
-        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore>(obj) };
-        func(inner, key, store);
     }
 }
 
@@ -99,10 +87,17 @@ impl<'ob> AsRef<[Object<'ob>]> for Gc<[GcStore]> {
     }
 }
 
-impl<T, U> Gc<(T, U)> {
-    pub(crate) fn get(&self) -> &(Gc<T>, Gc<U>) {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
+impl<T, U> Deref for Gc<(T, U)> {
+    type Target = (Gc<T>, Gc<U>);
+
+    fn deref(&self) -> &Self::Target {
         unsafe { &*(self as *const Gc<(T, U)>).cast::<(Gc<T>, Gc<U>)>() }
+    }
+}
+
+impl<T, U> DerefMut for Gc<(T, U)> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self as *mut Gc<(T, U)>).cast::<(Gc<T>, Gc<U>)>() }
     }
 }
 
@@ -141,9 +136,14 @@ impl<T, I: SliceIndex<[T]>> IndexMut<I> for Gc<[T]> {
 }
 
 impl<T> Gc<Vec<T>> {
-    pub(crate) fn as_slice_of_gc(&self) -> &[Gc<T>] {
+    pub(crate) fn as_slice(&self) -> &[Gc<T>] {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
         unsafe { &*(self.inner.as_slice() as *const [T] as *const [Gc<T>]) }
+    }
+
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [Gc<T>] {
+        // SAFETY: `Gc<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Gc<T>]) }
     }
 
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
@@ -151,10 +151,17 @@ impl<T> Gc<Vec<T>> {
     }
 }
 
-impl<T> Gc<[T]> {
-    pub(crate) fn as_slice_of_gc(&self) -> &[Gc<T>] {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self as *const Gc<[T]> as *const [Gc<T>]) }
+impl<T> Deref for Gc<Vec<T>> {
+    type Target = [Gc<T>];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<T> DerefMut for Gc<Vec<T>> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_slice()
     }
 }
 
@@ -218,12 +225,12 @@ mod test {
         let arena = &Arena::new(root);
         let mut vec: Gc<Vec<GcStore>> = Gc { inner: vec![] };
 
-        vec.add(Object::NIL, Vec::push);
+        vec.push(Object::NIL);
         assert!(matches!(vec[0].obj(), Object::Nil(_)));
         let str1 = arena.add("str1");
         let str2 = arena.add("str2");
-        vec.add(str1, Vec::push);
-        vec.add(str2, Vec::push);
+        vec.push(str1);
+        vec.push(str2);
         let slice = &vec[0..3];
         assert_eq!(vec![Object::NIL, str1, str2], slice.as_ref());
     }
