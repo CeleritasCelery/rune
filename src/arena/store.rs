@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, IndexMut};
 use std::{ops::Index, slice::SliceIndex};
 
 use crate::data::Environment;
@@ -6,7 +6,15 @@ use crate::hashmap::HashMap;
 use crate::object::Object;
 use crate::symbol::Symbol;
 
-use super::Arena;
+pub(crate) trait IntoRoot<T> {
+    unsafe fn into_root(self) -> T;
+}
+
+impl<'ob> IntoRoot<GcStore<'static>> for Object<'ob> {
+    unsafe fn into_root(self) -> GcStore<'static> {
+        std::mem::transmute::<GcStore<'ob>, GcStore<'static>>(GcStore::from(self))
+    }
+}
 
 #[repr(transparent)]
 #[derive(Default, Debug, PartialEq)]
@@ -28,35 +36,35 @@ impl<'ob> From<Object<'ob>> for GcStore<'ob> {
 
 #[repr(transparent)]
 pub(crate) struct Gc<T: ?Sized> {
-    data: T,
+    inner: T,
 }
 
 impl<T> Deref for Gc<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.data
+        &self.inner
     }
 }
 
 impl<T> AsRef<T> for Gc<T> {
     fn as_ref(&self) -> &T {
-        &self.data
+        &self.inner
     }
 }
 
 impl<T> Gc<T> {
     pub(crate) unsafe fn new(data: T) -> Self {
-        Gc { data }
+        Gc { inner: data }
     }
 
     pub(crate) fn mutate(&mut self, func: fn(&mut T)) {
-        let inner = &mut self.data;
+        let inner = &mut self.inner;
         func(inner);
     }
 
     pub(crate) fn add<'ob, 'a>(&mut self, obj: Object<'ob>, func: fn(&'a mut T, GcStore<'a>)) {
-        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.data) };
+        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
         let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore<'a>>(obj) };
         func(inner, store);
     }
@@ -67,7 +75,7 @@ impl<T> Gc<T> {
         obj: Object<'ob>,
         func: fn(&'a mut T, K, GcStore<'a>),
     ) {
-        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.data) };
+        let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
         let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore<'a>>(obj) };
         func(inner, key, store);
     }
@@ -75,11 +83,11 @@ impl<T> Gc<T> {
 
 impl<'root> Gc<GcStore<'root>> {
     pub(crate) fn obj(&self) -> Object {
-        unsafe { Object::from_raw(self.data.obj.into()) }
+        unsafe { Object::from_raw(self.inner.obj.into()) }
     }
 
-    pub(crate) fn bind<'ob>(&self, _cx: &'ob Arena) -> Object<'ob> {
-        unsafe { Object::from_raw(self.data.obj.into()) }
+    pub(crate) fn set(&mut self, item: Object<'_>) {
+        self.inner.obj = unsafe { std::mem::transmute::<Object<'_>, Object<'root>>(item) };
     }
 }
 
@@ -91,8 +99,8 @@ impl<'ob, 'root> AsRef<Object<'ob>> for Gc<GcStore<'root>> {
 
 impl<'ob, 'root> AsRef<[Object<'ob>]> for Gc<[GcStore<'root>]> {
     fn as_ref(&self) -> &[Object<'ob>] {
-        let ptr = self.data.as_ptr().cast::<Object>();
-        let len = self.data.len();
+        let ptr = self.inner.as_ptr().cast::<Object>();
+        let len = self.inner.len();
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 }
@@ -108,7 +116,16 @@ impl<T, I: SliceIndex<[T]>> Index<I> for Gc<Vec<T>> {
     type Output = Gc<I::Output>;
 
     fn index(&self, index: I) -> &Self::Output {
-        unsafe { &*(Index::index(&self.data, index) as *const I::Output as *const Gc<I::Output>) }
+        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Gc<I::Output>) }
+    }
+}
+
+impl<T, I: SliceIndex<[T]>> IndexMut<I> for Gc<Vec<T>> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        unsafe {
+            &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
+                as *mut Gc<I::Output>)
+        }
     }
 }
 
@@ -116,14 +133,27 @@ impl<T, I: SliceIndex<[T]>> Index<I> for Gc<[T]> {
     type Output = Gc<I::Output>;
 
     fn index(&self, index: I) -> &Self::Output {
-        unsafe { &*(Index::index(&self.data, index) as *const I::Output as *const Gc<I::Output>) }
+        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Gc<I::Output>) }
+    }
+}
+
+impl<T, I: SliceIndex<[T]>> IndexMut<I> for Gc<[T]> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        unsafe {
+            &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
+                as *mut Gc<I::Output>)
+        }
     }
 }
 
 impl<T> Gc<Vec<T>> {
     pub(crate) fn as_slice_of_gc(&self) -> &[Gc<T>] {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.data.as_slice() as *const [T] as *const [Gc<T>]) }
+        unsafe { &*(self.inner.as_slice() as *const [T] as *const [Gc<T>]) }
+    }
+
+    pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
+        self.inner.push(unsafe { item.into_root() });
     }
 }
 
@@ -143,7 +173,7 @@ where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
     {
-        self.data
+        self.inner
             .get(k)
             .map(|v| unsafe { &*(v as *const V).cast::<Gc<V>>() })
     }
@@ -153,32 +183,32 @@ where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
     {
-        self.data
+        self.inner
             .get_mut(k)
             .map(|v| unsafe { &mut *(v as *mut V).cast::<Gc<V>>() })
     }
 
     pub(crate) fn insert(&mut self, k: K, v: V) {
-        self.data.insert(k, v);
+        self.inner.insert(k, v);
     }
 }
 
 type Prop<'rt> = Gc<HashMap<Symbol, Vec<(Symbol, GcStore<'rt>)>>>;
 impl<'rt> Gc<Environment<'rt>> {
     pub(crate) fn vars(&self) -> &Gc<HashMap<Symbol, GcStore<'rt>>> {
-        unsafe { &*(&self.data.vars as *const HashMap<_, _>).cast() }
+        unsafe { &*(&self.inner.vars as *const HashMap<_, _>).cast() }
     }
 
     pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, GcStore<'rt>>> {
-        unsafe { &mut *(&mut self.data.vars as *mut HashMap<_, _>).cast() }
+        unsafe { &mut *(&mut self.inner.vars as *mut HashMap<_, _>).cast() }
     }
 
     pub(crate) fn props(&self) -> &Prop<'rt> {
-        unsafe { &*(&self.data.props as *const HashMap<_, _>).cast() }
+        unsafe { &*(&self.inner.props as *const HashMap<_, _>).cast() }
     }
 
     pub(crate) fn props_mut(&mut self) -> &mut Prop<'rt> {
-        unsafe { &mut *(&mut self.data.props as *mut HashMap<_, _>).cast() }
+        unsafe { &mut *(&mut self.inner.props as *mut HashMap<_, _>).cast() }
     }
 }
 
@@ -192,7 +222,7 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let arena = &Arena::new(root);
-        let mut vec: Gc<Vec<GcStore>> = Gc { data: vec![] };
+        let mut vec: Gc<Vec<GcStore>> = Gc { inner: vec![] };
 
         vec.add(Object::NIL, Vec::push);
         assert!(matches!(vec[0].obj(), Object::Nil(_)));

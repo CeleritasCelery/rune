@@ -100,7 +100,7 @@ pub(crate) fn get<'ob>(
         Some(plist) => match plist.as_slice_of_gc().iter().find(|x| x.0 == propname) {
             Some(element) => {
                 let (_, val) = element.get();
-                val.bind(arena)
+                arena.bind(val.obj())
             }
             None => Object::NIL,
         },
@@ -132,7 +132,7 @@ pub(crate) fn symbol_value<'ob>(
     env: &mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
-    env.vars().get(&symbol).map(|x| x.bind(arena))
+    env.vars().get(&symbol).map(|x| arena.bind(x.obj()))
 }
 
 #[defun]

@@ -443,7 +443,7 @@ impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
             {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
-                    Some(v) => Ok(v.bind(self.arena)),
+                    Some(v) => Ok(self.arena.bind(v.obj())),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },
             }
