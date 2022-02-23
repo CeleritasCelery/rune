@@ -22,11 +22,11 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
     format!("{object}")
 }
 
-impl<'ob, 'brw, 'rt> Function<'ob> {
+impl<'ob, 'brw> Function<'ob> {
     pub(crate) fn call(
         self,
         args: Vec<Object<'ob>>,
-        env: &'brw mut Gc<Environment<'rt>>,
+        env: &'brw mut Gc<Environment>,
         arena: &'ob Arena,
     ) -> Result<Object<'ob>> {
         match self {
@@ -41,7 +41,7 @@ impl<'ob, 'brw, 'rt> Function<'ob> {
 pub(crate) fn mapcar<'ob, 'brw>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &'brw mut Gc<Environment<'_>>,
+    env: &'brw mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match sequence {

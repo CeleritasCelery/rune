@@ -120,7 +120,7 @@ impl<'ob> Default for LispFn<'ob> {
 
 pub(crate) type BuiltInFn = for<'ob, 'brw> fn(
     &[Object<'ob>],
-    &'brw mut Gc<crate::data::Environment<'_>>,
+    &'brw mut Gc<crate::data::Environment>,
     &'ob Arena,
 ) -> Result<Object<'ob>>;
 

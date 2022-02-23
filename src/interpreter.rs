@@ -13,17 +13,17 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 
-struct Interpreter<'ob, 'brw, 'rt> {
+struct Interpreter<'ob, 'brw> {
     vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Gc<Environment<'rt>>,
+    env: &'brw mut Gc<Environment>,
     arena: &'ob Arena<'ob>,
 }
 
 #[defun]
-pub(crate) fn eval<'ob, 'brw, 'rt>(
+pub(crate) fn eval<'ob, 'brw>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &'brw mut Gc<Environment<'rt>>,
+    env: &'brw mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let roots = &RootSet::default();
@@ -41,10 +41,10 @@ pub(crate) fn eval<'ob, 'brw, 'rt>(
     interpreter.eval_form(form, gc)
 }
 
-pub(crate) fn call<'ob, 'brw, 'rt>(
+pub(crate) fn call<'ob, 'brw>(
     form: Object<'ob>,
     args: Vec<Object<'ob>>,
-    env: &'brw mut Gc<Environment<'rt>>,
+    env: &'brw mut Gc<Environment>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     let roots = &RootSet::default();
@@ -57,7 +57,7 @@ pub(crate) fn call<'ob, 'brw, 'rt>(
     frame.call_closure(form.try_into()?, args, gc)
 }
 
-impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
+impl<'ob, 'brw> Interpreter<'ob, 'brw> {
     fn eval_form(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         match obj {
             Object::Symbol(sym) => self.var_ref(!sym),
@@ -457,7 +457,7 @@ impl<'ob, 'brw, 'rt> Interpreter<'ob, 'brw, 'rt> {
                 value.set_cdr(new_value).expect("env should be mutable");
             }
             None => {
-                self.env.insert_obj(name, new_value, Environment::set_var);
+                Environment::set_var(self.env, name, new_value);
             }
         }
         new_value

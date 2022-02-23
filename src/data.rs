@@ -12,17 +12,17 @@ use fn_macros::defun;
 use lazy_static::lazy_static;
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct Environment<'rt> {
-    pub(crate) vars: HashMap<Symbol, GcStore<'rt>>,
-    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcStore<'rt>)>>,
+pub(crate) struct Environment {
+    pub(crate) vars: HashMap<Symbol, GcStore>,
+    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcStore)>>,
 }
 
-impl<'rt> Environment<'rt> {
-    pub(crate) fn set_var(&'rt mut self, sym: Symbol, value: GcStore<'rt>) {
-        self.vars.insert(sym, value);
+impl Environment {
+    pub(crate) fn set_var(env: &mut Gc<Environment>, sym: Symbol, value: Object) {
+        env.vars_mut().insert(sym, value);
     }
 
-    pub(crate) fn set_prop(&'rt mut self, symbols: (Symbol, Symbol), value: GcStore<'rt>) {
+    pub(crate) fn set_prop(&mut self, symbols: (Symbol, Symbol), value: GcStore) {
         let (symbol, propname) = symbols;
         match self.props.get_mut(&symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
@@ -74,7 +74,7 @@ pub(crate) fn set<'ob>(
     newlet: Object<'ob>,
     env: &mut Gc<Environment>,
 ) -> Object<'ob> {
-    env.insert_obj(place, newlet, Environment::set_var);
+    Environment::set_var(env, place, newlet);
     newlet
 }
 

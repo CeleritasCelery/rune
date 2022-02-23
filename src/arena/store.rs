@@ -3,34 +3,28 @@ use std::{ops::Index, slice::SliceIndex};
 
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::Object;
+use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'ob> IntoRoot<GcStore<'static>> for Object<'ob> {
-    unsafe fn into_root(self) -> GcStore<'static> {
-        std::mem::transmute::<GcStore<'ob>, GcStore<'static>>(GcStore::from(self))
+impl<'ob> IntoRoot<GcStore> for Object<'ob> {
+    unsafe fn into_root(self) -> GcStore {
+        GcStore::new(self)
     }
 }
 
 #[repr(transparent)]
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct GcStore<'ob> {
-    obj: Object<'ob>,
+pub(crate) struct GcStore {
+    obj: RawObj,
 }
 
-impl<'ob> GcStore<'ob> {
-    fn set(&mut self, obj: Object<'ob>) {
-        self.obj = obj;
-    }
-}
-
-impl<'ob> From<Object<'ob>> for GcStore<'ob> {
-    fn from(obj: Object<'ob>) -> Self {
-        Self { obj }
+impl GcStore {
+    fn new(obj: Object) -> Self {
+        Self { obj: obj.into() }
     }
 }
 
@@ -63,9 +57,9 @@ impl<T> Gc<T> {
         func(inner);
     }
 
-    pub(crate) fn add<'ob, 'a>(&mut self, obj: Object<'ob>, func: fn(&'a mut T, GcStore<'a>)) {
+    pub(crate) fn add<'ob, 'a>(&mut self, obj: Object<'ob>, func: fn(&'a mut T, GcStore)) {
         let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
-        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore<'a>>(obj) };
+        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore>(obj) };
         func(inner, store);
     }
 
@@ -73,31 +67,31 @@ impl<T> Gc<T> {
         &mut self,
         key: K,
         obj: Object<'ob>,
-        func: fn(&'a mut T, K, GcStore<'a>),
+        func: fn(&'a mut T, K, GcStore),
     ) {
         let inner = unsafe { std::mem::transmute::<&mut T, &'a mut T>(&mut self.inner) };
-        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore<'a>>(obj) };
+        let store = unsafe { std::mem::transmute::<Object<'ob>, GcStore>(obj) };
         func(inner, key, store);
     }
 }
 
-impl<'root> Gc<GcStore<'root>> {
+impl Gc<GcStore> {
     pub(crate) fn obj(&self) -> Object {
-        unsafe { Object::from_raw(self.inner.obj.into()) }
+        unsafe { Object::from_raw(self.inner.obj) }
     }
 
     pub(crate) fn set(&mut self, item: Object<'_>) {
-        self.inner.obj = unsafe { std::mem::transmute::<Object<'_>, Object<'root>>(item) };
+        self.inner.obj = item.into();
     }
 }
 
-impl<'ob, 'root> AsRef<Object<'ob>> for Gc<GcStore<'root>> {
+impl<'ob> AsRef<Object<'ob>> for Gc<GcStore> {
     fn as_ref(&self) -> &Object<'ob> {
         unsafe { &*(self as *const Self).cast::<Object>() }
     }
 }
 
-impl<'ob, 'root> AsRef<[Object<'ob>]> for Gc<[GcStore<'root>]> {
+impl<'ob> AsRef<[Object<'ob>]> for Gc<[GcStore]> {
     fn as_ref(&self) -> &[Object<'ob>] {
         let ptr = self.inner.as_ptr().cast::<Object>();
         let len = self.inner.len();
@@ -188,26 +182,26 @@ where
             .map(|v| unsafe { &mut *(v as *mut V).cast::<Gc<V>>() })
     }
 
-    pub(crate) fn insert(&mut self, k: K, v: V) {
-        self.inner.insert(k, v);
+    pub(crate) fn insert<R: IntoRoot<V>>(&mut self, k: K, v: R) {
+        self.inner.insert(k, unsafe { v.into_root() });
     }
 }
 
-type Prop<'rt> = Gc<HashMap<Symbol, Vec<(Symbol, GcStore<'rt>)>>>;
-impl<'rt> Gc<Environment<'rt>> {
-    pub(crate) fn vars(&self) -> &Gc<HashMap<Symbol, GcStore<'rt>>> {
+type Prop = Gc<HashMap<Symbol, Vec<(Symbol, GcStore)>>>;
+impl Gc<Environment> {
+    pub(crate) fn vars(&self) -> &Gc<HashMap<Symbol, GcStore>> {
         unsafe { &*(&self.inner.vars as *const HashMap<_, _>).cast() }
     }
 
-    pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, GcStore<'rt>>> {
+    pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, GcStore>> {
         unsafe { &mut *(&mut self.inner.vars as *mut HashMap<_, _>).cast() }
     }
 
-    pub(crate) fn props(&self) -> &Prop<'rt> {
+    pub(crate) fn props(&self) -> &Prop {
         unsafe { &*(&self.inner.props as *const HashMap<_, _>).cast() }
     }
 
-    pub(crate) fn props_mut(&mut self) -> &mut Prop<'rt> {
+    pub(crate) fn props_mut(&mut self) -> &mut Prop {
         unsafe { &mut *(&mut self.inner.props as *mut HashMap<_, _>).cast() }
     }
 }
