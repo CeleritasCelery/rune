@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::{Arena, Gc, GcStore};
+use crate::arena::{Arena, Gc, RootObj};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -13,8 +13,8 @@ use lazy_static::lazy_static;
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Environment {
-    pub(crate) vars: HashMap<Symbol, GcStore>,
-    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcStore)>>,
+    pub(crate) vars: HashMap<Symbol, RootObj>,
+    pub(crate) props: HashMap<Symbol, Vec<(Symbol, RootObj)>>,
 }
 
 impl Environment {

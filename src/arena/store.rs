@@ -11,21 +11,21 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'ob> IntoRoot<GcStore> for Object<'ob> {
-    unsafe fn into_root(self) -> GcStore {
-        GcStore::new(self)
+impl<'ob> IntoRoot<RootObj> for Object<'ob> {
+    unsafe fn into_root(self) -> RootObj {
+        RootObj::new(self)
     }
 }
 
-impl<'ob> IntoRoot<ConsRoot> for &Cons<'ob> {
-    unsafe fn into_root(self) -> ConsRoot {
-        ConsRoot::new(self)
+impl<'ob> IntoRoot<RootCons> for &Cons<'ob> {
+    unsafe fn into_root(self) -> RootCons {
+        RootCons::new(self)
     }
 }
 
-impl<'ob> IntoRoot<(Symbol, GcStore)> for (Symbol, Object<'ob>) {
-    unsafe fn into_root(self) -> (Symbol, GcStore) {
-        (self.0, GcStore::new(self.1))
+impl<'ob> IntoRoot<(Symbol, RootObj)> for (Symbol, Object<'ob>) {
+    unsafe fn into_root(self) -> (Symbol, RootObj) {
+        (self.0, RootObj::new(self.1))
     }
 }
 
@@ -37,11 +37,11 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
 
 #[repr(transparent)]
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct GcStore {
+pub(crate) struct RootObj {
     obj: RawObj,
 }
 
-impl GcStore {
+impl RootObj {
     fn new(obj: Object) -> Self {
         Self { obj: obj.into() }
     }
@@ -49,11 +49,11 @@ impl GcStore {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq)]
-pub(crate) struct ConsRoot {
+pub(crate) struct RootCons {
     obj: *const Cons<'static>,
 }
 
-impl ConsRoot {
+impl RootCons {
     fn new(obj: &Cons) -> Self {
         Self {
             obj: unsafe { std::mem::transmute(obj) },
@@ -84,7 +84,7 @@ impl<T> Gc<T> {
     }
 }
 
-impl Gc<GcStore> {
+impl Gc<RootObj> {
     pub(crate) fn obj(&self) -> Object {
         unsafe { Object::from_raw(self.inner.obj) }
     }
@@ -94,13 +94,13 @@ impl Gc<GcStore> {
     }
 }
 
-impl<'ob> AsRef<Object<'ob>> for Gc<GcStore> {
+impl<'ob> AsRef<Object<'ob>> for Gc<RootObj> {
     fn as_ref(&self) -> &Object<'ob> {
         unsafe { &*(self as *const Self).cast::<Object>() }
     }
 }
 
-impl<'ob> AsRef<[Object<'ob>]> for Gc<[GcStore]> {
+impl<'ob> AsRef<[Object<'ob>]> for Gc<[RootObj]> {
     fn as_ref(&self) -> &[Object<'ob>] {
         let ptr = self.inner.as_ptr().cast::<Object>();
         let len = self.inner.len();
@@ -108,7 +108,7 @@ impl<'ob> AsRef<[Object<'ob>]> for Gc<[GcStore]> {
     }
 }
 
-impl Gc<ConsRoot> {
+impl Gc<RootCons> {
     // TODO: remove this method and implement Deref with lifetime parameter is removed
     pub(crate) fn obj<'ob>(&'ob self) -> &'ob Cons<'ob> {
         unsafe { std::mem::transmute::<&Cons, &'ob Cons<'ob>>(&*(self.inner.obj)) }
@@ -119,13 +119,13 @@ impl Gc<ConsRoot> {
     }
 }
 
-impl<'ob> AsRef<Cons<'ob>> for Gc<ConsRoot> {
+impl<'ob> AsRef<Cons<'ob>> for Gc<RootCons> {
     fn as_ref(&self) -> &Cons<'ob> {
         unsafe { &*(self as *const Self).cast::<Cons>() }
     }
 }
 
-impl<'ob> AsRef<[Cons<'ob>]> for Gc<[ConsRoot]> {
+impl<'ob> AsRef<[Cons<'ob>]> for Gc<[RootCons]> {
     fn as_ref(&self) -> &[Cons<'ob>] {
         let ptr = self.inner.as_ptr().cast::<Cons>();
         let len = self.inner.len();
@@ -247,13 +247,13 @@ where
     }
 }
 
-type Prop = Gc<HashMap<Symbol, Vec<(Symbol, GcStore)>>>;
+type Prop = Gc<HashMap<Symbol, Vec<(Symbol, RootObj)>>>;
 impl Gc<Environment> {
-    pub(crate) fn vars(&self) -> &Gc<HashMap<Symbol, GcStore>> {
+    pub(crate) fn vars(&self) -> &Gc<HashMap<Symbol, RootObj>> {
         unsafe { &*(&self.inner.vars as *const HashMap<_, _>).cast() }
     }
 
-    pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, GcStore>> {
+    pub(crate) fn vars_mut(&mut self) -> &mut Gc<HashMap<Symbol, RootObj>> {
         unsafe { &mut *(&mut self.inner.vars as *mut HashMap<_, _>).cast() }
     }
 
@@ -276,7 +276,7 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let arena = &Arena::new(root);
-        let mut vec: Gc<Vec<GcStore>> = Gc { inner: vec![] };
+        let mut vec: Gc<Vec<RootObj>> = Gc { inner: vec![] };
 
         vec.push(Object::NIL);
         assert!(matches!(vec[0].obj(), Object::Nil(_)));

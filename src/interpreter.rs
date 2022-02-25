@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::arena::{ConsRoot, Gc, IntoRoot, RootSet};
+use crate::arena::{Gc, IntoRoot, RootCons, RootSet};
 use crate::error::{Error, Type};
 use crate::object::Callable;
 use crate::symbol::sym;
@@ -14,7 +14,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 
 struct Interpreter<'ob, 'brw, 'vars> {
-    vars: &'vars mut Gc<Vec<ConsRoot>>,
+    vars: &'vars mut Gc<Vec<RootCons>>,
     env: &'brw mut Gc<Environment>,
     arena: &'ob Arena<'ob>,
 }
