@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut, IndexMut};
 use std::{ops::Index, slice::SliceIndex};
 
+use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
 use crate::object::{Object, RawObj};
@@ -13,6 +14,12 @@ pub(crate) trait IntoRoot<T> {
 impl<'ob> IntoRoot<GcStore> for Object<'ob> {
     unsafe fn into_root(self) -> GcStore {
         GcStore::new(self)
+    }
+}
+
+impl<'ob> IntoRoot<ConsRoot> for &Cons<'ob> {
+    unsafe fn into_root(self) -> ConsRoot {
+        ConsRoot::new(self)
     }
 }
 
@@ -37,6 +44,20 @@ pub(crate) struct GcStore {
 impl GcStore {
     fn new(obj: Object) -> Self {
         Self { obj: obj.into() }
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, PartialEq)]
+pub(crate) struct ConsRoot {
+    obj: *const Cons<'static>,
+}
+
+impl ConsRoot {
+    fn new(obj: &Cons) -> Self {
+        Self {
+            obj: unsafe { std::mem::transmute(obj) },
+        }
     }
 }
 
@@ -82,6 +103,31 @@ impl<'ob> AsRef<Object<'ob>> for Gc<GcStore> {
 impl<'ob> AsRef<[Object<'ob>]> for Gc<[GcStore]> {
     fn as_ref(&self) -> &[Object<'ob>] {
         let ptr = self.inner.as_ptr().cast::<Object>();
+        let len = self.inner.len();
+        unsafe { std::slice::from_raw_parts(ptr, len) }
+    }
+}
+
+impl Gc<ConsRoot> {
+    // TODO: remove this method and implement Deref with lifetime parameter is removed
+    pub(crate) fn obj<'ob>(&'ob self) -> &'ob Cons<'ob> {
+        unsafe { std::mem::transmute::<&Cons, &'ob Cons<'ob>>(&*(self.inner.obj)) }
+    }
+
+    pub(crate) fn set(&mut self, item: &Cons) {
+        self.inner.obj = unsafe { std::mem::transmute(item) }
+    }
+}
+
+impl<'ob> AsRef<Cons<'ob>> for Gc<ConsRoot> {
+    fn as_ref(&self) -> &Cons<'ob> {
+        unsafe { &*(self as *const Self).cast::<Cons>() }
+    }
+}
+
+impl<'ob> AsRef<[Cons<'ob>]> for Gc<[ConsRoot]> {
+    fn as_ref(&self) -> &[Cons<'ob>] {
+        let ptr = self.inner.as_ptr().cast::<Cons>();
         let len = self.inner.len();
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -148,6 +194,13 @@ impl<T> Gc<Vec<T>> {
 
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
+    }
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.inner.truncate(len);
+    }
+    pub(crate) fn append<U: IntoRoot<T>>(&mut self, other: &mut Vec<U>) {
+        let mut new = other.drain(0..).map(|x| unsafe { x.into_root() }).collect();
+        self.inner.append(&mut new);
     }
 }
 

@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::arena::{Gc, RootSet};
+use crate::arena::{ConsRoot, Gc, IntoRoot, RootSet};
 use crate::error::{Error, Type};
 use crate::object::Callable;
 use crate::symbol::sym;
@@ -13,8 +13,8 @@ use crate::{
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 
-struct Interpreter<'ob, 'brw> {
-    vars: Vec<&'ob Cons<'ob>>,
+struct Interpreter<'ob, 'brw, 'vars> {
+    vars: &'vars mut Gc<Vec<ConsRoot>>,
     env: &'brw mut Gc<Environment>,
     arena: &'ob Arena<'ob>,
 }
@@ -33,11 +33,8 @@ pub(crate) fn eval<'ob, 'brw>(
         "lexical enviroments are not yet supported: found {:?}",
         lexical
     );
-    let mut interpreter = Interpreter {
-        vars: Vec::new(),
-        env,
-        arena,
-    };
+    let vars = unsafe { &mut Gc::new(Vec::new()) };
+    let mut interpreter = Interpreter { vars, env, arena };
     interpreter.eval_form(form, gc)
 }
 
@@ -49,15 +46,12 @@ pub(crate) fn call<'ob, 'brw>(
 ) -> Result<Object<'ob>> {
     let roots = &RootSet::default();
     let gc = &mut Arena::new(roots);
-    let mut frame = Interpreter {
-        vars: Vec::new(),
-        env,
-        arena,
-    };
+    let vars = unsafe { &mut Gc::new(Vec::new()) };
+    let mut frame = Interpreter { vars, env, arena };
     frame.call_closure(form.try_into()?, args, gc)
 }
 
-impl<'ob, 'brw> Interpreter<'ob, 'brw> {
+impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
     fn eval_form(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         match obj {
             Object::Symbol(sym) => self.var_ref(!sym),
@@ -232,6 +226,7 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                 let mut forms = closure.cdr(self.arena).as_list(self.arena)?;
                 let vars = self.bind_variables(&mut forms, args)?;
+                let vars = unsafe { &mut Gc::new(vars.into_root()) };
 
                 let mut call_frame = Interpreter {
                     vars,
@@ -296,8 +291,11 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 if cons.car(self.arena) == (&sym::LAMBDA).into() {
                     let env = {
                         // TODO: remove temp vector
-                        let env: Vec<_> =
-                            self.vars.iter().map(|&x| Object::Cons(x.into())).collect();
+                        let env: Vec<_> = self
+                            .vars
+                            .iter()
+                            .map(|x| Object::Cons(x.obj().into()))
+                            .collect();
                         crate::fns::slice_into_list(
                             env.as_slice(),
                             Some(cons!(true; self.arena)),
@@ -305,7 +303,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                         )
                     };
                     let end: Object = cons!(env, cons.cdr(self.arena); self.arena);
-                    Ok(cons!(&sym::CLOSURE, end; self.arena))
+                    let closure = cons!(&sym::CLOSURE, end; self.arena);
+                    Ok(self.arena.bind(closure))
                 } else {
                     Ok(Object::Cons(cons))
                 }
@@ -438,9 +437,9 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter
-                .find_map(|cons| (cons.car(self.arena) == sym.into()).then(|| cons.cdr(self.arena)))
-            {
+            match iter.find_map(|cons| {
+                (cons.obj().car(self.arena) == sym.into()).then(|| cons.obj().cdr(self.arena))
+            }) {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
                     Some(v) => Ok(self.arena.bind(v.obj())),
@@ -452,9 +451,14 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
 
     fn var_set(&mut self, name: Symbol, new_value: Object<'ob>) -> Object<'ob> {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.car(self.arena) == name.into())) {
+        match iter.find(|cons| (cons.obj().car(self.arena) == name.into())) {
             Some(value) => {
-                value.set_cdr(new_value).expect("env should be mutable");
+                // TODO: Fix this once cons is managed type
+                let new_value = unsafe { std::mem::transmute::<Object<'ob>, Object>(new_value) };
+                value
+                    .obj()
+                    .set_cdr(new_value)
+                    .expect("env should be mutable");
             }
             None => {
                 Environment::set_var(self.env, name, new_value);
@@ -509,7 +513,8 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
                 // (let (x))
                 Object::Symbol(_) => {
                     let val = cons!(binding; self.arena);
-                    self.vars.push(val.try_into().unwrap());
+                    let obj: &Cons = val.try_into().unwrap();
+                    self.vars.push(obj);
                 }
                 // (let (1))
                 x => bail!(Error::from_object(Type::Cons, x)),
@@ -563,17 +568,6 @@ impl<'ob, 'brw> Interpreter<'ob, 'brw> {
         }
         Ok(last)
     }
-}
-
-fn eval_function_body<'ob, 'brw>(
-    forms: ElemIter<'ob>,
-    vars: Vec<&'ob Cons<'ob>>,
-    env: &'brw mut Gc<Environment>,
-    arena: &'ob Arena,
-    gc: &mut Arena,
-) -> Result<Object<'ob>> {
-    let mut call_frame = Interpreter { vars, env, arena };
-    call_frame.implicit_progn(forms, gc)
 }
 
 defsubr!(eval);
