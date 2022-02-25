@@ -5,8 +5,8 @@ use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
 
-mod store;
-pub(crate) use store::*;
+mod root;
+pub(crate) use root::*;
 
 pub(crate) trait ConstrainLifetime<'new, T>
 where
