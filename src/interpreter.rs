@@ -288,7 +288,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
 
         match forms.next().unwrap()? {
             Object::Cons(cons) => {
-                if cons.car(self.arena) == (&sym::LAMBDA).into() {
+                if cons.car(self.arena) == &sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self
@@ -438,7 +438,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         } else {
             let mut iter = self.vars.iter().rev();
             match iter.find_map(|cons| {
-                (cons.obj().car(self.arena) == sym.into()).then(|| cons.obj().cdr(self.arena))
+                (cons.obj().car(self.arena) == sym).then(|| cons.obj().cdr(self.arena))
             }) {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
@@ -451,7 +451,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
 
     fn var_set(&mut self, name: Symbol, new_value: Object<'ob>) -> Object<'ob> {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.obj().car(self.arena) == name.into())) {
+        match iter.find(|cons| (cons.obj().car(self.arena) == name)) {
             Some(value) => {
                 // TODO: Fix this once cons is managed type
                 let new_value = unsafe { std::mem::transmute::<Object<'ob>, Object>(new_value) };

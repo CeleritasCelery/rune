@@ -66,6 +66,43 @@ impl<'ob> Bits for Object<'ob> {
     }
 }
 
+impl<'ob> PartialEq<&str> for Object<'ob> {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            Object::String(x) => &**x == other,
+            _ => false,
+        }
+    }
+}
+
+impl<'ob> PartialEq<Symbol> for Object<'ob> {
+    fn eq(&self, other: &Symbol) -> bool {
+        match self {
+            Object::Symbol(x) => x == other,
+            _ => false,
+        }
+    }
+}
+
+impl<'ob> PartialEq<f64> for Object<'ob> {
+    fn eq(&self, other: &f64) -> bool {
+        use float_cmp::ApproxEq;
+        match self {
+            Object::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
+            _ => false,
+        }
+    }
+}
+
+impl<'ob> PartialEq<i64> for Object<'ob> {
+    fn eq(&self, other: &i64) -> bool {
+        match self {
+            Object::Int(x) => x == other,
+            _ => false,
+        }
+    }
+}
+
 pub(crate) trait IntoObject<'ob, T> {
     fn into_obj(self, arena: &'ob Arena) -> T;
 }
@@ -272,14 +309,12 @@ mod test {
         {
             let x: Object = "foo".into_obj(arena);
             assert!(matches!(x, Object::String(_)));
-            let cmp = "foo".to_owned();
-            assert_eq!(x, Object::String(Data::from_ref(&cmp)));
+            assert_eq!(x, "foo");
         }
         {
             let x: Object = "bar".to_owned().into_obj(arena);
             assert!(matches!(x, Object::String(_)));
-            let cmp = "bar".to_owned();
-            assert_eq!(x, Object::String(Data::from_ref(&cmp)));
+            assert_eq!(x, "bar");
         }
     }
 

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::cons::Cons;
-use crate::object::{IntoObject, LispFn, Object, SubrFn};
+use crate::object::{IntoObject, LispFn, Object, RawObj, SubrFn};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -72,6 +72,21 @@ impl<'rt> Drop for StackRoot<'rt> {
     fn drop(&mut self) {
         self.root_set.roots.borrow_mut().pop();
     }
+}
+
+macro_rules! root {
+    ($obj:ident, $arena:ident) => {
+        let mut root = unsafe { StackRoot::new($arena.get_root_set()) };
+        let $obj = root.set($obj);
+    };
+}
+
+macro_rules! rebind {
+    ($item:ident, $arena:ident) => {
+        let bits: RawObj = $item.into();
+        #[allow(clippy::shadow_unrelated)]
+        let $item = unsafe { $arena.rebind_raw_ptr(bits) };
+    };
 }
 
 #[derive(Default, Debug)]
@@ -225,5 +240,43 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn bind<'a>(&'ob self, obj: Object<'a>) -> Object<'ob> {
         obj.constrain_lifetime(self)
+    }
+
+    #[allow(clippy::unused_self)]
+    pub(crate) unsafe fn rebind_raw_ptr(&'ob self, raw: RawObj) -> Object<'ob> {
+        Object::from_raw(raw)
+    }
+
+    pub(crate) unsafe fn get_root_set(&'ob self) -> &'rt RootSet {
+        self.roots
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    fn take_mut_arena(_: &mut Arena) {}
+    fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> Object<'ob> {
+        arena.add("invariant")
+    }
+
+    #[test]
+    fn test_stack_root() {
+        let roots = &RootSet::default();
+        let mut arena = Arena::new(roots);
+        let obj = "foo".into_obj(&arena);
+        root!(obj, arena);
+        take_mut_arena(&mut arena);
+        assert_eq!(obj, "foo");
+    }
+
+    #[test]
+    fn test_reborrow() {
+        let roots = &RootSet::default();
+        let mut arena = Arena::new(roots);
+        let obj = bind_to_mut(&mut arena);
+        rebind!(obj, arena);
+        let _ = "foo".into_obj(&arena);
+        assert_eq!(obj, "invariant");
     }
 }

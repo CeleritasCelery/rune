@@ -250,7 +250,8 @@ mod test {
             _ => unreachable!("expected lispfn"),
         };
         assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());
-        assert_eq!(func.body.constants, vec_into_object![1; arena]);
+        let vec: Vec<Object> = vec_into_object![1_i64; arena];
+        assert_eq!(func.body.constants, vec);
         assert_eq!(func.args.required, 0);
         assert_eq!(func.args.optional, 0);
         assert!(!func.args.rest);

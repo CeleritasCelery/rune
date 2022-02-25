@@ -109,9 +109,10 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::{arena::RootSet, object::IntoObject};
+    use crate::arena::RootSet;
 
     #[test]
+    #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
@@ -120,6 +121,6 @@ mod test {
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         let val = interpreter::eval(obj, None, env, arena).unwrap();
-        assert_eq!(val, 4.5.into_obj(arena));
+        assert_eq!(val, 4.5);
     }
 }
