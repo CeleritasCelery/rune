@@ -78,7 +78,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                 SETQ => self.setq(forms, gc),
                 DEFVAR => self.defvar(forms, gc),
                 DEFCONST => self.defvar(forms, gc),
-                FUNCTION => self.eval_function(forms),
+                FUNCTION => self.eval_function(forms, self.arena),
                 @ func => self.eval_call(func, forms, gc),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
@@ -281,14 +281,14 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
             },
         }
     }
-    fn eval_function(&mut self, obj: Object<'ob>) -> Result<Object<'ob>> {
-        let mut forms = obj.as_list(self.arena)?;
+    fn eval_function<'a>(&mut self, obj: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {
+        let mut forms = obj.as_list(gc)?;
         let len = forms.len() as u16;
         ensure!(len == 1, Error::ArgCount(1, len));
 
         match forms.next().unwrap()? {
             Object::Cons(cons) => {
-                if cons.car(self.arena) == &sym::LAMBDA {
+                if cons.car(gc) == &sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self
@@ -298,13 +298,13 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                             .collect();
                         crate::fns::slice_into_list(
                             env.as_slice(),
-                            Some(cons!(true; self.arena)),
-                            self.arena,
+                            Some(cons!(true; gc)),
+                            gc,
                         )
                     };
-                    let end: Object = cons!(env, cons.cdr(self.arena); self.arena);
-                    let closure = cons!(&sym::CLOSURE, end; self.arena);
-                    Ok(self.arena.bind(closure))
+                    let end: Object = cons!(env, cons.cdr(gc); gc);
+                    let closure = cons!(&sym::CLOSURE, end; gc);
+                    Ok(gc.bind(closure))
                 } else {
                     Ok(Object::Cons(cons))
                 }
