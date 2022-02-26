@@ -54,7 +54,7 @@ pub(crate) fn call<'ob, 'brw>(
 impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
     fn eval_form(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
         match obj {
-            Object::Symbol(sym) => self.var_ref(!sym),
+            Object::Symbol(sym) => self.var_ref(!sym, self.arena),
             Object::Cons(cons) => self.eval_sexp(&cons, gc),
             other => Ok(other),
         }
@@ -430,17 +430,17 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn var_ref(&self, sym: Symbol) -> Result<Object<'ob>> {
+    fn var_ref<'a>(&self, sym: Symbol, gc: &'a Arena) -> Result<Object<'a>> {
         if sym.name.starts_with(':') {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
             match iter.find_map(|cons| {
-                (cons.obj().car(self.arena) == sym).then(|| cons.obj().cdr(self.arena))
+                (cons.obj().car(gc) == sym).then(|| cons.obj().cdr(gc))
             }) {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
-                    Some(v) => Ok(self.arena.bind(v.obj())),
+                    Some(v) => Ok(gc.bind(v.obj())),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },
             }
