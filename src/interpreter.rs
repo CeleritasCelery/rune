@@ -105,7 +105,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn parse_closure_env(obj: Object<'ob>, arena: &'ob Arena) -> Result<Vec<&'ob Cons<'ob>>> {
+    fn parse_closure_env<'a>(obj: Object<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons<'a>>> {
         let forms = obj.as_list(arena)?;
         let mut env = Vec::new();
         for form in forms {
@@ -120,9 +120,9 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Err(anyhow!("Closure env did not end with `t`"))
     }
 
-    fn parse_arg_list(
-        bindings: Object<'ob>,
-        arena: &'ob Arena,
+    fn parse_arg_list<'a>(
+        bindings: Object<'a>,
+        arena: &'a Arena,
     ) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
         let mut required = Vec::new();
         let mut optional = Vec::new();
@@ -150,13 +150,14 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok((required, optional, rest))
     }
 
-    fn bind_args(
+    fn bind_args<'a>(
         &self,
-        arg_list: Object<'ob>,
-        args: Vec<Object<'ob>>,
-        vars: &mut Vec<&'ob Cons<'ob>>,
+        arg_list: Object<'a>,
+        args: Vec<Object<'a>>,
+        vars: &mut Vec<&'a Cons<'a>>,
+        gc: &'a Arena,
     ) -> Result<()> {
-        let (required, optional, rest) = Self::parse_arg_list(arg_list, self.arena)?;
+        let (required, optional, rest) = Self::parse_arg_list(arg_list, gc)?;
 
         let num_required_args = required.len() as u16;
         let num_optional_args = optional.len() as u16;
@@ -171,18 +172,18 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
 
         for name in required {
             let val = arg_values.next().unwrap();
-            vars.push(cons!(name, val; self.arena).try_into().unwrap());
+            vars.push(cons!(name, val; gc).try_into().unwrap());
         }
 
         for name in optional {
             let val = arg_values.next().unwrap_or_default();
-            vars.push(cons!(name, val; self.arena).try_into().unwrap());
+            vars.push(cons!(name, val; gc).try_into().unwrap());
         }
 
         if let Some(rest_name) = rest {
             let values = arg_values.as_slice();
-            let list = crate::fns::slice_into_list(values, None, self.arena);
-            vars.push(cons!(rest_name, list; self.arena).try_into().unwrap());
+            let list = crate::fns::slice_into_list(values, None, gc);
+            vars.push(cons!(rest_name, list; gc).try_into().unwrap());
         } else {
             // Ensure too many args were not provided
             ensure!(
@@ -193,18 +194,19 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok(())
     }
 
-    fn bind_variables(
+    fn bind_variables<'a>(
         &self,
-        forms: &mut ElemIter<'ob>,
-        args: Vec<Object<'ob>>,
-    ) -> Result<Vec<&'ob Cons<'ob>>> {
+        forms: &mut ElemIter<'a>,
+        args: Vec<Object<'a>>,
+        gc: &'a Arena,
+    ) -> Result<Vec<&'a Cons<'a>>> {
         // Add closure environment to variables
         // (closure ((x . 1) (y . 2) t) ...)
         //          ^^^^^^^^^^^^^^^^^^^
         let env = forms
             .next()
             .ok_or_else(|| anyhow!("Closure missing environment"))??;
-        let mut vars = Self::parse_closure_env(env, self.arena)?;
+        let mut vars = Self::parse_closure_env(env, gc)?;
 
         // Add function arguments to variables
         // (closure (t) (x y &rest z) ...)
@@ -212,7 +214,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         let arg_list = forms
             .next()
             .ok_or_else(|| anyhow!("Closure missing argument list"))??;
-        self.bind_args(arg_list, args, &mut vars)?;
+        self.bind_args(arg_list, args, &mut vars, gc)?;
         Ok(vars)
     }
 
@@ -225,7 +227,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         match closure.car(self.arena) {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                 let mut forms = closure.cdr(self.arena).as_list(self.arena)?;
-                let vars = self.bind_variables(&mut forms, args)?;
+                let vars = self.bind_variables(&mut forms, args, self.arena)?;
                 let vars = unsafe { &mut Gc::new(vars.into_root()) };
 
                 let mut call_frame = Interpreter {
@@ -296,11 +298,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                             .iter()
                             .map(|x| Object::Cons(x.obj().into()))
                             .collect();
-                        crate::fns::slice_into_list(
-                            env.as_slice(),
-                            Some(cons!(true; gc)),
-                            gc,
-                        )
+                        crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end: Object = cons!(env, cons.cdr(gc); gc);
                     let closure = cons!(&sym::CLOSURE, end; gc);
