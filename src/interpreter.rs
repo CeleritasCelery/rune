@@ -98,7 +98,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                     // (defvar x)
                     None => Object::NIL,
                 };
-                Ok(self.var_set(name, value))
+                Ok(self.var_set(name, value, self.arena))
             }
             // (defvar)
             None => Err(Error::ArgCount(1, 0).into()),
@@ -409,7 +409,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
             match Self::pairs(&mut forms)? {
                 Some((Object::Symbol(var), Some(val))) => {
                     let val = self.eval_form(val, gc)?;
-                    last_value = Some(self.var_set(!var, val));
+                    last_value = Some(self.var_set(!var, val, self.arena));
                 }
                 Some((other, Some(_))) => bail!(Error::from_object(Type::Symbol, other)),
                 Some((_, None)) => bail!(Error::ArgCount(arg_cnt, arg_cnt + 1)),
@@ -435,9 +435,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter.find_map(|cons| {
-                (cons.obj().car(gc) == sym).then(|| cons.obj().cdr(gc))
-            }) {
+            match iter.find_map(|cons| (cons.obj().car(gc) == sym).then(|| cons.obj().cdr(gc))) {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
                     Some(v) => Ok(gc.bind(v.obj())),
@@ -447,12 +445,12 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn var_set(&mut self, name: Symbol, new_value: Object<'ob>) -> Object<'ob> {
+    fn var_set<'a>(&mut self, name: Symbol, new_value: Object<'a>, gc: &'a Arena) -> Object<'a> {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.obj().car(self.arena) == name)) {
+        match iter.find(|cons| (cons.obj().car(gc) == name)) {
             Some(value) => {
                 // TODO: Fix this once cons is managed type
-                let new_value = unsafe { std::mem::transmute::<Object<'ob>, Object>(new_value) };
+                let new_value = unsafe { std::mem::transmute::<Object<'a>, Object>(new_value) };
                 value
                     .obj()
                     .set_cdr(new_value)
