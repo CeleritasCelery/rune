@@ -53,7 +53,7 @@ pub(crate) struct CellRoot<'rt> {
 }
 
 impl<'rt> StackRoot<'rt> {
-    unsafe fn new(roots: &'rt RootSet) -> Self {
+    pub(crate) unsafe fn new(roots: &'rt RootSet) -> Self {
         StackRoot { root_set: roots }
     }
 
@@ -74,13 +74,15 @@ impl<'rt> Drop for StackRoot<'rt> {
     }
 }
 
+#[macro_export]
 macro_rules! root {
     ($obj:ident, $arena:ident) => {
-        let mut root = unsafe { StackRoot::new($arena.get_root_set()) };
+        let mut root = unsafe { crate::arena::StackRoot::new($arena.get_root_set()) };
         let $obj = root.set($obj);
     };
 }
 
+#[macro_export]
 macro_rules! rebind {
     ($item:ident, $arena:ident) => {
         let bits: RawObj = $item.into();

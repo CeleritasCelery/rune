@@ -177,7 +177,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) fn as_list(self, arena: &'ob Arena) -> Result<ElemIter<'ob>> {
+    pub(crate) fn as_list<'gc>(self, arena: &'gc Arena) -> Result<ElemIter<'gc>> {
         match self {
             Object::Cons(cons) => {
                 let cons = (!cons).constrain_lifetime(arena);

@@ -2,6 +2,7 @@
 use crate::arena::{Gc, IntoRoot, RootCons, RootSet};
 use crate::error::{Error, Type};
 use crate::object::Callable;
+use crate::root;
 use crate::symbol::sym;
 use crate::{
     arena::Arena,
@@ -60,8 +61,9 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    pub(crate) fn eval_sexp(&mut self, cons: &Cons<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    pub(crate) fn eval_sexp<'a>(&mut self, cons: &Cons<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let forms = cons.cdr(self.arena);
+        root!(forms, gc);
         match cons.car(self.arena) {
             Object::Symbol(sym) => symbol_match! {!sym;
                 QUOTE => self.quote(forms, self.arena),
@@ -78,14 +80,14 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                 SETQ => self.setq(forms, gc),
                 DEFVAR => self.defvar(forms, gc),
                 DEFCONST => self.defvar(forms, gc),
-                FUNCTION => self.eval_function(forms, self.arena),
+                FUNCTION => self.eval_function(self.arena.bind(forms), self.arena),
                 @ func => self.eval_call(func, forms, gc),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
         }
     }
 
-    fn defvar(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn defvar<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
 
         match forms.next() {
@@ -150,6 +152,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok((required, optional, rest))
     }
 
+    #[allow(clippy::unused_self)]
     fn bind_args<'a>(
         &self,
         arg_list: Object<'a>,
@@ -241,7 +244,12 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn eval_call(&mut self, name: Symbol, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_call<'a>(
+        &mut self,
+        name: Symbol,
+        obj: Object<'a>,
+        gc: &mut Arena,
+    ) -> Result<Object<'ob>> {
         let func = match name.resolve_callable() {
             Some(x) => x,
             None => bail!("Invalid function: {name}"),
@@ -311,9 +319,9 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn eval_progx(
+    fn eval_progx<'a>(
         &mut self,
-        obj: Object<'ob>,
+        obj: Object<'a>,
         prog_num: u16,
         gc: &mut Arena,
     ) -> Result<Object<'ob>> {
@@ -329,11 +337,11 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         returned_form.ok_or_else(|| Error::ArgCount(prog_num, count).into())
     }
 
-    fn eval_progn(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_progn<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         self.implicit_progn(obj.as_list(self.arena)?, gc)
     }
 
-    fn eval_while(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_while<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let condition = match forms.next() {
             Some(cond) => cond?,
@@ -345,7 +353,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok(Object::NIL)
     }
 
-    fn eval_cond(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_cond<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::NIL;
         for form in obj.as_list(self.arena)? {
             let mut clause = (form?).as_list(self.arena)?;
@@ -361,7 +369,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok(last)
     }
 
-    fn eval_and(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_and<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::TRUE;
         for form in obj.as_list(self.arena)? {
             last = self.eval_form(form?, gc)?;
@@ -372,7 +380,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok(last)
     }
 
-    fn eval_or(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_or<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut last = Object::NIL;
         for form in obj.as_list(self.arena)? {
             last = self.eval_form(form?, gc)?;
@@ -383,7 +391,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         Ok(last)
     }
 
-    fn eval_if(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn eval_if<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let condition = match forms.next() {
             Some(x) => x?,
@@ -401,7 +409,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn setq(&mut self, obj: Object<'ob>, gc: &mut Arena) -> Result<Object<'ob>> {
+    fn setq<'a>(&mut self, obj: Object<'a>, gc: &mut Arena) -> Result<Object<'ob>> {
         let mut forms = obj.as_list(self.arena)?;
         let mut arg_cnt = 0;
         let mut last_value = None;
@@ -464,7 +472,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
     }
 
     #[allow(clippy::unused_self)]
-    fn quote<'a>(&self, value: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {
+    fn quote<'a, 'gc>(&self, value: Object<'a>, gc: &'gc Arena) -> Result<Object<'gc>> {
         let mut forms = value.as_list(gc)?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
@@ -472,9 +480,9 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
         }
     }
 
-    fn eval_let(
+    fn eval_let<'a>(
         &mut self,
-        form: Object<'ob>,
+        form: Object<'a>,
         parallel: bool,
         gc: &mut Arena,
     ) -> Result<Object<'ob>> {
