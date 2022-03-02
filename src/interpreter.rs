@@ -308,7 +308,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                             .collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
-                    let end: Object = cons!(env, cons.cdr(gc); gc);
+                    let end = cons!(env, cons.cdr(gc); gc);
                     let closure = cons!(&sym::CLOSURE, end; gc);
                     Ok(gc.bind(closure))
                 } else {
@@ -539,7 +539,7 @@ impl<'ob, 'brw, 'vars> Interpreter<'ob, 'brw, 'vars> {
                 }
                 // (let (x))
                 Object::Symbol(_) => {
-                    let val: Object = cons!(binding; self.arena);
+                    let val = cons!(binding; self.arena);
                     let_bindings.push(val.try_into().unwrap());
                 }
                 // (let (1))

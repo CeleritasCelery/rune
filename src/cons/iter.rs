@@ -157,7 +157,7 @@ mod test {
     fn elem_iter() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let cons: Object = list![1, 2, 3, 4; arena];
+        let cons = list![1, 2, 3, 4; arena];
         let iter = cons.as_list(arena).unwrap();
         let vec: Result<Vec<_>> = iter.collect();
         assert_eq!(vec.unwrap(), vec![1, 2, 3, 4]);
@@ -167,7 +167,7 @@ mod test {
     fn cons_iter() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let cons: Object = list![1, 2, 3, 4; arena];
+        let cons = list![1, 2, 3, 4; arena];
         if let Object::Cons(cons) = cons {
             let list = List::Cons(cons);
             let iter = list.conses(arena);
@@ -184,7 +184,7 @@ mod test {
     fn stream_iter() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let cons: Object = list![1, 2, 3, 4; arena];
+        let cons = list![1, 2, 3, 4; arena];
         if let Object::Cons(cons) = cons {
             let cons_root = unsafe { &mut Gc::new(RootCons::new(&cons)) };
             let obj_root = unsafe { &mut Gc::new(RootObj::default()) };

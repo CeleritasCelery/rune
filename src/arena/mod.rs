@@ -233,9 +233,9 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn add<Input, Output>(&'ob self, item: Input) -> Output
+    pub(crate) fn add<Input>(&'ob self, item: Input) -> Object<'ob>
     where
-        Input: IntoObject<'ob, Output>,
+        Input: IntoObject<'ob, Object<'ob>>,
     {
         item.into_obj(self)
     }

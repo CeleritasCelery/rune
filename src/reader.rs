@@ -405,8 +405,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        let ret: Object = list!(symbol, obj; self.arena);
-        Ok(ret)
+        Ok(list!(symbol, obj; self.arena))
     }
 
     /// read a quoted character (e.g. `?a`)
