@@ -54,7 +54,7 @@ pub(crate) struct RootCons {
 }
 
 impl RootCons {
-    fn new(obj: &Cons) -> Self {
+    pub(crate) fn new(obj: &Cons) -> Self {
         Self {
             obj: unsafe { std::mem::transmute(obj) },
         }
@@ -62,6 +62,7 @@ impl RootCons {
 }
 
 #[repr(transparent)]
+#[derive(Debug)]
 pub(crate) struct Gc<T: ?Sized> {
     inner: T,
 }

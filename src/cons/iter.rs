@@ -3,6 +3,7 @@ use crate::{
     error::{Error, Type},
     object::{List, Object},
 };
+use streaming_iterator::StreamingIterator;
 
 use anyhow::{anyhow, Result};
 
@@ -107,6 +108,45 @@ impl<'ob> Iterator for ConsIter<'ob> {
     }
 }
 
+pub(crate) struct ElemStreamIter<'rt> {
+    cons: Option<&'rt mut Gc<RootCons>>,
+    elem: &'rt mut Gc<RootObj>,
+}
+
+impl<'rt> ElemStreamIter<'rt> {
+    pub(crate) fn new(cons: &'rt mut Gc<RootCons>, elem: &'rt mut Gc<RootObj>) -> Self {
+        Self {
+            cons: Some(cons),
+            elem,
+        }
+    }
+}
+
+impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
+    type Item = Gc<RootObj>;
+
+    fn advance(&mut self) {
+        if let Some(cons) = &mut self.cons {
+            let car = cons.obj().car.get();
+            self.elem.set(car);
+            match cons.obj().cdr.get() {
+                Object::Cons(next) => {
+                    let x = unsafe { std::mem::transmute::<&Cons, &Cons>(!next) };
+                    cons.set(x);
+                }
+                _ => self.cons = None,
+            }
+        }
+    }
+
+    fn get(&self) -> Option<&Self::Item> {
+        match &self.cons {
+            Some(_) => Some(self.elem),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{arena::RootSet, cons, list};
@@ -135,6 +175,27 @@ mod test {
             for (act, exp) in iter.zip(expect.iter()) {
                 assert_eq!(act.unwrap().car(arena), *exp);
             }
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn stream_iter() {
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
+        let cons: Object = list![1, 2, 3, 4; arena];
+        if let Object::Cons(cons) = cons {
+            let cons_root = unsafe { &mut Gc::new(RootCons::new(&cons)) };
+            let obj_root = unsafe { &mut Gc::new(RootObj::default()) };
+            let mut iter = ElemStreamIter::new(cons_root, obj_root);
+            let mut expect = vec![1, 2, 3, 4].into_iter();
+            while let Some(elem) = iter.next() {
+                let exp = expect.next().unwrap();
+                assert_eq!(elem.obj(), exp);
+            }
+        } else {
+            unreachable!();
         }
     }
 }
