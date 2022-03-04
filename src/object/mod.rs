@@ -107,9 +107,9 @@ pub(crate) trait IntoObject<'ob, T> {
     fn into_obj(self, arena: &'ob Arena) -> T;
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for Object<'ob> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        self
+impl<'old, 'new> IntoObject<'new, Object<'new>> for Object<'old> {
+    fn into_obj(self, _arena: &'new Arena) -> Object<'new> {
+        unsafe { std::mem::transmute::<Object<'old>, Object<'new>>(self) }
     }
 }
 
