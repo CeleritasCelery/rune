@@ -8,16 +8,19 @@ use std::mem::transmute;
 mod root;
 pub(crate) use root::*;
 
-pub(crate) trait ConstrainLifetime<'new, T>
-where
-    T: 'new,
-{
+pub(crate) trait ConstrainLifetime<'new, T> {
     fn constrain_lifetime(self, cx: &'new Arena) -> T;
 }
 
 impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
     fn constrain_lifetime(self, _cx: &'new Arena) -> Object<'new> {
         unsafe { transmute::<Object<'old>, Object<'new>>(self) }
+    }
+}
+
+impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
+    fn constrain_lifetime(self, _cx: &'new Arena) -> &'brw [Object<'new>] {
+        unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
     }
 }
 
@@ -85,7 +88,8 @@ macro_rules! root {
 #[macro_export]
 macro_rules! rebind {
     ($item:ident, $arena:ident) => {
-        let bits: RawObj = $item.into();
+        #[allow(unused_qualifications)]
+        let bits: crate::object::RawObj = $item.into();
         #[allow(clippy::shadow_unrelated)]
         let $item = unsafe { $arena.rebind_raw_ptr(bits) };
     };
@@ -240,7 +244,10 @@ impl<'ob, 'rt> Arena<'rt> {
         item.into_obj(self)
     }
 
-    pub(crate) fn bind<'a>(&'ob self, obj: Object<'a>) -> Object<'ob> {
+    pub(crate) fn bind<T, U>(&'ob self, obj: T) -> U
+    where
+        T: ConstrainLifetime<'ob, U>,
+    {
         obj.constrain_lifetime(self)
     }
 

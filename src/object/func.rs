@@ -133,18 +133,18 @@ pub(crate) struct SubrFn {
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 impl SubrFn {
-    pub(crate) fn call<'ob>(
+    pub(crate) fn call<'ob, 'gc>(
         &self,
         mut args: Vec<Object<'ob>>,
         env: &mut Gc<crate::data::Environment>,
-        arena: &'ob Arena,
-    ) -> Result<Object<'ob>> {
+        arena: &'gc Arena,
+    ) -> Result<Object<'gc>> {
         let arg_cnt = args.len() as u16;
         let fill_args = self.args.num_of_fill_args(arg_cnt)?;
         for _ in 0..fill_args {
             args.push(Object::NIL);
         }
-        (self.subr)(&args, env, arena)
+        (self.subr)(arena.bind(args.as_slice()), env, arena)
     }
 }
 

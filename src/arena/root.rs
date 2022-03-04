@@ -42,7 +42,7 @@ pub(crate) struct RootObj {
 }
 
 impl RootObj {
-    fn new(obj: Object) -> Self {
+    pub(crate) fn new(obj: Object) -> Self {
         Self { obj: obj.into() }
     }
 }
@@ -88,6 +88,10 @@ impl<T> Gc<T> {
 impl Gc<RootObj> {
     pub(crate) fn obj(&self) -> Object {
         unsafe { Object::from_raw(self.inner.obj) }
+    }
+
+    pub(crate) fn bind<'ob>(&self, gc: &'ob super::Arena) -> Object<'ob> {
+        unsafe { gc.bind(Object::from_raw(self.inner.obj)) }
     }
 
     pub(crate) fn set(&mut self, item: Object<'_>) {
@@ -162,6 +166,12 @@ impl<T> DerefMut for Gc<Option<T>> {
     }
 }
 
+impl Gc<Option<RootObj>> {
+    pub(crate) fn set(&mut self, obj: Object) {
+        self.inner = Some(RootObj::new(obj));
+    }
+}
+
 impl<T, I: SliceIndex<[T]>> Index<I> for Gc<Vec<T>> {
     type Output = Gc<I::Output>;
 
@@ -213,9 +223,8 @@ impl<T> Gc<Vec<T>> {
     pub(crate) fn truncate(&mut self, len: usize) {
         self.inner.truncate(len);
     }
-    pub(crate) fn append<U: IntoRoot<T>>(&mut self, other: &mut Vec<U>) {
-        let mut new = other.drain(0..).map(|x| unsafe { x.into_root() }).collect();
-        self.inner.append(&mut new);
+    pub(crate) fn append(&mut self, other: &mut Self) {
+        self.inner.append(&mut other.inner);
     }
 }
 
