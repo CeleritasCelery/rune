@@ -108,17 +108,11 @@ impl<'ob> Iterator for ConsIter<'ob> {
     }
 }
 
-pub(crate) struct ElemStreamIter<'rt> {
-    cons: Option<&'rt mut Gc<RootCons>>,
-    elem: &'rt mut Gc<RootObj>,
-}
+pub(crate) struct ElemStreamIter<'rt>(&'rt mut Option<(Gc<RootObj>, Gc<RootCons>)>);
 
 impl<'rt> ElemStreamIter<'rt> {
-    pub(crate) fn new(cons: &'rt mut Gc<RootCons>, elem: &'rt mut Gc<RootObj>) -> Self {
-        Self {
-            cons: Some(cons),
-            elem,
-        }
+    pub(crate) fn new(iter: &'rt mut Option<(Gc<RootObj>, Gc<RootCons>)>) -> Self {
+        Self(iter)
     }
 }
 
@@ -126,25 +120,43 @@ impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
     type Item = Gc<RootObj>;
 
     fn advance(&mut self) {
-        if let Some(cons) = &mut self.cons {
-            let car = cons.obj().car.get();
-            self.elem.set(car);
-            match cons.obj().cdr.get() {
+        if let Some(iter) = &mut self.0 {
+            let car = iter.1.obj().car.get();
+            iter.0.set(car);
+            match iter.1.obj().cdr.get() {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(!next) };
-                    cons.set(x);
+                    iter.1.set(x);
                 }
-                _ => self.cons = None,
+                _ => *self.0 = None,
             }
         }
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        match &self.cons {
-            Some(_) => Some(self.elem),
+        match &self.0 {
+            Some(iter) => Some(&iter.0),
             _ => None,
         }
     }
+}
+
+#[macro_export]
+macro_rules! element_iter {
+    ($ident:ident, $obj:expr) => {
+        let mut root = None;
+        #[allow(unused_qualifications)]
+        let list: crate::object::List = $obj.try_into().unwrap();
+        if let crate::object::List::Cons(x) = list {
+            root = unsafe {
+                Some((
+                    Gc::new(crate::arena::RootObj::default()),
+                    Gc::new(crate::arena::RootCons::new(!x)),
+                ))
+            };
+        }
+        let mut $ident = crate::cons::ElemStreamIter::new(&mut root);
+    };
 }
 
 #[cfg(test)]
@@ -168,15 +180,12 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let cons = list![1, 2, 3, 4; arena];
-        if let Object::Cons(cons) = cons {
-            let list = List::Cons(cons);
-            let iter = list.conses(arena);
-            let expect = vec![1, 2, 3, 4];
-            for (act, exp) in iter.zip(expect.iter()) {
-                assert_eq!(act.unwrap().car(arena), *exp);
-            }
-        } else {
-            unreachable!();
+        let cons: &Cons = cons.try_into().unwrap();
+        let list = List::Cons(cons.into());
+        let iter = list.conses(arena);
+        let expect = vec![1, 2, 3, 4];
+        for (act, exp) in iter.zip(expect.iter()) {
+            assert_eq!(act.unwrap().car(arena), *exp);
         }
     }
 
@@ -185,17 +194,11 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let cons = list![1, 2, 3, 4; arena];
-        if let Object::Cons(cons) = cons {
-            let cons_root = unsafe { &mut Gc::new(RootCons::new(&cons)) };
-            let obj_root = unsafe { &mut Gc::new(RootObj::default()) };
-            let mut iter = ElemStreamIter::new(cons_root, obj_root);
-            let mut expect = vec![1, 2, 3, 4].into_iter();
-            while let Some(elem) = iter.next() {
-                let exp = expect.next().unwrap();
-                assert_eq!(elem.obj(), exp);
-            }
-        } else {
-            unreachable!();
+        element_iter!(iter, cons);
+        let mut expect = vec![1, 2, 3, 4].into_iter();
+        while let Some(elem) = iter.next() {
+            let exp = expect.next().unwrap();
+            assert_eq!(elem.obj(), exp);
         }
     }
 }

@@ -148,6 +148,20 @@ impl<T, U> DerefMut for Gc<(T, U)> {
     }
 }
 
+impl<T> Deref for Gc<Option<T>> {
+    type Target = Option<Gc<T>>;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(self as *const Gc<Option<T>>).cast::<Option<Gc<T>>>() }
+    }
+}
+
+impl<T> DerefMut for Gc<Option<T>> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self as *mut Gc<Option<T>>).cast::<Option<Gc<T>>>() }
+    }
+}
+
 impl<T, I: SliceIndex<[T]>> Index<I> for Gc<Vec<T>> {
     type Output = Gc<I::Output>;
 
