@@ -9,16 +9,16 @@ use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
-struct Interpreter<'brw, 'vars> {
-    vars: &'vars mut Gc<Vec<RootCons>>,
+struct Interpreter<'brw> {
+    vars: &'brw mut Gc<Vec<RootCons>>,
     env: &'brw mut Gc<Environment>,
 }
 
 #[defun]
-pub(crate) fn eval<'ob, 'brw>(
+pub(crate) fn eval<'ob>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &'brw mut Gc<Environment>,
+    env: &mut Gc<Environment>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     ensure!(
@@ -42,7 +42,7 @@ pub(crate) fn call<'ob, 'gc>(
     frame.call_closure(form.try_into()?, args, gc)
 }
 
-impl<'brw, 'vars> Interpreter<'brw, 'vars> {
+impl<'brw> Interpreter<'brw> {
     fn eval_form<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
         match obj {
             Object::Symbol(sym) => self.var_ref(!sym, gc),
