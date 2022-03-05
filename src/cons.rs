@@ -196,8 +196,8 @@ macro_rules! cons {
 
 #[macro_export]
 macro_rules! list {
-    ($x:expr; $arena:expr) => (cons!($x; $arena));
-    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => (cons!($x, list!($($y),+ ; $arena) ; $arena));
+    ($x:expr; $arena:expr) => (crate::cons!($x; $arena));
+    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => (crate::cons!($x, list!($($y),+ ; $arena) ; $arena));
 }
 
 #[cfg(test)]

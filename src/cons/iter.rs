@@ -172,7 +172,7 @@ macro_rules! element_iter {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, cons, list};
+    use crate::{arena::RootSet, list};
 
     use super::*;
 

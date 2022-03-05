@@ -94,7 +94,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Gc<Environment>, arena: &Arena) {
+fn repl(env: &mut Gc<Environment>, arena: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -120,6 +120,7 @@ fn repl(env: &mut Gc<Environment>, arena: &Arena) {
             }
         };
 
+        root!(obj, arena);
         match interpreter::eval(obj, None, env, arena) {
             Ok(val) => println!("{val}"),
             Err(e) => println!("Error: {e}"),
@@ -128,7 +129,7 @@ fn repl(env: &mut Gc<Environment>, arena: &Arena) {
     }
 }
 
-fn load(env: &mut Gc<Environment>, arena: &Arena) {
+fn load(env: &mut Gc<Environment>, arena: &mut Arena) {
     use crate::symbol::sym;
 
     Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
@@ -174,7 +175,7 @@ fn load(env: &mut Gc<Environment>, arena: &Arena) {
 
 fn main() {
     let roots = &RootSet::default();
-    let arena = &Arena::new(roots);
+    let arena = &mut Arena::new(roots);
     let env = unsafe { &mut Gc::new(Environment::default()) };
 
     match env::args().nth(1) {

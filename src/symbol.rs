@@ -375,7 +375,7 @@ mod test {
     fn dummy<'ob>(
         vars: &[Object<'ob>],
         _map: &mut Gc<Environment>,
-        _arena: &'ob Arena,
+        _arena: &'ob mut Arena,
     ) -> Result<Object<'ob>> {
         Ok(vars[0])
     }

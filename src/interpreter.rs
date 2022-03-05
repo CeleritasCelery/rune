@@ -1,9 +1,7 @@
-#![allow(dead_code)]
-
-use crate::arena::{Gc, IntoRoot, RootCons, RootObj, RootSet};
+use crate::arena::{Gc, IntoRoot, RootCons, RootObj};
 use crate::cons::ElemStreamIter;
 use crate::error::{Error, Type};
-use crate::object::{Callable, List};
+use crate::object::{Callable, Function, List};
 use crate::symbol::sym;
 use crate::{arena::Arena, cons::Cons, data::Environment, object::Object, symbol::Symbol};
 use crate::{element_iter, rebind, root};
@@ -21,10 +19,8 @@ pub(crate) fn eval<'ob, 'brw>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
     env: &'brw mut Gc<Environment>,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
-    let roots = &RootSet::default();
-    let mut gc = Arena::new(roots);
     ensure!(
         matches!(lexical, Some(Object::True(_) | Object::Nil(_)) | None),
         "lexical enviroments are not yet supported: found {:?}",
@@ -32,28 +28,18 @@ pub(crate) fn eval<'ob, 'brw>(
     );
     let vars = unsafe { &mut Gc::new(Vec::new()) };
     let mut interpreter = Interpreter { vars, env };
-    // TODO: fix this return type
-    let ret = interpreter.eval_form(form, &mut gc)?;
-    let ret = arena.bind(ret);
-    std::mem::forget(gc);
-    Ok(ret)
+    interpreter.eval_form(form, arena)
 }
 
-pub(crate) fn call<'ob, 'brw>(
+pub(crate) fn call<'ob, 'gc>(
     form: Object<'ob>,
-    args: Vec<Object<'ob>>,
-    env: &'brw mut Gc<Environment>,
-    arena: &'ob Arena,
-) -> Result<Object<'ob>> {
-    let roots = &RootSet::default();
-    let mut gc = Arena::new(roots);
+    args: &mut Gc<Vec<RootObj>>,
+    env: &mut Gc<Environment>,
+    gc: &'gc mut Arena,
+) -> Result<Object<'gc>> {
     let vars = unsafe { &mut Gc::new(Vec::new()) };
     let mut frame = Interpreter { vars, env };
-    let ret = frame.call_closure(form.try_into()?, args, &mut gc)?;
-    // TODO: Fix this return value
-    let ret = arena.bind(ret);
-    std::mem::forget(gc);
-    Ok(ret)
+    frame.call_closure(form.try_into()?, args, gc)
 }
 
 impl<'brw, 'vars> Interpreter<'brw, 'vars> {
@@ -232,15 +218,15 @@ impl<'brw, 'vars> Interpreter<'brw, 'vars> {
     fn call_closure<'a, 'gc>(
         &mut self,
         closure: &'a Cons<'a>,
-        args: Vec<Object<'a>>,
+        args: &mut Gc<Vec<RootObj>>,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
         match closure.car(gc) {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
-                // let mut forms = closure.cdr(gc).as_list(gc)?;
                 let obj = closure.cdr(gc);
                 element_iter!(forms, obj);
-                let args = args.into_iter().map(|x| gc.bind(x)).collect();
+                // TODO: remove this temp vector
+                let args = args.iter().map(|x| x.bind(gc)).collect();
                 let vars = self.bind_variables(&mut forms, args, gc)?;
                 let vars = unsafe { &mut Gc::new(vars.into_root()) };
 
@@ -276,15 +262,19 @@ impl<'brw, 'vars> Interpreter<'brw, 'vars> {
                 if crate::debug::debug_enabled() {
                     println!("({name} {args:?})");
                 }
-                let args = unsafe { std::mem::transmute::<Gc<Vec<RootObj>>, Vec<Object>>(args) };
-                (*func).call(args, self.env, gc)
+                (*func).call(&mut args, self.env, gc)
             }
             Callable::Macro(mcro) => {
                 let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
                 if crate::debug::debug_enabled() {
                     println!("(macro: {name} {macro_args:?})");
                 }
-                let value = mcro.get(gc).call(macro_args, self.env, gc)?;
+                let args = unsafe { &mut Gc::new(macro_args.into_root()) };
+                let macro_obj: Object = mcro.get(gc).into();
+                root!(macro_obj, gc);
+                let macro_func: Function = macro_obj.try_into().unwrap();
+                let value = macro_func.call(args, self.env, gc)?;
+                rebind!(value, gc);
                 root!(value, gc);
                 self.eval_form(value, gc)
             }
@@ -299,12 +289,10 @@ impl<'brw, 'vars> Interpreter<'brw, 'vars> {
                     if crate::debug::debug_enabled() {
                         println!("({name} {args:?})");
                     }
-                    let args =
-                        unsafe { std::mem::transmute::<Gc<Vec<RootObj>>, Vec<Object>>(args) };
                     if crate::debug::debug_enabled() {
                         println!("({name} {args:?})");
                     }
-                    self.call_closure(!form, args, gc)
+                    self.call_closure(!form, &mut args, gc)
                 }
                 other => Err(anyhow!("Invalid Function: {other}")),
             },
@@ -642,11 +630,13 @@ mod test {
     macro_rules! check_interpreter {
         ($compare:expr, $expect:expr) => {{
             let roots = &RootSet::default();
-            let comp_arena = &Arena::new(roots);
+            let comp_arena = &mut Arena::new(roots);
             let comp_env = &mut unsafe { Gc::new(Environment::default()) };
             println!("Test String: {}", $compare);
             let obj = crate::reader::read($compare, comp_arena).unwrap().0;
             let expect: Object = comp_arena.add($expect);
+            root!(obj, comp_arena);
+            root!(expect, comp_arena);
             assert_eq!(eval(obj, None, comp_env, comp_arena).unwrap(), expect);
         }};
     }

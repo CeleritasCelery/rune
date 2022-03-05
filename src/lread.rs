@@ -1,9 +1,9 @@
 use crate::arena::{Arena, Gc};
 use crate::data::Environment;
-use crate::interpreter;
 use crate::object::Object;
 use crate::reader;
 use crate::symbol::Symbol;
+use crate::{interpreter, root};
 use fn_macros::defun;
 
 use anyhow::{bail, ensure, Context, Result};
@@ -55,7 +55,7 @@ pub(crate) fn read_from_string<'ob>(
 
 pub(crate) fn load_internal<'ob>(
     contents: &str,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
     env: &mut Gc<Environment>,
 ) -> Result<bool> {
     let mut pos = 0;
@@ -73,6 +73,7 @@ pub(crate) fn load_internal<'ob>(
             println!("-----READ START-----\n {content}");
             println!("-----READ END-----");
         }
+        root!(obj, arena);
         interpreter::eval(obj, None, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
@@ -86,7 +87,7 @@ pub(crate) fn load<'ob>(
     _nomessage: Option<bool>,
     _nosuffix: Option<bool>,
     _must_suffix: Option<bool>,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
     env: &mut Gc<Environment>,
 ) -> Result<bool> {
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
@@ -115,11 +116,12 @@ mod test {
     #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let arena = &mut Arena::new(roots);
         let env = &mut unsafe { Gc::new(Environment::default()) };
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
+        root!(obj, arena);
         let val = interpreter::eval(obj, None, env, arena).unwrap();
         assert_eq!(val, 4.5);
     }

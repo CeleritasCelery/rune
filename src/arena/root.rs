@@ -212,6 +212,11 @@ impl<T> Gc<Vec<T>> {
         unsafe { &*(self.inner.as_slice() as *const [T] as *const [Gc<T>]) }
     }
 
+    pub(crate) fn as_gc(&self) -> &Gc<[T]> {
+        // SAFETY: `Gc<T>` has the same memory layout as `T`.
+        unsafe { &*(self.inner.as_slice() as *const [T] as *const Gc<[T]>) }
+    }
+
     pub(crate) fn as_mut_slice(&mut self) -> &mut [Gc<T>] {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
         unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Gc<T>]) }
@@ -223,8 +228,13 @@ impl<T> Gc<Vec<T>> {
     pub(crate) fn truncate(&mut self, len: usize) {
         self.inner.truncate(len);
     }
+
     pub(crate) fn append(&mut self, other: &mut Self) {
         self.inner.append(&mut other.inner);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.inner.clear();
     }
 }
 

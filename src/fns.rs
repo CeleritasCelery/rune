@@ -1,12 +1,13 @@
-use crate::arena::{Arena, Gc};
+use crate::arena::{Arena, Gc, RootObj};
 use crate::cons::Cons;
-use crate::data;
 use crate::data::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Function, List, Object};
 use crate::symbol::Symbol;
+use crate::{data, element_iter};
 use anyhow::{bail, Result};
 use fn_macros::defun;
+use streaming_iterator::StreamingIterator;
 
 pub(crate) fn slice_into_list<'ob>(
     slice: &[Object<'ob>],
@@ -23,12 +24,12 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
 }
 
 impl<'ob, 'brw> Function<'ob> {
-    pub(crate) fn call(
+    pub(crate) fn call<'gc>(
         self,
-        args: Vec<Object<'ob>>,
+        args: &mut Gc<Vec<RootObj>>,
         env: &'brw mut Gc<Environment>,
-        arena: &'ob Arena,
-    ) -> Result<Object<'ob>> {
+        arena: &'gc mut Arena,
+    ) -> Result<Object<'gc>> {
         match self {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f).call(args, env, arena),
@@ -42,19 +43,24 @@ pub(crate) fn mapcar<'ob, 'brw>(
     function: Function<'ob>,
     sequence: List<'ob>,
     env: &'brw mut Gc<Environment>,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let vec = cons
-                .elements(arena)
-                .map(|x| match x {
-                    Ok(obj) => function.call(vec![obj], env, arena),
-                    err => err,
-                })
-                .collect::<Result<Vec<_>>>()?;
-            Ok(slice_into_list(&vec, None, arena))
+            element_iter!(iter, !cons);
+            let mut outputs = unsafe { Gc::new(Vec::new()) };
+            let call_arg = unsafe { &mut Gc::new(Vec::new()) };
+            while let Some(x) = iter.next() {
+                let obj = x.obj();
+                call_arg.push(obj);
+                let output = function.call(call_arg, env, arena)?;
+                outputs.push(output);
+                call_arg.clear();
+            }
+            // TODO: remove this intermediate vector
+            let slice = outputs.as_gc().as_ref();
+            Ok(slice_into_list(slice, None, arena))
         }
     }
 }
@@ -64,13 +70,17 @@ pub(crate) fn mapc<'ob>(
     function: Function<'ob>,
     sequence: List<'ob>,
     env: &mut Gc<Environment>,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            for elem in cons.elements(arena) {
-                function.call(vec![elem?], env, arena)?;
+            let call_arg = unsafe { &mut Gc::new(Vec::new()) };
+            element_iter!(elements, !cons);
+            while let Some(elem) = elements.next() {
+                call_arg.push(elem.obj());
+                function.call(call_arg, env, arena)?;
+                call_arg.clear();
             }
             Ok(sequence.into())
         }
@@ -230,7 +240,7 @@ fn require<'ob>(
     filename: Option<&str>,
     noerror: Option<bool>,
     env: &mut Gc<Environment>,
-    arena: &'ob Arena,
+    arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
         return Ok(feature.into());

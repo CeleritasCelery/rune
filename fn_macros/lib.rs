@@ -39,7 +39,15 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         quote! {}
     };
     let subr_call =
-        quote! {Ok(crate::object::IntoObject::into_obj(#subr(#(#arg_conversion),*)#err, arena))};
+        // Create the arena from a pointer to get around the issue that the
+        // return val is bound to the mutable borrow, meaning we can use them
+        // both in the into_obj function.
+        quote! {
+            let ptr = arena as *mut crate::arena::Arena;
+            let val = #subr(#(#arg_conversion),*)#err;
+            let arena: &'ob mut crate::arena::Arena = unsafe {&mut *ptr};
+            Ok(crate::object::IntoObject::into_obj(val, arena))
+        };
 
     quote! {
         #[doc(hidden)]
@@ -60,7 +68,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         pub(crate) fn #func_name<'ob>(
             args: &[crate::object::Object<'ob>],
             env: &mut crate::arena::Gc<crate::data::Environment>,
-            arena: &'ob crate::arena::Arena,
+            arena: &'ob mut crate::arena::Arena,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }
@@ -307,7 +315,7 @@ mod test {
         let stream = quote! {
             fn car<'ob>(list: &Cons<'ob>, env: &mut Gc<Environment>) -> Object<'ob> {
                 list.car()
-            }
+}
         };
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec {

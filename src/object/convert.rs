@@ -155,6 +155,12 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     }
 }
 
+impl<'ob> From<&'ob Cons<'ob>> for List<'ob> {
+    fn from(x: &'ob Cons<'ob>) -> Self {
+        List::Cons(x.into())
+    }
+}
+
 /// This function is required because we have no specialization yet.
 /// Essentially this let's us convert one type to another "in place"
 /// without the need to allocate a new slice. We ensure that the two

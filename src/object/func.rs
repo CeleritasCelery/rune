@@ -1,4 +1,4 @@
-use crate::arena::{Arena, Gc};
+use crate::arena::{Arena, Gc, RootObj};
 use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{Function, IntoObject, Object};
@@ -121,7 +121,7 @@ impl<'ob> Default for LispFn<'ob> {
 pub(crate) type BuiltInFn = for<'ob, 'brw> fn(
     &[Object<'ob>],
     &'brw mut Gc<crate::data::Environment>,
-    &'ob Arena,
+    &'ob mut Arena,
 ) -> Result<Object<'ob>>;
 
 #[derive(Copy, Clone)]
@@ -133,18 +133,20 @@ pub(crate) struct SubrFn {
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 impl SubrFn {
-    pub(crate) fn call<'ob, 'gc>(
+    pub(crate) fn call<'gc>(
         &self,
-        mut args: Vec<Object<'ob>>,
+        args: &mut Gc<Vec<RootObj>>,
         env: &mut Gc<crate::data::Environment>,
-        arena: &'gc Arena,
+        arena: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
         let arg_cnt = args.len() as u16;
         let fill_args = self.args.num_of_fill_args(arg_cnt)?;
         for _ in 0..fill_args {
             args.push(Object::NIL);
         }
-        (self.subr)(arena.bind(args.as_slice()), env, arena)
+        let slice =
+            unsafe { std::mem::transmute::<&[Object], &[Object<'gc>]>(args.as_gc().as_ref()) };
+        (self.subr)(slice, env, arena)
     }
 }
 
@@ -176,7 +178,7 @@ impl std::fmt::Debug for SubrFn {
 
 impl PartialEq for SubrFn {
     fn eq(&self, other: &Self) -> bool {
-        let lhs: fn(&'static _, &'static mut _, &'static _) -> _ = self.subr;
+        let lhs: fn(&'static _, &'static mut _, &'static mut _) -> _ = self.subr;
         lhs == other.subr
     }
 }
