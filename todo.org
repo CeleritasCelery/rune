@@ -4,9 +4,12 @@
 ** define a trace trait
 ** store a list of vtables in the gc
 ** add a safe macro to create new gc pointers
+* Cons
+** rewrite cons as a heap only type
+Can move the constant field to the alignment marker and remove the generic lifetime argument
+** move invalid list checking to the end of the iterator
+This way we don't need every single ~next~ to return a result. Just have one check that must be called before it drops or it panics.
 
-* define sexp macro
-Not sure if this can be done with just a regular macro or would require a proc macro. But this would let us decouple our tests from the reader in a clean way.
 * define benchmarks
 * Add reader macro hooks
 * Steps to add a new object

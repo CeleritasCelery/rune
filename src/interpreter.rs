@@ -621,143 +621,174 @@ impl<'brw> Interpreter<'brw> {
 
 defsubr!(eval);
 
+#[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, symbol::intern};
+    use crate::{arena::RootSet, object::IntoObject, symbol::intern};
 
     use super::*;
 
-    macro_rules! check_interpreter {
-        ($compare:expr, $expect:expr) => {{
-            let roots = &RootSet::default();
-            let comp_arena = &mut Arena::new(roots);
-            let comp_env = &mut unsafe { Gc::new(Environment::default()) };
-            println!("Test String: {}", $compare);
-            let obj = crate::reader::read($compare, comp_arena).unwrap().0;
-            let expect: Object = comp_arena.add($expect);
-            root!(obj, comp_arena);
-            root!(expect, comp_arena);
-            assert_eq!(eval(obj, None, comp_env, comp_arena).unwrap(), expect);
-        }};
+    fn check_interpreter<'ob, T>(test_str: &str, expect: T, arena: &'ob mut Arena)
+    where
+        T: IntoObject<'ob, Object<'ob>>,
+    {
+        let env = &mut unsafe { Gc::new(Environment::default()) };
+        // Work around for not having GAT's. Currently the IntoObject trait
+        // must define the lifetime in it's defintion, but that means that the
+        // lifetime in this generic function of the object has to last for the
+        // entire function body.
+        let expect: Object = {
+            let arena: &'ob mut Arena = unsafe { &mut *(arena as *mut Arena) };
+            expect.into_obj(arena)
+        };
+        root!(expect, arena);
+        println!("Test String: {}", test_str);
+        let obj = crate::reader::read(test_str, arena).unwrap().0;
+        root!(obj, arena);
+        let compare = eval(obj, None, env, arena).unwrap();
+        assert_eq!(compare, expect);
     }
 
     #[test]
     fn basic() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_interpreter!("1", 1);
-        check_interpreter!("1.5", 1.5);
-        check_interpreter!("nil", false);
-        check_interpreter!("t", true);
-        check_interpreter!("\"foo\"", "foo");
-        check_interpreter!("'(1 2)", list!(1, 2; arena));
+        let arena = &mut Arena::new(roots);
+        check_interpreter("1", 1, arena);
+        check_interpreter("1.5", 1.5, arena);
+        check_interpreter("nil", false, arena);
+        check_interpreter("t", true, arena);
+        check_interpreter("\"foo\"", "foo", arena);
+        let list = list!(1, 2; arena);
+        root!(list, arena);
+        check_interpreter("'(1 2)", list, arena);
     }
 
     #[test]
     fn variables() {
-        check_interpreter!("(let ())", false);
-        check_interpreter!("(let (x) x)", false);
-        check_interpreter!("(let ((x 1)) x)", 1);
-        check_interpreter!("(let ((x 1)))", false);
-        check_interpreter!("(let ((x 1) (y 2)) x y)", 2);
-        check_interpreter!("(let ((x 1)) (let ((x 3)) x))", 3);
-        check_interpreter!("(let ((x 1)) (let ((y 3)) x))", 1);
-        check_interpreter!("(let ((x 1)) (setq x 2) x)", 2);
-        check_interpreter!("(let* ())", false);
-        check_interpreter!("(let* ((x 1) (y x)) y)", 1);
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(let ())", false, arena);
+        check_interpreter("(let (x) x)", false, arena);
+        check_interpreter("(let ((x 1)) x)", 1, arena);
+        check_interpreter("(let ((x 1)))", false, arena);
+        check_interpreter("(let ((x 1) (y 2)) x y)", 2, arena);
+        check_interpreter("(let ((x 1)) (let ((x 3)) x))", 3, arena);
+        check_interpreter("(let ((x 1)) (let ((y 3)) x))", 1, arena);
+        check_interpreter("(let ((x 1)) (setq x 2) x)", 2, arena);
+        check_interpreter("(let* ())", false, arena);
+        check_interpreter("(let* ((x 1) (y x)) y)", 1, arena);
     }
 
     #[test]
     fn conditionals() {
-        check_interpreter!("(if nil 1)", false);
-        check_interpreter!("(if t 1)", 1);
-        check_interpreter!("(if nil 1 2)", 2);
-        check_interpreter!("(if t 1 2)", 1);
-        check_interpreter!("(if nil 1 2 3)", 3);
-        check_interpreter!("(and)", true);
-        check_interpreter!("(and 1)", 1);
-        check_interpreter!("(and 1 2)", 2);
-        check_interpreter!("(and 1 nil)", false);
-        check_interpreter!("(and nil 1)", false);
-        check_interpreter!("(or)", false);
-        check_interpreter!("(or nil)", false);
-        check_interpreter!("(or nil 1)", 1);
-        check_interpreter!("(or 1 2)", 1);
-        check_interpreter!("(cond)", false);
-        check_interpreter!("(cond nil)", false);
-        check_interpreter!("(cond (1))", 1);
-        check_interpreter!("(cond (1 2))", 2);
-        check_interpreter!("(cond (nil 1) (2 3))", 3);
-        check_interpreter!("(cond (nil 1) (2 3) (4 5))", 3);
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(if nil 1)", false, arena);
+        check_interpreter("(if t 1)", 1, arena);
+        check_interpreter("(if nil 1 2)", 2, arena);
+        check_interpreter("(if t 1 2)", 1, arena);
+        check_interpreter("(if nil 1 2 3)", 3, arena);
+        check_interpreter("(and)", true, arena);
+        check_interpreter("(and 1)", 1, arena);
+        check_interpreter("(and 1 2)", 2, arena);
+        check_interpreter("(and 1 nil)", false, arena);
+        check_interpreter("(and nil 1)", false, arena);
+        check_interpreter("(or)", false, arena);
+        check_interpreter("(or nil)", false, arena);
+        check_interpreter("(or nil 1)", 1, arena);
+        check_interpreter("(or 1 2)", 1, arena);
+        check_interpreter("(cond)", false, arena);
+        check_interpreter("(cond nil)", false, arena);
+        check_interpreter("(cond (1))", 1, arena);
+        check_interpreter("(cond (1 2))", 2, arena);
+        check_interpreter("(cond (nil 1) (2 3))", 3, arena);
+        check_interpreter("(cond (nil 1) (2 3) (4 5))", 3, arena);
     }
 
     #[test]
     fn special_forms() {
-        check_interpreter!("(prog1 1 2 3)", 1);
-        check_interpreter!("(prog2 1 2 3)", 2);
-        check_interpreter!("(progn 1 2 3 4)", 4);
-        check_interpreter!("(function 1)", 1);
-        check_interpreter!("(quote 1)", 1);
-        check_interpreter!("(if 1 2 3)", 2);
-        check_interpreter!("(if nil 2 3)", 3);
-        check_interpreter!("(if (and 1 nil) 2 3)", 3);
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(prog1 1 2 3)", 1, arena);
+        check_interpreter("(prog2 1 2 3)", 2, arena);
+        check_interpreter("(progn 1 2 3 4)", 4, arena);
+        check_interpreter("(function 1)", 1, arena);
+        check_interpreter("(quote 1)", 1, arena);
+        check_interpreter("(if 1 2 3)", 2, arena);
+        check_interpreter("(if nil 2 3)", 3, arena);
+        check_interpreter("(if (and 1 nil) 2 3)", 3, arena);
     }
 
     #[test]
     fn test_functions() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_interpreter!(
-            "(function (lambda))",
-            list![&sym::CLOSURE, list![true; arena]; arena]
-        );
+        let arena = &mut Arena::new(roots);
+        let list = list![&sym::CLOSURE, list![true; arena]; arena];
+        root!(list, arena);
+        check_interpreter("(function (lambda))", list, arena);
         let x = intern("x");
         let y = intern("y");
-        check_interpreter!(
-            "(function (lambda (x) x))",
-            list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena]
-        );
-        check_interpreter!(
-            "(let ((y 1)) (function (lambda (x) x)))",
-            list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena]
-        );
+        let list = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
+        root!(list, arena);
+        check_interpreter("(function (lambda (x) x))", list, arena);
+        let list =
+            list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena];
+        root!(list, arena);
+        check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, arena);
 
-        check_interpreter!(
+        let list = list!(5, false; arena);
+        root!(list, arena);
+        check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5))",
-            list!(5, false; arena)
+            list,
+            arena,
         );
-        check_interpreter!(
+        let list = list!(5, 7; arena);
+        root!(list, arena);
+        check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7))",
-            list!(5, 7; arena)
+            list,
+            arena,
         );
-        check_interpreter!(
+        let list = list!(5, 7, 11; arena);
+        root!(list, arena);
+        check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
-            list!(5, 7, 11; arena)
+            list,
+            arena,
         );
     }
 
     #[test]
     fn test_call() {
-        check_interpreter!("(let ((x #'(lambda (x) x))) (funcall x 5))", 5);
-        check_interpreter!("(let ((x #'(lambda () 3))) (funcall x))", 3);
-        check_interpreter!(
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(let ((x #'(lambda (x) x))) (funcall x 5))", 5, arena);
+        check_interpreter("(let ((x #'(lambda () 3))) (funcall x))", 3, arena);
+        check_interpreter(
             "(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))",
-            10
+            10,
+            arena,
         );
         // Test closures
-        check_interpreter!("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7);
-        check_interpreter!("(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))", 10);
+        check_interpreter("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7, arena);
+        check_interpreter(
+            "(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))",
+            10,
+            arena,
+        );
         // Test that closures capture their environments
-        check_interpreter!(
+        check_interpreter(
             "(progn (setq func (let ((x 3)) #'(lambda (y) (+ y x)))) (funcall func 5))",
-            8
+            8,
+            arena,
         );
         // Test multiple closures
-        check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16);
+        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16, arena);
         // Test that closures close over variables
-        check_interpreter!("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9);
+        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9, arena);
         // Test that closures in global function close over values and not
         // variables
-        check_interpreter!("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8);
+        check_interpreter("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8, arena);
     }
 }

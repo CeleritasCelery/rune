@@ -19,7 +19,7 @@ use data::{Data, Inner};
 pub(crate) use func::*;
 pub(crate) use sub_type::*;
 
-use crate::arena::Arena;
+use crate::arena::{Arena, ConstrainLifetime};
 use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::cell::RefCell;
@@ -108,20 +108,23 @@ pub(crate) trait IntoObject<'ob, T> {
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for Object<'old> {
-    fn into_obj(self, _arena: &'new Arena) -> Object<'new> {
-        unsafe { std::mem::transmute::<Object<'old>, Object<'new>>(self) }
+    fn into_obj(self, arena: &'new Arena) -> Object<'new> {
+        self.constrain_lifetime(arena)
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for &Object<'ob> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        *self
+impl<'old, 'new> IntoObject<'new, Object<'new>> for &Object<'old> {
+    fn into_obj(self, gc: &'new Arena) -> Object<'new> {
+        self.constrain_lifetime(gc)
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for Option<Object<'ob>> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
-        self.unwrap_or_default()
+impl<'old, 'new> IntoObject<'new, Object<'new>> for Option<Object<'old>> {
+    fn into_obj(self, gc: &'new Arena) -> Object<'new> {
+        match self {
+            Some(x) => x.constrain_lifetime(gc),
+            None => Object::NIL,
+        }
     }
 }
 

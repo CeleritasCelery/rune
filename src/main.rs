@@ -51,6 +51,7 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_ptr_alignment,
+    clippy::mem_forget,
     clippy::unwrap_in_result,
     clippy::unwrap_used,
     clippy::expect_used,

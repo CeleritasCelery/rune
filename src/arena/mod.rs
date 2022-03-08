@@ -100,6 +100,12 @@ pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
 }
 
+use std::sync::atomic::AtomicBool;
+
+thread_local! {
+    pub(crate) static SINGLETON_CHECK: AtomicBool = AtomicBool::new(false);
+}
+
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Arena`. When the
 /// `Arena` goes out of scope, no objects should be accessible.
@@ -138,7 +144,14 @@ extern "Rust" {
 // This is safe here because we will never return mutable overlapping borrows
 #[allow(clippy::mut_from_ref)]
 impl<'ob, 'rt> Arena<'rt> {
-    pub(crate) const fn new(roots: &'rt RootSet) -> Self {
+    pub(crate) fn new(roots: &'rt RootSet) -> Self {
+        use std::sync::atomic::Ordering::Relaxed;
+        SINGLETON_CHECK.with(|x| {
+            assert!(
+                x.compare_exchange(false, true, Relaxed, Relaxed).is_ok(),
+                "There was already and active arena when this arena was created"
+            );
+        });
         Arena {
             objects: RefCell::new(Vec::new()),
             roots,
@@ -258,6 +271,13 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) unsafe fn get_root_set(&'ob self) -> &'rt RootSet {
         self.roots
+    }
+}
+
+impl<'rt> Drop for Arena<'rt> {
+    fn drop(&mut self) {
+        use std::sync::atomic::Ordering::Relaxed;
+        SINGLETON_CHECK.with(|s| s.store(false, Relaxed));
     }
 }
 
