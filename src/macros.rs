@@ -41,7 +41,7 @@ macro_rules! define_unbox {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj {
-                    crate::object::Object::$ident(x) => Ok(!x),
+                    crate::object::Object::$ident(x) => Ok(crate::object::Inner::inner(x)),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
@@ -54,7 +54,7 @@ macro_rules! define_unbox {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj {
-                    crate::object::Object::$ident(x) => Ok(Some(!x)),
+                    crate::object::Object::$ident(x) => Ok(Some(crate::object::Inner::inner(x))),
                     crate::object::Object::Nil(_) => Ok(None),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,

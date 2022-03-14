@@ -4,6 +4,7 @@ use crate::object::{IntoObject, LispFn, Object, RawObj, SubrFn};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
+use std::ops::Deref;
 
 mod root;
 pub(crate) use root::*;
@@ -21,28 +22,6 @@ impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
 impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
     fn constrain_lifetime(self, _cx: &'new Arena) -> &'brw [Object<'new>] {
         unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
-    }
-}
-
-#[repr(transparent)]
-pub(crate) struct GcCell {
-    inner: Cell<Object<'static>>,
-}
-
-impl GcCell {
-    pub(crate) unsafe fn new<'ob>(obj: Object<'ob>) -> Self {
-        Self {
-            inner: Cell::new(transmute::<Object<'ob>, Object<'static>>(obj)),
-        }
-    }
-
-    pub(crate) fn get<'ob>(&self, cx: &'ob Arena) -> Object<'ob> {
-        self.inner.get().constrain_lifetime(cx)
-    }
-
-    pub(crate) fn update<'ob>(&self, obj: Object<'ob>) {
-        self.inner
-            .set(unsafe { transmute::<Object<'ob>, Object<'static>>(obj) });
     }
 }
 
@@ -122,12 +101,67 @@ pub(crate) struct Arena<'rt> {
 /// the object can outlive this.
 #[derive(Debug)]
 enum OwnedObject<'ob> {
-    Float(Box<f64>),
+    Float(Box<Allocation<f64>>),
     Cons(Box<Cons<'ob>>),
     Vec(Box<RefCell<Vec<Object<'ob>>>>),
-    String(Box<String>),
-    LispFn(Box<LispFn<'ob>>),
-    SubrFn(Box<SubrFn>),
+    String(Box<Allocation<String>>),
+    LispFn(Box<Allocation<LispFn<'ob>>>),
+    SubrFn(Box<Allocation<SubrFn>>),
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct Allocation<T> {
+    marked: Cell<bool>,
+    data: T,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct AllocPtr<'a, T>(&'a Allocation<T>);
+
+impl<T> Allocation<T> {
+    fn new(data: T) -> Self {
+        Allocation {
+            marked: Cell::from(false),
+            data,
+        }
+    }
+}
+
+impl<'a, T> AllocPtr<'a, T> {
+    pub(crate) fn get(self) -> &'a Allocation<T> {
+        self.0
+    }
+
+    pub(crate) fn into_raw(self) -> u64 {
+        self.0 as *const _ as u64
+    }
+
+    pub(crate) unsafe fn from_raw(raw: u64) -> Self {
+        let ptr = raw as *const Allocation<T>;
+        Self(&*ptr)
+    }
+}
+
+impl<T> Deref for Allocation<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<'a, T> From<&'a Allocation<T>> for AllocPtr<'a, T> {
+    fn from(x: &'a Allocation<T>) -> Self {
+        AllocPtr(x)
+    }
+}
+
+impl<'a, T> Deref for AllocPtr<'a, T> {
+    type Target = Allocation<T>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
 }
 
 impl<'ob> OwnedObject<'ob> {
@@ -177,17 +211,17 @@ impl<'ob, 'rt> Arena<'rt> {
         objects.push(unsafe { obj.coerce_lifetime() });
     }
 
-    pub(crate) fn alloc_f64(&'ob self, obj: f64) -> &'ob mut f64 {
+    pub(crate) fn alloc_f64(&'ob self, obj: f64) -> &'ob Allocation<f64> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::Float(Box::new(obj)));
-        if let Some(OwnedObject::Float(x)) = objects.last_mut() {
-            unsafe { transmute::<&mut f64, &'ob mut f64>(x.as_mut()) }
+        Self::register(&mut objects, OwnedObject::Float(Box::new(Allocation::new(obj))));
+        if let Some(OwnedObject::Float(x)) = objects.last() {
+            unsafe { &*(x.as_ref() as *const Allocation<f64>)}
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_cons(&'ob self, mut obj: Cons<'ob>) -> &'ob mut Cons<'ob> {
+    pub(crate) fn alloc_cons(&'ob self, mut obj: Cons<'ob>) -> &'ob Cons<'ob> {
         if self.is_const {
             obj.make_const();
         }
@@ -200,11 +234,11 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_string(&'ob self, obj: String) -> &'ob mut String {
+    pub(crate) fn alloc_string(&'ob self, obj: String) -> &'ob Allocation<String> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::String(Box::new(obj)));
+        Self::register(&mut objects, OwnedObject::String(Box::new(Allocation::new(obj))));
         if let Some(OwnedObject::String(x)) = objects.last_mut() {
-            unsafe { transmute::<&mut String, &'ob mut String>(x.as_mut()) }
+            unsafe { &*(x.as_ref() as *const Allocation<_>)}
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -213,7 +247,7 @@ impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn alloc_vec(
         &'ob self,
         obj: Vec<Object<'ob>>,
-    ) -> &'ob mut RefCell<Vec<Object<'ob>>> {
+    ) -> &'ob RefCell<Vec<Object<'ob>>> {
         let mut objects = self.objects.borrow_mut();
         let ref_cell = RefCell::new(obj);
         if self.is_const {
@@ -230,21 +264,21 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_lisp_fn(&'ob self, obj: LispFn<'ob>) -> &'ob mut LispFn<'ob> {
+    pub(crate) fn alloc_lisp_fn(&'ob self, obj: LispFn<'ob>) -> &'ob Allocation<LispFn<'ob>> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::LispFn(Box::new(obj)));
-        if let Some(OwnedObject::LispFn(x)) = objects.last_mut() {
-            unsafe { transmute::<&mut LispFn, &'ob mut LispFn>(x.as_mut()) }
+        Self::register(&mut objects, OwnedObject::LispFn(Box::new(Allocation::new(obj))));
+        if let Some(OwnedObject::LispFn(x)) = objects.last() {
+            unsafe { transmute::<&Allocation<LispFn>, &'ob Allocation<LispFn>>(x.as_ref()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob mut SubrFn {
+    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob Allocation<SubrFn> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
-        if let Some(OwnedObject::SubrFn(x)) = objects.last_mut() {
-            unsafe { transmute::<&mut SubrFn, &'ob mut SubrFn>(x.as_mut()) }
+        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(Allocation::new(obj))));
+        if let Some(OwnedObject::SubrFn(x)) = objects.last() {
+            unsafe { &*(x.as_ref() as *const Allocation<_>)}
         } else {
             unreachable!("object was not the type we just inserted");
         }

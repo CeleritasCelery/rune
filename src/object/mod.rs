@@ -15,11 +15,12 @@ mod func;
 mod sub_type;
 
 pub(crate) use convert::*;
-use data::{Data, Inner};
+use data::Data;
+pub(crate) use data::Inner;
 pub(crate) use func::*;
 pub(crate) use sub_type::*;
 
-use crate::arena::{Arena, ConstrainLifetime};
+use crate::arena::{AllocPtr, Arena, ConstrainLifetime};
 use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::cell::RefCell;
@@ -29,7 +30,7 @@ use std::fmt;
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Object<'ob> {
     Int(Data<i64>),
-    Float(Data<&'ob f64>),
+    Float(Data<AllocPtr<'ob, f64>>),
     Symbol(Data<Symbol>),
     True(Data<()>),
     Nil(Data<()>),
@@ -78,7 +79,7 @@ impl<'ob> PartialEq<&str> for Object<'ob> {
 impl<'ob> PartialEq<Symbol> for Object<'ob> {
     fn eq(&self, other: &Symbol) -> bool {
         match self {
-            Object::Symbol(x) => x == other,
+            Object::Symbol(x) => !*x == *other,
             _ => false,
         }
     }
@@ -97,7 +98,7 @@ impl<'ob> PartialEq<f64> for Object<'ob> {
 impl<'ob> PartialEq<i64> for Object<'ob> {
     fn eq(&self, other: &i64) -> bool {
         match self {
-            Object::Int(x) => x == other,
+            Object::Int(x) => !*x == *other,
             _ => false,
         }
     }
@@ -219,6 +220,7 @@ impl<'ob> fmt::Display for Object<'ob> {
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
+                let x = **x;
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -251,6 +253,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
+                let x = **x;
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -301,8 +304,7 @@ mod test {
         let arena = &Arena::new(roots);
         let x: Object = 1.3.into_obj(arena);
         assert!(matches!(x, Object::Float(_)));
-        let float = 1.3;
-        assert_eq!(x, Object::Float(Data::from_ref(&float)));
+        assert_eq!(x, 1.3);
     }
 
     #[test]
