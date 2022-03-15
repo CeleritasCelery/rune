@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::cons::Cons;
 use crate::object::{IntoObject, LispFn, Object, RawObj, SubrFn};
 use std::cell::{Cell, RefCell};
@@ -27,11 +26,6 @@ impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [
 
 pub(crate) struct StackRoot<'rt> {
     root_set: &'rt RootSet,
-}
-
-pub(crate) struct CellRoot<'rt> {
-    roots: &'rt RootSet,
-    object: Cell<u64>,
 }
 
 impl<'rt> StackRoot<'rt> {
@@ -158,6 +152,13 @@ impl Block {
         }
     }
 
+    pub(crate) fn add<'ob, Input>(&'ob self, item: Input) -> Object<'ob>
+    where
+        Input: IntoObject<'ob, Object<'ob>>,
+    {
+        item.into_obj(self)
+    }
+
     fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject) {
         objects.push(unsafe { obj.coerce_lifetime() });
     }
@@ -253,20 +254,6 @@ impl<'ob, 'rt> Arena<'rt> {
             block: Block::new(false),
             roots,
         }
-    }
-
-    pub(crate) fn new_const(roots: &'rt RootSet) -> Self {
-        Arena {
-            block: Block::new(true),
-            roots,
-        }
-    }
-
-    pub(crate) fn add<Input>(&'ob self, item: Input) -> Object<'ob>
-    where
-        Input: IntoObject<'ob, Object<'ob>>,
-    {
-        item.into_obj(self)
     }
 
     pub(crate) fn bind<T, U>(&'ob self, obj: T) -> U

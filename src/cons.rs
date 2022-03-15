@@ -44,7 +44,7 @@ impl<'ob> Cons<'ob> {
         }
     }
 
-    pub(crate) fn car<'new>(&self, cx: &'new Arena) -> Object<'new> {
+    pub(crate) fn car<'new>(&self, cx: &'new Block) -> Object<'new> {
         self.car.get().constrain_lifetime(cx)
     }
 
@@ -52,7 +52,7 @@ impl<'ob> Cons<'ob> {
         std::mem::transmute::<Object<'ob>, Object<'new>>(self.car.get())
     }
 
-    pub(crate) fn cdr<'new>(&self, cx: &'new Arena) -> Object<'new> {
+    pub(crate) fn cdr<'new>(&self, cx: &'new Block) -> Object<'new> {
         self.cdr.get().constrain_lifetime(cx)
     }
 

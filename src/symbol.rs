@@ -376,8 +376,7 @@ mod test {
 
     #[test]
     fn subr() {
-        let roots = &RootSet::default();
-        let arena = &Arena::new_const(roots);
+        let arena = &Block::new(true);
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };
