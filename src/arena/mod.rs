@@ -103,10 +103,10 @@ pub(crate) struct Arena<'rt> {
 enum OwnedObject<'ob> {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons<'ob>>),
-    Vec(Box<RefCell<Vec<Object<'ob>>>>),
+    Vec(Box<Allocation<RefCell<Vec<Object<'ob>>>>>),
     String(Box<Allocation<String>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
-    SubrFn(Box<Allocation<SubrFn>>),
+    SubrFn(Box<SubrFn>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,9 +114,6 @@ pub(crate) struct Allocation<T> {
     marked: Cell<bool>,
     data: T,
 }
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub(crate) struct AllocPtr<'a, T>(&'a Allocation<T>);
 
 impl<T> Allocation<T> {
     fn new(data: T) -> Self {
@@ -127,40 +124,11 @@ impl<T> Allocation<T> {
     }
 }
 
-impl<'a, T> AllocPtr<'a, T> {
-    pub(crate) fn get(self) -> &'a Allocation<T> {
-        self.0
-    }
-
-    pub(crate) fn into_raw(self) -> u64 {
-        self.0 as *const _ as u64
-    }
-
-    pub(crate) unsafe fn from_raw(raw: u64) -> Self {
-        let ptr = raw as *const Allocation<T>;
-        Self(&*ptr)
-    }
-}
-
 impl<T> Deref for Allocation<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.data
-    }
-}
-
-impl<'a, T> From<&'a Allocation<T>> for AllocPtr<'a, T> {
-    fn from(x: &'a Allocation<T>) -> Self {
-        AllocPtr(x)
-    }
-}
-
-impl<'a, T> Deref for AllocPtr<'a, T> {
-    type Target = Allocation<T>;
-
-    fn deref(&self) -> &Self::Target {
-        self.0
     }
 }
 
@@ -213,9 +181,12 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn alloc_f64(&'ob self, obj: f64) -> &'ob Allocation<f64> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::Float(Box::new(Allocation::new(obj))));
+        Self::register(
+            &mut objects,
+            OwnedObject::Float(Box::new(Allocation::new(obj))),
+        );
         if let Some(OwnedObject::Float(x)) = objects.last() {
-            unsafe { &*(x.as_ref() as *const Allocation<f64>)}
+            unsafe { &*(x.as_ref() as *const Allocation<f64>) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -227,8 +198,8 @@ impl<'ob, 'rt> Arena<'rt> {
         }
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Cons(Box::new(obj)));
-        if let Some(OwnedObject::Cons(x)) = objects.last_mut() {
-            unsafe { transmute::<&mut Cons, &'ob mut Cons>(x.as_mut()) }
+        if let Some(OwnedObject::Cons(x)) = objects.last() {
+            unsafe { transmute::<&Cons, &'ob Cons>(x.as_ref()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -236,9 +207,12 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn alloc_string(&'ob self, obj: String) -> &'ob Allocation<String> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::String(Box::new(Allocation::new(obj))));
+        Self::register(
+            &mut objects,
+            OwnedObject::String(Box::new(Allocation::new(obj))),
+        );
         if let Some(OwnedObject::String(x)) = objects.last_mut() {
-            unsafe { &*(x.as_ref() as *const Allocation<_>)}
+            unsafe { &*(x.as_ref() as *const Allocation<_>) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -247,18 +221,19 @@ impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn alloc_vec(
         &'ob self,
         obj: Vec<Object<'ob>>,
-    ) -> &'ob RefCell<Vec<Object<'ob>>> {
+    ) -> &'ob Allocation<RefCell<Vec<Object<'ob>>>> {
         let mut objects = self.objects.borrow_mut();
         let ref_cell = RefCell::new(obj);
         if self.is_const {
             // Leak a borrow so that the vector cannot be borrowed mutably
             std::mem::forget(ref_cell.borrow());
         }
-        Self::register(&mut objects, OwnedObject::Vec(Box::new(ref_cell)));
-        if let Some(OwnedObject::Vec(x)) = objects.last_mut() {
-            unsafe {
-                transmute::<&mut RefCell<Vec<Object>>, &'ob mut RefCell<Vec<Object>>>(x.as_mut())
-            }
+        Self::register(
+            &mut objects,
+            OwnedObject::Vec(Box::new(Allocation::new(ref_cell))),
+        );
+        if let Some(OwnedObject::Vec(x)) = objects.last() {
+            unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
         } else {
             unreachable!("object was not the type we just inserted");
         }
@@ -266,7 +241,10 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn alloc_lisp_fn(&'ob self, obj: LispFn<'ob>) -> &'ob Allocation<LispFn<'ob>> {
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::LispFn(Box::new(Allocation::new(obj))));
+        Self::register(
+            &mut objects,
+            OwnedObject::LispFn(Box::new(Allocation::new(obj))),
+        );
         if let Some(OwnedObject::LispFn(x)) = objects.last() {
             unsafe { transmute::<&Allocation<LispFn>, &'ob Allocation<LispFn>>(x.as_ref()) }
         } else {
@@ -274,11 +252,12 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob Allocation<SubrFn> {
+    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob SubrFn {
+        assert!(self.is_const, "Attempt to add subrFn to non-const arena");
         let mut objects = self.objects.borrow_mut();
-        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(Allocation::new(obj))));
+        Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
         if let Some(OwnedObject::SubrFn(x)) = objects.last() {
-            unsafe { &*(x.as_ref() as *const Allocation<_>)}
+            unsafe { &*(x.as_ref() as *const SubrFn) }
         } else {
             unreachable!("object was not the type we just inserted");
         }

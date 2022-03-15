@@ -2,7 +2,11 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, Not};
 
-use crate::arena::AllocPtr;
+use crate::arena::Allocation;
+use crate::cons::Cons;
+use crate::symbol::Symbol;
+
+use super::{Macro, SubrFn};
 
 /// The inner data type that hold the value for an object variant. This type
 /// should be no larger then 56 bits. The lowest bit of data is used to encode
@@ -46,25 +50,42 @@ impl<T> Data<T> {
 }
 
 impl<'a, T> Data<&'a T> {
-    #[inline(always)]
     pub(super) fn from_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
         Self::from_raw(ptr as u64)
     }
 }
 
-impl<'a, T> From<&'a T> for Data<&'a T> {
-    fn from(x: &'a T) -> Self {
+impl<'a, T> Data<&'a Allocation<T>> {
+    pub(crate) fn get_alloc(self) -> &'a Allocation<T> {
+        let ptr = self.into_raw() as *const Allocation<T>;
+        unsafe { &*ptr }
+    }
+}
+
+impl From<Symbol> for Data<Symbol> {
+    fn from(x: Symbol) -> Self {
         Data::from_ref(x)
     }
 }
 
-impl<'a, T> Inner for Data<&'a T> {
+impl<'a> From<&'a Cons<'a>> for Data<&'a Cons<'a>> {
+    fn from(x: &'a Cons<'a>) -> Self {
+        Data::from_ref(x)
+    }
+}
+
+impl<'a, T> From<&'a Allocation<T>> for Data<&'a Allocation<T>> {
+    fn from(x: &'a Allocation<T>) -> Self {
+        Data::from_ref(x)
+    }
+}
+
+impl<'a, T> Inner for Data<&'a Allocation<T>> {
     type Target = &'a T;
     #[inline(always)]
     fn inner(self) -> &'a T {
-        let ptr = self.into_raw() as *const T;
-        unsafe { &*ptr }
+        self.get_alloc()
     }
 }
 
@@ -76,37 +97,45 @@ impl Inner for Data<i64> {
     }
 }
 
+impl Inner for Data<Symbol> {
+    type Target = Symbol;
+    #[inline(always)]
+    fn inner(self) -> Self::Target {
+        let ptr = self.into_raw() as *const _;
+        unsafe { &*ptr }
+    }
+}
+
+impl<'a> Inner for Data<&'a Cons<'a>> {
+    type Target = &'a Cons<'a>;
+    #[inline(always)]
+    fn inner(self) -> Self::Target {
+        let ptr = self.into_raw() as *const _;
+        unsafe { &*ptr }
+    }
+}
+
+impl<'a> Inner for Data<&'a Macro<'a>> {
+    type Target = &'a Macro<'a>;
+    #[inline(always)]
+    fn inner(self) -> Self::Target {
+        let ptr = self.into_raw() as *const _;
+        unsafe { &*ptr }
+    }
+}
+
+impl<'a> Inner for Data<&'a SubrFn> {
+    type Target = &'a SubrFn;
+    #[inline(always)]
+    fn inner(self) -> Self::Target {
+        let ptr = self.into_raw() as *const _;
+        unsafe { &*ptr }
+    }
+}
+
 impl Data<i64> {
     pub(super) const fn from_int(data: i64) -> Self {
         Data::from_raw(data as u64)
-    }
-}
-
-impl<'a, T> Data<AllocPtr<'a, T>> {
-    pub(super) fn from_alloc(alloc: AllocPtr<'a, T>) -> Self {
-        let raw = alloc.into_raw();
-        Self::from_raw(raw)
-    }
-}
-
-impl<'a, T: 'a> Inner for Data<AllocPtr<'a, T>> {
-    type Target = &'a T;
-    #[inline(always)]
-    fn inner(self) -> &'a T {
-        let alloc: AllocPtr<'a, T> = unsafe { AllocPtr::from_raw(self.into_raw()) };
-        alloc.get()
-    }
-}
-
-impl<'a, T> Deref for Data<AllocPtr<'a, T>>
-where
-    T: Copy,
-{
-    type Target = T;
-
-    #[inline(always)]
-    fn deref(&self) -> &'a Self::Target {
-        self.inner()
     }
 }
 
@@ -141,7 +170,7 @@ impl PartialEq for Data<()> {
 
 impl<T> fmt::Display for Data<T>
 where
-    T: fmt::Display + Copy,
+    T: Copy,
     Data<T>: Inner,
     <Self as Inner>::Target: fmt::Display,
 {
@@ -152,7 +181,7 @@ where
 
 impl<T> fmt::Debug for Data<T>
 where
-    T: fmt::Debug + Copy,
+    T: Copy,
     Data<T>: Inner,
     <Self as Inner>::Target: fmt::Debug,
 {
@@ -161,16 +190,20 @@ where
     }
 }
 
-impl<'a, T> Deref for Data<&'a T> {
+impl<'a, T> Deref for Data<&'a T>
+where
+    Self: Inner,
+{
     type Target = T;
 
     #[inline(always)]
-    fn deref(&self) -> &'a Self::Target {
-        self.inner()
+    fn deref(&self) -> &Self::Target {
+        let ptr = self.into_raw() as *const T;
+        unsafe { &*ptr }
     }
 }
 
-impl<'a, T> AsRef<T> for Data<&'a T> {
+impl<'a, T> AsRef<T> for Data<&'a Allocation<T>> {
     #[inline(always)]
     fn as_ref<'b>(&'b self) -> &'a T {
         self.inner()

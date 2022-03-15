@@ -1,4 +1,4 @@
-use crate::arena::{AllocPtr, Arena};
+use crate::arena::{Allocation, Arena};
 use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
@@ -8,7 +8,7 @@ use super::{Bits, Macro};
 #[repr(align(8))]
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
-    LispFn(Data<&'ob LispFn<'ob>>),
+    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
     Uncompiled(Data<&'ob Cons<'ob>>),
 }
@@ -78,7 +78,7 @@ extern "Rust" {
 #[repr(align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum FuncCell<'ob> {
-    LispFn(Data<&'ob LispFn<'ob>>),
+    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Macro<'ob>>),
     Uncompiled(Data<&'ob Cons<'ob>>),
@@ -164,7 +164,7 @@ impl<'a> FuncCell<'a> {
 #[repr(align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Callable<'ob> {
-    LispFn(Data<&'ob LispFn<'ob>>),
+    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
     Macro(Data<&'ob Macro<'ob>>),
     Uncompiled(Data<&'ob Cons<'ob>>),
@@ -185,7 +185,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
 #[derive(Copy, Clone)]
 pub(crate) enum Number<'ob> {
     Int(Data<i64>),
-    Float(Data<AllocPtr<'ob, f64>>),
+    Float(Data<&'ob Allocation<f64>>),
 }
 
 impl<'ob> Bits for Number<'ob> {
@@ -218,7 +218,7 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for i64 {
 impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
     fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
         let rf = arena.alloc_f64(self);
-        Number::Float(Data::from_alloc(rf.into()))
+        Number::Float(Data::from_ref(rf))
     }
 }
 
@@ -251,7 +251,7 @@ impl<'ob> Number<'ob> {
     pub(crate) fn val(self) -> NumberValue {
         match self {
             Number::Int(x) => NumberValue::Int(!x),
-            Number::Float(x) => NumberValue::Float(*x),
+            Number::Float(x) => NumberValue::Float(**x),
         }
     }
 }

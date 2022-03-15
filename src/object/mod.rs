@@ -20,7 +20,7 @@ pub(crate) use data::Inner;
 pub(crate) use func::*;
 pub(crate) use sub_type::*;
 
-use crate::arena::{AllocPtr, Arena, ConstrainLifetime};
+use crate::arena::{Allocation, Arena, ConstrainLifetime};
 use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::cell::RefCell;
@@ -30,14 +30,14 @@ use std::fmt;
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Object<'ob> {
     Int(Data<i64>),
-    Float(Data<AllocPtr<'ob, f64>>),
+    Float(Data<&'ob Allocation<f64>>),
     Symbol(Data<Symbol>),
     True(Data<()>),
     Nil(Data<()>),
     Cons(Data<&'ob Cons<'ob>>),
-    Vec(Data<&'ob RefCell<Vec<Object<'ob>>>>),
-    String(Data<&'ob String>),
-    LispFn(Data<&'ob LispFn<'ob>>),
+    Vec(Data<&'ob Allocation<RefCell<Vec<Object<'ob>>>>>),
+    String(Data<&'ob Allocation<String>>),
+    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
 }
 
@@ -70,7 +70,7 @@ impl<'ob> Bits for Object<'ob> {
 impl<'ob> PartialEq<&str> for Object<'ob> {
     fn eq(&self, other: &&str) -> bool {
         match self {
-            Object::String(x) => &**x == other,
+            Object::String(x) => ***x == *other,
             _ => false,
         }
     }
@@ -220,7 +220,7 @@ impl<'ob> fmt::Display for Object<'ob> {
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
-                let x = **x;
+                let x = ***x;
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -253,7 +253,7 @@ impl<'ob> fmt::Debug for Object<'ob> {
             Object::True(_) => write!(f, "t"),
             Object::Nil(_) => write!(f, "nil"),
             Object::Float(x) => {
-                let x = **x;
+                let x = ***x;
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -299,6 +299,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn float() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
@@ -330,12 +331,14 @@ mod test {
         let vec = vec_into_object![1, 2, 3.4, "foo"; arena];
         let x: Object = vec.into_obj(arena);
         assert!(matches!(x, Object::Vec(_)));
-        assert_eq!(
-            x,
-            Object::Vec(Data::from_ref(&RefCell::new(
-                vec_into_object![1, 2, 3.4, "foo"; arena]
-            )))
-        );
+        let expect = vec_into_object![1, 2, 3.4, "foo"; arena];
+        if let Object::Vec(compare) = x {
+            for (cmp, exp) in compare.borrow().iter().zip(expect.iter()) {
+                assert_eq!(cmp, exp);
+            }
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -361,7 +364,7 @@ mod test {
     }
 
     #[test]
-    fn mutuality() {
+    fn mutability() {
         let roots = &RootSet::default();
         let arena = &Arena::new_const(roots);
         let inner_cons = Cons::new(1.into(), 4.into());
