@@ -79,10 +79,8 @@ pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
 }
 
-use std::sync::atomic::AtomicBool;
-
 thread_local! {
-    pub(crate) static SINGLETON_CHECK: AtomicBool = AtomicBool::new(false);
+    pub(crate) static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
 }
 
 /// Owns all allocations and creates objects. All objects have
@@ -147,12 +145,12 @@ extern "Rust" {
 #[allow(clippy::mut_from_ref)]
 impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        use std::sync::atomic::Ordering::Relaxed;
         SINGLETON_CHECK.with(|x| {
             assert!(
-                x.compare_exchange(false, true, Relaxed, Relaxed).is_ok(),
+                !x.get(),
                 "There was already and active arena when this arena was created"
             );
+            x.set(true);
         });
         Arena {
             objects: RefCell::new(Vec::new()),
@@ -289,8 +287,12 @@ impl<'ob, 'rt> Arena<'rt> {
 
 impl<'rt> Drop for Arena<'rt> {
     fn drop(&mut self) {
-        use std::sync::atomic::Ordering::Relaxed;
-        SINGLETON_CHECK.with(|s| s.store(false, Relaxed));
+        if !self.is_const {
+            SINGLETON_CHECK.with(|s| {
+                debug_assert!(s.get(), "Arena singleton check was overwritten");
+                s.set(false);
+            });
+        }
     }
 }
 
