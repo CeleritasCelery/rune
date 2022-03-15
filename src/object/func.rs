@@ -1,4 +1,4 @@
-use crate::arena::{Arena, Gc, RootObj};
+use crate::arena::{Arena, Block, Gc, RootObj};
 use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{Function, IntoObject, Object};
@@ -83,23 +83,18 @@ impl<'ob> LispFn<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }
 }
 
 impl<'old, 'new> LispFn<'old> {
-    pub(crate) fn clone_in(&self, arena: &'new Arena) -> LispFn<'new> {
+    pub(crate) fn clone_in(&self, bk: &'new Block) -> LispFn<'new> {
         LispFn {
             body: Expression {
                 op_codes: self.body.op_codes.clone(),
-                constants: self
-                    .body
-                    .constants
-                    .iter()
-                    .map(|x| x.clone_in(arena))
-                    .collect(),
+                constants: self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
             },
             args: self.args,
         }
@@ -184,7 +179,7 @@ impl PartialEq for SubrFn {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
-    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }

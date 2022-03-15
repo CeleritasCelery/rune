@@ -1,4 +1,4 @@
-use crate::arena::{Arena, RootSet};
+use crate::arena::Block;
 use crate::hashmap::HashMap;
 use crate::object::{Callable, FuncCell, Function, Object};
 use lazy_static::lazy_static;
@@ -113,6 +113,7 @@ impl fmt::Display for GlobalSymbol {
 
 pub(crate) struct ObjectMap {
     map: SymbolMap,
+    block: Block,
 }
 
 /// Box needs to follow rust's aliasing rules (references can't outlive the borrow).
@@ -199,23 +200,15 @@ impl ObjectMap {
 
     #[allow(clippy::unused_self)]
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
-        let roots = &RootSet::default();
-        let arena = Arena::new_const(roots);
-        let obj: Object = func.clone_in(&arena);
+        let obj: Object = func.clone_in(&self.block);
         let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
+        #[cfg(miri)]
+        new_func.set_as_miri_root();
         // SAFETY: The object is marked read-only and we have cloned
         // in the map's arena, so calling this function is safe.
         unsafe {
             symbol.set_func(new_func);
         }
-        // This is a temporary workaround until we have a global arena type.
-        // Just make sure the data does not get dropped
-        #[cfg(miri)]
-        {
-            new_func.set_as_miri_root();
-            unsafe { arena.mark_static() };
-        }
-        std::mem::forget(arena);
     }
 }
 
@@ -253,6 +246,7 @@ macro_rules! create_symbolmap {
                 }
                 ObjectMap {
                     map,
+                    block: Block::new(true),
                 }
             });
         }
@@ -324,7 +318,7 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use crate::arena::{Arena, Gc};
+    use crate::arena::{Arena, Gc, RootSet};
     use crate::data::Environment;
     use crate::object::{IntoObject, LispFn, Object};
     use std::mem::size_of;

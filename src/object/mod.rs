@@ -20,7 +20,7 @@ pub(crate) use data::Inner;
 pub(crate) use func::*;
 pub(crate) use sub_type::*;
 
-use crate::arena::{Allocation, Arena, ConstrainLifetime};
+use crate::arena::{Allocation, Block, ConstrainLifetime};
 use crate::cons::Cons;
 use crate::symbol::Symbol;
 use std::cell::RefCell;
@@ -105,23 +105,23 @@ impl<'ob> PartialEq<i64> for Object<'ob> {
 }
 
 pub(crate) trait IntoObject<'ob, T> {
-    fn into_obj(self, arena: &'ob Arena) -> T;
+    fn into_obj(self, block: &'ob Block) -> T;
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for Object<'old> {
-    fn into_obj(self, arena: &'new Arena) -> Object<'new> {
-        self.constrain_lifetime(arena)
+    fn into_obj(self, block: &'new Block) -> Object<'new> {
+        self.constrain_lifetime(block)
     }
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for &Object<'old> {
-    fn into_obj(self, gc: &'new Arena) -> Object<'new> {
+    fn into_obj(self, gc: &'new Block) -> Object<'new> {
         self.constrain_lifetime(gc)
     }
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for Option<Object<'old>> {
-    fn into_obj(self, gc: &'new Arena) -> Object<'new> {
+    fn into_obj(self, gc: &'new Block) -> Object<'new> {
         match self {
             Some(x) => x.constrain_lifetime(gc),
             None => Object::NIL,
@@ -129,25 +129,25 @@ impl<'old, 'new> IntoObject<'new, Object<'new>> for Option<Object<'old>> {
     }
 }
 
-fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], arena: &'new Arena) -> Vec<Object<'new>> {
-    vec.iter().map(|x| x.clone_in(arena)).collect()
+fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], bk: &'new Block) -> Vec<Object<'new>> {
+    vec.iter().map(|x| x.clone_in(bk)).collect()
 }
 
 impl<'old, 'new> Object<'old> {
     /// Clone object in a new arena
-    pub(crate) fn clone_in(self, arena: &'new Arena) -> Object<'new> {
+    pub(crate) fn clone_in(self, bk: &'new Block) -> Object<'new> {
         // TODO: Handle pointers to the same object
         match self {
             Object::Int(x) => (!x).into(),
-            Object::Cons(x) => x.clone_in(arena).into_obj(arena),
-            Object::String(x) => (!x).clone().into_obj(arena),
+            Object::Cons(x) => x.clone_in(bk).into_obj(bk),
+            Object::String(x) => (!x).clone().into_obj(bk),
             Object::Symbol(x) => x.inner().into(),
-            Object::LispFn(x) => x.clone_in(arena).into_obj(arena),
-            Object::SubrFn(x) => (*x).into_obj(arena),
+            Object::LispFn(x) => x.clone_in(bk).into_obj(bk),
+            Object::SubrFn(x) => (*x).into_obj(bk),
             Object::True(_) => Object::TRUE,
             Object::Nil(_) => Object::NIL,
-            Object::Float(x) => x.into_obj(arena),
-            Object::Vec(x) => vec_clone_in(&x.borrow(), arena).into_obj(arena),
+            Object::Float(x) => x.into_obj(bk),
+            Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk),
         }
     }
 }
@@ -279,7 +279,7 @@ mod const_assertions {
 #[cfg(test)]
 mod test {
 
-    use crate::arena::RootSet;
+    use crate::arena::{Arena, RootSet};
 
     use super::*;
 

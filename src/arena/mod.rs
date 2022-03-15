@@ -10,17 +10,17 @@ mod root;
 pub(crate) use root::*;
 
 pub(crate) trait ConstrainLifetime<'new, T> {
-    fn constrain_lifetime(self, cx: &'new Arena) -> T;
+    fn constrain_lifetime(self, cx: &'new Block) -> T;
 }
 
 impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
-    fn constrain_lifetime(self, _cx: &'new Arena) -> Object<'new> {
+    fn constrain_lifetime(self, _cx: &'new Block) -> Object<'new> {
         unsafe { transmute::<Object<'old>, Object<'new>>(self) }
     }
 }
 
 impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
-    fn constrain_lifetime(self, _cx: &'new Arena) -> &'brw [Object<'new>] {
+    fn constrain_lifetime(self, _cx: &'new Block) -> &'brw [Object<'new>] {
         unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
     }
 }
@@ -83,6 +83,12 @@ thread_local! {
     pub(crate) static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
 }
 
+#[derive(Debug)]
+pub(crate) struct Block {
+    objects: RefCell<Vec<OwnedObject<'static>>>,
+    is_const: bool,
+}
+
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Arena`. When the
 /// `Arena` goes out of scope, no objects should be accessible.
@@ -90,9 +96,8 @@ thread_local! {
 /// don't invalid objects.
 #[derive(Debug)]
 pub(crate) struct Arena<'rt> {
-    objects: RefCell<Vec<OwnedObject<'static>>>,
+    pub(crate) block: Block,
     roots: &'rt RootSet,
-    is_const: bool,
 }
 
 /// The owner of an object allocation. No references to
@@ -136,48 +141,28 @@ impl<'ob> OwnedObject<'ob> {
     }
 }
 
-#[cfg(miri)]
-extern "Rust" {
-    fn miri_static_root(ptr: *const u8);
-}
-
-// This is safe here because we will never return mutable overlapping borrows
-#[allow(clippy::mut_from_ref)]
-impl<'ob, 'rt> Arena<'rt> {
-    pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        SINGLETON_CHECK.with(|x| {
-            assert!(
-                !x.get(),
-                "There was already and active arena when this arena was created"
-            );
-            x.set(true);
-        });
-        Arena {
+impl Block {
+    pub(crate) fn new(is_const: bool) -> Self {
+        if !is_const {
+            SINGLETON_CHECK.with(|x| {
+                assert!(
+                    !x.get(),
+                    "There was already and active arena when this arena was created"
+                );
+                x.set(true);
+            });
+        }
+        Self {
             objects: RefCell::new(Vec::new()),
-            roots,
-            is_const: false,
+            is_const,
         }
     }
 
-    pub(crate) const fn new_const(roots: &'rt RootSet) -> Self {
-        Arena {
-            objects: RefCell::new(Vec::new()),
-            roots,
-            is_const: true,
-        }
-    }
-
-    #[cfg(miri)]
-    pub(crate) unsafe fn mark_static(&self) {
-        let ptr = self.objects.borrow().as_ptr();
-        miri_static_root(ptr as _);
-    }
-
-    fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject<'ob>) {
+    fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject) {
         objects.push(unsafe { obj.coerce_lifetime() });
     }
 
-    pub(crate) fn alloc_f64(&'ob self, obj: f64) -> &'ob Allocation<f64> {
+    pub(crate) fn alloc_f64(&self, obj: f64) -> &Allocation<f64> {
         let mut objects = self.objects.borrow_mut();
         Self::register(
             &mut objects,
@@ -190,7 +175,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_cons(&'ob self, mut obj: Cons<'ob>) -> &'ob Cons<'ob> {
+    pub(crate) fn alloc_cons<'ob>(&'ob self, mut obj: Cons<'ob>) -> &'ob Cons<'ob> {
         if self.is_const {
             obj.make_const();
         }
@@ -203,7 +188,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_string(&'ob self, obj: String) -> &'ob Allocation<String> {
+    pub(crate) fn alloc_string(&self, obj: String) -> &Allocation<String> {
         let mut objects = self.objects.borrow_mut();
         Self::register(
             &mut objects,
@@ -216,7 +201,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_vec(
+    pub(crate) fn alloc_vec<'ob>(
         &'ob self,
         obj: Vec<Object<'ob>>,
     ) -> &'ob Allocation<RefCell<Vec<Object<'ob>>>> {
@@ -237,7 +222,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_lisp_fn(&'ob self, obj: LispFn<'ob>) -> &'ob Allocation<LispFn<'ob>> {
+    pub(crate) fn alloc_lisp_fn<'ob>(&'ob self, obj: LispFn<'ob>) -> &'ob Allocation<LispFn<'ob>> {
         let mut objects = self.objects.borrow_mut();
         Self::register(
             &mut objects,
@@ -250,7 +235,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&'ob self, obj: SubrFn) -> &'ob SubrFn {
+    pub(crate) fn alloc_subr_fn(&self, obj: SubrFn) -> &SubrFn {
         assert!(self.is_const, "Attempt to add subrFn to non-const arena");
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
@@ -258,6 +243,22 @@ impl<'ob, 'rt> Arena<'rt> {
             unsafe { &*(x.as_ref() as *const SubrFn) }
         } else {
             unreachable!("object was not the type we just inserted");
+        }
+    }
+}
+
+impl<'ob, 'rt> Arena<'rt> {
+    pub(crate) fn new(roots: &'rt RootSet) -> Self {
+        Arena {
+            block: Block::new(false),
+            roots,
+        }
+    }
+
+    pub(crate) fn new_const(roots: &'rt RootSet) -> Self {
+        Arena {
+            block: Block::new(true),
+            roots,
         }
     }
 
@@ -285,7 +286,21 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 }
 
-impl<'rt> Drop for Arena<'rt> {
+impl<'rt> Deref for Arena<'rt> {
+    type Target = Block;
+
+    fn deref(&self) -> &Self::Target {
+        &self.block
+    }
+}
+
+impl<'rt> AsRef<Block> for Arena<'rt> {
+    fn as_ref(&self) -> &Block {
+        &self.block
+    }
+}
+
+impl Drop for Block {
     fn drop(&mut self) {
         if !self.is_const {
             SINGLETON_CHECK.with(|s| {

@@ -1,4 +1,4 @@
-use crate::arena::{Arena, ConstrainLifetime};
+use crate::arena::{Arena, Block, ConstrainLifetime};
 use crate::object::{List, Object};
 use anyhow::Result;
 use fn_macros::defun;
@@ -29,11 +29,8 @@ impl Display for ConstConsError {
 impl std::error::Error for ConstConsError {}
 
 impl<'old, 'new> Cons<'old> {
-    pub(crate) fn clone_in(&self, arena: &'new Arena) -> Cons<'new> {
-        Cons::new(
-            self.car(arena).clone_in(arena),
-            self.cdr(arena).clone_in(arena),
-        )
+    pub(crate) fn clone_in(&self, bk: &'new Block) -> Cons<'new> {
+        Cons::new(self.car.get().clone_in(bk), self.cdr.get().clone_in(bk))
     }
 }
 
@@ -87,7 +84,7 @@ impl<'ob> Cons<'ob> {
 }
 
 impl<'brw, 'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'brw Cons<'old> {
-    fn constrain_lifetime(self, _cx: &'new Arena) -> &'new Cons<'new> {
+    fn constrain_lifetime(self, _cx: &'new Block) -> &'new Cons<'new> {
         unsafe { std::mem::transmute::<&'brw Cons<'old>, &'new Cons<'new>>(self) }
     }
 }

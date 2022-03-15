@@ -1,4 +1,4 @@
-use crate::arena::{Allocation, Arena};
+use crate::arena::{Allocation, Block};
 use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
@@ -24,15 +24,15 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Function<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
-        let rf = arena.alloc_lisp_fn(self);
+    fn into_obj(self, block: &'ob Block) -> Function<'ob> {
+        let rf = block.alloc_lisp_fn(self);
         Function::LispFn(Data::from_ref(rf))
     }
 }
 
 impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
-    fn into_obj(self, arena: &'ob Arena) -> Function<'ob> {
-        let rf = arena.alloc_subr_fn(self);
+    fn into_obj(self, block: &'ob Block) -> Function<'ob> {
+        let rf = block.alloc_subr_fn(self);
         Function::SubrFn(Data::from_ref(rf))
     }
 }
@@ -86,14 +86,14 @@ pub(crate) enum FuncCell<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, FuncCell<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Arena) -> FuncCell<'ob> {
+    fn into_obj(self, arena: &'ob Block) -> FuncCell<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }
 }
 
 impl<'ob> IntoObject<'ob, FuncCell<'ob>> for SubrFn {
-    fn into_obj(self, arena: &'ob Arena) -> FuncCell<'ob> {
+    fn into_obj(self, arena: &'ob Block) -> FuncCell<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }
@@ -122,7 +122,7 @@ impl<'ob> From<FuncCell<'ob>> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for FuncCell<'ob> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, _arena: &'ob Block) -> Object<'ob> {
         self.into()
     }
 }
@@ -134,7 +134,7 @@ impl<'ob> From<&'static SubrFn> for FuncCell<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, _arena: &'ob Block) -> Object<'ob> {
         match self {
             Some(FuncCell::LispFn(x)) => Object::LispFn(x),
             Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
@@ -147,15 +147,15 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
 }
 
 impl<'a> FuncCell<'a> {
-    pub(crate) fn clone_in<'ob>(self, arena: &'ob Arena) -> Object<'ob> {
+    pub(crate) fn clone_in(self, bk: &Block) -> Object<'_> {
         match self {
-            FuncCell::LispFn(x) => x.clone_in(arena).into_obj(arena),
-            FuncCell::SubrFn(x) => x.into_obj(arena),
+            FuncCell::LispFn(x) => x.clone_in(bk).into_obj(bk),
+            FuncCell::SubrFn(x) => x.into_obj(bk),
             FuncCell::Macro(x) => {
                 let cons: Data<&Cons> = x.into();
-                cons.clone_in(arena).into_obj(arena)
+                cons.clone_in(bk).into_obj(bk)
             }
-            FuncCell::Uncompiled(x) => x.clone_in(arena).into_obj(arena),
+            FuncCell::Uncompiled(x) => x.clone_in(bk).into_obj(bk),
             FuncCell::Symbol(x) => (!x).into(),
         }
     }
@@ -210,14 +210,14 @@ impl<'ob> From<Number<'ob>> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Number<'ob>> for i64 {
-    fn into_obj(self, _arena: &'ob Arena) -> Number<'ob> {
+    fn into_obj(self, _arena: &'ob Block) -> Number<'ob> {
         self.into()
     }
 }
 
 impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
-    fn into_obj(self, arena: &'ob Arena) -> Number<'ob> {
-        let rf = arena.alloc_f64(self);
+    fn into_obj(self, block: &'ob Block) -> Number<'ob> {
+        let rf = block.alloc_f64(self);
         Number::Float(Data::from_ref(rf))
     }
 }
@@ -257,7 +257,7 @@ impl<'ob> Number<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
-    fn into_obj(self, arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => x.into_obj(arena),
@@ -281,7 +281,7 @@ impl<'ob> From<List<'ob>> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for List<'ob> {
-    fn into_obj(self, _arena: &'ob Arena) -> Object<'ob> {
+    fn into_obj(self, _arena: &'ob Block) -> Object<'ob> {
         self.into()
     }
 }
