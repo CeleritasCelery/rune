@@ -12,6 +12,7 @@ pub(crate) use iter::*;
 #[derive(PartialEq)]
 pub(crate) struct Cons<'ob> {
     mutable: bool,
+    marked: Cell<bool>,
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
 }
@@ -40,6 +41,7 @@ impl<'ob> Cons<'ob> {
     pub(crate) const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
         Self {
             mutable: true,
+            marked: Cell::new(false),
             car: Cell::new(car),
             cdr: Cell::new(cdr),
         }
