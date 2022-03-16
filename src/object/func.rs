@@ -83,14 +83,14 @@ impl<'ob> LispFn<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
-    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }
 }
 
 impl<'old, 'new> LispFn<'old> {
-    pub(crate) fn clone_in(&self, bk: &'new Block) -> LispFn<'new> {
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn<'new> {
         LispFn {
             body: Expression {
                 op_codes: self.body.op_codes.clone(),
@@ -179,7 +179,7 @@ impl PartialEq for SubrFn {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
-    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
     }

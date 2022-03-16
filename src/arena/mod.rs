@@ -4,22 +4,23 @@ use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
 use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
 
 mod root;
 pub(crate) use root::*;
 
 pub(crate) trait ConstrainLifetime<'new, T> {
-    fn constrain_lifetime(self, cx: &'new Block) -> T;
+    fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
 }
 
 impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
-    fn constrain_lifetime(self, _cx: &'new Block) -> Object<'new> {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> Object<'new> {
         unsafe { transmute::<Object<'old>, Object<'new>>(self) }
     }
 }
 
 impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
-    fn constrain_lifetime(self, _cx: &'new Block) -> &'brw [Object<'new>] {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [Object<'new>] {
         unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
     }
 }
@@ -73,14 +74,9 @@ pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
 }
 
-thread_local! {
-    pub(crate) static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
-}
-
 #[derive(Debug)]
-pub(crate) struct Block {
+pub(crate) struct Block<const CONST: bool> {
     objects: RefCell<Vec<OwnedObject<'static>>>,
-    is_const: bool,
 }
 
 /// Owns all allocations and creates objects. All objects have
@@ -90,7 +86,7 @@ pub(crate) struct Block {
 /// don't invalid objects.
 #[derive(Debug)]
 pub(crate) struct Arena<'rt> {
-    pub(crate) block: Block,
+    pub(crate) block: Block<false>,
     roots: &'rt RootSet,
 }
 
@@ -135,23 +131,52 @@ impl<'ob> OwnedObject<'ob> {
     }
 }
 
-impl Block {
-    pub(crate) fn new(is_const: bool) -> Self {
-        if !is_const {
-            SINGLETON_CHECK.with(|x| {
-                assert!(
-                    !x.get(),
-                    "There was already and active arena when this arena was created"
-                );
-                x.set(true);
-            });
-        }
+thread_local! {
+    static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
+}
+
+static GLOBAL_CHECK: AtomicBool = AtomicBool::new(false);
+
+impl Block<true> {
+    pub(crate) fn new_global() -> Self {
+        use std::sync::atomic::Ordering::Relaxed as Rel;
+        assert!(GLOBAL_CHECK.compare_exchange(false, true, Rel, Rel).is_ok());
         Self {
             objects: RefCell::new(Vec::new()),
-            is_const,
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_local() -> Self {
+        SINGLETON_CHECK.with(|x| {
+            assert!(
+                !x.get(),
+                "There was already and active arena when this arena was created"
+            );
+            x.set(true);
+        });
+        Self {
+            objects: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl Block<false> {
+    fn new_mut() -> Self {
+        SINGLETON_CHECK.with(|x| {
+            assert!(
+                !x.get(),
+                "There was already and active arena when this arena was created"
+            );
+            x.set(true);
+        });
+        Self {
+            objects: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl<const CONST: bool> Block<CONST> {
     pub(crate) fn add<'ob, Input>(&'ob self, item: Input) -> Object<'ob>
     where
         Input: IntoObject<'ob, Object<'ob>>,
@@ -177,7 +202,7 @@ impl Block {
     }
 
     pub(crate) fn alloc_cons<'ob>(&'ob self, mut obj: Cons<'ob>) -> &'ob Cons<'ob> {
-        if self.is_const {
+        if CONST {
             obj.make_const();
         }
         let mut objects = self.objects.borrow_mut();
@@ -208,7 +233,7 @@ impl Block {
     ) -> &'ob Allocation<RefCell<Vec<Object<'ob>>>> {
         let mut objects = self.objects.borrow_mut();
         let ref_cell = RefCell::new(obj);
-        if self.is_const {
+        if CONST {
             // Leak a borrow so that the vector cannot be borrowed mutably
             std::mem::forget(ref_cell.borrow());
         }
@@ -237,7 +262,7 @@ impl Block {
     }
 
     pub(crate) fn alloc_subr_fn(&self, obj: SubrFn) -> &SubrFn {
-        assert!(self.is_const, "Attempt to add subrFn to non-const arena");
+        assert!(CONST, "Attempt to add subrFn to non-const arena");
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));
         if let Some(OwnedObject::SubrFn(x)) = objects.last() {
@@ -251,7 +276,7 @@ impl Block {
 impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
         Arena {
-            block: Block::new(false),
+            block: Block::new_mut(),
             roots,
         }
     }
@@ -274,22 +299,22 @@ impl<'ob, 'rt> Arena<'rt> {
 }
 
 impl<'rt> Deref for Arena<'rt> {
-    type Target = Block;
+    type Target = Block<false>;
 
     fn deref(&self) -> &Self::Target {
         &self.block
     }
 }
 
-impl<'rt> AsRef<Block> for Arena<'rt> {
-    fn as_ref(&self) -> &Block {
+impl<'rt> AsRef<Block<false>> for Arena<'rt> {
+    fn as_ref(&self) -> &Block<false> {
         &self.block
     }
 }
 
-impl Drop for Block {
+impl<const CONST: bool> Drop for Block<CONST> {
     fn drop(&mut self) {
-        if !self.is_const {
+        if !CONST {
             SINGLETON_CHECK.with(|s| {
                 debug_assert!(s.get(), "Arena singleton check was overwritten");
                 s.set(false);

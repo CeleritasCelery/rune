@@ -113,7 +113,7 @@ impl fmt::Display for GlobalSymbol {
 
 pub(crate) struct ObjectMap {
     map: SymbolMap,
-    block: Block,
+    block: Block<true>,
 }
 
 /// Box needs to follow rust's aliasing rules (references can't outlive the borrow).
@@ -246,7 +246,7 @@ macro_rules! create_symbolmap {
                 }
                 ObjectMap {
                     map,
-                    block: Block::new(true),
+                    block: Block::new_global(),
                 }
             });
         }
@@ -376,13 +376,13 @@ mod test {
 
     #[test]
     fn subr() {
-        let arena = &Block::new(true);
+        let bk = &Block::new_local();
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };
         let core_func = crate::object::new_subr("bar", dummy, 0, 0, false);
         unsafe {
-            sym.set_func(core_func.into_obj(arena));
+            sym.set_func(core_func.into_obj(bk));
         }
 
         if let Some(FuncCell::SubrFn(subr)) = sym.func() {

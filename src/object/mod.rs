@@ -105,23 +105,23 @@ impl<'ob> PartialEq<i64> for Object<'ob> {
 }
 
 pub(crate) trait IntoObject<'ob, T> {
-    fn into_obj(self, block: &'ob Block) -> T;
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> T;
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for Object<'old> {
-    fn into_obj(self, block: &'new Block) -> Object<'new> {
+    fn into_obj<const C: bool>(self, block: &'new Block<C>) -> Object<'new> {
         self.constrain_lifetime(block)
     }
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for &Object<'old> {
-    fn into_obj(self, gc: &'new Block) -> Object<'new> {
+    fn into_obj<const C: bool>(self, gc: &'new Block<C>) -> Object<'new> {
         self.constrain_lifetime(gc)
     }
 }
 
 impl<'old, 'new> IntoObject<'new, Object<'new>> for Option<Object<'old>> {
-    fn into_obj(self, gc: &'new Block) -> Object<'new> {
+    fn into_obj<const C: bool>(self, gc: &'new Block<C>) -> Object<'new> {
         match self {
             Some(x) => x.constrain_lifetime(gc),
             None => Object::NIL,
@@ -129,13 +129,16 @@ impl<'old, 'new> IntoObject<'new, Object<'new>> for Option<Object<'old>> {
     }
 }
 
-fn vec_clone_in<'old, 'new>(vec: &[Object<'old>], bk: &'new Block) -> Vec<Object<'new>> {
+fn vec_clone_in<'old, 'new, const C: bool>(
+    vec: &[Object<'old>],
+    bk: &'new Block<C>,
+) -> Vec<Object<'new>> {
     vec.iter().map(|x| x.clone_in(bk)).collect()
 }
 
 impl<'old, 'new> Object<'old> {
     /// Clone object in a new arena
-    pub(crate) fn clone_in(self, bk: &'new Block) -> Object<'new> {
+    pub(crate) fn clone_in<const C: bool>(self, bk: &'new Block<C>) -> Object<'new> {
         // TODO: Handle pointers to the same object
         match self {
             Object::Int(x) => (!x).into(),
@@ -365,7 +368,7 @@ mod test {
 
     #[test]
     fn mutability() {
-        let bk = &Block::new(true);
+        let bk = &Block::new_local();
         let inner_cons = Cons::new(1.into(), 4.into());
         let vec = vec_into_object![inner_cons, 2, 3, 4; bk];
         let obj = Cons::new(1.into(), bk.add(vec)).into_obj(bk);

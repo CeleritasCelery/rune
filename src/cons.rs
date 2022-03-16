@@ -29,7 +29,7 @@ impl Display for ConstConsError {
 impl std::error::Error for ConstConsError {}
 
 impl<'old, 'new> Cons<'old> {
-    pub(crate) fn clone_in(&self, bk: &'new Block) -> Cons<'new> {
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Cons<'new> {
         Cons::new(self.car.get().clone_in(bk), self.cdr.get().clone_in(bk))
     }
 }
@@ -44,7 +44,7 @@ impl<'ob> Cons<'ob> {
         }
     }
 
-    pub(crate) fn car<'new>(&self, cx: &'new Block) -> Object<'new> {
+    pub(crate) fn car<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
         self.car.get().constrain_lifetime(cx)
     }
 
@@ -52,7 +52,7 @@ impl<'ob> Cons<'ob> {
         std::mem::transmute::<Object<'ob>, Object<'new>>(self.car.get())
     }
 
-    pub(crate) fn cdr<'new>(&self, cx: &'new Block) -> Object<'new> {
+    pub(crate) fn cdr<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
         self.cdr.get().constrain_lifetime(cx)
     }
 
@@ -84,7 +84,7 @@ impl<'ob> Cons<'ob> {
 }
 
 impl<'brw, 'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'brw Cons<'old> {
-    fn constrain_lifetime(self, _cx: &'new Block) -> &'new Cons<'new> {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'new Cons<'new> {
         unsafe { std::mem::transmute::<&'brw Cons<'old>, &'new Cons<'new>>(self) }
     }
 }

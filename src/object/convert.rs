@@ -193,7 +193,7 @@ impl<'ob> From<i64> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
-    fn into_obj(self, _arena: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
         self.into()
     }
 }
@@ -201,7 +201,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
 define_unbox!(Float, &'ob f64);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
-    fn into_obj(self, arena: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
         let obj: Number = self.into_obj(arena);
         obj.into()
     }
@@ -218,13 +218,13 @@ impl<'ob> From<bool> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
-    fn into_obj(self, _: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Object<'ob> {
         self.into()
     }
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
-    fn into_obj(self, block: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
         let rf = block.alloc_string(self.to_owned());
         Object::String(Data::from_ref(rf))
     }
@@ -234,7 +234,7 @@ define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for String {
-    fn into_obj(self, block: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
         let rf = block.alloc_string(self);
         Object::String(Data::from_ref(rf))
     }
@@ -243,7 +243,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for String {
 define_unbox!(Vec, &'ob RefCell<Vec<Object<'ob>>>);
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
-    fn into_obj(self, block: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
         let rf = block.alloc_vec(self);
         Object::Vec(Data::from_ref(rf))
     }
@@ -258,13 +258,13 @@ impl<'ob> From<Symbol> for Object<'ob> {
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
-    fn into_obj(self, _arena: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
         self.into()
     }
 }
 
 impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
-    fn into_obj(self, block: &'ob Block) -> Object<'ob> {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
         let rf = block.alloc_cons(self);
         Object::Cons(Data::from_ref(rf))
     }
