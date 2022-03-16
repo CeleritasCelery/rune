@@ -376,7 +376,7 @@ mod test {
 
     #[test]
     fn subr() {
-        let bk = &Block::new_local();
+        let bk: &Block<true> = &Block::new_local();
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };

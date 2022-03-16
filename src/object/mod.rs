@@ -368,7 +368,7 @@ mod test {
 
     #[test]
     fn mutability() {
-        let bk = &Block::new_local();
+        let bk: &Block<true> = &Block::new_local();
         let inner_cons = Cons::new(1.into(), 4.into());
         let vec = vec_into_object![inner_cons, 2, 3, 4; bk];
         let obj = Cons::new(1.into(), bk.add(vec)).into_obj(bk);

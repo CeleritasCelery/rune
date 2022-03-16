@@ -145,8 +145,9 @@ impl Block<true> {
             objects: RefCell::new(Vec::new()),
         }
     }
+}
 
-    #[cfg(test)]
+impl<const CONST: bool> Block<CONST> {
     pub(crate) fn new_local() -> Self {
         SINGLETON_CHECK.with(|x| {
             assert!(
@@ -159,24 +160,7 @@ impl Block<true> {
             objects: RefCell::new(Vec::new()),
         }
     }
-}
 
-impl Block<false> {
-    fn new_mut() -> Self {
-        SINGLETON_CHECK.with(|x| {
-            assert!(
-                !x.get(),
-                "There was already and active arena when this arena was created"
-            );
-            x.set(true);
-        });
-        Self {
-            objects: RefCell::new(Vec::new()),
-        }
-    }
-}
-
-impl<const CONST: bool> Block<CONST> {
     pub(crate) fn add<'ob, Input>(&'ob self, item: Input) -> Object<'ob>
     where
         Input: IntoObject<'ob, Object<'ob>>,
@@ -276,7 +260,7 @@ impl<const CONST: bool> Block<CONST> {
 impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
         Arena {
-            block: Block::new_mut(),
+            block: Block::new_local(),
             roots,
         }
     }
@@ -314,12 +298,10 @@ impl<'rt> AsRef<Block<false>> for Arena<'rt> {
 
 impl<const CONST: bool> Drop for Block<CONST> {
     fn drop(&mut self) {
-        if !CONST {
-            SINGLETON_CHECK.with(|s| {
-                debug_assert!(s.get(), "Arena singleton check was overwritten");
-                s.set(false);
-            });
-        }
+        SINGLETON_CHECK.with(|s| {
+            assert!(s.get(), "Arena singleton check was overwritten");
+            s.set(false);
+        });
     }
 }
 
