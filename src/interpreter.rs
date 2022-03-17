@@ -246,11 +246,16 @@ impl<'brw> Interpreter<'brw> {
         obj: Object<'a>,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
-        let func = match name.resolve_callable() {
+        let resolved = match name.resolve_callable(gc) {
             Some(x) => x,
             None => bail!("Invalid function: {name}"),
         };
-        match func {
+
+        let tmp: Object = resolved.into();
+        root!(tmp, gc); // Root callable
+        let callable: Callable = tmp.try_into().unwrap();
+
+        match callable {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
                 element_iter!(iter, obj);
@@ -264,38 +269,51 @@ impl<'brw> Interpreter<'brw> {
                 }
                 (*func).call(&mut args, self.env, gc)
             }
-            Callable::Macro(mcro) => {
-                let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
-                if crate::debug::debug_enabled() {
-                    println!("(macro: {name} {macro_args:?})");
+            Callable::Cons(form) => {
+                match form.try_as_macro(gc) {
+                    Ok(mcro) => {
+                        let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
+                        if crate::debug::debug_enabled() {
+                            println!("(macro: {name} {macro_args:?})");
+                        }
+                        let args = unsafe { &mut Gc::new(macro_args.into_root()) };
+                        let macro_func: Function = mcro.try_into().unwrap();
+                        let tmp: Object = macro_func.into();
+                        root!(tmp, gc); // Root callable
+                        let func: Function = tmp.try_into().unwrap();
+                        let value = func.call(args, self.env, gc)?;
+                        rebind!(value, gc);
+                        root!(value, gc);
+                        self.eval_form(value, gc)
+                    }
+                    Err(_) => {
+                        let tmp = Object::Cons(form);
+                        root!(tmp, gc); // Root callable
+                        match form.car(gc) {
+                            Object::Symbol(sym) if !sym == &sym::CLOSURE => {
+                                element_iter!(iter, obj);
+                                let mut args = unsafe { Gc::new(Vec::new()) };
+                                while let Some(x) = iter.next() {
+                                    let result = self.eval_form(x.obj(), gc)?;
+                                    args.push(result);
+                                }
+                                if crate::debug::debug_enabled() {
+                                    println!("({name} {args:?})");
+                                }
+                                if crate::debug::debug_enabled() {
+                                    println!("({name} {args:?})");
+                                }
+                                if let Object::Cons(closure) = tmp {
+                                    self.call_closure(!closure, &mut args, gc)
+                                } else {
+                                    unreachable!();
+                                }
+                            }
+                            other => Err(anyhow!("Invalid Function: {other}")),
+                        }
+                    }
                 }
-                let args = unsafe { &mut Gc::new(macro_args.into_root()) };
-                let macro_obj: Object = mcro.get(gc).into();
-                root!(macro_obj, gc);
-                let macro_func: Function = macro_obj.try_into().unwrap();
-                let value = macro_func.call(args, self.env, gc)?;
-                rebind!(value, gc);
-                root!(value, gc);
-                self.eval_form(value, gc)
             }
-            Callable::Uncompiled(form) => match form.car(gc) {
-                Object::Symbol(sym) if !sym == &sym::CLOSURE => {
-                    element_iter!(iter, obj);
-                    let mut args = unsafe { Gc::new(Vec::new()) };
-                    while let Some(x) = iter.next() {
-                        let result = self.eval_form(x.obj(), gc)?;
-                        args.push(result);
-                    }
-                    if crate::debug::debug_enabled() {
-                        println!("({name} {args:?})");
-                    }
-                    if crate::debug::debug_enabled() {
-                        println!("({name} {args:?})");
-                    }
-                    self.call_closure(!form, &mut args, gc)
-                }
-                other => Err(anyhow!("Invalid Function: {other}")),
-            },
         }
     }
     fn eval_function<'a>(&mut self, obj: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {

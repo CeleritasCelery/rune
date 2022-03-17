@@ -120,8 +120,8 @@ pub(crate) fn equal<'ob>(obj1: Object<'ob>, obj2: Object<'ob>) -> bool {
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol) -> Object<'ob> {
-    match symbol.func() {
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> Object<'ob> {
+    match symbol.func(gc) {
         Some(f) => f.into(),
         None => Object::NIL,
     }
@@ -246,9 +246,9 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function(object: Object) -> Object {
+pub(crate) fn indirect_function<'ob>(object: Object<'ob>, gc: &'ob Arena) -> Object<'ob> {
     match object {
-        Object::Symbol(sym) => match sym.resolve_callable() {
+        Object::Symbol(sym) => match sym.resolve_callable(gc) {
             Some(func) => func.into(),
             None => Object::NIL,
         },

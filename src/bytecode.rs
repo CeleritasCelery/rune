@@ -1,6 +1,4 @@
 //! The main bytecode interpeter.
-#![allow(dead_code)]
-
 use crate::arena::Arena;
 use crate::compile::compile;
 use crate::data::Environment;
@@ -217,7 +215,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 Callable::LispFn(func) => self.call_lisp(!func, arg_cnt, arena),
                 Callable::SubrFn(func) => self.call_subr(*func, arg_cnt, env, arena),
                 Callable::Macro(_) => Err(anyhow!("Attempt to call macro {} at runtime", sym.name)),
-                Callable::Uncompiled(x) => {
+                Callable::Cons(x) => {
                     let value = crate::interpreter::call(
                         Object::Cons(x),
                         self.stack.take_slice(arg_cnt.into()).to_vec(),

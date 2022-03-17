@@ -2,9 +2,10 @@ use crate::arena::{Arena, Gc, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::object::{Function, List, Object};
+use crate::object::{Callable, Function, List, Object};
 use crate::symbol::Symbol;
-use crate::{data, element_iter};
+use crate::{data, element_iter, root};
+use anyhow::anyhow;
 use anyhow::{bail, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -30,10 +31,38 @@ impl<'ob> Function<'ob> {
         env: &mut Gc<Environment>,
         arena: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
+        use crate::interpreter;
         match self {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f).call(args, env, arena),
-            Function::Uncompiled(f) => crate::interpreter::call(Object::Cons(f), args, env, arena),
+            Function::Uncompiled(f) => interpreter::call(Object::Cons(f), args, env, arena),
+            Function::Symbol(s) => {
+                if let Some(resolved) = s.resolve_callable(arena) {
+                    let tmp: Object = resolved.into();
+                    root!(tmp, arena); // root callable
+                    let callable: Callable = tmp.try_into().unwrap();
+                    match callable {
+                        Callable::LispFn(_) => todo!("call lisp functions"),
+                        Callable::SubrFn(f) => (*f).call(args, env, arena),
+                        Callable::Cons(cons) => {
+                            match cons.try_as_macro(arena) {
+                                Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
+                                Err(_) => {
+                                    let tmp: Object = Object::Cons(cons);
+                                    root!(tmp, arena); // root callable
+                                    if let Object::Cons(func) = tmp {
+                                        interpreter::call(Object::Cons(func), args, env, arena)
+                                    } else {
+                                        unreachable!();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Err(anyhow!("Void Function: {}", s))
+                }
+            }
         }
     }
 }

@@ -48,16 +48,8 @@ impl<'ob> Cons<'ob> {
         self.car.get().constrain_lifetime(cx)
     }
 
-    pub(crate) unsafe fn car_unchecked<'new>(&self) -> Object<'new> {
-        std::mem::transmute::<Object<'ob>, Object<'new>>(self.car.get())
-    }
-
     pub(crate) fn cdr<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
         self.cdr.get().constrain_lifetime(cx)
-    }
-
-    pub(crate) unsafe fn cdr_unchecked<'new>(&self) -> Object<'new> {
-        std::mem::transmute::<Object<'ob>, Object<'new>>(self.cdr.get())
     }
 
     pub(crate) fn set_car(&self, new_car: Object<'ob>) -> Result<()> {

@@ -31,6 +31,7 @@
     clippy::similar_names,
     clippy::shadow_reuse,
     clippy::shadow_same,
+    clippy::shadow_unrelated,
     clippy::missing_docs_in_private_items,
     clippy::needless_pass_by_value,
     clippy::implicit_return,

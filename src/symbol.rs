@@ -1,13 +1,11 @@
-use crate::arena::Block;
+use crate::arena::{Arena, Block};
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Function, Object};
+use crate::object::{Callable, FuncCell, Object};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
-
-use anyhow::{anyhow, Result};
 
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
@@ -60,7 +58,7 @@ impl GlobalSymbol {
         self.func.load(Ordering::Acquire) != 0
     }
 
-    pub(crate) fn func<'a>(&self) -> Option<FuncCell<'a>> {
+    pub(crate) fn func<'a, const C: bool>(&self, _gc: &'a Block<C>) -> Option<FuncCell<'a>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             x => Some(unsafe { std::mem::transmute(x) }),
@@ -68,24 +66,12 @@ impl GlobalSymbol {
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_func<'ob>(&self) -> Result<Option<Function<'ob>>> {
-        match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.resolve_func(),
-            Some(FuncCell::LispFn(x)) => Ok(Some(Function::LispFn(x))),
-            Some(FuncCell::SubrFn(x)) => Ok(Some(Function::SubrFn(x))),
-            Some(FuncCell::Macro(_)) => Err(anyhow!("Macro's are invalid as functions")),
-            Some(FuncCell::Uncompiled(x)) => Ok(Some(Function::Uncompiled(x))),
-            None => Ok(None),
-        }
-    }
-    /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_callable<'ob>(&self) -> Option<Callable<'ob>> {
-        match self.func() {
-            Some(FuncCell::Symbol(sym)) => sym.resolve_callable(),
+    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Callable<'ob>> {
+        match self.func(gc) {
+            Some(FuncCell::Symbol(sym)) => sym.resolve_callable(gc),
             Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
             Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
-            Some(FuncCell::Macro(x)) => Some(Callable::Macro(x)),
-            Some(FuncCell::Uncompiled(obj)) => Some(Callable::Uncompiled(obj)),
+            Some(FuncCell::Cons(obj)) => Some(Callable::Cons(obj)),
             None => None,
         }
     }
@@ -321,6 +307,7 @@ mod test {
     use crate::arena::{Arena, Gc, RootSet};
     use crate::data::Environment;
     use crate::object::{IntoObject, LispFn, Object};
+    use anyhow::Result;
     use std::mem::size_of;
 
     #[test]
@@ -337,16 +324,16 @@ mod test {
     #[test]
     fn symbol_func() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let gc = &Arena::new(roots);
         let inner = GlobalSymbol::new("foo");
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
-        assert!(sym.func().is_none());
+        assert!(sym.func(gc).is_none());
         let func1 = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func1.into_obj(arena));
+            sym.set_func(func1.into_obj(gc));
         }
-        let cell1 = sym.func().unwrap();
+        let cell1 = sym.func(gc).unwrap();
         let before = match cell1 {
             FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
@@ -354,9 +341,9 @@ mod test {
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
         let func2 = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func2.into_obj(arena));
+            sym.set_func(func2.into_obj(gc));
         }
-        let cell2 = sym.func().unwrap();
+        let cell2 = sym.func(gc).unwrap();
         let after = match cell2 {
             FuncCell::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
@@ -385,7 +372,7 @@ mod test {
             sym.set_func(core_func.into_obj(bk));
         }
 
-        if let Some(FuncCell::SubrFn(subr)) = sym.func() {
+        if let Some(FuncCell::SubrFn(subr)) = sym.func(bk) {
             assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

@@ -4,12 +4,12 @@
 
 use std::cell::RefCell;
 
-use crate::arena::Block;
+use crate::arena::{Arena, Block};
 use crate::cons::Cons;
 use crate::error::{Error, Type};
 use crate::object::{FuncCell, Function, IntoObject, List, Number, Object};
-use crate::symbol::Symbol;
-use anyhow::{anyhow, Context};
+use crate::symbol::{sym, Symbol};
+use anyhow::Context;
 
 use super::{Bits, Callable, Data, IntOrMarker};
 
@@ -20,10 +20,19 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
             Object::Cons(x) => Ok(Function::Uncompiled(x)),
-            Object::Symbol(sym) => match sym.resolve_func()? {
-                Some(x) => Ok(x),
-                None => Err(anyhow!("Void Function: {}", sym)),
-            },
+            Object::Symbol(x) => Ok(Function::Symbol(x)),
+            x => Err(Error::from_object(Type::Func, x).into()),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
+    type Error = anyhow::Error;
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj {
+            Object::LispFn(x) => Ok(Callable::LispFn(x)),
+            Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
+            Object::Cons(x) => Ok(Callable::Cons(x)),
             x => Err(Error::from_object(Type::Func, x).into()),
         }
     }
@@ -35,17 +44,19 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
         match obj {
             Callable::LispFn(x) => Ok(Function::LispFn(x)),
             Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Callable::Macro(_) => Err(anyhow!("Macros are invalid as functions")),
-            Callable::Uncompiled(x) => Ok(Function::Uncompiled(x)),
+            Callable::Cons(x) => Ok(Function::Uncompiled(x)),
         }
     }
 }
 
-impl<'ob> From<&'ob Cons<'ob>> for FuncCell<'ob> {
-    fn from(cons: &'ob Cons<'ob>) -> Self {
-        match cons.try_into() {
-            Ok(x) => FuncCell::Macro(Data::from_ref(x)),
-            Err(_) => FuncCell::Uncompiled(Data::from_ref(cons)),
+impl<'ob> Cons<'ob> {
+    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Callable<'ob>> {
+        match self.car(gc) {
+            Object::Symbol(sym) if !sym == &sym::MACRO => {
+                let cdr = self.cdr(gc);
+                cdr.try_into()
+            }
+            x => Err(Error::from_object(Type::Symbol, x).into()),
         }
     }
 }
@@ -57,7 +68,7 @@ impl<'ob> TryFrom<Object<'ob>> for FuncCell<'ob> {
             Object::LispFn(x) => Ok(FuncCell::LispFn(x)),
             Object::SubrFn(x) => Ok(FuncCell::SubrFn(x)),
             Object::Symbol(x) => Ok(FuncCell::Symbol(x)),
-            Object::Cons(cons) => Ok((!cons).into()),
+            Object::Cons(x) => Ok(FuncCell::Cons(x)),
             _ => Err(Error::from_object(Type::Func, obj)),
         }
     }

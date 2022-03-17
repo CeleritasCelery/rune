@@ -3,7 +3,7 @@ use crate::cons::Cons;
 use crate::object::{Data, IntoObject, LispFn, Object, SubrFn};
 use crate::symbol::Symbol;
 
-use super::{Bits, Macro};
+use super::Bits;
 
 #[repr(align(8))]
 #[derive(Copy, Clone, Debug)]
@@ -11,6 +11,7 @@ pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
     Uncompiled(Data<&'ob Cons<'ob>>),
+    Symbol(Data<Symbol>),
 }
 
 impl<'ob> From<Function<'ob>> for Object<'ob> {
@@ -19,6 +20,7 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
             Function::LispFn(x) => Object::LispFn(x),
             Function::SubrFn(x) => Object::SubrFn(x),
             Function::Uncompiled(x) => Object::Cons(x),
+            Function::Symbol(x) => Object::Symbol(x),
         }
     }
 }
@@ -37,8 +39,22 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
+#[repr(align(8))]
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum FuncCell<'ob> {
+    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
+    SubrFn(Data<&'ob SubrFn>),
+    Cons(Data<&'ob Cons<'ob>>),
+    Symbol(Data<Symbol>),
+}
+
+#[cfg(miri)]
+extern "Rust" {
+    fn miri_static_root(ptr: *const u8);
+}
+
+#[cfg(miri)]
 impl<'ob> FuncCell<'ob> {
-    #[cfg(miri)]
     pub(crate) fn set_as_miri_root(self) {
         match self {
             FuncCell::LispFn(x) => {
@@ -53,13 +69,7 @@ impl<'ob> FuncCell<'ob> {
                     miri_static_root(ptr as _);
                 }
             }
-            FuncCell::Macro(x) => {
-                let ptr: *const _ = &x;
-                unsafe {
-                    miri_static_root(ptr as _);
-                }
-            }
-            FuncCell::Uncompiled(x) => {
+            FuncCell::Cons(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
@@ -68,21 +78,6 @@ impl<'ob> FuncCell<'ob> {
             FuncCell::Symbol(_) => {}
         }
     }
-}
-
-#[cfg(miri)]
-extern "Rust" {
-    fn miri_static_root(ptr: *const u8);
-}
-
-#[repr(align(8))]
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum FuncCell<'ob> {
-    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'ob SubrFn>),
-    Macro(Data<&'ob Macro<'ob>>),
-    Uncompiled(Data<&'ob Cons<'ob>>),
-    Symbol(Data<Symbol>),
 }
 
 impl<'ob> IntoObject<'ob, FuncCell<'ob>> for LispFn<'ob> {
@@ -104,7 +99,8 @@ impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
         match x {
             Function::LispFn(x) => FuncCell::LispFn(x),
             Function::SubrFn(x) => FuncCell::SubrFn(x),
-            Function::Uncompiled(x) => FuncCell::Uncompiled(x),
+            Function::Uncompiled(x) => FuncCell::Cons(x),
+            Function::Symbol(x) => FuncCell::Symbol(x),
         }
     }
 }
@@ -114,8 +110,7 @@ impl<'ob> From<FuncCell<'ob>> for Object<'ob> {
         match x {
             FuncCell::LispFn(x) => Object::LispFn(x),
             FuncCell::SubrFn(x) => Object::SubrFn(x),
-            FuncCell::Macro(x) => Object::Cons(x.into()),
-            FuncCell::Uncompiled(x) => Object::Cons(x),
+            FuncCell::Cons(x) => Object::Cons(x),
             FuncCell::Symbol(x) => Object::Symbol(x),
         }
     }
@@ -138,8 +133,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
         match self {
             Some(FuncCell::LispFn(x)) => Object::LispFn(x),
             Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
-            Some(FuncCell::Macro(x)) => Object::Cons(x.into()),
-            Some(FuncCell::Uncompiled(x)) => Object::Cons(x),
+            Some(FuncCell::Cons(x)) => Object::Cons(x),
             Some(FuncCell::Symbol(x)) => Object::Symbol(x),
             None => Object::NIL,
         }
@@ -151,11 +145,7 @@ impl<'a> FuncCell<'a> {
         match self {
             FuncCell::LispFn(x) => x.clone_in(bk).into_obj(bk),
             FuncCell::SubrFn(x) => x.into_obj(bk),
-            FuncCell::Macro(x) => {
-                let cons: Data<&Cons> = x.into();
-                cons.clone_in(bk).into_obj(bk)
-            }
-            FuncCell::Uncompiled(x) => x.clone_in(bk).into_obj(bk),
+            FuncCell::Cons(x) => x.clone_in(bk).into_obj(bk),
             FuncCell::Symbol(x) => (!x).into(),
         }
     }
@@ -166,8 +156,7 @@ impl<'a> FuncCell<'a> {
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'ob SubrFn>),
-    Macro(Data<&'ob Macro<'ob>>),
-    Uncompiled(Data<&'ob Cons<'ob>>),
+    Cons(Data<&'ob Cons<'ob>>),
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -175,8 +164,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
         match x {
             Callable::LispFn(x) => Object::LispFn(x),
             Callable::SubrFn(x) => Object::SubrFn(x),
-            Callable::Macro(x) => Object::Cons(x.into()),
-            Callable::Uncompiled(x) => Object::Cons(x),
+            Callable::Cons(x) => Object::Cons(x),
         }
     }
 }

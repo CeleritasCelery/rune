@@ -1,15 +1,11 @@
 use crate::arena::{Arena, Block, Gc, RootObj};
-use crate::cons::Cons;
-use crate::error::{Error, Type};
+use crate::error::Error;
 use crate::object::{Function, IntoObject, Object};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
-use crate::symbol::sym;
 use std::fmt;
 
 use anyhow::{bail, Result};
-
-use super::data::Data;
 
 /// Argument requirments to a function.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -182,48 +178,6 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
     fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
         let x: Function = self.into_obj(arena);
         x.into()
-    }
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub(crate) struct Macro<'ob>(Cons<'ob>);
-
-impl<'ob> Macro<'ob> {
-    pub(crate) fn get(&self, arena: &'ob Arena) -> Function<'ob> {
-        match self.0.cdr(arena).try_into() {
-            Ok(f) => f,
-            Err(_) => unreachable!("Macro should only contain a valid function"),
-        }
-    }
-}
-
-impl<'ob> TryFrom<&Cons<'ob>> for &Macro<'ob> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Cons<'ob>) -> Result<Self, Self::Error> {
-        unsafe {
-            match value.car_unchecked() {
-                Object::Symbol(sym) if !sym == &sym::MACRO => {
-                    let _: Function = value.cdr_unchecked().try_into()?;
-                    let ptr: *const Cons = value;
-                    Ok(&*ptr.cast::<Macro>())
-                }
-                x => Err(Error::from_object(Type::Symbol, x).into()),
-            }
-        }
-    }
-}
-
-impl<'ob> AsRef<Cons<'ob>> for Macro<'ob> {
-    fn as_ref(&self) -> &Cons<'ob> {
-        &self.0
-    }
-}
-
-impl<'a, 'ob> From<Data<&'a Macro<'ob>>> for Data<&'a Cons<'ob>> {
-    fn from(x: Data<&Macro<'ob>>) -> Data<&'a Cons<'ob>> {
-        unsafe { std::mem::transmute::<Data<&Macro>, Data<&Cons>>(x) }
     }
 }
 

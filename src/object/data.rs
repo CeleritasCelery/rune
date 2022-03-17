@@ -6,7 +6,7 @@ use crate::arena::Allocation;
 use crate::cons::Cons;
 use crate::symbol::Symbol;
 
-use super::{Macro, SubrFn};
+use super::SubrFn;
 
 /// The inner data type that hold the value for an object variant. This type
 /// should be no larger then 56 bits. The lowest bit of data is used to encode
@@ -108,15 +108,6 @@ impl Inner for Data<Symbol> {
 
 impl<'a> Inner for Data<&'a Cons<'a>> {
     type Target = &'a Cons<'a>;
-    #[inline(always)]
-    fn inner(self) -> Self::Target {
-        let ptr = self.into_raw() as *const _;
-        unsafe { &*ptr }
-    }
-}
-
-impl<'a> Inner for Data<&'a Macro<'a>> {
-    type Target = &'a Macro<'a>;
     #[inline(always)]
     fn inner(self) -> Self::Target {
         let ptr = self.into_raw() as *const _;
