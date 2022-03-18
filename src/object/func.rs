@@ -115,7 +115,6 @@ pub(crate) type BuiltInFn = for<'ob> fn(
     &'ob mut Arena,
 ) -> Result<Object<'ob>>;
 
-#[derive(Copy, Clone)]
 pub(crate) struct SubrFn {
     pub(crate) subr: BuiltInFn,
     pub(crate) args: FnArgs,

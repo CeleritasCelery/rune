@@ -245,7 +245,7 @@ impl<const CONST: bool> Block<CONST> {
         }
     }
 
-    pub(crate) fn alloc_subr_fn(&self, obj: SubrFn) -> &SubrFn {
+    pub(crate) fn alloc_subr_fn(&self, obj: SubrFn) -> &'static SubrFn {
         assert!(CONST, "Attempt to add subrFn to non-const arena");
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::SubrFn(Box::new(obj)));

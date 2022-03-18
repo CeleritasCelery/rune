@@ -9,7 +9,7 @@ use super::Bits;
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'ob SubrFn>),
+    SubrFn(Data<&'static SubrFn>),
     Uncompiled(Data<&'ob Cons<'ob>>),
     Symbol(Data<Symbol>),
 }
@@ -43,7 +43,7 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum FuncCell<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'ob SubrFn>),
+    SubrFn(Data<&'static SubrFn>),
     Cons(Data<&'ob Cons<'ob>>),
     Symbol(Data<Symbol>),
 }
@@ -94,6 +94,13 @@ impl<'ob> IntoObject<'ob, FuncCell<'ob>> for SubrFn {
     }
 }
 
+impl<'ob> IntoObject<'ob, FuncCell<'ob>> for Cons<'ob> {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> FuncCell<'ob> {
+        let rf = block.alloc_cons(self);
+        FuncCell::Cons(Data::from_ref(rf))
+    }
+}
+
 impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
     fn from(x: Function<'ob>) -> Self {
         match x {
@@ -141,12 +148,13 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
 }
 
 impl<'a> FuncCell<'a> {
-    pub(crate) fn clone_in<const C: bool>(self, bk: &Block<C>) -> Object<'_> {
+    pub(crate) fn clone_in<'ob, const C: bool>(self, bk: &'ob Block<C>) -> FuncCell<'ob> {
         match self {
+            // TODO: once gc is implemented change this to not copy the lispfn
             FuncCell::LispFn(x) => x.clone_in(bk).into_obj(bk),
-            FuncCell::SubrFn(x) => x.into_obj(bk),
+            FuncCell::SubrFn(x) => FuncCell::SubrFn(x),
             FuncCell::Cons(x) => x.clone_in(bk).into_obj(bk),
-            FuncCell::Symbol(x) => (!x).into(),
+            FuncCell::Symbol(x) => FuncCell::Symbol(x),
         }
     }
 }
@@ -155,7 +163,7 @@ impl<'a> FuncCell<'a> {
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'ob SubrFn>),
+    SubrFn(Data<&'static SubrFn>),
     Cons(Data<&'ob Cons<'ob>>),
 }
 

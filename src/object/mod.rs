@@ -38,7 +38,7 @@ pub(crate) enum Object<'ob> {
     Vec(Data<&'ob Allocation<RefCell<Vec<Object<'ob>>>>>),
     String(Data<&'ob Allocation<String>>),
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'ob SubrFn>),
+    SubrFn(Data<&'static SubrFn>),
 }
 
 #[repr(transparent)]
@@ -144,9 +144,9 @@ impl<'old, 'new> Object<'old> {
             Object::Int(x) => (!x).into(),
             Object::Cons(x) => x.clone_in(bk).into_obj(bk),
             Object::String(x) => (!x).clone().into_obj(bk),
-            Object::Symbol(x) => x.inner().into(),
+            Object::Symbol(x) => Object::Symbol(x),
             Object::LispFn(x) => x.clone_in(bk).into_obj(bk),
-            Object::SubrFn(x) => (*x).into_obj(bk),
+            Object::SubrFn(x) => Object::SubrFn(x),
             Object::True(_) => Object::TRUE,
             Object::Nil(_) => Object::NIL,
             Object::Float(x) => x.into_obj(bk),

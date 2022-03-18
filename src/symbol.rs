@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Block};
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell, Object};
+use crate::object::{Callable, FuncCell};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -58,11 +58,15 @@ impl GlobalSymbol {
         self.func.load(Ordering::Acquire) != 0
     }
 
-    pub(crate) fn func<'a, const C: bool>(&self, _gc: &'a Block<C>) -> Option<FuncCell<'a>> {
+    fn get(&'_ self) -> Option<FuncCell<'_>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             x => Some(unsafe { std::mem::transmute(x) }),
         }
+    }
+
+    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<FuncCell<'a>> {
+        self.get().map(|x| x.clone_in(gc))
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
@@ -186,8 +190,7 @@ impl ObjectMap {
 
     #[allow(clippy::unused_self)]
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
-        let obj: Object = func.clone_in(&self.block);
-        let new_func: FuncCell = obj.try_into().expect("return type was not type we put in");
+        let new_func = func.clone_in(&self.block);
         #[cfg(miri)]
         new_func.set_as_miri_root();
         // SAFETY: The object is marked read-only and we have cloned
@@ -372,7 +375,7 @@ mod test {
             sym.set_func(core_func.into_obj(bk));
         }
 
-        if let Some(FuncCell::SubrFn(subr)) = sym.func(bk) {
+        if let Some(FuncCell::SubrFn(subr)) = sym.get() {
             assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");
