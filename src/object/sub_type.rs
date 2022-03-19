@@ -148,7 +148,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
 }
 
 impl<'a> FuncCell<'a> {
-    pub(crate) fn clone_in<'ob, const C: bool>(self, bk: &'ob Block<C>) -> FuncCell<'ob> {
+    pub(crate) fn clone_in<const C: bool>(self, bk: &Block<C>) -> FuncCell {
         match self {
             // TODO: once gc is implemented change this to not copy the lispfn
             FuncCell::LispFn(x) => x.clone_in(bk).into_obj(bk),

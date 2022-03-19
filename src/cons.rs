@@ -52,22 +52,19 @@ impl<'ob> Cons<'ob> {
         self.cdr.get().constrain_lifetime(cx)
     }
 
-    pub(crate) fn set_car(&self, new_car: Object<'ob>) -> Result<()> {
-        if self.mutable {
-            self.car.set(new_car);
-            Ok(())
-        } else {
-            Err(ConstConsError::default().into())
-        }
+    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
+        assert!(self.mutable, "Attempt to mutate constant cons");
+        self.car.set(new_car);
     }
 
-    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) -> Result<()> {
-        if self.mutable {
-            self.cdr.set(new_cdr);
-            Ok(())
-        } else {
-            Err(ConstConsError::default().into())
-        }
+    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
+        assert!(self.mutable, "Attempt to mutate constant cons");
+        self.cdr.set(new_cdr);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_mut(&self) -> bool {
+        self.mutable
     }
 
     pub(crate) fn make_const(&mut self) {
@@ -154,15 +151,15 @@ fn cdr_safe<'ob>(object: Object, arena: &'ob Arena) -> Object<'ob> {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &'ob Cons<'ob>, newcar: Object<'ob>) -> Result<Object<'ob>> {
-    cell.set_car(newcar)?;
-    Ok(newcar)
+fn setcar<'ob>(cell: &'ob Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
+    cell.set_car(newcar);
+    newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &'ob Cons<'ob>, newcdr: Object<'ob>) -> Result<Object<'ob>> {
-    cell.set_cdr(newcdr)?;
-    Ok(newcdr)
+fn setcdr<'ob>(cell: &'ob Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
+    cell.set_cdr(newcdr);
+    newcdr
 }
 
 #[defun]
@@ -218,7 +215,7 @@ mod test {
 
         let start_str = "start".to_owned();
         assert_eq!(start_str.into_obj(arena), cons1.car(arena));
-        cons1.set_car("start2".into_obj(arena)).unwrap();
+        cons1.set_car("start2".into_obj(arena));
         let start2_str = "start2".to_owned();
         assert_eq!(start2_str.into_obj(arena), cons1.car(arena));
 

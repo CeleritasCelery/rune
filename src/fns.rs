@@ -121,7 +121,7 @@ pub(crate) fn nreverse<'ob>(seq: List<'ob>, arena: &'ob Arena) -> Result<Object<
     let mut prev = Object::NIL;
     for tail in seq.conses(arena) {
         let tail = tail?;
-        tail.set_cdr(prev)?;
+        tail.set_cdr(prev);
         prev = Object::Cons(tail.into());
     }
     Ok(prev)
@@ -183,7 +183,7 @@ fn delete_from_list<'ob>(
         let tail = tail?;
         if eq_fn(tail.car(arena), elt) {
             if let Some(prev_tail) = &mut prev {
-                prev_tail.set_cdr(tail.cdr(arena))?;
+                prev_tail.set_cdr(tail.cdr(arena));
             } else {
                 head = tail.cdr(arena);
             }

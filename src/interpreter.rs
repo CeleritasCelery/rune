@@ -509,10 +509,7 @@ impl<'brw> Interpreter<'brw> {
             Some(value) => {
                 // TODO: Fix this once cons is managed type
                 let new_value = unsafe { std::mem::transmute::<Object<'a>, Object>(new_value) };
-                value
-                    .obj()
-                    .set_cdr(new_value)
-                    .expect("env should be mutable");
+                value.obj().set_cdr(new_value);
             }
             None => {
                 Environment::set_var(self.env, name, new_value);
