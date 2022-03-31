@@ -78,14 +78,16 @@ mod fns;
 mod hashmap;
 mod interpreter;
 mod keymap;
+mod lcell;
 mod lread;
 mod opcode;
 mod reader;
 mod search;
 mod symbol;
 
-use arena::{Arena, Gc, RootSet};
+use arena::{Arena, GcCell, RootSet};
 use data::Environment;
+use lcell::LCellOwner;
 use object::Object;
 use std::env;
 use std::io::{self, Write};
@@ -97,7 +99,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Gc<Environment>, arena: &mut Arena) {
+fn repl<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -124,7 +126,7 @@ fn repl(env: &mut Gc<Environment>, arena: &mut Arena) {
         };
 
         root!(obj, arena);
-        match interpreter::eval(obj, None, env, arena) {
+        match interpreter::eval(obj, None, env, arena, owner) {
             Ok(val) => println!("{val}"),
             Err(e) => println!("Error: {e}"),
         }
@@ -132,14 +134,16 @@ fn repl(env: &mut Gc<Environment>, arena: &mut Arena) {
     }
 }
 
-fn load(env: &mut Gc<Environment>, arena: &mut Arena) {
+fn load<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
     use crate::symbol::sym;
-
-    Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
-    Environment::set_var(env, &sym::LEXICAL_BINDING, Object::TRUE);
-    Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-    Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-    Environment::set_var(env, &sym::CURRENT_LOAD_LIST, Object::NIL);
+    {
+        let env = env.borrow_mut(owner, arena);
+        Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
+        Environment::set_var(env, &sym::LEXICAL_BINDING, Object::TRUE);
+        Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
+        Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
+        Environment::set_var(env, &sym::CURRENT_LOAD_LIST, Object::NIL);
+    }
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 
@@ -153,7 +157,7 @@ fn load(env: &mut Gc<Environment>, arena: &mut Arena) {
 )"#,
     );
 
-    match crate::lread::load_internal(&buffer, arena, env) {
+    match crate::lread::load_internal(&buffer, arena, env, owner) {
         Ok(val) => println!("{val}"),
         Err(e) => {
             println!("Error: {e}");
@@ -170,7 +174,7 @@ fn load(env: &mut Gc<Environment>, arena: &mut Arena) {
 )"#,
     );
 
-    match crate::lread::load_internal(&buffer, arena, env) {
+    match crate::lread::load_internal(&buffer, arena, env, owner) {
         Ok(val) => println!("{val}"),
         Err(e) => println!("Error: {e}"),
     }
@@ -179,15 +183,16 @@ fn load(env: &mut Gc<Environment>, arena: &mut Arena) {
 fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
-    let env = unsafe { &mut Gc::new(Environment::default()) };
+    let env = unsafe { &GcCell::new(Environment::default()) };
+    make_lcell_owner!(owner);
 
     match env::args().nth(1) {
-        Some(arg) if arg == "--repl" => repl(env, arena),
-        Some(arg) if arg == "--load" => load(env, arena),
+        Some(arg) if arg == "--repl" => repl(env, &mut owner, arena),
+        Some(arg) if arg == "--load" => load(env, &mut owner, arena),
         Some(arg) => panic!("unknown arg: {arg}"),
         None => {
-            load(env, arena);
-            repl(env, arena);
+            load(env, &mut owner, arena);
+            repl(env, &mut owner, arena);
         }
     }
 }

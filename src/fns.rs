@@ -1,10 +1,11 @@
-use crate::arena::{Arena, Gc, RootObj};
+use crate::arena::{Arena, GcCell, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
+use crate::lcell::LCellOwner;
 use crate::object::{Callable, Function, List, Object};
 use crate::symbol::Symbol;
-use crate::{data, element_iter, root};
+use crate::{data, element_iter, rebind, root};
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use fn_macros::defun;
@@ -25,17 +26,18 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
 }
 
 impl<'ob> Function<'ob> {
-    pub(crate) fn call<'gc>(
+    pub(crate) fn call<'gc, 'id>(
         self,
-        args: &mut Gc<Vec<RootObj>>,
-        env: &mut Gc<Environment>,
+        args: &GcCell<'id, Vec<RootObj>>,
+        env: &GcCell<'id, Environment>,
         arena: &'gc mut Arena,
+        owner: &mut LCellOwner<'id>,
     ) -> Result<Object<'gc>> {
         use crate::interpreter;
         match self {
             Function::LispFn(_) => todo!("call lisp functions"),
-            Function::SubrFn(f) => (*f).call(args, env, arena),
-            Function::Uncompiled(f) => interpreter::call(Object::Cons(f), args, env, arena),
+            Function::SubrFn(f) => (*f).call(args, env, arena, owner),
+            Function::Uncompiled(f) => interpreter::call(Object::Cons(f), args, env, arena, owner),
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
                     let tmp: Object = resolved.into();
@@ -43,7 +45,7 @@ impl<'ob> Function<'ob> {
                     let callable: Callable = tmp.try_into().unwrap();
                     match callable {
                         Callable::LispFn(_) => todo!("call lisp functions"),
-                        Callable::SubrFn(f) => (*f).call(args, env, arena),
+                        Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
                         Callable::Cons(cons) => {
                             match cons.try_as_macro(arena) {
                                 Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
@@ -51,7 +53,13 @@ impl<'ob> Function<'ob> {
                                     let tmp: Object = Object::Cons(cons);
                                     root!(tmp, arena); // root callable
                                     if let Object::Cons(func) = tmp {
-                                        interpreter::call(Object::Cons(func), args, env, arena)
+                                        interpreter::call(
+                                            Object::Cons(func),
+                                            args,
+                                            env,
+                                            arena,
+                                            owner,
+                                        )
                                     } else {
                                         unreachable!();
                                     }
@@ -68,48 +76,51 @@ impl<'ob> Function<'ob> {
 }
 
 #[defun]
-pub(crate) fn mapcar<'ob>(
+pub(crate) fn mapcar<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Gc<Environment>,
-    arena: &'ob mut Arena,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
+    gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
             element_iter!(iter, !cons);
-            let mut outputs = unsafe { Gc::new(Vec::new()) };
-            let call_arg = unsafe { &mut Gc::new(Vec::new()) };
+            let outputs = unsafe { &GcCell::new(Vec::new()) };
+            let call_arg = unsafe { &GcCell::new(Vec::new()) };
             while let Some(x) = iter.next() {
                 let obj = x.obj();
-                call_arg.push(obj);
-                let output = function.call(call_arg, env, arena)?;
-                outputs.push(output);
-                call_arg.clear();
+                call_arg.borrow_mut(owner, gc).push(obj);
+                let output = function.call(call_arg, env, gc, owner)?;
+                rebind!(output, gc);
+                outputs.borrow_mut(owner, gc).push(output);
+                call_arg.borrow_mut(owner, gc).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.as_gc().as_ref();
-            Ok(slice_into_list(slice, None, arena))
+            let slice = outputs.borrow(owner).as_gc().as_ref();
+            Ok(slice_into_list(slice, None, gc))
         }
     }
 }
 
 #[defun]
-pub(crate) fn mapc<'ob>(
+pub(crate) fn mapc<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &mut Gc<Environment>,
-    arena: &'ob mut Arena,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
+    gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let call_arg = unsafe { &mut Gc::new(Vec::new()) };
+            let call_arg = unsafe { &GcCell::new(Vec::new()) };
             element_iter!(elements, !cons);
             while let Some(elem) = elements.next() {
-                call_arg.push(elem.obj());
-                function.call(call_arg, env, arena)?;
-                call_arg.clear();
+                call_arg.borrow_mut(owner, gc).push(elem.obj());
+                function.call(call_arg, env, gc, owner)?;
+                call_arg.borrow_mut(owner, gc).clear();
             }
             Ok(sequence.into())
         }
@@ -264,11 +275,12 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 }
 
 #[defun]
-fn require<'ob>(
+fn require<'ob, 'id>(
     feature: Symbol,
     filename: Option<&str>,
     noerror: Option<bool>,
-    env: &mut Gc<Environment>,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
@@ -280,7 +292,7 @@ fn require<'ob>(
             format!("lisp/{}.el", feature.name)
         }
     };
-    match crate::lread::load(&file, None, None, None, None, arena, env) {
+    match crate::lread::load(&file, None, None, None, None, arena, env, owner) {
         Ok(_) => Ok(feature.into()),
         Err(e) => match noerror {
             Some(_) => Ok(Object::NIL),

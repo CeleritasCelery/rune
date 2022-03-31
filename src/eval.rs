@@ -1,17 +1,19 @@
 use fn_macros::defun;
 
 use crate::{
-    arena::{Arena, Gc, IntoRoot},
+    arena::{Arena, GcCell, IntoRoot},
     data::Environment,
+    lcell::LCellOwner,
     object::{Function, Object},
 };
 use anyhow::Result;
 
 #[defun]
-pub(crate) fn apply<'ob>(
+pub(crate) fn apply<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Gc<Environment>,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     let args = match arguments.len() {
@@ -27,19 +29,20 @@ pub(crate) fn apply<'ob>(
             args
         }
     };
-    let args = unsafe { &mut Gc::new(args.into_root()) };
-    function.call(args, env, arena)
+    let args = unsafe { &GcCell::new(args.into_root()) };
+    function.call(args, env, arena, owner)
 }
 
 #[defun]
-pub(crate) fn funcall<'ob>(
+pub(crate) fn funcall<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &mut Gc<Environment>,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
-    let arg_list = unsafe { &mut Gc::new(arguments.to_vec().into_root()) };
-    function.call(arg_list, env, arena)
+    let arg_list = unsafe { &GcCell::new(arguments.to_vec().into_root()) };
+    function.call(arg_list, env, arena, owner)
 }
 
 defsubr!(apply, funcall);

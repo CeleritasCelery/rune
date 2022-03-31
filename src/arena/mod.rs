@@ -64,7 +64,6 @@ macro_rules! rebind {
     ($item:ident, $arena:ident) => {
         #[allow(unused_qualifications)]
         let bits: crate::object::RawObj = $item.into();
-        #[allow(clippy::shadow_unrelated)]
         let $item = unsafe { $arena.rebind_raw_ptr(bits) };
     };
 }

@@ -1,5 +1,6 @@
-use crate::arena::{Arena, Block, Gc, RootObj};
+use crate::arena::{Arena, Block, GcCell, RootObj};
 use crate::error::Error;
+use crate::lcell::LCellOwner;
 use crate::object::{Function, IntoObject, Object};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
@@ -109,10 +110,11 @@ impl<'ob> Default for LispFn<'ob> {
     }
 }
 
-pub(crate) type BuiltInFn = for<'ob> fn(
+pub(crate) type BuiltInFn = for<'ob, 'id> fn(
     &[Object<'ob>],
-    &mut Gc<crate::data::Environment>,
+    &GcCell<'id, crate::data::Environment>,
     &'ob mut Arena,
+    &mut LCellOwner<'id>,
 ) -> Result<Object<'ob>>;
 
 pub(crate) struct SubrFn {
@@ -123,20 +125,23 @@ pub(crate) struct SubrFn {
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 impl SubrFn {
-    pub(crate) fn call<'gc>(
+    pub(crate) fn call<'gc, 'id>(
         &self,
-        args: &mut Gc<Vec<RootObj>>,
-        env: &mut Gc<crate::data::Environment>,
+        args: &GcCell<'id, Vec<RootObj>>,
+        env: &GcCell<'id, crate::data::Environment>,
         arena: &'gc mut Arena,
+        owner: &mut LCellOwner<'id>,
     ) -> Result<Object<'gc>> {
-        let arg_cnt = args.len() as u16;
-        let fill_args = self.args.num_of_fill_args(arg_cnt)?;
-        for _ in 0..fill_args {
-            args.push(Object::NIL);
-        }
-        let slice =
-            unsafe { std::mem::transmute::<&[Object], &[Object<'gc>]>(args.as_gc().as_ref()) };
-        (self.subr)(slice, env, arena)
+        let slice = {
+            let args = args.borrow_mut(owner, arena);
+            let arg_cnt = args.len() as u16;
+            let fill_args = self.args.num_of_fill_args(arg_cnt)?;
+            for _ in 0..fill_args {
+                args.push(Object::NIL);
+            }
+            unsafe { std::mem::transmute::<&[Object], &[Object<'gc>]>(args.as_gc().as_ref()) }
+        };
+        (self.subr)(slice, env, arena, owner)
     }
 }
 
@@ -167,9 +172,11 @@ impl std::fmt::Debug for SubrFn {
 }
 
 impl PartialEq for SubrFn {
+    #[allow(clippy::fn_to_numeric_cast_any)]
     fn eq(&self, other: &Self) -> bool {
-        let lhs: fn(&'static _, &'static mut _, &'static mut _) -> _ = self.subr;
-        lhs == other.subr
+        let lhs = self.subr as *const BuiltInFn;
+        let rhs = other.subr as *const BuiltInFn;
+        lhs == rhs
     }
 }
 

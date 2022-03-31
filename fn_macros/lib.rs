@@ -65,10 +65,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
 
         #[doc(hidden)]
         #[allow(non_snake_case)]
-        pub(crate) fn #func_name<'ob>(
+        pub(crate) fn #func_name<'ob, 'id>(
             args: &[crate::object::Object<'ob>],
-            env: &mut crate::arena::Gc<crate::data::Environment>,
+            env: &crate::arena::GcCell<'id, crate::data::Environment>,
             arena: &'ob mut crate::arena::Arena,
+            owner: &mut crate::lcell::LCellOwner<'id>,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }
@@ -80,49 +81,51 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     }
 }
 
+enum ArgType {
+    Arena,
+    Env,
+    Owner,
+    Other,
+}
+
 fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
     args.iter()
         .enumerate()
         .map(|(idx, ty)| {
-            if is_env(ty) {
-                quote! {env}
-            } else if is_arena(ty) {
-                quote! {arena}
-            } else {
-                let call = get_call(idx, ty);
-                if convert_type(ty) {
-                    if is_slice(ty) {
-                        quote! {crate::object::try_from_slice(#call)?}
+            match get_arg_type(ty) {
+                ArgType::Arena => quote!{arena},
+                ArgType::Env => quote!{env},
+                ArgType::Owner => quote!{owner},
+                ArgType::Other => {
+                    let call = get_call(idx, ty);
+                    if type_needs_conversion(ty) {
+                        if is_slice(ty) {
+                            quote! {crate::object::try_from_slice(#call)?}
+                        } else {
+                            quote! {std::convert::TryFrom::try_from(#call)?}
+                        }
                     } else {
-                        quote! {std::convert::TryFrom::try_from(#call)?}
+                        quote! {#call}
                     }
-                } else {
-                    quote! {#call}
                 }
             }
         })
         .collect()
 }
 
-fn is_arena(ty: &syn::Type) -> bool {
+fn get_arg_type(ty: &syn::Type) -> ArgType {
     match ty {
         syn::Type::Reference(refer) => match refer.elem.as_ref() {
-            syn::Type::Path(path) => get_path_ident_name(path) == "Arena",
-            _ => false,
-        },
-        _ => false,
-    }
-}
-
-fn is_env(ty: &syn::Type) -> bool {
-    if let syn::Type::Reference(refer) = ty {
-        if let syn::Type::Path(path) = refer.elem.as_ref() {
-            if let Some(gen_arg) = get_generic_param(path) {
-                return gen_arg == "Environment" && get_path_ident_name(path) == "Gc";
+            syn::Type::Path(path) => match get_path_ident_name(path).as_str() {
+                "Arena" => ArgType::Arena,
+                "LCellOwner" => ArgType::Owner,
+                "GcCell" => ArgType::Env,
+                _ => ArgType::Other,
             }
+            _ => ArgType::Other,
         }
+        _ => ArgType::Other,
     }
-    false
 }
 
 fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
@@ -133,10 +136,10 @@ fn get_call(idx: usize, ty: &syn::Type) -> proc_macro2::TokenStream {
     }
 }
 
-fn convert_type(ty: &syn::Type) -> bool {
+fn type_needs_conversion(ty: &syn::Type) -> bool {
     match ty {
-        syn::Type::Reference(refer) => convert_type(refer.elem.as_ref()),
-        syn::Type::Slice(slice) => convert_type(slice.elem.as_ref()),
+        syn::Type::Reference(refer) => type_needs_conversion(refer.elem.as_ref()),
+        syn::Type::Slice(slice) => type_needs_conversion(slice.elem.as_ref()),
         syn::Type::Path(path) => "Object" != get_path_ident_name(path),
         _ => false,
     }
@@ -148,9 +151,9 @@ fn get_call_signature(args: &[syn::Type], spec_min: Option<u16>) -> (u16, u16, b
         None => 0,
     };
 
-    let args: Vec<&syn::Type> = args
+    let args: Vec<_> = args
         .iter()
-        .filter(|x| !(is_env(x) || is_arena(x)))
+        .filter(|x| matches!(get_arg_type(x), ArgType::Other))
         .collect();
 
     let rest = match args.last() {
@@ -189,16 +192,6 @@ fn is_slice(arg: &syn::Type) -> bool {
 
 fn get_path_ident_name(type_path: &syn::TypePath) -> String {
     type_path.path.segments.last().unwrap().ident.to_string()
-}
-
-fn get_generic_param(type_path: &syn::TypePath) -> Option<String> {
-    match &type_path.path.segments.last().unwrap().arguments {
-        syn::PathArguments::AngleBracketed(generic) => match generic.args.last().unwrap() {
-            syn::GenericArgument::Type(syn::Type::Path(path)) => Some(get_path_ident_name(path)),
-            _ => None,
-        },
-        _ => None,
-    }
 }
 
 struct Function {
@@ -313,7 +306,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob>(list: &Cons<'ob>, env: &mut Gc<Environment>) -> Object<'ob> {
+            fn car<'ob, 'id>(list: &Cons<'ob>, env: &GcCell<'id, Environment>, owner: &LCellOwner<'id>) -> Object<'ob> {
                 list.car()
 }
         };

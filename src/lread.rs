@@ -1,5 +1,6 @@
-use crate::arena::{Arena, Gc};
+use crate::arena::{Arena, GcCell};
 use crate::data::Environment;
+use crate::lcell::LCellOwner;
 use crate::object::Object;
 use crate::reader;
 use crate::symbol::Symbol;
@@ -53,10 +54,11 @@ pub(crate) fn read_from_string<'ob>(
     Ok(cons!(obj, new_pos as i64; arena))
 }
 
-pub(crate) fn load_internal<'ob>(
+pub(crate) fn load_internal<'ob, 'id>(
     contents: &str,
     arena: &'ob mut Arena,
-    env: &mut Gc<Environment>,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -74,24 +76,26 @@ pub(crate) fn load_internal<'ob>(
             println!("-----READ END-----");
         }
         root!(obj, arena);
-        interpreter::eval(obj, None, env, arena)?;
+        interpreter::eval(obj, None, env, arena, owner)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
 }
 
 #[defun]
-pub(crate) fn load<'ob>(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn load<'ob, 'id>(
     file: &str,
     noerror: Option<bool>,
     _nomessage: Option<bool>,
     _nosuffix: Option<bool>,
     _must_suffix: Option<bool>,
     arena: &'ob mut Arena,
-    env: &mut Gc<Environment>,
+    env: &GcCell<'id, Environment>,
+    owner: &mut LCellOwner<'id>,
 ) -> Result<bool> {
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
-        Ok(content) => load_internal(&content, arena, env),
+        Ok(content) => load_internal(&content, arena, env, owner),
         Err(e) => match noerror {
             Some(_) => Ok(false),
             None => Err(e),
@@ -110,19 +114,26 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::arena::RootSet;
+    use crate::{arena::RootSet, make_lcell_owner};
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let env = &mut unsafe { Gc::new(Environment::default()) };
-        load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
+        let env = unsafe { &GcCell::new(Environment::default()) };
+        make_lcell_owner!(owner);
+        load_internal(
+            "(setq foo 1) (setq bar 2) (setq baz 1.5)",
+            arena,
+            env,
+            &mut owner,
+        )
+        .unwrap();
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         root!(obj, arena);
-        let val = interpreter::eval(obj, None, env, arena).unwrap();
+        let val = interpreter::eval(obj, None, env, arena, &mut owner).unwrap();
         assert_eq!(val, 4.5);
     }
 }

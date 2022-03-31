@@ -1,6 +1,7 @@
 use crate::{
-    arena::{Arena, ConstrainLifetime, Gc, RootCons, RootObj},
+    arena::{Arena, ConstrainLifetime, Gc, GcCell, RootCons, RootObj},
     error::{Error, Type},
+    lcell::LCellOwner,
     object::{List, Object},
 };
 use streaming_iterator::StreamingIterator;
@@ -105,50 +106,64 @@ impl<'ob> Iterator for ConsIter<'ob> {
 }
 
 #[derive(Debug)]
-pub(crate) struct ElemStreamIter<'rt> {
-    elem: &'rt mut Option<Gc<RootObj>>,
-    cons: &'rt mut Option<Gc<RootCons>>,
+pub(crate) struct ElemStreamIter<'rt, 'id> {
+    elem: Option<&'rt GcCell<'id, RootObj>>,
+    cons: Option<&'rt GcCell<'id, RootCons>>,
+    owner: LCellOwner<'id>,
 }
 
-impl<'rt> ElemStreamIter<'rt> {
+impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
     pub(crate) fn new(
-        elem: &'rt mut Option<Gc<RootObj>>,
-        cons: &'rt mut Option<Gc<RootCons>>,
+        elem: &'rt Option<GcCell<'id, RootObj>>,
+        cons: &'rt Option<GcCell<'id, RootCons>>,
+        owner: LCellOwner<'id>,
     ) -> Self {
-        Self { elem, cons }
+        let elem = match elem {
+            Some(x) => Some(x),
+            None => None,
+        };
+
+        let cons = match cons {
+            Some(x) => Some(x),
+            None => None,
+        };
+        Self { elem, cons, owner }
     }
 }
 
-impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
+impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
     type Item = Gc<RootObj>;
 
     fn advance(&mut self) {
-        if let Some(cons) = &mut self.cons {
+        if let Some(cons) = &self.cons {
+            let elem = self
+                .elem
+                .as_ref()
+                .expect("Element should never be None while Cons is Some");
+            let (cons, elem) =
+                unsafe { GcCell::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
             let car = cons.obj().car.get();
-            match self.elem {
-                Some(x) => x.set(car),
-                None => unreachable!("Element should never be None while Cons is Some"),
-            }
+            elem.set(car);
             match cons.obj().cdr.get() {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(!next) };
                     cons.set(x);
                 }
                 _ => {
-                    *self.cons = None;
+                    self.cons = None;
                 }
             }
         } else {
-            *self.elem = None;
+            self.elem = None;
         }
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        self.elem.as_ref()
+        self.elem.as_ref().map(|x| x.borrow(&self.owner))
     }
 }
 
-impl<'rt> ElemStreamIter<'rt> {
+impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
     pub(crate) fn is_empty(&self) -> bool {
         self.cons.is_none()
     }
@@ -159,14 +174,16 @@ macro_rules! element_iter {
     ($ident:ident, $obj:expr) => {
         let mut root_elem = None;
         let mut root_cons = None;
+        crate::make_lcell_owner!(owner);
         #[allow(unused_qualifications)]
         let list: crate::object::List = $obj.try_into()?;
         if let crate::object::List::Cons(x) = list {
-            root_elem = unsafe { Some(Gc::new(crate::arena::RootObj::default())) };
-            root_cons = unsafe { Some(Gc::new(crate::arena::RootCons::new(!x))) };
+            root_elem =
+                unsafe { Some(crate::arena::GcCell::new(crate::arena::RootObj::default())) };
+            root_cons = unsafe { Some(crate::arena::GcCell::new(crate::arena::RootCons::new(!x))) };
         }
         #[allow(unused_mut)]
-        let mut $ident = crate::cons::ElemStreamIter::new(&mut root_elem, &mut root_cons);
+        let mut $ident = crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
     };
 }
 

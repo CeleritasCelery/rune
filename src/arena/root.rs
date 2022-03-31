@@ -4,8 +4,11 @@ use std::{ops::Index, slice::SliceIndex};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
+use crate::lcell::{LCell, LCellOwner};
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
+
+use super::Arena;
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -61,6 +64,43 @@ impl RootCons {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct GcCell<'id, T: ?Sized>(LCell<'id, Gc<T>>);
+
+impl<'id, T> GcCell<'id, T> {
+    pub(crate) unsafe fn new(obj: T) -> Self {
+        GcCell(LCell::new(Gc::new(obj)))
+    }
+    pub(crate) fn borrow<'a>(&'a self, owner: &'a LCellOwner<'id>) -> &'a Gc<T> {
+        self.0.ro(owner)
+    }
+
+    pub(crate) fn borrow_mut<'a>(
+        &'a self,
+        owner: &'a mut LCellOwner<'id>,
+        _: &'a Arena,
+    ) -> &'a mut Gc<T> {
+        self.0.rw(owner)
+    }
+
+    pub(crate) fn borrow_mut2<'a, U>(
+        gc1: &'a Self,
+        gc2: &'a GcCell<'id, U>,
+        owner: &'a mut LCellOwner<'id>,
+        _: &'a Arena,
+    ) -> (&'a mut Gc<T>, &'a mut Gc<U>) {
+        owner.rw2(&gc1.0, &gc2.0)
+    }
+
+    pub(crate) unsafe fn borrow_mut_unchecked2<'a, U>(
+        gc1: &'a Self,
+        gc2: &'a GcCell<'id, U>,
+        owner: &'a mut LCellOwner<'id>,
+    ) -> (&'a mut Gc<T>, &'a mut Gc<U>) {
+        owner.rw2(&gc1.0, &gc2.0)
+    }
+}
+
 #[repr(transparent)]
 #[derive(Debug)]
 pub(crate) struct Gc<T: ?Sized> {
@@ -80,7 +120,7 @@ impl<T> AsRef<T> for Gc<T> {
 }
 
 impl<T> Gc<T> {
-    pub(crate) unsafe fn new(data: T) -> Self {
+    fn new(data: T) -> Self {
         Gc { inner: data }
     }
 }
@@ -90,7 +130,7 @@ impl Gc<RootObj> {
         unsafe { Object::from_raw(self.inner.obj) }
     }
 
-    pub(crate) fn bind<'ob>(&self, gc: &'ob super::Arena) -> Object<'ob> {
+    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> Object<'ob> {
         unsafe { gc.bind(Object::from_raw(self.inner.obj)) }
     }
 
@@ -302,7 +342,7 @@ impl Gc<Environment> {
 
 #[cfg(test)]
 mod test {
-    use crate::arena::{Arena, RootSet};
+    use crate::arena::RootSet;
 
     use super::*;
 
