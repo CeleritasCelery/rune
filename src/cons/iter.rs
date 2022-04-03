@@ -118,16 +118,11 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
         cons: &'rt Option<GcCell<'id, RootCons>>,
         owner: LCellOwner<'id>,
     ) -> Self {
-        let elem = match elem {
-            Some(x) => Some(x),
-            None => None,
-        };
-
-        let cons = match cons {
-            Some(x) => Some(x),
-            None => None,
-        };
-        Self { elem, cons, owner }
+        Self {
+            elem: elem.as_ref(),
+            cons: cons.as_ref(),
+            owner,
+        }
     }
 }
 
@@ -176,11 +171,11 @@ macro_rules! element_iter {
         let mut root_cons = None;
         crate::make_lcell_owner!(owner);
         #[allow(unused_qualifications)]
-        let list: crate::object::List = $obj.try_into()?;
-        if let crate::object::List::Cons(x) = list {
+        let list: $crate::object::List = $obj.try_into()?;
+        if let $crate::object::List::Cons(x) = list {
             root_elem =
-                unsafe { Some(crate::arena::GcCell::new(crate::arena::RootObj::default())) };
-            root_cons = unsafe { Some(crate::arena::GcCell::new(crate::arena::RootCons::new(!x))) };
+                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
+            root_cons = unsafe { Some($crate::arena::GcCell::new($crate::arena::RootCons::new(!x))) };
         }
         #[allow(unused_mut)]
         let mut $ident = crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);

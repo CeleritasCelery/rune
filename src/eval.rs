@@ -5,6 +5,7 @@ use crate::{
     data::Environment,
     lcell::LCellOwner,
     object::{Function, Object},
+    root_struct,
 };
 use anyhow::Result;
 
@@ -29,7 +30,7 @@ pub(crate) fn apply<'ob, 'id>(
             args
         }
     };
-    let args = unsafe { &GcCell::new(args.into_root()) };
+    root_struct!(args, args.into_root(), arena);
     function.call(args, env, arena, owner)
 }
 
@@ -41,7 +42,7 @@ pub(crate) fn funcall<'ob, 'id>(
     owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
-    let arg_list = unsafe { &GcCell::new(arguments.to_vec().into_root()) };
+    root_struct!(arg_list, arguments.to_vec().into_root(), arena);
     function.call(arg_list, env, arena, owner)
 }
 

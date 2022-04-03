@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::{Arena, Gc, GcCell, RootObj};
+use crate::arena::{Arena, Gc, GcCell, RootObj, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::lcell::LCellOwner;
@@ -37,6 +37,19 @@ impl Environment {
             },
             None => {
                 props.insert(symbol, vec![(propname, value)]);
+            }
+        }
+    }
+}
+
+impl Trace for Environment {
+    fn mark(&self) {
+        for x in self.vars.values() {
+            x.mark();
+        }
+        for vec in self.props.values() {
+            for x in vec {
+                x.1.mark();
             }
         }
     }

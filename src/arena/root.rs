@@ -8,7 +8,7 @@ use crate::lcell::{LCell, LCellOwner};
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 
-use super::Arena;
+use super::{Arena, Trace};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -50,6 +50,12 @@ impl RootObj {
     }
 }
 
+impl Trace for RootObj {
+    fn mark(&self) {
+        todo!()
+    }
+}
+
 #[repr(transparent)]
 #[derive(Debug, PartialEq)]
 pub(crate) struct RootCons {
@@ -64,6 +70,15 @@ impl RootCons {
     }
 }
 
+impl Trace for RootCons {
+    fn mark(&self) {
+        unsafe {
+            (*self.obj).mark();
+        }
+    }
+}
+
+#[repr(transparent)]
 #[derive(Debug)]
 pub(crate) struct GcCell<'id, T: ?Sized>(LCell<'id, Gc<T>>);
 
@@ -71,6 +86,11 @@ impl<'id, T> GcCell<'id, T> {
     pub(crate) unsafe fn new(obj: T) -> Self {
         GcCell(LCell::new(Gc::new(obj)))
     }
+
+    pub(super) fn deref(&mut self) -> &T {
+        unsafe { &*(self as *const Self).cast::<T>() }
+    }
+
     pub(crate) fn borrow<'a>(&'a self, owner: &'a LCellOwner<'id>) -> &'a Gc<T> {
         self.0.ro(owner)
     }
@@ -99,6 +119,16 @@ impl<'id, T> GcCell<'id, T> {
     ) -> (&'a mut Gc<T>, &'a mut Gc<U>) {
         owner.rw2(&gc1.0, &gc2.0)
     }
+}
+
+#[macro_export]
+macro_rules! root_struct {
+    ($ident:ident, $value:expr, $arena:ident) => {
+        let mut $ident = unsafe { $crate::arena::GcCell::new($value) };
+        let mut root = unsafe { $crate::arena::GcRoot::new($arena.get_root_set()) };
+        root.set(&mut $ident);
+        let $ident = &$ident;
+    };
 }
 
 #[repr(transparent)]

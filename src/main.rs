@@ -183,7 +183,7 @@ fn load<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena:
 fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
-    let env = unsafe { &GcCell::new(Environment::default()) };
+    root_struct!(env, Environment::default(), arena);
     make_lcell_owner!(owner);
 
     match env::args().nth(1) {

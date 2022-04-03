@@ -62,6 +62,10 @@ impl<'ob> Cons<'ob> {
         self.cdr.set(new_cdr);
     }
 
+    pub(crate) fn mark(&self) {
+        self.marked.set(true);
+    }
+
     #[cfg(test)]
     pub(crate) fn is_mut(&self) -> bool {
         self.mutable

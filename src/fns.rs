@@ -5,7 +5,7 @@ use crate::error::{Error, Type};
 use crate::lcell::LCellOwner;
 use crate::object::{Callable, Function, List, Object};
 use crate::symbol::Symbol;
-use crate::{data, element_iter, rebind, root};
+use crate::{data, element_iter, rebind, root, root_struct};
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use fn_macros::defun;
@@ -86,9 +86,9 @@ pub(crate) fn mapcar<'ob, 'id>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
+            root_struct!(outputs, Vec::new(), gc);
+            root_struct!(call_arg, Vec::new(), gc);
             element_iter!(iter, !cons);
-            let outputs = unsafe { &GcCell::new(Vec::new()) };
-            let call_arg = unsafe { &GcCell::new(Vec::new()) };
             while let Some(x) = iter.next() {
                 let obj = x.obj();
                 call_arg.borrow_mut(owner, gc).push(obj);
@@ -115,7 +115,7 @@ pub(crate) fn mapc<'ob, 'id>(
     match sequence {
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
-            let call_arg = unsafe { &GcCell::new(Vec::new()) };
+            root_struct!(call_arg, Vec::new(), gc);
             element_iter!(elements, !cons);
             while let Some(elem) = elements.next() {
                 call_arg.borrow_mut(owner, gc).push(elem.obj());

@@ -7,7 +7,9 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
 mod root;
+mod trace;
 pub(crate) use root::*;
+pub(crate) use trace::*;
 
 pub(crate) trait ConstrainLifetime<'new, T> {
     fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
@@ -71,6 +73,7 @@ macro_rules! rebind {
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
+    root_structs: RefCell<Vec<*const GcRoot<'static>>>,
 }
 
 #[derive(Debug)]

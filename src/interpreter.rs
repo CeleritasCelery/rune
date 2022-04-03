@@ -5,7 +5,7 @@ use crate::lcell::LCellOwner;
 use crate::object::{Callable, Function, List};
 use crate::symbol::sym;
 use crate::{arena::Arena, cons::Cons, data::Environment, object::Object, symbol::Symbol};
-use crate::{element_iter, rebind, root};
+use crate::{element_iter, rebind, root, root_struct};
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -29,7 +29,7 @@ pub(crate) fn eval<'ob, 'id>(
         "lexical enviroments are not yet supported: found {:?}",
         lexical
     );
-    let vars = unsafe { &GcCell::new(Vec::new()) };
+    root_struct!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env, owner };
     interpreter.eval_form(form, arena)
 }
@@ -41,7 +41,7 @@ pub(crate) fn call<'ob, 'gc, 'id>(
     gc: &'gc mut Arena,
     owner: &mut LCellOwner<'id>,
 ) -> Result<Object<'gc>> {
-    let vars = unsafe { &GcCell::new(Vec::new()) };
+    root_struct!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env, owner };
     frame.call_closure(form.try_into()?, args, gc)
 }
@@ -233,8 +233,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 // TODO: remove this temp vector
                 let args = args.borrow(self.owner).iter().map(|x| x.bind(gc)).collect();
                 let vars = self.bind_variables(&mut forms, args, gc)?;
-                let vars = unsafe { &GcCell::new(vars.into_root()) };
-
+                root_struct!(vars, vars.into_root(), gc);
                 let mut call_frame = Interpreter {
                     vars,
                     env: self.env,
@@ -265,7 +264,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
                 element_iter!(iter, obj);
-                let args = unsafe { &GcCell::new(Vec::new()) };
+                root_struct!(args, Vec::new(), gc);
                 while let Some(x) = iter.next() {
                     let result = self.eval_form(x.obj(), gc)?;
                     rebind!(result, gc);
@@ -283,7 +282,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         if crate::debug::debug_enabled() {
                             println!("(macro: {name} {macro_args:?})");
                         }
-                        let args = unsafe { &GcCell::new(macro_args.into_root()) };
+                        root_struct!(args, macro_args.into_root(), gc);
                         let macro_func: Function = mcro.try_into().unwrap();
                         let tmp: Object = macro_func.into();
                         root!(tmp, gc); // Root callable
@@ -299,7 +298,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         match form.car(gc) {
                             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                                 element_iter!(iter, obj);
-                                let args = unsafe { &GcCell::new(Vec::new()) };
+                                root_struct!(args, Vec::new(), gc);
                                 while let Some(x) = iter.next() {
                                     let result = self.eval_form(x.obj(), gc)?;
                                     rebind!(result, gc);
@@ -360,7 +359,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
         let mut count = 0;
-        let returned_form = unsafe { GcCell::new(None) };
+        root_struct!(returned_form, None, gc);
         element_iter!(forms, obj);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form.obj(), gc)?;
@@ -415,7 +414,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn eval_and<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        let last = unsafe { GcCell::new(RootObj::new(Object::TRUE)) };
+        root_struct!(last, RootObj::new(Object::TRUE), gc);
         element_iter!(forms, obj);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form.obj(), gc)?;
@@ -463,7 +462,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     fn setq<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
         element_iter!(forms, obj);
         let mut arg_cnt = 0;
-        let last_value = unsafe { GcCell::new(RootObj::default()) };
+        root_struct!(last_value, RootObj::default(), gc);
         loop {
             match Self::pairs(&mut forms, gc) {
                 Some((Object::Symbol(var), Some(val))) => {
@@ -593,7 +592,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn let_bind_parallel<'a, 'gc>(&mut self, form: Object<'a>, gc: &'gc mut Arena) -> Result<()> {
-        let let_bindings: GcCell<Vec<RootCons>> = unsafe { GcCell::new(Vec::new()) };
+        root_struct!(let_bindings, Vec::new(), gc);
         element_iter!(bindings, form);
         while let Some(binding) = bindings.next() {
             let binding = binding.obj();
@@ -617,7 +616,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 x => bail!(Error::from_object(Type::Cons, x)),
             }
         }
-        let (vars, let_bindings) = GcCell::borrow_mut2(self.vars, &let_bindings, self.owner, gc);
+        let (vars, let_bindings) = GcCell::borrow_mut2(self.vars, let_bindings, self.owner, gc);
         vars.append(let_bindings);
         Ok(())
     }
@@ -647,7 +646,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         mut forms: ElemStreamIter<'_, '_>,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
-        let last = unsafe { GcCell::new(RootObj::default()) };
+        root_struct!(last, RootObj::default(), gc);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form.obj(), gc)?;
             rebind!(value, gc);
@@ -659,15 +658,9 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
 defsubr!(eval);
 
-#[allow(clippy::shadow_unrelated)]
 #[cfg(test)]
 mod test {
-    use crate::{
-        arena::{GcCell, RootSet},
-        make_lcell_owner,
-        object::IntoObject,
-        symbol::intern,
-    };
+    use crate::{arena::RootSet, make_lcell_owner, object::IntoObject, symbol::intern};
 
     use super::*;
 
@@ -675,7 +668,7 @@ mod test {
     where
         T: IntoObject<'ob, Object<'ob>>,
     {
-        let env = unsafe { &GcCell::new(Environment::default()) };
+        root_struct!(env, Environment::default(), arena);
         make_lcell_owner!(owner);
         // Work around for not having GAT's. Currently the IntoObject trait
         // must define the lifetime in it's defintion, but that means that the

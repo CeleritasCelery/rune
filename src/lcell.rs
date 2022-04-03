@@ -92,6 +92,7 @@ impl<'id> LCellOwner<'id> {
 /// See also [crate documentation](index.html).
 ///
 /// [`LCellOwner`]: struct.LCellOwner.html
+#[repr(transparent)]
 #[derive(Debug)]
 pub(crate) struct LCell<'id, T: ?Sized> {
     _id: Invariant<'id>,

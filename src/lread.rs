@@ -114,14 +114,14 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::{arena::RootSet, make_lcell_owner};
+    use crate::{arena::RootSet, make_lcell_owner, root_struct};
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let env = unsafe { &GcCell::new(Environment::default()) };
+        root_struct!(env, Environment::default(), arena);
         make_lcell_owner!(owner);
         load_internal(
             "(setq foo 1) (setq bar 2) (setq baz 1.5)",
