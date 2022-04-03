@@ -86,7 +86,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn defvar<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         match forms.next() {
             // (defvar x ...)
             Some(x) => {
@@ -229,7 +229,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         match closure.car(gc) {
             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
                 let obj = closure.cdr(gc);
-                element_iter!(forms, obj);
+                element_iter!(forms, obj, gc);
                 // TODO: remove this temp vector
                 let args = args.borrow(self.owner).iter().map(|x| x.bind(gc)).collect();
                 let vars = self.bind_variables(&mut forms, args, gc)?;
@@ -263,7 +263,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         match callable {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
-                element_iter!(iter, obj);
+                element_iter!(iter, obj, gc);
                 root_struct!(args, Vec::new(), gc);
                 while let Some(x) = iter.next() {
                     let result = self.eval_form(x.obj(), gc)?;
@@ -297,7 +297,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         root!(tmp, gc); // Root callable
                         match form.car(gc) {
                             Object::Symbol(sym) if !sym == &sym::CLOSURE => {
-                                element_iter!(iter, obj);
+                                element_iter!(iter, obj, gc);
                                 root_struct!(args, Vec::new(), gc);
                                 while let Some(x) = iter.next() {
                                     let result = self.eval_form(x.obj(), gc)?;
@@ -360,7 +360,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     ) -> Result<Object<'gc>> {
         let mut count = 0;
         root_struct!(returned_form, None, gc);
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form.obj(), gc)?;
             count += 1;
@@ -376,7 +376,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn eval_progn<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         self.implicit_progn(forms, gc)
     }
 
@@ -388,16 +388,16 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         };
         root!(condition, gc);
         while self.eval_form(condition, gc)? != Object::NIL {
-            element_iter!(forms, obj);
+            element_iter!(forms, obj, gc);
             self.implicit_progn(forms, gc)?;
         }
         Ok(Object::NIL)
     }
 
     fn eval_cond<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
-            element_iter!(clause, form.obj());
+            element_iter!(clause, form.obj(), gc);
             if let Some(first) = clause.next() {
                 let condition = self.eval_form(first.obj(), gc)?;
                 if condition != Object::NIL {
@@ -415,7 +415,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn eval_and<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
         root_struct!(last, RootObj::new(Object::TRUE), gc);
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form.obj(), gc)?;
             if result == Object::NIL {
@@ -428,7 +428,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn eval_or<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form.obj(), gc)?;
             if result != Object::NIL {
@@ -440,7 +440,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn eval_if<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         let condition = match forms.next() {
             Some(x) => x.obj(),
             None => bail!(Error::ArgCount(2, 0)),
@@ -460,7 +460,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn setq<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        element_iter!(forms, obj);
+        element_iter!(forms, obj, gc);
         let mut arg_cnt = 0;
         root_struct!(last_value, RootObj::default(), gc);
         loop {
@@ -543,7 +543,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         parallel: bool,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
-        element_iter!(iter, form);
+        element_iter!(iter, form, gc);
         let prev_len = self.vars.borrow(self.owner).len();
         match iter.next() {
             // (let x ...)
@@ -565,7 +565,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn let_bind_serial<'a, 'gc>(&mut self, form: Object<'a>, gc: &'gc mut Arena) -> Result<()> {
-        element_iter!(bindings, form);
+        element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
             let binding = binding.obj();
             match binding {
@@ -593,7 +593,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn let_bind_parallel<'a, 'gc>(&mut self, form: Object<'a>, gc: &'gc mut Arena) -> Result<()> {
         root_struct!(let_bindings, Vec::new(), gc);
-        element_iter!(bindings, form);
+        element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
             let binding = binding.obj();
             match binding {
@@ -626,7 +626,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         cons: &'a Cons<'a>,
         gc: &'gc mut Arena,
     ) -> Result<&'gc Cons<'gc>> {
-        element_iter!(iter, cons.cdr(gc));
+        element_iter!(iter, cons.cdr(gc), gc);
         let value = match iter.next() {
             // (let ((x y)))
             Some(x) => self.eval_form(x.obj(), gc)?,

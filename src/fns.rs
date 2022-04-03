@@ -88,7 +88,7 @@ pub(crate) fn mapcar<'ob, 'id>(
         List::Cons(cons) => {
             root_struct!(outputs, Vec::new(), gc);
             root_struct!(call_arg, Vec::new(), gc);
-            element_iter!(iter, !cons);
+            element_iter!(iter, !cons, gc);
             while let Some(x) = iter.next() {
                 let obj = x.obj();
                 call_arg.borrow_mut(owner, gc).push(obj);
@@ -116,7 +116,7 @@ pub(crate) fn mapc<'ob, 'id>(
         List::Nil => Ok(Object::NIL),
         List::Cons(cons) => {
             root_struct!(call_arg, Vec::new(), gc);
-            element_iter!(elements, !cons);
+            element_iter!(elements, !cons, gc);
             while let Some(elem) = elements.next() {
                 call_arg.borrow_mut(owner, gc).push(elem.obj());
                 function.call(call_arg, env, gc, owner)?;

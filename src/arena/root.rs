@@ -88,7 +88,7 @@ impl<'id, T> GcCell<'id, T> {
     }
 
     pub(super) fn deref(&mut self) -> &T {
-        unsafe { &*(self as *const Self).cast::<T>() }
+        unsafe { &*(&self.0 as *const LCell<'id, Gc<T>>).cast::<T>() }
     }
 
     pub(crate) fn borrow<'a>(&'a self, owner: &'a LCellOwner<'id>) -> &'a Gc<T> {
@@ -126,8 +126,7 @@ macro_rules! root_struct {
     ($ident:ident, $value:expr, $arena:ident) => {
         let mut $ident = unsafe { $crate::arena::GcCell::new($value) };
         let mut root = unsafe { $crate::arena::GcRoot::new($arena.get_root_set()) };
-        root.set(&mut $ident);
-        let $ident = &$ident;
+        let $ident = root.set(&mut $ident);
     };
 }
 

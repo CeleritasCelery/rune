@@ -23,6 +23,12 @@ pub(crate) struct GcRoot<'rt> {
     root_set: &'rt RootSet,
 }
 
+impl<'rt> Drop for GcRoot<'rt> {
+    fn drop(&mut self) {
+        self.root_set.root_structs.borrow_mut().pop();
+    }
+}
+
 impl<'rt> GcRoot<'rt> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
         use std::ptr::null;
@@ -35,7 +41,8 @@ impl<'rt> GcRoot<'rt> {
         }
     }
 
-    pub(crate) fn set<T: Trace>(&mut self, root: &mut GcCell<T>) {
+    pub(crate) fn set<'a, 'id, T: Trace>(&mut self, root: &'a mut GcCell<'id, T>) -> &'a GcCell<'id, T> {
+        {
         let data = root.deref();
         self.obj.vtable = Self::extract_vtable(data);
         self.obj.data = (data as *const T).cast::<Data>();
@@ -48,6 +55,8 @@ impl<'rt> GcRoot<'rt> {
                 .push(std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self)
                     as *const GcRoot<'static>);
         }
+    }
+        root
     }
 
     fn extract_vtable<T: Trace>(data: &T) -> *const Vtable {
@@ -77,7 +86,7 @@ impl<T: Trace> Trace for Option<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::GcCell;
+    use crate::{arena::Arena, root_struct};
 
     struct Foo(u64);
     impl Trace for Foo {
@@ -89,11 +98,13 @@ mod test {
     #[test]
     fn test_gc_root() {
         let roots = &RootSet::default();
+        let gc = &mut Arena::new(roots);
         let foo = Foo(7);
-        let mut gc = unsafe { GcCell::new(foo) };
-        let mut root = unsafe { GcRoot::new(roots) };
-        root.set(&mut gc);
-        let data = root.dyn_data();
-        data.mark();
+        assert_eq!(roots.root_structs.borrow().len(), 0);
+        {
+            root_struct!(_root, foo, gc);
+            assert_eq!(roots.root_structs.borrow().len(), 1);
+        }
+        assert_eq!(roots.root_structs.borrow().len(), 0);
     }
 }

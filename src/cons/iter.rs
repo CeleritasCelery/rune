@@ -166,19 +166,23 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 
 #[macro_export]
 macro_rules! element_iter {
-    ($ident:ident, $obj:expr) => {
+    ($ident:ident, $obj:expr, $gc:ident) => {
         let mut root_elem = None;
         let mut root_cons = None;
-        crate::make_lcell_owner!(owner);
+        $crate::make_lcell_owner!(owner);
+
+        let mut gc_root_elem = unsafe { $crate::arena::GcRoot::new($gc.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::arena::GcRoot::new($gc.get_root_set()) };
         #[allow(unused_qualifications)]
         let list: $crate::object::List = $obj.try_into()?;
         if let $crate::object::List::Cons(x) = list {
-            root_elem =
-                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
+            root_elem = unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
             root_cons = unsafe { Some($crate::arena::GcCell::new($crate::arena::RootCons::new(!x))) };
+            gc_root_elem.set(root_elem.as_mut().unwrap());
+            gc_root_cons.set(root_cons.as_mut().unwrap());
         }
         #[allow(unused_mut)]
-        let mut $ident = crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
+        let mut $ident = $crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
     };
 }
 
@@ -219,7 +223,7 @@ mod test {
             let roots = &RootSet::default();
             let arena = &Arena::new(roots);
             let cons = list![1, 2, 3, 4; arena];
-            element_iter!(iter, cons);
+            element_iter!(iter, cons, arena);
             for expect in 1..=4 {
                 let actual = iter.next().unwrap().obj();
                 assert_eq!(actual, expect);
