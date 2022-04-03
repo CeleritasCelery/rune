@@ -41,6 +41,28 @@ pub(crate) enum Object<'ob> {
     SubrFn(Data<&'static SubrFn>),
 }
 
+impl<'ob> Object<'ob> {
+    pub(crate) fn mark(self) {
+        match self {
+            Object::Float(x) => x.get_alloc().mark(),
+            Object::Cons(x) => x.mark(),
+            Object::Vec(vec) => {
+                for x in vec.borrow().iter() {
+                    x.mark();
+                }
+                vec.mark();
+            }
+            Object::String(x) => x.get_alloc().mark(),
+            Object::LispFn(x) => x.get_alloc().mark(),
+            Object::Int(_)
+            | Object::Symbol(_)
+            | Object::True(_)
+            | Object::Nil(_)
+            | Object::SubrFn(_) => {}
+        }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct RawObj(u64);

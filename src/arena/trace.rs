@@ -41,21 +41,24 @@ impl<'rt> GcRoot<'rt> {
         }
     }
 
-    pub(crate) fn set<'a, 'id, T: Trace>(&mut self, root: &'a mut GcCell<'id, T>) -> &'a GcCell<'id, T> {
+    pub(crate) fn set<'a, 'id, T: Trace>(
+        &mut self,
+        root: &'a mut GcCell<'id, T>,
+    ) -> &'a GcCell<'id, T> {
         {
-        let data = root.deref();
-        self.obj.vtable = Self::extract_vtable(data);
-        self.obj.data = (data as *const T).cast::<Data>();
-        unsafe {
-            // false positive
-            #[allow(clippy::transmute_ptr_to_ptr)]
-            self.root_set
-                .root_structs
-                .borrow_mut()
-                .push(std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self)
-                    as *const GcRoot<'static>);
+            let data = root.deref();
+            self.obj.vtable = Self::extract_vtable(data);
+            self.obj.data = (data as *const T).cast::<Data>();
+            unsafe {
+                // false positive
+                #[allow(clippy::transmute_ptr_to_ptr)]
+                self.root_set
+                    .root_structs
+                    .borrow_mut()
+                    .push(std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self)
+                        as *const GcRoot<'static>);
+            }
         }
-    }
         root
     }
 

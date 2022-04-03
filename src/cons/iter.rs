@@ -176,8 +176,10 @@ macro_rules! element_iter {
         #[allow(unused_qualifications)]
         let list: $crate::object::List = $obj.try_into()?;
         if let $crate::object::List::Cons(x) = list {
-            root_elem = unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
-            root_cons = unsafe { Some($crate::arena::GcCell::new($crate::arena::RootCons::new(!x))) };
+            root_elem =
+                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
+            root_cons =
+                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootCons::new(!x))) };
             gc_root_elem.set(root_elem.as_mut().unwrap());
             gc_root_cons.set(root_cons.as_mut().unwrap());
         }

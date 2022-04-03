@@ -52,7 +52,8 @@ impl RootObj {
 
 impl Trace for RootObj {
     fn mark(&self) {
-        todo!()
+        let obj = unsafe { Object::from_raw(self.obj) };
+        obj.mark();
     }
 }
 
@@ -65,7 +66,7 @@ pub(crate) struct RootCons {
 impl RootCons {
     pub(crate) fn new(obj: &Cons) -> Self {
         Self {
-            obj: unsafe { std::mem::transmute(obj) },
+            obj: unsafe { std::mem::transmute::<&Cons, *const Cons<'static>>(obj) },
         }
     }
 }

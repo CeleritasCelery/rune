@@ -9,12 +9,17 @@ mod iter;
 
 pub(crate) use iter::*;
 
-#[derive(PartialEq)]
 pub(crate) struct Cons<'ob> {
     mutable: bool,
     marked: Cell<bool>,
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
+}
+
+impl<'ob> PartialEq for Cons<'ob> {
+    fn eq(&self, other: &Self) -> bool {
+        self.car == other.car && self.cdr == other.cdr
+    }
 }
 
 #[derive(Debug, Default)]

@@ -273,6 +273,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 if crate::debug::debug_enabled() {
                     println!("({name} {args:?})");
                 }
+                gc.garbage_collect();
                 (*func).call(args, self.env, gc, self.owner)
             }
             Callable::Cons(form) => {

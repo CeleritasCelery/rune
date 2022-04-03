@@ -104,7 +104,7 @@ enum OwnedObject<'ob> {
     SubrFn(Box<SubrFn>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct Allocation<T> {
     marked: Cell<bool>,
     data: T,
@@ -116,6 +116,20 @@ impl<T> Allocation<T> {
             marked: Cell::from(false),
             data,
         }
+    }
+
+    pub(crate) fn mark(&self) {
+        self.marked.set(true);
+    }
+
+    pub(crate) fn unmark(&self) {
+        self.marked.set(false);
+    }
+}
+
+impl<T: PartialEq> PartialEq for Allocation<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
     }
 }
 
@@ -281,6 +295,17 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) unsafe fn get_root_set(&'ob self) -> &'rt RootSet {
         self.roots
+    }
+
+    pub(crate) fn garbage_collect(&mut self) {
+        for x in self.roots.roots.borrow().iter() {
+            x.mark();
+        }
+        // for x in self.roots.root_structs.borrow().iter() {
+        //     unsafe {
+        //         x
+        //     }
+        // }
     }
 }
 
