@@ -69,6 +69,12 @@ impl<'ob> Cons<'ob> {
 
     pub(crate) fn mark(&self) {
         self.marked.set(true);
+        self.car.get().mark();
+        self.cdr.get().mark();
+    }
+
+    pub(crate) fn unmark(&self) {
+        self.marked.set(false);
     }
 
     #[cfg(test)]

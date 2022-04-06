@@ -89,7 +89,7 @@ pub(crate) struct Block<const CONST: bool> {
 #[derive(Debug)]
 pub(crate) struct Arena<'rt> {
     pub(crate) block: Block<false>,
-    roots: &'rt RootSet,
+    root_set: &'rt RootSet,
 }
 
 /// The owner of an object allocation. No references to
@@ -121,6 +121,10 @@ impl<T> Allocation<T> {
     pub(crate) fn mark(&self) {
         self.marked.set(true);
     }
+
+    fn unmark(&self) {
+        self.marked.set(false);
+    }
 }
 
 impl<T: PartialEq> PartialEq for Allocation<T> {
@@ -140,6 +144,17 @@ impl<T> Deref for Allocation<T> {
 impl<'ob> OwnedObject<'ob> {
     unsafe fn coerce_lifetime(self) -> OwnedObject<'static> {
         transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
+    }
+
+    fn unmark(&self) {
+        match self {
+            OwnedObject::Float(x) => x.unmark(),
+            OwnedObject::Cons(x) => x.unmark(),
+            OwnedObject::Vec(x) => x.unmark(),
+            OwnedObject::String(x) => x.unmark(),
+            OwnedObject::LispFn(x) => x.unmark(),
+            OwnedObject::SubrFn(_) => {}
+        }
     }
 }
 
@@ -273,7 +288,7 @@ impl<'ob, 'rt> Arena<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
         Arena {
             block: Block::new_local(),
-            roots,
+            root_set: roots,
         }
     }
 
@@ -290,17 +305,20 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 
     pub(crate) unsafe fn get_root_set(&'ob self) -> &'rt RootSet {
-        self.roots
+        self.root_set
     }
 
     pub(crate) fn garbage_collect(&mut self) {
-        for x in self.roots.roots.borrow().iter() {
+        for x in self.root_set.roots.borrow().iter() {
             x.mark();
         }
-        for x in self.roots.root_structs.borrow().iter() {
+        for x in self.root_set.root_structs.borrow().iter() {
             unsafe {
                 (&**x).dyn_data().mark();
             }
+        }
+        for x in self.block.objects.borrow().iter() {
+            x.unmark();
         }
     }
 }
