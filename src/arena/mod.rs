@@ -121,10 +121,6 @@ impl<T> Allocation<T> {
     pub(crate) fn mark(&self) {
         self.marked.set(true);
     }
-
-    pub(crate) fn unmark(&self) {
-        self.marked.set(false);
-    }
 }
 
 impl<T: PartialEq> PartialEq for Allocation<T> {
@@ -301,11 +297,11 @@ impl<'ob, 'rt> Arena<'rt> {
         for x in self.roots.roots.borrow().iter() {
             x.mark();
         }
-        // for x in self.roots.root_structs.borrow().iter() {
-        //     unsafe {
-        //         x
-        //     }
-        // }
+        for x in self.roots.root_structs.borrow().iter() {
+            unsafe {
+                (&**x).dyn_data().mark();
+            }
+        }
     }
 }
 

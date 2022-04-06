@@ -29,6 +29,7 @@ pub(crate) fn eval<'ob, 'id>(
         "lexical enviroments are not yet supported: found {:?}",
         lexical
     );
+    arena.garbage_collect();
     root_struct!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env, owner };
     interpreter.eval_form(form, arena)

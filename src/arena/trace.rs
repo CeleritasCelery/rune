@@ -1,26 +1,22 @@
-#![allow(dead_code)]
+use std::fmt::Debug;
 
 use super::{GcCell, RootSet};
-
-// uninhabited types
-enum Vtable {}
-enum Data {}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct DynObject {
-    data: *const Data,
-    vtable: *const Vtable,
-}
 
 pub(crate) trait Trace {
     fn mark(&self);
 }
 
-#[derive(Debug)]
 pub(crate) struct GcRoot<'rt> {
-    obj: DynObject,
+    obj: Option<*const dyn Trace>,
     root_set: &'rt RootSet,
+}
+
+impl<'rt> Debug for GcRoot<'rt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GcRoot")
+            .field("root_set", &self.root_set)
+            .finish()
+    }
 }
 
 impl<'rt> Drop for GcRoot<'rt> {
@@ -31,44 +27,34 @@ impl<'rt> Drop for GcRoot<'rt> {
 
 impl<'rt> GcRoot<'rt> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
-        use std::ptr::null;
         Self {
-            obj: DynObject {
-                vtable: null(),
-                data: null(),
-            },
+            obj: None,
             root_set,
         }
     }
 
-    pub(crate) fn set<'a, 'id, T: Trace>(
+    pub(crate) fn set<'a, 'id, T: Trace + 'static>(
         &mut self,
         root: &'a mut GcCell<'id, T>,
     ) -> &'a GcCell<'id, T> {
-        {
-            let data = root.deref();
-            self.obj.vtable = Self::extract_vtable(data);
-            self.obj.data = (data as *const T).cast::<Data>();
-            unsafe {
-                // false positive
-                #[allow(clippy::transmute_ptr_to_ptr)]
-                self.root_set
-                    .root_structs
-                    .borrow_mut()
-                    .push(std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self)
-                        as *const GcRoot<'static>);
-            }
+        let dyn_ptr = root.deref() as &dyn Trace as *const dyn Trace;
+        self.obj = Some(dyn_ptr);
+        let rebound_root = unsafe { &*dyn_ptr.cast::<GcCell<'id, T>>() };
+        // false positive. We are changing the filetime
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        let root_ptr = unsafe {
+            std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self) as *const GcRoot<'static>
+        };
+        self.root_set.root_structs.borrow_mut().push(root_ptr);
+        rebound_root
+    }
+
+    pub(crate) fn dyn_data(&self) -> &dyn Trace {
+        unsafe {
+            &*(self
+                .obj
+                .expect("This can only be None if this type was not intialized correctly"))
         }
-        root
-    }
-
-    fn extract_vtable<T: Trace>(data: &T) -> *const Vtable {
-        let obj = data as &dyn Trace;
-        unsafe { std::mem::transmute::<&dyn Trace, DynObject>(obj).vtable }
-    }
-
-    fn dyn_data(&self) -> &dyn Trace {
-        unsafe { std::mem::transmute::<DynObject, &dyn Trace>(self.obj) }
     }
 }
 
