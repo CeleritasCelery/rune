@@ -1,7 +1,7 @@
 use crate::arena::{IntoRoot, Root, RootCons, RootObj};
 use crate::cons::ElemStreamIter;
 use crate::error::{Error, Type};
-use crate::lcell::LCellOwner;
+use crate::arena::LCellOwner;
 use crate::object::{Callable, Function, List};
 use crate::symbol::sym;
 use crate::{arena::Arena, cons::Cons, data::Environment, object::Object, symbol::Symbol};

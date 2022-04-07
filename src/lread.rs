@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Root};
 use crate::data::Environment;
-use crate::lcell::LCellOwner;
+use crate::arena::LCellOwner;
 use crate::object::Object;
 use crate::reader;
 use crate::symbol::Symbol;

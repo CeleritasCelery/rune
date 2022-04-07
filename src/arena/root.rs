@@ -4,7 +4,7 @@ use std::{ops::Index, slice::SliceIndex};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::lcell::{LCell, LCellOwner};
+use crate::arena::{LCell, LCellOwner};
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 

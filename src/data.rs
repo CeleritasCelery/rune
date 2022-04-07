@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use crate::arena::{Arena, Root, RootHandle, RootObj, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::lcell::LCellOwner;
+use crate::arena::LCellOwner;
 use crate::object::{FuncCell, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;

@@ -3,7 +3,7 @@ use fn_macros::defun;
 use crate::{
     arena::{Arena, IntoRoot, Root},
     data::Environment,
-    lcell::LCellOwner,
+    arena::LCellOwner,
     object::{Function, Object},
     root_struct,
 };

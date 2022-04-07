@@ -1,7 +1,7 @@
 use crate::{
     arena::{Arena, ConstrainLifetime, Root, RootCons, RootHandle, RootObj},
     error::{Error, Type},
-    lcell::LCellOwner,
+    arena::LCellOwner,
     object::{List, Object},
 };
 use streaming_iterator::StreamingIterator;

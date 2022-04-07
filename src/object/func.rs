@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Block, Root, RootObj};
 use crate::error::Error;
-use crate::lcell::LCellOwner;
+use crate::arena::LCellOwner;
 use crate::object::{Function, IntoObject, Object};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;

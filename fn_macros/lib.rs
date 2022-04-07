@@ -69,7 +69,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
             args: &[crate::object::Object<'ob>],
             env: &crate::arena::Root<'id, crate::data::Environment>,
             arena: &'ob mut crate::arena::Arena,
-            owner: &mut crate::lcell::LCellOwner<'id>,
+            owner: &mut crate::arena::LCellOwner<'id>,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }

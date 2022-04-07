@@ -2,7 +2,7 @@ use crate::arena::{Arena, Root, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::lcell::LCellOwner;
+use crate::arena::LCellOwner;
 use crate::object::{Callable, Function, List, Object};
 use crate::symbol::Symbol;
 use crate::{data, element_iter, rebind, root, root_struct};

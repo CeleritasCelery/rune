@@ -309,7 +309,7 @@ mod test {
 
     use crate::arena::{Arena, Root, RootSet};
     use crate::data::Environment;
-    use crate::lcell::LCellOwner;
+    use crate::arena::LCellOwner;
     use crate::object::{IntoObject, LispFn, Object};
     use anyhow::Result;
     use std::mem::size_of;

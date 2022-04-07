@@ -1,7 +1,6 @@
 #![deny(
     macro_use_extern_crate,
-    keyword_idents,
-    absolute_paths_not_starting_with_crate
+    keyword_idents
 )]
 #![forbid(non_ascii_idents)]
 #![warn(rust_2018_idioms)]
@@ -78,7 +77,6 @@ mod fns;
 mod hashmap;
 mod interpreter;
 mod keymap;
-mod lcell;
 mod lread;
 mod opcode;
 mod reader;
@@ -87,11 +85,11 @@ mod symbol;
 
 use arena::{Arena, Root, RootSet};
 use data::Environment;
-use lcell::LCellOwner;
 use object::Object;
 use std::env;
 use std::io::{self, Write};
 use symbol::intern;
+use arena::LCellOwner;
 
 fn parens_closed(buffer: &str) -> bool {
     let open = buffer.chars().filter(|&x| x == '(').count();

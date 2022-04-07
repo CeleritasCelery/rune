@@ -156,7 +156,7 @@ macro_rules! make_lcell_owner {
     ($name:ident) => {
         generativity::make_guard!(a);
         #[allow(unused_mut)]
-        let mut $name = unsafe { $crate::lcell::LCellOwner::new(a) };
+        let mut $name = unsafe { $crate::arena::LCellOwner::new(a) };
     };
 }
 

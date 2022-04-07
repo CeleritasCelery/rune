@@ -8,8 +8,10 @@ use std::sync::atomic::AtomicBool;
 
 mod root;
 mod trace;
+mod cell;
 pub(crate) use root::*;
 pub(crate) use trace::*;
+pub(crate) use cell::*;
 
 pub(crate) trait ConstrainLifetime<'new, T> {
     fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
