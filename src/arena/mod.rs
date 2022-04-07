@@ -17,21 +17,27 @@ pub(crate) trait ConstrainLifetime<'new, T> {
 
 impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
     fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> Object<'new> {
+        // Lifetime is bound to borrow of Block, so it is safe to extend
         unsafe { transmute::<Object<'old>, Object<'new>>(self) }
     }
 }
 
 impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
     fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [Object<'new>] {
+        // Lifetime is bound to borrow of Block, so it is safe to extend
         unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
     }
 }
 
+#[doc(hidden)]
 pub(crate) struct StackRoot<'rt> {
     root_set: &'rt RootSet,
 }
 
 impl<'rt> StackRoot<'rt> {
+    // This function is only safe if [set] is called before use and StackRoot
+    // does not move from the stack or drop before it goes out of scope. This
+    // is ensured by a shadow binding in the [root!] macro.
     pub(crate) unsafe fn new(roots: &'rt RootSet) -> Self {
         StackRoot { root_set: roots }
     }
@@ -48,34 +54,61 @@ impl<'rt> StackRoot<'rt> {
 }
 
 impl<'rt> Drop for StackRoot<'rt> {
+    // Remove the object bound by this StackRoot from the root set. We know that
+    // the top of the stack will correspond to the correct object is the
+    // invariants of StackRoot are upheld.
     fn drop(&mut self) {
         self.root_set.roots.borrow_mut().pop();
     }
 }
 
+/// Roots an [Object] to the stack. The object will be valid until the end of
+/// the current scope. The object's lifetime will no longer be bound to the
+/// [Arena].
+///
+/// # Examples
+///
+/// ```
+/// let object = Object::from(5);
+/// root!(object, gc);
+/// ```
 #[macro_export]
 macro_rules! root {
     ($obj:ident, $arena:ident) => {
-        let mut root = unsafe { crate::arena::StackRoot::new($arena.get_root_set()) };
+        let mut root = unsafe { $crate::arena::StackRoot::new($arena.get_root_set()) };
         let $obj = root.set($obj);
     };
 }
 
+/// Rebinds an object so that it is bound to an immutable borrow of [Arena]
+/// instead of a mutable borrow. This can release the mutable borrow and allow
+/// arena to be used for other things.
+///
+/// # Examples
+///
+/// ```
+/// let object = func_taking_mut_arena(&mut Arena);
+/// rebind!(object, arena);
+/// ```
 #[macro_export]
 macro_rules! rebind {
     ($item:ident, $arena:ident) => {
         #[allow(unused_qualifications)]
-        let bits: crate::object::RawObj = $item.into();
+        let bits: $crate::object::RawObj = $item.into();
         let $item = unsafe { $arena.rebind_raw_ptr(bits) };
     };
 }
 
+/// A global store of all gc roots. This struct should be passed to the [Arena]
+/// when it is created.
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
     root_structs: RefCell<Vec<*const GcRoot<'static>>>,
 }
 
+/// A block of allocations. This type should be owned by [Arena] and not used
+/// directly.
 #[derive(Debug)]
 pub(crate) struct Block<const CONST: bool> {
     objects: RefCell<Vec<OwnedObject<'static>>>,
@@ -84,8 +117,6 @@ pub(crate) struct Block<const CONST: bool> {
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Arena`. When the
 /// `Arena` goes out of scope, no objects should be accessible.
-/// Interior mutability is used to ensure that `&mut` references
-/// don't invalid objects.
 #[derive(Debug)]
 pub(crate) struct Arena<'rt> {
     pub(crate) block: Block<false>,
@@ -104,6 +135,7 @@ enum OwnedObject<'ob> {
     SubrFn(Box<SubrFn>),
 }
 
+/// A container type that has a mark bit for garbage collection.
 #[derive(Debug)]
 pub(crate) struct Allocation<T> {
     marked: Cell<bool>,
@@ -328,23 +360,22 @@ impl<'ob, 'rt> Arena<'rt> {
             x.mark();
         }
         for x in self.root_set.root_structs.borrow().iter() {
+            // SAFETY: The contact of root structs will ensure that it removes
+            // itself from this list before it drops.
             unsafe {
                 (&**x).dyn_data().mark();
             }
         }
 
-        let before = self.block.objects.borrow().len();
-        self.block
-            .objects
-            .borrow_mut()
-            .retain(OwnedObject::is_marked);
-        let after = self.block.objects.borrow().len();
+        let mut objects = self.block.objects.borrow_mut();
+
+        let before = objects.len();
+        objects.retain(OwnedObject::is_marked);
+        let after = objects.len();
 
         println!("retained: {after}/{before}");
 
-        for x in self.block.objects.borrow().iter() {
-            x.unmark();
-        }
+        objects.iter().for_each(OwnedObject::unmark);
     }
 }
 
@@ -357,6 +388,8 @@ impl<'rt> Deref for Arena<'rt> {
 }
 
 impl<'rt> Drop for Arena<'rt> {
+    // Garbage collect one final time to make sure that no live references
+    // exist.
     fn drop(&mut self) {
         self.garbage_collect();
         assert!(
@@ -373,6 +406,8 @@ impl<'rt> AsRef<Block<false>> for Arena<'rt> {
 }
 
 impl<const CONST: bool> Drop for Block<CONST> {
+    // Only one block can exist in a thread at a time. This part of that
+    // contract.
     fn drop(&mut self) {
         SINGLETON_CHECK.with(|s| {
             assert!(s.get(), "Arena singleton check was overwritten");

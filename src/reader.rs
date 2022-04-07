@@ -1,5 +1,4 @@
-//! Lisp reader that reads an object from a string. Note that currently reader
-//! macros are not supported, but could be implemented in the future.
+//! Lisp reader that reads an object from a string.
 
 use crate::arena::Arena;
 use crate::fns;
