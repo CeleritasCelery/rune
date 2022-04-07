@@ -1,7 +1,7 @@
 use fn_macros::defun;
 
 use crate::{
-    arena::{Arena, GcCell, IntoRoot},
+    arena::{Arena, IntoRoot, Root},
     data::Environment,
     lcell::LCellOwner,
     object::{Function, Object},
@@ -13,7 +13,7 @@ use anyhow::Result;
 pub(crate) fn apply<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
@@ -38,7 +38,7 @@ pub(crate) fn apply<'ob, 'id>(
 pub(crate) fn funcall<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {

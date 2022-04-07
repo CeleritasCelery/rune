@@ -1,4 +1,4 @@
-use crate::arena::{GcCell, IntoRoot, RootCons, RootObj};
+use crate::arena::{IntoRoot, Root, RootCons, RootObj};
 use crate::cons::ElemStreamIter;
 use crate::error::{Error, Type};
 use crate::lcell::LCellOwner;
@@ -11,8 +11,8 @@ use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
 struct Interpreter<'id, 'brw> {
-    vars: &'brw GcCell<'id, Vec<RootCons>>,
-    env: &'brw GcCell<'id, Environment>,
+    vars: &'brw Root<'id, Vec<RootCons>>,
+    env: &'brw Root<'id, Environment>,
     owner: &'brw mut LCellOwner<'id>,
 }
 
@@ -20,7 +20,7 @@ struct Interpreter<'id, 'brw> {
 pub(crate) fn eval<'ob, 'id>(
     form: Object<'ob>,
     lexical: Option<Object<'ob>>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     arena: &'ob mut Arena,
     owner: &mut LCellOwner<'id>,
 ) -> Result<Object<'ob>> {
@@ -37,8 +37,8 @@ pub(crate) fn eval<'ob, 'id>(
 
 pub(crate) fn call<'ob, 'gc, 'id>(
     form: Object<'ob>,
-    args: &GcCell<'id, Vec<RootObj>>,
-    env: &GcCell<'id, Environment>,
+    args: &Root<'id, Vec<RootObj>>,
+    env: &Root<'id, Environment>,
     gc: &'gc mut Arena,
     owner: &mut LCellOwner<'id>,
 ) -> Result<Object<'gc>> {
@@ -224,7 +224,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     fn call_closure<'a, 'gc>(
         &mut self,
         closure: &'a Cons<'a>,
-        args: &GcCell<'id, Vec<RootObj>>,
+        args: &Root<'id, Vec<RootObj>>,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
         match closure.car(gc) {
@@ -618,7 +618,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 x => bail!(Error::from_object(Type::Cons, x)),
             }
         }
-        let (vars, let_bindings) = GcCell::borrow_mut2(self.vars, let_bindings, self.owner, gc);
+        let (vars, let_bindings) = Root::borrow_mut2(self.vars, let_bindings, self.owner, gc);
         vars.append(let_bindings);
         Ok(())
     }

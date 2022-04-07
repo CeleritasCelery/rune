@@ -307,7 +307,7 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use crate::arena::{Arena, GcCell, RootSet};
+    use crate::arena::{Arena, Root, RootSet};
     use crate::data::Environment;
     use crate::lcell::LCellOwner;
     use crate::object::{IntoObject, LispFn, Object};
@@ -359,7 +359,7 @@ mod test {
     #[allow(clippy::unnecessary_wraps)]
     fn dummy<'ob, 'id>(
         vars: &[Object<'ob>],
-        _map: &GcCell<'id, Environment>,
+        _map: &Root<'id, Environment>,
         _arena: &'ob mut Arena,
         _owner: &mut LCellOwner<'id>,
     ) -> Result<Object<'ob>> {

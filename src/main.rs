@@ -85,7 +85,7 @@ mod reader;
 mod search;
 mod symbol;
 
-use arena::{Arena, GcCell, RootSet};
+use arena::{Arena, Root, RootSet};
 use data::Environment;
 use lcell::LCellOwner;
 use object::Object;
@@ -99,7 +99,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
+fn repl<'id>(env: &Root<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -134,7 +134,7 @@ fn repl<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena:
     }
 }
 
-fn load<'id>(env: &GcCell<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
+fn load<'id>(env: &Root<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
     use crate::symbol::sym;
     {
         let env = env.borrow_mut(owner, arena);

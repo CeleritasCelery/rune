@@ -1,4 +1,4 @@
-use crate::arena::{Arena, GcCell, RootObj};
+use crate::arena::{Arena, Root, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
@@ -28,8 +28,8 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
 impl<'ob> Function<'ob> {
     pub(crate) fn call<'gc, 'id>(
         self,
-        args: &GcCell<'id, Vec<RootObj>>,
-        env: &GcCell<'id, Environment>,
+        args: &Root<'id, Vec<RootObj>>,
+        env: &Root<'id, Environment>,
         arena: &'gc mut Arena,
         owner: &mut LCellOwner<'id>,
     ) -> Result<Object<'gc>> {
@@ -79,7 +79,7 @@ impl<'ob> Function<'ob> {
 pub(crate) fn mapcar<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
@@ -108,7 +108,7 @@ pub(crate) fn mapcar<'ob, 'id>(
 pub(crate) fn mapc<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
@@ -279,7 +279,7 @@ fn require<'ob, 'id>(
     feature: Symbol,
     filename: Option<&str>,
     noerror: Option<bool>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {

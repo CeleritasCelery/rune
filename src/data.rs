@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::{Arena, Gc, GcCell, RootObj, Trace};
+use crate::arena::{Arena, Root, RootHandle, RootObj, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::lcell::LCellOwner;
@@ -19,12 +19,12 @@ pub(crate) struct Environment {
 }
 
 impl Environment {
-    pub(crate) fn set_var(env: &mut Gc<Environment>, sym: Symbol, value: Object) {
+    pub(crate) fn set_var(env: &mut RootHandle<Environment>, sym: Symbol, value: Object) {
         env.vars_mut().insert(sym, value);
     }
 
     pub(crate) fn set_prop(
-        env: &mut Gc<Environment>,
+        env: &mut RootHandle<Environment>,
         symbol: Symbol,
         propname: Symbol,
         value: Object,
@@ -90,7 +90,7 @@ pub(crate) fn defalias(
 pub(crate) fn set<'ob, 'id>(
     place: Symbol,
     newlet: Object<'ob>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {
@@ -103,7 +103,7 @@ pub(crate) fn put<'ob, 'id>(
     symbol: Symbol,
     propname: Symbol,
     value: Object<'ob>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {
@@ -115,7 +115,7 @@ pub(crate) fn put<'ob, 'id>(
 pub(crate) fn get<'ob, 'id>(
     symbol: Symbol,
     propname: Symbol,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &LCellOwner<'id>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
@@ -149,7 +149,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> Object<'ob
 #[defun]
 pub(crate) fn symbol_value<'ob, 'id>(
     symbol: Symbol,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &LCellOwner<'id>,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
@@ -183,7 +183,7 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 #[defun]
 pub(crate) fn boundp<'id>(
     symbol: Symbol,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &LCellOwner<'id>,
 ) -> bool {
     env.borrow(owner).vars().get(&symbol).is_some()
@@ -192,7 +192,7 @@ pub(crate) fn boundp<'id>(
 #[defun]
 pub(crate) fn default_boundp<'id>(
     symbol: Symbol,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &LCellOwner<'id>,
 ) -> bool {
     env.borrow(owner).vars().get(&symbol).is_some()
@@ -248,7 +248,7 @@ pub(crate) fn defvar<'ob, 'id>(
     symbol: Symbol,
     initvalue: Option<Object<'ob>>,
     _docstring: Option<&String>,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {

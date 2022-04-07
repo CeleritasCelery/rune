@@ -67,7 +67,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob, 'id>(
             args: &[crate::object::Object<'ob>],
-            env: &crate::arena::GcCell<'id, crate::data::Environment>,
+            env: &crate::arena::Root<'id, crate::data::Environment>,
             arena: &'ob mut crate::arena::Arena,
             owner: &mut crate::lcell::LCellOwner<'id>,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
@@ -119,7 +119,7 @@ fn get_arg_type(ty: &syn::Type) -> ArgType {
             syn::Type::Path(path) => match get_path_ident_name(path).as_str() {
                 "Arena" => ArgType::Arena,
                 "LCellOwner" => ArgType::Owner,
-                "GcCell" => ArgType::Env,
+                "Root" => ArgType::Env,
                 _ => ArgType::Other,
             }
             _ => ArgType::Other,
@@ -306,7 +306,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob, 'id>(list: &Cons<'ob>, env: &GcCell<'id, Environment>, owner: &LCellOwner<'id>) -> Object<'ob> {
+            fn car<'ob, 'id>(list: &Cons<'ob>, env: &Root<'id, Environment>, owner: &LCellOwner<'id>) -> Object<'ob> {
                 list.car()
 }
         };

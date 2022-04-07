@@ -1,5 +1,5 @@
 use crate::{
-    arena::{Arena, ConstrainLifetime, Gc, GcCell, RootCons, RootObj},
+    arena::{Arena, ConstrainLifetime, Root, RootCons, RootHandle, RootObj},
     error::{Error, Type},
     lcell::LCellOwner,
     object::{List, Object},
@@ -107,15 +107,15 @@ impl<'ob> Iterator for ConsIter<'ob> {
 
 #[derive(Debug)]
 pub(crate) struct ElemStreamIter<'rt, 'id> {
-    elem: Option<&'rt GcCell<'id, RootObj>>,
-    cons: Option<&'rt GcCell<'id, RootCons>>,
+    elem: Option<&'rt Root<'id, RootObj>>,
+    cons: Option<&'rt Root<'id, RootCons>>,
     owner: LCellOwner<'id>,
 }
 
 impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
     pub(crate) fn new(
-        elem: &'rt Option<GcCell<'id, RootObj>>,
-        cons: &'rt Option<GcCell<'id, RootCons>>,
+        elem: &'rt Option<Root<'id, RootObj>>,
+        cons: &'rt Option<Root<'id, RootCons>>,
         owner: LCellOwner<'id>,
     ) -> Self {
         Self {
@@ -127,7 +127,7 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 }
 
 impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
-    type Item = Gc<RootObj>;
+    type Item = RootHandle<RootObj>;
 
     fn advance(&mut self) {
         if let Some(cons) = &self.cons {
@@ -135,8 +135,7 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
                 .elem
                 .as_ref()
                 .expect("Element should never be None while Cons is Some");
-            let (cons, elem) =
-                unsafe { GcCell::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
+            let (cons, elem) = unsafe { Root::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
             let car = cons.obj().car.get();
             elem.set(car);
             match cons.obj().cdr.get() {
@@ -171,15 +170,14 @@ macro_rules! element_iter {
         let mut root_cons = None;
         $crate::make_lcell_owner!(owner);
 
-        let mut gc_root_elem = unsafe { $crate::arena::GcRoot::new($gc.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::arena::GcRoot::new($gc.get_root_set()) };
+        let mut gc_root_elem = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
         #[allow(unused_qualifications)]
         let list: $crate::object::List = $obj.try_into()?;
         if let $crate::object::List::Cons(x) = list {
             root_elem =
-                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootObj::default())) };
-            root_cons =
-                unsafe { Some($crate::arena::GcCell::new($crate::arena::RootCons::new(!x))) };
+                unsafe { Some($crate::arena::Root::new($crate::arena::RootObj::default())) };
+            root_cons = unsafe { Some($crate::arena::Root::new($crate::arena::RootCons::new(!x))) };
             gc_root_elem.set(root_elem.as_mut().unwrap());
             gc_root_cons.set(root_cons.as_mut().unwrap());
         }

@@ -1,4 +1,4 @@
-use crate::arena::{Arena, Block, GcCell, RootObj};
+use crate::arena::{Arena, Block, Root, RootObj};
 use crate::error::Error;
 use crate::lcell::LCellOwner;
 use crate::object::{Function, IntoObject, Object};
@@ -112,7 +112,7 @@ impl<'ob> Default for LispFn<'ob> {
 
 pub(crate) type BuiltInFn = for<'ob, 'id> fn(
     &[Object<'ob>],
-    &GcCell<'id, crate::data::Environment>,
+    &Root<'id, crate::data::Environment>,
     &'ob mut Arena,
     &mut LCellOwner<'id>,
 ) -> Result<Object<'ob>>;
@@ -127,8 +127,8 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'gc, 'id>(
         &self,
-        args: &GcCell<'id, Vec<RootObj>>,
-        env: &GcCell<'id, crate::data::Environment>,
+        args: &Root<'id, Vec<RootObj>>,
+        env: &Root<'id, crate::data::Environment>,
         arena: &'gc mut Arena,
         owner: &mut LCellOwner<'id>,
     ) -> Result<Object<'gc>> {

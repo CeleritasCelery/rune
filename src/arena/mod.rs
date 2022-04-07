@@ -104,7 +104,7 @@ macro_rules! rebind {
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
-    root_structs: RefCell<Vec<*const GcRoot<'static>>>,
+    root_structs: RefCell<Vec<*const RootStruct<'static>>>,
 }
 
 /// A block of allocations. This type should be owned by [Arena] and not used

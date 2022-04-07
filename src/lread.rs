@@ -1,4 +1,4 @@
-use crate::arena::{Arena, GcCell};
+use crate::arena::{Arena, Root};
 use crate::data::Environment;
 use crate::lcell::LCellOwner;
 use crate::object::Object;
@@ -57,7 +57,7 @@ pub(crate) fn read_from_string<'ob>(
 pub(crate) fn load_internal<'ob, 'id>(
     contents: &str,
     arena: &'ob mut Arena,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
 ) -> Result<bool> {
     let mut pos = 0;
@@ -91,7 +91,7 @@ pub(crate) fn load<'ob, 'id>(
     _nosuffix: Option<bool>,
     _must_suffix: Option<bool>,
     arena: &'ob mut Arena,
-    env: &GcCell<'id, Environment>,
+    env: &Root<'id, Environment>,
     owner: &mut LCellOwner<'id>,
 ) -> Result<bool> {
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {

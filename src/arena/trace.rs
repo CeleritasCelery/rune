@@ -1,17 +1,17 @@
 use std::fmt::Debug;
 
-use super::{GcCell, RootSet};
+use super::{Root, RootSet};
 
 pub(crate) trait Trace {
     fn mark(&self);
 }
 
-pub(crate) struct GcRoot<'rt> {
+pub(crate) struct RootStruct<'rt> {
     obj: Option<*const dyn Trace>,
     root_set: &'rt RootSet,
 }
 
-impl<'rt> Debug for GcRoot<'rt> {
+impl<'rt> Debug for RootStruct<'rt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GcRoot")
             .field("root_set", &self.root_set)
@@ -19,13 +19,13 @@ impl<'rt> Debug for GcRoot<'rt> {
     }
 }
 
-impl<'rt> Drop for GcRoot<'rt> {
+impl<'rt> Drop for RootStruct<'rt> {
     fn drop(&mut self) {
         self.root_set.root_structs.borrow_mut().pop();
     }
 }
 
-impl<'rt> GcRoot<'rt> {
+impl<'rt> RootStruct<'rt> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
         Self {
             obj: None,
@@ -35,15 +35,16 @@ impl<'rt> GcRoot<'rt> {
 
     pub(crate) fn set<'a, 'id, T: Trace + 'static>(
         &mut self,
-        root: &'a mut GcCell<'id, T>,
-    ) -> &'a GcCell<'id, T> {
+        root: &'a mut Root<'id, T>,
+    ) -> &'a Root<'id, T> {
         let dyn_ptr = root.deref() as &dyn Trace as *const dyn Trace;
         self.obj = Some(dyn_ptr);
-        let rebound_root = unsafe { &*dyn_ptr.cast::<GcCell<'id, T>>() };
+        let rebound_root = unsafe { &*dyn_ptr.cast::<Root<'id, T>>() };
         // false positive. We are changing the filetime
         #[allow(clippy::transmute_ptr_to_ptr)]
         let root_ptr = unsafe {
-            std::mem::transmute::<&GcRoot<'rt>, &GcRoot<'static>>(self) as *const GcRoot<'static>
+            std::mem::transmute::<&RootStruct<'rt>, &RootStruct<'static>>(self)
+                as *const RootStruct<'static>
         };
         self.root_set.root_structs.borrow_mut().push(root_ptr);
         rebound_root
