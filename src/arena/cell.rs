@@ -15,16 +15,16 @@ impl<'id> RootOwner<'id> {
         Self { _id: guard.into() }
     }
 
-    pub(crate) fn ro<'a, T: ?Sized>(&'a self, lc: &'a LCell<'id, T>) -> &'a T {
+    pub(super) fn ro<'a, T: ?Sized>(&'a self, lc: &'a LCell<'id, T>) -> &'a T {
         unsafe { &*lc.value.get() }
     }
 
-    pub(crate) fn rw<'a, T: ?Sized>(&'a mut self, lc: &'a LCell<'id, T>) -> &'a mut T {
+    pub(super) fn rw<'a, T: ?Sized>(&'a mut self, lc: &'a LCell<'id, T>) -> &'a mut T {
         unsafe { &mut *lc.value.get() }
     }
 
     #[allow(clippy::ptr_as_ptr)]
-    pub(crate) fn rw2<'a, T: ?Sized, U: ?Sized>(
+    pub(super) fn rw2<'a, T: ?Sized, U: ?Sized>(
         &'a mut self,
         lc1: &'a LCell<'id, T>,
         lc2: &'a LCell<'id, U>,
@@ -39,27 +39,17 @@ impl<'id> RootOwner<'id> {
 
 #[repr(transparent)]
 #[derive(Debug)]
-pub(crate) struct LCell<'id, T: ?Sized> {
+pub(super) struct LCell<'id, T: ?Sized> {
     _id: Invariant<'id>,
     value: UnsafeCell<T>,
 }
 
 impl<'id, T> LCell<'id, T> {
-    pub(crate) fn new(value: T) -> LCell<'id, T> {
+    pub(super) fn new(value: T) -> LCell<'id, T> {
         LCell {
             _id: PhantomData,
             value: UnsafeCell::new(value),
         }
-    }
-}
-
-impl<'id, T: ?Sized> LCell<'id, T> {
-    pub(crate) fn ro<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a T {
-        owner.ro(self)
-    }
-
-    pub(crate) fn rw<'a>(&'a self, owner: &'a mut RootOwner<'id>) -> &'a mut T {
-        owner.rw(self)
     }
 }
 

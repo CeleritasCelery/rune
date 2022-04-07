@@ -93,7 +93,7 @@ impl<'id, T> Root<'id, T> {
     }
 
     pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a RootHandle<T> {
-        self.0.ro(owner)
+        owner.ro(&self.0)
     }
 
     pub(crate) fn borrow_mut<'a>(
@@ -101,7 +101,7 @@ impl<'id, T> Root<'id, T> {
         owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
     ) -> &'a mut RootHandle<T> {
-        self.0.rw(owner)
+        owner.rw(&self.0)
     }
 
     pub(crate) fn borrow_mut2<'a, U>(
