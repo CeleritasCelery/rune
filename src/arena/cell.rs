@@ -5,13 +5,13 @@ use std::marker::PhantomData;
 type Invariant<'id> = PhantomData<&'id mut &'id fn(&'id ()) -> &'id ()>;
 
 #[derive(Debug)]
-pub(crate) struct RootOwner<'id> {
+pub(super) struct LCellOwner<'id> {
     _id: Id<'id>,
 }
 
 #[allow(clippy::unused_self)]
-impl<'id> RootOwner<'id> {
-    pub(crate) unsafe fn new(guard: Guard<'id>) -> Self {
+impl<'id> LCellOwner<'id> {
+    pub(super) unsafe fn new(guard: Guard<'id>) -> Self {
         Self { _id: guard.into() }
     }
 
@@ -54,11 +54,11 @@ impl<'id, T> LCell<'id, T> {
 }
 
 #[macro_export]
-macro_rules! make_root_owner {
+macro_rules! make_lcell_owner {
     ($name:ident) => {
         generativity::make_guard!(a);
         #[allow(unused_mut)]
-        let mut $name = unsafe { $crate::arena::RootOwner::new(a) };
+        let mut $name = unsafe { $crate::arena::LCellOwner::new(a) };
     };
 }
 
@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn lcell() {
-        make_root_owner!(owner);
+        make_lcell_owner!(owner);
         let c1 = LCell::new(100_u32);
         let c2 = LCell::new(200_u32);
         (*owner.rw(&c1)) += 1;
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn lcell_rw2() {
-        make_root_owner!(owner);
+        make_lcell_owner!(owner);
         let c1 = Rc::new(LCell::new(100_u32));
         let (_mutref1, _mutref2) = owner.rw2(&c1, &c1);
     }

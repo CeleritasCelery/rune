@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicBool;
 mod cell;
 mod root;
 mod trace;
-pub(crate) use cell::*;
+use cell::{LCell, LCellOwner};
 pub(crate) use root::*;
 pub(crate) use trace::*;
 

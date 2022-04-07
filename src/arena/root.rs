@@ -1,14 +1,13 @@
 use std::ops::{Deref, DerefMut, IndexMut};
 use std::{ops::Index, slice::SliceIndex};
 
-use crate::arena::{LCell, RootOwner};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 
-use super::{Arena, Trace};
+use super::{Arena, LCell, LCellOwner, Trace};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -79,6 +78,24 @@ impl Trace for RootCons {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct RootOwner<'id>(LCellOwner<'id>);
+
+impl<'id> RootOwner<'id> {
+    pub(crate) unsafe fn new(guard: generativity::Guard<'id>) -> Self {
+        Self(LCellOwner::new(guard))
+    }
+}
+
+#[macro_export]
+macro_rules! make_root_owner {
+    ($name:ident) => {
+        generativity::make_guard!(a);
+        #[allow(unused_mut)]
+        let mut $name = unsafe { $crate::arena::RootOwner::new(a) };
+    };
+}
+
 #[repr(transparent)]
 #[derive(Debug)]
 pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, RootHandle<T>>);
@@ -93,7 +110,7 @@ impl<'id, T> Root<'id, T> {
     }
 
     pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a RootHandle<T> {
-        owner.ro(&self.0)
+        owner.0.ro(&self.0)
     }
 
     pub(crate) fn borrow_mut<'a>(
@@ -101,7 +118,7 @@ impl<'id, T> Root<'id, T> {
         owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
     ) -> &'a mut RootHandle<T> {
-        owner.rw(&self.0)
+        owner.0.rw(&self.0)
     }
 
     pub(crate) fn borrow_mut2<'a, U>(
@@ -110,7 +127,7 @@ impl<'id, T> Root<'id, T> {
         owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
     ) -> (&'a mut RootHandle<T>, &'a mut RootHandle<U>) {
-        owner.rw2(&gc1.0, &gc2.0)
+        owner.0.rw2(&gc1.0, &gc2.0)
     }
 
     pub(crate) unsafe fn borrow_mut_unchecked2<'a, U>(
@@ -118,7 +135,7 @@ impl<'id, T> Root<'id, T> {
         gc2: &'a Root<'id, U>,
         owner: &'a mut RootOwner<'id>,
     ) -> (&'a mut RootHandle<T>, &'a mut RootHandle<U>) {
-        owner.rw2(&gc1.0, &gc2.0)
+        owner.0.rw2(&gc1.0, &gc2.0)
     }
 }
 
