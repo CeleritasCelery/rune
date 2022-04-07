@@ -1,8 +1,8 @@
+use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::arena::LCellOwner;
 use crate::object::{Callable, Function, List, Object};
 use crate::symbol::Symbol;
 use crate::{data, element_iter, rebind, root, root_struct};
@@ -31,7 +31,7 @@ impl<'ob> Function<'ob> {
         args: &Root<'id, Vec<RootObj>>,
         env: &Root<'id, Environment>,
         arena: &'gc mut Arena,
-        owner: &mut LCellOwner<'id>,
+        owner: &mut RootOwner<'id>,
     ) -> Result<Object<'gc>> {
         use crate::interpreter;
         match self {
@@ -80,7 +80,7 @@ pub(crate) fn mapcar<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -109,7 +109,7 @@ pub(crate) fn mapc<'ob, 'id>(
     function: Function<'ob>,
     sequence: List<'ob>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     match sequence {
@@ -280,7 +280,7 @@ fn require<'ob, 'id>(
     filename: Option<&str>,
     noerror: Option<bool>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {

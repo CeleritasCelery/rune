@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
+use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootHandle, RootObj, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::arena::LCellOwner;
 use crate::object::{FuncCell, Object};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
@@ -91,7 +91,7 @@ pub(crate) fn set<'ob, 'id>(
     place: Symbol,
     newlet: Object<'ob>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {
     Environment::set_var(env.borrow_mut(owner, gc), place, newlet);
@@ -104,7 +104,7 @@ pub(crate) fn put<'ob, 'id>(
     propname: Symbol,
     value: Object<'ob>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {
     Environment::set_prop(env.borrow_mut(owner, gc), symbol, propname, value);
@@ -116,7 +116,7 @@ pub(crate) fn get<'ob, 'id>(
     symbol: Symbol,
     propname: Symbol,
     env: &Root<'id, Environment>,
-    owner: &LCellOwner<'id>,
+    owner: &RootOwner<'id>,
     arena: &'ob Arena,
 ) -> Object<'ob> {
     match env.borrow(owner).props().get(&symbol) {
@@ -150,7 +150,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> Object<'ob
 pub(crate) fn symbol_value<'ob, 'id>(
     symbol: Symbol,
     env: &Root<'id, Environment>,
-    owner: &LCellOwner<'id>,
+    owner: &RootOwner<'id>,
     arena: &'ob Arena,
 ) -> Option<Object<'ob>> {
     env.borrow(owner)
@@ -184,7 +184,7 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 pub(crate) fn boundp<'id>(
     symbol: Symbol,
     env: &Root<'id, Environment>,
-    owner: &LCellOwner<'id>,
+    owner: &RootOwner<'id>,
 ) -> bool {
     env.borrow(owner).vars().get(&symbol).is_some()
 }
@@ -193,7 +193,7 @@ pub(crate) fn boundp<'id>(
 pub(crate) fn default_boundp<'id>(
     symbol: Symbol,
     env: &Root<'id, Environment>,
-    owner: &LCellOwner<'id>,
+    owner: &RootOwner<'id>,
 ) -> bool {
     env.borrow(owner).vars().get(&symbol).is_some()
 }
@@ -249,7 +249,7 @@ pub(crate) fn defvar<'ob, 'id>(
     initvalue: Option<Object<'ob>>,
     _docstring: Option<&String>,
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     gc: &Arena,
 ) -> Object<'ob> {
     let value = initvalue.unwrap_or_default();

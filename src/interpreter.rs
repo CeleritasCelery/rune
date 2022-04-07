@@ -1,7 +1,7 @@
+use crate::arena::RootOwner;
 use crate::arena::{IntoRoot, Root, RootCons, RootObj};
 use crate::cons::ElemStreamIter;
 use crate::error::{Error, Type};
-use crate::arena::LCellOwner;
 use crate::object::{Callable, Function, List};
 use crate::symbol::sym;
 use crate::{arena::Arena, cons::Cons, data::Environment, object::Object, symbol::Symbol};
@@ -13,7 +13,7 @@ use streaming_iterator::StreamingIterator;
 struct Interpreter<'id, 'brw> {
     vars: &'brw Root<'id, Vec<RootCons>>,
     env: &'brw Root<'id, Environment>,
-    owner: &'brw mut LCellOwner<'id>,
+    owner: &'brw mut RootOwner<'id>,
 }
 
 #[defun]
@@ -22,7 +22,7 @@ pub(crate) fn eval<'ob, 'id>(
     lexical: Option<Object<'ob>>,
     env: &Root<'id, Environment>,
     arena: &'ob mut Arena,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
 ) -> Result<Object<'ob>> {
     ensure!(
         matches!(lexical, Some(Object::True(_) | Object::Nil(_)) | None),
@@ -40,7 +40,7 @@ pub(crate) fn call<'ob, 'gc, 'id>(
     args: &Root<'id, Vec<RootObj>>,
     env: &Root<'id, Environment>,
     gc: &'gc mut Arena,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
 ) -> Result<Object<'gc>> {
     root_struct!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env, owner };
@@ -662,7 +662,7 @@ defsubr!(eval);
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, make_lcell_owner, object::IntoObject, symbol::intern};
+    use crate::{arena::RootSet, make_root_owner, object::IntoObject, symbol::intern};
 
     use super::*;
 
@@ -671,7 +671,7 @@ mod test {
         T: IntoObject<'ob, Object<'ob>>,
     {
         root_struct!(env, Environment::default(), arena);
-        make_lcell_owner!(owner);
+        make_root_owner!(owner);
         // Work around for not having GAT's. Currently the IntoObject trait
         // must define the lifetime in it's defintion, but that means that the
         // lifetime in this generic function of the object has to last for the

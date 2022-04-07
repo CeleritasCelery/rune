@@ -1,6 +1,6 @@
+use crate::arena::RootOwner;
 use crate::arena::{Arena, Block, Root, RootObj};
 use crate::error::Error;
-use crate::arena::LCellOwner;
 use crate::object::{Function, IntoObject, Object};
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
@@ -114,7 +114,7 @@ pub(crate) type BuiltInFn = for<'ob, 'id> fn(
     &[Object<'ob>],
     &Root<'id, crate::data::Environment>,
     &'ob mut Arena,
-    &mut LCellOwner<'id>,
+    &mut RootOwner<'id>,
 ) -> Result<Object<'ob>>;
 
 pub(crate) struct SubrFn {
@@ -130,7 +130,7 @@ impl SubrFn {
         args: &Root<'id, Vec<RootObj>>,
         env: &Root<'id, crate::data::Environment>,
         arena: &'gc mut Arena,
-        owner: &mut LCellOwner<'id>,
+        owner: &mut RootOwner<'id>,
     ) -> Result<Object<'gc>> {
         let slice = {
             let args = args.borrow_mut(owner, arena);

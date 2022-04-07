@@ -1,7 +1,4 @@
-#![deny(
-    macro_use_extern_crate,
-    keyword_idents
-)]
+#![deny(macro_use_extern_crate, keyword_idents)]
 #![forbid(non_ascii_idents)]
 #![warn(rust_2018_idioms)]
 // This lint makes code more verbose with little benefit
@@ -83,13 +80,13 @@ mod reader;
 mod search;
 mod symbol;
 
+use arena::RootOwner;
 use arena::{Arena, Root, RootSet};
 use data::Environment;
 use object::Object;
 use std::env;
 use std::io::{self, Write};
 use symbol::intern;
-use arena::LCellOwner;
 
 fn parens_closed(buffer: &str) -> bool {
     let open = buffer.chars().filter(|&x| x == '(').count();
@@ -97,7 +94,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl<'id>(env: &Root<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
+fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -132,7 +129,7 @@ fn repl<'id>(env: &Root<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &
     }
 }
 
-fn load<'id>(env: &Root<'id, Environment>, owner: &mut LCellOwner<'id>, arena: &mut Arena) {
+fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
     use crate::symbol::sym;
     {
         let env = env.borrow_mut(owner, arena);
@@ -182,7 +179,7 @@ fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
     root_struct!(env, Environment::default(), arena);
-    make_lcell_owner!(owner);
+    make_root_owner!(owner);
 
     match env::args().nth(1) {
         Some(arg) if arg == "--repl" => repl(env, &mut owner, arena),

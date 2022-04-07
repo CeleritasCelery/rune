@@ -69,7 +69,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
             args: &[crate::object::Object<'ob>],
             env: &crate::arena::Root<'id, crate::data::Environment>,
             arena: &'ob mut crate::arena::Arena,
-            owner: &mut crate::arena::LCellOwner<'id>,
+            owner: &mut crate::arena::RootOwner<'id>,
         ) -> anyhow::Result<crate::object::Object<'ob>> {
             #subr_call
         }
@@ -118,7 +118,7 @@ fn get_arg_type(ty: &syn::Type) -> ArgType {
         syn::Type::Reference(refer) => match refer.elem.as_ref() {
             syn::Type::Path(path) => match get_path_ident_name(path).as_str() {
                 "Arena" => ArgType::Arena,
-                "LCellOwner" => ArgType::Owner,
+                "RootOwner" => ArgType::Owner,
                 "Root" => ArgType::Env,
                 _ => ArgType::Other,
             }
@@ -306,7 +306,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob, 'id>(list: &Cons<'ob>, env: &Root<'id, Environment>, owner: &LCellOwner<'id>) -> Object<'ob> {
+            fn car<'ob, 'id>(list: &Cons<'ob>, env: &Root<'id, Environment>, owner: &RootOwner<'id>) -> Object<'ob> {
                 list.car()
 }
         };

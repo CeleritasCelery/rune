@@ -1,7 +1,7 @@
 use crate::{
+    arena::RootOwner,
     arena::{Arena, ConstrainLifetime, Root, RootCons, RootHandle, RootObj},
     error::{Error, Type},
-    arena::LCellOwner,
     object::{List, Object},
 };
 use streaming_iterator::StreamingIterator;
@@ -109,14 +109,14 @@ impl<'ob> Iterator for ConsIter<'ob> {
 pub(crate) struct ElemStreamIter<'rt, 'id> {
     elem: Option<&'rt Root<'id, RootObj>>,
     cons: Option<&'rt Root<'id, RootCons>>,
-    owner: LCellOwner<'id>,
+    owner: RootOwner<'id>,
 }
 
 impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
     pub(crate) fn new(
         elem: &'rt Option<Root<'id, RootObj>>,
         cons: &'rt Option<Root<'id, RootCons>>,
-        owner: LCellOwner<'id>,
+        owner: RootOwner<'id>,
     ) -> Self {
         Self {
             elem: elem.as_ref(),
@@ -168,7 +168,7 @@ macro_rules! element_iter {
     ($ident:ident, $obj:expr, $gc:ident) => {
         let mut root_elem = None;
         let mut root_cons = None;
-        $crate::make_lcell_owner!(owner);
+        $crate::make_root_owner!(owner);
 
         let mut gc_root_elem = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };

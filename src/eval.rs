@@ -1,9 +1,9 @@
 use fn_macros::defun;
 
 use crate::{
+    arena::RootOwner,
     arena::{Arena, IntoRoot, Root},
     data::Environment,
-    arena::LCellOwner,
     object::{Function, Object},
     root_struct,
 };
@@ -14,7 +14,7 @@ pub(crate) fn apply<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     let args = match arguments.len() {
@@ -39,7 +39,7 @@ pub(crate) fn funcall<'ob, 'id>(
     function: Function<'ob>,
     arguments: &[Object<'ob>],
     env: &Root<'id, Environment>,
-    owner: &mut LCellOwner<'id>,
+    owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
     root_struct!(arg_list, arguments.to_vec().into_root(), arena);

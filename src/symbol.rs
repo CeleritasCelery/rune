@@ -307,9 +307,9 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
+    use crate::arena::RootOwner;
     use crate::arena::{Arena, Root, RootSet};
     use crate::data::Environment;
-    use crate::arena::LCellOwner;
     use crate::object::{IntoObject, LispFn, Object};
     use anyhow::Result;
     use std::mem::size_of;
@@ -361,7 +361,7 @@ mod test {
         vars: &[Object<'ob>],
         _map: &Root<'id, Environment>,
         _arena: &'ob mut Arena,
-        _owner: &mut LCellOwner<'id>,
+        _owner: &mut RootOwner<'id>,
     ) -> Result<Object<'ob>> {
         Ok(vars[0])
     }

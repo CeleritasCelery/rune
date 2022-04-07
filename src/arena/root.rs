@@ -1,10 +1,10 @@
 use std::ops::{Deref, DerefMut, IndexMut};
 use std::{ops::Index, slice::SliceIndex};
 
+use crate::arena::{LCell, RootOwner};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::arena::{LCell, LCellOwner};
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 
@@ -92,13 +92,13 @@ impl<'id, T> Root<'id, T> {
         unsafe { &*(&self.0 as *const LCell<'id, RootHandle<T>>).cast::<T>() }
     }
 
-    pub(crate) fn borrow<'a>(&'a self, owner: &'a LCellOwner<'id>) -> &'a RootHandle<T> {
+    pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a RootHandle<T> {
         self.0.ro(owner)
     }
 
     pub(crate) fn borrow_mut<'a>(
         &'a self,
-        owner: &'a mut LCellOwner<'id>,
+        owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
     ) -> &'a mut RootHandle<T> {
         self.0.rw(owner)
@@ -107,7 +107,7 @@ impl<'id, T> Root<'id, T> {
     pub(crate) fn borrow_mut2<'a, U>(
         gc1: &'a Self,
         gc2: &'a Root<'id, U>,
-        owner: &'a mut LCellOwner<'id>,
+        owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
     ) -> (&'a mut RootHandle<T>, &'a mut RootHandle<U>) {
         owner.rw2(&gc1.0, &gc2.0)
@@ -116,7 +116,7 @@ impl<'id, T> Root<'id, T> {
     pub(crate) unsafe fn borrow_mut_unchecked2<'a, U>(
         gc1: &'a Self,
         gc2: &'a Root<'id, U>,
-        owner: &'a mut LCellOwner<'id>,
+        owner: &'a mut RootOwner<'id>,
     ) -> (&'a mut RootHandle<T>, &'a mut RootHandle<U>) {
         owner.rw2(&gc1.0, &gc2.0)
     }
