@@ -77,6 +77,10 @@ impl<'ob> Cons<'ob> {
         self.marked.set(false);
     }
 
+    pub(crate) fn is_marked(&self) -> bool {
+        self.marked.get()
+    }
+
     #[cfg(test)]
     pub(crate) fn is_mut(&self) -> bool {
         self.mutable

@@ -125,6 +125,10 @@ impl<T> Allocation<T> {
     fn unmark(&self) {
         self.marked.set(false);
     }
+
+    fn is_marked(&self) -> bool {
+        self.marked.get()
+    }
 }
 
 impl<T: PartialEq> PartialEq for Allocation<T> {
@@ -154,6 +158,17 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::LispFn(x) => x.unmark(),
             OwnedObject::SubrFn(_) => {}
+        }
+    }
+
+    fn is_marked(&self) -> bool {
+        match self {
+            OwnedObject::Float(x) => x.is_marked(),
+            OwnedObject::Cons(x) => x.is_marked(),
+            OwnedObject::Vec(x) => x.is_marked(),
+            OwnedObject::String(x) => x.is_marked(),
+            OwnedObject::LispFn(x) => x.is_marked(),
+            OwnedObject::SubrFn(_) => true,
         }
     }
 }
@@ -317,6 +332,16 @@ impl<'ob, 'rt> Arena<'rt> {
                 (&**x).dyn_data().mark();
             }
         }
+
+        let before = self.block.objects.borrow().len();
+        self.block
+            .objects
+            .borrow_mut()
+            .retain(OwnedObject::is_marked);
+        let after = self.block.objects.borrow().len();
+
+        println!("retained: {after}/{before}");
+
         for x in self.block.objects.borrow().iter() {
             x.unmark();
         }
@@ -328,6 +353,16 @@ impl<'rt> Deref for Arena<'rt> {
 
     fn deref(&self) -> &Self::Target {
         &self.block
+    }
+}
+
+impl<'rt> Drop for Arena<'rt> {
+    fn drop(&mut self) {
+        self.garbage_collect();
+        assert!(
+            self.block.objects.borrow().is_empty(),
+            "gc holding live data when dropped"
+        );
     }
 }
 
