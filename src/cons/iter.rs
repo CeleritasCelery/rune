@@ -1,6 +1,6 @@
 use crate::{
     arena::RootOwner,
-    arena::{Arena, ConstrainLifetime, Root, RootCons, RootHandle, RootObj},
+    arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootRef},
     error::{Error, Type},
     object::{List, Object},
 };
@@ -127,7 +127,7 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 }
 
 impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
-    type Item = RootHandle<RootObj>;
+    type Item = RootRef<RootObj>;
 
     fn advance(&mut self) {
         if let Some(cons) = &self.cons {

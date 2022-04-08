@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::sync::Mutex;
 
 use crate::arena::RootOwner;
-use crate::arena::{Arena, Root, RootHandle, RootObj, Trace};
+use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
 use crate::object::{FuncCell, Object};
@@ -19,12 +19,12 @@ pub(crate) struct Environment {
 }
 
 impl Environment {
-    pub(crate) fn set_var(env: &mut RootHandle<Environment>, sym: Symbol, value: Object) {
+    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: Object) {
         env.vars_mut().insert(sym, value);
     }
 
     pub(crate) fn set_prop(
-        env: &mut RootHandle<Environment>,
+        env: &mut RootRef<Environment>,
         symbol: Symbol,
         propname: Symbol,
         value: Object,
