@@ -104,7 +104,6 @@ macro_rules! make_root_owner {
 }
 
 #[repr(transparent)]
-#[derive(Debug)]
 pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, RootRef<T>>);
 
 impl<'id, T> Root<'id, T> {

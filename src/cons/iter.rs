@@ -105,7 +105,6 @@ impl<'ob> Iterator for ConsIter<'ob> {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct ElemStreamIter<'rt, 'id> {
     elem: Option<&'rt Root<'id, RootObj>>,
     cons: Option<&'rt Root<'id, RootCons>>,
