@@ -272,6 +272,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                     args.borrow_mut(self.owner, gc).push(result);
                 }
                 if crate::debug::debug_enabled() {
+                    let args = args.borrow(self.owner);
                     println!("({name} {args:?})");
                 }
                 gc.garbage_collect();
@@ -307,9 +308,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                                     args.borrow_mut(self.owner, gc).push(result);
                                 }
                                 if crate::debug::debug_enabled() {
-                                    println!("({name} {args:?})");
-                                }
-                                if crate::debug::debug_enabled() {
+                                    let args = args.borrow(self.owner);
                                     println!("({name} {args:?})");
                                 }
                                 if let Object::Cons(closure) = tmp {
@@ -829,5 +828,11 @@ mod test {
         // Test that closures in global function close over values and not
         // variables
         check_interpreter("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8, arena);
+
+        check_interpreter(
+            "(progn (read-from-string (prin1-to-string (make-hash-table))) nil)",
+            false,
+            arena,
+        );
     }
 }

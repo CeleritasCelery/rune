@@ -6,6 +6,7 @@ use crate::data::Environment;
 use crate::hashmap::HashMap;
 use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
+use std::fmt::Debug;
 
 use super::{Arena, LCell, LCellOwner, Trace};
 
@@ -38,7 +39,7 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
 }
 
 #[repr(transparent)]
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, PartialEq)]
 pub(crate) struct RootObj {
     obj: RawObj,
 }
@@ -53,6 +54,14 @@ impl Trace for RootObj {
     fn mark(&self) {
         let obj = unsafe { Object::from_raw(self.obj) };
         obj.mark();
+    }
+}
+
+impl Debug for RootObj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("RootObj")
+            .field(unsafe { &Object::from_raw(self.obj) })
+            .finish()
     }
 }
 

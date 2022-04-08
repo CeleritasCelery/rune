@@ -106,7 +106,7 @@ macro_rules! rebind {
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
     roots: RefCell<Vec<Object<'static>>>,
-    root_structs: RefCell<Vec<*const RootStruct<'static>>>,
+    root_structs: RefCell<Vec<*const dyn Trace>>,
 }
 
 /// A block of allocations. This type should be owned by [Arena] and not used
@@ -365,18 +365,12 @@ impl<'ob, 'rt> Arena<'rt> {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (&**x).dyn_data().mark();
+                (&**x).mark();
             }
         }
 
         let mut objects = self.block.objects.borrow_mut();
-
-        let before = objects.len();
         objects.retain(OwnedObject::is_marked);
-        let after = objects.len();
-
-        println!("retained: {after}/{before}");
-
         objects.iter().for_each(OwnedObject::unmark);
     }
 }

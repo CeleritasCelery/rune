@@ -37,25 +37,11 @@ impl<'rt> RootStruct<'rt> {
         &mut self,
         root: &'a mut Root<'id, T>,
     ) -> &'a Root<'id, T> {
+        assert!(self.obj.is_none(), "RootStruct should only be set once");
         let dyn_ptr = root.deref() as &dyn Trace as *const dyn Trace;
         self.obj = Some(dyn_ptr);
-        let rebound_root = unsafe { &*dyn_ptr.cast::<Root<'id, T>>() };
-        // false positive. We are changing the filetime
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        let root_ptr = unsafe {
-            std::mem::transmute::<&RootStruct<'rt>, &RootStruct<'static>>(self)
-                as *const RootStruct<'static>
-        };
-        self.root_set.root_structs.borrow_mut().push(root_ptr);
-        rebound_root
-    }
-
-    pub(crate) fn dyn_data(&self) -> &dyn Trace {
-        unsafe {
-            &*(self
-                .obj
-                .expect("This can only be None if this type was not intialized correctly"))
-        }
+        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
+        unsafe { &*dyn_ptr.cast::<Root<'id, T>>() }
     }
 }
 

@@ -27,6 +27,7 @@
     clippy::similar_names,
     clippy::shadow_reuse,
     clippy::shadow_same,
+    clippy::use_debug,
     clippy::shadow_unrelated,
     clippy::missing_docs_in_private_items,
     clippy::needless_pass_by_value,
@@ -181,13 +182,12 @@ fn main() {
     root_struct!(env, Environment::default(), arena);
     make_root_owner!(owner);
 
-    match env::args().nth(1) {
+    match env::args().nth(2) {
         Some(arg) if arg == "--repl" => repl(env, &mut owner, arena),
         Some(arg) if arg == "--load" => load(env, &mut owner, arena),
         Some(arg) => panic!("unknown arg: {arg}"),
         None => {
             load(env, &mut owner, arena);
-            repl(env, &mut owner, arena);
         }
     }
 }

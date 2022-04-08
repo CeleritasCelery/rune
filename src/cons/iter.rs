@@ -180,6 +180,9 @@ macro_rules! element_iter {
             root_cons = unsafe { Some($crate::arena::Root::new($crate::arena::RootCons::new(!x))) };
             gc_root_elem.set(root_elem.as_mut().unwrap());
             gc_root_cons.set(root_cons.as_mut().unwrap());
+        } else {
+            std::mem::forget(gc_root_elem);
+            std::mem::forget(gc_root_cons);
         }
         #[allow(unused_mut)]
         let mut $ident = $crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
