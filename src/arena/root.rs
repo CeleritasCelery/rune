@@ -59,9 +59,7 @@ impl Trace for RootObj {
 
 impl Debug for RootObj {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("RootObj")
-            .field(unsafe { &Object::from_raw(self.obj) })
-            .finish()
+        Debug::fmt(unsafe { &Object::from_raw(self.obj) }, f)
     }
 }
 
@@ -158,9 +156,14 @@ macro_rules! root_struct {
 }
 
 #[repr(transparent)]
-#[derive(Debug)]
 pub(crate) struct RootHandle<T: ?Sized> {
     inner: T,
+}
+
+impl<T: ?Sized + Debug> Debug for RootHandle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.inner, f)
+    }
 }
 
 impl<T: PartialEq> PartialEq<T> for RootHandle<T> {

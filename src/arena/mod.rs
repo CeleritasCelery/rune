@@ -123,6 +123,7 @@ pub(crate) struct Block<const CONST: bool> {
 pub(crate) struct Arena<'rt> {
     pub(crate) block: Block<false>,
     root_set: &'rt RootSet,
+    prev_obj_count: usize,
 }
 
 /// The owner of an object allocation. No references to
@@ -338,6 +339,7 @@ impl<'ob, 'rt> Arena<'rt> {
         Arena {
             block: Block::new_local(),
             root_set: roots,
+            prev_obj_count: 0,
         }
     }
 
@@ -358,6 +360,11 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 
     pub(crate) fn garbage_collect(&mut self) {
+        let mut objects = self.block.objects.borrow_mut();
+        #[cfg(not(test))]
+        if objects.len() < 1000 || objects.len() < (self.prev_obj_count * 2) {
+            return;
+        }
         for x in self.root_set.roots.borrow().iter() {
             x.mark();
         }
@@ -369,9 +376,12 @@ impl<'ob, 'rt> Arena<'rt> {
             }
         }
 
-        let mut objects = self.block.objects.borrow_mut();
+        let prev = objects.len();
         objects.retain(OwnedObject::is_marked);
+        let retained = prev - objects.len();
+        println!("garbage collected: {retained}/{prev}");
         objects.iter().for_each(OwnedObject::unmark);
+        self.prev_obj_count = objects.len();
     }
 }
 
@@ -380,18 +390,6 @@ impl<'rt> Deref for Arena<'rt> {
 
     fn deref(&self) -> &Self::Target {
         &self.block
-    }
-}
-
-impl<'rt> Drop for Arena<'rt> {
-    // Garbage collect one final time to make sure that no live references
-    // exist.
-    fn drop(&mut self) {
-        self.garbage_collect();
-        assert!(
-            self.block.objects.borrow().is_empty(),
-            "gc holding live data when dropped"
-        );
     }
 }
 
