@@ -1,26 +1,27 @@
 * Rune
 *R* ust *UN* der *E* macs
 
-This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase  and explores using rust as an host language.
+This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using rust as an host language.
 ** Status
-The goal of this project is to eventually bootstrap [[https://github.com/emacs-mirror/emacs/commits/master/lisp/emacs-lisp/bytecomp.el][bytecomp.el]], which would enable this project to use the same byte compiler as Emacs. This would let me fuzz my vm against emacs byte code to help find issues. The project currently features a minimal byte-code VM modeled after Emacs. The project has no lisp interpreter, instead relying on emitting byte code before evaluation.  The files bootstrapped so far are:
+The goal of this project is to eventually bootstrap [[https://github.com/emacs-mirror/emacs/commits/master/lisp/emacs-lisp/bytecomp.el][bytecomp.el]], which would enable this project to use the same byte compiler as Emacs. This would let me fuzz my vm against emacs byte code to help find issues. The project currently features a elisp interpreter to enable bootstrap. The files bootstrapped so far are:
 - ~byte-run.el~
 - ~backquote.el~
 - ~subr.el~
+- ~pcase.el~
+- ~macroexp.el~
 
 Development on this project is driven by trying to add new elisp files and seeing where things break. Most of the time, it is just missing builtin functions, but occasionally new functionality needs to be added.
 
 ** Running
-The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl with no elisp files loaded. Running with no arguments will load the bootstrapped elisp and then open to a REPL. This is equivalent to ~--load --repl~.
+The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl. Running with no arguments is equivalent to ~cargo run -- --load~.
 
 ** Exploring this repo
 This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
-- [[file:src/object.rs][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types are also found here.
+- [[file:src/object/mod.rs][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types are also found here.
 - [[file:src/reader.rs][reader]] :: The emacs lisp reader that translates a string to a cons cell. Due to the simple nature of lisp syntax, the reader is hand rolled and does not rely on any parsing libraries.
-- [[file:src/compile.rs][compile]] :: The bootstrap compiler. This compiler is single-pass and contains no optimizations. The goal is to only add enough to this compiler to bootstrap bytecomp.el, at which point that compiler can be used instead.
-- [[file:src/bytecode.rs][bytecode]] :: The core byte-code vm. The goal is to have this eventually support every opcode that Emacs does, but at this point is only supports a subset. The behavior should exactly match that of the Emacs byte-code interpreter.
 - [[file:src/symbol.rs][symbol]] :: The global obarray. Symbols are always interned and shared between threads. Currently function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them. Time will tell if this experiment will be successful.
-- [[file:src/arena.rs][arena]] :: Contains that start of an arena allocator. Currently this interpreter does not leak memory, but it doesn't free it either. When a garbage collector is added, it will use the same interface as the arena allocator.
+- [[file:src/arena/mod.rs][arena]] :: Contains the arena allocator and garbage collector. All code for rooting and managing objects live here as well.
+- [[file:src/interpreter.rs][interpreter]] :: The basic elisp interpreter. This is used only to bootstrap the elisp byte-compiler.
 - [[file:src/fns.rs][fns]], [[file:src/data.rs][data]], [[file:src/alloc.rs][alloc]] :: These modules contain definitions of builtin in functions. Some of these are just stubbed out until the functionality is actually needed.
 
 ** Contributing
@@ -42,7 +43,6 @@ The ~defun~ macro on the function will do the type conversion. After that we jus
 #+end_src
 
 To bootstrap new files you would run the project with ~cargo run~, which will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. The files the need to be bootstrapped next are
-- ~lisp/emacs-lisp/macroexp.el~
 - ~lisp/emacs-lisp/cl-lib.el~
 - ~lisp/emacs-lisp/cconv.el~
 - ~lisp/progmodes/compile.el~
@@ -50,6 +50,7 @@ To bootstrap new files you would run the project with ~cargo run~, which will lo
 
   These files are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
 ** Further exploration
+- [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][blog post on tagged pointers in Rust]] :: Post I wrote on my initial approach to creating tagged pointers in rust. It serves as in intro to this project.
 - [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained, but is a big inspiration for rune.
 - [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more mature ecosystem (which is part of the promise of rust).
 - [[http://craftinginterpreters.com/][crafting interpreters]] :: This was a big inspiration for this project, and it probably one of the best introductions to programming language implementations.
