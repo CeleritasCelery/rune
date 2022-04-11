@@ -107,11 +107,20 @@ macro_rules! make_root_owner {
 pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, RootRef<T>>);
 
 impl<'id, T> Root<'id, T> {
+    /// Create a new Root
+    ///
+    /// # SAFETY
+    ///
+    /// This method is only safe to call if Root never moves and drops in stack
+    /// order. Use the [`root_struct`] macro.
     pub(crate) unsafe fn new(obj: T) -> Self {
         Root(LCell::new(RootRef::new(obj)))
     }
 
     pub(super) fn deref(&mut self) -> &T {
+        // SAFETY: if we have a &mut self, we know that there are no other
+        // owners, so we don't need RootOwner. And we can cast since LCell is
+        // repr(transparent)
         unsafe { &*(&self.0 as *const LCell<'id, RootRef<T>>).cast::<T>() }
     }
 

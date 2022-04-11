@@ -37,9 +37,13 @@ pub(crate) struct StackRoot<'rt> {
 }
 
 impl<'rt> StackRoot<'rt> {
-    // This function is only safe if [set] is called before use and StackRoot
-    // does not move from the stack or drop before it goes out of scope. This
-    // is ensured by a shadow binding in the [root!] macro.
+    /// Create a new `StackRoot`
+    ///
+    /// # Safety
+    ///
+    /// This function is only safe if [set] is called before use and `StackRoot`
+    /// does not move from the stack or drop before it goes out of scope. This
+    /// is ensured by a shadow binding in the [root!] macro.
     pub(crate) unsafe fn new(roots: &'rt RootSet) -> Self {
         StackRoot { root_set: roots }
     }
@@ -355,7 +359,7 @@ impl<'ob, 'rt> Arena<'rt> {
         Object::from_raw(raw)
     }
 
-    pub(crate) unsafe fn get_root_set(&'ob self) -> &'rt RootSet {
+    pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {
         self.root_set
     }
 
