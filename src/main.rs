@@ -182,12 +182,26 @@ fn main() {
     root_struct!(env, Environment::default(), arena);
     make_root_owner!(owner);
 
-    match env::args().nth(2) {
-        Some(arg) if arg == "--repl" => repl(env, &mut owner, arena),
-        Some(arg) if arg == "--load" => load(env, &mut owner, arena),
-        Some(arg) => panic!("unknown arg: {arg}"),
-        None => {
-            load(env, &mut owner, arena);
+    let mut arg_load = false;
+    let mut arg_repl = false;
+
+    for arg in env::args() {
+        match arg.as_str() {
+            "--repl" => arg_repl = true,
+            "--load" => arg_load = true,
+            x => println!("unknown arg: {x}"),
         }
+    }
+
+    if !arg_load && !arg_repl {
+        arg_load = true;
+    }
+
+    if arg_load {
+        load(env, &mut owner, arena);
+    }
+
+    if arg_repl {
+        repl(env, &mut owner, arena);
     }
 }
