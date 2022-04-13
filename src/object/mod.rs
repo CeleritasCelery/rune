@@ -26,7 +26,7 @@ use crate::symbol::Symbol;
 use std::cell::RefCell;
 use std::fmt;
 
-#[repr(align(8))]
+#[repr(u8, align(8))]
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Object<'ob> {
     Int(Data<i64>),

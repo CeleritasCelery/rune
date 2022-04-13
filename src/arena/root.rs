@@ -89,18 +89,9 @@ impl Trace for RootCons {
 pub(crate) struct RootOwner<'id>(LCellOwner<'id>);
 
 impl<'id> RootOwner<'id> {
-    pub(crate) unsafe fn new(guard: generativity::Guard<'id>) -> Self {
+    pub(crate) fn new(guard: generativity::Guard<'id>) -> Self {
         Self(LCellOwner::new(guard))
     }
-}
-
-#[macro_export]
-macro_rules! make_root_owner {
-    ($name:ident) => {
-        generativity::make_guard!(a);
-        #[allow(unused_mut)]
-        let mut $name = unsafe { $crate::arena::RootOwner::new(a) };
-    };
 }
 
 #[repr(transparent)]

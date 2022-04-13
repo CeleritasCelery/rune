@@ -13,11 +13,14 @@ use super::SubrFn;
 /// the mutability flag: 1 if immutable, 0 if mutable. This should be stored in
 /// the alignment bits that bottom of the pointer.
 #[derive(Copy, Clone)]
+#[repr(transparent)]
 pub(crate) struct Data<T> {
     data: [u8; 7],
     marker: PhantomData<T>,
 }
-pub(super) const UNUSED: Data<()> = Data::from_raw(0);
+
+// SAFETY: Creating a Data<()> is always safe.
+pub(super) const UNUSED: Data<()> = unsafe { Data::from_raw(0) };
 
 /// A trait to access the inner value of a [`Data`]
 pub(crate) trait Inner {
@@ -39,7 +42,8 @@ impl<T> Data<T> {
     }
 
     #[inline(always)]
-    const fn from_raw(data: u64) -> Self {
+    // SAFETY: The data passed to from_raw must be a valid bit representation of T.
+    const unsafe fn from_raw(data: u64) -> Self {
         let x = data.to_le_bytes();
         // x[7] (the top byte) is removed to make room for the tag
         Data {
@@ -52,13 +56,16 @@ impl<T> Data<T> {
 impl<'a, T> Data<&'a T> {
     pub(super) fn from_ref(rf: &'a T) -> Self {
         let ptr: *const T = rf;
-        Self::from_raw(ptr as u64)
+        // SAFETY: We are getting the bits of a valid reference
+        unsafe { Self::from_raw(ptr as u64) }
     }
 }
 
 impl<'a, T> Data<&'a Allocation<T>> {
     pub(crate) fn get_alloc(self) -> &'a Allocation<T> {
         let ptr = self.into_raw() as *const Allocation<T>;
+        // SAFETY: The marker lifetime 'a ensures that raw data is still valid
+        // to dereference.
         unsafe { &*ptr }
     }
 }
@@ -126,7 +133,8 @@ impl<'a> Inner for Data<&'a SubrFn> {
 
 impl Data<i64> {
     pub(super) const fn from_int(data: i64) -> Self {
-        Data::from_raw(data as u64)
+        // SAFETY: i64 is always valid as a bit pattern
+        unsafe { Data::from_raw(data as u64) }
     }
 }
 

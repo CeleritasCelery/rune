@@ -114,7 +114,7 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::{arena::RootSet, make_root_owner, root_struct};
+    use crate::{arena::RootSet, root_struct};
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy
@@ -122,7 +122,8 @@ mod test {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
         root_struct!(env, Environment::default(), arena);
-        make_root_owner!(owner);
+        generativity::make_guard!(guard);
+        let mut owner = RootOwner::new(guard);
         load_internal(
             "(setq foo 1) (setq bar 2) (setq baz 1.5)",
             arena,

@@ -661,7 +661,7 @@ defsubr!(eval);
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, make_root_owner, object::IntoObject, symbol::intern};
+    use crate::{arena::RootSet, object::IntoObject, symbol::intern};
 
     use super::*;
 
@@ -670,7 +670,8 @@ mod test {
         T: IntoObject<'ob, Object<'ob>>,
     {
         root_struct!(env, Environment::default(), arena);
-        make_root_owner!(owner);
+        generativity::make_guard!(guard);
+        let mut owner = RootOwner::new(guard);
         // Work around for not having GAT's. Currently the IntoObject trait
         // must define the lifetime in it's defintion, but that means that the
         // lifetime in this generic function of the object has to last for the

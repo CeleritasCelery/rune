@@ -167,7 +167,8 @@ macro_rules! element_iter {
     ($ident:ident, $obj:expr, $gc:ident) => {
         let mut root_elem = None;
         let mut root_cons = None;
-        $crate::make_root_owner!(owner);
+        generativity::make_guard!(guard);
+        let owner = RootOwner::new(guard);
 
         let mut gc_root_elem = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };

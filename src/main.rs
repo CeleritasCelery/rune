@@ -180,8 +180,8 @@ fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
     root_struct!(env, Environment::default(), arena);
-    make_root_owner!(owner);
-
+    generativity::make_guard!(guard);
+    let mut owner = RootOwner::new(guard);
     let mut arg_load = false;
     let mut arg_repl = false;
 

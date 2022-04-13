@@ -5,7 +5,7 @@ use crate::symbol::Symbol;
 
 use super::Bits;
 
-#[repr(align(8))]
+#[repr(u8, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
@@ -39,7 +39,7 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-#[repr(align(8))]
+#[repr(u8, align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum FuncCell<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
@@ -159,7 +159,7 @@ impl<'a> FuncCell<'a> {
     }
 }
 
-#[repr(align(8))]
+#[repr(u8, align(8))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
@@ -177,7 +177,7 @@ impl<'ob> From<Callable<'ob>> for Object<'ob> {
     }
 }
 
-#[repr(align(8))]
+#[repr(u8, align(8))]
 #[derive(Copy, Clone)]
 pub(crate) enum Number<'ob> {
     Int(Data<i64>),
@@ -219,6 +219,7 @@ impl<'ob> IntoObject<'ob, Number<'ob>> for f64 {
 }
 
 #[derive(Copy, Clone)]
+#[repr(C)]
 pub(crate) struct IntOrMarker {
     _padding: u8,
     pub(crate) int: Data<i64>,
