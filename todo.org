@@ -1,15 +1,12 @@
 #+title: Next steps for Rune
 * GC
-** ensure that only 1 arena is active at a time
-** define a trace trait
-** store a list of vtables in the gc
-** add a safe macro to create new gc pointers
+** implement marking as a grey stack instead of recursive
+** Add trace derive
+* Break core code out from the rest of the code
+This will probably mean defining more traits to implement things in other crates.
 * Cons
 ** rewrite cons as a heap only type
 Can move the constant field to the alignment marker and remove the generic lifetime argument
-** move invalid list checking to the end of the iterator
-This way we don't need every single ~next~ to return a result. Just have one check that must be called before it drops or it panics.
-
 * define benchmarks
 * Add reader macro hooks
 * Steps to add a new object
