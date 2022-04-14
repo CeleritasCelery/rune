@@ -34,7 +34,7 @@ pub(crate) enum Object<'ob> {
     Symbol(Data<Symbol>),
     True(Data<()>),
     Nil(Data<()>),
-    Cons(Data<&'ob Cons<'ob>>),
+    Cons(Data<&'ob Cons>),
     Vec(Data<&'ob Allocation<RefCell<Vec<Object<'ob>>>>>),
     String(Data<&'ob Allocation<String>>),
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
@@ -64,7 +64,7 @@ impl<'ob> Object<'ob> {
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct RawObj(u64);
 
 impl Default for RawObj {
@@ -391,9 +391,9 @@ mod test {
     #[test]
     fn mutability() {
         let bk: &Block<true> = &Block::new_local();
-        let inner_cons = Cons::new(1.into(), 4.into());
+        let inner_cons = crate::cons!(1, 4; bk);
         let vec = vec_into_object![inner_cons, 2, 3, 4; bk];
-        let obj = Cons::new(1.into(), bk.add(vec)).into_obj(bk);
+        let obj = crate::cons!(1, vec; bk);
         if let Object::Cons(cons) = obj {
             if let Object::Vec(inner_vec) = cons.cdr(bk) {
                 assert!(inner_vec.try_borrow_mut().is_err());

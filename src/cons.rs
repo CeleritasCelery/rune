@@ -1,5 +1,5 @@
 use crate::arena::{Arena, Block, ConstrainLifetime};
-use crate::object::{List, Object};
+use crate::object::{List, Object, RawObj};
 use anyhow::Result;
 use fn_macros::defun;
 use std::cell::Cell;
@@ -9,15 +9,15 @@ mod iter;
 
 pub(crate) use iter::*;
 
-pub(crate) struct Cons<'ob> {
+pub(crate) struct Cons {
     marked: Cell<bool>,
-    car: Cell<Object<'ob>>,
-    cdr: Cell<Object<'ob>>,
+    car: Cell<RawObj>,
+    cdr: Cell<RawObj>,
 }
 
-impl<'ob> PartialEq for Cons<'ob> {
+impl PartialEq for Cons {
     fn eq(&self, other: &Self) -> bool {
-        self.car == other.car && self.cdr == other.cdr
+        self.__car() == other.__car() && self.__cdr() == other.__cdr()
     }
 }
 
@@ -32,41 +32,54 @@ impl Display for ConstConsError {
 
 impl std::error::Error for ConstConsError {}
 
-impl<'old, 'new> Cons<'old> {
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Cons<'new> {
-        Cons::new(self.car.get().clone_in(bk), self.cdr.get().clone_in(bk))
+impl<'new> Cons {
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Cons {
+        // TODO: this is not sound because we return a Cons directly
+        unsafe { Cons::new(self.__car().clone_in(bk), self.__cdr().clone_in(bk)) }
     }
 }
 
-impl<'ob> Cons<'ob> {
-    pub(crate) const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
+impl Cons {
+    // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
+    // the stack. Otherwise it could outlive it's objects since it has no
+    // lifetimes.
+    pub(crate) unsafe fn new(car: Object, cdr: Object) -> Self {
         Self {
             marked: Cell::new(false),
-            car: Cell::new(car),
-            cdr: Cell::new(cdr),
+            car: Cell::new(car.into()),
+            cdr: Cell::new(cdr.into()),
         }
     }
 
     pub(crate) fn car<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
-        self.car.get().constrain_lifetime(cx)
+        self.__car().constrain_lifetime(cx)
     }
 
     pub(crate) fn cdr<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
-        self.cdr.get().constrain_lifetime(cx)
+        self.__cdr().constrain_lifetime(cx)
     }
 
-    pub(crate) fn set_car(&self, new_car: Object<'ob>) {
-        self.car.set(new_car);
+    // Private internal function to get car/cdr without arena
+    fn __car(&self) -> Object {
+        unsafe { Object::from_raw(self.car.get()) }
     }
 
-    pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
-        self.cdr.set(new_cdr);
+    fn __cdr(&self) -> Object {
+        unsafe { Object::from_raw(self.cdr.get()) }
+    }
+
+    pub(crate) fn set_car(&self, new_car: Object) {
+        self.car.set(new_car.into());
+    }
+
+    pub(crate) fn set_cdr(&self, new_cdr: Object) {
+        self.cdr.set(new_cdr.into());
     }
 
     pub(crate) fn mark(&self) {
         self.marked.set(true);
-        self.car.get().mark();
-        self.cdr.get().mark();
+        self.__car().mark();
+        self.__cdr().mark();
     }
 
     pub(crate) fn unmark(&self) {
@@ -78,20 +91,20 @@ impl<'ob> Cons<'ob> {
     }
 }
 
-impl<'brw, 'old, 'new> ConstrainLifetime<'new, &'new Cons<'new>> for &'brw Cons<'old> {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'new Cons<'new> {
-        unsafe { std::mem::transmute::<&'brw Cons<'old>, &'new Cons<'new>>(self) }
+impl<'brw, 'new> ConstrainLifetime<'new, &'new Cons> for &'brw Cons {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'new Cons {
+        unsafe { &*(self as *const Cons) }
     }
 }
 
-impl<'ob> Display for Cons<'ob> {
+impl Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
         print_rest(self, f)
     }
 }
 
-impl<'ob> Debug for Cons<'ob> {
+impl Debug for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
         print_rest_debug(self, f)
@@ -99,8 +112,8 @@ impl<'ob> Debug for Cons<'ob> {
 }
 
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car.get();
-    match cons.cdr.get() {
+    let car = cons.__car();
+    match cons.__cdr() {
         Object::Cons(cdr) => {
             write!(f, "{car} ")?;
             print_rest(&cdr, f)
@@ -111,8 +124,8 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 }
 
 fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car.get();
-    match cons.cdr.get() {
+    let car = cons.__car();
+    match cons.__cdr() {
         Object::Cons(cdr) => {
             write!(f, "{car:?} ")?;
             print_rest(&cdr, f)
@@ -122,7 +135,7 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-define_unbox!(Cons, &Cons<'ob>);
+define_unbox!(Cons, &'ob Cons);
 
 #[defun]
 fn car<'ob>(list: List, arena: &'ob Arena) -> Object<'ob> {
@@ -157,20 +170,20 @@ fn cdr_safe<'ob>(object: Object, arena: &'ob Arena) -> Object<'ob> {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &'ob Cons<'ob>, newcar: Object<'ob>) -> Object<'ob> {
+fn setcar<'ob>(cell: &'ob Cons, newcar: Object<'ob>) -> Object<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &'ob Cons<'ob>, newcdr: Object<'ob>) -> Object<'ob> {
+fn setcdr<'ob>(cell: &'ob Cons, newcdr: Object<'ob>) -> Object<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
 
 #[defun]
-const fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>) -> Cons<'ob> {
-    Cons::new(car, cdr)
+fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
+    crate::cons!(car, cdr; arena)
 }
 
 defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);
@@ -178,13 +191,15 @@ defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $arena:expr) => {
-        $arena.add(crate::cons::Cons::new($arena.add($car), $arena.add($cdr)))
+        $arena.add(
+            #[allow(unused_unsafe)]
+            unsafe {
+                crate::cons::Cons::new($arena.add($car), $arena.add($cdr))
+            },
+        )
     };
     ($car:expr; $arena:expr) => {
-        $arena.add(crate::cons::Cons::new(
-            $arena.add($car),
-            crate::object::Object::NIL,
-        ))
+        $arena.add(unsafe { crate::cons::Cons::new($arena.add($car), crate::object::Object::NIL) })
     };
 }
 

@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub(crate) struct Environment {
     pub(crate) vars: HashMap<Symbol, RootObj>,
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, RootObj)>>,

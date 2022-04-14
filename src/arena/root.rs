@@ -20,7 +20,7 @@ impl<'ob> IntoRoot<RootObj> for Object<'ob> {
     }
 }
 
-impl<'ob> IntoRoot<RootCons> for &Cons<'ob> {
+impl IntoRoot<RootCons> for &Cons {
     unsafe fn into_root(self) -> RootCons {
         RootCons::new(self)
     }
@@ -39,7 +39,7 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
 }
 
 #[repr(transparent)]
-#[derive(Default, PartialEq)]
+#[derive(Default)]
 pub(crate) struct RootObj {
     obj: RawObj,
 }
@@ -64,15 +64,15 @@ impl Debug for RootObj {
 }
 
 #[repr(transparent)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct RootCons {
-    obj: *const Cons<'static>,
+    obj: *const Cons,
 }
 
 impl RootCons {
     pub(crate) fn new(obj: &Cons) -> Self {
         Self {
-            obj: unsafe { std::mem::transmute::<&Cons, *const Cons<'static>>(obj) },
+            obj: unsafe { std::mem::transmute::<&Cons, *const Cons>(obj) },
         }
     }
 }
@@ -212,24 +212,27 @@ impl<'ob> AsRef<[Object<'ob>]> for RootRef<[RootObj]> {
 }
 
 impl RootRef<RootCons> {
-    // TODO: remove this method and implement Deref with lifetime parameter is removed
-    pub(crate) fn obj<'ob>(&'ob self) -> &'ob Cons<'ob> {
-        unsafe { std::mem::transmute::<&Cons, &'ob Cons<'ob>>(&*(self.inner.obj)) }
-    }
-
     pub(crate) fn set(&mut self, item: &Cons) {
         self.inner.obj = unsafe { std::mem::transmute(item) }
     }
 }
 
-impl<'ob> AsRef<Cons<'ob>> for RootRef<RootCons> {
-    fn as_ref(&self) -> &Cons<'ob> {
+impl Deref for RootRef<RootCons> {
+    type Target = Cons;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.inner.obj }
+    }
+}
+
+impl AsRef<Cons> for RootRef<RootCons> {
+    fn as_ref(&self) -> &Cons {
         unsafe { &*(self as *const Self).cast::<Cons>() }
     }
 }
 
-impl<'ob> AsRef<[Cons<'ob>]> for RootRef<[RootCons]> {
-    fn as_ref(&self) -> &[Cons<'ob>] {
+impl AsRef<[Cons]> for RootRef<[RootCons]> {
+    fn as_ref(&self) -> &[Cons] {
         let ptr = self.inner.as_ptr().cast::<Cons>();
         let len = self.inner.len();
         unsafe { std::slice::from_raw_parts(ptr, len) }

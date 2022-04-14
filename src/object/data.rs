@@ -76,8 +76,8 @@ impl From<Symbol> for Data<Symbol> {
     }
 }
 
-impl<'a> From<&'a Cons<'a>> for Data<&'a Cons<'a>> {
-    fn from(x: &'a Cons<'a>) -> Self {
+impl<'a> From<&'a Cons> for Data<&'a Cons> {
+    fn from(x: &'a Cons) -> Self {
         Data::from_ref(x)
     }
 }
@@ -113,8 +113,8 @@ impl Inner for Data<Symbol> {
     }
 }
 
-impl<'a> Inner for Data<&'a Cons<'a>> {
-    type Target = &'a Cons<'a>;
+impl<'a> Inner for Data<&'a Cons> {
+    type Target = &'a Cons;
     #[inline(always)]
     fn inner(self) -> Self::Target {
         let ptr = self.into_raw() as *const _;

@@ -12,11 +12,11 @@ use super::Cons;
 
 #[derive(Clone)]
 pub(crate) struct ElemIter<'ob> {
-    cons: Option<&'ob Cons<'ob>>,
+    cons: Option<&'ob Cons>,
     arena: &'ob Arena<'ob>,
 }
 
-impl<'brw, 'ob> Cons<'ob> {
+impl<'brw> Cons {
     pub(crate) fn elements<'new>(&'brw self, arena: &'new Arena) -> ElemIter<'new> {
         ElemIter {
             cons: Some(self.constrain_lifetime(arena)),
@@ -88,7 +88,7 @@ pub(crate) struct ConsIter<'ob> {
 }
 
 impl<'ob> Iterator for ConsIter<'ob> {
-    type Item = Result<&'ob Cons<'ob>>;
+    type Item = Result<&'ob Cons>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.list {
@@ -135,9 +135,9 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
                 .as_ref()
                 .expect("Element should never be None while Cons is Some");
             let (cons, elem) = unsafe { Root::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
-            let car = cons.obj().car.get();
+            let car = cons.__car();
             elem.set(car);
-            match cons.obj().cdr.get() {
+            match cons.__cdr() {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(!next) };
                     cons.set(x);

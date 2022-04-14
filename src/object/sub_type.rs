@@ -10,7 +10,7 @@ use super::Bits;
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'static SubrFn>),
-    Uncompiled(Data<&'ob Cons<'ob>>),
+    Uncompiled(Data<&'ob Cons>),
     Symbol(Data<Symbol>),
 }
 
@@ -44,7 +44,7 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
 pub(crate) enum FuncCell<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'static SubrFn>),
-    Cons(Data<&'ob Cons<'ob>>),
+    Cons(Data<&'ob Cons>),
     Symbol(Data<Symbol>),
 }
 
@@ -94,7 +94,7 @@ impl<'ob> IntoObject<'ob, FuncCell<'ob>> for SubrFn {
     }
 }
 
-impl<'ob> IntoObject<'ob, FuncCell<'ob>> for Cons<'ob> {
+impl<'ob> IntoObject<'ob, FuncCell<'ob>> for Cons {
     fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> FuncCell<'ob> {
         let rf = block.alloc_cons(self);
         FuncCell::Cons(Data::from_ref(rf))
@@ -164,7 +164,7 @@ impl<'a> FuncCell<'a> {
 pub(crate) enum Callable<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'static SubrFn>),
-    Cons(Data<&'ob Cons<'ob>>),
+    Cons(Data<&'ob Cons>),
 }
 
 impl<'ob> From<Callable<'ob>> for Object<'ob> {
@@ -265,7 +265,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for NumberValue {
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum List<'o> {
     Nil,
-    Cons(Data<&'o Cons<'o>>),
+    Cons(Data<&'o Cons>),
 }
 
 impl<'ob> From<List<'ob>> for Object<'ob> {

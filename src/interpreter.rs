@@ -56,9 +56,9 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    pub(crate) fn eval_sexp<'a, 'gc>(
+    pub(crate) fn eval_sexp<'gc>(
         &mut self,
-        cons: &Cons<'a>,
+        cons: &Cons,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
         let forms = cons.cdr(gc);
@@ -107,7 +107,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn parse_closure_env<'a>(obj: Object<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons<'a>>> {
+    fn parse_closure_env<'a>(obj: Object<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons>> {
         let forms = obj.as_list(arena)?;
         let mut env = Vec::new();
         for form in forms {
@@ -157,7 +157,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         &self,
         arg_list: Object<'a>,
         args: Vec<Object<'a>>,
-        vars: &mut Vec<&'a Cons<'a>>,
+        vars: &mut Vec<&'a Cons>,
         gc: &'a Arena,
     ) -> Result<()> {
         let (required, optional, rest) = Self::parse_arg_list(arg_list, gc)?;
@@ -202,7 +202,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         forms: &mut ElemStreamIter<'_, '_>,
         args: Vec<Object<'a>>,
         gc: &'a Arena,
-    ) -> Result<Vec<&'a Cons<'a>>> {
+    ) -> Result<Vec<&'a Cons>> {
         // Add closure environment to variables
         // (closure ((x . 1) (y . 2) t) ...)
         //          ^^^^^^^^^^^^^^^^^^^
@@ -223,7 +223,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn call_closure<'a, 'gc>(
         &mut self,
-        closure: &'a Cons<'a>,
+        closure: &'a Cons,
         args: &Root<'id, Vec<RootObj>>,
         gc: &'gc mut Arena,
     ) -> Result<Object<'gc>> {
@@ -338,7 +338,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                             .vars
                             .borrow(self.owner)
                             .iter()
-                            .map(|x| Object::Cons(x.obj().into()))
+                            .map(|x| Object::Cons((&**x).into()))
                             .collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
@@ -505,7 +505,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.borrow(self.owner).iter().rev();
-            match iter.find_map(|cons| (cons.obj().car(gc) == sym).then(|| cons.obj().cdr(gc))) {
+            match iter.find_map(|cons| (cons.car(gc) == sym).then(|| cons.cdr(gc))) {
                 Some(value) => Ok(value),
                 None => match self.env.borrow(self.owner).vars().get(sym) {
                     Some(v) => Ok(gc.bind(v.obj())),
@@ -517,11 +517,9 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn var_set<'a>(&mut self, name: Symbol, new_value: Object<'a>, gc: &'a Arena) {
         let mut iter = self.vars.borrow(self.owner).iter().rev();
-        match iter.find(|cons| (cons.obj().car(gc) == name)) {
+        match iter.find(|cons| (cons.car(gc) == name)) {
             Some(value) => {
-                // TODO: Fix this once cons is managed type
-                let new_value = unsafe { std::mem::transmute::<Object<'a>, Object>(new_value) };
-                value.obj().set_cdr(new_value);
+                value.set_cdr(new_value);
             }
             None => {
                 Environment::set_var(self.env.borrow_mut(self.owner, gc), name, new_value);
@@ -622,11 +620,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         Ok(())
     }
 
-    fn let_bind_value<'a, 'gc>(
-        &mut self,
-        cons: &'a Cons<'a>,
-        gc: &'gc mut Arena,
-    ) -> Result<&'gc Cons<'gc>> {
+    fn let_bind_value<'a, 'gc>(&mut self, cons: &'a Cons, gc: &'gc mut Arena) -> Result<&'gc Cons> {
         element_iter!(iter, cons.cdr(gc), gc);
         let value = match iter.next() {
             // (let ((x y)))

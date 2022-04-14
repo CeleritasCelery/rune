@@ -135,7 +135,7 @@ pub(crate) struct Arena<'rt> {
 #[derive(Debug)]
 enum OwnedObject<'ob> {
     Float(Box<Allocation<f64>>),
-    Cons(Box<Cons<'ob>>),
+    Cons(Box<Cons>),
     Vec(Box<Allocation<RefCell<Vec<Object<'ob>>>>>),
     String(Box<Allocation<String>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
@@ -266,7 +266,7 @@ impl<const CONST: bool> Block<CONST> {
         }
     }
 
-    pub(crate) fn alloc_cons<'ob>(&'ob self, obj: Cons<'ob>) -> &'ob Cons<'ob> {
+    pub(crate) fn alloc_cons<'ob>(&'ob self, obj: Cons) -> &'ob Cons {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Cons(Box::new(obj)));
         if let Some(OwnedObject::Cons(x)) = objects.last() {

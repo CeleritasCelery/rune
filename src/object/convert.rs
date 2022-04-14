@@ -49,7 +49,7 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
     }
 }
 
-impl<'ob> Cons<'ob> {
+impl<'ob> Cons {
     pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Callable<'ob>> {
         match self.car(gc) {
             Object::Symbol(sym) if !sym == &sym::MACRO => {
@@ -166,8 +166,8 @@ impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     }
 }
 
-impl<'ob> From<&'ob Cons<'ob>> for List<'ob> {
-    fn from(x: &'ob Cons<'ob>) -> Self {
+impl<'ob> From<&'ob Cons> for List<'ob> {
+    fn from(x: &'ob Cons) -> Self {
         List::Cons(x.into())
     }
 }
@@ -274,7 +274,7 @@ impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for Cons<'ob> {
+impl<'ob> IntoObject<'ob, Object<'ob>> for Cons {
     fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
         let rf = block.alloc_cons(self);
         Object::Cons(Data::from_ref(rf))
@@ -317,7 +317,8 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let obj0 = 5.into_obj(arena);
-        let obj1 = Cons::new(1.into(), 2.into()).into_obj(arena);
+        // SAFETY: We don't call garbage collect so references are valid
+        let obj1 = unsafe { Cons::new(1.into(), 2.into()).into_obj(arena) };
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice(), arena);
         assert_eq!(6, res.unwrap());
