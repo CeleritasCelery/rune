@@ -49,8 +49,11 @@ To bootstrap new files you would run the project with ~cargo run~, which will lo
 - ~lisp/emacs-lisp/bytecomp.el~
 
   These files are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
+
+** Blog posts
+- [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in rust. It serves as in intro to this project.
+- [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]]  :: An overview of the garbage collector used in this project.
 ** Further exploration
-- [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][blog post on tagged pointers in Rust]] :: Post I wrote on my initial approach to creating tagged pointers in rust. It serves as in intro to this project.
 - [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained, but is a big inspiration for rune.
 - [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more mature ecosystem (which is part of the promise of rust).
 - [[http://craftinginterpreters.com/][crafting interpreters]] :: This was a big inspiration for this project, and it probably one of the best introductions to programming language implementations.
