@@ -3,10 +3,9 @@ macro_rules! vec_into {
     ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
 }
 
-#[allow(meta_variable_misuse)]
 macro_rules! count {
-    (@replace_expr $_t:tt $sub:expr) => {$sub};
-    ($($x:expr)+) => {0_usize $(+ count!(@replace_expr $x 1_usize))*};
+    ( $x:tt $($xs:tt)* ) => (1_usize + count!($($xs)*));
+    () => (0_usize);
 }
 
 macro_rules! defsubr {
