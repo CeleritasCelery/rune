@@ -395,11 +395,9 @@ mod test {
         let vec = vec_into_object![inner_cons, 2, 3, 4; bk];
         let obj = Cons::new(1.into(), bk.add(vec)).into_obj(bk);
         if let Object::Cons(cons) = obj {
-            assert!(!cons.is_mut());
             if let Object::Vec(inner_vec) = cons.cdr(bk) {
                 assert!(inner_vec.try_borrow_mut().is_err());
-                if let Object::Cons(inner) = inner_vec.try_borrow().unwrap().get(0).unwrap() {
-                    assert!(!inner.is_mut());
+                if let Object::Cons(_) = inner_vec.try_borrow().unwrap().get(0).unwrap() {
                 } else {
                     unreachable!("Type should be cons");
                 }

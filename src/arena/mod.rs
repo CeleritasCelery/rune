@@ -266,10 +266,7 @@ impl<const CONST: bool> Block<CONST> {
         }
     }
 
-    pub(crate) fn alloc_cons<'ob>(&'ob self, mut obj: Cons<'ob>) -> &'ob Cons<'ob> {
-        if CONST {
-            obj.make_const();
-        }
+    pub(crate) fn alloc_cons<'ob>(&'ob self, obj: Cons<'ob>) -> &'ob Cons<'ob> {
         let mut objects = self.objects.borrow_mut();
         Self::register(&mut objects, OwnedObject::Cons(Box::new(obj)));
         if let Some(OwnedObject::Cons(x)) = objects.last() {

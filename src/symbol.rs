@@ -61,6 +61,11 @@ impl GlobalSymbol {
     fn get(&'_ self) -> Option<FuncCell<'_>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
+            // SAFETY: we ensure that value is 0 is not representable in the
+            // enum FuncCell (by making a reference the first time, which will
+            // never be null). So it is safe to use 0 as niche value for `None`.
+            // We can't use AtomicCell due to this issue
+            // https://github.com/crossbeam-rs/crossbeam/issues/748 .
             x => Some(unsafe { std::mem::transmute(x) }),
         }
     }
@@ -225,6 +230,8 @@ macro_rules! create_symbolmap {
                 let size: usize = count!($($sym)*) $(+ $subr.len())*;
                 let mut map = SymbolMap::with_capacity(size);
                 $(for (func, sym) in $subr.iter() {
+                    // SAFETY: built-in subroutine are globally immutable, and
+                    // so they are safe to share between threads.
                     unsafe { sym.set_func(func.into()); }
                     map.pre_init(sym);
                 })*;

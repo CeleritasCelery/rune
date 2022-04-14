@@ -10,7 +10,6 @@ mod iter;
 pub(crate) use iter::*;
 
 pub(crate) struct Cons<'ob> {
-    mutable: bool,
     marked: Cell<bool>,
     car: Cell<Object<'ob>>,
     cdr: Cell<Object<'ob>>,
@@ -42,7 +41,6 @@ impl<'old, 'new> Cons<'old> {
 impl<'ob> Cons<'ob> {
     pub(crate) const fn new(car: Object<'ob>, cdr: Object<'ob>) -> Self {
         Self {
-            mutable: true,
             marked: Cell::new(false),
             car: Cell::new(car),
             cdr: Cell::new(cdr),
@@ -58,12 +56,10 @@ impl<'ob> Cons<'ob> {
     }
 
     pub(crate) fn set_car(&self, new_car: Object<'ob>) {
-        assert!(self.mutable, "Attempt to mutate constant cons");
         self.car.set(new_car);
     }
 
     pub(crate) fn set_cdr(&self, new_cdr: Object<'ob>) {
-        assert!(self.mutable, "Attempt to mutate constant cons");
         self.cdr.set(new_cdr);
     }
 
@@ -79,15 +75,6 @@ impl<'ob> Cons<'ob> {
 
     pub(crate) fn is_marked(&self) -> bool {
         self.marked.get()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn is_mut(&self) -> bool {
-        self.mutable
-    }
-
-    pub(crate) fn make_const(&mut self) {
-        self.mutable = false;
     }
 }
 
