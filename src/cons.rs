@@ -61,11 +61,19 @@ impl Cons {
 
     // Private internal function to get car/cdr without arena
     fn __car(&self) -> Object {
-        unsafe { Object::from_raw(self.car.get()) }
+        unsafe { self.car_unchecked() }
     }
 
     fn __cdr(&self) -> Object {
-        unsafe { Object::from_raw(self.cdr.get()) }
+        unsafe { self.cdr_unchecked() }
+    }
+
+    pub(crate) unsafe fn car_unchecked(&self) -> Object {
+        Object::from_raw(self.car.get())
+    }
+
+    pub(crate) unsafe fn cdr_unchecked(&self) -> Object {
+        Object::from_raw(self.cdr.get())
     }
 
     pub(crate) fn set_car(&self, new_car: Object) {
@@ -76,10 +84,16 @@ impl Cons {
         self.cdr.set(new_cdr.into());
     }
 
-    pub(crate) fn mark(&self) {
+    pub(crate) fn mark(&self, stack: &mut Vec<RawObj>) {
+        let cdr = self.__cdr();
+        if cdr.is_markable() {
+            stack.push(cdr.raw());
+        }
+        let car = self.__car();
+        if car.is_markable() {
+            stack.push(car.raw());
+        }
         self.marked.set(true);
-        self.__car().mark();
-        self.__cdr().mark();
     }
 
     pub(crate) fn unmark(&self) {

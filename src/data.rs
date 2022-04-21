@@ -5,7 +5,7 @@ use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::object::{FuncCell, Object};
+use crate::object::{FuncCell, Object, RawObj};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
@@ -43,13 +43,13 @@ impl Environment {
 }
 
 impl Trace for Environment {
-    fn mark(&self) {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
         for x in self.vars.values() {
-            x.mark();
+            x.mark(stack);
         }
         for vec in self.props.values() {
             for x in vec {
-                x.1.mark();
+                x.1.mark(stack);
             }
         }
     }

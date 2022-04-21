@@ -42,18 +42,50 @@ pub(crate) enum Object<'ob> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) fn mark(self) {
+    pub(crate) fn is_markable(self) -> bool {
+        match self {
+            Object::Int(_)
+            | Object::Symbol(_)
+            | Object::True(_)
+            | Object::Nil(_)
+            | Object::SubrFn(_) => false,
+            Object::Float(_)
+            | Object::Cons(_)
+            | Object::Vec(_)
+            | Object::String(_)
+            | Object::LispFn(_) => true,
+        }
+    }
+
+    pub(crate) fn is_marked(self) -> bool {
+        match self {
+            Object::Int(_)
+            | Object::Symbol(_)
+            | Object::True(_)
+            | Object::Nil(_)
+            | Object::SubrFn(_) => true,
+            Object::Float(x) => x.get_alloc().is_marked(),
+            Object::Cons(x) => x.is_marked(),
+            Object::Vec(x) => x.get_alloc().is_marked(),
+            Object::String(x) => x.get_alloc().is_marked(),
+            Object::LispFn(x) => x.get_alloc().is_marked(),
+        }
+    }
+
+    pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self {
             Object::Float(x) => x.get_alloc().mark(),
-            Object::Cons(x) => x.mark(),
+            Object::Cons(x) => x.mark(stack),
             Object::Vec(vec) => {
-                for x in vec.borrow().iter() {
-                    x.mark();
-                }
+                let content = vec.borrow();
+                let unmarked = content
+                    .iter()
+                    .filter_map(|x| x.is_markable().then(|| x.raw()));
+                stack.extend(unmarked);
                 vec.mark();
             }
             Object::String(x) => x.get_alloc().mark(),
-            Object::LispFn(x) => x.get_alloc().mark(),
+            Object::LispFn(_) => todo!(),
             Object::Int(_)
             | Object::Symbol(_)
             | Object::True(_)
@@ -213,6 +245,10 @@ impl<'ob> Object<'ob> {
                 transmute::<Self, i64>(self) == transmute::<Object, i64>(other)
             },
         }
+    }
+
+    pub(crate) fn raw(self) -> RawObj {
+        self.into()
     }
 
     pub(crate) unsafe fn from_raw(raw: RawObj) -> Self {

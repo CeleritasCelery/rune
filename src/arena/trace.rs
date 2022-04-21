@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 
+use crate::object::RawObj;
+
 use super::{Root, RootSet};
 
 pub(crate) trait Trace {
-    fn mark(&self);
+    fn mark(&self, stack: &mut Vec<RawObj>);
 }
 
 pub(crate) struct RootStruct<'rt> {
@@ -46,16 +48,18 @@ impl<'rt> RootStruct<'rt> {
 }
 
 impl<T: Trace> Trace for Vec<T> {
-    fn mark(&self) {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
         for x in self {
-            x.mark();
+            x.mark(stack);
         }
     }
 }
 
 impl<T: Trace> Trace for Option<T> {
-    fn mark(&self) {
-        self.as_ref().map(Trace::mark);
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        if let Some(x) = self.as_ref() {
+            x.mark(stack);
+        }
     }
 }
 
@@ -66,7 +70,7 @@ mod test {
 
     struct Foo(u64);
     impl Trace for Foo {
-        fn mark(&self) {
+        fn mark(&self, _stack: &mut Vec<RawObj>) {
             assert!(self.0 == 7);
         }
     }

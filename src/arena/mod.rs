@@ -165,7 +165,7 @@ impl<T> Allocation<T> {
         self.marked.set(false);
     }
 
-    fn is_marked(&self) -> bool {
+    pub(crate) fn is_marked(&self) -> bool {
         self.marked.get()
     }
 }
@@ -366,14 +366,22 @@ impl<'ob, 'rt> Arena<'rt> {
         if objects.len() < 1000 || objects.len() < (self.prev_obj_count * 2) {
             return;
         }
+        let gray_stack = &mut Vec::new();
         for x in self.root_set.roots.borrow().iter() {
-            x.mark();
+            x.trace_mark(gray_stack);
         }
         for x in self.root_set.root_structs.borrow().iter() {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (&**x).mark();
+                (&**x).mark(gray_stack);
+            }
+        }
+        while !gray_stack.is_empty() {
+            let raw = gray_stack.pop().unwrap();
+            let obj = unsafe { Object::from_raw(raw) };
+            if !obj.is_marked() {
+                obj.trace_mark(gray_stack);
             }
         }
 

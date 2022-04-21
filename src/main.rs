@@ -28,6 +28,7 @@
     clippy::shadow_reuse,
     clippy::shadow_same,
     clippy::use_debug,
+    clippy::single_char_lifetime_names,
     clippy::shadow_unrelated,
     clippy::missing_docs_in_private_items,
     clippy::needless_pass_by_value,

@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut, IndexMut};
+use std::ptr::{addr_of, addr_of_mut};
 use std::{ops::Index, slice::SliceIndex};
 
 use crate::cons::Cons;
@@ -51,9 +52,9 @@ impl RootObj {
 }
 
 impl Trace for RootObj {
-    fn mark(&self) {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
         let obj = unsafe { Object::from_raw(self.obj) };
-        obj.mark();
+        obj.trace_mark(stack);
     }
 }
 
@@ -78,9 +79,9 @@ impl RootCons {
 }
 
 impl Trace for RootCons {
-    fn mark(&self) {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
         unsafe {
-            (*self.obj).mark();
+            (*self.obj).mark(stack);
         }
     }
 }
@@ -112,7 +113,7 @@ impl<'id, T> Root<'id, T> {
         // SAFETY: if we have a &mut self, we know that there are no other
         // owners, so we don't need RootOwner. And we can cast since LCell is
         // repr(transparent)
-        unsafe { &*(&self.0 as *const LCell<'id, RootRef<T>>).cast::<T>() }
+        unsafe { &*addr_of!(self.0).cast::<T>() }
     }
 
     pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a RootRef<T> {
@@ -389,19 +390,19 @@ where
 type Prop = RootRef<HashMap<Symbol, Vec<(Symbol, RootObj)>>>;
 impl RootRef<Environment> {
     pub(crate) fn vars(&self) -> &RootRef<HashMap<Symbol, RootObj>> {
-        unsafe { &*(&self.inner.vars as *const HashMap<_, _>).cast() }
+        unsafe { &*addr_of!(self.inner.vars).cast() }
     }
 
     pub(crate) fn vars_mut(&mut self) -> &mut RootRef<HashMap<Symbol, RootObj>> {
-        unsafe { &mut *(&mut self.inner.vars as *mut HashMap<_, _>).cast() }
+        unsafe { &mut *addr_of_mut!(self.inner.vars).cast() }
     }
 
     pub(crate) fn props(&self) -> &Prop {
-        unsafe { &*(&self.inner.props as *const HashMap<_, _>).cast() }
+        unsafe { &*addr_of!(self.inner.props).cast() }
     }
 
     pub(crate) fn props_mut(&mut self) -> &mut Prop {
-        unsafe { &mut *(&mut self.inner.props as *mut HashMap<_, _>).cast() }
+        unsafe { &mut *addr_of_mut!(self.inner.props).cast() }
     }
 }
 
