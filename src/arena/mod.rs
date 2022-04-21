@@ -6,10 +6,8 @@ use std::mem::transmute;
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
-mod cell;
 mod root;
 mod trace;
-use cell::{LCell, LCellOwner};
 pub(crate) use root::*;
 pub(crate) use trace::*;
 

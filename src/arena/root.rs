@@ -9,7 +9,9 @@ use crate::object::{Object, RawObj};
 use crate::symbol::Symbol;
 use std::fmt::Debug;
 
-use super::{Arena, LCell, LCellOwner, Trace};
+use qcell::{LCell, LCellOwner};
+
+use super::{Arena, Trace};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -86,7 +88,6 @@ impl Trace for RootCons {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct RootOwner<'id>(LCellOwner<'id>);
 
 impl<'id> RootOwner<'id> {
