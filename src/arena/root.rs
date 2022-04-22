@@ -11,7 +11,7 @@ use std::fmt::Debug;
 
 use qcell::{LCell, LCellOwner};
 
-use super::{Arena, Trace};
+use super::{Arena, RootSet, Trace};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -39,6 +39,61 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
     unsafe fn into_root(self) -> Vec<U> {
         self.into_iter().map(|x| x.into_root()).collect()
     }
+}
+
+#[doc(hidden)]
+pub(crate) struct StackRoot<'rt> {
+    root_set: &'rt RootSet,
+}
+
+impl<'rt> StackRoot<'rt> {
+    /// Create a new `StackRoot`
+    ///
+    /// # Safety
+    ///
+    /// This function is only safe if [set] is called before use and `StackRoot`
+    /// does not move from the stack or drop before it goes out of scope. This
+    /// is ensured by a shadow binding in the [root!] macro.
+    pub(crate) unsafe fn new(roots: &'rt RootSet) -> Self {
+        StackRoot { root_set: roots }
+    }
+
+    pub(crate) fn set<'root>(&'root mut self, obj: Object<'_>) -> Object<'root> {
+        unsafe {
+            self.root_set
+                .roots
+                .borrow_mut()
+                .push(std::intrinsics::transmute::<Object, Object<'static>>(obj));
+            std::intrinsics::transmute::<Object, Object<'root>>(obj)
+        }
+    }
+}
+
+impl<'rt> Drop for StackRoot<'rt> {
+    // Remove the object bound by this StackRoot from the root set. We know that
+    // the top of the stack will correspond to the correct object is the
+    // invariants of StackRoot are upheld.
+    fn drop(&mut self) {
+        self.root_set.roots.borrow_mut().pop();
+    }
+}
+
+/// Roots an [Object] to the stack. The object will be valid until the end of
+/// the current scope. The object's lifetime will no longer be bound to the
+/// [Arena].
+///
+/// # Examples
+///
+/// ```
+/// let object = Object::from(5);
+/// root!(object, gc);
+/// ```
+#[macro_export]
+macro_rules! root {
+    ($obj:ident, $arena:ident) => {
+        let mut root = unsafe { $crate::arena::StackRoot::new($arena.get_root_set()) };
+        let $obj = root.set($obj);
+    };
 }
 
 #[repr(transparent)]

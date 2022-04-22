@@ -9,7 +9,7 @@ pub(crate) trait Trace {
 }
 
 pub(crate) struct RootStruct<'rt> {
-    obj: Option<*const dyn Trace>,
+    set: bool,
     root_set: &'rt RootSet,
 }
 
@@ -23,6 +23,7 @@ impl<'rt> Debug for RootStruct<'rt> {
 
 impl<'rt> Drop for RootStruct<'rt> {
     fn drop(&mut self) {
+        assert!(self.set, "RootStruct was dropped while still not set");
         self.root_set.root_structs.borrow_mut().pop();
     }
 }
@@ -30,7 +31,7 @@ impl<'rt> Drop for RootStruct<'rt> {
 impl<'rt> RootStruct<'rt> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
         Self {
-            obj: None,
+            set: false,
             root_set,
         }
     }
@@ -39,9 +40,9 @@ impl<'rt> RootStruct<'rt> {
         &mut self,
         root: &'a mut Root<'id, T>,
     ) -> &'a Root<'id, T> {
-        assert!(self.obj.is_none(), "RootStruct should only be set once");
+        assert!(!self.set, "RootStruct should only be set once");
         let dyn_ptr = root.deref() as &dyn Trace as *const dyn Trace;
-        self.obj = Some(dyn_ptr);
+        self.set = true;
         self.root_set.root_structs.borrow_mut().push(dyn_ptr);
         unsafe { &*dyn_ptr.cast::<Root<'id, T>>() }
     }
