@@ -10,7 +10,7 @@ use super::Bits;
 pub(crate) enum Function<'ob> {
     LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
     SubrFn(Data<&'static SubrFn>),
-    Uncompiled(Data<&'ob Cons>),
+    Cons(Data<&'ob Cons>),
     Symbol(Data<Symbol>),
 }
 
@@ -19,7 +19,7 @@ impl<'ob> From<Function<'ob>> for Object<'ob> {
         match x {
             Function::LispFn(x) => Object::LispFn(x),
             Function::SubrFn(x) => Object::SubrFn(x),
-            Function::Uncompiled(x) => Object::Cons(x),
+            Function::Cons(x) => Object::Cons(x),
             Function::Symbol(x) => Object::Symbol(x),
         }
     }
@@ -39,13 +39,29 @@ impl<'ob> IntoObject<'ob, Function<'ob>> for SubrFn {
     }
 }
 
-#[repr(u8, align(8))]
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum FuncCell<'ob> {
-    LispFn(Data<&'ob Allocation<LispFn<'ob>>>),
-    SubrFn(Data<&'static SubrFn>),
-    Cons(Data<&'ob Cons>),
-    Symbol(Data<Symbol>),
+impl<'ob> IntoObject<'ob, Function<'ob>> for Cons {
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Function<'ob> {
+        let rf = block.alloc_cons(self);
+        Function::Cons(Data::from_ref(rf))
+    }
+}
+
+impl<'ob> From<&'static SubrFn> for Function<'ob> {
+    fn from(x: &'static SubrFn) -> Self {
+        Function::SubrFn(Data::from_ref(x))
+    }
+}
+
+impl<'a> Function<'a> {
+    pub(crate) fn clone_in<const C: bool>(self, bk: &Block<C>) -> Function {
+        match self {
+            // TODO: once gc is implemented change this to not copy the lispfn
+            Function::LispFn(x) => x.clone_in(bk).into_obj(bk),
+            Function::SubrFn(x) => Function::SubrFn(x),
+            Function::Cons(x) => x.clone_in(bk).into_obj(bk),
+            Function::Symbol(x) => Function::Symbol(x),
+        }
+    }
 }
 
 #[cfg(miri)]
@@ -54,107 +70,28 @@ extern "Rust" {
 }
 
 #[cfg(miri)]
-impl<'ob> FuncCell<'ob> {
+impl<'ob> Function<'ob> {
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            FuncCell::LispFn(x) => {
+            Function::LispFn(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FuncCell::SubrFn(x) => {
+            Function::SubrFn(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FuncCell::Cons(x) => {
+            Function::Cons(x) => {
                 let ptr: *const _ = &x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FuncCell::Symbol(_) => {}
-        }
-    }
-}
-
-impl<'ob> IntoObject<'ob, FuncCell<'ob>> for LispFn<'ob> {
-    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> FuncCell<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, FuncCell<'ob>> for SubrFn {
-    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> FuncCell<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, FuncCell<'ob>> for Cons {
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> FuncCell<'ob> {
-        let rf = block.alloc_cons(self);
-        FuncCell::Cons(Data::from_ref(rf))
-    }
-}
-
-impl<'ob> From<Function<'ob>> for FuncCell<'ob> {
-    fn from(x: Function<'ob>) -> Self {
-        match x {
-            Function::LispFn(x) => FuncCell::LispFn(x),
-            Function::SubrFn(x) => FuncCell::SubrFn(x),
-            Function::Uncompiled(x) => FuncCell::Cons(x),
-            Function::Symbol(x) => FuncCell::Symbol(x),
-        }
-    }
-}
-
-impl<'ob> From<FuncCell<'ob>> for Object<'ob> {
-    fn from(x: FuncCell<'ob>) -> Self {
-        match x {
-            FuncCell::LispFn(x) => Object::LispFn(x),
-            FuncCell::SubrFn(x) => Object::SubrFn(x),
-            FuncCell::Cons(x) => Object::Cons(x),
-            FuncCell::Symbol(x) => Object::Symbol(x),
-        }
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for FuncCell<'ob> {
-    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
-        self.into()
-    }
-}
-
-impl<'ob> From<&'static SubrFn> for FuncCell<'ob> {
-    fn from(x: &'static SubrFn) -> Self {
-        FuncCell::SubrFn(Data::from_ref(x))
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for Option<FuncCell<'ob>> {
-    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
-        match self {
-            Some(FuncCell::LispFn(x)) => Object::LispFn(x),
-            Some(FuncCell::SubrFn(x)) => Object::SubrFn(x),
-            Some(FuncCell::Cons(x)) => Object::Cons(x),
-            Some(FuncCell::Symbol(x)) => Object::Symbol(x),
-            None => Object::NIL,
-        }
-    }
-}
-
-impl<'a> FuncCell<'a> {
-    pub(crate) fn clone_in<const C: bool>(self, bk: &Block<C>) -> FuncCell {
-        match self {
-            // TODO: once gc is implemented change this to not copy the lispfn
-            FuncCell::LispFn(x) => x.clone_in(bk).into_obj(bk),
-            FuncCell::SubrFn(x) => FuncCell::SubrFn(x),
-            FuncCell::Cons(x) => x.clone_in(bk).into_obj(bk),
-            FuncCell::Symbol(x) => FuncCell::Symbol(x),
+            Function::Symbol(_) => {}
         }
     }
 }
@@ -291,12 +228,10 @@ mod test {
     #[test]
     fn sub_type_size() {
         assert_eq!(size_of::<Object>(), size_of::<Function>());
-        assert_eq!(size_of::<Object>(), size_of::<FuncCell>());
         assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Function>>());
         assert_eq!(size_of::<Object>(), size_of::<Number>());
         assert_eq!(size_of::<Option<Object>>(), size_of::<Option<Number>>());
         assert_eq!(align_of::<Object>(), align_of::<Function>());
-        assert_eq!(align_of::<Object>(), align_of::<FuncCell>());
         assert_eq!(align_of::<Option<Object>>(), align_of::<Option<Function>>());
         assert_eq!(align_of::<Object>(), align_of::<Number>());
     }

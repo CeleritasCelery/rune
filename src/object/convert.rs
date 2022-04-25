@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use crate::arena::{Arena, Block};
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{FuncCell, Function, IntoObject, List, Number, Object};
+use crate::object::{Function, IntoObject, List, Number, Object};
 use crate::symbol::{sym, Symbol};
 use anyhow::Context;
 
@@ -19,7 +19,7 @@ impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
         match obj {
             Object::LispFn(x) => Ok(Function::LispFn(x)),
             Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Object::Cons(x) => Ok(Function::Uncompiled(x)),
+            Object::Cons(x) => Ok(Function::Cons(x)),
             Object::Symbol(x) => Ok(Function::Symbol(x)),
             x => Err(Error::from_object(Type::Func, x).into()),
         }
@@ -44,7 +44,7 @@ impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
         match obj {
             Callable::LispFn(x) => Ok(Function::LispFn(x)),
             Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Callable::Cons(x) => Ok(Function::Uncompiled(x)),
+            Callable::Cons(x) => Ok(Function::Cons(x)),
         }
     }
 }
@@ -57,19 +57,6 @@ impl<'ob> Cons {
                 cdr.try_into()
             }
             x => Err(Error::from_object(Type::Symbol, x).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for FuncCell<'ob> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::LispFn(x) => Ok(FuncCell::LispFn(x)),
-            Object::SubrFn(x) => Ok(FuncCell::SubrFn(x)),
-            Object::Symbol(x) => Ok(FuncCell::Symbol(x)),
-            Object::Cons(x) => Ok(FuncCell::Cons(x)),
-            _ => Err(Error::from_object(Type::Func, obj)),
         }
     }
 }

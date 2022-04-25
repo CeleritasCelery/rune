@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Block};
 use crate::hashmap::HashMap;
-use crate::object::{Callable, FuncCell};
+use crate::object::{Callable, Function};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -58,11 +58,11 @@ impl GlobalSymbol {
         self.func.load(Ordering::Acquire) != 0
     }
 
-    fn get(&'_ self) -> Option<FuncCell<'_>> {
+    fn get(&'_ self) -> Option<Function<'_>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             // SAFETY: we ensure that value is 0 is not representable in the
-            // enum FuncCell (by making a reference the first time, which will
+            // enum Function (by making a reference the first time, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
             // We can't use AtomicCell due to this issue
             // https://github.com/crossbeam-rs/crossbeam/issues/748 .
@@ -70,17 +70,17 @@ impl GlobalSymbol {
         }
     }
 
-    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<FuncCell<'a>> {
+    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Function<'a>> {
         self.get().map(|x| x.clone_in(gc))
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
     pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Callable<'ob>> {
         match self.func(gc) {
-            Some(FuncCell::Symbol(sym)) => sym.resolve_callable(gc),
-            Some(FuncCell::LispFn(x)) => Some(Callable::LispFn(x)),
-            Some(FuncCell::SubrFn(x)) => Some(Callable::SubrFn(x)),
-            Some(FuncCell::Cons(obj)) => Some(Callable::Cons(obj)),
+            Some(Function::Symbol(sym)) => sym.resolve_callable(gc),
+            Some(Function::LispFn(x)) => Some(Callable::LispFn(x)),
+            Some(Function::SubrFn(x)) => Some(Callable::SubrFn(x)),
+            Some(Function::Cons(obj)) => Some(Callable::Cons(obj)),
             None => None,
         }
     }
@@ -89,7 +89,7 @@ impl GlobalSymbol {
     /// requires that the caller:
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` arena
-    unsafe fn set_func(&self, func: FuncCell) {
+    unsafe fn set_func(&self, func: Function) {
         let val = std::mem::transmute(func);
         self.func.store(val, Ordering::Release);
     }
@@ -194,7 +194,7 @@ impl ObjectMap {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: FuncCell) {
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Function) {
         let new_func = func.clone_in(&self.block);
         #[cfg(miri)]
         new_func.set_as_miri_root();
@@ -324,7 +324,7 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
-        assert_eq!(size_of::<isize>(), size_of::<FuncCell>());
+        assert_eq!(size_of::<isize>(), size_of::<Function>());
         assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
     }
 
@@ -346,7 +346,7 @@ mod test {
         }
         let cell1 = sym.func(gc).unwrap();
         let before = match cell1 {
-            FuncCell::LispFn(x) => !x,
+            Function::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
@@ -356,7 +356,7 @@ mod test {
         }
         let cell2 = sym.func(gc).unwrap();
         let after = match cell2 {
-            FuncCell::LispFn(x) => !x,
+            Function::LispFn(x) => !x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
@@ -384,7 +384,7 @@ mod test {
             sym.set_func(core_func.into_obj(bk));
         }
 
-        if let Some(FuncCell::SubrFn(subr)) = sym.get() {
+        if let Some(Function::SubrFn(subr)) = sym.get() {
             assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

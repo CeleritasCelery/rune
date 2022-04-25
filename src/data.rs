@@ -5,7 +5,7 @@ use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::object::{FuncCell, Object, RawObj};
+use crate::object::{Function, Object, RawObj};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
@@ -61,7 +61,7 @@ lazy_static! {
     });
 }
 
-fn set_global_function(symbol: Symbol, func: FuncCell) {
+fn set_global_function(symbol: Symbol, func: Function) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
     map.set_func(symbol, func);
 }

@@ -37,7 +37,7 @@ impl<'ob> Function<'ob> {
         match self {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f).call(args, env, arena, owner),
-            Function::Uncompiled(f) => interpreter::call(Object::Cons(f), args, env, arena, owner),
+            Function::Cons(f) => interpreter::call(Object::Cons(f), args, env, arena, owner),
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
                     let tmp: Object = resolved.into();
