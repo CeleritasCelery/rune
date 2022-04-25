@@ -21,6 +21,7 @@
 #![allow(
     clippy::undocumented_unsafe_blocks, // Will enable this later
     clippy::todo,
+    clippy::unimplemented,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
     clippy::as_conversions,
@@ -36,6 +37,7 @@
     clippy::let_and_return,
     clippy::inline_always,
     clippy::wildcard_enum_match_arm,
+    clippy::match_bool,
     clippy::string_slice,
     clippy::separated_literal_suffix,
     clippy::unreachable,

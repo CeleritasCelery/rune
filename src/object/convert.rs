@@ -4,82 +4,25 @@
 
 use std::cell::RefCell;
 
-use crate::arena::{Arena, Block};
+use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::{Function, IntoObject, List, Number, Object};
+use crate::object::Object;
 use crate::symbol::{sym, Symbol};
 use anyhow::Context;
 
-use super::{Bits, Callable, Data, IntOrMarker};
-
-impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
-    type Error = anyhow::Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::LispFn(x) => Ok(Function::LispFn(x)),
-            Object::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Object::Cons(x) => Ok(Function::Cons(x)),
-            Object::Symbol(x) => Ok(Function::Symbol(x)),
-            x => Err(Error::from_object(Type::Func, x).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for Callable<'ob> {
-    type Error = anyhow::Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::LispFn(x) => Ok(Callable::LispFn(x)),
-            Object::SubrFn(x) => Ok(Callable::SubrFn(x)),
-            Object::Cons(x) => Ok(Callable::Cons(x)),
-            x => Err(Error::from_object(Type::Func, x).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Callable<'ob>> for Function<'ob> {
-    type Error = anyhow::Error;
-    fn try_from(obj: Callable<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Callable::LispFn(x) => Ok(Function::LispFn(x)),
-            Callable::SubrFn(x) => Ok(Function::SubrFn(x)),
-            Callable::Cons(x) => Ok(Function::Cons(x)),
-        }
-    }
-}
+use super::{CallableX, Gc, ObjectX};
 
 impl<'ob> Cons {
-    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Callable<'ob>> {
-        match self.car(gc) {
-            Object::Symbol(sym) if !sym == &sym::MACRO => {
+    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Gc<CallableX<'ob>>> {
+        let car = self.car(gc);
+        match car.get() {
+            ObjectX::Symbol(sym) if sym == &sym::MACRO => {
                 let cdr = self.cdr(gc);
-                cdr.try_into()
+                let x = cdr.try_into()?;
+                Ok(x)
             }
             x => Err(Error::from_object(Type::Symbol, x).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Int(x) => Ok(Number::Int(x)),
-            Object::Float(x) => Ok(Number::Float(x)),
-            _ => Err(Error::from_object(Type::Number, obj)),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Int(x) => Ok(Some(Number::Int(x))),
-            Object::Float(x) => Ok(Some(Number::Float(x))),
-            Object::Nil(_) => Ok(None),
-            _ => Err(Error::from_object(Type::Number, obj)),
         }
     }
 }
@@ -87,11 +30,11 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
 impl<'ob> TryFrom<Object<'ob>> for usize {
     type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Int(x) => (!x)
+        match obj.get() {
+            ObjectX::Int(x) => (!x)
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {}", !x)),
-            _ => Err(Error::from_object(Type::Int, obj).into()),
+            x => Err(Error::from_object(Type::Int, x).into()),
         }
     }
 }
@@ -99,25 +42,15 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
 impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
     type Error = anyhow::Error;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Int(x) => match (!x).try_into() {
+        match obj.get() {
+            ObjectX::Int(x) => match (!x).try_into() {
                 Ok(x) => Ok(Some(x)),
                 Err(e) => {
                     Err(e).with_context(|| format!("Integer must be positive, but was {}", !x))
                 }
             },
-            Object::Nil(_) => Ok(None),
+            ObjectX::Nil => Ok(None),
             _ => Err(Error::from_object(Type::Int, obj).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for IntOrMarker {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Int(int) => Ok(IntOrMarker::new(int)),
-            _ => Err(Error::from_object(Type::Int, obj)),
         }
     }
 }
@@ -125,8 +58,8 @@ impl<'ob> TryFrom<Object<'ob>> for IntOrMarker {
 impl<'ob> TryFrom<Object<'ob>> for bool {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Nil(_) => Ok(false),
+        match obj.get() {
+            ObjectX::Nil => Ok(false),
             _ => Ok(true),
         }
     }
@@ -135,27 +68,10 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
 impl<'ob> TryFrom<Object<'ob>> for Option<bool> {
     type Error = Error;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Nil(_) => Ok(None),
+        match obj.get() {
+            ObjectX::Nil => Ok(None),
             _ => Ok(Some(true)),
         }
-    }
-}
-
-impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
-    type Error = Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj {
-            Object::Cons(cons) => Ok(List::Cons(cons)),
-            Object::Nil(_) => Ok(List::Nil),
-            _ => Err(Error::from_object(Type::List, obj)),
-        }
-    }
-}
-
-impl<'ob> From<&'ob Cons> for List<'ob> {
-    fn from(x: &'ob Cons) -> Self {
-        List::Cons(x.into())
     }
 }
 
@@ -165,45 +81,22 @@ impl<'ob> From<&'ob Cons> for List<'ob> {
 /// types have the exact same representation, so that no writes
 /// actually need to be performed.
 pub(crate) fn try_from_slice<'brw, 'ob, T>(
-    slice: &'brw [Object<'ob>],
-) -> Result<&'brw [T], anyhow::Error>
+    slice: &'brw [Gc<ObjectX<'ob>>],
+) -> Result<&'brw [Gc<T>], anyhow::Error>
 where
-    T: TryFrom<Object<'ob>, Error = Error> + Bits + 'ob,
+    Gc<T>: TryFrom<Gc<ObjectX<'ob>>, Error = Error> + 'ob,
 {
-    assert_eq!(std::mem::size_of::<Object>(), std::mem::size_of::<T>());
     for x in slice.iter() {
-        let new: T = TryFrom::try_from(*x)?;
-        // ensure they have the same bit representation
-        debug_assert_eq!(new.bits(), x.bits());
+        let _new = Gc::<T>::try_from(*x)?;
     }
-    let ptr = slice.as_ptr().cast::<T>();
+    let ptr = slice.as_ptr().cast::<Gc<T>>();
     let len = slice.len();
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
 define_unbox!(Int, i64);
 
-impl<'ob> From<i64> for Object<'ob> {
-    fn from(x: i64) -> Self {
-        let x: Number = x.into();
-        x.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for i64 {
-    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
-        self.into()
-    }
-}
-
 define_unbox!(Float, &'ob f64);
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for f64 {
-    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
-        let obj: Number = self.into_obj(arena);
-        obj.into()
-    }
-}
 
 impl<'ob> From<bool> for Object<'ob> {
     fn from(b: bool) -> Self {
@@ -215,58 +108,12 @@ impl<'ob> From<bool> for Object<'ob> {
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for bool {
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Object<'ob> {
-        self.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for &str {
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
-        let rf = block.alloc_string(self.to_owned());
-        Object::String(Data::from_ref(rf))
-    }
-}
-
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for String {
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
-        let rf = block.alloc_string(self);
-        Object::String(Data::from_ref(rf))
-    }
-}
-
 define_unbox!(Vec, &'ob RefCell<Vec<Object<'ob>>>);
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for Vec<Object<'ob>> {
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
-        let rf = block.alloc_vec(self);
-        Object::Vec(Data::from_ref(rf))
-    }
-}
-
 define_unbox!(Symbol, Symbol);
-
-impl<'ob> From<Symbol> for Object<'ob> {
-    fn from(s: Symbol) -> Self {
-        Object::Symbol(Data::from_ref(s))
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for Symbol {
-    fn into_obj<const C: bool>(self, _arena: &'ob Block<C>) -> Object<'ob> {
-        self.into()
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for Cons {
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Object<'ob> {
-        let rf = block.alloc_cons(self);
-        Object::Cons(Data::from_ref(rf))
-    }
-}
 
 impl<'ob, T> From<Option<T>> for Object<'ob>
 where
@@ -303,9 +150,9 @@ mod test {
     fn test() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let obj0 = 5.into_obj(arena);
+        let obj0 = arena.add(5);
         // SAFETY: We don't call garbage collect so references are valid
-        let obj1 = unsafe { Cons::new(1.into(), 2.into()).into_obj(arena) };
+        let obj1 = unsafe { arena.add(Cons::new(1.into(), 2.into())) };
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice(), arena);
         assert_eq!(6, res.unwrap());

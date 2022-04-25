@@ -3,7 +3,7 @@ use crate::arena::{Arena, Root, RootObj};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::error::{Error, Type};
-use crate::object::{Callable, Function, List, Object};
+use crate::object::{CallableX, FunctionX, Gc, ListX, Object, ObjectX};
 use crate::symbol::Symbol;
 use crate::{data, element_iter, rebind, root, root_struct};
 use anyhow::anyhow;
@@ -25,7 +25,7 @@ pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> Stri
     format!("{object}")
 }
 
-impl<'ob> Function<'ob> {
+impl<'ob> Gc<FunctionX<'ob>> {
     pub(crate) fn call<'gc, 'id>(
         self,
         args: &Root<'id, Vec<RootObj>>,
@@ -34,32 +34,26 @@ impl<'ob> Function<'ob> {
         owner: &mut RootOwner<'id>,
     ) -> Result<Object<'gc>> {
         use crate::interpreter;
-        match self {
-            Function::LispFn(_) => todo!("call lisp functions"),
-            Function::SubrFn(f) => (*f).call(args, env, arena, owner),
-            Function::Cons(f) => interpreter::call(Object::Cons(f), args, env, arena, owner),
-            Function::Symbol(s) => {
+        match self.get() {
+            FunctionX::LispFn(_) => todo!("call lisp functions"),
+            FunctionX::SubrFn(f) => (*f).call(args, env, arena, owner),
+            FunctionX::Cons(_) => interpreter::call(self.into(), args, env, arena, owner),
+            FunctionX::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
                     let tmp: Object = resolved.into();
                     root!(tmp, arena); // root callable
-                    let callable: Callable = tmp.try_into().unwrap();
-                    match callable {
-                        Callable::LispFn(_) => todo!("call lisp functions"),
-                        Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
-                        Callable::Cons(cons) => {
+                    let callable: Gc<CallableX> = tmp.try_into().unwrap();
+                    match callable.get() {
+                        CallableX::LispFn(_) => todo!("call lisp functions"),
+                        CallableX::SubrFn(f) => (*f).call(args, env, arena, owner),
+                        CallableX::Cons(cons) => {
                             match cons.try_as_macro(arena) {
                                 Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
                                 Err(_) => {
-                                    let tmp: Object = Object::Cons(cons);
+                                    let tmp: Object = callable.into();
                                     root!(tmp, arena); // root callable
-                                    if let Object::Cons(func) = tmp {
-                                        interpreter::call(
-                                            Object::Cons(func),
-                                            args,
-                                            env,
-                                            arena,
-                                            owner,
-                                        )
+                                    if let ObjectX::Cons(_) = tmp.get() {
+                                        interpreter::call(tmp, args, env, arena, owner)
                                     } else {
                                         unreachable!();
                                     }
@@ -68,7 +62,7 @@ impl<'ob> Function<'ob> {
                         }
                     }
                 } else {
-                    Err(anyhow!("Void Function: {}", s))
+                    Err(anyhow!("Void FunctionX: {}", s))
                 }
             }
         }
@@ -77,18 +71,18 @@ impl<'ob> Function<'ob> {
 
 #[defun]
 pub(crate) fn mapcar<'ob, 'id>(
-    function: Function<'ob>,
-    sequence: List<'ob>,
+    function: Gc<FunctionX<'ob>>,
+    sequence: Gc<ListX<'ob>>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
-    match sequence {
-        List::Nil => Ok(Object::NIL),
-        List::Cons(cons) => {
+    match sequence.get() {
+        ListX::Nil => Ok(Object::NIL),
+        ListX::Cons(cons) => {
             root_struct!(outputs, Vec::new(), gc);
             root_struct!(call_arg, Vec::new(), gc);
-            element_iter!(iter, !cons, gc);
+            element_iter!(iter, cons, gc);
             while let Some(x) = iter.next() {
                 let obj = x.obj();
                 call_arg.borrow_mut(owner, gc).push(obj);
@@ -106,17 +100,17 @@ pub(crate) fn mapcar<'ob, 'id>(
 
 #[defun]
 pub(crate) fn mapc<'ob, 'id>(
-    function: Function<'ob>,
-    sequence: List<'ob>,
+    function: Gc<FunctionX<'ob>>,
+    sequence: Gc<ListX<'ob>>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<Object<'ob>> {
-    match sequence {
-        List::Nil => Ok(Object::NIL),
-        List::Cons(cons) => {
+    match sequence.get() {
+        ListX::Nil => Ok(Object::NIL),
+        ListX::Cons(cons) => {
             root_struct!(call_arg, Vec::new(), gc);
-            element_iter!(elements, !cons, gc);
+            element_iter!(elements, cons, gc);
             while let Some(elem) = elements.next() {
                 call_arg.borrow_mut(owner, gc).push(elem.obj());
                 function.call(call_arg, env, gc, owner)?;
@@ -128,24 +122,24 @@ pub(crate) fn mapc<'ob, 'id>(
 }
 
 #[defun]
-pub(crate) fn nreverse<'ob>(seq: List<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
+pub(crate) fn nreverse<'ob>(seq: Gc<ListX<'ob>>, arena: &'ob Arena) -> Result<Object<'ob>> {
     let mut prev = Object::NIL;
     for tail in seq.conses(arena) {
         let tail = tail?;
         tail.set_cdr(prev);
-        prev = Object::Cons(tail.into());
+        prev = tail.into();
     }
     Ok(prev)
 }
 
-fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>, arena: &'ob Arena) -> Result<()> {
-    match seq {
-        List::Cons(cons) => {
+fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: Gc<ListX<'ob>>, arena: &'ob Arena) -> Result<()> {
+    match seq.get() {
+        ListX::Cons(cons) => {
             for elt in cons.elements(arena) {
                 list.push(elt?);
             }
         }
-        List::Nil => {}
+        ListX::Nil => {}
     }
     Ok(())
 }
@@ -165,13 +159,16 @@ pub(crate) fn append<'ob>(
 }
 
 #[defun]
-pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>, arena: &'ob Arena) -> Object<'ob> {
-    match alist {
-        List::Nil => Object::NIL,
-        List::Cons(cons) => cons
+pub(crate) fn assq<'ob>(key: Object<'ob>, alist: Gc<ListX<'ob>>, arena: &'ob Arena) -> Object<'ob> {
+    match alist.get() {
+        ListX::Nil => Object::NIL,
+        ListX::Cons(cons) => cons
             .elements(arena)
             .find(|x| match x {
-                Ok(Object::Cons(elem)) => data::eq(key, elem.car(arena)),
+                Ok(elem) => match elem.get() {
+                    ObjectX::Cons(cons) => data::eq(key, cons.car(arena)),
+                    _ => false,
+                },
                 _ => false,
             })
             .transpose()
@@ -184,7 +181,7 @@ type EqFunc = for<'ob> fn(Object<'ob>, Object<'ob>) -> bool;
 
 fn delete_from_list<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     eq_fn: EqFunc,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
@@ -208,7 +205,7 @@ fn delete_from_list<'ob>(
 #[defun]
 pub(crate) fn delete<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     delete_from_list(elt, list, data::equal, arena)
@@ -217,7 +214,7 @@ pub(crate) fn delete<'ob>(
 #[defun]
 pub(crate) fn delq<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     delete_from_list(elt, list, data::eq, arena)
@@ -225,7 +222,7 @@ pub(crate) fn delq<'ob>(
 
 fn member_of_list<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     eq_fn: EqFunc,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
@@ -234,7 +231,7 @@ fn member_of_list<'ob>(
         Err(_) => true,
     });
     match val {
-        Some(Ok(elem)) => Ok(Object::Cons(elem.into())),
+        Some(Ok(elem)) => Ok(elem.into()),
         Some(Err(e)) => Err(e),
         None => Ok(Object::NIL),
     }
@@ -243,7 +240,7 @@ fn member_of_list<'ob>(
 #[defun]
 pub(crate) fn memq<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     member_of_list(elt, list, data::eq, arena)
@@ -252,7 +249,7 @@ pub(crate) fn memq<'ob>(
 #[defun]
 pub(crate) fn member<'ob>(
     elt: Object<'ob>,
-    list: List<'ob>,
+    list: Gc<ListX<'ob>>,
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     member_of_list(elt, list, data::equal, arena)
@@ -305,8 +302,8 @@ fn require<'ob, 'id>(
 pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
     let mut concat = String::new();
     for elt in sequences {
-        match elt {
-            Object::String(string) => concat.push_str(string),
+        match elt.get() {
+            ObjectX::String(string) => concat.push_str(string),
             _ => bail!("Currently only concatenating strings are supported"),
         }
     }
@@ -315,10 +312,10 @@ pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
 
 #[defun]
 pub(crate) fn length<'ob>(sequence: Object<'ob>, arena: &'ob Arena) -> Result<i64> {
-    let size = match sequence {
-        Object::Cons(x) => x.elements(arena).len(),
-        Object::Vec(x) => x.borrow().len(),
-        Object::String(x) => x.len(),
+    let size = match sequence.get() {
+        ObjectX::Cons(x) => x.elements(arena).len(),
+        ObjectX::Vec(x) => x.borrow().len(),
+        ObjectX::String(x) => x.len(),
         obj => bail!(Error::from_object(Type::Sequence, obj)),
     };
     Ok(size
@@ -327,7 +324,7 @@ pub(crate) fn length<'ob>(sequence: Object<'ob>, arena: &'ob Arena) -> Result<i6
 }
 
 #[defun]
-pub(crate) fn nth<'ob>(n: usize, list: List<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
+pub(crate) fn nth<'ob>(n: usize, list: Gc<ListX<'ob>>, arena: &'ob Arena) -> Result<Object<'ob>> {
     list.elements(arena).nth(n).unwrap_or(Ok(Object::NIL))
 }
 
@@ -355,8 +352,8 @@ pub(crate) fn puthash<'ob>(
 
 #[defun]
 fn copy_sequence<'ob>(arg: Object<'ob>, arena: &'ob Arena) -> Result<Object<'ob>> {
-    match arg {
-        Object::String(_) | Object::Vec(_) | Object::Nil(_) | Object::Cons(_) => {
+    match arg.get() {
+        ObjectX::String(_) | ObjectX::Vec(_) | ObjectX::Nil | ObjectX::Cons(_) => {
             Ok(arg.clone_in(arena))
         }
         _ => Err(Error::from_object(Type::Sequence, arg).into()),
@@ -385,12 +382,12 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         {
-            let list = list![1, 2, 3, 1, 4, 1; arena];
+            let list: Object = list![1, 2, 3, 1, 4, 1; arena];
             let res = delq(1.into(), list.try_into().unwrap(), arena).unwrap();
             assert_eq!(res, list![2, 3, 4; arena]);
         }
         {
-            let list = list![true, true, true; arena];
+            let list: Object = list![true, true, true; arena];
             let res = delq(Object::TRUE, list.try_into().unwrap(), arena).unwrap();
             assert_eq!(res, Object::NIL);
         }
@@ -401,15 +398,15 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         {
-            let list = list![1, 2, 3, 4; arena];
-            let res = nreverse(list.try_into().unwrap(), arena)
+            let list: Object = list![1, 2, 3, 4; arena];
+            let res: Object = nreverse(list.try_into().unwrap(), arena)
                 .unwrap()
                 .into_obj(arena);
             assert_eq!(res, list![4, 3, 2, 1; arena]);
         }
         {
-            let list = list![1; arena];
-            let res = nreverse(list.try_into().unwrap(), arena)
+            let list: Object = list![1; arena];
+            let res: Object = nreverse(list.try_into().unwrap(), arena)
                 .unwrap()
                 .into_obj(arena);
             assert_eq!(res, list![1; arena]);
@@ -421,11 +418,10 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let element = cons!(5, 6; arena);
-        let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
-        if let Object::Cons(cons) = list {
-            let result = assq(5.into(), List::Cons(cons), arena);
-            assert_eq!(result, element);
-        }
+        let list: Object = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
+        let list = list.try_into().unwrap();
+        let result = assq(5.into(), list, arena);
+        assert_eq!(result, element);
     }
 }
 

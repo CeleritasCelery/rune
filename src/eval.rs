@@ -4,14 +4,14 @@ use crate::{
     arena::RootOwner,
     arena::{Arena, IntoRoot, Root},
     data::Environment,
-    object::{Function, Object},
+    object::{FunctionX, Gc, Object},
     root_struct,
 };
 use anyhow::Result;
 
 #[defun]
 pub(crate) fn apply<'ob, 'id>(
-    function: Function<'ob>,
+    function: Gc<FunctionX<'ob>>,
     arguments: &[Object<'ob>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
@@ -36,7 +36,7 @@ pub(crate) fn apply<'ob, 'id>(
 
 #[defun]
 pub(crate) fn funcall<'ob, 'id>(
-    function: Function<'ob>,
+    function: Gc<FunctionX<'ob>>,
     arguments: &[Object<'ob>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,

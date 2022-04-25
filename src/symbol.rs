@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Block};
 use crate::hashmap::HashMap;
-use crate::object::{Callable, Function};
+use crate::object::{CallableX, FunctionX, Gc};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -58,11 +58,11 @@ impl GlobalSymbol {
         self.func.load(Ordering::Acquire) != 0
     }
 
-    fn get(&'_ self) -> Option<Function<'_>> {
+    fn get(&'_ self) -> Option<Gc<FunctionX<'_>>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             // SAFETY: we ensure that value is 0 is not representable in the
-            // enum Function (by making a reference the first time, which will
+            // enum FunctionX (by making a reference the first element, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
             // We can't use AtomicCell due to this issue
             // https://github.com/crossbeam-rs/crossbeam/issues/748 .
@@ -70,18 +70,17 @@ impl GlobalSymbol {
         }
     }
 
-    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Function<'a>> {
+    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Gc<FunctionX<'a>>> {
         self.get().map(|x| x.clone_in(gc))
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Callable<'ob>> {
-        match self.func(gc) {
-            Some(Function::Symbol(sym)) => sym.resolve_callable(gc),
-            Some(Function::LispFn(x)) => Some(Callable::LispFn(x)),
-            Some(Function::SubrFn(x)) => Some(Callable::SubrFn(x)),
-            Some(Function::Cons(obj)) => Some(Callable::Cons(obj)),
-            None => None,
+    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Gc<CallableX<'ob>>> {
+        let func = self.func(gc)?;
+        match func.get() {
+            FunctionX::Symbol(sym) => sym.resolve_callable(gc),
+            // If it is not a symbol this conversion is infallible
+            _ => Some(func.try_into().unwrap()),
         }
     }
 
@@ -89,7 +88,7 @@ impl GlobalSymbol {
     /// requires that the caller:
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` arena
-    unsafe fn set_func(&self, func: Function) {
+    unsafe fn set_func(&self, func: Gc<FunctionX>) {
         let val = std::mem::transmute(func);
         self.func.store(val, Ordering::Release);
     }
@@ -194,10 +193,10 @@ impl ObjectMap {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Function) {
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<FunctionX>) {
         let new_func = func.clone_in(&self.block);
         #[cfg(miri)]
-        new_func.set_as_miri_root();
+        new_func.get().set_as_miri_root();
         // SAFETY: The object is marked read-only and we have cloned
         // in the map's arena, so calling this function is safe.
         unsafe {
@@ -324,7 +323,7 @@ mod test {
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
-        assert_eq!(size_of::<isize>(), size_of::<Function>());
+        assert_eq!(size_of::<isize>(), size_of::<Gc<FunctionX>>());
         assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
     }
 
@@ -342,21 +341,21 @@ mod test {
         assert!(sym.func(gc).is_none());
         let func1 = LispFn::new(vec![1].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func1.into_obj(gc));
+            sym.set_func(func1.into_obj(gc).into());
         }
         let cell1 = sym.func(gc).unwrap();
-        let before = match cell1 {
-            Function::LispFn(x) => !x,
+        let before = match cell1.get() {
+            FunctionX::LispFn(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
         let func2 = LispFn::new(vec![7].into(), vec![], 0, 0, false);
         unsafe {
-            sym.set_func(func2.into_obj(gc));
+            sym.set_func(func2.into_obj(gc).into());
         }
         let cell2 = sym.func(gc).unwrap();
-        let after = match cell2 {
-            Function::LispFn(x) => !x,
+        let after = match cell2.get() {
+            FunctionX::LispFn(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
@@ -380,11 +379,12 @@ mod test {
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };
         let core_func = crate::object::new_subr("bar", dummy, 0, 0, false);
+        let func = core_func.into_obj(bk).into();
         unsafe {
-            sym.set_func(core_func.into_obj(bk));
+            sym.set_func(func);
         }
 
-        if let Some(Function::SubrFn(subr)) = sym.get() {
+        if let FunctionX::SubrFn(subr) = sym.get().unwrap().get() {
             assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

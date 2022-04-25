@@ -5,7 +5,7 @@ use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::object::{Function, Object, RawObj};
+use crate::object::{FunctionX, Gc, Object, ObjectX, RawObj};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
@@ -61,7 +61,7 @@ lazy_static! {
     });
 }
 
-fn set_global_function(symbol: Symbol, func: Function) {
+fn set_global_function(symbol: Symbol, func: Gc<FunctionX>) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
     map.set_func(symbol, func);
 }
@@ -166,7 +166,7 @@ pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
 
 #[defun]
 pub(crate) fn null(obj: Object) -> bool {
-    matches!(obj, Object::Nil(_))
+    matches!(obj.get(), ObjectX::Nil)
 }
 
 #[defun]
@@ -200,7 +200,7 @@ pub(crate) fn default_boundp<'id>(
 
 #[defun]
 pub(crate) fn listp(object: Object) -> bool {
-    matches!(object, Object::Nil(_) | Object::Cons(_))
+    matches!(object.get(), ObjectX::Nil | ObjectX::Cons(_))
 }
 
 #[defun]
@@ -210,32 +210,32 @@ pub(crate) fn nlistp(object: Object) -> bool {
 
 #[defun]
 pub(crate) fn symbolp(object: Object) -> bool {
-    matches!(object, Object::Symbol(_))
+    matches!(object.get(), ObjectX::Symbol(_))
 }
 
 #[defun]
 pub(crate) fn functionp(object: Object) -> bool {
-    matches!(object, Object::LispFn(_) | Object::SubrFn(_))
+    matches!(object.get(), ObjectX::LispFn(_) | ObjectX::SubrFn(_))
 }
 
 #[defun]
 pub(crate) fn stringp(object: Object) -> bool {
-    matches!(object, Object::String(_))
+    matches!(object.get(), ObjectX::String(_))
 }
 
 #[defun]
 pub(crate) fn numberp(object: Object) -> bool {
-    matches!(object, Object::Int(_) | Object::Float(_))
+    matches!(object.get(), ObjectX::Int(_) | ObjectX::Float(_))
 }
 
 #[defun]
 pub(crate) fn vectorp(object: Object) -> bool {
-    matches!(object, Object::Vec(_))
+    matches!(object.get(), ObjectX::Vec(_))
 }
 
 #[defun]
 pub(crate) fn consp(object: Object) -> bool {
-    matches!(object, Object::Cons(_))
+    matches!(object.get(), ObjectX::Cons(_))
 }
 
 #[defun]
@@ -280,12 +280,12 @@ pub(crate) fn aset<'ob>(
 
 #[defun]
 pub(crate) fn indirect_function<'ob>(object: Object<'ob>, gc: &'ob Arena) -> Object<'ob> {
-    match object {
-        Object::Symbol(sym) => match sym.resolve_callable(gc) {
+    match object.get() {
+        ObjectX::Symbol(sym) => match sym.resolve_callable(gc) {
             Some(func) => func.into(),
             None => Object::NIL,
         },
-        x => x,
+        _ => object,
     }
 }
 

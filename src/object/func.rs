@@ -1,7 +1,7 @@
 use crate::arena::RootOwner;
 use crate::arena::{Arena, Block, Root, RootObj};
 use crate::error::Error;
-use crate::object::{Function, IntoObject, Object};
+use crate::object::Object;
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
 use std::fmt;
@@ -76,13 +76,6 @@ impl<'ob> LispFn<'ob> {
                 advice: false,
             },
         }
-    }
-}
-
-impl<'ob> IntoObject<'ob, Object<'ob>> for LispFn<'ob> {
-    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
     }
 }
 
@@ -180,16 +173,9 @@ impl PartialEq for SubrFn {
     }
 }
 
-impl<'ob> IntoObject<'ob, Object<'ob>> for SubrFn {
-    fn into_obj<const C: bool>(self, arena: &'ob Block<C>) -> Object<'ob> {
-        let x: Function = self.into_obj(arena);
-        x.into()
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use crate::arena::RootSet;
+    use crate::{arena::RootSet, object::ObjectX};
 
     use super::*;
 
@@ -197,13 +183,13 @@ mod test {
     fn function() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let constant: Object = 1.into_obj(arena);
+        let constant: Object = arena.add(1);
         let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
-        let obj: Object = lisp_fn.into_obj(arena);
-        assert!(matches!(obj, Object::LispFn(_)));
+        let obj: Object = arena.add(lisp_fn);
+        assert!(matches!(obj.get(), ObjectX::LispFn(_)));
         format!("{}", obj);
-        let func = match obj {
-            Object::LispFn(x) => x,
+        let func = match obj.get() {
+            ObjectX::LispFn(x) => x,
             _ => unreachable!("expected lispfn"),
         };
         assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());

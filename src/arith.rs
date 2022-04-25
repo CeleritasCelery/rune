@@ -1,9 +1,38 @@
-use crate::object::NumberValue::{Float, Int};
-use crate::object::{IntOrMarker, Number, NumberValue};
+use crate::object::{Gc, IntoObject, NumberX};
 use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) enum NumberValue {
+    Int(i64),
+    Float(f64),
+}
+
+impl<'ob> Gc<NumberX<'ob>> {
+    pub(crate) fn val(self) -> NumberValue {
+        match self.get() {
+            NumberX::Int(x) => NumberValue::Int(x),
+            NumberX::Float(x) => NumberValue::Float(*x),
+        }
+    }
+}
+
+impl<'ob> IntoObject<'ob> for NumberValue {
+    type Out = NumberX<'ob>;
+
+    fn into_obj<const C: bool>(self, block: &'ob crate::arena::Block<C>) -> Gc<Self::Out> {
+        match self {
+            NumberValue::Int(x) => x.into(),
+            NumberValue::Float(x) => block.add(x),
+        }
+    }
+
+    unsafe fn from_obj(_ptr: *const u8) -> Self::Out {
+        todo!()
+    }
+}
 
 fn arith(
     cur: NumberValue,
@@ -12,13 +41,13 @@ fn arith(
     float_fn: fn(f64, f64) -> f64,
 ) -> NumberValue {
     match cur {
-        Float(cur) => match next {
-            Float(next) => Float(float_fn(cur, next)),
-            Int(next) => Float(float_fn(cur, next as f64)),
+        NumberValue::Float(cur) => match next {
+            NumberValue::Float(next) => NumberValue::Float(float_fn(cur, next)),
+            NumberValue::Int(next) => NumberValue::Float(float_fn(cur, next as f64)),
         },
-        Int(cur) => match next {
-            Float(next) => Float(float_fn(cur as f64, next)),
-            Int(next) => Int(int_fn(cur, next)),
+        NumberValue::Int(cur) => match next {
+            NumberValue::Float(next) => NumberValue::Float(float_fn(cur as f64, next)),
+            NumberValue::Int(next) => NumberValue::Int(int_fn(cur, next)),
         },
     }
 }
@@ -31,8 +60,8 @@ impl Neg for NumberValue {
     type Output = Self;
     fn neg(self) -> Self::Output {
         match self {
-            Int(x) => Int(-x),
-            Float(x) => Float(-x),
+            NumberValue::Int(x) => NumberValue::Int(-x),
+            NumberValue::Float(x) => NumberValue::Float(-x),
         }
     }
 }
@@ -72,20 +101,20 @@ impl Rem for NumberValue {
     }
 }
 
-impl<'ob> PartialEq<i64> for Number<'ob> {
+impl<'ob> PartialEq<i64> for Gc<NumberX<'ob>> {
     fn eq(&self, other: &i64) -> bool {
         match self.val() {
-            Int(num) => num == *other,
-            Float(num) => num == *other as f64,
+            NumberValue::Int(num) => num == *other,
+            NumberValue::Float(num) => num == *other as f64,
         }
     }
 }
 
-impl<'ob> PartialEq<f64> for Number<'ob> {
+impl<'ob> PartialEq<f64> for Gc<NumberX<'ob>> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
-            Int(num) => num as f64 == *other,
-            Float(num) => num.approx_eq(*other, (f64::EPSILON, 2)),
+            NumberValue::Int(num) => num as f64 == *other,
+            NumberValue::Float(num) => num.approx_eq(*other, (f64::EPSILON, 2)),
         }
     }
 }
@@ -93,25 +122,26 @@ impl<'ob> PartialEq<f64> for Number<'ob> {
 impl PartialOrd for NumberValue {
     fn partial_cmp(&self, other: &NumberValue) -> Option<std::cmp::Ordering> {
         match self {
-            Int(lhs) => match other {
-                Int(rhs) => lhs.partial_cmp(rhs),
-                Float(rhs) => (*lhs as f64).partial_cmp(rhs),
+            NumberValue::Int(lhs) => match other {
+                NumberValue::Int(rhs) => lhs.partial_cmp(rhs),
+                NumberValue::Float(rhs) => (*lhs as f64).partial_cmp(rhs),
             },
-            Float(lhs) => match other {
-                Int(rhs) => lhs.partial_cmp(&(*rhs as f64)),
-                Float(rhs) => lhs.partial_cmp(rhs),
+            NumberValue::Float(lhs) => match other {
+                NumberValue::Int(rhs) => lhs.partial_cmp(&(*rhs as f64)),
+                NumberValue::Float(rhs) => lhs.partial_cmp(rhs),
             },
         }
     }
 }
 
 #[defun(name = "+")]
-pub(crate) fn add(vars: &[Number]) -> NumberValue {
-    vars.iter().fold(Int(0), |acc, x| acc + x.val())
+pub(crate) fn add(vars: &[Gc<NumberX>]) -> NumberValue {
+    vars.iter()
+        .fold(NumberValue::Int(0), |acc, x| acc + x.val())
 }
 
 #[defun(name = "-")]
-pub(crate) fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
+pub(crate) fn sub(number: Option<Gc<NumberX>>, numbers: &[Gc<NumberX>]) -> NumberValue {
     match number {
         Some(num) => {
             let num = num.val();
@@ -121,81 +151,89 @@ pub(crate) fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
                 numbers.iter().fold(num, |acc, x| acc - x.val())
             }
         }
-        None => Int(0),
+        None => NumberValue::Int(0),
     }
 }
 
 #[defun(name = "*")]
-pub(crate) fn mul(numbers: &[Number]) -> NumberValue {
-    numbers.iter().fold(Int(1), |acc, x| acc * x.val())
+pub(crate) fn mul(numbers: &[Gc<NumberX>]) -> NumberValue {
+    numbers
+        .iter()
+        .fold(NumberValue::Int(1), |acc, x| acc * x.val())
 }
 
 #[defun(name = "/")]
-pub(crate) fn div(number: Number, divisors: &[Number]) -> NumberValue {
+pub(crate) fn div(number: Gc<NumberX>, divisors: &[Gc<NumberX>]) -> NumberValue {
     divisors.iter().fold(number.val(), |acc, x| acc / x.val())
 }
 
 #[defun(name = "1+")]
-pub(crate) fn plus_one(number: Number) -> NumberValue {
-    number.val() + Int(1)
+pub(crate) fn plus_one(number: Gc<NumberX>) -> NumberValue {
+    number.val() + NumberValue::Int(1)
 }
 
 #[defun(name = "1-")]
-pub(crate) fn minus_one(number: Number) -> NumberValue {
-    number.val() - Int(1)
+pub(crate) fn minus_one(number: Gc<NumberX>) -> NumberValue {
+    number.val() - NumberValue::Int(1)
 }
 
 #[defun(name = "=")]
-pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn num_eq(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     match number.val() {
-        Int(num) => numbers.iter().all(|&x| x == num),
-        Float(num) => numbers.iter().all(|&x| x == num),
+        NumberValue::Int(num) => numbers.iter().all(|&x| x == num),
+        NumberValue::Float(num) => numbers.iter().all(|&x| x == num),
     }
 }
 
 #[defun(name = "/=")]
 #[allow(clippy::float_cmp)] // This is a bug in clippy, we are not comparing floats directly
-pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn num_ne(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     match number.val() {
-        Int(num) => numbers.iter().all(|&x| x != num),
-        Float(num) => numbers.iter().all(|&x| x != num),
+        NumberValue::Int(num) => numbers.iter().all(|&x| x != num),
+        NumberValue::Float(num) => numbers.iter().all(|&x| x != num),
     }
 }
 
-fn cmp(number: Number, numbers: &[Number], cmp: fn(&NumberValue, &NumberValue) -> bool) -> bool {
+fn cmp(
+    number: Gc<NumberX>,
+    numbers: &[Gc<NumberX>],
+    cmp: fn(&NumberValue, &NumberValue) -> bool,
+) -> bool {
     numbers
         .iter()
-        .try_fold(number.val(), |acc, &x| cmp(&acc, &x.val()).then(|| Int(0)))
+        .try_fold(number.val(), |acc, &x| {
+            cmp(&acc, &x.val()).then(|| NumberValue::Int(0))
+        })
         .is_some()
 }
 
 #[defun(name = "<")]
-pub(crate) fn less_than(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn less_than(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     cmp(number, numbers, NumberValue::lt)
 }
 
 #[defun(name = "<=")]
-pub(crate) fn less_than_or_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn less_than_or_eq(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     cmp(number, numbers, NumberValue::le)
 }
 
 #[defun(name = ">")]
-pub(crate) fn greater_than(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn greater_than(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     cmp(number, numbers, NumberValue::gt)
 }
 
 #[defun(name = ">=")]
-pub(crate) fn greater_than_or_eq(number: Number, numbers: &[Number]) -> bool {
+pub(crate) fn greater_than_or_eq(number: Gc<NumberX>, numbers: &[Gc<NumberX>]) -> bool {
     cmp(number, numbers, NumberValue::ge)
 }
 
 #[defun]
-pub(crate) fn logior(ints_or_markers: &[IntOrMarker]) -> i64 {
-    ints_or_markers.iter().fold(0, |acc, x| acc | !x.int)
+pub(crate) fn logior(ints_or_markers: &[Gc<i64>]) -> i64 {
+    ints_or_markers.iter().fold(0, |acc, x| acc | x.get())
 }
 
 #[defun(name = "mod")]
-pub(crate) fn modulo(x: Number, y: Number) -> NumberValue {
+pub(crate) fn modulo(x: Gc<NumberX>, y: Gc<NumberX>) -> NumberValue {
     x.val() % y.val()
 }
 
@@ -219,7 +257,10 @@ defsubr!(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::{Arena, RootSet};
+    use crate::{
+        arena::{Arena, RootSet},
+        object::IntoObject,
+    };
 
     #[test]
     fn test_add() {
@@ -227,9 +268,9 @@ mod test {
         let arena = &Arena::new(roots);
         let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; arena);
 
-        assert_eq!(add(&[]), Int(0));
-        assert_eq!(add(&[int7, int13]), Int(20));
-        assert_eq!(add(&[int1, float2_5]), Float(3.5));
+        assert_eq!(add(&[]), NumberValue::Int(0));
+        assert_eq!(add(&[int7, int13]), NumberValue::Int(20));
+        assert_eq!(add(&[int1, float2_5]), NumberValue::Float(3.5));
     }
 
     #[test]
@@ -238,9 +279,9 @@ mod test {
         let arena = &Arena::new(roots);
         let int13 = into_objects!(13; arena);
 
-        assert_eq!(sub(None, &[]), Int(0));
-        assert_eq!(sub(Some(7.into()), &[]), Int(-7));
-        assert_eq!(sub(Some(7.into()), &[int13]), Int(-6));
+        assert_eq!(sub(None, &[]), NumberValue::Int(0));
+        assert_eq!(sub(Some(7.into()), &[]), NumberValue::Int(-7));
+        assert_eq!(sub(Some(7.into()), &[int13]), NumberValue::Int(-6));
     }
 
     #[test]
@@ -249,41 +290,46 @@ mod test {
         let arena = &Arena::new(roots);
         let args = vec_into_object![7, 13; arena];
 
-        assert_eq!(mul(&[]), Int(1));
-        assert_eq!(mul(&args), Int(91));
+        assert_eq!(mul(&[]), NumberValue::Int(1));
+        assert_eq!(mul(&args), NumberValue::Int(91));
     }
 
     #[test]
     fn test_div() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let (int2, int5, float12) = into_objects!(2, 5, 12.0; arena);
 
-        assert_eq!(div(float12, &[]), Float(12.0));
-        assert_eq!(div(12.into(), &[int5, int2]), Int(1));
+        assert_eq!(
+            div(12.0.into_obj(arena).into(), &[]),
+            NumberValue::Float(12.0)
+        );
+        assert_eq!(div(12.into(), &[5.into(), 2.into()]), NumberValue::Int(1));
     }
 
     #[test]
     fn test_eq() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let (int1, float1, float1_1) = into_objects![1, 1.0, 1.1; arena];
+        let int1 = 1.into();
+        let float1: Gc<NumberX> = arena.add(1.0);
+        let float1_1 = arena.add(1.1);
 
         assert!(num_eq(int1, &[]));
-        assert!(num_eq(int1, &[float1]));
-        assert!(num_eq(float1, &[int1]));
-        assert!(!num_eq(float1, &[int1, int1, float1_1]));
+        assert!(num_eq(int1, &[arena.add(1.0)]));
+        assert!(num_eq(float1, &[1.into()]));
+        assert!(!num_eq(float1, &[1.into(), 1.into(), float1_1]));
     }
 
     #[test]
     fn test_cmp() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let (int1, int2, float1, float1_1, float2_1) = into_objects![1, 2, 1.0, 1.1, 2.1; arena];
+        let (float1_1, float2_1) = into_objects![1.1, 2.1; arena];
+        let float1 = 1.0.into_obj(arena).into();
 
-        assert!(less_than(int1, &[]));
-        assert!(less_than(int1, &[float1_1]));
-        assert!(!less_than(float1, &[int1]));
-        assert!(less_than(float1, &[float1_1, int2, float2_1]));
+        assert!(less_than(1.into(), &[]));
+        assert!(less_than(1.into(), &[float1_1]));
+        assert!(!less_than(float1, &[1.into()]));
+        assert!(less_than(float1, &[float1_1, 2.into(), float2_1]));
     }
 }

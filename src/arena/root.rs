@@ -104,7 +104,9 @@ pub(crate) struct RootObj {
 
 impl RootObj {
     pub(crate) fn new(obj: Object) -> Self {
-        Self { obj: obj.into() }
+        Self {
+            obj: obj.into_raw(),
+        }
     }
 }
 
@@ -250,7 +252,7 @@ impl RootRef<RootObj> {
     }
 
     pub(crate) fn set(&mut self, item: Object<'_>) {
-        self.inner.obj = item.into();
+        self.inner.obj = item.into_raw();
     }
 }
 
@@ -464,7 +466,7 @@ impl RootRef<Environment> {
 
 #[cfg(test)]
 mod test {
-    use crate::arena::RootSet;
+    use crate::{arena::RootSet, object::ObjectX};
 
     use super::*;
 
@@ -475,7 +477,7 @@ mod test {
         let mut vec: RootRef<Vec<RootObj>> = RootRef { inner: vec![] };
 
         vec.push(Object::NIL);
-        assert!(matches!(vec[0].obj(), Object::Nil(_)));
+        assert!(matches!(vec[0].obj().get(), ObjectX::Nil));
         let str1 = arena.add("str1");
         let str2 = arena.add("str2");
         vec.push(str1);

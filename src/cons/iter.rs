@@ -2,7 +2,7 @@ use crate::{
     arena::RootOwner,
     arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootRef},
     error::{Error, Type},
-    object::{List, Object},
+    object::{Gc, ListX, Object, ObjectX},
 };
 use streaming_iterator::StreamingIterator;
 
@@ -25,19 +25,22 @@ impl<'brw> Cons {
     }
 }
 
-impl<'ob> List<'ob> {
+impl<'ob> Gc<ListX<'ob>> {
     pub(crate) fn elements(self, arena: &'ob Arena) -> ElemIter<'ob> {
-        match self {
-            List::Nil => ElemIter { cons: None, arena },
-            List::Cons(cons) => ElemIter {
-                cons: Some((!cons).constrain_lifetime(arena)),
+        match self.get() {
+            ListX::Nil => ElemIter { cons: None, arena },
+            ListX::Cons(cons) => ElemIter {
+                cons: Some(cons.constrain_lifetime(arena)),
                 arena,
             },
         }
     }
 
     pub(crate) fn conses(self, arena: &'ob Arena) -> ConsIter<'ob> {
-        ConsIter { list: self, arena }
+        ConsIter {
+            list: self.get(),
+            arena,
+        }
     }
 }
 
@@ -47,9 +50,9 @@ impl<'ob> Iterator for ElemIter<'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cons {
             Some(cons) => {
-                (*self).cons = match cons.cdr(self.arena) {
-                    Object::Cons(next) => Some(!next),
-                    Object::Nil(_) => None,
+                (*self).cons = match cons.cdr(self.arena).get() {
+                    ObjectX::Cons(next) => Some(next),
+                    ObjectX::Nil => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons.car(self.arena)))
@@ -61,15 +64,15 @@ impl<'ob> Iterator for ElemIter<'ob> {
 
 impl<'ob> Object<'ob> {
     pub(crate) fn as_list<'gc>(self, arena: &'gc Arena) -> Result<ElemIter<'gc>> {
-        match self {
-            Object::Cons(cons) => {
-                let cons = (!cons).constrain_lifetime(arena);
+        match self.get() {
+            ObjectX::Cons(cons) => {
+                let cons = cons.constrain_lifetime(arena);
                 Ok(ElemIter {
                     cons: Some(cons),
                     arena,
                 })
             }
-            Object::Nil(_) => Ok(ElemIter { cons: None, arena }),
+            ObjectX::Nil => Ok(ElemIter { cons: None, arena }),
             _ => Err(Error::from_object(Type::List, self).into()),
         }
     }
@@ -83,7 +86,7 @@ impl<'ob> ElemIter<'ob> {
 
 #[derive(Clone)]
 pub(crate) struct ConsIter<'ob> {
-    list: List<'ob>,
+    list: ListX<'ob>,
     arena: &'ob Arena<'ob>,
 }
 
@@ -92,14 +95,14 @@ impl<'ob> Iterator for ConsIter<'ob> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.list {
-            List::Nil => None,
-            List::Cons(cons) => {
-                self.list = match cons.cdr(self.arena) {
-                    Object::Cons(next) => List::Cons(next),
-                    Object::Nil(_) => List::Nil,
+            ListX::Nil => None,
+            ListX::Cons(cons) => {
+                self.list = match cons.cdr(self.arena).get() {
+                    ObjectX::Cons(next) => ListX::Cons(next),
+                    ObjectX::Nil => ListX::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Some(Ok(!cons))
+                Some(Ok(cons))
             }
         }
     }
@@ -137,9 +140,9 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
             let (cons, elem) = unsafe { Root::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
             let car = cons.__car();
             elem.set(car);
-            match cons.__cdr() {
-                Object::Cons(next) => {
-                    let x = unsafe { std::mem::transmute::<&Cons, &Cons>(!next) };
+            match cons.__cdr().get() {
+                ObjectX::Cons(next) => {
+                    let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
                 }
                 _ => {
@@ -173,11 +176,12 @@ macro_rules! element_iter {
         let mut gc_root_elem = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
         #[allow(unused_qualifications)]
-        let list: $crate::object::List = $obj.try_into()?;
-        if let $crate::object::List::Cons(x) = list {
+        let list: $crate::object::Gc<$crate::object::ListX> = $obj.try_into()?;
+        if let $crate::object::ListX::Cons(cons) = list.get() {
             root_elem =
                 unsafe { Some($crate::arena::Root::new($crate::arena::RootObj::default())) };
-            root_cons = unsafe { Some($crate::arena::Root::new($crate::arena::RootCons::new(!x))) };
+            root_cons =
+                unsafe { Some($crate::arena::Root::new($crate::arena::RootCons::new(cons))) };
             gc_root_elem.set(root_elem.as_mut().unwrap());
             gc_root_cons.set(root_cons.as_mut().unwrap());
         } else {
@@ -209,9 +213,8 @@ mod test {
     fn cons_iter() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let cons = list![1, 2, 3, 4; arena];
-        let cons: &Cons = cons.try_into().unwrap();
-        let list = List::Cons(cons.into());
+        let cons: Object = list![1, 2, 3, 4; arena];
+        let list: Gc<ListX> = cons.try_into().unwrap();
         let iter = list.conses(arena);
         let expects = vec![1, 2, 3, 4];
         for (act, expect) in iter.zip(expects.into_iter()) {
@@ -225,7 +228,7 @@ mod test {
         let func = || -> Result<()> {
             let roots = &RootSet::default();
             let arena = &Arena::new(roots);
-            let cons = list![1, 2, 3, 4; arena];
+            let cons: Object = list![1, 2, 3, 4; arena];
             element_iter!(iter, cons, arena);
             for expect in 1..=4 {
                 let actual = iter.next().unwrap().obj();

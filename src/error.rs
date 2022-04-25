@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::object::Object;
+use crate::object::ObjectX;
 
 /// Errors the are used in more then 1 module.
 #[derive(Debug, PartialEq)]
@@ -27,7 +27,11 @@ impl Display for Error {
 
 impl Error {
     /// Get a type error from an object.
-    pub(crate) fn from_object(exp: Type, obj: Object) -> Self {
+    pub(crate) fn from_object<'ob, T>(exp: Type, obj: T) -> Self
+    where
+        T: Into<ObjectX<'ob>>,
+    {
+        let obj = obj.into();
         Error::Type(exp, obj.get_type(), obj.to_string())
     }
 }

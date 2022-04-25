@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::fns;
-use crate::object::{IntoObject, Object};
+use crate::object::Object;
 use crate::symbol::{intern, sym, Symbol};
 use std::fmt::Display;
 use std::str;
@@ -281,13 +281,13 @@ fn intern_symbol(symbol: &str) -> Symbol {
 /// literal.
 fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
     match slice.parse::<i64>() {
-        Ok(num) => num.into_obj(arena),
+        Ok(num) => arena.add(num),
         Err(_) => match slice.parse::<f64>() {
-            Ok(num) => num.into_obj(arena),
+            Ok(num) => arena.add(num),
             Err(_) => match slice {
                 "nil" => Object::NIL,
                 "t" => Object::TRUE,
-                _ => intern_symbol(slice).into_obj(arena),
+                _ => arena.add(intern_symbol(slice)),
             },
         },
     }
@@ -462,7 +462,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Sharp(i) => self.read_sharp(i),
             Token::QuestionMark(i) => self.read_char_quote(i),
             Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
-            Token::String(x) => Ok(unescape_string(x).into_obj(self.arena)),
+            Token::String(x) => Ok(self.arena.add(unescape_string(x))),
             Token::Error(e) => Err(e),
         }
     }
@@ -502,7 +502,7 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr, $arena:expr) => {{
-            let obj: Object = $expect.into_obj($arena);
+            let obj: Object = $arena.add($expect);
             assert_eq!(obj, read($compare, $arena).unwrap().0)
         }};
     }

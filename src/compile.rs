@@ -82,7 +82,7 @@ impl<'ob> ConstVec<'ob> {
     /// Return the index of object in the constant vector, otherwise insert it
     fn insert_or_get(&mut self, obj: Object<'ob>) -> usize {
         let mut iter = match obj {
-            Object::Nil(_) => self.consts[self.upvalue_offset..].iter(),
+            ObjectX::Nil => self.consts[self.upvalue_offset..].iter(),
             _ => self.consts.iter(),
         };
         match iter.position(|&x| obj == x) {
@@ -383,9 +383,9 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         let len = forms.len();
         if len == 1 {
             match forms.next().unwrap()? {
-                Object::Cons(cons) => match cons.car() {
-                    Object::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
-                    _ => self.const_ref(Object::Cons(cons), None),
+                ObjectX::Cons(cons) => match cons.car() {
+                    ObjectX::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
+                    _ => self.const_ref(ObjectX::Cons(cons), None),
                 },
                 sym => self.const_ref(sym, None),
             }
@@ -488,12 +488,12 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             let binding = binding?;
             match binding {
                 // (let ((x y)))
-                Object::Cons(cons) => {
+                ObjectX::Cons(cons) => {
                     let let_bound_var = self.let_bind_value(!cons)?;
                     let_bindings.push(Some(let_bound_var));
                 }
                 // (let (x))
-                Object::Symbol(sym) => {
+                ObjectX::Symbol(sym) => {
                     let_bindings.push(Some(!sym));
                     self.const_ref(Object::NIL, Some(!sym))?;
                 }
@@ -523,14 +523,14 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
             let binding = binding?;
             match binding {
                 // (let ((x y)))
-                Object::Cons(cons) => {
+                ObjectX::Cons(cons) => {
                     let let_bound_var = self.let_bind_value(!cons)?;
                     let last = self.vars.last_mut();
                     let tos = last.expect("stack empty after compile form");
                     *tos = Some(let_bound_var);
                 }
                 // (let (x))
-                Object::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
+                ObjectX::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
                 _ => bail!(Error::from_object(Type::Cons, binding)),
             }
             len += 1;
@@ -608,7 +608,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     /// Compile a call to a macro or function
     fn compile_call(&mut self, func: Object<'ob>, args: Object<'ob>) -> Result<()> {
         match func {
-            Object::Symbol(name) => match name.as_macro() {
+            ObjectX::Symbol(name) => match name.as_macro() {
                 Some(lisp_macro) => {
                     let form = self.compile_macro_call(args, lisp_macro.get())?;
                     self.compile_form(form)
@@ -860,7 +860,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
     fn compile_sexp(&mut self, cons: &Cons<'ob>) -> Result<()> {
         let forms = cons.cdr();
         match cons.car() {
-            Object::Symbol(form) => symbol_match! {!form;
+            ObjectX::Symbol(form) => symbol_match! {!form;
                 WHILE => self.compile_loop(forms),
                 QUOTE => self.quote(forms),
                 BACKQUOTE => self.backquote(forms),
@@ -949,8 +949,8 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
 
     fn compile_form(&mut self, obj: Object<'ob>) -> Result<()> {
         match obj {
-            Object::Cons(cons) => self.compile_sexp(&cons),
-            Object::Symbol(sym) => self.variable_reference(!sym),
+            ObjectX::Cons(cons) => self.compile_sexp(&cons),
+            ObjectX::Symbol(sym) => self.variable_reference(!sym),
             _ => self.const_ref(obj, None),
         }
     }
@@ -1054,11 +1054,11 @@ mod test {
         arena: &'ob Arena,
     ) -> Result<LispFn<'ob>> {
         match obj {
-            Object::Cons(sexp) => match sexp.car() {
-                Object::Symbol(sym) if sym == &sym::FUNCTION => {
+            ObjectX::Cons(sexp) => match sexp.car() {
+                ObjectX::Symbol(sym) if sym == &sym::FUNCTION => {
                     compile_lambda(sexp.cdr(), env, arena)
                 }
-                Object::Symbol(sym) if sym == &sym::LAMBDA => {
+                ObjectX::Symbol(sym) if sym == &sym::LAMBDA => {
                     let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
                     debug_assert!(upvalues.is_empty());
                     Ok(func)
@@ -1384,8 +1384,8 @@ mod test {
         let obj = read(sexp, comp_arena).unwrap().0;
         let env = &mut Environment::default();
         let lambda = match obj {
-            Object::Cons(function) => match function.cdr() {
-                Object::Cons(lambda) => lambda.car(),
+            ObjectX::Cons(function) => match function.cdr() {
+                ObjectX::Cons(lambda) => lambda.car(),
                 x => panic!("expected cons, found {x}"),
             },
             x => panic!("expected cons, found {x}"),

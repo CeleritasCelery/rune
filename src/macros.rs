@@ -40,8 +40,8 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-                match obj {
-                    crate::object::Object::$ident(x) => Ok(crate::object::Inner::inner(x)),
+                match obj.get() {
+                    crate::object::ObjectX::$ident(x) => Ok(x),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
@@ -53,9 +53,9 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
             type Error = crate::error::Error;
             fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
-                match obj {
-                    crate::object::Object::$ident(x) => Ok(Some(crate::object::Inner::inner(x))),
-                    crate::object::Object::Nil(_) => Ok(None),
+                match obj.get() {
+                    crate::object::ObjectX::$ident(x) => Ok(Some(x)),
+                    crate::object::ObjectX::Nil => Ok(None),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
@@ -68,10 +68,10 @@ macro_rules! define_unbox {
 
 #[cfg(test)]
 macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::object::IntoObject::into_obj($x, $arena)),+]};
+    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::object::IntoObject::into_obj($x, $arena).into()),+]};
 }
 
 #[cfg(test)]
 macro_rules! into_objects {
-    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::object::IntoObject::into_obj($x, $arena)),+)};
+    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::object::IntoObject::into_obj($x, $arena).into()),+)};
 }

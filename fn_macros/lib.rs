@@ -46,7 +46,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
             let ptr = arena as *mut crate::arena::Arena;
             let val = #subr(#(#arg_conversion),*)#err;
             let arena: &'ob mut crate::arena::Arena = unsafe {&mut *ptr};
-            Ok(crate::object::IntoObject::into_obj(val, arena))
+            Ok(crate::object::IntoObject::into_obj(val, arena).into())
         };
 
     quote! {
