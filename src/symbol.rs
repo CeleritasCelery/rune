@@ -349,7 +349,7 @@ mod test {
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
-        let func2 = LispFn::new(vec![7].into(), vec![], 0, 0, false);
+        let func2 = LispFn::new(vec![2].into(), vec![], 0, 0, false);
         unsafe {
             sym.set_func(func2.into_obj(gc).into());
         }
@@ -358,7 +358,7 @@ mod test {
             Function::LispFn(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
-        assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
+        assert_eq!(after.body.op_codes.get(0).unwrap(), &2);
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
     }
 
