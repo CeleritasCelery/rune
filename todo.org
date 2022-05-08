@@ -1,12 +1,8 @@
 #+title: Next steps for Rune
 * GC
-** implement marking as a grey stack instead of recursive
 ** Add trace derive
 * Break core code out from the rest of the code
 This will probably mean defining more traits to implement things in other crates.
-* Cons
-** rewrite cons as a heap only type
-Can move the constant field to the alignment marker and remove the generic lifetime argument
 * define benchmarks
 * Add reader macro hooks
 * Steps to add a new object

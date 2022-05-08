@@ -105,15 +105,19 @@ unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
 }
 
 impl<T> Gc<T> {
-    #[allow(clippy::wrong_self_convention)]
-    pub(crate) fn as_obj<'ob>(self) -> Gc<Object<'ob>> {
+    #[allow(dead_code)]
+    pub(crate) fn copy_as_obj<'ob>(self) -> Gc<Object<'ob>> {
+        Gc::new(self.ptr)
+    }
+
+    pub(crate) fn as_obj(&self) -> Gc<Object<'_>> {
         Gc::new(self.ptr)
     }
 }
 
-impl<'a, T: Copy + 'a> From<Gc<T>> for Object<'a> {
+impl<'a, T: 'a> From<Gc<T>> for Object<'a> {
     fn from(x: Gc<T>) -> Self {
-        x.as_obj().get()
+        Gc::<Object>::new(x.ptr).get()
     }
 }
 
@@ -880,10 +884,33 @@ impl Gc<i64> {
     }
 }
 
-impl<'ob> Gc<&Cons> {
+impl<'ob> Gc<&'ob Cons> {
     pub(crate) fn get(self) -> &'ob Cons {
         let (ptr, _) = self.untag();
-        unsafe { Cons::from_obj(ptr)}
+        unsafe { Cons::from_obj(ptr) }
+    }
+}
+
+impl From<&Cons> for Gc<&Cons> {
+    fn from(x: &Cons) -> Self {
+        let ptr = x as *const Cons;
+        unsafe { Cons::gc_from(ptr) }
+    }
+}
+
+impl std::ops::Deref for Gc<&Cons> {
+    type Target = Cons;
+
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
+    type Out = Gc<&'new Cons>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
     }
 }
 
@@ -976,21 +1003,21 @@ impl Default for &Gc<Object<'_>> {
     }
 }
 
-impl<T: fmt::Display + Copy> fmt::Display for Gc<T> {
+impl<T: fmt::Display> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let obj = self.as_obj().get();
         write!(f, "{obj}")
     }
 }
 
-impl<T: fmt::Debug + Copy> fmt::Debug for Gc<T> {
+impl<T: fmt::Debug> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let obj = self.as_obj().get();
         write!(f, "Gc: {obj}")
     }
 }
 
-impl<T: Copy> PartialEq for Gc<T> {
+impl<T> PartialEq for Gc<T> {
     fn eq(&self, other: &Self) -> bool {
         self.as_obj().get() == other.as_obj().get()
     }

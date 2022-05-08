@@ -342,7 +342,10 @@ impl<'ob, 'rt> Arena<'rt> {
 
     pub(crate) fn garbage_collect(&mut self, force: bool) {
         let mut objects = self.block.objects.borrow_mut();
-        if cfg!(not(test)) && !force && (objects.len() < 2000 || objects.len() < (self.prev_obj_count * 2)) {
+        if cfg!(not(test))
+            && !force
+            && (objects.len() < 2000 || objects.len() < (self.prev_obj_count * 2))
+        {
             return;
         }
         let gray_stack = &mut Vec::new();
@@ -412,7 +415,7 @@ mod test {
     fn test_stack_root() {
         let roots = &RootSet::default();
         let mut arena = Arena::new(roots);
-        let obj = arena.add("foo");
+        let obj: GcObj = arena.add("foo");
         crate::root!(obj, arena);
         take_mut_arena(&mut arena);
         assert_eq!(obj, "foo");

@@ -40,26 +40,14 @@ impl<'ob> Gc<Function<'ob>> {
             Function::Cons(_) => interpreter::call(self.into(), args, env, arena, owner),
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
-                    let tmp: GcObj = resolved.into();
-                    root!(tmp, arena); // root callable
-                    let callable: Gc<Callable> = tmp.try_into().unwrap();
-                    match callable.get() {
+                    root!(resolved, arena);
+                    match resolved.get() {
                         Callable::LispFn(_) => todo!("call lisp functions"),
                         Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
-                        Callable::Cons(cons) => {
-                            match cons.try_as_macro(arena) {
-                                Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
-                                Err(_) => {
-                                    let tmp: GcObj = callable.into();
-                                    root!(tmp, arena); // root callable
-                                    if let Object::Cons(_) = tmp.get() {
-                                        interpreter::call(tmp, args, env, arena, owner)
-                                    } else {
-                                        unreachable!();
-                                    }
-                                }
-                            }
-                        }
+                        Callable::Cons(cons) => match cons.try_as_macro(arena) {
+                            Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
+                            Err(_) => interpreter::call(cons.into(), args, env, arena, owner),
+                        },
                     }
                 } else {
                     Err(anyhow!("Void FunctionX: {}", s))

@@ -5,7 +5,7 @@ use std::{ops::Index, slice::SliceIndex};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::{GcObj, RawObj};
+use crate::object::{Gc, GcObj, RawObj, WithLifetime};
 use crate::symbol::Symbol;
 use std::fmt::Debug;
 
@@ -58,13 +58,26 @@ impl<'rt> StackRoot<'rt> {
         StackRoot { root_set: roots }
     }
 
-    pub(crate) fn set<'root>(&'root mut self, obj: GcObj<'_>) -> GcObj<'root> {
+    // pub(crate) fn set<'root>(&'root mut self, obj: GcObj<'_>) -> GcObj<'root> {
+    //     unsafe {
+    //         self.root_set
+    //             .roots
+    //             .borrow_mut()
+    //             .push(std::intrinsics::transmute::<GcObj, GcObj<'static>>(obj));
+    //         std::intrinsics::transmute::<GcObj, GcObj<'root>>(obj)
+    //     }
+    // }
+
+    pub(crate) fn set<'root, T, U>(&'root mut self, obj: Gc<T>) -> Gc<U>
+    where
+        Gc<T>: WithLifetime<'root, Out = Gc<U>>,
+    {
         unsafe {
             self.root_set
                 .roots
                 .borrow_mut()
-                .push(std::intrinsics::transmute::<GcObj, GcObj<'static>>(obj));
-            std::intrinsics::transmute::<GcObj, GcObj<'root>>(obj)
+                .push(obj.as_obj().with_lifetime());
+            obj.with_lifetime()
         }
     }
 }

@@ -256,11 +256,8 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             None => bail!("Invalid function: {name}"),
         };
 
-        let tmp: GcObj = resolved.into();
-        root!(tmp, gc); // Root callable
-        let callable: Gc<Callable> = tmp.try_into().unwrap();
-
-        match callable.get() {
+        root!(resolved, gc);
+        match resolved.get() {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
                 element_iter!(iter, obj, gc);
@@ -286,17 +283,15 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         }
                         root_struct!(args, macro_args.into_root(), gc);
                         let macro_func: Gc<Function> = mcro.into();
-                        let tmp: GcObj = macro_func.into();
-                        root!(tmp, gc); // Root callable
-                        let func: Gc<Function> = tmp.try_into().unwrap();
-                        let value = func.call(args, self.env, gc, self.owner)?;
+                        root!(macro_func, gc);
+                        let value = macro_func.call(args, self.env, gc, self.owner)?;
                         rebind!(value, gc);
                         root!(value, gc);
                         self.eval_form(value, gc)
                     }
                     Err(_) => {
-                        let tmp = form.into();
-                        root!(tmp, gc); // Root callable
+                        let form: Gc<&Cons> = form.into();
+                        root!(form, gc); // Root callable
                         match form.car(gc).get() {
                             Object::Symbol(sym) if sym == &sym::CLOSURE => {
                                 element_iter!(iter, obj, gc);
@@ -310,11 +305,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                                     let args = args.borrow(self.owner);
                                     println!("({name} {args:?})");
                                 }
-                                if let Object::Cons(closure) = tmp.get() {
-                                    self.call_closure(closure, args, gc)
-                                } else {
-                                    unreachable!();
-                                }
+                                self.call_closure(&form, args, gc)
                             }
                             other => Err(anyhow!("Invalid Function: {other}")),
                         }
@@ -669,7 +660,7 @@ mod test {
         // entire function body.
         let expect: GcObj = {
             let arena: &'ob mut Arena = unsafe { &mut *(arena as *mut Arena) };
-            expect.into_obj(arena).as_obj()
+            expect.into_obj(arena).copy_as_obj()
         };
         root!(expect, arena);
         println!("Test String: {}", test_str);
@@ -688,7 +679,7 @@ mod test {
         check_interpreter("nil", false, arena);
         check_interpreter("t", true, arena);
         check_interpreter("\"foo\"", "foo", arena);
-        let list = list!(1, 2; arena);
+        let list: GcObj = list!(1, 2; arena);
         root!(list, arena);
         check_interpreter("'(1 2)", list, arena);
     }
@@ -753,34 +744,34 @@ mod test {
     fn test_functions() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let list = list![&sym::CLOSURE, list![true; arena]; arena];
+        let list: GcObj = list![&sym::CLOSURE, list![true; arena]; arena];
         root!(list, arena);
         check_interpreter("(function (lambda))", list, arena);
         let x = intern("x");
         let y = intern("y");
-        let list = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
+        let list: GcObj = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
         root!(list, arena);
         check_interpreter("(function (lambda (x) x))", list, arena);
-        let list =
+        let list: GcObj =
             list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena];
         root!(list, arena);
         check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, arena);
 
-        let list = list!(5, false; arena);
+        let list: GcObj = list!(5, false; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5))",
             list,
             arena,
         );
-        let list = list!(5, 7; arena);
+        let list: GcObj = list!(5, 7; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7))",
             list,
             arena,
         );
-        let list = list!(5, 7, 11; arena);
+        let list: GcObj = list!(5, 7, 11; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
