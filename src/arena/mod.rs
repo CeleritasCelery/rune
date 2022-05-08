@@ -278,7 +278,7 @@ static GLOBAL_CHECK: AtomicBool = AtomicBool::new(false);
 
 impl Block<true> {
     pub(crate) fn new_global() -> Self {
-        use std::sync::atomic::Ordering::Relaxed as Rel;
+        use std::sync::atomic::Ordering::SeqCst as Rel;
         assert!(GLOBAL_CHECK.compare_exchange(false, true, Rel, Rel).is_ok());
         Self {
             objects: RefCell::new(Vec::new()),
