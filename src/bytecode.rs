@@ -152,7 +152,7 @@ pub(crate) struct Routine<'brw, 'ob> {
 impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn varref(&mut self, idx: usize, env: &Environment) -> Result<()> {
         let symbol = self.frame.get_const(idx);
-        if let ObjectX::Symbol(sym) = symbol {
+        if let Object::Symbol(sym) = symbol {
             let var = *env
                 .vars
                 .get(!sym)
@@ -203,7 +203,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
     fn call(&mut self, arg_cnt: u16, env: &mut Environment, arena: &'ob Arena) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx) {
-            ObjectX::Symbol(x) => !x,
+            Object::Symbol(x) => !x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
         if crate::debug::debug_enabled() {
@@ -217,7 +217,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
                 Callable::Macro(_) => Err(anyhow!("Attempt to call macro {} at runtime", sym.name)),
                 Callable::Cons(x) => {
                     let value = crate::interpreter::call(
-                        ObjectX::Cons(x),
+                        Object::Cons(x),
                         self.stack.take_slice(arg_cnt.into()).to_vec(),
                         env,
                         arena,
@@ -493,7 +493,7 @@ pub(crate) fn eval<'ob>(
     arena: &'ob Arena,
 ) -> Result<Object<'ob>> {
     match lexical {
-        Some(ObjectX::True | ObjectX::Nil) | None => {}
+        Some(Object::True | Object::Nil) | None => {}
         Some(x) => bail!("lexical enviroments are not yet supported: found {}", x),
     }
     let func = compile(form, env, arena)?;

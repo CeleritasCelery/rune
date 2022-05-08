@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::fns;
-use crate::object::Object;
+use crate::object::GcObj;
 use crate::symbol::{intern, sym, Symbol};
 use std::fmt::Display;
 use std::str;
@@ -279,14 +279,14 @@ fn intern_symbol(symbol: &str) -> Symbol {
 
 /// Parse a symbol from a string. This will either by a true symbol or a number
 /// literal.
-fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> Object<'a> {
+fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> GcObj<'a> {
     match slice.parse::<i64>() {
         Ok(num) => arena.add(num),
         Err(_) => match slice.parse::<f64>() {
             Ok(num) => arena.add(num),
             Err(_) => match slice {
-                "nil" => Object::NIL,
-                "t" => Object::TRUE,
+                "nil" => GcObj::NIL,
+                "t" => GcObj::TRUE,
                 _ => arena.add(intern_symbol(slice)),
             },
         },
@@ -352,7 +352,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     /// '(1 2 3 . 45)
     ///           ^^^
     /// ```
-    fn read_cdr(&mut self, delim: usize) -> Result<Option<Object<'ob>>> {
+    fn read_cdr(&mut self, delim: usize) -> Result<Option<GcObj<'ob>>> {
         match self.tokens.next() {
             Some(Token::CloseParen(_)) => Ok(None),
             Some(sexp) => {
@@ -367,7 +367,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
-    fn read_list(&mut self, delim: usize) -> Result<Object<'ob>> {
+    fn read_list(&mut self, delim: usize) -> Result<GcObj<'ob>> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
@@ -387,7 +387,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Err(Error::MissingCloseParen(delim))
     }
 
-    fn read_vec(&mut self, delim: usize) -> Result<Object<'ob>> {
+    fn read_vec(&mut self, delim: usize) -> Result<GcObj<'ob>> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
@@ -399,8 +399,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// Quote an item using `symbol`.
-    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
-        let obj: Object = match self.tokens.next() {
+    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<GcObj<'ob>> {
+        let obj: GcObj = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
@@ -408,7 +408,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// read a quoted character (e.g. `?a`)
-    fn read_char_quote(&mut self, pos: usize) -> Result<Object<'ob>> {
+    fn read_char_quote(&mut self, pos: usize) -> Result<GcObj<'ob>> {
         match self.tokens.next() {
             // TODO: Implement actual parsing
             Some(Token::Ident(_)) => Ok(0.into()),
@@ -418,7 +418,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// Read an octal escape (e.g. `#0759`)
-    fn read_octal(&mut self, pos: usize) -> Result<Object<'ob>> {
+    fn read_octal(&mut self, pos: usize) -> Result<GcObj<'ob>> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => match usize::from_str_radix(ident, 8) {
                 Ok(x) => Ok(self.arena.add(x as i64)),
@@ -430,7 +430,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// read a sharp quoted character. This could be used for reader macro's in
     /// the future, but right now it just handles the special cases from elisp.
-    fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>> {
+    fn read_sharp(&mut self, pos: usize) -> Result<GcObj<'ob>> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
@@ -449,7 +449,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
-    fn read_sexp(&mut self, token: Token<'a>) -> Result<Object<'ob>> {
+    fn read_sexp(&mut self, token: Token<'a>) -> Result<GcObj<'ob>> {
         match token {
             Token::OpenParen(i) => self.read_list(i),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
@@ -470,7 +470,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
-pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(Object<'ob>, usize)> {
+pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(GcObj<'ob>, usize)> {
     let mut reader = Reader {
         tokens: Tokenizer::new(slice),
         arena,
@@ -502,7 +502,7 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr, $arena:expr) => {{
-            let obj: Object = $arena.add($expect);
+            let obj: GcObj = $arena.add($expect);
             assert_eq!(obj, read($compare, $arena).unwrap().0)
         }};
     }

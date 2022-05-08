@@ -37,11 +37,11 @@ macro_rules! define_unbox {
     };
     ($ident:ident, $ty:ident, $self:ty) => {
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
+        impl<'ob> std::convert::TryFrom<crate::object::GcObj<'ob>> for $self {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::GcObj<'ob>) -> Result<Self, Self::Error> {
                 match obj.get() {
-                    crate::object::ObjectX::$ident(x) => Ok(x),
+                    crate::object::Object::$ident(x) => Ok(x),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,
@@ -50,12 +50,12 @@ macro_rules! define_unbox {
             }
         }
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
+        impl<'ob> std::convert::TryFrom<crate::object::GcObj<'ob>> for Option<$self> {
             type Error = crate::error::Error;
-            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::GcObj<'ob>) -> Result<Self, Self::Error> {
                 match obj.get() {
-                    crate::object::ObjectX::$ident(x) => Ok(Some(x)),
-                    crate::object::ObjectX::Nil => Ok(None),
+                    crate::object::Object::$ident(x) => Ok(Some(x)),
+                    crate::object::Object::Nil => Ok(None),
                     _ => Err(crate::error::Error::from_object(
                         crate::error::Type::$ty,
                         obj,

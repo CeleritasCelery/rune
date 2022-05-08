@@ -87,7 +87,7 @@ mod symbol;
 use arena::RootOwner;
 use arena::{Arena, Root, RootSet};
 use data::Environment;
-use object::Object;
+use object::GcObj;
 use std::env;
 use std::io::{self, Write};
 use symbol::intern;
@@ -138,10 +138,10 @@ fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
     {
         let env = env.borrow_mut(owner, arena);
         Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
-        Environment::set_var(env, &sym::LEXICAL_BINDING, Object::TRUE);
+        Environment::set_var(env, &sym::LEXICAL_BINDING, GcObj::TRUE);
         Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-        Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, Object::NIL);
-        Environment::set_var(env, &sym::CURRENT_LOAD_LIST, Object::NIL);
+        Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, GcObj::NIL);
+        Environment::set_var(env, &sym::CURRENT_LOAD_LIST, GcObj::NIL);
     }
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");

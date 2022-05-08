@@ -2,9 +2,9 @@ use crate::arena::RootOwner;
 use crate::arena::{IntoRoot, Root, RootCons, RootObj};
 use crate::cons::ElemStreamIter;
 use crate::error::{Error, Type};
-use crate::object::{CallableX, FunctionX, Gc, ListX, ObjectX};
+use crate::object::{Callable, Function, Gc, List, Object};
 use crate::symbol::sym;
-use crate::{arena::Arena, cons::Cons, data::Environment, object::Object, symbol::Symbol};
+use crate::{arena::Arena, cons::Cons, data::Environment, object::GcObj, symbol::Symbol};
 use crate::{element_iter, rebind, root, root_struct};
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
@@ -18,15 +18,15 @@ struct Interpreter<'id, 'brw> {
 
 #[defun]
 pub(crate) fn eval<'ob, 'id>(
-    form: Object<'ob>,
-    lexical: Option<Object<'ob>>,
+    form: GcObj<'ob>,
+    lexical: Option<GcObj<'ob>>,
     env: &Root<'id, Environment>,
     arena: &'ob mut Arena,
     owner: &mut RootOwner<'id>,
-) -> Result<Object<'ob>> {
+) -> Result<GcObj<'ob>> {
     ensure!(
         match lexical {
-            Some(x) => matches!(x.get(), ObjectX::True | ObjectX::Nil),
+            Some(x) => matches!(x.get(), Object::True | Object::Nil),
             None => true,
         },
         "lexical enviroments are not yet supported: found {:?}",
@@ -39,35 +39,31 @@ pub(crate) fn eval<'ob, 'id>(
 }
 
 pub(crate) fn call<'ob, 'gc, 'id>(
-    form: Object<'ob>,
+    form: GcObj<'ob>,
     args: &Root<'id, Vec<RootObj>>,
     env: &Root<'id, Environment>,
     gc: &'gc mut Arena,
     owner: &mut RootOwner<'id>,
-) -> Result<Object<'gc>> {
+) -> Result<GcObj<'gc>> {
     root_struct!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env, owner };
     frame.call_closure(form.try_into()?, args, gc)
 }
 
 impl<'id, 'brw> Interpreter<'id, 'brw> {
-    fn eval_form<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn eval_form<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         match obj.get() {
-            ObjectX::Symbol(sym) => self.var_ref(sym, gc),
-            ObjectX::Cons(cons) => self.eval_sexp(cons, gc),
+            Object::Symbol(sym) => self.var_ref(sym, gc),
+            Object::Cons(cons) => self.eval_sexp(cons, gc),
             _ => Ok(gc.bind(obj)),
         }
     }
 
-    pub(crate) fn eval_sexp<'gc>(
-        &mut self,
-        cons: &Cons,
-        gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    pub(crate) fn eval_sexp<'gc>(&mut self, cons: &Cons, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let forms = cons.cdr(gc);
         root!(forms, gc);
         match cons.car(gc).get() {
-            ObjectX::Symbol(sym) => symbol_match! {sym;
+            Object::Symbol(sym) => symbol_match! {sym;
                 QUOTE => self.quote(forms, gc),
                 LET => self.eval_let(forms, true, gc),
                 LET_STAR => self.eval_let(forms, false, gc),
@@ -89,7 +85,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn defvar<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn defvar<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         match forms.next() {
             // (defvar x ...)
@@ -99,7 +95,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                     // (defvar x y)
                     Some(value) => self.eval_form(value.obj(), gc)?,
                     // (defvar x)
-                    None => Object::NIL,
+                    None => GcObj::NIL,
                 };
                 rebind!(value, gc);
                 self.var_set(name, value, gc);
@@ -110,15 +106,15 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn parse_closure_env<'a>(obj: Object<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons>> {
+    fn parse_closure_env<'a>(obj: GcObj<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons>> {
         let forms = obj.as_list(arena)?;
         let mut env = Vec::new();
         for form in forms {
             match form?.get() {
-                ObjectX::Cons(pair) => {
+                Object::Cons(pair) => {
                     env.push(pair);
                 }
-                ObjectX::True => return Ok(env),
+                Object::True => return Ok(env),
                 x => bail!("Invalid closure environment member: {x}"),
             }
         }
@@ -126,7 +122,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn parse_arg_list<'a>(
-        bindings: Object<'a>,
+        bindings: GcObj<'a>,
         arena: &'a Arena,
     ) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
         let mut required = Vec::new();
@@ -158,8 +154,8 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     #[allow(clippy::unused_self)]
     fn bind_args<'a>(
         &self,
-        arg_list: Object<'a>,
-        args: Vec<Object<'a>>,
+        arg_list: GcObj<'a>,
+        args: Vec<GcObj<'a>>,
         vars: &mut Vec<&'a Cons>,
         gc: &'a Arena,
     ) -> Result<()> {
@@ -203,7 +199,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     fn bind_variables<'a>(
         &self,
         forms: &mut ElemStreamIter<'_, '_>,
-        args: Vec<Object<'a>>,
+        args: Vec<GcObj<'a>>,
         gc: &'a Arena,
     ) -> Result<Vec<&'a Cons>> {
         // Add closure environment to variables
@@ -229,9 +225,9 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         closure: &'a Cons,
         args: &Root<'id, Vec<RootObj>>,
         gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         match closure.car(gc).get() {
-            ObjectX::Symbol(sym) if sym == &sym::CLOSURE => {
+            Object::Symbol(sym) if sym == &sym::CLOSURE => {
                 let obj = closure.cdr(gc);
                 element_iter!(forms, obj, gc);
                 // TODO: remove this temp vector
@@ -252,21 +248,21 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     fn eval_call<'a, 'gc>(
         &mut self,
         name: Symbol,
-        obj: Object<'a>,
+        obj: GcObj<'a>,
         gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         let resolved = match name.resolve_callable(gc) {
             Some(x) => x,
             None => bail!("Invalid function: {name}"),
         };
 
-        let tmp: Object = resolved.into();
+        let tmp: GcObj = resolved.into();
         root!(tmp, gc); // Root callable
-        let callable: Gc<CallableX> = tmp.try_into().unwrap();
+        let callable: Gc<Callable> = tmp.try_into().unwrap();
 
         match callable.get() {
-            CallableX::LispFn(_) => todo!("call lisp functions in interpreter"),
-            CallableX::SubrFn(func) => {
+            Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
+            Callable::SubrFn(func) => {
                 element_iter!(iter, obj, gc);
                 root_struct!(args, Vec::new(), gc);
                 while let Some(x) = iter.next() {
@@ -281,7 +277,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 gc.garbage_collect();
                 (*func).call(args, self.env, gc, self.owner)
             }
-            CallableX::Cons(form) => {
+            Callable::Cons(form) => {
                 match form.try_as_macro(gc) {
                     Ok(mcro) => {
                         let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
@@ -289,10 +285,10 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                             println!("(macro: {name} {macro_args:?})");
                         }
                         root_struct!(args, macro_args.into_root(), gc);
-                        let macro_func: Gc<FunctionX> = mcro.into();
-                        let tmp: Object = macro_func.into();
+                        let macro_func: Gc<Function> = mcro.into();
+                        let tmp: GcObj = macro_func.into();
                         root!(tmp, gc); // Root callable
-                        let func: Gc<FunctionX> = tmp.try_into().unwrap();
+                        let func: Gc<Function> = tmp.try_into().unwrap();
                         let value = func.call(args, self.env, gc, self.owner)?;
                         rebind!(value, gc);
                         root!(value, gc);
@@ -302,7 +298,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         let tmp = form.into();
                         root!(tmp, gc); // Root callable
                         match form.car(gc).get() {
-                            ObjectX::Symbol(sym) if sym == &sym::CLOSURE => {
+                            Object::Symbol(sym) if sym == &sym::CLOSURE => {
                                 element_iter!(iter, obj, gc);
                                 root_struct!(args, Vec::new(), gc);
                                 while let Some(x) = iter.next() {
@@ -314,7 +310,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                                     let args = args.borrow(self.owner);
                                     println!("({name} {args:?})");
                                 }
-                                if let ObjectX::Cons(closure) = tmp.get() {
+                                if let Object::Cons(closure) = tmp.get() {
                                     self.call_closure(closure, args, gc)
                                 } else {
                                     unreachable!();
@@ -327,14 +323,14 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             }
         }
     }
-    fn eval_function<'a>(&mut self, obj: Object<'a>, gc: &'a Arena) -> Result<Object<'a>> {
+    fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
         let mut forms = obj.as_list(gc)?;
         let len = forms.len() as u16;
         ensure!(len == 1, Error::ArgCount(1, len));
 
         let form = forms.next().unwrap()?;
         match form.get() {
-            ObjectX::Cons(cons) => {
+            Object::Cons(cons) => {
                 if cons.car(gc) == &sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
@@ -347,7 +343,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end = cons!(env, cons.cdr(gc); gc);
-                    let closure: Object = cons!(&sym::CLOSURE, end; gc);
+                    let closure: GcObj = cons!(&sym::CLOSURE, end; gc);
                     Ok(gc.bind(closure))
                 } else {
                     Ok(cons.into())
@@ -359,10 +355,10 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn eval_progx<'a, 'gc>(
         &mut self,
-        obj: Object<'a>,
+        obj: GcObj<'a>,
         prog_num: u16,
         gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         let mut count = 0;
         root_struct!(returned_form, None, gc);
         element_iter!(forms, obj, gc);
@@ -380,32 +376,32 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn eval_progn<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn eval_progn<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         self.implicit_progn(forms, gc)
     }
 
-    fn eval_while<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        let first: Gc<ListX> = obj.try_into()?;
+    fn eval_while<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+        let first: Gc<List> = obj.try_into()?;
         let condition = match first.get() {
-            ListX::Cons(cons) => cons.car(gc),
-            ListX::Nil => bail!(Error::ArgCount(1, 0)),
+            List::Cons(cons) => cons.car(gc),
+            List::Nil => bail!(Error::ArgCount(1, 0)),
         };
         root!(condition, gc);
-        while self.eval_form(condition, gc)? != Object::NIL {
+        while self.eval_form(condition, gc)? != GcObj::NIL {
             element_iter!(forms, obj, gc);
             self.implicit_progn(forms, gc)?;
         }
-        Ok(Object::NIL)
+        Ok(GcObj::NIL)
     }
 
-    fn eval_cond<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn eval_cond<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             element_iter!(clause, form.obj(), gc);
             if let Some(first) = clause.next() {
                 let condition = self.eval_form(first.obj(), gc)?;
-                if condition != Object::NIL {
+                if condition != GcObj::NIL {
                     return if clause.is_empty() {
                         rebind!(condition, gc);
                         Ok(condition)
@@ -415,16 +411,16 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 }
             }
         }
-        Ok(Object::NIL)
+        Ok(GcObj::NIL)
     }
 
-    fn eval_and<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
-        root_struct!(last, RootObj::new(Object::TRUE), gc);
+    fn eval_and<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+        root_struct!(last, RootObj::new(GcObj::TRUE), gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form.obj(), gc)?;
-            if result == Object::NIL {
-                return Ok(Object::NIL);
+            if result == GcObj::NIL {
+                return Ok(GcObj::NIL);
             }
             rebind!(result, gc);
             last.borrow_mut(self.owner, gc).set(result);
@@ -432,19 +428,19 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         Ok(gc.bind(last.borrow(self.owner).obj()))
     }
 
-    fn eval_or<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn eval_or<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form.obj(), gc)?;
-            if result != Object::NIL {
+            if result != GcObj::NIL {
                 rebind!(result, gc);
                 return Ok(result);
             }
         }
-        Ok(Object::NIL)
+        Ok(GcObj::NIL)
     }
 
-    fn eval_if<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn eval_if<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         let condition = match forms.next() {
             Some(x) => x.obj(),
@@ -457,20 +453,20 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         };
         root!(true_branch, gc);
         #[allow(clippy::if_not_else)]
-        if self.eval_form(condition, gc)? != Object::NIL {
+        if self.eval_form(condition, gc)? != GcObj::NIL {
             self.eval_form(true_branch, gc)
         } else {
             self.implicit_progn(forms, gc)
         }
     }
 
-    fn setq<'a, 'gc>(&mut self, obj: Object<'a>, gc: &'gc mut Arena) -> Result<Object<'gc>> {
+    fn setq<'a, 'gc>(&mut self, obj: GcObj<'a>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         element_iter!(forms, obj, gc);
         let mut arg_cnt = 0;
         root_struct!(last_value, RootObj::default(), gc);
         while let Some((var, val)) = Self::pairs(&mut forms, gc) {
             match (var.get(), val) {
-                (ObjectX::Symbol(var), Some(val)) => {
+                (Object::Symbol(var), Some(val)) => {
                     root!(val, gc);
                     let val = self.eval_form(val, gc)?;
                     rebind!(val, gc);
@@ -492,7 +488,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     fn pairs<'ob>(
         iter: &mut ElemStreamIter<'_, '_>,
         gc: &'ob Arena,
-    ) -> Option<(Object<'ob>, Option<Object<'ob>>)> {
+    ) -> Option<(GcObj<'ob>, Option<GcObj<'ob>>)> {
         #[allow(clippy::manual_map)]
         if let Some(first) = iter.next() {
             Some((first.bind(gc), iter.next().map(|x| x.bind(gc))))
@@ -501,7 +497,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn var_ref<'a>(&self, sym: Symbol, gc: &'a Arena) -> Result<Object<'a>> {
+    fn var_ref<'a>(&self, sym: Symbol, gc: &'a Arena) -> Result<GcObj<'a>> {
         if sym.name.starts_with(':') {
             Ok(sym.into())
         } else {
@@ -516,7 +512,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         }
     }
 
-    fn var_set<'a>(&mut self, name: Symbol, new_value: Object<'a>, gc: &'a Arena) {
+    fn var_set<'a>(&mut self, name: Symbol, new_value: GcObj<'a>, gc: &'a Arena) {
         let mut iter = self.vars.borrow(self.owner).iter().rev();
         match iter.find(|cons| (cons.car(gc) == name)) {
             Some(value) => {
@@ -529,7 +525,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     #[allow(clippy::unused_self)]
-    fn quote<'a, 'gc>(&self, value: Object<'a>, gc: &'gc Arena) -> Result<Object<'gc>> {
+    fn quote<'a, 'gc>(&self, value: GcObj<'a>, gc: &'gc Arena) -> Result<GcObj<'gc>> {
         let mut forms = value.as_list(gc)?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
@@ -539,10 +535,10 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
 
     fn eval_let<'a, 'gc>(
         &mut self,
-        form: Object<'a>,
+        form: GcObj<'a>,
         parallel: bool,
         gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         element_iter!(iter, form, gc);
         let prev_len = self.vars.borrow(self.owner).len();
         match iter.next() {
@@ -564,22 +560,22 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         Ok(obj)
     }
 
-    fn let_bind_serial<'a, 'gc>(&mut self, form: Object<'a>, gc: &'gc mut Arena) -> Result<()> {
+    fn let_bind_serial<'a, 'gc>(&mut self, form: GcObj<'a>, gc: &'gc mut Arena) -> Result<()> {
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
             let binding = binding.obj();
             match binding.get() {
                 // (let ((x y)))
-                ObjectX::Cons(cons) => {
+                Object::Cons(cons) => {
                     let var = self.let_bind_value(cons, gc)?;
                     // TODO: Fix this tmp transmute
-                    let tmp: Object = var.into();
+                    let tmp: GcObj = var.into();
                     rebind!(tmp, gc);
                     let var: &Cons = tmp.try_into().unwrap();
                     self.vars.borrow_mut(self.owner, gc).push(var);
                 }
                 // (let (x))
-                ObjectX::Symbol(_) => {
+                Object::Symbol(_) => {
                     let val = cons!(binding; gc);
                     let obj: &Cons = val.try_into().unwrap();
                     self.vars.borrow_mut(self.owner, gc).push(obj);
@@ -591,23 +587,23 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         Ok(())
     }
 
-    fn let_bind_parallel<'a, 'gc>(&mut self, form: Object<'a>, gc: &'gc mut Arena) -> Result<()> {
+    fn let_bind_parallel<'a, 'gc>(&mut self, form: GcObj<'a>, gc: &'gc mut Arena) -> Result<()> {
         root_struct!(let_bindings, Vec::new(), gc);
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
             let binding = binding.obj();
             match binding.get() {
                 // (let ((x y)))
-                ObjectX::Cons(cons) => {
+                Object::Cons(cons) => {
                     let var = self.let_bind_value(cons, gc)?;
                     // TODO: Fix this tmp transmute
-                    let tmp: Object = var.into();
+                    let tmp: GcObj = var.into();
                     rebind!(tmp, gc);
                     let var: &Cons = tmp.try_into().unwrap();
                     let_bindings.borrow_mut(self.owner, gc).push(var);
                 }
                 // (let (x))
-                ObjectX::Symbol(_) => {
+                Object::Symbol(_) => {
                     let val = cons!(binding; gc);
                     let cons: &Cons = val.try_into().unwrap();
                     let_bindings.borrow_mut(self.owner, gc).push(cons);
@@ -627,7 +623,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             // (let ((x y)))
             Some(x) => self.eval_form(x.obj(), gc)?,
             // (let ((x)))
-            None => Object::NIL,
+            None => GcObj::NIL,
         };
         // (let ((x y z ..)))
         ensure!(iter.is_empty(), "Let binding forms can only have 1 value");
@@ -641,7 +637,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         &mut self,
         mut forms: ElemStreamIter<'_, '_>,
         gc: &'gc mut Arena,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         root_struct!(last, RootObj::default(), gc);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form.obj(), gc)?;
@@ -671,7 +667,7 @@ mod test {
         // must define the lifetime in it's defintion, but that means that the
         // lifetime in this generic function of the object has to last for the
         // entire function body.
-        let expect: Object = {
+        let expect: GcObj = {
             let arena: &'ob mut Arena = unsafe { &mut *(arena as *mut Arena) };
             expect.into_obj(arena).as_obj()
         };

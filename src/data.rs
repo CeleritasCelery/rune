@@ -5,7 +5,7 @@ use crate::arena::RootOwner;
 use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
 use crate::cons::Cons;
 use crate::hashmap::{HashMap, HashSet};
-use crate::object::{FunctionX, Gc, Object, ObjectX, RawObj};
+use crate::object::{Function, Gc, GcObj, Object, RawObj};
 use crate::symbol::Symbol;
 use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
@@ -19,7 +19,7 @@ pub(crate) struct Environment {
 }
 
 impl Environment {
-    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: Object) {
+    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: GcObj) {
         env.vars_mut().insert(sym, value);
     }
 
@@ -27,7 +27,7 @@ impl Environment {
         env: &mut RootRef<Environment>,
         symbol: Symbol,
         propname: Symbol,
-        value: Object,
+        value: GcObj,
     ) {
         let props = env.props_mut();
         match props.get_mut(&symbol) {
@@ -61,14 +61,14 @@ lazy_static! {
     });
 }
 
-fn set_global_function(symbol: Symbol, func: Gc<FunctionX>) {
+fn set_global_function(symbol: Symbol, func: Gc<Function>) {
     let map = INTERNED_SYMBOLS.lock().unwrap();
     map.set_func(symbol, func);
 }
 
 #[defun]
-pub(crate) fn fset(symbol: Symbol, definition: Object) -> Result<Symbol> {
-    if definition == Object::NIL {
+pub(crate) fn fset(symbol: Symbol, definition: GcObj) -> Result<Symbol> {
+    if definition == GcObj::NIL {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
@@ -80,7 +80,7 @@ pub(crate) fn fset(symbol: Symbol, definition: Object) -> Result<Symbol> {
 #[defun]
 pub(crate) fn defalias(
     symbol: Symbol,
-    definition: Object,
+    definition: GcObj,
     _docstring: Option<&String>,
 ) -> Result<Symbol> {
     fset(symbol, definition)
@@ -89,11 +89,11 @@ pub(crate) fn defalias(
 #[defun]
 pub(crate) fn set<'ob, 'id>(
     place: Symbol,
-    newlet: Object<'ob>,
+    newlet: GcObj<'ob>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &Arena,
-) -> Object<'ob> {
+) -> GcObj<'ob> {
     Environment::set_var(env.borrow_mut(owner, gc), place, newlet);
     newlet
 }
@@ -102,11 +102,11 @@ pub(crate) fn set<'ob, 'id>(
 pub(crate) fn put<'ob, 'id>(
     symbol: Symbol,
     propname: Symbol,
-    value: Object<'ob>,
+    value: GcObj<'ob>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &Arena,
-) -> Object<'ob> {
+) -> GcObj<'ob> {
     Environment::set_prop(env.borrow_mut(owner, gc), symbol, propname, value);
     value
 }
@@ -118,31 +118,31 @@ pub(crate) fn get<'ob, 'id>(
     env: &Root<'id, Environment>,
     owner: &RootOwner<'id>,
     arena: &'ob Arena,
-) -> Object<'ob> {
+) -> GcObj<'ob> {
     match env.borrow(owner).props().get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => arena.bind(element.1.obj()),
-            None => Object::NIL,
+            None => GcObj::NIL,
         },
-        None => Object::NIL,
+        None => GcObj::NIL,
     }
 }
 
 #[defun]
-pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
+pub(crate) fn eq(obj1: GcObj, obj2: GcObj) -> bool {
     obj1.ptr_eq(obj2)
 }
 
 #[defun]
-pub(crate) fn equal<'ob>(obj1: Object<'ob>, obj2: Object<'ob>) -> bool {
+pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
     obj1 == obj2
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> Object<'ob> {
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> GcObj<'ob> {
     match symbol.func(gc) {
         Some(f) => f.into(),
-        None => Object::NIL,
+        None => GcObj::NIL,
     }
 }
 
@@ -152,7 +152,7 @@ pub(crate) fn symbol_value<'ob, 'id>(
     env: &Root<'id, Environment>,
     owner: &RootOwner<'id>,
     arena: &'ob Arena,
-) -> Option<Object<'ob>> {
+) -> Option<GcObj<'ob>> {
     env.borrow(owner)
         .vars()
         .get(&symbol)
@@ -165,8 +165,8 @@ pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
 }
 
 #[defun]
-pub(crate) fn null(obj: Object) -> bool {
-    matches!(obj.get(), ObjectX::Nil)
+pub(crate) fn null(obj: GcObj) -> bool {
+    matches!(obj.get(), Object::Nil)
 }
 
 #[defun]
@@ -199,59 +199,59 @@ pub(crate) fn default_boundp<'id>(
 }
 
 #[defun]
-pub(crate) fn listp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::Nil | ObjectX::Cons(_))
+pub(crate) fn listp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Nil | Object::Cons(_))
 }
 
 #[defun]
-pub(crate) fn nlistp(object: Object) -> bool {
+pub(crate) fn nlistp(object: GcObj) -> bool {
     !listp(object)
 }
 
 #[defun]
-pub(crate) fn symbolp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::Symbol(_))
+pub(crate) fn symbolp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Symbol(_))
 }
 
 #[defun]
-pub(crate) fn functionp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::LispFn(_) | ObjectX::SubrFn(_))
+pub(crate) fn functionp(object: GcObj) -> bool {
+    matches!(object.get(), Object::LispFn(_) | Object::SubrFn(_))
 }
 
 #[defun]
-pub(crate) fn stringp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::String(_))
+pub(crate) fn stringp(object: GcObj) -> bool {
+    matches!(object.get(), Object::String(_))
 }
 
 #[defun]
-pub(crate) fn numberp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::Int(_) | ObjectX::Float(_))
+pub(crate) fn numberp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Int(_) | Object::Float(_))
 }
 
 #[defun]
-pub(crate) fn vectorp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::Vec(_))
+pub(crate) fn vectorp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Vec(_))
 }
 
 #[defun]
-pub(crate) fn consp(object: Object) -> bool {
-    matches!(object.get(), ObjectX::Cons(_))
+pub(crate) fn consp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Cons(_))
 }
 
 #[defun]
-pub(crate) fn atom(object: Object) -> bool {
+pub(crate) fn atom(object: GcObj) -> bool {
     !consp(object)
 }
 
 #[defun]
 pub(crate) fn defvar<'ob, 'id>(
     symbol: Symbol,
-    initvalue: Option<Object<'ob>>,
+    initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &Arena,
-) -> Object<'ob> {
+) -> GcObj<'ob> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env, owner, gc)
 }
@@ -264,10 +264,10 @@ pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
 
 #[defun]
 pub(crate) fn aset<'ob>(
-    array: &RefCell<Vec<Object<'ob>>>,
+    array: &RefCell<Vec<GcObj<'ob>>>,
     idx: usize,
-    newlet: Object<'ob>,
-) -> Result<Object<'ob>> {
+    newlet: GcObj<'ob>,
+) -> Result<GcObj<'ob>> {
     let mut vec = array.try_borrow_mut()?;
     if idx < vec.len() {
         vec[idx] = newlet;
@@ -279,11 +279,11 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(object: Object<'ob>, gc: &'ob Arena) -> Object<'ob> {
+pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, gc: &'ob Arena) -> GcObj<'ob> {
     match object.get() {
-        ObjectX::Symbol(sym) => match sym.resolve_callable(gc) {
+        Object::Symbol(sym) => match sym.resolve_callable(gc) {
             Some(func) => func.into(),
-            None => Object::NIL,
+            None => GcObj::NIL,
         },
         _ => object,
     }

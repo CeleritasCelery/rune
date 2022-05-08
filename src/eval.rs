@@ -4,19 +4,19 @@ use crate::{
     arena::RootOwner,
     arena::{Arena, IntoRoot, Root},
     data::Environment,
-    object::{FunctionX, Gc, Object},
+    object::{Function, Gc, GcObj},
     root_struct,
 };
 use anyhow::Result;
 
 #[defun]
 pub(crate) fn apply<'ob, 'id>(
-    function: Gc<FunctionX<'ob>>,
-    arguments: &[Object<'ob>],
+    function: Gc<Function<'ob>>,
+    arguments: &[GcObj<'ob>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
-) -> Result<Object<'ob>> {
+) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
         0 => Vec::new(),
         len => {
@@ -36,12 +36,12 @@ pub(crate) fn apply<'ob, 'id>(
 
 #[defun]
 pub(crate) fn funcall<'ob, 'id>(
-    function: Gc<FunctionX<'ob>>,
-    arguments: &[Object<'ob>],
+    function: Gc<Function<'ob>>,
+    arguments: &[GcObj<'ob>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
-) -> Result<Object<'ob>> {
+) -> Result<GcObj<'ob>> {
     root_struct!(arg_list, arguments.to_vec().into_root(), arena);
     function.call(arg_list, env, arena, owner)
 }

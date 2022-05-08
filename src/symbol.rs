@@ -1,6 +1,6 @@
 use crate::arena::{Arena, Block};
 use crate::hashmap::HashMap;
-use crate::object::{CallableX, FunctionX, Gc};
+use crate::object::{Callable, Function, Gc};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -58,7 +58,7 @@ impl GlobalSymbol {
         self.func.load(Ordering::Acquire) != 0
     }
 
-    fn get(&'_ self) -> Option<Gc<FunctionX<'_>>> {
+    fn get(&'_ self) -> Option<Gc<Function<'_>>> {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             // SAFETY: we ensure that value is 0 is not representable in the
@@ -70,15 +70,15 @@ impl GlobalSymbol {
         }
     }
 
-    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Gc<FunctionX<'a>>> {
+    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Gc<Function<'a>>> {
         self.get().map(|x| x.clone_in(gc))
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Gc<CallableX<'ob>>> {
+    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Gc<Callable<'ob>>> {
         let func = self.func(gc)?;
         match func.get() {
-            FunctionX::Symbol(sym) => sym.resolve_callable(gc),
+            Function::Symbol(sym) => sym.resolve_callable(gc),
             // If it is not a symbol this conversion is infallible
             _ => Some(func.try_into().unwrap()),
         }
@@ -88,7 +88,7 @@ impl GlobalSymbol {
     /// requires that the caller:
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` arena
-    unsafe fn set_func(&self, func: Gc<FunctionX>) {
+    unsafe fn set_func(&self, func: Gc<Function>) {
         let val = std::mem::transmute(func);
         self.func.store(val, Ordering::Release);
     }
@@ -193,7 +193,7 @@ impl ObjectMap {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<FunctionX>) {
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) {
         let new_func = func.clone_in(&self.block);
         #[cfg(miri)]
         new_func.get().set_as_miri_root();
@@ -316,14 +316,14 @@ mod test {
     use crate::arena::RootOwner;
     use crate::arena::{Arena, Root, RootSet};
     use crate::data::Environment;
-    use crate::object::{IntoObject, LispFn, Object};
+    use crate::object::{GcObj, IntoObject, LispFn};
     use anyhow::Result;
     use std::mem::size_of;
 
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
-        assert_eq!(size_of::<isize>(), size_of::<Gc<FunctionX>>());
+        assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
         assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
     }
 
@@ -345,7 +345,7 @@ mod test {
         }
         let cell1 = sym.func(gc).unwrap();
         let before = match cell1.get() {
-            FunctionX::LispFn(x) => x,
+            Function::LispFn(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
@@ -355,7 +355,7 @@ mod test {
         }
         let cell2 = sym.func(gc).unwrap();
         let after = match cell2.get() {
-            FunctionX::LispFn(x) => x,
+            Function::LispFn(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &7);
@@ -364,11 +364,11 @@ mod test {
 
     #[allow(clippy::unnecessary_wraps)]
     fn dummy<'ob, 'id>(
-        vars: &[Object<'ob>],
+        vars: &[GcObj<'ob>],
         _map: &Root<'id, Environment>,
         _arena: &'ob mut Arena,
         _owner: &mut RootOwner<'id>,
-    ) -> Result<Object<'ob>> {
+    ) -> Result<GcObj<'ob>> {
         Ok(vars[0])
     }
 
@@ -384,7 +384,7 @@ mod test {
             sym.set_func(func);
         }
 
-        if let FunctionX::SubrFn(subr) = sym.get().unwrap().get() {
+        if let Function::SubrFn(subr) = sym.get().unwrap().get() {
             assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
         } else {
             unreachable!("Type should be subr");

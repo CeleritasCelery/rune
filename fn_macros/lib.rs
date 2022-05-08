@@ -66,11 +66,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[doc(hidden)]
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob, 'id>(
-            args: &[crate::object::Object<'ob>],
+            args: &[crate::object::GcObj<'ob>],
             env: &crate::arena::Root<'id, crate::data::Environment>,
             arena: &'ob mut crate::arena::Arena,
             owner: &mut crate::arena::RootOwner<'id>,
-        ) -> anyhow::Result<crate::object::Object<'ob>> {
+        ) -> anyhow::Result<crate::object::GcObj<'ob>> {
             #subr_call
         }
 

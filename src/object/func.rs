@@ -1,7 +1,7 @@
 use crate::arena::RootOwner;
 use crate::arena::{Arena, Block, Root, RootObj};
 use crate::error::Error;
-use crate::object::Object;
+use crate::object::GcObj;
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
 use std::fmt;
@@ -26,7 +26,7 @@ pub(crate) struct FnArgs {
 #[derive(Debug, PartialEq)]
 pub(crate) struct Expression<'ob> {
     pub(crate) op_codes: CodeVec,
-    pub(crate) constants: Vec<Object<'ob>>,
+    pub(crate) constants: Vec<GcObj<'ob>>,
 }
 
 /// A function implemented in lisp. Note that all functions are byte compiled,
@@ -59,7 +59,7 @@ define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
 impl<'ob> LispFn<'ob> {
     pub(crate) fn new(
         op_codes: CodeVec,
-        constants: Vec<Object<'ob>>,
+        constants: Vec<GcObj<'ob>>,
         required: u16,
         optional: u16,
         rest: bool,
@@ -95,7 +95,7 @@ impl<'ob> Default for LispFn<'ob> {
     fn default() -> Self {
         LispFn::new(
             vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![Object::NIL],
+            vec![GcObj::NIL],
             0,
             0,
             false,
@@ -104,11 +104,11 @@ impl<'ob> Default for LispFn<'ob> {
 }
 
 pub(crate) type BuiltInFn = for<'ob, 'id> fn(
-    &[Object<'ob>],
+    &[GcObj<'ob>],
     &Root<'id, crate::data::Environment>,
     &'ob mut Arena,
     &mut RootOwner<'id>,
-) -> Result<Object<'ob>>;
+) -> Result<GcObj<'ob>>;
 
 pub(crate) struct SubrFn {
     pub(crate) subr: BuiltInFn,
@@ -124,15 +124,15 @@ impl SubrFn {
         env: &Root<'id, crate::data::Environment>,
         arena: &'gc mut Arena,
         owner: &mut RootOwner<'id>,
-    ) -> Result<Object<'gc>> {
+    ) -> Result<GcObj<'gc>> {
         let slice = {
             let args = args.borrow_mut(owner, arena);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt)?;
             for _ in 0..fill_args {
-                args.push(Object::NIL);
+                args.push(GcObj::NIL);
             }
-            unsafe { std::mem::transmute::<&[Object], &[Object<'gc>]>(args.as_gc().as_ref()) }
+            unsafe { std::mem::transmute::<&[GcObj], &[GcObj<'gc>]>(args.as_gc().as_ref()) }
         };
         (self.subr)(slice, env, arena, owner)
     }
@@ -175,7 +175,7 @@ impl PartialEq for SubrFn {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, object::ObjectX};
+    use crate::{arena::RootSet, object::Object};
 
     use super::*;
 
@@ -183,13 +183,13 @@ mod test {
     fn function() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let constant: Object = arena.add(1);
+        let constant: GcObj = arena.add(1);
         let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
-        let obj: Object = arena.add(lisp_fn);
-        assert!(matches!(obj.get(), ObjectX::LispFn(_)));
+        let obj: GcObj = arena.add(lisp_fn);
+        assert!(matches!(obj.get(), Object::LispFn(_)));
         format!("{}", obj);
         let func = match obj.get() {
-            ObjectX::LispFn(x) => x,
+            Object::LispFn(x) => x,
             _ => unreachable!("expected lispfn"),
         };
         assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());

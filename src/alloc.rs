@@ -1,11 +1,11 @@
-use crate::object::{Expression, LispFn, Object};
+use crate::object::{Expression, GcObj, LispFn};
 use crate::{arena::Arena, symbol::Symbol};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
 #[defun]
-pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'ob> {
-    let mut head = Object::NIL;
+pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], arena: &'ob Arena) -> GcObj<'ob> {
+    let mut head = GcObj::NIL;
     for object in objects.iter().rev() {
         head = cons!(*object, head; arena);
     }
@@ -17,7 +17,7 @@ pub(crate) fn list<'ob>(objects: &[Object<'ob>], arena: &'ob Arena) -> Object<'o
 #[defun]
 pub(crate) fn make_closure<'ob>(
     prototype: &LispFn<'ob>,
-    closure_vars: &[Object<'ob>],
+    closure_vars: &[GcObj<'ob>],
 ) -> Result<LispFn<'ob>> {
     let const_len = prototype.body.constants.len();
     let vars = closure_vars.len();
@@ -41,17 +41,17 @@ pub(crate) fn make_closure<'ob>(
 }
 
 #[defun]
-fn make_vector(length: usize, init: Object) -> Vec<Object> {
+fn make_vector(length: usize, init: GcObj) -> Vec<GcObj> {
     vec![init; length]
 }
 
 #[defun]
-fn vector<'ob>(objects: &[Object<'ob>]) -> Vec<Object<'ob>> {
+fn vector<'ob>(objects: &[GcObj<'ob>]) -> Vec<GcObj<'ob>> {
     objects.into()
 }
 
 #[defun]
-fn purecopy(obj: Object) -> Object {
+fn purecopy(obj: GcObj) -> GcObj {
     obj
 }
 

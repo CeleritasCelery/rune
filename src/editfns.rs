@@ -1,16 +1,16 @@
 use fn_macros::defun;
 
-use crate::object::Object;
+use crate::object::GcObj;
 use anyhow::{anyhow, ensure, Result};
 
 #[defun]
-fn message(format_string: &str, args: &[Object]) -> String {
+fn message(format_string: &str, args: &[GcObj]) -> String {
     println!("MESSAGE: {format_string} -> {args:?}");
     format_string.to_owned()
 }
 
 #[defun]
-fn format(string: &str, objects: &[Object]) -> Result<String> {
+fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     let mut result = String::new();
     let mut last_end = 0;
     let mut iter = objects.iter();

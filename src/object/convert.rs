@@ -7,17 +7,17 @@ use std::cell::RefCell;
 use crate::arena::Arena;
 use crate::cons::Cons;
 use crate::error::{Error, Type};
-use crate::object::Object;
+use crate::object::GcObj;
 use crate::symbol::{sym, Symbol};
 use anyhow::Context;
 
-use super::{CallableX, Gc, ObjectX};
+use super::{Callable, Gc, Object};
 
 impl<'ob> Cons {
-    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Gc<CallableX<'ob>>> {
+    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Gc<Callable<'ob>>> {
         let car = self.car(gc);
         match car.get() {
-            ObjectX::Symbol(sym) if sym == &sym::MACRO => {
+            Object::Symbol(sym) if sym == &sym::MACRO => {
                 let cdr = self.cdr(gc);
                 let x = cdr.try_into()?;
                 Ok(x)
@@ -27,11 +27,11 @@ impl<'ob> Cons {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for usize {
+impl<'ob> TryFrom<GcObj<'ob>> for usize {
     type Error = anyhow::Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.get() {
-            ObjectX::Int(x) => (!x)
+            Object::Int(x) => (!x)
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {}", !x)),
             x => Err(Error::from_object(Type::Int, x).into()),
@@ -39,37 +39,37 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
+impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
     type Error = anyhow::Error;
-    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.get() {
-            ObjectX::Int(x) => match (!x).try_into() {
+            Object::Int(x) => match (!x).try_into() {
                 Ok(x) => Ok(Some(x)),
                 Err(e) => {
                     Err(e).with_context(|| format!("Integer must be positive, but was {}", !x))
                 }
             },
-            ObjectX::Nil => Ok(None),
+            Object::Nil => Ok(None),
             _ => Err(Error::from_object(Type::Int, obj).into()),
         }
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for bool {
+impl<'ob> TryFrom<GcObj<'ob>> for bool {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
         match obj.get() {
-            ObjectX::Nil => Ok(false),
+            Object::Nil => Ok(false),
             _ => Ok(true),
         }
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Option<bool> {
+impl<'ob> TryFrom<GcObj<'ob>> for Option<bool> {
     type Error = Error;
-    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
         match obj.get() {
-            ObjectX::Nil => Ok(None),
+            Object::Nil => Ok(None),
             _ => Ok(Some(true)),
         }
     }
@@ -80,11 +80,9 @@ impl<'ob> TryFrom<Object<'ob>> for Option<bool> {
 /// without the need to allocate a new slice. We ensure that the two
 /// types have the exact same representation, so that no writes
 /// actually need to be performed.
-pub(crate) fn try_from_slice<'brw, 'ob, T>(
-    slice: &'brw [Gc<ObjectX<'ob>>],
-) -> Result<&'brw [Gc<T>], anyhow::Error>
+pub(crate) fn try_from_slice<'brw, 'ob, T, E>(slice: &'brw [GcObj<'ob>]) -> Result<&'brw [Gc<T>], E>
 where
-    Gc<T>: TryFrom<Gc<ObjectX<'ob>>, Error = Error> + 'ob,
+    Gc<T>: TryFrom<GcObj<'ob>, Error = E> + 'ob,
 {
     for x in slice.iter() {
         let _new = Gc::<T>::try_from(*x)?;
@@ -98,12 +96,12 @@ define_unbox!(Int, i64);
 
 define_unbox!(Float, &'ob f64);
 
-impl<'ob> From<bool> for Object<'ob> {
+impl<'ob> From<bool> for GcObj<'ob> {
     fn from(b: bool) -> Self {
         if b {
-            Object::TRUE
+            GcObj::TRUE
         } else {
-            Object::NIL
+            GcObj::NIL
         }
     }
 }
@@ -111,18 +109,18 @@ impl<'ob> From<bool> for Object<'ob> {
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
 
-define_unbox!(Vec, &'ob RefCell<Vec<Object<'ob>>>);
+define_unbox!(Vec, &'ob RefCell<Vec<GcObj<'ob>>>);
 
 define_unbox!(Symbol, Symbol);
 
-impl<'ob, T> From<Option<T>> for Object<'ob>
+impl<'ob, T> From<Option<T>> for GcObj<'ob>
 where
-    T: Into<Object<'ob>>,
+    T: Into<GcObj<'ob>>,
 {
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => Object::NIL,
+            None => GcObj::NIL,
         }
     }
 }
@@ -133,7 +131,7 @@ mod test {
 
     use super::*;
 
-    fn wrapper(args: &[Object], arena: &Arena) -> Result<i64, Error> {
+    fn wrapper(args: &[GcObj], arena: &Arena) -> Result<i64, Error> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,

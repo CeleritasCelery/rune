@@ -13,8 +13,8 @@ use crate::{
 
 use super::{LispFn, SubrFn};
 
-pub(crate) type ObjVec<'ob> = Vec<Object<'ob>>;
-pub(crate) type Object<'ob> = Gc<ObjectX<'ob>>;
+pub(crate) type ObjVec<'ob> = Vec<GcObj<'ob>>;
+pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct RawObj {
@@ -106,12 +106,12 @@ unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
 
 impl<T> Gc<T> {
     #[allow(clippy::wrong_self_convention)]
-    pub(crate) fn as_obj<'ob>(self) -> Gc<ObjectX<'ob>> {
+    pub(crate) fn as_obj<'ob>(self) -> Gc<Object<'ob>> {
         Gc::new(self.ptr)
     }
 }
 
-impl<'a, T: Copy + 'a> From<Gc<T>> for ObjectX<'a> {
+impl<'a, T: Copy + 'a> From<Gc<T>> for Object<'a> {
     fn from(x: Gc<T>) -> Self {
         x.as_obj().get()
     }
@@ -132,8 +132,8 @@ pub(crate) trait IntoObject<'ob> {
     unsafe fn from_obj(ptr: *const u8) -> Self::Out;
 }
 
-impl<'ob> IntoObject<'ob> for Gc<ObjectX<'ob>> {
-    type Out = ObjectX<'ob>;
+impl<'ob> IntoObject<'ob> for Gc<Object<'ob>> {
+    type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         unsafe { Self::transmute(self) }
@@ -144,13 +144,13 @@ impl<'ob> IntoObject<'ob> for Gc<ObjectX<'ob>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for Option<Gc<ObjectX<'ob>>> {
-    type Out = ObjectX<'ob>;
+impl<'ob> IntoObject<'ob> for Option<Gc<Object<'ob>>> {
+    type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         match self {
             Some(x) => unsafe { x.with_lifetime() },
-            None => Object::NIL,
+            None => GcObj::NIL,
         }
     }
 
@@ -363,43 +363,43 @@ impl<'ob> FromPtr<'ob> for ObjVec<'ob> {
 
 // Number
 #[derive(Copy, Clone)]
-pub(crate) enum NumberX<'ob> {
+pub(crate) enum Number<'ob> {
     Int(i64),
     Float(&'ob f64),
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<NumberX<'old>> {
-    type Out = Gc<NumberX<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<Number<'old>> {
+    type Out = Gc<Number<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
 }
 
-impl<'ob> From<Gc<i64>> for Gc<NumberX<'ob>> {
+impl<'ob> From<Gc<i64>> for Gc<Number<'ob>> {
     fn from(x: Gc<i64>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob f64>> for Gc<NumberX<'ob>> {
+impl<'ob> From<Gc<&'ob f64>> for Gc<Number<'ob>> {
     fn from(x: Gc<&'ob f64>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> Gc<NumberX<'ob>> {
-    pub(crate) fn get(self) -> NumberX<'ob> {
+impl<'ob> Gc<Number<'ob>> {
+    pub(crate) fn get(self) -> Number<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Int => NumberX::Int(unsafe { i64::from_obj(ptr) }),
-            Tag::Float => NumberX::Float(unsafe { f64::from_obj(ptr) }),
+            Tag::Int => Number::Int(unsafe { i64::from_obj(ptr) }),
+            Tag::Float => Number::Float(unsafe { f64::from_obj(ptr) }),
             _ => unreachable!(),
         }
     }
 }
 
-impl<'ob> From<i64> for Gc<NumberX<'ob>> {
+impl<'ob> From<i64> for Gc<Number<'ob>> {
     fn from(x: i64) -> Self {
         let ptr = sptr::invalid(x as usize);
         unsafe { i64::gc_from(ptr).into() }
@@ -408,44 +408,44 @@ impl<'ob> From<i64> for Gc<NumberX<'ob>> {
 
 // List
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum ListX<'ob> {
+pub(crate) enum List<'ob> {
     Nil,
     Cons(&'ob Cons),
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<ListX<'old>> {
-    type Out = Gc<ListX<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
+    type Out = Gc<List<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
 }
 
-impl<'ob> From<Gc<&'ob Cons>> for Gc<ListX<'ob>> {
+impl<'ob> From<Gc<&'ob Cons>> for Gc<List<'ob>> {
     fn from(x: Gc<&'ob Cons>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<()>> for Gc<ListX<'ob>> {
+impl<'ob> From<Gc<()>> for Gc<List<'ob>> {
     fn from(x: Gc<()>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> Gc<ListX<'ob>> {
-    pub(crate) fn get(self) -> ListX<'ob> {
+impl<'ob> Gc<List<'ob>> {
+    pub(crate) fn get(self) -> List<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Nil => ListX::Nil,
-            Tag::Cons => ListX::Cons(unsafe { Cons::from_obj(ptr) }),
+            Tag::Nil => List::Nil,
+            Tag::Cons => List::Cons(unsafe { Cons::from_obj(ptr) }),
             _ => unreachable!(),
         }
     }
 }
 
 // This is safe because cons is a gc heap only type
-impl<'ob> From<&'ob Cons> for Gc<ListX<'ob>> {
+impl<'ob> From<&'ob Cons> for Gc<List<'ob>> {
     fn from(x: &'ob Cons) -> Self {
         unsafe { Cons::gc_from(x as *const _).into() }
     }
@@ -453,61 +453,61 @@ impl<'ob> From<&'ob Cons> for Gc<ListX<'ob>> {
 
 // Callable
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum CallableX<'ob> {
+pub(crate) enum Callable<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<CallableX<'old>> {
-    type Out = Gc<CallableX<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<Callable<'old>> {
+    type Out = Gc<Callable<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
 }
 
-impl<'ob> From<Gc<&'ob Cons>> for Gc<CallableX<'ob>> {
+impl<'ob> From<Gc<&'ob Cons>> for Gc<Callable<'ob>> {
     fn from(x: Gc<&'ob Cons>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'static SubrFn>> for Gc<CallableX<'ob>> {
+impl<'ob> From<Gc<&'static SubrFn>> for Gc<Callable<'ob>> {
     fn from(x: Gc<&'static SubrFn>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<CallableX<'ob>> {
+impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Callable<'ob>> {
     fn from(x: Gc<&'ob LispFn<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> Gc<CallableX<'ob>> {
-    pub(crate) fn get(self) -> CallableX<'ob> {
+impl<'ob> Gc<Callable<'ob>> {
+    pub(crate) fn get(self) -> Callable<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Cons => CallableX::Cons(unsafe { Cons::from_obj(ptr) }),
-            Tag::SubrFn => CallableX::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
-            Tag::LispFn => CallableX::LispFn(unsafe { LispFn::from_obj(ptr) }),
+            Tag::Cons => Callable::Cons(unsafe { Cons::from_obj(ptr) }),
+            Tag::SubrFn => Callable::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
+            Tag::LispFn => Callable::LispFn(unsafe { LispFn::from_obj(ptr) }),
             _ => unreachable!(),
         }
     }
 }
 
-// FunctionX
+// Function
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum FunctionX<'ob> {
+pub(crate) enum Function<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
     Symbol(Symbol),
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<FunctionX<'old>> {
-    type Out = Gc<FunctionX<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
+    type Out = Gc<Function<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
@@ -520,93 +520,93 @@ extern "Rust" {
 }
 
 #[cfg(miri)]
-impl<'ob> FunctionX<'ob> {
+impl<'ob> Function<'ob> {
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            FunctionX::LispFn(x) => {
+            Function::LispFn(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FunctionX::SubrFn(x) => {
+            Function::SubrFn(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FunctionX::Cons(x) => {
+            Function::Cons(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            FunctionX::Symbol(_) => {}
+            Function::Symbol(_) => {}
         }
     }
 }
 
-impl<'ob> From<Gc<&'ob Cons>> for Gc<FunctionX<'ob>> {
+impl<'ob> From<Gc<&'ob Cons>> for Gc<Function<'ob>> {
     fn from(x: Gc<&'ob Cons>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'static SubrFn>> for Gc<FunctionX<'ob>> {
+impl<'ob> From<Gc<&'static SubrFn>> for Gc<Function<'ob>> {
     fn from(x: Gc<&'static SubrFn>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<FunctionX<'ob>> {
+impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Function<'ob>> {
     fn from(x: Gc<&'ob LispFn<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<Symbol>> for Gc<FunctionX<'ob>> {
+impl<'ob> From<Gc<Symbol>> for Gc<Function<'ob>> {
     fn from(x: Gc<Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Symbol> for Gc<FunctionX<'ob>> {
+impl<'ob> From<Symbol> for Gc<Function<'ob>> {
     fn from(x: Symbol) -> Self {
         let ptr = x as *const GlobalSymbol;
         unsafe { Symbol::gc_from(ptr).into() }
     }
 }
 
-impl From<&'static SubrFn> for Gc<FunctionX<'_>> {
+impl From<&'static SubrFn> for Gc<Function<'_>> {
     fn from(x: &'static SubrFn) -> Self {
         let ptr = x as *const SubrFn;
         unsafe { SubrFn::gc_from(ptr).into() }
     }
 }
 
-impl<'ob> Gc<FunctionX<'ob>> {
-    pub(crate) fn get(self) -> FunctionX<'ob> {
+impl<'ob> Gc<Function<'ob>> {
+    pub(crate) fn get(self) -> Function<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Cons => FunctionX::Cons(unsafe { Cons::from_obj(ptr) }),
-            Tag::SubrFn => FunctionX::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
-            Tag::LispFn => FunctionX::LispFn(unsafe { LispFn::from_obj(ptr) }),
-            Tag::Symbol => FunctionX::Symbol(unsafe { Symbol::from_obj(ptr) }),
+            Tag::Cons => Function::Cons(unsafe { Cons::from_obj(ptr) }),
+            Tag::SubrFn => Function::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
+            Tag::LispFn => Function::LispFn(unsafe { LispFn::from_obj(ptr) }),
+            Tag::Symbol => Function::Symbol(unsafe { Symbol::from_obj(ptr) }),
             _ => unreachable!(),
         }
     }
 }
 
-impl<'ob> From<Gc<CallableX<'ob>>> for Gc<FunctionX<'ob>> {
-    fn from(obj: Gc<CallableX<'ob>>) -> Self {
+impl<'ob> From<Gc<Callable<'ob>>> for Gc<Function<'ob>> {
+    fn from(obj: Gc<Callable<'ob>>) -> Self {
         unsafe { Self::transmute(obj) }
     }
 }
 
-impl<'ob> TryFrom<Gc<FunctionX<'ob>>> for Gc<CallableX<'ob>> {
+impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<Callable<'ob>> {
     type Error = anyhow::Error;
 
-    fn try_from(value: Gc<FunctionX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Symbol => Err(Error::from_object(Type::Func, value).into()),
             _ => unsafe { Ok(Self::transmute(value)) },
@@ -615,7 +615,7 @@ impl<'ob> TryFrom<Gc<FunctionX<'ob>>> for Gc<CallableX<'ob>> {
 }
 
 #[derive(Copy, Clone)]
-pub(crate) enum ObjectX<'ob> {
+pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob f64),
     Symbol(Symbol),
@@ -628,24 +628,24 @@ pub(crate) enum ObjectX<'ob> {
     SubrFn(&'static SubrFn),
 }
 
-impl ObjectX<'_> {
+impl Object<'_> {
     /// Return the type of an object
     pub(crate) fn get_type(self) -> Type {
         match self {
-            ObjectX::Int(_) => Type::Int,
-            ObjectX::Float(_) => Type::Float,
-            ObjectX::Symbol(_) => Type::Symbol,
-            ObjectX::True => Type::True,
-            ObjectX::Nil => Type::Nil,
-            ObjectX::Cons(_) => Type::Cons,
-            ObjectX::Vec(_) => Type::Vec,
-            ObjectX::String(_) => Type::String,
-            ObjectX::LispFn(_) | ObjectX::SubrFn(_) => Type::Func,
+            Object::Int(_) => Type::Int,
+            Object::Float(_) => Type::Float,
+            Object::Symbol(_) => Type::Symbol,
+            Object::True => Type::True,
+            Object::Nil => Type::Nil,
+            Object::Cons(_) => Type::Cons,
+            Object::Vec(_) => Type::Vec,
+            Object::String(_) => Type::String,
+            Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
         }
     }
 }
 
-impl PartialEq for ObjectX<'_> {
+impl PartialEq for Object<'_> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Int(l0), Self::Int(r0)) => l0 == r0,
@@ -663,129 +663,129 @@ impl PartialEq for ObjectX<'_> {
 
 // auto-generated
 
-impl<'old, 'new> WithLifetime<'new> for Gc<ObjectX<'old>> {
-    type Out = Gc<ObjectX<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<Object<'old>> {
+    type Out = Gc<Object<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
 }
 
-impl<'ob> Gc<ObjectX<'ob>> {
-    pub(crate) fn get(self) -> ObjectX<'ob> {
+impl<'ob> Gc<Object<'ob>> {
+    pub(crate) fn get(self) -> Object<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Symbol => ObjectX::Symbol(unsafe { Symbol::from_obj(ptr) }),
-            Tag::Cons => ObjectX::Cons(unsafe { Cons::from_obj(ptr) }),
-            Tag::SubrFn => ObjectX::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
-            Tag::LispFn => ObjectX::LispFn(unsafe { LispFn::from_obj(ptr) }),
-            Tag::Int => ObjectX::Int(unsafe { i64::from_obj(ptr) }),
-            Tag::Float => ObjectX::Float(unsafe { f64::from_obj(ptr) }),
-            Tag::Nil => ObjectX::Nil,
-            Tag::True => ObjectX::True,
-            Tag::String => ObjectX::String(unsafe { String::from_obj(ptr) }),
-            Tag::Vec => ObjectX::Vec(unsafe { ObjVec::from_obj(ptr) }),
+            Tag::Symbol => Object::Symbol(unsafe { Symbol::from_obj(ptr) }),
+            Tag::Cons => Object::Cons(unsafe { Cons::from_obj(ptr) }),
+            Tag::SubrFn => Object::SubrFn(unsafe { SubrFn::from_obj(ptr) }),
+            Tag::LispFn => Object::LispFn(unsafe { LispFn::from_obj(ptr) }),
+            Tag::Int => Object::Int(unsafe { i64::from_obj(ptr) }),
+            Tag::Float => Object::Float(unsafe { f64::from_obj(ptr) }),
+            Tag::Nil => Object::Nil,
+            Tag::True => Object::True,
+            Tag::String => Object::String(unsafe { String::from_obj(ptr) }),
+            Tag::Vec => Object::Vec(unsafe { ObjVec::from_obj(ptr) }),
         }
     }
 }
 
-impl<'ob> From<Gc<i64>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<i64>> for Gc<Object<'ob>> {
     fn from(x: Gc<i64>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<i64> for Gc<ObjectX<'ob>> {
+impl<'ob> From<i64> for Gc<Object<'ob>> {
     fn from(x: i64) -> Self {
         let ptr = sptr::invalid(x as usize);
         unsafe { i64::gc_from(ptr).into() }
     }
 }
 
-impl<'ob> From<Gc<&'ob f64>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<&'ob f64>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob f64>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Symbol> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Symbol> for Gc<Object<'ob>> {
     fn from(x: Symbol) -> Self {
         let ptr = x as *const GlobalSymbol;
         unsafe { Symbol::gc_from(ptr).into() }
     }
 }
 
-impl<'ob> From<&Cons> for Gc<ObjectX<'ob>> {
+impl<'ob> From<&Cons> for Gc<Object<'ob>> {
     fn from(x: &Cons) -> Self {
         let ptr = x as *const Cons;
         unsafe { Cons::gc_from(ptr).into() }
     }
 }
 
-impl<'ob> From<Gc<Symbol>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<Symbol>> for Gc<Object<'ob>> {
     fn from(x: Gc<Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<()>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<()>> for Gc<Object<'ob>> {
     fn from(x: Gc<()>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<bool>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<bool>> for Gc<Object<'ob>> {
     fn from(x: Gc<bool>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob Cons>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<&'ob Cons>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob Cons>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob String>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<&'ob String>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob String>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob RefCell<Vec<Object<'ob>>>>> for Gc<ObjectX<'ob>> {
-    fn from(x: Gc<&'ob RefCell<Vec<Object<'ob>>>>) -> Self {
+impl<'ob> From<Gc<&'ob RefCell<Vec<GcObj<'ob>>>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&'ob RefCell<Vec<GcObj<'ob>>>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob LispFn<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<&'ob SubrFn> for Gc<ObjectX<'ob>> {
+impl<'ob> From<&'ob SubrFn> for Gc<Object<'ob>> {
     fn from(x: &'ob SubrFn) -> Self {
         unsafe { SubrFn::gc_from(x as *const _).into() }
     }
 }
 
-impl<'ob> From<Gc<&'ob SubrFn>> for Gc<ObjectX<'ob>> {
+impl<'ob> From<Gc<&'ob SubrFn>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob SubrFn>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Gc<NumberX<'ob>>> for Gc<ObjectX<'ob>> {
-    fn from(x: Gc<NumberX<'ob>>) -> Self {
+impl<'ob> From<Gc<Number<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<Number<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<NumberX<'ob>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int | Tag::Float => unsafe { Ok(Self::transmute(value)) },
             _ => Err(Error::from_object(Type::Number, value)),
@@ -793,10 +793,10 @@ impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<NumberX<'ob>> {
     }
 }
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Option<Gc<NumberX<'ob>>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int | Tag::Float => unsafe { Ok(Some(transmute(value))) },
             Tag::Nil => Ok(None),
@@ -805,16 +805,16 @@ impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Option<Gc<NumberX<'ob>>> {
     }
 }
 
-impl<'ob> From<Gc<ListX<'ob>>> for Gc<ObjectX<'ob>> {
-    fn from(x: Gc<ListX<'ob>>) -> Self {
+impl<'ob> From<Gc<List<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<List<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<ListX<'ob>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Nil | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
             _ => Err(Error::from_object(Type::List, value)),
@@ -822,16 +822,16 @@ impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<ListX<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<FunctionX<'ob>>> for Gc<ObjectX<'ob>> {
-    fn from(x: Gc<FunctionX<'ob>>) -> Self {
+impl<'ob> From<Gc<Function<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<Function<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<FunctionX<'ob>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::LispFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
                 Ok(Self::transmute(value))
@@ -841,16 +841,16 @@ impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<FunctionX<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<CallableX<'ob>>> for Gc<ObjectX<'ob>> {
-    fn from(x: Gc<CallableX<'ob>>) -> Self {
+impl<'ob> From<Gc<Callable<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<Callable<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<CallableX<'ob>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Callable<'ob>> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::LispFn | Tag::SubrFn | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
             _ => Err(Error::from_object(Type::Func, value)),
@@ -859,184 +859,13 @@ impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<CallableX<'ob>> {
 }
 
 ///////////////////////////
-// Compatibility Section //
-///////////////////////////
-// use super::{LispFn, Number, SubrFn};
-
-// impl<'ob> TryFrom<Object<'ob>> for Gc<NumberX<'ob>> {
-//     type Error = Error;
-
-//     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
-//         match value {
-//             ObjectX::Int(x) => {
-//                 let x: i64 = !x;
-//                 let ptr = sptr::invalid(x as usize);
-//                 unsafe { Ok(i64::gc_from(ptr).into()) }
-//             }
-//             ObjectX::Float(x) => unsafe { Ok(f64::gc_from(x.get_alloc() as *const _).into()) },
-//             _ => Err(Error::from_object(Type::Number, value)),
-//         }
-//     }
-// }
-
-// impl<'ob> From<Number<'ob>> for Gc<NumberX<'ob>> {
-//     fn from(x: Number) -> Self {
-//         match x {
-//             Number::Int(x) => {
-//                 let x: i64 = !x;
-//                 let ptr: *const u8 = sptr::invalid(x as usize);
-//                 Gc::from_ptr(ptr, Tag::Int)
-//             }
-//             Number::Float(x) => {
-//                 let x: &f64 = !x;
-//                 Gc::from_ptr(x as *const _, Tag::Float)
-//             }
-//         }
-//     }
-// }
-
-// // List
-// impl<'ob> TryFrom<Object<'ob>> for Gc<ListX<'ob>> {
-//     type Error = Error;
-
-//     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
-//         match value {
-//             ObjectX::Nil => Ok(Gc::from_tag(Tag::Nil)),
-//             ObjectX::Cons(x) => {
-//                 let x: &Cons = !x;
-//                 unsafe { Ok(Cons::gc_from(x as *const Cons).into()) }
-//             }
-//             _ => Err(Error::from_object(Type::List, value)),
-//         }
-//     }
-// }
-
-// impl<'ob> From<Gc<ListX<'ob>>> for Object<'ob> {
-//     fn from(x: Gc<ListX<'ob>>) -> Self {
-//         match x.get() {
-//             ListX::Nil => Object::NIL,
-//             ListX::Cons(x) => ObjectX::Cons(super::data::Data::from_ref(x)),
-//         }
-//     }
-// }
-
-// // Callable
-
-// impl<'ob> TryFrom<Object<'ob>> for Gc<CallableX<'ob>> {
-//     type Error = Error;
-
-//     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
-//         match value {
-//             ObjectX::Cons(x) => {
-//                 let x: &Cons = !x;
-//                 unsafe { Ok(Cons::gc_from(x as *const Cons).into()) }
-//             }
-//             ObjectX::SubrFn(x) => {
-//                 let x: &SubrFn = !x;
-//                 unsafe { Ok(SubrFn::gc_from(x as *const SubrFn).into()) }
-//             }
-//             ObjectX::LispFn(x) => {
-//                 let x: &Allocation<LispFn> = x.get_alloc();
-//                 unsafe { Ok(LispFn::gc_from(x as *const Allocation<LispFn>).into()) }
-//             }
-//             _ => Err(Error::from_object(Type::Func, value)),
-//         }
-//     }
-// }
-
-// impl<'ob> From<Gc<CallableX<'ob>>> for Object<'ob> {
-//     fn from(x: Gc<CallableX<'ob>>) -> Self {
-//         match x.get() {
-//             CallableX::Cons(x) => ObjectX::Cons(super::data::Data::from_ref(x)),
-//             CallableX::SubrFn(x) => ObjectX::SubrFn(super::data::Data::from_ref(x)),
-//             CallableX::LispFn(_) => {
-//                 let rf: &Allocation<LispFn> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::LispFn(super::data::Data::from_ref(rf))
-//             }
-//         }
-//     }
-// }
-
-// // FunctionX
-
-// impl<'ob> TryFrom<Object<'ob>> for Gc<FunctionX<'ob>> {
-//     type Error = Error;
-
-//     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
-//         match value {
-//             ObjectX::Cons(x) => {
-//                 let x: &Cons = !x;
-//                 unsafe { Ok(Cons::gc_from(x as *const Cons).into()) }
-//             }
-//             ObjectX::SubrFn(x) => {
-//                 let x: &SubrFn = !x;
-//                 unsafe { Ok(SubrFn::gc_from(x as *const SubrFn).into()) }
-//             }
-//             ObjectX::LispFn(x) => {
-//                 let x: &Allocation<LispFn> = x.get_alloc();
-//                 unsafe { Ok(LispFn::gc_from(x as *const Allocation<LispFn>).into()) }
-//             }
-//             ObjectX::Symbol(x) => {
-//                 let x: Symbol = !x;
-//                 unsafe { Ok(Symbol::gc_from(x as *const GlobalSymbol).into()) }
-//             }
-//             _ => Err(Error::from_object(Type::Func, value)),
-//         }
-//     }
-// }
-
-// impl<'ob> From<Gc<FunctionX<'ob>>> for Object<'ob> {
-//     fn from(x: Gc<FunctionX<'ob>>) -> Self {
-//         match x.get() {
-//             FunctionX::Cons(x) => ObjectX::Cons(super::data::Data::from_ref(x)),
-//             FunctionX::SubrFn(x) => ObjectX::SubrFn(super::data::Data::from_ref(x)),
-//             FunctionX::Symbol(x) => ObjectX::Symbol(super::data::Data::from_ref(x)),
-//             FunctionX::LispFn(_) => {
-//                 let rf: &Allocation<LispFn> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::LispFn(super::data::Data::from_ref(rf))
-//             }
-//         }
-//     }
-// }
-
-// impl<'ob> From<Gc<ObjectX<'ob>>> for Object<'ob> {
-//     fn from(x: Gc<ObjectX<'ob>>) -> Self {
-//         use super::data::Data;
-//         match x.get() {
-//             ObjectX::Int(x) => x.into(),
-//             ObjectX::Float(_) => {
-//                 let rf: &Allocation<f64> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::Float(Data::from_ref(rf))
-//             }
-//             ObjectX::Symbol(x) => x.into(),
-//             ObjectX::True => Object::TRUE,
-//             ObjectX::Nil => Object::NIL,
-//             ObjectX::Cons(x) => ObjectX::Cons(Data::from_ref(x)),
-//             ObjectX::Vec(_) => {
-//                 let rf: &Allocation<RefCell<Vec<Object>>> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::Vec(Data::from_ref(rf))
-//             }
-//             ObjectX::String(_) => {
-//                 let rf: &Allocation<String> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::String(Data::from_ref(rf))
-//             }
-//             ObjectX::LispFn(_) => {
-//                 let rf: &Allocation<LispFn> = unsafe { &*x.ptr.cast() };
-//                 ObjectX::LispFn(Data::from_ref(rf))
-//             }
-//             ObjectX::SubrFn(subr) => ObjectX::SubrFn(Data::from_ref(subr)),
-//         }
-//     }
-// }
-
-///////////////////////////
 // Other implementations //
 ///////////////////////////
 
-impl<'ob> TryFrom<Gc<ObjectX<'ob>>> for Gc<i64> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
     type Error = Error;
 
-    fn try_from(value: Gc<ObjectX<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int => unsafe { Ok(Self::transmute(value)) },
             _ => Err(Error::from_object(Type::Int, value)),
@@ -1052,9 +881,9 @@ impl Gc<i64> {
 }
 
 fn vec_clone_in<'old, 'new, const C: bool>(
-    vec: &[Object<'old>],
+    vec: &[GcObj<'old>],
     bk: &'new Block<C>,
-) -> Vec<Object<'new>> {
+) -> Vec<GcObj<'new>> {
     vec.iter().map(|x| x.clone_in(bk)).collect()
 }
 
@@ -1063,21 +892,21 @@ impl<T> Gc<T> {
     where
         Self: 'old,
         E: fmt::Debug,
-        Gc<U>: TryFrom<Gc<ObjectX<'new>>, Error = E>,
+        Gc<U>: TryFrom<Gc<Object<'new>>, Error = E>,
         // The WithLifetime bound ensures that T is the same type as U
-        Gc<T>: Into<Gc<ObjectX<'old>>> + WithLifetime<'new, Out = Gc<U>>,
+        Gc<T>: Into<Gc<Object<'old>>> + WithLifetime<'new, Out = Gc<U>>,
     {
         let obj = match self.into().get() {
-            ObjectX::Int(x) => x.into(),
-            ObjectX::Cons(x) => x.clone_in(bk).into_obj(bk).into(),
-            ObjectX::String(x) => x.clone().into_obj(bk).into(),
-            ObjectX::Symbol(x) => x.into(),
-            ObjectX::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
-            ObjectX::SubrFn(x) => x.into(),
-            ObjectX::True => Gc::TRUE,
-            ObjectX::Nil => Gc::NIL,
-            ObjectX::Float(x) => x.into_obj(bk).into(),
-            ObjectX::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
+            Object::Int(x) => x.into(),
+            Object::Cons(x) => x.clone_in(bk).into_obj(bk).into(),
+            Object::String(x) => x.clone().into_obj(bk).into(),
+            Object::Symbol(x) => x.into(),
+            Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
+            Object::SubrFn(x) => x.into(),
+            Object::True => Gc::TRUE,
+            Object::Nil => Gc::NIL,
+            Object::Float(x) => x.into_obj(bk).into(),
+            Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
         };
         match Gc::<U>::try_from(obj) {
             Ok(x) => x,
@@ -1086,64 +915,55 @@ impl<T> Gc<T> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct RawObjX(*const u8);
-
-impl<'a> From<Gc<ObjectX<'a>>> for RawObjX {
-    fn from(x: Gc<ObjectX<'a>>) -> Self {
-        Self(x.ptr)
-    }
-}
-
-impl<'ob> PartialEq<&str> for Gc<ObjectX<'ob>> {
+impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     fn eq(&self, other: &&str) -> bool {
         match self.get() {
-            ObjectX::String(x) => x == other,
+            Object::String(x) => x == other,
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<Symbol> for Gc<ObjectX<'ob>> {
+impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
     fn eq(&self, other: &Symbol) -> bool {
         match self.get() {
-            ObjectX::Symbol(x) => x == *other,
+            Object::Symbol(x) => x == *other,
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<f64> for Gc<ObjectX<'ob>> {
+impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;
         match self.get() {
-            ObjectX::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
+            Object::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<i64> for Gc<ObjectX<'ob>> {
+impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
     fn eq(&self, other: &i64) -> bool {
         match self.get() {
-            ObjectX::Int(x) => x == *other,
+            Object::Int(x) => x == *other,
             _ => false,
         }
     }
 }
 
-impl Gc<ObjectX<'_>> {
+impl Gc<Object<'_>> {
     pub(crate) const TRUE: Self = Gc::from_tag(Tag::True);
     pub(crate) const NIL: Self = Gc::from_tag(Tag::Nil);
 }
 
-impl Default for Gc<ObjectX<'_>> {
+impl Default for Gc<Object<'_>> {
     fn default() -> Self {
         Gc::NIL
     }
 }
 
-impl Default for &Gc<ObjectX<'_>> {
+impl Default for &Gc<Object<'_>> {
     fn default() -> Self {
         &Gc::NIL
     }
@@ -1169,19 +989,19 @@ impl<T: Copy> PartialEq for Gc<T> {
     }
 }
 
-impl fmt::Display for ObjectX<'_> {
+impl fmt::Display for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ObjectX::Int(x) => write!(f, "{x}"),
-            ObjectX::Cons(x) => write!(f, "{x}"),
-            ObjectX::Vec(x) => write!(f, "{x:?}"),
-            ObjectX::String(x) => write!(f, "\"{x}\""),
-            ObjectX::Symbol(x) => write!(f, "{x}"),
-            ObjectX::LispFn(x) => write!(f, "(lambda {x:?})"),
-            ObjectX::SubrFn(x) => write!(f, "{x:?}"),
-            ObjectX::True => write!(f, "t"),
-            ObjectX::Nil => write!(f, "nil"),
-            ObjectX::Float(x) => {
+            Object::Int(x) => write!(f, "{x}"),
+            Object::Cons(x) => write!(f, "{x}"),
+            Object::Vec(x) => write!(f, "{x:?}"),
+            Object::String(x) => write!(f, "\"{x}\""),
+            Object::Symbol(x) => write!(f, "{x}"),
+            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
+            Object::SubrFn(x) => write!(f, "{x:?}"),
+            Object::True => write!(f, "t"),
+            Object::Nil => write!(f, "nil"),
+            Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -1192,13 +1012,13 @@ impl fmt::Display for ObjectX<'_> {
     }
 }
 
-impl fmt::Debug for ObjectX<'_> {
+impl fmt::Debug for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ObjectX::Int(x) => write!(f, "{x}"),
-            ObjectX::Cons(x) => write!(f, "{x:?}"),
-            ObjectX::Vec(x) => write!(f, "{x:?}"),
-            ObjectX::String(string) => {
+            Object::Int(x) => write!(f, "{x}"),
+            Object::Cons(x) => write!(f, "{x:?}"),
+            Object::Vec(x) => write!(f, "{x:?}"),
+            Object::String(string) => {
                 write!(
                     f,
                     "\"{}\"",
@@ -1208,12 +1028,12 @@ impl fmt::Debug for ObjectX<'_> {
                         .collect::<String>()
                 )
             }
-            ObjectX::Symbol(x) => write!(f, "{x}"),
-            ObjectX::LispFn(x) => write!(f, "(lambda {x:?})"),
-            ObjectX::SubrFn(x) => write!(f, "{x:?}"),
-            ObjectX::True => write!(f, "t"),
-            ObjectX::Nil => write!(f, "nil"),
-            ObjectX::Float(x) => {
+            Object::Symbol(x) => write!(f, "{x}"),
+            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
+            Object::SubrFn(x) => write!(f, "{x:?}"),
+            Object::True => write!(f, "t"),
+            Object::Nil => write!(f, "nil"),
+            Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
                 } else {
@@ -1233,7 +1053,7 @@ pub(crate) enum ObjectAllocation<'ob> {
     NonAllocated,
 }
 
-impl<'ob> Gc<ObjectX<'ob>> {
+impl<'ob> Gc<Object<'ob>> {
     pub(crate) fn is_markable(self) -> bool {
         !matches!(self.get_alloc(), ObjectAllocation::NonAllocated)
     }

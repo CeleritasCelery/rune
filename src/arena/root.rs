@@ -5,7 +5,7 @@ use std::{ops::Index, slice::SliceIndex};
 use crate::cons::Cons;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::{Object, RawObj};
+use crate::object::{GcObj, RawObj};
 use crate::symbol::Symbol;
 use std::fmt::Debug;
 
@@ -17,7 +17,7 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'ob> IntoRoot<RootObj> for Object<'ob> {
+impl<'ob> IntoRoot<RootObj> for GcObj<'ob> {
     unsafe fn into_root(self) -> RootObj {
         RootObj::new(self)
     }
@@ -29,7 +29,7 @@ impl IntoRoot<RootCons> for &Cons {
     }
 }
 
-impl<'ob> IntoRoot<(Symbol, RootObj)> for (Symbol, Object<'ob>) {
+impl<'ob> IntoRoot<(Symbol, RootObj)> for (Symbol, GcObj<'ob>) {
     unsafe fn into_root(self) -> (Symbol, RootObj) {
         (self.0, RootObj::new(self.1))
     }
@@ -58,13 +58,13 @@ impl<'rt> StackRoot<'rt> {
         StackRoot { root_set: roots }
     }
 
-    pub(crate) fn set<'root>(&'root mut self, obj: Object<'_>) -> Object<'root> {
+    pub(crate) fn set<'root>(&'root mut self, obj: GcObj<'_>) -> GcObj<'root> {
         unsafe {
             self.root_set
                 .roots
                 .borrow_mut()
-                .push(std::intrinsics::transmute::<Object, Object<'static>>(obj));
-            std::intrinsics::transmute::<Object, Object<'root>>(obj)
+                .push(std::intrinsics::transmute::<GcObj, GcObj<'static>>(obj));
+            std::intrinsics::transmute::<GcObj, GcObj<'root>>(obj)
         }
     }
 }
@@ -103,7 +103,7 @@ pub(crate) struct RootObj {
 }
 
 impl RootObj {
-    pub(crate) fn new(obj: Object) -> Self {
+    pub(crate) fn new(obj: GcObj) -> Self {
         Self {
             obj: obj.into_raw(),
         }
@@ -112,14 +112,14 @@ impl RootObj {
 
 impl Trace for RootObj {
     fn mark(&self, stack: &mut Vec<RawObj>) {
-        let obj = unsafe { Object::from_raw(self.obj) };
+        let obj = unsafe { GcObj::from_raw(self.obj) };
         obj.trace_mark(stack);
     }
 }
 
 impl Debug for RootObj {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(unsafe { &Object::from_raw(self.obj) }, f)
+        Debug::fmt(unsafe { &GcObj::from_raw(self.obj) }, f)
     }
 }
 
@@ -243,28 +243,28 @@ impl<T> RootRef<T> {
 }
 
 impl RootRef<RootObj> {
-    pub(crate) fn obj(&self) -> Object {
-        unsafe { Object::from_raw(self.inner.obj) }
+    pub(crate) fn obj(&self) -> GcObj {
+        unsafe { GcObj::from_raw(self.inner.obj) }
     }
 
-    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> Object<'ob> {
-        unsafe { gc.bind(Object::from_raw(self.inner.obj)) }
+    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
+        unsafe { gc.bind(GcObj::from_raw(self.inner.obj)) }
     }
 
-    pub(crate) fn set(&mut self, item: Object<'_>) {
+    pub(crate) fn set(&mut self, item: GcObj<'_>) {
         self.inner.obj = item.into_raw();
     }
 }
 
-impl<'ob> AsRef<Object<'ob>> for RootRef<RootObj> {
-    fn as_ref(&self) -> &Object<'ob> {
-        unsafe { &*(self as *const Self).cast::<Object>() }
+impl<'ob> AsRef<GcObj<'ob>> for RootRef<RootObj> {
+    fn as_ref(&self) -> &GcObj<'ob> {
+        unsafe { &*(self as *const Self).cast::<GcObj>() }
     }
 }
 
-impl<'ob> AsRef<[Object<'ob>]> for RootRef<[RootObj]> {
-    fn as_ref(&self) -> &[Object<'ob>] {
-        let ptr = self.inner.as_ptr().cast::<Object>();
+impl<'ob> AsRef<[GcObj<'ob>]> for RootRef<[RootObj]> {
+    fn as_ref(&self) -> &[GcObj<'ob>] {
+        let ptr = self.inner.as_ptr().cast::<GcObj>();
         let len = self.inner.len();
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -327,7 +327,7 @@ impl<T> DerefMut for RootRef<Option<T>> {
 }
 
 impl RootRef<Option<RootObj>> {
-    pub(crate) fn set(&mut self, obj: Object) {
+    pub(crate) fn set(&mut self, obj: GcObj) {
         self.inner = Some(RootObj::new(obj));
     }
 }
@@ -466,7 +466,7 @@ impl RootRef<Environment> {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, object::ObjectX};
+    use crate::{arena::RootSet, object::Object};
 
     use super::*;
 
@@ -476,13 +476,13 @@ mod test {
         let arena = &Arena::new(root);
         let mut vec: RootRef<Vec<RootObj>> = RootRef { inner: vec![] };
 
-        vec.push(Object::NIL);
-        assert!(matches!(vec[0].obj().get(), ObjectX::Nil));
+        vec.push(GcObj::NIL);
+        assert!(matches!(vec[0].obj().get(), Object::Nil));
         let str1 = arena.add("str1");
         let str2 = arena.add("str2");
         vec.push(str1);
         vec.push(str2);
         let slice = &vec[0..3];
-        assert_eq!(vec![Object::NIL, str1, str2], slice.as_ref());
+        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref());
     }
 }

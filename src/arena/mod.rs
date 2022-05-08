@@ -1,5 +1,5 @@
 use crate::cons::Cons;
-use crate::object::{Gc, IntoObject, LispFn, ObjVec, Object, RawObj, SubrFn, WithLifetime};
+use crate::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawObj, SubrFn, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -15,17 +15,17 @@ pub(crate) trait ConstrainLifetime<'new, T> {
     fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
 }
 
-impl<'old, 'new> ConstrainLifetime<'new, Object<'new>> for Object<'old> {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> Object<'new> {
+impl<'old, 'new> ConstrainLifetime<'new, GcObj<'new>> for GcObj<'old> {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> GcObj<'new> {
         // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe {self.with_lifetime()}
+        unsafe { self.with_lifetime() }
     }
 }
 
-impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [Object<'new>]> for &'brw [Object<'old>] {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [Object<'new>] {
+impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [GcObj<'old>] {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [GcObj<'new>] {
         // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe { transmute::<&[Object<'old>], &[Object<'new>]>(self) }
+        unsafe { transmute::<&[GcObj<'old>], &[GcObj<'new>]>(self) }
     }
 }
 
@@ -52,7 +52,7 @@ macro_rules! rebind {
 /// when it is created.
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
-    roots: RefCell<Vec<Object<'static>>>,
+    roots: RefCell<Vec<GcObj<'static>>>,
     root_structs: RefCell<Vec<*const dyn Trace>>,
 }
 
@@ -89,7 +89,7 @@ impl<'rt> Drop for Arena<'rt> {
 enum OwnedObject<'ob> {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons>),
-    Vec(Box<Allocation<RefCell<Vec<Object<'ob>>>>>),
+    Vec(Box<Allocation<RefCell<Vec<GcObj<'ob>>>>>),
     String(Box<Allocation<String>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
     SubrFn(Box<SubrFn>),
@@ -332,8 +332,8 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) unsafe fn rebind_raw_ptr(&'ob self, raw: RawObj) -> Object<'ob> {
-        Object::from_raw(raw)
+    pub(crate) unsafe fn rebind_raw_ptr(&'ob self, raw: RawObj) -> GcObj<'ob> {
+        GcObj::from_raw(raw)
     }
 
     pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {
@@ -359,7 +359,7 @@ impl<'ob, 'rt> Arena<'rt> {
         }
         while !gray_stack.is_empty() {
             let raw = gray_stack.pop().unwrap();
-            let obj = unsafe { Object::from_raw(raw) };
+            let obj = unsafe { GcObj::from_raw(raw) };
             if !obj.is_marked() {
                 obj.trace_mark(gray_stack);
             }
@@ -403,7 +403,7 @@ impl<const CONST: bool> Drop for Block<CONST> {
 mod test {
     use super::*;
     fn take_mut_arena(_: &mut Arena) {}
-    fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> Object<'ob> {
+    fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> GcObj<'ob> {
         arena.add("invariant")
     }
 

@@ -1,7 +1,7 @@
 use crate::arena::RootOwner;
 use crate::arena::{Arena, Root};
 use crate::data::Environment;
-use crate::object::Object;
+use crate::object::GcObj;
 use crate::reader;
 use crate::symbol::Symbol;
 use crate::{interpreter, root};
@@ -39,7 +39,7 @@ pub(crate) fn read_from_string<'ob>(
     start: Option<i64>,
     end: Option<i64>,
     arena: &'ob Arena,
-) -> Result<Object<'ob>> {
+) -> Result<GcObj<'ob>> {
     let len = string.len();
     let start = check_lower_bounds(start, len)?;
     let end = check_upper_bounds(end, len)?;

@@ -1,5 +1,5 @@
 use crate::arena::{Arena, Block, ConstrainLifetime};
-use crate::object::{Gc, ListX, Object, ObjectX, RawObj};
+use crate::object::{Gc, GcObj, List, Object, RawObj};
 use anyhow::Result;
 use fn_macros::defun;
 use std::cell::Cell;
@@ -43,7 +43,7 @@ impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
     // the stack. Otherwise it could outlive it's objects since it has no
     // lifetimes.
-    pub(crate) unsafe fn new(car: Object, cdr: Object) -> Self {
+    pub(crate) unsafe fn new(car: GcObj, cdr: GcObj) -> Self {
         Self {
             marked: Cell::new(false),
             car: Cell::new(car.into_raw()),
@@ -51,36 +51,36 @@ impl Cons {
         }
     }
 
-    pub(crate) fn car<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
+    pub(crate) fn car<'new, const C: bool>(&self, cx: &'new Block<C>) -> GcObj<'new> {
         self.__car().constrain_lifetime(cx)
     }
 
-    pub(crate) fn cdr<'new, const C: bool>(&self, cx: &'new Block<C>) -> Object<'new> {
+    pub(crate) fn cdr<'new, const C: bool>(&self, cx: &'new Block<C>) -> GcObj<'new> {
         self.__cdr().constrain_lifetime(cx)
     }
 
     // Private internal function to get car/cdr without arena
-    fn __car(&self) -> Object {
+    fn __car(&self) -> GcObj {
         unsafe { self.car_unchecked() }
     }
 
-    fn __cdr(&self) -> Object {
+    fn __cdr(&self) -> GcObj {
         unsafe { self.cdr_unchecked() }
     }
 
-    pub(crate) unsafe fn car_unchecked(&self) -> Object {
-        Object::from_raw(self.car.get())
+    pub(crate) unsafe fn car_unchecked(&self) -> GcObj {
+        GcObj::from_raw(self.car.get())
     }
 
-    pub(crate) unsafe fn cdr_unchecked(&self) -> Object {
-        Object::from_raw(self.cdr.get())
+    pub(crate) unsafe fn cdr_unchecked(&self) -> GcObj {
+        GcObj::from_raw(self.cdr.get())
     }
 
-    pub(crate) fn set_car(&self, new_car: Object) {
+    pub(crate) fn set_car(&self, new_car: GcObj) {
         self.car.set(new_car.into_raw());
     }
 
-    pub(crate) fn set_cdr(&self, new_cdr: Object) {
+    pub(crate) fn set_cdr(&self, new_cdr: GcObj) {
         self.cdr.set(new_cdr.into_raw());
     }
 
@@ -128,11 +128,11 @@ impl Debug for Cons {
 fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     let car = cons.__car();
     match cons.__cdr().get() {
-        ObjectX::Cons(cdr) => {
+        Object::Cons(cdr) => {
             write!(f, "{car} ")?;
             print_rest(cdr, f)
         }
-        ObjectX::Nil => write!(f, "{car})"),
+        Object::Nil => write!(f, "{car})"),
         cdr => write!(f, "{car} . {cdr})"),
     }
 }
@@ -140,11 +140,11 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     let car = cons.__car();
     match cons.__cdr().get() {
-        ObjectX::Cons(cdr) => {
+        Object::Cons(cdr) => {
             write!(f, "{car:?} ")?;
             print_rest(cdr, f)
         }
-        ObjectX::Nil => write!(f, "{car:?})"),
+        Object::Nil => write!(f, "{car:?})"),
         cdr => write!(f, "{car:?} . {cdr:?})"),
     }
 }
@@ -152,51 +152,51 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
 define_unbox!(Cons, &'ob Cons);
 
 #[defun]
-fn car<'ob>(list: Gc<ListX>, arena: &'ob Arena) -> Object<'ob> {
+fn car<'ob>(list: Gc<List>, arena: &'ob Arena) -> GcObj<'ob> {
     match list.get() {
-        ListX::Cons(cons) => cons.car(arena),
-        ListX::Nil => Object::NIL,
+        List::Cons(cons) => cons.car(arena),
+        List::Nil => GcObj::NIL,
     }
 }
 
 #[defun]
-fn cdr<'ob>(list: Gc<ListX>, arena: &'ob Arena) -> Object<'ob> {
+fn cdr<'ob>(list: Gc<List>, arena: &'ob Arena) -> GcObj<'ob> {
     match list.get() {
-        ListX::Cons(cons) => cons.cdr(arena),
-        ListX::Nil => Object::NIL,
+        List::Cons(cons) => cons.cdr(arena),
+        List::Nil => GcObj::NIL,
     }
 }
 
 #[defun]
-fn car_safe<'ob>(object: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
+fn car_safe<'ob>(object: GcObj<'ob>, arena: &'ob Arena) -> GcObj<'ob> {
     match object.get() {
-        ObjectX::Cons(cons) => cons.car(arena),
-        _ => Object::NIL,
+        Object::Cons(cons) => cons.car(arena),
+        _ => GcObj::NIL,
     }
 }
 
 #[defun]
-fn cdr_safe<'ob>(object: Object, arena: &'ob Arena) -> Object<'ob> {
+fn cdr_safe<'ob>(object: GcObj, arena: &'ob Arena) -> GcObj<'ob> {
     match object.get() {
-        ObjectX::Cons(cons) => cons.cdr(arena),
-        _ => Object::NIL,
+        Object::Cons(cons) => cons.cdr(arena),
+        _ => GcObj::NIL,
     }
 }
 
 #[defun]
-fn setcar<'ob>(cell: &'ob Cons, newcar: Object<'ob>) -> Object<'ob> {
+fn setcar<'ob>(cell: &'ob Cons, newcar: GcObj<'ob>) -> GcObj<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &'ob Cons, newcdr: Object<'ob>) -> Object<'ob> {
+fn setcdr<'ob>(cell: &'ob Cons, newcdr: GcObj<'ob>) -> GcObj<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
 
 #[defun]
-fn cons<'ob>(car: Object<'ob>, cdr: Object<'ob>, arena: &'ob Arena) -> Object<'ob> {
+fn cons<'ob>(car: GcObj<'ob>, cdr: GcObj<'ob>, arena: &'ob Arena) -> GcObj<'ob> {
     crate::cons!(car, cdr; arena)
 }
 
@@ -213,7 +213,7 @@ macro_rules! cons {
         )
     };
     ($car:expr; $arena:expr) => {
-        $arena.add(unsafe { crate::cons::Cons::new($arena.add($car), crate::object::Object::NIL) })
+        $arena.add(unsafe { crate::cons::Cons::new($arena.add($car), crate::object::GcObj::NIL) })
     };
 }
 
@@ -228,9 +228,9 @@ mod test {
     use super::*;
     use crate::arena::RootSet;
 
-    fn as_cons(obj: Object) -> Option<&Cons> {
+    fn as_cons(obj: GcObj) -> Option<&Cons> {
         match obj.get() {
-            ObjectX::Cons(x) => Some(x),
+            Object::Cons(x) => Some(x),
             _ => None,
         }
     }
@@ -241,10 +241,10 @@ mod test {
         let arena = &Arena::new(roots);
         // TODO: Need to find a way to solve this
         // assert_eq!(16, size_of::<Cons>());
-        let x: Object = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
-        assert!(matches!(x.get(), ObjectX::Cons(_)));
+        let x: GcObj = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
+        assert!(matches!(x.get(), Object::Cons(_)));
         let cons1 = match x.get() {
-            ObjectX::Cons(x) => x,
+            Object::Cons(x) => x,
             _ => unreachable!("Expected cons"),
         };
 
@@ -256,19 +256,19 @@ mod test {
 
         let cons2 = as_cons(cons1.cdr(arena)).expect("expected cons");
 
-        let cmp: Object = 7.into();
+        let cmp: GcObj = 7.into();
         assert_eq!(cmp, cons2.car(arena));
 
         let cons3 = as_cons(cons2.cdr(arena)).expect("expected cons");
-        let cmp1: Object = 5.into();
+        let cmp1: GcObj = 5.into();
         assert_eq!(cmp1, cons3.car(arena));
-        let cmp2: Object = 9.into();
+        let cmp2: GcObj = 9.into();
         assert_eq!(cmp2, cons3.cdr(arena));
 
-        let lhs: Object = cons!(5, "foo"; arena);
+        let lhs: GcObj = cons!(5, "foo"; arena);
         assert_eq!(lhs, cons!(5, "foo"; arena));
         assert_ne!(lhs, cons!(5, "bar"; arena));
-        let lhs: Object = list![5, 1, 1.5, "foo"; arena];
+        let lhs: GcObj = list![5, 1, 1.5, "foo"; arena];
         assert_eq!(lhs, list![5, 1, 1.5, "foo"; arena]);
         assert_ne!(lhs, list![5, 1, 1.5, "bar"; arena]);
     }
