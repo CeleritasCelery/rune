@@ -75,7 +75,7 @@ pub(crate) struct Arena<'rt> {
 
 impl<'rt> Drop for Arena<'rt> {
     fn drop(&mut self) {
-        self.garbage_collect();
+        self.garbage_collect(true);
         assert!(
             self.block.objects.borrow().is_empty(),
             "Arena was dropped while still holding data"
@@ -340,10 +340,9 @@ impl<'ob, 'rt> Arena<'rt> {
         self.root_set
     }
 
-    pub(crate) fn garbage_collect(&mut self) {
+    pub(crate) fn garbage_collect(&mut self, force: bool) {
         let mut objects = self.block.objects.borrow_mut();
-        #[cfg(not(test))]
-        if objects.len() < 1000 || objects.len() < (self.prev_obj_count * 2) {
+        if cfg!(not(test)) && !force && (objects.len() < 2000 || objects.len() < (self.prev_obj_count * 2)) {
             return;
         }
         let gray_stack = &mut Vec::new();
@@ -401,6 +400,8 @@ impl<const CONST: bool> Drop for Block<CONST> {
 
 #[cfg(test)]
 mod test {
+    use crate::root_struct;
+
     use super::*;
     fn take_mut_arena(_: &mut Arena) {}
     fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> GcObj<'ob> {
@@ -425,5 +426,19 @@ mod test {
         rebind!(obj, arena);
         let _ = "foo".into_obj(&arena);
         assert_eq!(obj, "invariant");
+    }
+
+    #[test]
+    fn garbage_collect() {
+        generativity::make_guard!(guard);
+        let owner = &mut RootOwner::new(guard);
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        let vec1: Vec<RootCons> = Vec::new();
+        root_struct!(vec, vec1, arena);
+        arena.garbage_collect(false);
+        let cons: Gc<&Cons> = list!["foo", 1, false, "end"; arena];
+        vec.borrow_mut(owner, arena).push(cons.get());
+        arena.garbage_collect(false);
     }
 }

@@ -32,7 +32,7 @@ pub(crate) fn eval<'ob, 'id>(
         "lexical enviroments are not yet supported: found {:?}",
         lexical
     );
-    arena.garbage_collect();
+    arena.garbage_collect(false);
     root_struct!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env, owner };
     interpreter.eval_form(form, arena)
@@ -274,7 +274,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                     let args = args.borrow(self.owner);
                     println!("({name} {args:?})");
                 }
-                gc.garbage_collect();
+                gc.garbage_collect(false);
                 (*func).call(args, self.env, gc, self.owner)
             }
             Callable::Cons(form) => {

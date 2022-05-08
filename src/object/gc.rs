@@ -880,6 +880,13 @@ impl Gc<i64> {
     }
 }
 
+impl<'ob> Gc<&Cons> {
+    pub(crate) fn get(self) -> &'ob Cons {
+        let (ptr, _) = self.untag();
+        unsafe { Cons::from_obj(ptr)}
+    }
+}
+
 fn vec_clone_in<'old, 'new, const C: bool>(
     vec: &[GcObj<'old>],
     bk: &'new Block<C>,
