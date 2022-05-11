@@ -29,7 +29,7 @@ impl<'ob> IntoObject<'ob> for NumberValue {
         }
     }
 
-    unsafe fn from_obj(_ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
         todo!()
     }
 }
