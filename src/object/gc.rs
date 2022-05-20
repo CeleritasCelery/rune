@@ -64,7 +64,7 @@ impl<T> Gc<T> {
             std::mem::size_of::<*const U>(),
             std::mem::size_of::<*const ()>()
         );
-        let ptr = ptr.cast::<u8>().map_addr(|x| (x << 8) | tag as usize);
+        let ptr = Strict::map_addr(ptr.cast::<u8>(), |x| (x << 8) | tag as usize);
         Self::new(ptr)
     }
 
@@ -74,13 +74,13 @@ impl<T> Gc<T> {
     }
 
     fn untag(self) -> (*const u8, Tag) {
-        let ptr = self.ptr.map_addr(|x| x >> 8);
+        let ptr = Strict::map_addr(self.ptr, |x| x >> 8);
         let tag = self.tag();
         (ptr, tag)
     }
 
     fn tag(self) -> Tag {
-        unsafe { std::mem::transmute(self.ptr.addr() as u8) }
+        unsafe { std::mem::transmute(Strict::addr(self.ptr) as u8) }
     }
 
     pub(crate) fn into_raw(self) -> RawObj {
@@ -185,7 +185,7 @@ impl<'ob> IntoObject<'ob> for i64 {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        ptr.addr() as i64
+        Strict::addr(ptr) as i64
     }
 }
 
