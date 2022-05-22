@@ -67,7 +67,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob, 'id>(
             args: &[crate::core::object::GcObj<'ob>],
-            env: &crate::core::arena::Root<'id, crate::data::Environment>,
+            env: &crate::core::arena::Root<'id, crate::core::env::Environment>,
             arena: &'ob mut crate::core::arena::Arena,
             owner: &mut crate::core::arena::RootOwner<'id>,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
@@ -75,7 +75,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         }
 
         #[doc(hidden)]
-        pub(crate) static #symbol_name: crate::core::symbol::GlobalSymbol = crate::core::symbol::GlobalSymbol::new(#lisp_name);
+        pub(crate) static #symbol_name: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(#lisp_name);
 
         #body
     }

@@ -2,10 +2,11 @@ use std::ops::{Deref, DerefMut, IndexMut};
 use std::ptr::{addr_of, addr_of_mut};
 use std::{ops::Index, slice::SliceIndex};
 
-use super::super::cons::Cons;
-use super::super::object::{Gc, GcObj, RawObj, WithLifetime};
-use super::super::symbol::Symbol;
-use crate::data::Environment;
+use super::super::{
+    cons::Cons,
+    env::{Environment, Symbol},
+    object::{Gc, GcObj, RawObj, WithLifetime},
+};
 use crate::hashmap::HashMap;
 use std::fmt::Debug;
 
@@ -471,7 +472,6 @@ impl RootRef<Environment> {
 mod test {
     use super::super::super::object::Object;
     use super::super::RootSet;
-
     use super::*;
 
     #[test]

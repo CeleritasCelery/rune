@@ -45,7 +45,7 @@ mod test {
             "foo-3 4"
         );
         assert_eq!(
-            &format("%s", &[(&crate::core::symbol::sym::FUNCTION).into()]).unwrap(),
+            &format("%s", &[(&crate::core::env::sym::FUNCTION).into()]).unwrap(),
             "function"
         );
 

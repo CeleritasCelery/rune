@@ -8,7 +8,7 @@
 
 use crate::arena::Arena;
 use crate::cons::{Cons, ElemIter};
-use crate::data::Environment;
+use crate::core::env::Environment;
 use crate::error::{Error, Type};
 use crate::object::{Expression, Function, IntoObject, LispFn, Object};
 use crate::opcode::{CodeVec, OpCode};

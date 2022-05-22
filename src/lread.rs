@@ -1,8 +1,8 @@
 use crate::core::arena::RootOwner;
 use crate::core::arena::{Arena, Root};
+use crate::core::env::Environment;
+use crate::core::env::Symbol;
 use crate::core::object::GcObj;
-use crate::core::symbol::Symbol;
-use crate::data::Environment;
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
@@ -105,7 +105,7 @@ pub(crate) fn load<'ob, 'id>(
 
 #[defun]
 pub(crate) fn intern(string: &str) -> Symbol {
-    crate::core::symbol::intern(string)
+    crate::core::env::intern(string)
 }
 
 defsubr!(load, read_from_string, intern);

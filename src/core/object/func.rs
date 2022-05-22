@@ -1,6 +1,8 @@
-use super::super::arena::RootOwner;
-use super::super::arena::{Arena, Block, Root, RootObj};
-use super::super::error::Error;
+use super::super::{
+    arena::RootOwner,
+    arena::{Arena, Block, Root, RootObj},
+    error::Error,
+};
 use super::GcObj;
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
@@ -105,7 +107,7 @@ impl<'ob> Default for LispFn<'ob> {
 
 pub(crate) type BuiltInFn = for<'ob, 'id> fn(
     &[GcObj<'ob>],
-    &Root<'id, crate::data::Environment>,
+    &Root<'id, crate::core::env::Environment>,
     &'ob mut Arena,
     &mut RootOwner<'id>,
 ) -> Result<GcObj<'ob>>;
@@ -121,7 +123,7 @@ impl SubrFn {
     pub(crate) fn call<'gc, 'id>(
         &self,
         args: &Root<'id, Vec<RootObj>>,
-        env: &Root<'id, crate::data::Environment>,
+        env: &Root<'id, crate::core::env::Environment>,
         arena: &'gc mut Arena,
         owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'gc>> {

@@ -82,11 +82,10 @@ mod search;
 
 use crate::core::{
     arena::{Arena, Root, RootOwner, RootSet},
+    env::{intern, Environment},
     object::GcObj,
-    symbol::intern,
 };
 
-use data::Environment;
 use std::env;
 use std::io::{self, Write};
 
@@ -132,7 +131,7 @@ fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 }
 
 fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
-    use crate::core::symbol::sym;
+    use crate::core::env::sym;
     {
         let env = env.borrow_mut(owner, arena);
         Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));

@@ -1,6 +1,5 @@
 use super::super::{
-    arena::RootOwner,
-    arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootRef},
+    arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootOwner, RootRef},
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };

@@ -12,20 +12,20 @@ macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
         #[allow(unused_qualifications)]
         #[doc(hidden)]
-        pub(crate) static DEFSUBR: [(crate::core::object::SubrFn, &crate::core::symbol::GlobalSymbol); count!($($x)+)] = [$((paste::paste!{[<S $x>]}, &paste::paste!{[<$x:upper>]})),+];
+        pub(crate) static DEFSUBR: [(crate::core::object::SubrFn, &crate::core::env::GlobalSymbol); count!($($x)+)] = [$((paste::paste!{[<S $x>]}, &paste::paste!{[<$x:upper>]})),+];
     );
 }
 
 macro_rules! symbol_match {
     ($v:expr; $($a:ident => $b:expr,)* @ $wildcard:ident => $e:expr $(,)?) => {
         match $v {
-            $(v if v == &crate::core::symbol::sym::$a => $b,)*
+            $(v if v == &crate::core::env::sym::$a => $b,)*
             $wildcard => $e,
         }
     };
     ($v:expr; $($a:ident => $b:expr ,)* _ => $e:expr $(,)?) => {
         match $v {
-            $(v if v == &crate::core::symbol::sym::$a => $b,)*
+            $(v if v == &crate::core::env::sym::$a => $b,)*
             _ => $e,
         }
     };

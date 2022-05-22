@@ -1,11 +1,11 @@
+use crate::core::env::Environment;
 use crate::core::{
-    arena::{RootOwner, Arena, IntoRoot, Root, RootCons, RootObj},
+    arena::{Arena, IntoRoot, Root, RootCons, RootObj, RootOwner},
     cons::{Cons, ElemStreamIter},
+    env::{sym, Symbol},
     error::{Error, Type},
     object::{Callable, Function, Gc, GcObj, List, Object},
-    symbol::{Symbol, sym},
 };
-use crate::data::Environment;
 use crate::{element_iter, rebind, root, root_struct};
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
@@ -644,7 +644,7 @@ defsubr!(eval);
 
 #[cfg(test)]
 mod test {
-    use crate::core::{arena::RootSet, object::IntoObject, symbol::intern};
+    use crate::core::{arena::RootSet, env::intern, object::IntoObject};
 
     use super::*;
 

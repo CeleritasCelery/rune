@@ -2,8 +2,8 @@
 
 use crate::core::{
     arena::Arena,
+    env::{intern, sym, Symbol},
     object::GcObj,
-    symbol::{intern, sym, Symbol},
 };
 use crate::fns;
 use std::fmt::Display;

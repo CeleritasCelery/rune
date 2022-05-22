@@ -8,7 +8,7 @@ use super::super::error::{Error, Type};
 use super::super::{
     arena::{AllocObject, Allocation},
     cons::Cons,
-    symbol::{GlobalSymbol, Symbol},
+    env::{GlobalSymbol, Symbol},
 };
 
 use super::{LispFn, SubrFn};

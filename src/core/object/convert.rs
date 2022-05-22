@@ -4,10 +4,12 @@
 
 use std::cell::RefCell;
 
-use super::super::arena::Arena;
-use super::super::cons::Cons;
-use super::super::error::{Error, Type};
-use super::super::symbol::{sym, Symbol};
+use super::super::{
+    arena::Arena,
+    cons::Cons,
+    env::{sym, Symbol},
+    error::{Error, Type},
+};
 use super::GcObj;
 use anyhow::Context;
 

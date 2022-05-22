@@ -1,11 +1,11 @@
+use crate::core::env::Environment;
 use crate::core::{
-    arena::{Arena, Root, RootOwner, RootObj},
+    arena::{Arena, Root, RootObj, RootOwner},
     cons::Cons,
+    env::Symbol,
     error::{Error, Type},
     object::{Callable, Function, Gc, GcObj, List, Object},
-    symbol::Symbol,
 };
-use crate::data::Environment;
 use crate::{data, element_iter, rebind, root, root_struct};
 use anyhow::anyhow;
 use anyhow::{bail, Result};

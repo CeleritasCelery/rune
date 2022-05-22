@@ -1,11 +1,54 @@
-use super::arena::{Arena, Block};
-use super::object::{Callable, Function, Gc};
+use super::arena::{Arena, Block, RootObj, RootRef, Trace};
+use super::object::{Callable, Function, Gc, GcObj, RawObj};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Mutex;
+
+#[derive(Debug, Default)]
+pub(crate) struct Environment {
+    pub(crate) vars: HashMap<Symbol, RootObj>,
+    pub(crate) props: HashMap<Symbol, Vec<(Symbol, RootObj)>>,
+}
+
+impl Environment {
+    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: GcObj) {
+        env.vars_mut().insert(sym, value);
+    }
+
+    pub(crate) fn set_prop(
+        env: &mut RootRef<Environment>,
+        symbol: Symbol,
+        propname: Symbol,
+        value: GcObj,
+    ) {
+        let props = env.props_mut();
+        match props.get_mut(&symbol) {
+            Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
+                Some(x) => x.1.set(value),
+                None => plist.push((propname, value)),
+            },
+            None => {
+                props.insert(symbol, vec![(propname, value)]);
+            }
+        }
+    }
+}
+
+impl Trace for Environment {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        for x in self.vars.values() {
+            x.mark(stack);
+        }
+        for vec in self.props.values() {
+            for x in vec {
+                x.1.mark(stack);
+            }
+        }
+    }
+}
 
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
@@ -316,7 +359,7 @@ mod test {
     use super::super::arena::RootOwner;
     use super::super::arena::{Arena, Root, RootSet};
     use super::super::object::{GcObj, IntoObject, LispFn};
-    use crate::data::Environment;
+    use crate::core::env::Environment;
     use anyhow::Result;
     use std::mem::size_of;
 

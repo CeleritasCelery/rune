@@ -2,59 +2,16 @@ use std::cell::RefCell;
 use std::sync::Mutex;
 
 use crate::core::{
-    arena::{Arena, RootOwner, Root, RootObj, RootRef, Trace},
+    arena::{Arena, Root, RootOwner},
     cons::Cons,
-    object::{Function, Gc, GcObj, Object, RawObj},
-    symbol::{Symbol, INTERNED_SYMBOLS},
+    env::{Environment, Symbol, INTERNED_SYMBOLS},
+    object::{Function, Gc, GcObj, Object},
 };
 
-use crate::hashmap::{HashMap, HashSet};
+use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;
-
-#[derive(Debug, Default)]
-pub(crate) struct Environment {
-    pub(crate) vars: HashMap<Symbol, RootObj>,
-    pub(crate) props: HashMap<Symbol, Vec<(Symbol, RootObj)>>,
-}
-
-impl Environment {
-    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: GcObj) {
-        env.vars_mut().insert(sym, value);
-    }
-
-    pub(crate) fn set_prop(
-        env: &mut RootRef<Environment>,
-        symbol: Symbol,
-        propname: Symbol,
-        value: GcObj,
-    ) {
-        let props = env.props_mut();
-        match props.get_mut(&symbol) {
-            Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
-                Some(x) => x.1.set(value),
-                None => plist.push((propname, value)),
-            },
-            None => {
-                props.insert(symbol, vec![(propname, value)]);
-            }
-        }
-    }
-}
-
-impl Trace for Environment {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        for x in self.vars.values() {
-            x.mark(stack);
-        }
-        for vec in self.props.values() {
-            for x in vec {
-                x.1.mark(stack);
-            }
-        }
-    }
-}
 
 lazy_static! {
     pub(crate) static ref FEATURES: Mutex<HashSet<Symbol>> = Mutex::new({
