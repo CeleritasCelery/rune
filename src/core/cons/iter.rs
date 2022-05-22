@@ -1,4 +1,4 @@
-use crate::{
+use super::super::{
     arena::RootOwner,
     arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootRef},
     error::{Error, Type},
@@ -173,15 +173,21 @@ macro_rules! element_iter {
         generativity::make_guard!(guard);
         let owner = RootOwner::new(guard);
 
-        let mut gc_root_elem = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::arena::RootStruct::new($gc.get_root_set()) };
+        let mut gc_root_elem = unsafe { $crate::core::arena::RootStruct::new($gc.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::core::arena::RootStruct::new($gc.get_root_set()) };
         #[allow(unused_qualifications)]
-        let list: $crate::object::Gc<$crate::object::List> = $obj.try_into()?;
-        if let $crate::object::List::Cons(cons) = list.get() {
-            root_elem =
-                unsafe { Some($crate::arena::Root::new($crate::arena::RootObj::default())) };
-            root_cons =
-                unsafe { Some($crate::arena::Root::new($crate::arena::RootCons::new(cons))) };
+        let list: $crate::core::object::Gc<$crate::core::object::List> = $obj.try_into()?;
+        if let $crate::core::object::List::Cons(cons) = list.get() {
+            root_elem = unsafe {
+                Some($crate::core::arena::Root::new(
+                    $crate::core::arena::RootObj::default(),
+                ))
+            };
+            root_cons = unsafe {
+                Some($crate::core::arena::Root::new(
+                    $crate::core::arena::RootCons::new(cons),
+                ))
+            };
             gc_root_elem.set(root_elem.as_mut().unwrap());
             gc_root_cons.set(root_cons.as_mut().unwrap());
         } else {
@@ -189,13 +195,14 @@ macro_rules! element_iter {
             std::mem::forget(gc_root_cons);
         }
         #[allow(unused_mut)]
-        let mut $ident = $crate::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
+        let mut $ident = $crate::core::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
     };
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, list};
+    use super::super::super::arena::RootSet;
+    use crate::list;
 
     use super::*;
 

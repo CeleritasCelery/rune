@@ -1,6 +1,6 @@
 use fn_macros::defun;
 
-use crate::object::GcObj;
+use crate::core::object::GcObj;
 use anyhow::{anyhow, ensure, Result};
 
 #[defun]
@@ -45,7 +45,7 @@ mod test {
             "foo-3 4"
         );
         assert_eq!(
-            &format("%s", &[(&crate::symbol::sym::FUNCTION).into()]).unwrap(),
+            &format("%s", &[(&crate::core::symbol::sym::FUNCTION).into()]).unwrap(),
             "function"
         );
 

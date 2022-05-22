@@ -1,9 +1,9 @@
-use crate::arena::RootOwner;
-use crate::arena::{Arena, Root};
+use crate::core::arena::RootOwner;
+use crate::core::arena::{Arena, Root};
+use crate::core::object::GcObj;
+use crate::core::symbol::Symbol;
 use crate::data::Environment;
-use crate::object::GcObj;
 use crate::reader;
-use crate::symbol::Symbol;
 use crate::{interpreter, root};
 use fn_macros::defun;
 
@@ -105,7 +105,7 @@ pub(crate) fn load<'ob, 'id>(
 
 #[defun]
 pub(crate) fn intern(string: &str) -> Symbol {
-    crate::symbol::intern(string)
+    crate::core::symbol::intern(string)
 }
 
 defsubr!(load, read_from_string, intern);
@@ -114,7 +114,8 @@ defsubr!(load, read_from_string, intern);
 mod test {
 
     use super::*;
-    use crate::{arena::RootSet, root_struct};
+    use crate::core::arena::RootSet;
+    use crate::root_struct;
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy

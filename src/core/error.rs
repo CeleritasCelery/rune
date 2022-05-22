@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::object::Object;
+use super::object::Object;
 
 /// Errors the are used in more then 1 module.
 #[derive(Debug, PartialEq)]

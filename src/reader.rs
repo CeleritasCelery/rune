@@ -1,9 +1,11 @@
 //! Lisp reader that reads an object from a string.
 
-use crate::arena::Arena;
+use crate::core::{
+    arena::Arena,
+    object::GcObj,
+    symbol::{intern, sym, Symbol},
+};
 use crate::fns;
-use crate::object::GcObj;
-use crate::symbol::{intern, sym, Symbol};
 use std::fmt::Display;
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
@@ -483,7 +485,7 @@ pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(GcObj<
 
 #[cfg(test)]
 mod test {
-    use crate::arena::RootSet;
+    use crate::core::arena::RootSet;
 
     use super::*;
 

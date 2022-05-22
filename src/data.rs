@@ -1,13 +1,14 @@
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use crate::arena::RootOwner;
-use crate::arena::{Arena, Root, RootObj, RootRef, Trace};
-use crate::cons::Cons;
+use crate::core::{
+    arena::{Arena, RootOwner, Root, RootObj, RootRef, Trace},
+    cons::Cons,
+    object::{Function, Gc, GcObj, Object, RawObj},
+    symbol::{Symbol, INTERNED_SYMBOLS},
+};
+
 use crate::hashmap::{HashMap, HashSet};
-use crate::object::{Function, Gc, GcObj, Object, RawObj};
-use crate::symbol::Symbol;
-use crate::symbol::INTERNED_SYMBOLS;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;

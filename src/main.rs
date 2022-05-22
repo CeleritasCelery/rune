@@ -63,16 +63,13 @@
 
 #[macro_use]
 mod macros;
-mod object;
 #[macro_use]
-mod cons;
+mod core;
 mod alloc;
-mod arena;
 mod arith;
 mod data;
 mod debug;
 mod editfns;
-mod error;
 mod eval;
 mod fns;
 mod hashmap;
@@ -82,15 +79,16 @@ mod lread;
 mod opcode;
 mod reader;
 mod search;
-mod symbol;
 
-use arena::RootOwner;
-use arena::{Arena, Root, RootSet};
+use crate::core::{
+    arena::{Arena, Root, RootOwner, RootSet},
+    object::GcObj,
+    symbol::intern,
+};
+
 use data::Environment;
-use object::GcObj;
 use std::env;
 use std::io::{self, Write};
-use symbol::intern;
 
 fn parens_closed(buffer: &str) -> bool {
     let open = buffer.chars().filter(|&x| x == '(').count();
@@ -134,7 +132,7 @@ fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 }
 
 fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
-    use crate::symbol::sym;
+    use crate::core::symbol::sym;
     {
         let env = env.borrow_mut(owner, arena);
         Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));

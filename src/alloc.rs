@@ -1,5 +1,5 @@
-use crate::object::{Expression, GcObj, LispFn};
-use crate::{arena::Arena, symbol::Symbol};
+use crate::core::object::{Expression, GcObj, LispFn};
+use crate::core::{arena::Arena, symbol::Symbol};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -57,7 +57,7 @@ fn purecopy(obj: GcObj) -> GcObj {
 
 #[defun]
 fn make_symbol(name: &str) -> Symbol {
-    crate::symbol::intern(name)
+    crate::core::symbol::intern(name)
 }
 
 defsubr!(

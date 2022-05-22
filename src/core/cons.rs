@@ -1,5 +1,5 @@
-use crate::arena::{Arena, Block, ConstrainLifetime};
-use crate::object::{Gc, GcObj, List, Object, RawObj};
+use super::arena::{Arena, Block, ConstrainLifetime};
+use super::object::{Gc, GcObj, List, Object, RawObj};
 use anyhow::Result;
 use fn_macros::defun;
 use std::cell::Cell;
@@ -208,12 +208,14 @@ macro_rules! cons {
         $arena.add(
             #[allow(unused_unsafe)]
             unsafe {
-                crate::cons::Cons::new($arena.add($car), $arena.add($cdr))
+                crate::core::cons::Cons::new($arena.add($car), $arena.add($cdr))
             },
         )
     };
     ($car:expr; $arena:expr) => {
-        $arena.add(unsafe { crate::cons::Cons::new($arena.add($car), crate::object::GcObj::NIL) })
+        $arena.add(unsafe {
+            crate::core::cons::Cons::new($arena.add($car), crate::core::object::GcObj::NIL)
+        })
     };
 }
 
@@ -225,8 +227,8 @@ macro_rules! list {
 
 #[cfg(test)]
 mod test {
+    use super::super::arena::RootSet;
     use super::*;
-    use crate::arena::RootSet;
 
     fn as_cons(obj: GcObj) -> Option<&Cons> {
         match obj.get() {

@@ -1,12 +1,13 @@
 use fn_macros::defun;
 
-use crate::{
-    arena::RootOwner,
-    arena::{Arena, IntoRoot, Root},
-    data::Environment,
+use crate::core::{
+    arena::{Arena, RootOwner, IntoRoot, Root},
     object::{Function, Gc, GcObj},
-    root_struct,
 };
+use crate::root_struct;
+
+use crate::data::Environment;
+
 use anyhow::Result;
 
 #[defun]

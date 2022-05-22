@@ -4,11 +4,11 @@
 
 use std::cell::RefCell;
 
-use crate::arena::Arena;
-use crate::cons::Cons;
-use crate::error::{Error, Type};
-use crate::object::GcObj;
-use crate::symbol::{sym, Symbol};
+use super::super::arena::Arena;
+use super::super::cons::Cons;
+use super::super::error::{Error, Type};
+use super::super::symbol::{sym, Symbol};
+use super::GcObj;
 use anyhow::Context;
 
 use super::{Callable, Gc, Object};
@@ -127,7 +127,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::arena::{Arena, RootSet};
+    use super::super::super::arena::{Arena, RootSet};
 
     use super::*;
 

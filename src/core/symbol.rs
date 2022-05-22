@@ -1,6 +1,6 @@
-use crate::arena::{Arena, Block};
+use super::arena::{Arena, Block};
+use super::object::{Callable, Function, Gc};
 use crate::hashmap::HashMap;
-use crate::object::{Callable, Function, Gc};
 use lazy_static::lazy_static;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -252,7 +252,7 @@ create_symbolmap!(
     SUBR => {
         crate::arith::DEFSUBR,
         crate::interpreter::DEFSUBR,
-        crate::cons::DEFSUBR,
+        crate::core::cons::DEFSUBR,
         crate::lread::DEFSUBR,
         crate::data::DEFSUBR,
         crate::fns::DEFSUBR,
@@ -313,10 +313,10 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use crate::arena::RootOwner;
-    use crate::arena::{Arena, Root, RootSet};
+    use super::super::arena::RootOwner;
+    use super::super::arena::{Arena, Root, RootSet};
+    use super::super::object::{GcObj, IntoObject, LispFn};
     use crate::data::Environment;
-    use crate::object::{GcObj, IntoObject, LispFn};
     use anyhow::Result;
     use std::mem::size_of;
 
@@ -378,14 +378,17 @@ mod test {
 
         let inner = GlobalSymbol::new("bar");
         let sym = unsafe { fix_lifetime(&inner) };
-        let core_func = crate::object::new_subr("bar", dummy, 0, 0, false);
+        let core_func = crate::core::object::new_subr("bar", dummy, 0, 0, false);
         let func = core_func.into_obj(bk).into();
         unsafe {
             sym.set_func(func);
         }
 
         if let Function::SubrFn(subr) = sym.get().unwrap().get() {
-            assert_eq!(*subr, crate::object::new_subr("bar", dummy, 0, 0, false));
+            assert_eq!(
+                *subr,
+                crate::core::object::new_subr("bar", dummy, 0, 0, false)
+            );
         } else {
             unreachable!("Type should be subr");
         }

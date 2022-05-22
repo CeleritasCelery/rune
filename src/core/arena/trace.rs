@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::object::RawObj;
+use super::super::object::RawObj;
 
 use super::{Root, RootSet};
 
@@ -66,8 +66,9 @@ impl<T: Trace> Trace for Option<T> {
 
 #[cfg(test)]
 mod test {
+    use super::super::super::arena::Arena;
     use super::*;
-    use crate::{arena::Arena, root_struct};
+    use crate::root_struct;
 
     struct Foo(u64);
     impl Trace for Foo {

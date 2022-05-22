@@ -2,11 +2,11 @@ use std::ops::{Deref, DerefMut, IndexMut};
 use std::ptr::{addr_of, addr_of_mut};
 use std::{ops::Index, slice::SliceIndex};
 
-use crate::cons::Cons;
+use super::super::cons::Cons;
+use super::super::object::{Gc, GcObj, RawObj, WithLifetime};
+use super::super::symbol::Symbol;
 use crate::data::Environment;
 use crate::hashmap::HashMap;
-use crate::object::{Gc, GcObj, RawObj, WithLifetime};
-use crate::symbol::Symbol;
 use std::fmt::Debug;
 
 use qcell::{LCell, LCellOwner};
@@ -58,16 +58,6 @@ impl<'rt> StackRoot<'rt> {
         StackRoot { root_set: roots }
     }
 
-    // pub(crate) fn set<'root>(&'root mut self, obj: GcObj<'_>) -> GcObj<'root> {
-    //     unsafe {
-    //         self.root_set
-    //             .roots
-    //             .borrow_mut()
-    //             .push(std::intrinsics::transmute::<GcObj, GcObj<'static>>(obj));
-    //         std::intrinsics::transmute::<GcObj, GcObj<'root>>(obj)
-    //     }
-    // }
-
     pub(crate) fn set<'root, T, U>(&'root mut self, obj: Gc<T>) -> Gc<U>
     where
         Gc<T>: WithLifetime<'root, Out = Gc<U>>,
@@ -104,7 +94,7 @@ impl<'rt> Drop for StackRoot<'rt> {
 #[macro_export]
 macro_rules! root {
     ($obj:ident, $arena:ident) => {
-        let mut root = unsafe { $crate::arena::StackRoot::new($arena.get_root_set()) };
+        let mut root = unsafe { $crate::core::arena::StackRoot::new($arena.get_root_set()) };
         let $obj = root.set($obj);
     };
 }
@@ -220,8 +210,8 @@ impl<'id, T> Root<'id, T> {
 #[macro_export]
 macro_rules! root_struct {
     ($ident:ident, $value:expr, $arena:ident) => {
-        let mut $ident = unsafe { $crate::arena::Root::new($value) };
-        let mut root = unsafe { $crate::arena::RootStruct::new($arena.get_root_set()) };
+        let mut $ident = unsafe { $crate::core::arena::Root::new($value) };
+        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
         let $ident = root.set(&mut $ident);
     };
 }
@@ -479,7 +469,8 @@ impl RootRef<Environment> {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, object::Object};
+    use super::super::super::object::Object;
+    use super::super::RootSet;
 
     use super::*;
 

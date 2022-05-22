@@ -1,5 +1,5 @@
-use crate::cons::Cons;
-use crate::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawObj, SubrFn, WithLifetime};
+use super::cons::Cons;
+use super::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawObj, SubrFn, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -43,7 +43,7 @@ impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [G
 macro_rules! rebind {
     ($item:ident, $arena:ident) => {
         #[allow(unused_qualifications)]
-        let bits: $crate::object::RawObj = $item.into_raw();
+        let bits: $crate::core::object::RawObj = $item.into_raw();
         let $item = unsafe { $arena.rebind_raw_ptr(bits) };
     };
 }

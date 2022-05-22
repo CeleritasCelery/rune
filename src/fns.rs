@@ -1,10 +1,11 @@
-use crate::arena::RootOwner;
-use crate::arena::{Arena, Root, RootObj};
-use crate::cons::Cons;
+use crate::core::{
+    arena::{Arena, Root, RootOwner, RootObj},
+    cons::Cons,
+    error::{Error, Type},
+    object::{Callable, Function, Gc, GcObj, List, Object},
+    symbol::Symbol,
+};
 use crate::data::Environment;
-use crate::error::{Error, Type};
-use crate::object::{Callable, Function, Gc, GcObj, List, Object};
-use crate::symbol::Symbol;
 use crate::{data, element_iter, rebind, root, root_struct};
 use anyhow::anyhow;
 use anyhow::{bail, Result};
@@ -357,7 +358,7 @@ fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, object::IntoObject};
+    use crate::core::{arena::RootSet, object::IntoObject};
 
     use super::*;
 

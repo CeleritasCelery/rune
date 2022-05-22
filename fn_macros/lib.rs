@@ -43,19 +43,19 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         // return val is bound to the mutable borrow, meaning we can use them
         // both in the into_obj function.
         quote! {
-            let ptr = arena as *mut crate::arena::Arena;
+            let ptr = arena as *mut crate::core::arena::Arena;
             let val = #subr(#(#arg_conversion),*)#err;
-            let arena: &'ob mut crate::arena::Arena = unsafe {&mut *ptr};
-            Ok(crate::object::IntoObject::into_obj(val, arena).into())
+            let arena: &'ob mut crate::core::arena::Arena = unsafe {&mut *ptr};
+            Ok(crate::core::object::IntoObject::into_obj(val, arena).into())
         };
 
     quote! {
         #[doc(hidden)]
         #[allow(non_upper_case_globals)]
-        const #struct_name: crate::object::SubrFn = crate::object::SubrFn {
+        const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
             subr: #func_name,
-            args: crate::object::FnArgs {
+            args: crate::core::object::FnArgs {
                 required: #required,
                 optional: #optional,
                 rest: #rest,
@@ -66,16 +66,16 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[doc(hidden)]
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob, 'id>(
-            args: &[crate::object::GcObj<'ob>],
-            env: &crate::arena::Root<'id, crate::data::Environment>,
-            arena: &'ob mut crate::arena::Arena,
-            owner: &mut crate::arena::RootOwner<'id>,
-        ) -> anyhow::Result<crate::object::GcObj<'ob>> {
+            args: &[crate::core::object::GcObj<'ob>],
+            env: &crate::core::arena::Root<'id, crate::data::Environment>,
+            arena: &'ob mut crate::core::arena::Arena,
+            owner: &mut crate::core::arena::RootOwner<'id>,
+        ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
             #subr_call
         }
 
         #[doc(hidden)]
-        pub(crate) static #symbol_name: crate::symbol::GlobalSymbol = crate::symbol::GlobalSymbol::new(#lisp_name);
+        pub(crate) static #symbol_name: crate::core::symbol::GlobalSymbol = crate::core::symbol::GlobalSymbol::new(#lisp_name);
 
         #body
     }
@@ -100,7 +100,7 @@ fn get_arg_conversion(args: Vec<syn::Type>) -> Vec<proc_macro2::TokenStream> {
                     let call = get_call(idx, ty);
                     if type_needs_conversion(ty) {
                         if is_slice(ty) {
-                            quote! {crate::object::try_from_slice(#call)?}
+                            quote! {crate::core::object::try_from_slice(#call)?}
                         } else {
                             quote! {std::convert::TryFrom::try_from(#call)?}
                         }

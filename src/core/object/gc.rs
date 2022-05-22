@@ -2,10 +2,10 @@ use sptr::Strict;
 use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
-use crate::arena::Block;
-use crate::error::{Error, Type};
+use super::super::arena::Block;
+use super::super::error::{Error, Type};
 
-use crate::{
+use super::super::{
     arena::{AllocObject, Allocation},
     cons::Cons,
     symbol::{GlobalSymbol, Symbol},

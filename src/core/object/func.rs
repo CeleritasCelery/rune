@@ -1,7 +1,7 @@
-use crate::arena::RootOwner;
-use crate::arena::{Arena, Block, Root, RootObj};
-use crate::error::Error;
-use crate::object::GcObj;
+use super::super::arena::RootOwner;
+use super::super::arena::{Arena, Block, Root, RootObj};
+use super::super::error::Error;
+use super::GcObj;
 use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
 use std::fmt;
@@ -175,8 +175,8 @@ impl PartialEq for SubrFn {
 
 #[cfg(test)]
 mod test {
-    use crate::{arena::RootSet, object::Object};
-
+    use super::super::super::arena::RootSet;
+    use super::super::Object;
     use super::*;
 
     #[test]

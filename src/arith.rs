@@ -1,4 +1,4 @@
-use crate::object::{Gc, IntoObject, Number};
+use crate::core::object::{Gc, IntoObject, Number};
 use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
@@ -22,7 +22,7 @@ impl<'ob> Gc<Number<'ob>> {
 impl<'ob> IntoObject<'ob> for NumberValue {
     type Out = Number<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob crate::arena::Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &'ob crate::core::arena::Block<C>) -> Gc<Self::Out> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => block.add(x),
@@ -257,7 +257,7 @@ defsubr!(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
+    use crate::core::{
         arena::{Arena, RootSet},
         object::IntoObject,
     };

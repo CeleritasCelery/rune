@@ -1,4 +1,4 @@
-use crate::object::GcObj;
+use crate::core::object::GcObj;
 use fn_macros::defun;
 
 #[defun]
