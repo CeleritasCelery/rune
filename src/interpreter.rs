@@ -291,7 +291,6 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         self.eval_form(value, gc)
                     }
                     Err(_) => {
-                        let form: Gc<&Cons> = form.into();
                         root!(form, gc); // Root callable
                         match form.car(gc).get() {
                             Object::Symbol(sym) if sym == &sym::CLOSURE => {
@@ -306,7 +305,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                                     let args = args.borrow(self.owner);
                                     println!("({name} {args:?})");
                                 }
-                                self.call_closure(&form, args, gc)
+                                self.call_closure(form, args, gc)
                             }
                             other => Err(anyhow!("Invalid Function: {other}")),
                         }
@@ -560,10 +559,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 // (let ((x y)))
                 Object::Cons(cons) => {
                     let var = self.let_bind_value(cons, gc)?;
-                    // TODO: Fix this tmp transmute
-                    let tmp: GcObj = var.into();
-                    rebind!(tmp, gc);
-                    let var: &Cons = tmp.try_into().unwrap();
+                    rebind!(var, gc);
                     self.vars.borrow_mut(self.owner, gc).push(var);
                 }
                 // (let (x))
@@ -588,10 +584,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 // (let ((x y)))
                 Object::Cons(cons) => {
                     let var = self.let_bind_value(cons, gc)?;
-                    // TODO: Fix this tmp transmute
-                    let tmp: GcObj = var.into();
-                    rebind!(tmp, gc);
-                    let var: &Cons = tmp.try_into().unwrap();
+                    rebind!(var, gc);
                     let_bindings.borrow_mut(self.owner, gc).push(var);
                 }
                 // (let (x))

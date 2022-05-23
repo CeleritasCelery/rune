@@ -1,5 +1,5 @@
 use super::arena::{Arena, Block, ConstrainLifetime};
-use super::object::{Gc, GcObj, List, Object, RawObj};
+use super::object::{Gc, GcObj, List, Object, RawObj, WithLifetime};
 use anyhow::Result;
 use fn_macros::defun;
 use std::cell::Cell;
@@ -84,6 +84,11 @@ impl Cons {
         self.cdr.set(new_cdr.into_raw());
     }
 
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn into_raw(&self) -> *const Self {
+        self as *const Self
+    }
+
     pub(crate) fn mark(&self, stack: &mut Vec<RawObj>) {
         let cdr = self.__cdr();
         if cdr.is_markable() {
@@ -105,9 +110,17 @@ impl Cons {
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for &'old Cons {
+    type Out = &'new Cons;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const Cons)
+    }
+}
+
 impl<'brw, 'new> ConstrainLifetime<'new, &'new Cons> for &'brw Cons {
     fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'new Cons {
-        unsafe { &*(self as *const Cons) }
+        unsafe { self.with_lifetime() }
     }
 }
 

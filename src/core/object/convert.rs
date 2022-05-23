@@ -94,10 +94,6 @@ where
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-define_unbox!(Int, i64);
-
-define_unbox!(Float, &'ob f64);
-
 impl<'ob> From<bool> for GcObj<'ob> {
     fn from(b: bool) -> Self {
         if b {
@@ -108,11 +104,11 @@ impl<'ob> From<bool> for GcObj<'ob> {
     }
 }
 
+define_unbox!(Int, i64);
+define_unbox!(Float, &'ob f64);
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
-
 define_unbox!(Vec, &'ob RefCell<Vec<GcObj<'ob>>>);
-
 define_unbox!(Symbol, Symbol);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>

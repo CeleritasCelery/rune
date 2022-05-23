@@ -1,5 +1,5 @@
 use super::cons::Cons;
-use super::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawObj, SubrFn, WithLifetime};
+use super::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawInto, SubrFn, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -42,8 +42,7 @@ impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [G
 #[macro_export]
 macro_rules! rebind {
     ($item:ident, $arena:ident) => {
-        #[allow(unused_qualifications)]
-        let bits: $crate::core::object::RawObj = $item.into_raw();
+        let bits = $item.into_raw();
         let $item = unsafe { $arena.rebind_raw_ptr(bits) };
     };
 }
@@ -332,8 +331,11 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) unsafe fn rebind_raw_ptr(&'ob self, raw: RawObj) -> GcObj<'ob> {
-        GcObj::from_raw(raw)
+    pub(crate) unsafe fn rebind_raw_ptr<T, U>(&'ob self, raw: T) -> U
+    where
+        T: RawInto<U>,
+    {
+        raw.raw_into()
     }
 
     pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {

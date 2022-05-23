@@ -5,7 +5,7 @@ use std::{ops::Index, slice::SliceIndex};
 use super::super::{
     cons::Cons,
     env::{Environment, Symbol},
-    object::{Gc, GcObj, RawObj, WithLifetime},
+    object::{GcObj, RawObj, WithLifetime},
 };
 use crate::hashmap::HashMap;
 use std::fmt::Debug;
@@ -59,15 +59,13 @@ impl<'rt> StackRoot<'rt> {
         StackRoot { root_set: roots }
     }
 
-    pub(crate) fn set<'root, T, U>(&'root mut self, obj: Gc<T>) -> Gc<U>
+    pub(crate) fn set<'root, 'ob, T, U>(&'root mut self, obj: T) -> U
     where
-        Gc<T>: WithLifetime<'root, Out = Gc<U>>,
+        T: 'ob + Copy + Into<GcObj<'ob>> + WithLifetime<'root, Out = U>,
     {
         unsafe {
-            self.root_set
-                .roots
-                .borrow_mut()
-                .push(obj.as_obj().with_lifetime());
+            let root: GcObj = obj.into();
+            self.root_set.roots.borrow_mut().push(root.with_lifetime());
             obj.with_lifetime()
         }
     }
@@ -217,6 +215,7 @@ macro_rules! root_struct {
     };
 }
 
+// TODO: see if this type can be made local
 #[repr(transparent)]
 pub(crate) struct RootRef<T: ?Sized> {
     inner: T,

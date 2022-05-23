@@ -130,6 +130,23 @@ pub(crate) trait WithLifetime<'new> {
     unsafe fn with_lifetime(self) -> Self::Out;
 }
 
+// TODO: GAT
+pub(crate) trait RawInto<T> {
+    unsafe fn raw_into(self) -> T;
+}
+
+impl<'ob> RawInto<GcObj<'ob>> for RawObj {
+    unsafe fn raw_into(self) -> GcObj<'ob> {
+        GcObj::new(self.ptr)
+    }
+}
+
+impl<'ob> RawInto<&'ob Cons> for *const Cons {
+    unsafe fn raw_into(self) -> &'ob Cons {
+        &*self
+    }
+}
+
 pub(crate) trait IntoObject<'ob> {
     type Out;
     fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out>;
