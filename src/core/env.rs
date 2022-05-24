@@ -105,7 +105,7 @@ impl GlobalSymbol {
         match self.func.load(Ordering::Acquire) {
             0 => None,
             // SAFETY: we ensure that value is 0 is not representable in the
-            // enum FunctionX (by making a reference the first element, which will
+            // enum Function (by making a reference the first element, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
             // We can't use AtomicCell due to this issue
             // https://github.com/crossbeam-rs/crossbeam/issues/748 .

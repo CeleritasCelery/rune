@@ -82,7 +82,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 FUNCTION => self.eval_function(gc.bind(forms), gc),
                 @ func => self.eval_call(func, forms, gc),
             },
-            other => Err(anyhow!("Invalid FunctionX: {other}")),
+            other => Err(anyhow!("Invalid Function: {other}")),
         }
     }
 
@@ -257,7 +257,6 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             None => bail!("Invalid function: {name}"),
         };
 
-        root!(resolved, gc);
         match resolved.get() {
             Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
             Callable::SubrFn(func) => {
@@ -291,7 +290,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                         self.eval_form(value, gc)
                     }
                     Err(_) => {
-                        root!(form, gc); // Root callable
+                        root!(form, gc);
                         match form.car(gc).get() {
                             Object::Symbol(sym) if sym == &sym::CLOSURE => {
                                 element_iter!(iter, obj, gc);

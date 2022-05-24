@@ -51,7 +51,7 @@ impl<'ob> Gc<Function<'ob>> {
                         },
                     }
                 } else {
-                    Err(anyhow!("Void FunctionX: {}", s))
+                    Err(anyhow!("Void Function: {}", s))
                 }
             }
         }
