@@ -2,13 +2,11 @@ use sptr::Strict;
 use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
-use super::super::arena::Block;
-use super::super::error::{Error, Type};
-
 use super::super::{
-    arena::{AllocObject, Allocation},
+    arena::{AllocObject, Allocation, Block},
     cons::Cons,
     env::{GlobalSymbol, Symbol},
+    error::{Error, Type},
 };
 
 use super::{LispFn, SubrFn};
@@ -130,7 +128,6 @@ pub(crate) trait WithLifetime<'new> {
     unsafe fn with_lifetime(self) -> Self::Out;
 }
 
-// TODO: GAT
 pub(crate) trait RawInto<T> {
     unsafe fn raw_into(self) -> T;
 }

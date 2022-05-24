@@ -274,43 +274,41 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 gc.garbage_collect(false);
                 (*func).call(args, self.env, gc, self.owner)
             }
-            Callable::Cons(form) => {
-                match form.try_as_macro(gc) {
-                    Ok(mcro) => {
-                        let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
-                        if crate::debug::debug_enabled() {
-                            println!("(macro: {name} {macro_args:?})");
-                        }
-                        root_struct!(args, macro_args.into_root(), gc);
-                        let macro_func: Gc<Function> = mcro.into();
-                        root!(macro_func, gc);
-                        let value = macro_func.call(args, self.env, gc, self.owner)?;
-                        rebind!(value, gc);
-                        root!(value, gc);
-                        self.eval_form(value, gc)
+            Callable::Cons(form) => match form.try_as_macro(gc) {
+                Ok(mcro) => {
+                    let macro_args = obj.as_list(gc)?.collect::<Result<Vec<_>>>()?;
+                    if crate::debug::debug_enabled() {
+                        println!("(macro: {name} {macro_args:?})");
                     }
-                    Err(_) => {
-                        root!(form, gc);
-                        match form.car(gc).get() {
-                            Object::Symbol(sym) if sym == &sym::CLOSURE => {
-                                element_iter!(iter, obj, gc);
-                                root_struct!(args, Vec::new(), gc);
-                                while let Some(x) = iter.next() {
-                                    let result = self.eval_form(x.obj(), gc)?;
-                                    rebind!(result, gc);
-                                    args.borrow_mut(self.owner, gc).push(result);
-                                }
-                                if crate::debug::debug_enabled() {
-                                    let args = args.borrow(self.owner);
-                                    println!("({name} {args:?})");
-                                }
-                                self.call_closure(form, args, gc)
+                    root_struct!(args, macro_args.into_root(), gc);
+                    let macro_func: Gc<Function> = mcro.into();
+                    root!(macro_func, gc);
+                    let value = macro_func.call(args, self.env, gc, self.owner)?;
+                    rebind!(value, gc);
+                    root!(value, gc);
+                    self.eval_form(value, gc)
+                }
+                Err(_) => {
+                    root!(form, gc);
+                    match form.car(gc).get() {
+                        Object::Symbol(sym) if sym == &sym::CLOSURE => {
+                            element_iter!(iter, obj, gc);
+                            root_struct!(args, Vec::new(), gc);
+                            while let Some(x) = iter.next() {
+                                let result = self.eval_form(x.obj(), gc)?;
+                                rebind!(result, gc);
+                                args.borrow_mut(self.owner, gc).push(result);
                             }
-                            other => Err(anyhow!("Invalid Function: {other}")),
+                            if crate::debug::debug_enabled() {
+                                let args = args.borrow(self.owner);
+                                println!("({name} {args:?})");
+                            }
+                            self.call_closure(form, args, gc)
                         }
+                        other => Err(anyhow!("Invalid Function: {other}")),
                     }
                 }
-            }
+            },
         }
     }
     fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
