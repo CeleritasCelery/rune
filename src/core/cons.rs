@@ -1,4 +1,4 @@
-use super::arena::{Arena, Block, ConstrainLifetime};
+use super::arena::{Arena, Block};
 use super::object::{Gc, GcObj, List, Object, RawObj, WithLifetime};
 use anyhow::Result;
 use fn_macros::defun;
@@ -159,6 +159,24 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
         }
         Object::Nil => write!(f, "{car:?})"),
         cdr => write!(f, "{car:?} . {cdr:?})"),
+    }
+}
+
+trait ConstrainLifetime<'new, T> {
+    fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
+}
+
+impl<'old, 'new> ConstrainLifetime<'new, GcObj<'new>> for GcObj<'old> {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> GcObj<'new> {
+        // Lifetime is bound to borrow of Block, so it is safe to extend
+        unsafe { self.with_lifetime() }
+    }
+}
+
+impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [GcObj<'old>] {
+    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [GcObj<'new>] {
+        // Lifetime is bound to borrow of Block, so it is safe to extend
+        unsafe { std::mem::transmute::<&[GcObj<'old>], &[GcObj<'new>]>(self) }
     }
 }
 

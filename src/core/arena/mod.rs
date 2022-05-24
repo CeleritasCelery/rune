@@ -7,45 +7,11 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
 mod root;
+mod root_struct;
 mod trace;
 pub(crate) use root::*;
+pub(crate) use root_struct::*;
 pub(crate) use trace::*;
-
-pub(crate) trait ConstrainLifetime<'new, T> {
-    fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
-}
-
-impl<'old, 'new> ConstrainLifetime<'new, GcObj<'new>> for GcObj<'old> {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> GcObj<'new> {
-        // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe { self.with_lifetime() }
-    }
-}
-
-impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [GcObj<'old>] {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [GcObj<'new>] {
-        // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe { transmute::<&[GcObj<'old>], &[GcObj<'new>]>(self) }
-    }
-}
-
-/// Rebinds an object so that it is bound to an immutable borrow of [Arena]
-/// instead of a mutable borrow. This can release the mutable borrow and allow
-/// arena to be used for other things.
-///
-/// # Examples
-///
-/// ```
-/// let object = func_taking_mut_arena(&mut Arena);
-/// rebind!(object, arena);
-/// ```
-#[macro_export]
-macro_rules! rebind {
-    ($item:ident, $arena:ident) => {
-        let bits = $item.into_raw();
-        let $item = unsafe { $arena.rebind_raw_ptr(bits) };
-    };
-}
 
 /// A global store of all gc roots. This struct should be passed to the [Arena]
 /// when it is created.
@@ -401,6 +367,24 @@ impl<const CONST: bool> Drop for Block<CONST> {
             s.set(false);
         });
     }
+}
+
+/// Rebinds an object so that it is bound to an immutable borrow of [Arena]
+/// instead of a mutable borrow. This can release the mutable borrow and allow
+/// arena to be used for other things.
+///
+/// # Examples
+///
+/// ```
+/// let object = func_taking_mut_arena(&mut Arena);
+/// rebind!(object, arena);
+/// ```
+#[macro_export]
+macro_rules! rebind {
+    ($item:ident, $arena:ident) => {
+        let bits = $item.into_raw();
+        let $item = unsafe { $arena.rebind_raw_ptr(bits) };
+    };
 }
 
 #[cfg(test)]

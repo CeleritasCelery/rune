@@ -1,8 +1,9 @@
 use super::super::{
-    arena::{Arena, ConstrainLifetime, Root, RootCons, RootObj, RootOwner, RootRef},
+    arena::{Arena, Root, RootCons, RootObj, RootOwner, RootRef},
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };
+use super::ConstrainLifetime;
 use streaming_iterator::StreamingIterator;
 
 use anyhow::{anyhow, Result};
