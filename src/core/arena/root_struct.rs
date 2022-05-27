@@ -1,18 +1,17 @@
-use std::ops::{Deref, DerefMut, IndexMut};
+use std::fmt::Debug;
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::ptr::{addr_of, addr_of_mut};
-use std::{ops::Index, slice::SliceIndex};
+use std::slice::SliceIndex;
 
 use super::super::{
     cons::Cons,
     env::{Environment, Symbol},
     object::{GcObj, RawObj},
 };
+use super::{Arena, RootSet, Trace};
 use crate::hashmap::HashMap;
-use std::fmt::Debug;
 
 use qcell::{LCell, LCellOwner};
-
-use super::{Arena, RootSet, Trace};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -49,11 +48,20 @@ pub(crate) struct RootObj {
 }
 
 impl RootObj {
-    pub(crate) fn new(obj: GcObj) -> Self {
+    pub(crate) unsafe fn new(obj: GcObj) -> Self {
         Self {
             obj: obj.into_raw(),
         }
     }
+
+    pub(crate) fn obj(&self) -> GcObj {
+        unsafe { GcObj::from_raw(self.obj) }
+    }
+
+    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
+        unsafe { gc.bind(GcObj::from_raw(self.obj)) }
+    }
+
 }
 
 impl Trace for RootObj {
@@ -230,16 +238,16 @@ impl<T> RootRef<T> {
 }
 
 impl RootRef<RootObj> {
-    pub(crate) fn obj(&self) -> GcObj {
-        unsafe { GcObj::from_raw(self.inner.obj) }
-    }
-
-    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
-        unsafe { gc.bind(GcObj::from_raw(self.inner.obj)) }
-    }
-
     pub(crate) fn set(&mut self, item: GcObj<'_>) {
         self.inner.obj = item.into_raw();
+    }
+}
+
+impl Deref for RootRef<RootObj> {
+    type Target = RootObj;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
@@ -315,7 +323,7 @@ impl<T> DerefMut for RootRef<Option<T>> {
 
 impl RootRef<Option<RootObj>> {
     pub(crate) fn set(&mut self, obj: GcObj) {
-        self.inner = Some(RootObj::new(obj));
+        self.inner = unsafe {Some(RootObj::new(obj))};
     }
 }
 
