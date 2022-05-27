@@ -2,9 +2,10 @@ use super::arena::{Arena, Block, RootObj, RootRef, Trace};
 use super::object::{Callable, Function, Gc, GcObj, RawObj};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
+use sptr::Strict;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
 
 #[derive(Debug, Default)]
@@ -62,7 +63,7 @@ impl Trace for Environment {
 #[derive(Debug)]
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
-    func: AtomicI64,
+    func: AtomicPtr<u8>,
 }
 
 /// A static reference to a [`GlobalSymbol`]. These
@@ -90,26 +91,28 @@ impl Hash for GlobalSymbol {
 }
 
 impl GlobalSymbol {
+    const NULL: *mut u8 = std::ptr::null_mut();
     pub(crate) const fn new(name: &'static str) -> Self {
         GlobalSymbol {
             name,
-            func: AtomicI64::new(0),
+            func: AtomicPtr::new(Self::NULL),
         }
     }
 
     pub(crate) fn has_func(&self) -> bool {
-        self.func.load(Ordering::Acquire) != 0
+        Strict::addr(self.func.load(Ordering::Acquire)) != 0
     }
 
     fn get(&'_ self) -> Option<Gc<Function<'_>>> {
-        match self.func.load(Ordering::Acquire) {
+        let ptr = self.func.load(Ordering::Acquire);
+        match Strict::addr(ptr) {
             0 => None,
             // SAFETY: we ensure that value is 0 is not representable in the
             // enum Function (by making a reference the first element, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
             // We can't use AtomicCell due to this issue
             // https://github.com/crossbeam-rs/crossbeam/issues/748 .
-            x => Some(unsafe { std::mem::transmute(x) }),
+            _ => Some(unsafe { Gc::from_raw_ptr(ptr) }),
         }
     }
 
@@ -137,7 +140,7 @@ impl GlobalSymbol {
     }
 
     pub(crate) fn unbind_func(&self) {
-        self.func.store(0, Ordering::Release);
+        self.func.store(Self::NULL, Ordering::Release);
     }
 }
 

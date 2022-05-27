@@ -61,7 +61,6 @@ impl RootObj {
     pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
         unsafe { gc.bind(GcObj::from_raw(self.obj)) }
     }
-
 }
 
 impl Trace for RootObj {
@@ -323,7 +322,7 @@ impl<T> DerefMut for RootRef<Option<T>> {
 
 impl RootRef<Option<RootObj>> {
     pub(crate) fn set(&mut self, obj: GcObj) {
-        self.inner = unsafe {Some(RootObj::new(obj))};
+        self.inner = unsafe { Some(RootObj::new(obj)) };
     }
 }
 

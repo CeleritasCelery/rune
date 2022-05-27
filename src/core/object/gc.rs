@@ -89,6 +89,10 @@ impl<T> Gc<T> {
         Self::new(raw.ptr)
     }
 
+    pub(crate) unsafe fn from_raw_ptr(raw: *mut u8) -> Self {
+        Self::new(raw)
+    }
+
     unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
         Gc::new(e.ptr)
     }
