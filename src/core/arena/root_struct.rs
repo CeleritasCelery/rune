@@ -9,6 +9,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Arena, RootSet, Trace};
+use crate::core::object::{Gc, WithLifetime};
 use crate::hashmap::HashMap;
 
 use qcell::{LCell, LCellOwner};
@@ -48,18 +49,10 @@ pub(crate) struct RootObj {
 }
 
 impl RootObj {
-    pub(crate) unsafe fn new(obj: GcObj) -> Self {
+    pub(crate) fn new(obj: GcObj) -> Self {
         Self {
             obj: obj.into_raw(),
         }
-    }
-
-    pub(crate) fn obj(&self) -> GcObj {
-        unsafe { GcObj::from_raw(self.obj) }
-    }
-
-    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
-        unsafe { gc.bind(GcObj::from_raw(self.obj)) }
     }
 }
 
@@ -67,6 +60,12 @@ impl Trace for RootObj {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         let obj = unsafe { GcObj::from_raw(self.obj) };
         obj.trace_mark(stack);
+    }
+}
+
+impl<T> Trace for Gc<T> {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        self.as_obj().trace_mark(stack);
     }
 }
 
@@ -136,6 +135,15 @@ impl<'rt> RootStruct<'rt> {
         self.root_set.root_structs.borrow_mut().push(dyn_ptr);
         unsafe { &*dyn_ptr.cast::<Root<'id, T>>() }
     }
+
+    pub(crate) fn set_rt<T: Trace>(&mut self, root: &mut Rt<T>) -> &Rt<T> {
+        assert!(!self.set, "RootStruct should only be set once");
+        let dyn_ptr = &root.inner as &dyn Trace as *const dyn Trace;
+        let dyn_ptr: *const (dyn Trace + 'static) = unsafe { std::mem::transmute(dyn_ptr) };
+        self.set = true;
+        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
+        unsafe { &*dyn_ptr.cast::<Rt<T>>() }
+    }
 }
 
 pub(crate) struct RootOwner<'id>(LCellOwner<'id>);
@@ -147,7 +155,7 @@ impl<'id> RootOwner<'id> {
 }
 
 #[repr(transparent)]
-pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, RootRef<T>>);
+pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, Rt<T>>);
 
 impl<'id, T> Root<'id, T> {
     /// Create a new Root
@@ -156,18 +164,22 @@ impl<'id, T> Root<'id, T> {
     ///
     /// This method is only safe to call if Root never moves and drops in stack
     /// order. Use the [`root_struct`] macro.
-    pub(crate) unsafe fn new(obj: T) -> Self {
-        Root(LCell::new(RootRef::new(obj)))
+    pub(crate) unsafe fn new(obj: T) -> Self
+    where
+        T: 'static,
+    {
+        Root(LCell::new(Rt::new(obj)))
     }
 
     pub(super) fn deref(&mut self) -> &T {
         // SAFETY: if we have a &mut self, we know that there are no other
         // owners, so we don't need RootOwner. And we can cast since LCell is
         // repr(transparent)
+        // TODO: LCell is not transparent yet. See https://github.com/uazu/qcell/pull/36
         unsafe { &*addr_of!(self.0).cast::<T>() }
     }
 
-    pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a RootRef<T> {
+    pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a Rt<T> {
         owner.0.ro(&self.0)
     }
 
@@ -175,7 +187,7 @@ impl<'id, T> Root<'id, T> {
         &'a self,
         owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
-    ) -> &'a mut RootRef<T> {
+    ) -> &'a mut Rt<T> {
         owner.0.rw(&self.0)
     }
 
@@ -184,7 +196,7 @@ impl<'id, T> Root<'id, T> {
         gc2: &'a Root<'id, U>,
         owner: &'a mut RootOwner<'id>,
         _: &'a Arena,
-    ) -> (&'a mut RootRef<T>, &'a mut RootRef<U>) {
+    ) -> (&'a mut Rt<T>, &'a mut Rt<U>) {
         owner.0.rw2(&gc1.0, &gc2.0)
     }
 
@@ -192,7 +204,7 @@ impl<'id, T> Root<'id, T> {
         gc1: &'a Self,
         gc2: &'a Root<'id, U>,
         owner: &'a mut RootOwner<'id>,
-    ) -> (&'a mut RootRef<T>, &'a mut RootRef<U>) {
+    ) -> (&'a mut Rt<T>, &'a mut Rt<U>) {
         owner.0.rw2(&gc1.0, &gc2.0)
     }
 }
@@ -206,43 +218,72 @@ macro_rules! root_struct {
     };
 }
 
+#[macro_export]
+macro_rules! rootx {
+    ($ident:ident, $arena:ident) => {
+        let mut x = unsafe {
+            $crate::core::arena::Rt::new($crate::core::object::WithLifetime::with_lifetime($ident))
+        };
+        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
+        let $ident = root.set_rt(&mut x);
+    };
+}
+
 // TODO: see if this type can be made local
 #[repr(transparent)]
-pub(crate) struct RootRef<T: ?Sized> {
+pub(crate) struct Rt<T: ?Sized> {
     inner: T,
 }
 
-impl<T: ?Sized + Debug> Debug for RootRef<T> {
+impl<T: ?Sized + Debug> Debug for Rt<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner, f)
     }
 }
 
-impl<T: PartialEq> PartialEq<T> for RootRef<T> {
+impl<T: PartialEq> PartialEq<T> for Rt<T> {
     fn eq(&self, other: &T) -> bool {
         self.inner == *other
     }
 }
 
-impl<T> AsRef<T> for RootRef<T> {
+impl<T> AsRef<T> for Rt<T> {
     fn as_ref(&self) -> &T {
         &self.inner
     }
 }
 
-impl<T> RootRef<T> {
-    fn new(data: T) -> Self {
-        RootRef { inner: data }
+impl<T> Rt<T> {
+    pub(crate) unsafe fn new(data: T) -> Self
+    where
+        T: 'static,
+    {
+        Rt { inner: data }
+    }
+
+    pub(crate) fn getx<'ob, U>(&self, _: &'ob Arena) -> U
+    where
+        T: WithLifetime<'ob, Out = U> + Copy,
+    {
+        unsafe { self.inner.with_lifetime() }
     }
 }
 
-impl RootRef<RootObj> {
+impl Rt<RootObj> {
     pub(crate) fn set(&mut self, item: GcObj<'_>) {
         self.inner.obj = item.into_raw();
     }
+
+    pub(crate) fn obj(&self) -> GcObj {
+        unsafe { GcObj::from_raw(self.inner.obj) }
+    }
+
+    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
+        unsafe { gc.bind(GcObj::from_raw(self.inner.obj)) }
+    }
 }
 
-impl Deref for RootRef<RootObj> {
+impl Deref for Rt<RootObj> {
     type Target = RootObj;
 
     fn deref(&self) -> &Self::Target {
@@ -250,13 +291,13 @@ impl Deref for RootRef<RootObj> {
     }
 }
 
-impl<'ob> AsRef<GcObj<'ob>> for RootRef<RootObj> {
+impl<'ob> AsRef<GcObj<'ob>> for Rt<RootObj> {
     fn as_ref(&self) -> &GcObj<'ob> {
         unsafe { &*(self as *const Self).cast::<GcObj>() }
     }
 }
 
-impl<'ob> AsRef<[GcObj<'ob>]> for RootRef<[RootObj]> {
+impl<'ob> AsRef<[GcObj<'ob>]> for Rt<[RootObj]> {
     fn as_ref(&self) -> &[GcObj<'ob>] {
         let ptr = self.inner.as_ptr().cast::<GcObj>();
         let len = self.inner.len();
@@ -264,13 +305,13 @@ impl<'ob> AsRef<[GcObj<'ob>]> for RootRef<[RootObj]> {
     }
 }
 
-impl RootRef<RootCons> {
+impl Rt<RootCons> {
     pub(crate) fn set(&mut self, item: &Cons) {
         self.inner.obj = unsafe { std::mem::transmute(item) }
     }
 }
 
-impl Deref for RootRef<RootCons> {
+impl Deref for Rt<RootCons> {
     type Target = Cons;
 
     fn deref(&self) -> &Self::Target {
@@ -278,13 +319,13 @@ impl Deref for RootRef<RootCons> {
     }
 }
 
-impl AsRef<Cons> for RootRef<RootCons> {
+impl AsRef<Cons> for Rt<RootCons> {
     fn as_ref(&self) -> &Cons {
         unsafe { &*(self as *const Self).cast::<Cons>() }
     }
 }
 
-impl AsRef<[Cons]> for RootRef<[RootCons]> {
+impl AsRef<[Cons]> for Rt<[RootCons]> {
     fn as_ref(&self) -> &[Cons] {
         let ptr = self.inner.as_ptr().cast::<Cons>();
         let len = self.inner.len();
@@ -292,92 +333,88 @@ impl AsRef<[Cons]> for RootRef<[RootCons]> {
     }
 }
 
-impl<T, U> Deref for RootRef<(T, U)> {
-    type Target = (RootRef<T>, RootRef<U>);
+impl<T, U> Deref for Rt<(T, U)> {
+    type Target = (Rt<T>, Rt<U>);
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const RootRef<(T, U)>).cast::<(RootRef<T>, RootRef<U>)>() }
+        unsafe { &*(self as *const Rt<(T, U)>).cast::<(Rt<T>, Rt<U>)>() }
     }
 }
 
-impl<T, U> DerefMut for RootRef<(T, U)> {
+impl<T, U> DerefMut for Rt<(T, U)> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut RootRef<(T, U)>).cast::<(RootRef<T>, RootRef<U>)>() }
+        unsafe { &mut *(self as *mut Rt<(T, U)>).cast::<(Rt<T>, Rt<U>)>() }
     }
 }
 
-impl<T> Deref for RootRef<Option<T>> {
-    type Target = Option<RootRef<T>>;
+impl<T> Deref for Rt<Option<T>> {
+    type Target = Option<Rt<T>>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const RootRef<Option<T>>).cast::<Option<RootRef<T>>>() }
+        unsafe { &*(self as *const Rt<Option<T>>).cast::<Option<Rt<T>>>() }
     }
 }
 
-impl<T> DerefMut for RootRef<Option<T>> {
+impl<T> DerefMut for Rt<Option<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut RootRef<Option<T>>).cast::<Option<RootRef<T>>>() }
+        unsafe { &mut *(self as *mut Rt<Option<T>>).cast::<Option<Rt<T>>>() }
     }
 }
 
-impl RootRef<Option<RootObj>> {
+impl Rt<Option<RootObj>> {
     pub(crate) fn set(&mut self, obj: GcObj) {
-        self.inner = unsafe { Some(RootObj::new(obj)) };
+        self.inner = Some(RootObj::new(obj));
     }
 }
 
-impl<T, I: SliceIndex<[T]>> Index<I> for RootRef<Vec<T>> {
-    type Output = RootRef<I::Output>;
+impl<T, I: SliceIndex<[T]>> Index<I> for Rt<Vec<T>> {
+    type Output = Rt<I::Output>;
 
     fn index(&self, index: I) -> &Self::Output {
-        unsafe {
-            &*(Index::index(&self.inner, index) as *const I::Output as *const RootRef<I::Output>)
-        }
+        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Rt<I::Output>) }
     }
 }
 
-impl<T, I: SliceIndex<[T]>> IndexMut<I> for RootRef<Vec<T>> {
+impl<T, I: SliceIndex<[T]>> IndexMut<I> for Rt<Vec<T>> {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         unsafe {
             &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
-                as *mut RootRef<I::Output>)
+                as *mut Rt<I::Output>)
         }
     }
 }
 
-impl<T, I: SliceIndex<[T]>> Index<I> for RootRef<[T]> {
-    type Output = RootRef<I::Output>;
+impl<T, I: SliceIndex<[T]>> Index<I> for Rt<[T]> {
+    type Output = Rt<I::Output>;
 
     fn index(&self, index: I) -> &Self::Output {
-        unsafe {
-            &*(Index::index(&self.inner, index) as *const I::Output as *const RootRef<I::Output>)
-        }
+        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Rt<I::Output>) }
     }
 }
 
-impl<T, I: SliceIndex<[T]>> IndexMut<I> for RootRef<[T]> {
+impl<T, I: SliceIndex<[T]>> IndexMut<I> for Rt<[T]> {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         unsafe {
             &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
-                as *mut RootRef<I::Output>)
+                as *mut Rt<I::Output>)
         }
     }
 }
 
-impl<T> RootRef<Vec<T>> {
-    pub(crate) fn as_slice(&self) -> &[RootRef<T>] {
+impl<T> Rt<Vec<T>> {
+    pub(crate) fn as_slice(&self) -> &[Rt<T>] {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.inner.as_slice() as *const [T] as *const [RootRef<T>]) }
+        unsafe { &*(self.inner.as_slice() as *const [T] as *const [Rt<T>]) }
     }
 
-    pub(crate) fn as_gc(&self) -> &RootRef<[T]> {
+    pub(crate) fn as_gc(&self) -> &Rt<[T]> {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.inner.as_slice() as *const [T] as *const RootRef<[T]>) }
+        unsafe { &*(self.inner.as_slice() as *const [T] as *const Rt<[T]>) }
     }
 
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [RootRef<T>] {
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [Rt<T>] {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [RootRef<T>]) }
+        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Rt<T>]) }
     }
 
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
@@ -396,42 +433,42 @@ impl<T> RootRef<Vec<T>> {
     }
 }
 
-impl<T> Deref for RootRef<Vec<T>> {
-    type Target = [RootRef<T>];
+impl<T> Deref for Rt<Vec<T>> {
+    type Target = [Rt<T>];
 
     fn deref(&self) -> &Self::Target {
         self.as_slice()
     }
 }
 
-impl<T> DerefMut for RootRef<Vec<T>> {
+impl<T> DerefMut for Rt<Vec<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_slice()
     }
 }
 
-impl<K, V> RootRef<HashMap<K, V>>
+impl<K, V> Rt<HashMap<K, V>>
 where
     K: Eq + std::hash::Hash,
 {
-    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&RootRef<V>>
+    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&Rt<V>>
     where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
     {
         self.inner
             .get(k)
-            .map(|v| unsafe { &*(v as *const V).cast::<RootRef<V>>() })
+            .map(|v| unsafe { &*(v as *const V).cast::<Rt<V>>() })
     }
 
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut RootRef<V>>
+    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut Rt<V>>
     where
         K: std::borrow::Borrow<Q>,
         Q: std::hash::Hash + Eq,
     {
         self.inner
             .get_mut(k)
-            .map(|v| unsafe { &mut *(v as *mut V).cast::<RootRef<V>>() })
+            .map(|v| unsafe { &mut *(v as *mut V).cast::<Rt<V>>() })
     }
 
     pub(crate) fn insert<R: IntoRoot<V>>(&mut self, k: K, v: R) {
@@ -439,13 +476,13 @@ where
     }
 }
 
-type Prop = RootRef<HashMap<Symbol, Vec<(Symbol, RootObj)>>>;
-impl RootRef<Environment> {
-    pub(crate) fn vars(&self) -> &RootRef<HashMap<Symbol, RootObj>> {
+type Prop = Rt<HashMap<Symbol, Vec<(Symbol, RootObj)>>>;
+impl Rt<Environment> {
+    pub(crate) fn vars(&self) -> &Rt<HashMap<Symbol, RootObj>> {
         unsafe { &*addr_of!(self.inner.vars).cast() }
     }
 
-    pub(crate) fn vars_mut(&mut self) -> &mut RootRef<HashMap<Symbol, RootObj>> {
+    pub(crate) fn vars_mut(&mut self) -> &mut Rt<HashMap<Symbol, RootObj>> {
         unsafe { &mut *addr_of_mut!(self.inner.vars).cast() }
     }
 
@@ -468,7 +505,7 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let arena = &Arena::new(root);
-        let mut vec: RootRef<Vec<RootObj>> = RootRef { inner: vec![] };
+        let mut vec: Rt<Vec<RootObj>> = Rt { inner: vec![] };
 
         vec.push(GcObj::NIL);
         assert!(matches!(vec[0].obj().get(), Object::Nil));

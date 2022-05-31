@@ -1,4 +1,4 @@
-use super::arena::{Arena, Block, RootObj, RootRef, Trace};
+use super::arena::{Arena, Block, RootObj, Rt, Trace};
 use super::object::{Callable, Function, Gc, GcObj, RawObj};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
@@ -15,12 +15,12 @@ pub(crate) struct Environment {
 }
 
 impl Environment {
-    pub(crate) fn set_var(env: &mut RootRef<Environment>, sym: Symbol, value: GcObj) {
+    pub(crate) fn set_var(env: &mut Rt<Environment>, sym: Symbol, value: GcObj) {
         env.vars_mut().insert(sym, value);
     }
 
     pub(crate) fn set_prop(
-        env: &mut RootRef<Environment>,
+        env: &mut Rt<Environment>,
         symbol: Symbol,
         propname: Symbol,
         value: GcObj,

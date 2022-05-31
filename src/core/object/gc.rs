@@ -923,14 +923,6 @@ impl std::ops::Deref for Gc<&Cons> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
-    type Out = Gc<&'new Cons>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
 fn vec_clone_in<'old, 'new, const C: bool>(
     vec: &[GcObj<'old>],
     bk: &'new Block<C>,

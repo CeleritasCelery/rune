@@ -1,5 +1,5 @@
 use super::super::{
-    arena::{Arena, Root, RootCons, RootObj, RootOwner, RootRef},
+    arena::{Arena, Root, RootCons, RootObj, RootOwner, Rt},
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };
@@ -129,7 +129,7 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 }
 
 impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
-    type Item = RootRef<RootObj>;
+    type Item = Rt<RootObj>;
 
     fn advance(&mut self) {
         if let Some(cons) = &self.cons {
