@@ -423,11 +423,11 @@ mod test {
         let owner = &mut RootOwner::new(guard);
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let vec1: Vec<RootCons> = Vec::new();
+        let vec1: Vec<&'static Cons> = Vec::new();
         root_struct!(vec, vec1, arena);
         arena.garbage_collect(false);
         let cons: Gc<&Cons> = list!["foo", 1, false, "end"; arena];
-        vec.borrow_mut(owner, arena).push(cons.get());
+        vec.borrow_mut(owner, arena).push(&*cons);
         arena.garbage_collect(false);
     }
 }

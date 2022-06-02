@@ -1,12 +1,13 @@
+use crate::core::arena::Rt;
 use crate::core::env::Environment;
 use crate::core::{
-    arena::{Arena, Root, RootObj, RootOwner},
+    arena::{Arena, Root, RootOwner},
     cons::Cons,
     env::Symbol,
     error::{Error, Type},
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
-use crate::{data, element_iter, rebind, root, root_struct};
+use crate::{data, element_iter, rebind, root, root_struct, rootx};
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use fn_macros::defun;
@@ -26,29 +27,32 @@ pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String
     format!("{object}")
 }
 
-impl<'ob> Gc<Function<'ob>> {
+impl<'ob> Rt<Gc<Function<'ob>>> {
     pub(crate) fn call<'gc, 'id>(
-        self,
-        args: &Root<'id, Vec<RootObj>>,
+        &self,
+        args: &Root<'id, Vec<GcObj<'static>>>,
         env: &Root<'id, Environment>,
         arena: &'gc mut Arena,
         owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'gc>> {
         use crate::interpreter;
-        match self.get() {
+        match self.bind(arena).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f).call(args, env, arena, owner),
-            Function::Cons(_) => interpreter::call(self.into(), args, env, arena, owner),
+            Function::Cons(cons) => {
+                rootx!(cons, arena);
+                interpreter::call(cons, args, env, arena, owner)
+            }
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
                     root!(resolved, arena);
                     match resolved.get() {
                         Callable::LispFn(_) => todo!("call lisp functions"),
                         Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
-                        Callable::Cons(cons) => match cons.try_as_macro(arena) {
-                            Ok(_) => Err(anyhow!("Macro's are invalid as functions")),
-                            Err(_) => interpreter::call(cons.into(), args, env, arena, owner),
-                        },
+                        Callable::Cons(cons) => {
+                            rootx!(cons, arena);
+                            interpreter::call(cons, args, env, arena, owner)
+                        }
                     }
                 } else {
                     Err(anyhow!("Void Function: {}", s))
@@ -73,15 +77,16 @@ pub(crate) fn mapcar<'ob, 'id>(
             root_struct!(call_arg, Vec::new(), gc);
             element_iter!(iter, cons, gc);
             while let Some(x) = iter.next() {
-                let obj = x.obj();
+                let obj = x.bind(gc);
                 call_arg.borrow_mut(owner, gc).push(obj);
+                rootx!(function, gc);
                 let output = function.call(call_arg, env, gc, owner)?;
                 rebind!(output, gc);
                 outputs.borrow_mut(owner, gc).push(output);
                 call_arg.borrow_mut(owner, gc).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.borrow(owner).as_gc().as_ref();
+            let slice = outputs.borrow(owner).as_gc().as_ref(gc);
             Ok(slice_into_list(slice, None, gc))
         }
     }
@@ -101,7 +106,8 @@ pub(crate) fn mapc<'ob, 'id>(
             root_struct!(call_arg, Vec::new(), gc);
             element_iter!(elements, cons, gc);
             while let Some(elem) = elements.next() {
-                call_arg.borrow_mut(owner, gc).push(elem.obj());
+                call_arg.borrow_mut(owner, gc).push(elem.bind(gc));
+                rootx!(function, gc);
                 function.call(call_arg, env, gc, owner)?;
                 call_arg.borrow_mut(owner, gc).clear();
             }

@@ -1,4 +1,4 @@
-use super::arena::{Arena, Block, RootObj, Rt, Trace};
+use super::arena::{Arena, Block, Rt, Trace};
 use super::object::{Callable, Function, Gc, GcObj, RawObj};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
@@ -10,8 +10,8 @@ use std::sync::Mutex;
 
 #[derive(Debug, Default)]
 pub(crate) struct Environment {
-    pub(crate) vars: HashMap<Symbol, RootObj>,
-    pub(crate) props: HashMap<Symbol, Vec<(Symbol, RootObj)>>,
+    pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
+    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
 }
 
 impl Environment {

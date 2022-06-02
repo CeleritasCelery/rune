@@ -3,8 +3,8 @@ use crate::core::arena::{Arena, Root};
 use crate::core::env::Environment;
 use crate::core::env::Symbol;
 use crate::core::object::GcObj;
-use crate::reader;
-use crate::{interpreter, root};
+use crate::interpreter;
+use crate::{reader, root};
 use fn_macros::defun;
 
 use anyhow::{bail, ensure, Context, Result};
@@ -115,7 +115,7 @@ mod test {
 
     use super::*;
     use crate::core::arena::RootSet;
-    use crate::root_struct;
+    use crate::{root, root_struct};
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy

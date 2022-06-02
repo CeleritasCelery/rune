@@ -1,10 +1,13 @@
 use fn_macros::defun;
 
-use crate::core::{
-    arena::{Arena, IntoRoot, Root, RootOwner},
-    object::{Function, Gc, GcObj},
-};
 use crate::root_struct;
+use crate::{
+    core::{
+        arena::{Arena, IntoRoot, Root, RootOwner},
+        object::{Function, Gc, GcObj},
+    },
+    rootx,
+};
 
 use crate::core::env::Environment;
 
@@ -32,6 +35,7 @@ pub(crate) fn apply<'ob, 'id>(
         }
     };
     root_struct!(args, args.into_root(), arena);
+    rootx!(function, arena);
     function.call(args, env, arena, owner)
 }
 
@@ -44,6 +48,7 @@ pub(crate) fn funcall<'ob, 'id>(
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     root_struct!(arg_list, arguments.to_vec().into_root(), arena);
+    rootx!(function, arena);
     function.call(arg_list, env, arena, owner)
 }
 

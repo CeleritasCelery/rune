@@ -18,21 +18,21 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'ob> IntoRoot<RootObj> for GcObj<'ob> {
-    unsafe fn into_root(self) -> RootObj {
-        RootObj::new(self)
+impl IntoRoot<GcObj<'static>> for GcObj<'_> {
+    unsafe fn into_root(self) -> GcObj<'static> {
+        self.with_lifetime()
     }
 }
 
-impl IntoRoot<RootCons> for &Cons {
-    unsafe fn into_root(self) -> RootCons {
-        RootCons::new(self)
+impl IntoRoot<&'static Cons> for &Cons {
+    unsafe fn into_root(self) -> &'static Cons {
+        self.with_lifetime()
     }
 }
 
-impl<'ob> IntoRoot<(Symbol, RootObj)> for (Symbol, GcObj<'ob>) {
-    unsafe fn into_root(self) -> (Symbol, RootObj) {
-        (self.0, RootObj::new(self.1))
+impl<'ob> IntoRoot<(Symbol, GcObj<'static>)> for (Symbol, GcObj<'ob>) {
+    unsafe fn into_root(self) -> (Symbol, GcObj<'static>) {
+        (self.0, self.1.with_lifetime())
     }
 }
 
@@ -42,58 +42,15 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
     }
 }
 
-#[repr(transparent)]
-#[derive(Default)]
-pub(crate) struct RootObj {
-    obj: RawObj,
-}
-
-impl RootObj {
-    pub(crate) fn new(obj: GcObj) -> Self {
-        Self {
-            obj: obj.into_raw(),
-        }
-    }
-}
-
-impl Trace for RootObj {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        let obj = unsafe { GcObj::from_raw(self.obj) };
-        obj.trace_mark(stack);
-    }
-}
-
 impl<T> Trace for Gc<T> {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         self.as_obj().trace_mark(stack);
     }
 }
 
-impl Debug for RootObj {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(unsafe { &GcObj::from_raw(self.obj) }, f)
-    }
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub(crate) struct RootCons {
-    obj: *const Cons,
-}
-
-impl RootCons {
-    pub(crate) fn new(obj: &Cons) -> Self {
-        Self {
-            obj: unsafe { std::mem::transmute::<&Cons, *const Cons>(obj) },
-        }
-    }
-}
-
-impl Trace for RootCons {
+impl Trace for &Cons {
     fn mark(&self, stack: &mut Vec<RawObj>) {
-        unsafe {
-            (*self.obj).mark(stack);
-        }
+        Cons::mark(self, stack);
     }
 }
 
@@ -247,89 +204,67 @@ impl<T: PartialEq> PartialEq<T> for Rt<T> {
     }
 }
 
-impl<T> AsRef<T> for Rt<T> {
-    fn as_ref(&self) -> &T {
-        &self.inner
-    }
-}
-
 impl<T> Rt<T> {
-    pub(crate) unsafe fn new(data: T) -> Self
-    where
-        T: 'static,
-    {
+    pub(crate) unsafe fn new(data: T) -> Self {
         Rt { inner: data }
     }
 
-    pub(crate) fn getx<'ob, U>(&self, _: &'ob Arena) -> U
+    pub(crate) fn bind<'ob, U>(&self, _: &'ob Arena) -> U
     where
         T: WithLifetime<'ob, Out = U> + Copy,
     {
         unsafe { self.inner.with_lifetime() }
     }
-}
 
-impl Rt<RootObj> {
-    pub(crate) fn set(&mut self, item: GcObj<'_>) {
-        self.inner.obj = item.into_raw();
-    }
-
-    pub(crate) fn obj(&self) -> GcObj {
-        unsafe { GcObj::from_raw(self.inner.obj) }
-    }
-
-    pub(crate) fn bind<'ob>(&self, gc: &'ob Arena) -> GcObj<'ob> {
-        unsafe { gc.bind(GcObj::from_raw(self.inner.obj)) }
+    pub(crate) unsafe fn bind_unchecked<'ob, U>(&'ob self) -> U
+    where
+        T: WithLifetime<'ob, Out = U> + Copy,
+    {
+        self.inner.with_lifetime()
     }
 }
 
-impl Deref for Rt<RootObj> {
-    type Target = RootObj;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+impl<T> Rt<[T]> {
+    pub(crate) fn as_ref<'ob, U>(&self, _: &'ob Arena) -> &'ob [U]
+    where
+        T: WithLifetime<'ob, Out = U>,
+    {
+        unsafe { &*(addr_of!(self.inner) as *const [U]) }
     }
 }
 
-impl<'ob> AsRef<GcObj<'ob>> for Rt<RootObj> {
-    fn as_ref(&self) -> &GcObj<'ob> {
-        unsafe { &*(self as *const Self).cast::<GcObj>() }
+impl<T> Rt<Gc<T>> {
+    pub(crate) fn try_as<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
+    where
+        Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
+    {
+        let _: Gc<U> = self.inner.try_into()?;
+        // SAFETY: This is safe because all Gc types have the same representation
+        unsafe { Ok(&*addr_of!(self).cast::<Rt<Gc<U>>>()) }
+    }
+
+    pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
+        match self.inner.as_obj().get() {
+            crate::core::object::Object::Cons(_) => unsafe {
+                &*addr_of!(self).cast::<Rt<Gc<&Cons>>>()
+            },
+            x => panic!("attempt to convert type that was not cons: {x}"),
+        }
+    }
+
+    pub(crate) fn set<U>(&mut self, item: U)
+    where
+        U: IntoRoot<Gc<T>>,
+    {
+        unsafe {
+            self.inner = item.into_root();
+        }
     }
 }
 
-impl<'ob> AsRef<[GcObj<'ob>]> for Rt<[RootObj]> {
-    fn as_ref(&self) -> &[GcObj<'ob>] {
-        let ptr = self.inner.as_ptr().cast::<GcObj>();
-        let len = self.inner.len();
-        unsafe { std::slice::from_raw_parts(ptr, len) }
-    }
-}
-
-impl Rt<RootCons> {
+impl Rt<&Cons> {
     pub(crate) fn set(&mut self, item: &Cons) {
-        self.inner.obj = unsafe { std::mem::transmute(item) }
-    }
-}
-
-impl Deref for Rt<RootCons> {
-    type Target = Cons;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.inner.obj }
-    }
-}
-
-impl AsRef<Cons> for Rt<RootCons> {
-    fn as_ref(&self) -> &Cons {
-        unsafe { &*(self as *const Self).cast::<Cons>() }
-    }
-}
-
-impl AsRef<[Cons]> for Rt<[RootCons]> {
-    fn as_ref(&self) -> &[Cons] {
-        let ptr = self.inner.as_ptr().cast::<Cons>();
-        let len = self.inner.len();
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        self.inner = unsafe { std::mem::transmute(item) }
     }
 }
 
@@ -337,7 +272,7 @@ impl<T, U> Deref for Rt<(T, U)> {
     type Target = (Rt<T>, Rt<U>);
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Rt<(T, U)>).cast::<(Rt<T>, Rt<U>)>() }
+        unsafe { &*addr_of!(self).cast::<(Rt<T>, Rt<U>)>() }
     }
 }
 
@@ -351,7 +286,7 @@ impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Rt<Option<T>>).cast::<Option<Rt<T>>>() }
+        unsafe { &*addr_of!(self).cast::<Option<Rt<T>>>() }
     }
 }
 
@@ -361,9 +296,11 @@ impl<T> DerefMut for Rt<Option<T>> {
     }
 }
 
-impl Rt<Option<RootObj>> {
+impl Rt<Option<GcObj<'static>>> {
     pub(crate) fn set(&mut self, obj: GcObj) {
-        self.inner = Some(RootObj::new(obj));
+        unsafe {
+            self.inner = Some(obj.with_lifetime());
+        }
     }
 }
 
@@ -476,13 +413,13 @@ where
     }
 }
 
-type Prop = Rt<HashMap<Symbol, Vec<(Symbol, RootObj)>>>;
+type Prop = Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>;
 impl Rt<Environment> {
-    pub(crate) fn vars(&self) -> &Rt<HashMap<Symbol, RootObj>> {
+    pub(crate) fn vars(&self) -> &Rt<HashMap<Symbol, GcObj<'static>>> {
         unsafe { &*addr_of!(self.inner.vars).cast() }
     }
 
-    pub(crate) fn vars_mut(&mut self) -> &mut Rt<HashMap<Symbol, RootObj>> {
+    pub(crate) fn vars_mut(&mut self) -> &mut Rt<HashMap<Symbol, GcObj<'static>>> {
         unsafe { &mut *addr_of_mut!(self.inner.vars).cast() }
     }
 
@@ -505,15 +442,15 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let arena = &Arena::new(root);
-        let mut vec: Rt<Vec<RootObj>> = Rt { inner: vec![] };
+        let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![] };
 
         vec.push(GcObj::NIL);
-        assert!(matches!(vec[0].obj().get(), Object::Nil));
+        assert!(matches!(vec[0].bind(arena).get(), Object::Nil));
         let str1 = arena.add("str1");
         let str2 = arena.add("str2");
         vec.push(str1);
         vec.push(str2);
         let slice = &vec[0..3];
-        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref());
+        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref(arena));
     }
 }

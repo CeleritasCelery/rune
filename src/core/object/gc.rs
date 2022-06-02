@@ -915,6 +915,25 @@ impl From<&Cons> for Gc<&Cons> {
     }
 }
 
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
+    type Error = Error;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.tag() {
+            Tag::Cons => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(Error::from_object(Type::Cons, value)),
+        }
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
+    type Out = Gc<&'new Cons>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
 impl std::ops::Deref for Gc<&Cons> {
     type Target = Cons;
 

@@ -1,6 +1,6 @@
 use super::super::{
     arena::RootOwner,
-    arena::{Arena, Block, Root, RootObj},
+    arena::{Arena, Block, Root},
     error::Error,
 };
 use super::GcObj;
@@ -122,7 +122,7 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'gc, 'id>(
         &self,
-        args: &Root<'id, Vec<RootObj>>,
+        args: &Root<'id, Vec<GcObj<'static>>>,
         env: &Root<'id, crate::core::env::Environment>,
         arena: &'gc mut Arena,
         owner: &mut RootOwner<'id>,
@@ -134,7 +134,7 @@ impl SubrFn {
             for _ in 0..fill_args {
                 args.push(GcObj::NIL);
             }
-            unsafe { std::mem::transmute::<&[GcObj], &[GcObj<'gc>]>(args.as_gc().as_ref()) }
+            unsafe { std::mem::transmute::<&[GcObj], &[GcObj<'gc>]>(args.as_gc().as_ref(arena)) }
         };
         (self.subr)(slice, env, arena, owner)
     }

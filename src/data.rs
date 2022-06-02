@@ -79,7 +79,7 @@ pub(crate) fn get<'ob, 'id>(
 ) -> GcObj<'ob> {
     match env.borrow(owner).props().get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
-            Some(element) => arena.bind(element.1.obj()),
+            Some(element) => arena.bind(element.1.bind(arena)),
             None => GcObj::NIL,
         },
         None => GcObj::NIL,
@@ -111,10 +111,7 @@ pub(crate) fn symbol_value<'ob, 'id>(
     owner: &RootOwner<'id>,
     arena: &'ob Arena,
 ) -> Option<GcObj<'ob>> {
-    env.borrow(owner)
-        .vars()
-        .get(&symbol)
-        .map(|x| arena.bind(x.obj()))
+    env.borrow(owner).vars().get(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]

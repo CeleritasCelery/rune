@@ -1,5 +1,5 @@
 use super::super::{
-    arena::{Arena, Root, RootCons, RootObj, RootOwner, Rt},
+    arena::{Arena, Root, RootOwner, Rt},
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };
@@ -109,15 +109,15 @@ impl<'ob> Iterator for ConsIter<'ob> {
 }
 
 pub(crate) struct ElemStreamIter<'rt, 'id> {
-    elem: Option<&'rt Root<'id, RootObj>>,
-    cons: Option<&'rt Root<'id, RootCons>>,
+    elem: Option<&'rt Root<'id, GcObj<'static>>>,
+    cons: Option<&'rt Root<'id, &'static Cons>>,
     owner: RootOwner<'id>,
 }
 
 impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
     pub(crate) fn new(
-        elem: &'rt Option<Root<'id, RootObj>>,
-        cons: &'rt Option<Root<'id, RootCons>>,
+        elem: &'rt Option<Root<'id, GcObj<'static>>>,
+        cons: &'rt Option<Root<'id, &'static Cons>>,
         owner: RootOwner<'id>,
     ) -> Self {
         Self {
@@ -129,7 +129,7 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 }
 
 impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
-    type Item = Rt<RootObj>;
+    type Item = Rt<GcObj<'static>>;
 
     fn advance(&mut self) {
         if let Some(cons) = &self.cons {
@@ -138,9 +138,9 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
                 .as_ref()
                 .expect("Element should never be None while Cons is Some");
             let (cons, elem) = unsafe { Root::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
-            let car = cons.__car();
+            let car = unsafe { cons.bind_unchecked().__car() };
             elem.set(car);
-            match cons.__cdr().get() {
+            match unsafe { cons.bind_unchecked().__cdr().get() } {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
@@ -180,12 +180,12 @@ macro_rules! element_iter {
         if let $crate::core::object::List::Cons(cons) = list.get() {
             root_elem = unsafe {
                 Some($crate::core::arena::Root::new(
-                    $crate::core::arena::RootObj::default(),
+                    $crate::core::object::GcObj::NIL,
                 ))
             };
             root_cons = unsafe {
                 Some($crate::core::arena::Root::new(
-                    $crate::core::arena::RootCons::new(cons),
+                    $crate::core::object::WithLifetime::with_lifetime(cons),
                 ))
             };
             gc_root_elem.set(root_elem.as_mut().unwrap());
@@ -238,7 +238,7 @@ mod test {
             let cons: GcObj = list![1, 2, 3, 4; arena];
             element_iter!(iter, cons, arena);
             for expect in 1..=4 {
-                let actual = iter.next().unwrap().obj();
+                let actual = iter.next().unwrap().bind(arena);
                 assert_eq!(actual, expect);
             }
             assert!(iter.is_empty());
