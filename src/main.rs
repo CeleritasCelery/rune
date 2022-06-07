@@ -179,7 +179,7 @@ fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
-    root_struct!(env, Environment::default(), arena);
+    root!(env, Environment::default(), arena);
     generativity::make_guard!(guard);
     let mut owner = RootOwner::new(guard);
     let mut arg_load = false;

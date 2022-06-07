@@ -1,13 +1,11 @@
 use fn_macros::defun;
 
-use crate::root_struct;
-use crate::{
-    core::{
-        arena::{Arena, IntoRoot, Root, RootOwner},
-        object::{Function, Gc, GcObj},
-    },
-    rootx,
+use crate::core::arena::Rt;
+use crate::core::{
+    arena::{Arena, IntoRoot, Root, RootOwner},
+    object::{Function, Gc, GcObj},
 };
+use crate::root;
 
 use crate::core::env::Environment;
 
@@ -15,8 +13,8 @@ use anyhow::Result;
 
 #[defun]
 pub(crate) fn apply<'ob, 'id>(
-    function: Gc<Function<'ob>>,
-    arguments: &[GcObj<'ob>],
+    function: &Rt<Gc<Function>>,
+    arguments: &[Rt<GcObj>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
@@ -25,30 +23,29 @@ pub(crate) fn apply<'ob, 'id>(
         0 => Vec::new(),
         len => {
             let end = len - 1;
-            let last = arguments[end];
-            let mut args: Vec<_> = arguments[..end].iter().map(|x| arena.bind(*x)).collect();
-            for element in last.as_list(arena)? {
+            let last = &arguments[end];
+            let mut args: Vec<_> = arguments[..end].iter().map(|x| x.bind(arena)).collect();
+            for element in last.bind(arena).as_list(arena)? {
                 let e = arena.bind(element?);
                 args.push(e);
             }
             args
         }
     };
-    root_struct!(args, args.into_root(), arena);
-    rootx!(function, arena);
+    root!(args, args.into_root(), arena);
     function.call(args, env, arena, owner)
 }
 
 #[defun]
 pub(crate) fn funcall<'ob, 'id>(
-    function: Gc<Function<'ob>>,
-    arguments: &[GcObj<'ob>],
+    function: &Rt<Gc<Function>>,
+    arguments: &[Rt<GcObj>],
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    root_struct!(arg_list, arguments.to_vec().into_root(), arena);
-    rootx!(function, arena);
+    let arguments = unsafe { Rt::bind_slice(arguments, arena).to_vec().into_root() };
+    root!(arg_list, arguments, arena);
     function.call(arg_list, env, arena, owner)
 }
 

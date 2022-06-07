@@ -1,10 +1,11 @@
-use crate::core::arena::RootOwner;
 use crate::core::arena::{Arena, Root};
+use crate::core::arena::{RootOwner, Rt};
 use crate::core::env::Environment;
 use crate::core::env::Symbol;
-use crate::core::object::GcObj;
-use crate::interpreter;
-use crate::{reader, root};
+use crate::core::error::{Error, Type};
+use crate::core::object::{GcObj, Object};
+use crate::reader;
+use crate::{interpreter, root};
 use fn_macros::defun;
 
 use anyhow::{bail, ensure, Context, Result};
@@ -85,20 +86,21 @@ pub(crate) fn load_internal<'ob, 'id>(
 #[defun]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn load<'ob, 'id>(
-    file: &str,
-    noerror: Option<bool>,
-    _nomessage: Option<bool>,
-    _nosuffix: Option<bool>,
-    _must_suffix: Option<bool>,
+    file: &Rt<GcObj>,
+    noerror: &Rt<GcObj>,
     arena: &'ob mut Arena,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
 ) -> Result<bool> {
+    let file = match file.bind(arena).get() {
+        Object::String(s) => s,
+        x => bail!(Error::from_object(Type::Symbol, x)),
+    };
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
         Ok(content) => load_internal(&content, arena, env, owner),
-        Err(e) => match noerror {
-            Some(_) => Ok(false),
-            None => Err(e),
+        Err(e) => match noerror.bind(arena).get() {
+            Object::Nil => Err(e),
+            _ => Ok(false),
         },
     }
 }
@@ -115,14 +117,14 @@ mod test {
 
     use super::*;
     use crate::core::arena::RootSet;
-    use crate::{root, root_struct};
+    use crate::root;
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        root_struct!(env, Environment::default(), arena);
+        root!(env, Environment::default(), arena);
         generativity::make_guard!(guard);
         let mut owner = RootOwner::new(guard);
         load_internal(

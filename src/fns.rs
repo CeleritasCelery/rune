@@ -7,7 +7,7 @@ use crate::core::{
     error::{Error, Type},
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
-use crate::{data, element_iter, rebind, root, root_struct, rootx};
+use crate::{data, element_iter, rebind, root};
 use anyhow::anyhow;
 use anyhow::{bail, Result};
 use fn_macros::defun;
@@ -40,17 +40,16 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f).call(args, env, arena, owner),
             Function::Cons(cons) => {
-                rootx!(cons, arena);
+                root!(cons, arena);
                 interpreter::call(cons, args, env, arena, owner)
             }
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
-                    root!(resolved, arena);
                     match resolved.get() {
                         Callable::LispFn(_) => todo!("call lisp functions"),
                         Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
                         Callable::Cons(cons) => {
-                            rootx!(cons, arena);
+                            root!(cons, arena);
                             interpreter::call(cons, args, env, arena, owner)
                         }
                     }
@@ -64,22 +63,21 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
 
 #[defun]
 pub(crate) fn mapcar<'ob, 'id>(
-    function: Gc<Function<'ob>>,
-    sequence: Gc<List<'ob>>,
+    function: &Rt<Gc<Function>>,
+    sequence: &Rt<Gc<List>>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    match sequence.get() {
+    match sequence.bind(gc).get() {
         List::Nil => Ok(GcObj::NIL),
         List::Cons(cons) => {
-            root_struct!(outputs, Vec::new(), gc);
-            root_struct!(call_arg, Vec::new(), gc);
+            root!(outputs, Vec::new(), gc);
+            root!(call_arg, Vec::new(), gc);
             element_iter!(iter, cons, gc);
             while let Some(x) = iter.next() {
                 let obj = x.bind(gc);
                 call_arg.borrow_mut(owner, gc).push(obj);
-                rootx!(function, gc);
                 let output = function.call(call_arg, env, gc, owner)?;
                 rebind!(output, gc);
                 outputs.borrow_mut(owner, gc).push(output);
@@ -94,24 +92,23 @@ pub(crate) fn mapcar<'ob, 'id>(
 
 #[defun]
 pub(crate) fn mapc<'ob, 'id>(
-    function: Gc<Function<'ob>>,
-    sequence: Gc<List<'ob>>,
+    function: &Rt<Gc<Function>>,
+    sequence: &Rt<Gc<List>>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     gc: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    match sequence.get() {
+    match sequence.bind(gc).get() {
         List::Nil => Ok(GcObj::NIL),
         List::Cons(cons) => {
-            root_struct!(call_arg, Vec::new(), gc);
+            root!(call_arg, Vec::new(), gc);
             element_iter!(elements, cons, gc);
             while let Some(elem) = elements.next() {
                 call_arg.borrow_mut(owner, gc).push(elem.bind(gc));
-                rootx!(function, gc);
                 function.call(call_arg, env, gc, owner)?;
                 call_arg.borrow_mut(owner, gc).clear();
             }
-            Ok(sequence.into())
+            Ok(sequence.bind(gc).into())
         }
     }
 }
@@ -269,8 +266,8 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 #[defun]
 fn require<'ob, 'id>(
     feature: Symbol,
-    filename: Option<&str>,
-    noerror: Option<bool>,
+    filename: &Rt<GcObj>,
+    noerror: &Rt<GcObj>,
     env: &Root<'id, Environment>,
     owner: &mut RootOwner<'id>,
     arena: &'ob mut Arena,
@@ -278,17 +275,20 @@ fn require<'ob, 'id>(
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
         return Ok(feature.into());
     }
-    let file = match filename {
-        Some(file) => file.to_owned(),
-        None => {
-            format!("lisp/{}.el", feature.name)
-        }
+    let file = match filename.bind(arena).get() {
+        Object::Nil => format!("lisp/{}.el", feature.name),
+        Object::String(file) => file.clone(),
+        x => bail!(Error::from_object(Type::String, x)),
     };
-    match crate::lread::load(&file, None, None, None, None, arena, env, owner) {
+    let file: GcObj = arena.add(file);
+    root!(file, arena);
+    let no_error = Gc::NIL;
+    root!(no_error, arena);
+    match crate::lread::load(file, no_error, arena, env, owner) {
         Ok(_) => Ok(feature.into()),
-        Err(e) => match noerror {
-            Some(_) => Ok(GcObj::NIL),
-            None => Err(e),
+        Err(e) => match noerror.bind(arena).get() {
+            Object::Nil => Err(e),
+            _ => Ok(Gc::NIL),
         },
     }
 }

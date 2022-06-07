@@ -410,12 +410,12 @@ mod test {
 
     #[allow(clippy::unnecessary_wraps)]
     fn dummy<'ob, 'id>(
-        vars: &[GcObj<'ob>],
+        vars: &[Rt<GcObj<'static>>],
         _map: &Root<'id, Environment>,
-        _arena: &'ob mut Arena,
+        arena: &'ob mut Arena,
         _owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'ob>> {
-        Ok(vars[0])
+        Ok(vars[0].bind(arena))
     }
 
     #[test]

@@ -7,7 +7,7 @@ use crate::core::{
     error::{Error, Type},
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
-use crate::{element_iter, rebind, root_struct, rootx};
+use crate::{element_iter, rebind, root};
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -20,23 +20,14 @@ struct Interpreter<'id, 'brw> {
 
 #[defun]
 pub(crate) fn eval<'ob, 'id>(
-    form: GcObj<'ob>,
-    lexical: Option<GcObj<'ob>>,
+    form: &Rt<GcObj>,
+    _lexical: Option<()>,
     env: &Root<'id, Environment>,
     arena: &'ob mut Arena,
     owner: &mut RootOwner<'id>,
 ) -> Result<GcObj<'ob>> {
-    ensure!(
-        match lexical {
-            Some(x) => matches!(x.get(), Object::True | Object::Nil),
-            None => true,
-        },
-        "lexical enviroments are not yet supported: found {:?}",
-        lexical
-    );
-    rootx!(form, arena);
     arena.garbage_collect(false);
-    root_struct!(vars, Vec::new(), arena);
+    root!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env, owner };
     interpreter.eval_form(form, arena)
 }
@@ -48,7 +39,7 @@ pub(crate) fn call<'gc, 'id>(
     gc: &'gc mut Arena,
     owner: &mut RootOwner<'id>,
 ) -> Result<GcObj<'gc>> {
-    root_struct!(vars, Vec::new(), gc);
+    root!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env, owner };
     frame.call_closure(form, args, gc)
 }
@@ -58,7 +49,10 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         let obj = rt.bind(gc);
         match obj.get() {
             Object::Symbol(sym) => self.var_ref(sym, gc),
-            Object::Cons(_) => self.eval_sexp(rt.try_as().unwrap(), gc),
+            Object::Cons(_) => {
+                let x = rt.try_as().unwrap();
+                self.eval_sexp(x, gc)
+            }
             _ => Ok(gc.bind(obj)),
         }
     }
@@ -70,7 +64,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     ) -> Result<GcObj<'gc>> {
         let cons = cons.bind(gc);
         let forms = cons.cdr(gc);
-        rootx!(forms, gc);
+        root!(forms, gc);
         match cons.car(gc).get() {
             Object::Symbol(sym) => symbol_match! {sym;
                 QUOTE => self.quote(forms.bind(gc), gc),
@@ -244,7 +238,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                 // TODO: remove this temp vector
                 let args = args.borrow(self.owner).iter().map(|x| x.bind(gc)).collect();
                 let vars = self.bind_variables(&mut forms, args, gc)?;
-                root_struct!(vars, vars.into_root(), gc);
+                root!(vars, vars.into_root(), gc);
                 let mut call_frame = Interpreter {
                     vars,
                     env: self.env,
@@ -272,7 +266,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             Callable::SubrFn(func) => {
                 let obj = obj.bind(gc);
                 element_iter!(iter, obj, gc);
-                root_struct!(args, Vec::new(), gc);
+                root!(args, Vec::new(), gc);
                 while let Some(x) = iter.next() {
                     let result = self.eval_form(x, gc)?;
                     rebind!(result, gc);
@@ -291,20 +285,20 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
                     if crate::debug::debug_enabled() {
                         println!("(macro: {name} {macro_args:?})");
                     }
-                    root_struct!(args, macro_args.into_root(), gc);
+                    root!(args, macro_args.into_root(), gc);
                     let macro_func: Gc<Function> = mcro.into();
-                    rootx!(macro_func, gc);
+                    root!(macro_func, gc);
                     let value = macro_func.call(args, self.env, gc, self.owner)?;
                     rebind!(value, gc);
-                    rootx!(value, gc);
+                    root!(value, gc);
                     self.eval_form(value, gc)
                 }
                 Err(_) => match form.car(gc).get() {
                     Object::Symbol(sym) if sym == &sym::CLOSURE => {
                         let obj = obj.bind(gc);
                         element_iter!(iter, obj, gc);
-                        root_struct!(args, Vec::new(), gc);
-                        rootx!(form, gc);
+                        root!(args, Vec::new(), gc);
+                        root!(form, gc);
                         while let Some(x) = iter.next() {
                             let result = self.eval_form(x, gc)?;
                             rebind!(result, gc);
@@ -358,7 +352,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         let mut count = 0;
-        root_struct!(returned_form, None, gc);
+        root!(returned_form, None, gc);
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -395,7 +389,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             List::Cons(cons) => cons.car(gc),
             List::Nil => bail!(Error::ArgCount(1, 0)),
         };
-        rootx!(condition, gc);
+        root!(condition, gc);
         while self.eval_form(condition, gc)? != GcObj::NIL {
             let obj = obj.bind(gc);
             element_iter!(forms, obj, gc);
@@ -429,7 +423,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
     }
 
     fn eval_and<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
-        root_struct!(last, GcObj::TRUE, gc);
+        root!(last, GcObj::TRUE, gc);
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -463,12 +457,12 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
             Some(x) => x.bind(gc),
             None => bail!(Error::ArgCount(2, 0)),
         };
-        rootx!(condition, gc);
+        root!(condition, gc);
         let true_branch = match forms.next() {
             Some(x) => x.bind(gc),
             None => bail!(Error::ArgCount(2, 1)),
         };
-        rootx!(true_branch, gc);
+        root!(true_branch, gc);
         #[allow(clippy::if_not_else)]
         if self.eval_form(condition, gc)? != GcObj::NIL {
             self.eval_form(true_branch, gc)
@@ -481,11 +475,11 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         let mut arg_cnt = 0;
-        root_struct!(last_value, GcObj::NIL, gc);
+        root!(last_value, GcObj::NIL, gc);
         while let Some((var, val)) = Self::pairs(&mut forms, gc) {
             match (var.get(), val) {
                 (Object::Symbol(var), Some(val)) => {
-                    rootx!(val, gc);
+                    root!(val, gc);
                     let val = self.eval_form(val, gc)?;
                     rebind!(val, gc);
                     self.var_set(var, val, gc);
@@ -611,7 +605,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         form: &Rt<GcObj<'a>>,
         gc: &'gc mut Arena,
     ) -> Result<()> {
-        root_struct!(let_bindings, Vec::new(), gc);
+        root!(let_bindings, Vec::new(), gc);
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
@@ -663,7 +657,7 @@ impl<'id, 'brw> Interpreter<'id, 'brw> {
         mut forms: ElemStreamIter<'_, '_>,
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
-        root_struct!(last, GcObj::NIL, gc);
+        root!(last, GcObj::NIL, gc);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form, gc)?;
             rebind!(value, gc);
@@ -678,7 +672,6 @@ defsubr!(eval);
 #[cfg(test)]
 mod test {
     use crate::core::{arena::RootSet, env::intern, object::IntoObject};
-    use crate::root;
 
     use super::*;
 
@@ -686,22 +679,15 @@ mod test {
     where
         T: IntoObject<'ob>,
     {
-        root_struct!(env, Environment::default(), arena);
+        root!(env, Environment::default(), arena);
         generativity::make_guard!(guard);
         let mut owner = RootOwner::new(guard);
-        // Work around for not having GAT's. Currently the IntoObject trait
-        // must define the lifetime in it's defintion, but that means that the
-        // lifetime in this generic function of the object has to last for the
-        // entire function body.
-        let expect: GcObj = {
-            let arena: &'ob mut Arena = unsafe { &mut *(arena as *mut Arena) };
-            expect.into_obj(arena).copy_as_obj()
-        };
-        root!(expect, arena);
         println!("Test String: {}", test_str);
         let obj = crate::reader::read(test_str, arena).unwrap().0;
         root!(obj, arena);
         let compare = eval(obj, None, env, arena, &mut owner).unwrap();
+        rebind!(compare, arena);
+        let expect: GcObj = expect.into_obj(arena).copy_as_obj();
         assert_eq!(compare, expect);
     }
 

@@ -8,8 +8,9 @@ use super::super::{
     env::{Environment, Symbol},
     object::{GcObj, RawObj},
 };
-use super::{Arena, RootSet, Trace};
-use crate::core::object::{Gc, WithLifetime};
+use super::{Arena, Block, RootSet, Trace};
+use crate::core::error::{Error, Type};
+use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::HashMap;
 
 use qcell::{LCell, LCellOwner};
@@ -120,7 +121,7 @@ impl<'id, T> Root<'id, T> {
     /// # SAFETY
     ///
     /// This method is only safe to call if Root never moves and drops in stack
-    /// order. Use the [`root_struct`] macro.
+    /// order. Use the [`root`] macro.
     pub(crate) unsafe fn new(obj: T) -> Self
     where
         T: 'static,
@@ -167,22 +168,18 @@ impl<'id, T> Root<'id, T> {
 }
 
 #[macro_export]
-macro_rules! root_struct {
-    ($ident:ident, $value:expr, $arena:ident) => {
-        let mut $ident = unsafe { $crate::core::arena::Root::new($value) };
-        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
-        let $ident = root.set(&mut $ident);
-    };
-}
-
-#[macro_export]
-macro_rules! rootx {
+macro_rules! root {
     ($ident:ident, $arena:ident) => {
         let mut x = unsafe {
             $crate::core::arena::Rt::new($crate::core::object::WithLifetime::with_lifetime($ident))
         };
         let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
         let $ident = root.set_rt(&mut x);
+    };
+    ($ident:ident, $value:expr, $arena:ident) => {
+        let mut $ident = unsafe { $crate::core::arena::Root::new($value) };
+        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
+        let $ident = root.set(&mut $ident);
     };
 }
 
@@ -231,6 +228,13 @@ impl<T> Rt<[T]> {
     {
         unsafe { &*(addr_of!(self.inner) as *const [U]) }
     }
+
+    pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Arena) -> &'ob [U]
+    where
+        T: WithLifetime<'ob, Out = U>,
+    {
+        unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
+    }
 }
 
 impl<T> Rt<Gc<T>> {
@@ -240,13 +244,13 @@ impl<T> Rt<Gc<T>> {
     {
         let _: Gc<U> = self.inner.try_into()?;
         // SAFETY: This is safe because all Gc types have the same representation
-        unsafe { Ok(&*addr_of!(self).cast::<Rt<Gc<U>>>()) }
+        unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
     }
 
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
         match self.inner.as_obj().get() {
             crate::core::object::Object::Cons(_) => unsafe {
-                &*addr_of!(self).cast::<Rt<Gc<&Cons>>>()
+                &*(self as *const Self).cast::<Rt<Gc<&Cons>>>()
             },
             x => panic!("attempt to convert type that was not cons: {x}"),
         }
@@ -262,6 +266,38 @@ impl<T> Rt<Gc<T>> {
     }
 }
 
+impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
+        match value.inner.get() {
+            Object::Symbol(sym) => Ok(sym),
+            x => Err(Error::from_object(Type::Symbol, x).into()),
+        }
+    }
+}
+
+impl From<&Rt<GcObj<'_>>> for Option<()> {
+    fn from(value: &Rt<GcObj<'_>>) -> Self {
+        match value.inner.get() {
+            Object::Nil => None,
+            _ => Some(()),
+        }
+    }
+}
+
+impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
+    type Out = Object<'ob>;
+
+    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+        unsafe { self.inner.with_lifetime() }
+    }
+
+    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+        unimplemented!()
+    }
+}
+
 impl Rt<&Cons> {
     pub(crate) fn set(&mut self, item: &Cons) {
         self.inner = unsafe { std::mem::transmute(item) }
@@ -272,7 +308,7 @@ impl<T, U> Deref for Rt<(T, U)> {
     type Target = (Rt<T>, Rt<U>);
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*addr_of!(self).cast::<(Rt<T>, Rt<U>)>() }
+        unsafe { &*(self as *const Self).cast::<(Rt<T>, Rt<U>)>() }
     }
 }
 
@@ -286,7 +322,7 @@ impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*addr_of!(self).cast::<Option<Rt<T>>>() }
+        unsafe { &*(self as *const Self).cast::<Option<Rt<T>>>() }
     }
 }
 

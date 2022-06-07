@@ -24,7 +24,7 @@ impl<T: Trace> Trace for Option<T> {
 mod test {
     use super::super::super::arena::{Arena, RootSet};
     use super::*;
-    use crate::root_struct;
+    use crate::root;
 
     struct Foo(u64);
     impl Trace for Foo {
@@ -40,7 +40,7 @@ mod test {
         let foo = Foo(7);
         assert_eq!(roots.root_structs.borrow().len(), 0);
         {
-            root_struct!(_root, foo, gc);
+            root!(_root, foo, gc);
             assert_eq!(roots.root_structs.borrow().len(), 1);
         }
         assert_eq!(roots.root_structs.borrow().len(), 0);

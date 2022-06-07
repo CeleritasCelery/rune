@@ -4,8 +4,8 @@ use super::super::{
     error::Error,
 };
 use super::GcObj;
-use crate::opcode::CodeVec;
 use crate::opcode::OpCode;
+use crate::{core::arena::Rt, opcode::CodeVec};
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -106,7 +106,7 @@ impl<'ob> Default for LispFn<'ob> {
 }
 
 pub(crate) type BuiltInFn = for<'ob, 'id> fn(
-    &[GcObj<'ob>],
+    &[Rt<GcObj<'static>>],
     &Root<'id, crate::core::env::Environment>,
     &'ob mut Arena,
     &mut RootOwner<'id>,
@@ -127,15 +127,17 @@ impl SubrFn {
         arena: &'gc mut Arena,
         owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'gc>> {
-        let slice = {
+        {
             let args = args.borrow_mut(owner, arena);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt)?;
             for _ in 0..fill_args {
                 args.push(GcObj::NIL);
             }
-            unsafe { std::mem::transmute::<&[GcObj], &[GcObj<'gc>]>(args.as_gc().as_ref(arena)) }
-        };
+        }
+        let slice = args.borrow(owner);
+        // TODO: Fix this when the root type is updated
+        let slice = unsafe { &*(slice.as_slice() as *const [Rt<GcObj>]) };
         (self.subr)(slice, env, arena, owner)
     }
 }

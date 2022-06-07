@@ -6,10 +6,8 @@ use std::mem::transmute;
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
-mod root;
 mod root_struct;
 mod trace;
-pub(crate) use root::*;
 pub(crate) use root_struct::*;
 pub(crate) use trace::*;
 
@@ -389,22 +387,11 @@ macro_rules! rebind {
 
 #[cfg(test)]
 mod test {
-    use crate::root_struct;
+    use crate::root;
 
     use super::*;
-    fn take_mut_arena(_: &mut Arena) {}
     fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> GcObj<'ob> {
         arena.add("invariant")
-    }
-
-    #[test]
-    fn test_stack_root() {
-        let roots = &RootSet::default();
-        let mut arena = Arena::new(roots);
-        let obj: GcObj = arena.add("foo");
-        crate::root!(obj, arena);
-        take_mut_arena(&mut arena);
-        assert_eq!(obj, "foo");
     }
 
     #[test]
@@ -424,7 +411,7 @@ mod test {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
         let vec1: Vec<&'static Cons> = Vec::new();
-        root_struct!(vec, vec1, arena);
+        root!(vec, vec1, arena);
         arena.garbage_collect(false);
         let cons: Gc<&Cons> = list!["foo", 1, false, "end"; arena];
         vec.borrow_mut(owner, arena).push(&*cons);
