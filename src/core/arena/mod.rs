@@ -6,9 +6,9 @@ use std::mem::transmute;
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
-mod root_struct;
+mod root;
 mod trace;
-pub(crate) use root_struct::*;
+pub(crate) use root::*;
 pub(crate) use trace::*;
 
 /// A global store of all gc roots. This struct should be passed to the [Arena]
