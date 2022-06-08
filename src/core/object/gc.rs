@@ -150,8 +150,12 @@ impl<'ob> RawInto<&'ob Cons> for *const Cons {
 
 pub(crate) trait IntoObject<'ob> {
     type Out;
+
     fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out>;
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out;
+
+    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+        unimplemented!()
+    }
 }
 
 impl<'ob> IntoObject<'ob> for Gc<Object<'ob>> {
@@ -159,10 +163,6 @@ impl<'ob> IntoObject<'ob> for Gc<Object<'ob>> {
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         unsafe { Self::transmute(self) }
-    }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
     }
 }
 
@@ -174,10 +174,6 @@ impl<'ob> IntoObject<'ob> for Option<Gc<Object<'ob>>> {
             Some(x) => unsafe { x.with_lifetime() },
             None => GcObj::NIL,
         }
-    }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
     }
 }
 
@@ -215,10 +211,6 @@ impl<'ob> IntoObject<'ob> for bool {
             true => Gc::from_tag(Tag::True),
             false => Gc::from_tag(Tag::Nil),
         }
-    }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
     }
 }
 

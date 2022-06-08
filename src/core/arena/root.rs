@@ -244,10 +244,6 @@ impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         unsafe { self.inner.with_lifetime() }
     }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
-    }
 }
 
 impl<'ob> IntoObject<'ob> for &Root<'_, GcObj<'static>> {
@@ -256,10 +252,6 @@ impl<'ob> IntoObject<'ob> for &Root<'_, GcObj<'static>> {
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         unsafe { self.inner.with_lifetime() }
     }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
-    }
 }
 
 impl<'ob> IntoObject<'ob> for &mut Root<'_, GcObj<'static>> {
@@ -267,10 +259,6 @@ impl<'ob> IntoObject<'ob> for &mut Root<'_, GcObj<'static>> {
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         unsafe { self.inner.with_lifetime() }
-    }
-
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
-        unimplemented!()
     }
 }
 
