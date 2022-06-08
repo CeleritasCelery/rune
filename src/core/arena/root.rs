@@ -13,8 +13,6 @@ use crate::core::error::{Error, Type};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::HashMap;
 
-use qcell::{LCell, LCellOwner};
-
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
@@ -55,131 +53,67 @@ impl Trace for &Cons {
     }
 }
 
-pub(crate) struct RootStruct<'rt> {
-    set: bool,
+pub(crate) struct Root<'rt, T> {
+    data: *mut T,
     root_set: &'rt RootSet,
 }
 
-impl<'rt> Debug for RootStruct<'rt> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GcRoot")
-            .field("root_set", &self.root_set)
-            .finish()
-    }
-}
-
-impl<'rt> Drop for RootStruct<'rt> {
-    fn drop(&mut self) {
-        assert!(self.set, "RootStruct was dropped while still not set");
-        self.root_set.root_structs.borrow_mut().pop();
-    }
-}
-
-impl<'rt> RootStruct<'rt> {
+impl<'rt, T> Root<'rt, T> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
         Self {
-            set: false,
+            data: std::ptr::null_mut(),
             root_set,
         }
     }
 
-    pub(crate) fn set<'a, 'id, T: Trace + 'static>(
-        &mut self,
-        root: &'a mut Root<'id, T>,
-    ) -> &'a Root<'id, T> {
-        assert!(!self.set, "RootStruct should only be set once");
-        let dyn_ptr = root.deref() as &dyn Trace as *const dyn Trace;
-        self.set = true;
-        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
-        unsafe { &*dyn_ptr.cast::<Root<'id, T>>() }
+    pub(crate) fn deref(&self) -> &Rt<T> {
+        assert!(!self.data.is_null(), "Attempt to deref uninitialzed Root");
+        unsafe { &*self.data.cast::<Rt<T>>() }
     }
 
-    pub(crate) fn set_rt<T: Trace>(&mut self, root: &mut Rt<T>) -> &Rt<T> {
-        assert!(!self.set, "RootStruct should only be set once");
-        let dyn_ptr = &root.inner as &dyn Trace as *const dyn Trace;
-        let dyn_ptr: *const (dyn Trace + 'static) = unsafe { std::mem::transmute(dyn_ptr) };
-        self.set = true;
-        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
-        unsafe { &*dyn_ptr.cast::<Rt<T>>() }
+    pub(crate) fn deref_mut<'a, 'd>(&'a mut self, _: &'a Arena<'d>) -> &'a mut Rt<T> {
+        unsafe { self.deref_mut_unchecked() }
+    }
+
+    pub(crate) unsafe fn deref_mut_unchecked(&mut self) -> &mut Rt<T> {
+        assert!(
+            !self.data.is_null(),
+            "Attempt to mutably deref uninitialzed Root"
+        );
+        &mut *self.data.cast::<Rt<T>>()
     }
 }
 
-pub(crate) struct RootOwner<'id>(LCellOwner<'id>);
-
-impl<'id> RootOwner<'id> {
-    pub(crate) fn new(guard: generativity::Guard<'id>) -> Self {
-        Self(LCellOwner::new(guard))
+impl<'b, T: Trace + 'static> Root<'b, T> {
+    pub(crate) unsafe fn init<'a>(&'a mut self, data: &'a mut T) -> &'a mut Self {
+        assert!(self.data.is_null(), "Attempt to reinit Root");
+        let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
+        self.data = dyn_ptr.cast::<T>();
+        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
+        self
     }
 }
 
-#[repr(transparent)]
-pub(crate) struct Root<'id, T: ?Sized>(LCell<'id, Rt<T>>);
-
-impl<'id, T> Root<'id, T> {
-    /// Create a new Root
-    ///
-    /// # SAFETY
-    ///
-    /// This method is only safe to call if Root never moves and drops in stack
-    /// order. Use the [`root`] macro.
-    pub(crate) unsafe fn new(obj: T) -> Self
-    where
-        T: 'static,
-    {
-        Root(LCell::new(Rt::new(obj)))
-    }
-
-    pub(super) fn deref(&mut self) -> &T {
-        // SAFETY: if we have a &mut self, we know that there are no other
-        // owners, so we don't need RootOwner. And we can cast since LCell is
-        // repr(transparent)
-        // TODO: LCell is not transparent yet. See https://github.com/uazu/qcell/pull/36
-        unsafe { &*addr_of!(self.0).cast::<T>() }
-    }
-
-    pub(crate) fn borrow<'a>(&'a self, owner: &'a RootOwner<'id>) -> &'a Rt<T> {
-        owner.0.ro(&self.0)
-    }
-
-    pub(crate) fn borrow_mut<'a>(
-        &'a self,
-        owner: &'a mut RootOwner<'id>,
-        _: &'a Arena,
-    ) -> &'a mut Rt<T> {
-        owner.0.rw(&self.0)
-    }
-
-    pub(crate) fn borrow_mut2<'a, U>(
-        gc1: &'a Self,
-        gc2: &'a Root<'id, U>,
-        owner: &'a mut RootOwner<'id>,
-        _: &'a Arena,
-    ) -> (&'a mut Rt<T>, &'a mut Rt<U>) {
-        owner.0.rw2(&gc1.0, &gc2.0)
-    }
-
-    pub(crate) unsafe fn borrow_mut_unchecked2<'a, U>(
-        gc1: &'a Self,
-        gc2: &'a Root<'id, U>,
-        owner: &'a mut RootOwner<'id>,
-    ) -> (&'a mut Rt<T>, &'a mut Rt<U>) {
-        owner.0.rw2(&gc1.0, &gc2.0)
+impl<T> Drop for Root<'_, T> {
+    fn drop(&mut self) {
+        assert!(!self.data.is_null(), "Root was dropped while still not set");
+        self.root_set.root_structs.borrow_mut().pop();
     }
 }
 
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $arena:ident) => {
-        let mut x = unsafe {
-            $crate::core::arena::Rt::new($crate::core::object::WithLifetime::with_lifetime($ident))
-        };
-        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
-        let $ident = root.set_rt(&mut x);
+        let mut rooted = unsafe { $crate::core::object::WithLifetime::with_lifetime($ident) };
+        let mut root = unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
+        let $ident = unsafe { root.init(&mut rooted).deref() };
     };
     ($ident:ident, $value:expr, $arena:ident) => {
-        let mut $ident = unsafe { $crate::core::arena::Root::new($value) };
-        let mut root = unsafe { $crate::core::arena::RootStruct::new($arena.get_root_set()) };
-        let $ident = root.set(&mut $ident);
+        // TODO: see if this can be removed
+        #[allow(unused_unsafe)]
+        let mut rooted = unsafe { $value };
+        let mut root = unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
+        let $ident = unsafe { root.init(&mut rooted) };
     };
 }
 
@@ -202,10 +136,6 @@ impl<T: PartialEq> PartialEq<T> for Rt<T> {
 }
 
 impl<T> Rt<T> {
-    pub(crate) unsafe fn new(data: T) -> Self {
-        Rt { inner: data }
-    }
-
     pub(crate) fn bind<'ob, U>(&self, _: &'ob Arena) -> U
     where
         T: WithLifetime<'ob, Out = U> + Copy,

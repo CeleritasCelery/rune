@@ -81,11 +81,10 @@ mod reader;
 mod search;
 
 use crate::core::{
-    arena::{Arena, Root, RootOwner, RootSet},
+    arena::{Arena, Root, RootSet},
     env::{intern, Environment},
     object::GcObj,
 };
-
 use std::env;
 use std::io::{self, Write};
 
@@ -95,7 +94,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
+fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -122,7 +121,7 @@ fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
         };
 
         root!(obj, arena);
-        match interpreter::eval(obj, None, env, arena, owner) {
+        match interpreter::eval(obj, None, env, arena) {
             Ok(val) => println!("{val}"),
             Err(e) => println!("Error: {e}"),
         }
@@ -130,10 +129,10 @@ fn repl<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
     }
 }
 
-fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &mut Arena) {
+fn load(env: &mut Root<Environment>, arena: &mut Arena) {
     use crate::core::env::sym;
     {
-        let env = env.borrow_mut(owner, arena);
+        let env = env.deref_mut(arena);
         Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
         Environment::set_var(env, &sym::LEXICAL_BINDING, GcObj::TRUE);
         Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
@@ -145,7 +144,7 @@ fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 
     let mut buffer = String::from(
         r#"
-(progn 
+(progn
     (load "lisp/byte-run.el")
     (load "lisp/backquote.el")
     (load "lisp/subr.el")
@@ -153,7 +152,7 @@ fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 )"#,
     );
 
-    match crate::lread::load_internal(&buffer, arena, env, owner) {
+    match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{val}"),
         Err(e) => {
             println!("Error: {e}");
@@ -170,7 +169,7 @@ fn load<'id>(env: &Root<'id, Environment>, owner: &mut RootOwner<'id>, arena: &m
 )"#,
     );
 
-    match crate::lread::load_internal(&buffer, arena, env, owner) {
+    match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{val}"),
         Err(e) => println!("Error: {e}"),
     }
@@ -180,8 +179,6 @@ fn main() {
     let roots = &RootSet::default();
     let arena = &mut Arena::new(roots);
     root!(env, Environment::default(), arena);
-    generativity::make_guard!(guard);
-    let mut owner = RootOwner::new(guard);
     let mut arg_load = false;
     let mut arg_repl = false;
 
@@ -198,10 +195,10 @@ fn main() {
     }
 
     if arg_load {
-        load(env, &mut owner, arena);
+        load(env, arena);
     }
 
     if arg_repl {
-        repl(env, &mut owner, arena);
+        repl(env, arena);
     }
 }

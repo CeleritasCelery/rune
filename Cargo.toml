@@ -10,10 +10,8 @@ edition = "2021"
 anyhow = "1.0.55"
 float-cmp = "0.9.0"
 fn_macros = { version = "0.1.0", path = "fn_macros" }
-generativity = "1.0.0"
 lazy_static = "1.4.0"
 paste = "1.0.5"
-qcell = { version = "0.5.1", features = ["generativity"]}
 rustc-hash = "1.1.0"
 sptr = "0.3.1"
 streaming-iterator = "0.1.5"

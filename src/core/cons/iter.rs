@@ -1,5 +1,7 @@
+use crate::core::arena::Root;
+
 use super::super::{
-    arena::{Arena, Root, RootOwner, Rt},
+    arena::{Arena, Rt},
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };
@@ -108,23 +110,17 @@ impl<'ob> Iterator for ConsIter<'ob> {
     }
 }
 
-pub(crate) struct ElemStreamIter<'rt, 'id> {
-    elem: Option<&'rt Root<'id, GcObj<'static>>>,
-    cons: Option<&'rt Root<'id, &'static Cons>>,
-    owner: RootOwner<'id>,
+pub(crate) struct ElemStreamIter<'rt, 'rs> {
+    elem: Option<&'rt mut Root<'rs, GcObj<'static>>>,
+    cons: Option<&'rt mut Root<'rs, &'static Cons>>,
 }
 
-impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
+impl<'rt, 'rs> ElemStreamIter<'rt, 'rs> {
     pub(crate) fn new(
-        elem: &'rt Option<Root<'id, GcObj<'static>>>,
-        cons: &'rt Option<Root<'id, &'static Cons>>,
-        owner: RootOwner<'id>,
+        elem: Option<&'rt mut Root<'rs, GcObj<'static>>>,
+        cons: Option<&'rt mut Root<'rs, &'static Cons>>,
     ) -> Self {
-        Self {
-            elem: elem.as_ref(),
-            cons: cons.as_ref(),
-            owner,
-        }
+        Self { elem, cons }
     }
 }
 
@@ -132,12 +128,13 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
     type Item = Rt<GcObj<'static>>;
 
     fn advance(&mut self) {
-        if let Some(cons) = &self.cons {
+        if let Some(cons) = &mut self.cons {
             let elem = self
                 .elem
-                .as_ref()
+                .as_mut()
                 .expect("Element should never be None while Cons is Some");
-            let (cons, elem) = unsafe { Root::borrow_mut_unchecked2(cons, elem, &mut self.owner) };
+            let cons = unsafe { cons.deref_mut_unchecked() };
+            let elem = unsafe { elem.deref_mut_unchecked() };
             let car = unsafe { cons.bind_unchecked().__car() };
             elem.set(car);
             match unsafe { cons.bind_unchecked().__cdr().get() } {
@@ -155,7 +152,7 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        self.elem.as_ref().map(|x| x.borrow(&self.owner))
+        self.elem.as_ref().map(|x| x.deref())
     }
 }
 
@@ -168,34 +165,28 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 #[macro_export]
 macro_rules! element_iter {
     ($ident:ident, $obj:expr, $gc:ident) => {
+        #[allow(unused_assignments)]
         let mut root_elem = None;
+        #[allow(unused_assignments)]
         let mut root_cons = None;
-        generativity::make_guard!(guard);
-        let owner = RootOwner::new(guard);
-
-        let mut gc_root_elem = unsafe { $crate::core::arena::RootStruct::new($gc.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::core::arena::RootStruct::new($gc.get_root_set()) };
-        #[allow(unused_qualifications)]
+        let mut gc_root_elem = unsafe { $crate::core::arena::Root::new($gc.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::core::arena::Root::new($gc.get_root_set()) };
         let list: $crate::core::object::Gc<$crate::core::object::List> = $obj.try_into()?;
-        if let $crate::core::object::List::Cons(cons) = list.get() {
-            root_elem = unsafe {
-                Some($crate::core::arena::Root::new(
-                    $crate::core::object::GcObj::NIL,
-                ))
-            };
-            root_cons = unsafe {
-                Some($crate::core::arena::Root::new(
-                    $crate::core::object::WithLifetime::with_lifetime(cons),
-                ))
-            };
-            gc_root_elem.set(root_elem.as_mut().unwrap());
-            gc_root_cons.set(root_cons.as_mut().unwrap());
+        #[allow(unused_mut)]
+        let mut $ident = if let $crate::core::object::List::Cons(cons) = list.get() {
+            unsafe {
+                root_elem = Some($crate::core::object::GcObj::NIL);
+                root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
+                $crate::core::cons::ElemStreamIter::new(
+                    Some(gc_root_elem.init(root_elem.as_mut().unwrap())),
+                    Some(gc_root_cons.init(root_cons.as_mut().unwrap())),
+                )
+            }
         } else {
             std::mem::forget(gc_root_elem);
             std::mem::forget(gc_root_cons);
-        }
-        #[allow(unused_mut)]
-        let mut $ident = $crate::core::cons::ElemStreamIter::new(&root_elem, &root_cons, owner);
+            $crate::core::cons::ElemStreamIter::new(None, None)
+        };
     };
 }
 

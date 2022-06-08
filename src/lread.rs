@@ -1,5 +1,5 @@
+use crate::core::arena::Rt;
 use crate::core::arena::{Arena, Root};
-use crate::core::arena::{RootOwner, Rt};
 use crate::core::env::Environment;
 use crate::core::env::Symbol;
 use crate::core::error::{Error, Type};
@@ -55,11 +55,10 @@ pub(crate) fn read_from_string<'ob>(
     Ok(cons!(obj, new_pos as i64; arena))
 }
 
-pub(crate) fn load_internal<'ob, 'id>(
+pub(crate) fn load_internal<'ob>(
     contents: &str,
     arena: &'ob mut Arena,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -77,7 +76,7 @@ pub(crate) fn load_internal<'ob, 'id>(
             println!("-----READ END-----");
         }
         root!(obj, arena);
-        interpreter::eval(obj, None, env, arena, owner)?;
+        interpreter::eval(obj, None, env, arena)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
@@ -85,19 +84,18 @@ pub(crate) fn load_internal<'ob, 'id>(
 
 #[defun]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn load<'ob, 'id>(
+pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: &Rt<GcObj>,
     arena: &'ob mut Arena,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
 ) -> Result<bool> {
     let file = match file.bind(arena).get() {
         Object::String(s) => s,
         x => bail!(Error::from_object(Type::Symbol, x)),
     };
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
-        Ok(content) => load_internal(&content, arena, env, owner),
+        Ok(content) => load_internal(&content, arena, env),
         Err(e) => match noerror.bind(arena).get() {
             Object::Nil => Err(e),
             _ => Ok(false),
@@ -125,19 +123,11 @@ mod test {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
         root!(env, Environment::default(), arena);
-        generativity::make_guard!(guard);
-        let mut owner = RootOwner::new(guard);
-        load_internal(
-            "(setq foo 1) (setq bar 2) (setq baz 1.5)",
-            arena,
-            env,
-            &mut owner,
-        )
-        .unwrap();
+        load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
 
         let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
         root!(obj, arena);
-        let val = interpreter::eval(obj, None, env, arena, &mut owner).unwrap();
+        let val = interpreter::eval(obj, None, env, arena).unwrap();
         assert_eq!(val, 4.5);
     }
 }

@@ -1,7 +1,7 @@
 use crate::core::arena::Rt;
 use crate::core::env::Environment;
 use crate::core::{
-    arena::{Arena, Root, RootOwner},
+    arena::{Arena, Root},
     cons::Cons,
     env::Symbol,
     error::{Error, Type},
@@ -28,29 +28,28 @@ pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String
 }
 
 impl<'ob> Rt<Gc<Function<'ob>>> {
-    pub(crate) fn call<'gc, 'id>(
+    pub(crate) fn call<'gc>(
         &self,
-        args: &Root<'id, Vec<GcObj<'static>>>,
-        env: &Root<'id, Environment>,
+        args: &mut Root<Vec<GcObj<'static>>>,
+        env: &mut Root<Environment>,
         arena: &'gc mut Arena,
-        owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'gc>> {
         use crate::interpreter;
         match self.bind(arena).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
-            Function::SubrFn(f) => (*f).call(args, env, arena, owner),
+            Function::SubrFn(f) => (*f).call(args, env, arena),
             Function::Cons(cons) => {
                 root!(cons, arena);
-                interpreter::call(cons, args, env, arena, owner)
+                interpreter::call(cons, args, env, arena)
             }
             Function::Symbol(s) => {
                 if let Some(resolved) = s.resolve_callable(arena) {
                     match resolved.get() {
                         Callable::LispFn(_) => todo!("call lisp functions"),
-                        Callable::SubrFn(f) => (*f).call(args, env, arena, owner),
+                        Callable::SubrFn(f) => (*f).call(args, env, arena),
                         Callable::Cons(cons) => {
                             root!(cons, arena);
-                            interpreter::call(cons, args, env, arena, owner)
+                            interpreter::call(cons, args, env, arena)
                         }
                     }
                 } else {
@@ -62,11 +61,10 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
 }
 
 #[defun]
-pub(crate) fn mapcar<'ob, 'id>(
+pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     gc: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(gc).get() {
@@ -77,25 +75,24 @@ pub(crate) fn mapcar<'ob, 'id>(
             element_iter!(iter, cons, gc);
             while let Some(x) = iter.next() {
                 let obj = x.bind(gc);
-                call_arg.borrow_mut(owner, gc).push(obj);
-                let output = function.call(call_arg, env, gc, owner)?;
+                call_arg.deref_mut(gc).push(obj);
+                let output = function.call(call_arg, env, gc)?;
                 rebind!(output, gc);
-                outputs.borrow_mut(owner, gc).push(output);
-                call_arg.borrow_mut(owner, gc).clear();
+                outputs.deref_mut(gc).push(output);
+                call_arg.deref_mut(gc).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.borrow(owner).as_gc().as_ref(gc);
+            let slice = outputs.deref().as_gc().as_ref(gc);
             Ok(slice_into_list(slice, None, gc))
         }
     }
 }
 
 #[defun]
-pub(crate) fn mapc<'ob, 'id>(
+pub(crate) fn mapc<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     gc: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(gc).get() {
@@ -104,9 +101,9 @@ pub(crate) fn mapc<'ob, 'id>(
             root!(call_arg, Vec::new(), gc);
             element_iter!(elements, cons, gc);
             while let Some(elem) = elements.next() {
-                call_arg.borrow_mut(owner, gc).push(elem.bind(gc));
-                function.call(call_arg, env, gc, owner)?;
-                call_arg.borrow_mut(owner, gc).clear();
+                call_arg.deref_mut(gc).push(elem.bind(gc));
+                function.call(call_arg, env, gc)?;
+                call_arg.deref_mut(gc).clear();
             }
             Ok(sequence.bind(gc).into())
         }
@@ -264,12 +261,11 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 }
 
 #[defun]
-fn require<'ob, 'id>(
+fn require<'ob>(
     feature: Symbol,
     filename: &Rt<GcObj>,
     noerror: &Rt<GcObj>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
@@ -284,7 +280,7 @@ fn require<'ob, 'id>(
     root!(file, arena);
     let no_error = Gc::NIL;
     root!(no_error, arena);
-    match crate::lread::load(file, no_error, arena, env, owner) {
+    match crate::lread::load(file, no_error, arena, env) {
         Ok(_) => Ok(feature.into()),
         Err(e) => match noerror.bind(arena).get() {
             Object::Nil => Err(e),

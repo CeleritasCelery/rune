@@ -359,7 +359,6 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use super::super::arena::RootOwner;
     use super::super::arena::{Arena, Root, RootSet};
     use super::super::object::{GcObj, IntoObject, LispFn};
     use crate::core::env::Environment;
@@ -409,11 +408,10 @@ mod test {
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn dummy<'ob, 'id>(
+    fn dummy<'ob>(
         vars: &[Rt<GcObj<'static>>],
-        _map: &Root<'id, Environment>,
+        _map: &mut Root<Environment>,
         arena: &'ob mut Arena,
-        _owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'ob>> {
         Ok(vars[0].bind(arena))
     }

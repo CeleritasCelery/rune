@@ -67,9 +67,8 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         pub(crate) fn #func_name<'ob, 'id>(
             args: &[crate::core::arena::Rt<crate::core::object::GcObj<'static>>],
-            env: &crate::core::arena::Root<'id, crate::core::env::Environment>,
+            env: &mut crate::core::arena::Root<crate::core::env::Environment>,
             arena: &'ob mut crate::core::arena::Arena,
-            owner: &mut crate::core::arena::RootOwner<'id>,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
             #subr_call
         }
@@ -88,7 +87,6 @@ fn get_arg_conversion(args: Vec<(ArgType, syn::Type)>) -> Vec<proc_macro2::Token
         .map(|(idx, (arg_type, ty))| {match arg_type {
             ArgType::Arena(_) => quote! {arena},
             ArgType::Env => quote! {env},
-            ArgType::Owner => quote! {owner},
             ArgType::Rt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx]},
                 Gc::Other => quote! {crate::core::arena::Rt::try_as(&args[#idx])?},
@@ -209,7 +207,6 @@ enum Gc {
 enum ArgType {
     Arena(bool),
     Env,
-    Owner,
     Rt(Gc),
     Gc(Gc),
     Slice(Gc),
@@ -219,7 +216,7 @@ enum ArgType {
 
 impl ArgType {
     fn is_supporting_arg(&self) -> bool {
-        matches!(self, ArgType::Arena(_) | ArgType::Owner | ArgType::Env)
+        matches!(self, ArgType::Arena(_) | ArgType::Env)
     }
 }
 
@@ -288,7 +285,6 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
         }) => match elem.as_ref() {
             syn::Type::Path(path) => match get_path_ident_name(path).as_str() {
                 "Arena" => ArgType::Arena(mutability.is_some()),
-                "RootOwner" => ArgType::Owner,
                 "Root" => ArgType::Env,
                 "Rt" => get_rt_type(path)?,
                 _ => ArgType::Other,
@@ -417,16 +413,14 @@ mod test {
         test_args(quote! {x: &[Rt<Gc<T>>]}, &[ArgType::SliceRt(Gc::Other)]);
         test_args(quote! {x: &mut Arena}, &[ArgType::Arena(MUT)]);
         test_args(quote! {x: &Arena}, &[ArgType::Arena(false)]);
-        test_args(quote! {x: &Root<'id, Environment>}, &[ArgType::Env]);
-        test_args(quote! {x: &RootOwner}, &[ArgType::Owner]);
+        test_args(quote! {x: &Root< Environment>}, &[ArgType::Env]);
         test_args(
-            quote! {x: u8, s: &[Rt<GcObj>], y: &Arena, z: &Root<'id, Environment>, u: &RootOwner},
+            quote! {x: u8, s: &[Rt<GcObj>], y: &Arena, z: &Root< Environment>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),
                 ArgType::Arena(false),
                 ArgType::Env,
-                ArgType::Owner,
             ],
         );
     }

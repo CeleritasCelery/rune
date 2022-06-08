@@ -2,7 +2,7 @@ use fn_macros::defun;
 
 use crate::core::arena::Rt;
 use crate::core::{
-    arena::{Arena, IntoRoot, Root, RootOwner},
+    arena::{Arena, IntoRoot, Root},
     object::{Function, Gc, GcObj},
 };
 use crate::root;
@@ -12,11 +12,10 @@ use crate::core::env::Environment;
 use anyhow::Result;
 
 #[defun]
-pub(crate) fn apply<'ob, 'id>(
+pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
@@ -33,20 +32,19 @@ pub(crate) fn apply<'ob, 'id>(
         }
     };
     root!(args, args.into_root(), arena);
-    function.call(args, env, arena, owner)
+    function.call(args, env, arena)
 }
 
 #[defun]
-pub(crate) fn funcall<'ob, 'id>(
+pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, arena).to_vec().into_root() };
     root!(arg_list, arguments, arena);
-    function.call(arg_list, env, arena, owner)
+    function.call(arg_list, env, arena)
 }
 
 defsubr!(apply, funcall);

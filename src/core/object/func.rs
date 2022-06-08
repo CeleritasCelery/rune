@@ -1,5 +1,4 @@
 use super::super::{
-    arena::RootOwner,
     arena::{Arena, Block, Root},
     error::Error,
 };
@@ -105,11 +104,10 @@ impl<'ob> Default for LispFn<'ob> {
     }
 }
 
-pub(crate) type BuiltInFn = for<'ob, 'id> fn(
+pub(crate) type BuiltInFn = for<'ob> fn(
     &[Rt<GcObj<'static>>],
-    &Root<'id, crate::core::env::Environment>,
+    &mut Root<crate::core::env::Environment>,
     &'ob mut Arena,
-    &mut RootOwner<'id>,
 ) -> Result<GcObj<'ob>>;
 
 pub(crate) struct SubrFn {
@@ -120,25 +118,24 @@ pub(crate) struct SubrFn {
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 impl SubrFn {
-    pub(crate) fn call<'gc, 'id>(
+    pub(crate) fn call<'gc>(
         &self,
-        args: &Root<'id, Vec<GcObj<'static>>>,
-        env: &Root<'id, crate::core::env::Environment>,
+        args: &mut Root<Vec<GcObj<'static>>>,
+        env: &mut Root<crate::core::env::Environment>,
         arena: &'gc mut Arena,
-        owner: &mut RootOwner<'id>,
     ) -> Result<GcObj<'gc>> {
         {
-            let args = args.borrow_mut(owner, arena);
+            let args = args.deref_mut(arena);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt)?;
             for _ in 0..fill_args {
                 args.push(GcObj::NIL);
             }
         }
-        let slice = args.borrow(owner);
+        let slice = args.deref();
         // TODO: Fix this when the root type is updated
         let slice = unsafe { &*(slice.as_slice() as *const [Rt<GcObj>]) };
-        (self.subr)(slice, env, arena, owner)
+        (self.subr)(slice, env, arena)
     }
 }
 

@@ -2,12 +2,11 @@ use std::cell::RefCell;
 use std::sync::Mutex;
 
 use crate::core::{
-    arena::{Arena, Root, RootOwner},
+    arena::{Arena, Root},
     cons::Cons,
     env::{Environment, Symbol, INTERNED_SYMBOLS},
     object::{Function, Gc, GcObj, Object},
 };
-
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
@@ -45,39 +44,36 @@ pub(crate) fn defalias(
 }
 
 #[defun]
-pub(crate) fn set<'ob, 'id>(
+pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: GcObj<'ob>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     gc: &Arena,
 ) -> GcObj<'ob> {
-    Environment::set_var(env.borrow_mut(owner, gc), place, newlet);
+    Environment::set_var(env.deref_mut(gc), place, newlet);
     newlet
 }
 
 #[defun]
-pub(crate) fn put<'ob, 'id>(
+pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: GcObj<'ob>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     gc: &Arena,
 ) -> GcObj<'ob> {
-    Environment::set_prop(env.borrow_mut(owner, gc), symbol, propname, value);
+    Environment::set_prop(env.deref_mut(gc), symbol, propname, value);
     value
 }
 
 #[defun]
-pub(crate) fn get<'ob, 'id>(
+pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    env: &Root<'id, Environment>,
-    owner: &RootOwner<'id>,
+    env: &Root<Environment>,
     arena: &'ob Arena,
 ) -> GcObj<'ob> {
-    match env.borrow(owner).props().get(&symbol) {
+    match env.deref().props().get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => arena.bind(element.1.bind(arena)),
             None => GcObj::NIL,
@@ -105,13 +101,12 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> GcObj<'ob>
 }
 
 #[defun]
-pub(crate) fn symbol_value<'ob, 'id>(
+pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
-    env: &Root<'id, Environment>,
-    owner: &RootOwner<'id>,
+    env: &Root<Environment>,
     arena: &'ob Arena,
 ) -> Option<GcObj<'ob>> {
-    env.borrow(owner).vars().get(&symbol).map(|x| x.bind(arena))
+    env.deref().vars().get(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]
@@ -136,21 +131,13 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 }
 
 #[defun]
-pub(crate) fn boundp<'id>(
-    symbol: Symbol,
-    env: &Root<'id, Environment>,
-    owner: &RootOwner<'id>,
-) -> bool {
-    env.borrow(owner).vars().get(&symbol).is_some()
+pub(crate) fn boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
+    env.deref().vars().get(&symbol).is_some()
 }
 
 #[defun]
-pub(crate) fn default_boundp<'id>(
-    symbol: Symbol,
-    env: &Root<'id, Environment>,
-    owner: &RootOwner<'id>,
-) -> bool {
-    env.borrow(owner).vars().get(&symbol).is_some()
+pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
+    env.deref().vars().get(&symbol).is_some()
 }
 
 #[defun]
@@ -199,16 +186,15 @@ pub(crate) fn atom(object: GcObj) -> bool {
 }
 
 #[defun]
-pub(crate) fn defvar<'ob, 'id>(
+pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
-    env: &Root<'id, Environment>,
-    owner: &mut RootOwner<'id>,
+    env: &mut Root<Environment>,
     gc: &Arena,
 ) -> GcObj<'ob> {
     let value = initvalue.unwrap_or_default();
-    set(symbol, value, env, owner, gc)
+    set(symbol, value, env, gc)
 }
 
 #[defun]

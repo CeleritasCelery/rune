@@ -406,15 +406,13 @@ mod test {
 
     #[test]
     fn garbage_collect() {
-        generativity::make_guard!(guard);
-        let owner = &mut RootOwner::new(guard);
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
         let vec1: Vec<&'static Cons> = Vec::new();
         root!(vec, vec1, arena);
         arena.garbage_collect(false);
         let cons: Gc<&Cons> = list!["foo", 1, false, "end"; arena];
-        vec.borrow_mut(owner, arena).push(&*cons);
+        vec.deref_mut(arena).push(&*cons);
         arena.garbage_collect(false);
     }
 }
