@@ -132,10 +132,7 @@ impl SubrFn {
                 args.push(GcObj::NIL);
             }
         }
-        let slice = args.deref();
-        // TODO: Fix this when the root type is updated
-        let slice = unsafe { &*(slice.as_slice() as *const [Rt<GcObj>]) };
-        (self.subr)(slice, env, arena)
+        (self.subr)(args, env, arena)
     }
 }
 

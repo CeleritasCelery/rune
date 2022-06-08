@@ -231,7 +231,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 let obj = closure.cdr(gc);
                 element_iter!(forms, obj, gc);
                 // TODO: remove this temp vector
-                let args = args.deref().iter().map(|x| x.bind(gc)).collect();
+                let args = args.iter().map(|x| x.bind(gc)).collect();
                 let vars = self.bind_variables(&mut forms, args, gc)?;
                 root!(vars, vars.into_root(), gc);
                 let mut call_frame = Interpreter {
@@ -267,7 +267,6 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                     args.deref_mut(gc).push(result);
                 }
                 if crate::debug::debug_enabled() {
-                    let args = args.deref();
                     println!("({name} {args:?})");
                 }
                 gc.garbage_collect(false);
@@ -298,7 +297,6 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                             args.deref_mut(gc).push(result);
                         }
                         if crate::debug::debug_enabled() {
-                            let args = args.deref();
                             println!("({name} {args:?})");
                         }
                         self.call_closure(form, args, gc)
@@ -319,12 +317,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 if cons.car(gc) == &sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
-                        let env: Vec<_> = self
-                            .vars
-                            .deref()
-                            .iter()
-                            .map(|x| (&*x.bind(gc)).into())
-                            .collect();
+                        let env: Vec<_> = self.vars.iter().map(|x| (&*x.bind(gc)).into()).collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end = cons!(env, cons.cdr(gc); gc);
@@ -356,7 +349,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 returned_form.deref_mut(gc).set(value);
             }
         }
-        match &**returned_form.deref() {
+        match &***returned_form {
             Some(x) => Ok(gc.bind(x.bind(gc))),
             None => Err(Error::ArgCount(prog_num, count).into()),
         }
@@ -427,7 +420,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
             rebind!(result, gc);
             last.deref_mut(gc).set(result);
         }
-        Ok(gc.bind(last.deref().bind(gc)))
+        Ok(gc.bind(last.bind(gc)))
     }
 
     fn eval_or<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
@@ -486,7 +479,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         if arg_cnt < 2 {
             Err(Error::ArgCount(2, 0).into())
         } else {
-            Ok(last_value.deref().bind(gc))
+            Ok(last_value.bind(gc))
         }
     }
 
@@ -506,12 +499,12 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         if sym.name.starts_with(':') {
             Ok(sym.into())
         } else {
-            let mut iter = self.vars.deref().iter().rev();
+            let mut iter = self.vars.iter().rev();
             match iter
                 .find_map(|cons| (cons.bind(gc).car(gc) == sym).then(|| cons.bind(gc).cdr(gc)))
             {
                 Some(value) => Ok(value),
-                None => match self.env.deref().vars().get(sym) {
+                None => match self.env.vars().get(sym) {
                     Some(v) => Ok(v.bind(gc)),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },
@@ -520,7 +513,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
     }
 
     fn var_set<'a>(&mut self, name: Symbol, new_value: GcObj<'a>, gc: &'a Arena) {
-        let mut iter = self.vars.deref().iter().rev();
+        let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.bind(gc).car(gc) == name)) {
             Some(value) => {
                 value.bind(gc).set_cdr(new_value);
@@ -548,7 +541,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
     ) -> Result<GcObj<'gc>> {
         let form = form.bind(gc);
         element_iter!(iter, form, gc);
-        let prev_len = self.vars.deref().len();
+        let prev_len = self.vars.len();
         match iter.next() {
             // (let x ...)
             Some(x) => {

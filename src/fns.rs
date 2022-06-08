@@ -82,7 +82,7 @@ pub(crate) fn mapcar<'ob>(
                 call_arg.deref_mut(gc).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.deref().as_gc().as_ref(gc);
+            let slice = outputs.as_slice().as_ref(gc);
             Ok(slice_into_list(slice, None, gc))
         }
     }

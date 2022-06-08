@@ -67,12 +67,12 @@ impl<'ob> TryFrom<GcObj<'ob>> for bool {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Option<bool> {
+impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
     type Error = Error;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
         match obj.get() {
             Object::Nil => Ok(None),
-            _ => Ok(Some(true)),
+            _ => Ok(Some(())),
         }
     }
 }

@@ -152,7 +152,7 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        self.elem.as_ref().map(|x| x.deref())
+        self.elem.as_ref().map(AsRef::as_ref)
     }
 }
 
@@ -178,8 +178,14 @@ macro_rules! element_iter {
                 root_elem = Some($crate::core::object::GcObj::NIL);
                 root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
                 $crate::core::cons::ElemStreamIter::new(
-                    Some(gc_root_elem.init(root_elem.as_mut().unwrap())),
-                    Some(gc_root_cons.init(root_cons.as_mut().unwrap())),
+                    Some($crate::core::arena::Root::init(
+                        &mut gc_root_elem,
+                        root_elem.as_mut().unwrap(),
+                    )),
+                    Some($crate::core::arena::Root::init(
+                        &mut gc_root_cons,
+                        root_cons.as_mut().unwrap(),
+                    )),
                 )
             }
         } else {

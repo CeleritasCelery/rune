@@ -53,6 +53,12 @@ impl Trace for &Cons {
     }
 }
 
+/// Represents a Root object T. The purpose of this type is we cannot have
+/// mutable references to the inner data, because the garbage collector will
+/// need to trace it. This type will only give us a [`Rt`] (rooted mutable reference) when we
+/// are also holding a reference to the Arena, meaning that garbage collection
+/// cannot happen.
+#[derive(Debug)]
 pub(crate) struct Root<'rt, T> {
     data: *mut T,
     root_set: &'rt RootSet,
@@ -66,12 +72,7 @@ impl<'rt, T> Root<'rt, T> {
         }
     }
 
-    pub(crate) fn deref(&self) -> &Rt<T> {
-        assert!(!self.data.is_null(), "Attempt to deref uninitialzed Root");
-        unsafe { &*self.data.cast::<Rt<T>>() }
-    }
-
-    pub(crate) fn deref_mut<'a, 'd>(&'a mut self, _: &'a Arena<'d>) -> &'a mut Rt<T> {
+    pub(crate) fn deref_mut<'a>(&'a mut self, _gc: &'a Arena) -> &'a mut Rt<T> {
         unsafe { self.deref_mut_unchecked() }
     }
 
@@ -84,13 +85,28 @@ impl<'rt, T> Root<'rt, T> {
     }
 }
 
-impl<'b, T: Trace + 'static> Root<'b, T> {
-    pub(crate) unsafe fn init<'a>(&'a mut self, data: &'a mut T) -> &'a mut Self {
-        assert!(self.data.is_null(), "Attempt to reinit Root");
-        let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
-        self.data = dyn_ptr.cast::<T>();
-        self.root_set.root_structs.borrow_mut().push(dyn_ptr);
+impl<T> Deref for Root<'_, T> {
+    type Target = Rt<T>;
+
+    fn deref(&self) -> &Self::Target {
+        assert!(!self.data.is_null(), "Attempt to deref uninitialzed Root");
+        unsafe { &*self.data.cast::<Rt<T>>() }
+    }
+}
+
+impl<T> AsRef<Rt<T>> for Root<'_, T> {
+    fn as_ref(&self) -> &Rt<T> {
         self
+    }
+}
+
+impl<T: Trace + 'static> Root<'_, T> {
+    pub(crate) unsafe fn init<'a>(root: &'a mut Self, data: &'a mut T) -> &'a mut Self {
+        assert!(root.data.is_null(), "Attempt to reinit Root");
+        let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
+        root.data = dyn_ptr.cast::<T>();
+        root.root_set.root_structs.borrow_mut().push(dyn_ptr);
+        root
     }
 }
 
@@ -105,19 +121,24 @@ impl<T> Drop for Root<'_, T> {
 macro_rules! root {
     ($ident:ident, $arena:ident) => {
         let mut rooted = unsafe { $crate::core::object::WithLifetime::with_lifetime($ident) };
-        let mut root = unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
-        let $ident = unsafe { root.init(&mut rooted).deref() };
+        let mut root: $crate::core::arena::Root<_> =
+            unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
+        let $ident = unsafe { $crate::core::arena::Root::init(&mut root, &mut rooted) };
     };
     ($ident:ident, $value:expr, $arena:ident) => {
         // TODO: see if this can be removed
         #[allow(unused_unsafe)]
         let mut rooted = unsafe { $value };
-        let mut root = unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
-        let $ident = unsafe { root.init(&mut rooted) };
+        let mut root: $crate::core::arena::Root<_> =
+            unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
+        let $ident = unsafe { $crate::core::arena::Root::init(&mut root, &mut rooted) };
     };
 }
 
-// TODO: see if this type can be made local
+/// A Rooted type. If a type is wrapped in Rt, it is known to be rooted and hold
+/// items passed garbage collection. This type is never used as an owned type,
+/// only a reference. This ensures that underlying data does not move. In order
+/// to access the inner data, the [`bind`] method must be used.
 #[repr(transparent)]
 pub(crate) struct Rt<T: ?Sized> {
     inner: T,
@@ -177,6 +198,7 @@ impl<T> Rt<Gc<T>> {
         unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
     }
 
+    // TODO: see if this can be removed
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
         match self.inner.as_obj().get() {
             crate::core::object::Object::Cons(_) => unsafe {
@@ -217,6 +239,30 @@ impl From<&Rt<GcObj<'_>>> for Option<()> {
 }
 
 impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
+    type Out = Object<'ob>;
+
+    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+        unsafe { self.inner.with_lifetime() }
+    }
+
+    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+        unimplemented!()
+    }
+}
+
+impl<'ob> IntoObject<'ob> for &Root<'_, GcObj<'static>> {
+    type Out = Object<'ob>;
+
+    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+        unsafe { self.inner.with_lifetime() }
+    }
+
+    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+        unimplemented!()
+    }
+}
+
+impl<'ob> IntoObject<'ob> for &mut Root<'_, GcObj<'static>> {
     type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
@@ -305,19 +351,9 @@ impl<T, I: SliceIndex<[T]>> IndexMut<I> for Rt<[T]> {
 }
 
 impl<T> Rt<Vec<T>> {
-    pub(crate) fn as_slice(&self) -> &[Rt<T>] {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.inner.as_slice() as *const [T] as *const [Rt<T>]) }
-    }
-
-    pub(crate) fn as_gc(&self) -> &Rt<[T]> {
+    pub(crate) fn as_slice(&self) -> &Rt<[T]> {
         // SAFETY: `Gc<T>` has the same memory layout as `T`.
         unsafe { &*(self.inner.as_slice() as *const [T] as *const Rt<[T]>) }
-    }
-
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [Rt<T>] {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Rt<T>]) }
     }
 
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
@@ -340,13 +376,15 @@ impl<T> Deref for Rt<Vec<T>> {
     type Target = [Rt<T>];
 
     fn deref(&self) -> &Self::Target {
-        self.as_slice()
+        // SAFETY: `Gc<T>` has the same memory layout as `T`.
+        unsafe { &*(self.inner.as_slice() as *const [T] as *const [Rt<T>]) }
     }
 }
 
 impl<T> DerefMut for Rt<Vec<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.as_mut_slice()
+        // SAFETY: `Gc<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Rt<T>]) }
     }
 }
 
