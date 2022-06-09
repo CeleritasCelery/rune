@@ -58,9 +58,9 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         let cons = cons.bind(gc);
-        let forms = cons.cdr(gc);
+        let forms = cons.cdr();
         root!(forms, gc);
-        match cons.car(gc).get() {
+        match cons.car().get() {
             Object::Symbol(sym) => symbol_match! {sym;
                 QUOTE => self.quote(forms.bind(gc), gc),
                 LET => self.eval_let(forms, true, gc),
@@ -226,9 +226,9 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         let closure = closure.bind(gc);
-        match closure.car(gc).get() {
+        match closure.car().get() {
             Object::Symbol(sym) if sym == &sym::CLOSURE => {
-                let obj = closure.cdr(gc);
+                let obj = closure.cdr();
                 element_iter!(forms, obj, gc);
                 // TODO: remove this temp vector
                 let args = args.iter().map(|x| x.bind(gc)).collect();
@@ -272,7 +272,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 gc.garbage_collect(false);
                 (*func).call(args, self.env, gc)
             }
-            Callable::Cons(form) => match form.try_as_macro(gc) {
+            Callable::Cons(form) => match form.try_as_macro() {
                 Ok(mcro) => {
                     let macro_args = obj.bind(gc).as_list(gc)?.collect::<Result<Vec<_>>>()?;
                     if crate::debug::debug_enabled() {
@@ -285,7 +285,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                     root!(value, gc);
                     self.eval_form(value, gc)
                 }
-                Err(_) => match form.car(gc).get() {
+                Err(_) => match form.car().get() {
                     Object::Symbol(sym) if sym == &sym::CLOSURE => {
                         let obj = obj.bind(gc);
                         element_iter!(iter, obj, gc);
@@ -314,13 +314,13 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         let form = forms.next().unwrap()?;
         match form.get() {
             Object::Cons(cons) => {
-                if cons.car(gc) == &sym::LAMBDA {
+                if cons.car() == &sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self.vars.iter().map(|x| (&*x.bind(gc)).into()).collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
-                    let end = cons!(env, cons.cdr(gc); gc);
+                    let end = cons!(env, cons.cdr(); gc);
                     let closure: GcObj = cons!(&sym::CLOSURE, end; gc);
                     Ok(gc.bind(closure))
                 } else {
@@ -372,7 +372,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
     ) -> Result<GcObj<'gc>> {
         let first: Gc<List> = obj.bind(gc).try_into()?;
         let condition = match first.get() {
-            List::Cons(cons) => cons.car(gc),
+            List::Cons(cons) => cons.car(),
             List::Nil => bail!(Error::ArgCount(1, 0)),
         };
         root!(condition, gc);
@@ -500,9 +500,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter
-                .find_map(|cons| (cons.bind(gc).car(gc) == sym).then(|| cons.bind(gc).cdr(gc)))
-            {
+            match iter.find_map(|cons| (cons.bind(gc).car() == sym).then(|| cons.bind(gc).cdr())) {
                 Some(value) => Ok(value),
                 None => match self.env.vars().get(sym) {
                     Some(v) => Ok(v.bind(gc)),
@@ -514,7 +512,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
 
     fn var_set<'a>(&mut self, name: Symbol, new_value: GcObj<'a>, gc: &'a Arena) {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.bind(gc).car(gc) == name)) {
+        match iter.find(|cons| (cons.bind(gc).car() == name)) {
             Some(value) => {
                 value.bind(gc).set_cdr(new_value);
             }
@@ -622,7 +620,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         cons: &Rt<Gc<&'a Cons>>,
         gc: &'gc mut Arena,
     ) -> Result<&'gc Cons> {
-        element_iter!(iter, cons.bind(gc).cdr(gc), gc);
+        element_iter!(iter, gc.bind(cons.bind(gc).cdr()), gc);
         let value = match iter.next() {
             // (let ((x y)))
             Some(x) => self.eval_form(x, gc)?,
@@ -632,7 +630,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         // (let ((x y z ..)))
         ensure!(iter.is_empty(), "Let binding forms can only have 1 value");
         rebind!(value, gc);
-        let name: Symbol = cons.bind(gc).car(gc).try_into()?;
+        let name: Symbol = cons.bind(gc).car().try_into()?;
         let val = cons!(name, value; gc);
         Ok(val.try_into().unwrap())
     }

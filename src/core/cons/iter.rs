@@ -15,14 +15,12 @@ use super::Cons;
 #[derive(Clone)]
 pub(crate) struct ElemIter<'ob> {
     cons: Option<&'ob Cons>,
-    arena: &'ob Arena<'ob>,
 }
 
 impl<'brw> Cons {
     pub(crate) fn elements<'new>(&'brw self, arena: &'new Arena) -> ElemIter<'new> {
         ElemIter {
             cons: Some(self.constrain_lifetime(arena)),
-            arena,
         }
     }
 }
@@ -30,19 +28,15 @@ impl<'brw> Cons {
 impl<'ob> Gc<List<'ob>> {
     pub(crate) fn elements(self, arena: &'ob Arena) -> ElemIter<'ob> {
         match self.get() {
-            List::Nil => ElemIter { cons: None, arena },
+            List::Nil => ElemIter { cons: None },
             List::Cons(cons) => ElemIter {
                 cons: Some(cons.constrain_lifetime(arena)),
-                arena,
             },
         }
     }
 
-    pub(crate) fn conses(self, arena: &'ob Arena) -> ConsIter<'ob> {
-        ConsIter {
-            list: self.get(),
-            arena,
-        }
+    pub(crate) fn conses(self) -> ConsIter<'ob> {
+        ConsIter { list: self.get() }
     }
 }
 
@@ -52,12 +46,12 @@ impl<'ob> Iterator for ElemIter<'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cons {
             Some(cons) => {
-                (*self).cons = match cons.cdr(self.arena).get() {
+                (*self).cons = match cons.cdr().get() {
                     Object::Cons(next) => Some(next),
                     Object::Nil => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Some(Ok(cons.car(self.arena)))
+                Some(Ok(cons.car()))
             }
             None => None,
         }
@@ -69,12 +63,9 @@ impl<'ob> GcObj<'ob> {
         match self.get() {
             Object::Cons(cons) => {
                 let cons = cons.constrain_lifetime(arena);
-                Ok(ElemIter {
-                    cons: Some(cons),
-                    arena,
-                })
+                Ok(ElemIter { cons: Some(cons) })
             }
-            Object::Nil => Ok(ElemIter { cons: None, arena }),
+            Object::Nil => Ok(ElemIter { cons: None }),
             _ => Err(Error::from_object(Type::List, self).into()),
         }
     }
@@ -89,7 +80,6 @@ impl<'ob> ElemIter<'ob> {
 #[derive(Clone)]
 pub(crate) struct ConsIter<'ob> {
     list: List<'ob>,
-    arena: &'ob Arena<'ob>,
 }
 
 impl<'ob> Iterator for ConsIter<'ob> {
@@ -99,7 +89,7 @@ impl<'ob> Iterator for ConsIter<'ob> {
         match self.list {
             List::Nil => None,
             List::Cons(cons) => {
-                self.list = match cons.cdr(self.arena).get() {
+                self.list = match cons.cdr().get() {
                     Object::Cons(next) => List::Cons(next),
                     Object::Nil => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
@@ -135,9 +125,9 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
                 .expect("Element should never be None while Cons is Some");
             let cons = unsafe { cons.deref_mut_unchecked() };
             let elem = unsafe { elem.deref_mut_unchecked() };
-            let car = unsafe { cons.bind_unchecked().__car() };
+            let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
-            match unsafe { cons.bind_unchecked().__cdr().get() } {
+            match unsafe { cons.bind_unchecked().cdr().get() } {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
@@ -219,10 +209,10 @@ mod test {
         let arena = &Arena::new(roots);
         let cons: GcObj = list![1, 2, 3, 4; arena];
         let list: Gc<List> = cons.try_into().unwrap();
-        let iter = list.conses(arena);
+        let iter = list.conses();
         let expects = vec![1, 2, 3, 4];
         for (act, expect) in iter.zip(expects.into_iter()) {
-            let actual = act.unwrap().car(arena);
+            let actual = act.unwrap().car();
             assert_eq!(actual, expect);
         }
     }

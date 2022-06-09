@@ -111,9 +111,9 @@ pub(crate) fn mapc<'ob>(
 }
 
 #[defun]
-pub(crate) fn nreverse<'ob>(seq: Gc<List<'ob>>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
+pub(crate) fn nreverse<'ob>(seq: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     let mut prev = GcObj::NIL;
-    for tail in seq.conses(arena) {
+    for tail in seq.conses() {
         let tail = tail?;
         tail.set_cdr(prev);
         prev = tail.into();
@@ -155,7 +155,7 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, arena: &'ob Arena
             .elements(arena)
             .find(|x| match x {
                 Ok(elem) => match elem.get() {
-                    Object::Cons(cons) => data::eq(key, cons.car(arena)),
+                    Object::Cons(cons) => data::eq(key, cons.car()),
                     _ => false,
                 },
                 _ => false,
@@ -172,17 +172,16 @@ fn delete_from_list<'ob>(
     elt: GcObj<'ob>,
     list: Gc<List<'ob>>,
     eq_fn: EqFunc,
-    arena: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
-    for tail in list.conses(arena) {
+    for tail in list.conses() {
         let tail = tail?;
-        if eq_fn(tail.car(arena), elt) {
+        if eq_fn(tail.car(), elt) {
             if let Some(prev_tail) = &mut prev {
-                prev_tail.set_cdr(tail.cdr(arena));
+                prev_tail.set_cdr(tail.cdr());
             } else {
-                head = tail.cdr(arena);
+                head = tail.cdr();
             }
         } else {
             prev = Some(tail);
@@ -192,31 +191,18 @@ fn delete_from_list<'ob>(
 }
 
 #[defun]
-pub(crate) fn delete<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    arena: &'ob Arena,
-) -> Result<GcObj<'ob>> {
-    delete_from_list(elt, list, data::equal, arena)
+pub(crate) fn delete<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    delete_from_list(elt, list, data::equal)
 }
 
 #[defun]
-pub(crate) fn delq<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    arena: &'ob Arena,
-) -> Result<GcObj<'ob>> {
-    delete_from_list(elt, list, data::eq, arena)
+pub(crate) fn delq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    delete_from_list(elt, list, data::eq)
 }
 
-fn member_of_list<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    eq_fn: EqFunc,
-    arena: &'ob Arena,
-) -> Result<GcObj<'ob>> {
-    let val = list.conses(arena).find(|x| match x {
-        Ok(obj) => eq_fn(obj.car(arena), elt),
+fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> Result<GcObj<'ob>> {
+    let val = list.conses().find(|x| match x {
+        Ok(obj) => eq_fn(obj.car(), elt),
         Err(_) => true,
     });
     match val {
@@ -227,21 +213,13 @@ fn member_of_list<'ob>(
 }
 
 #[defun]
-pub(crate) fn memq<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    arena: &'ob Arena,
-) -> Result<GcObj<'ob>> {
-    member_of_list(elt, list, data::eq, arena)
+pub(crate) fn memq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    member_of_list(elt, list, data::eq)
 }
 
 #[defun]
-pub(crate) fn member<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    arena: &'ob Arena,
-) -> Result<GcObj<'ob>> {
-    member_of_list(elt, list, data::equal, arena)
+pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    member_of_list(elt, list, data::equal)
 }
 
 #[defun]
@@ -370,12 +348,12 @@ mod test {
         let arena = &Arena::new(roots);
         {
             let list: GcObj = list![1, 2, 3, 1, 4, 1; arena];
-            let res = delq(1.into(), list.try_into().unwrap(), arena).unwrap();
+            let res = delq(1.into(), list.try_into().unwrap()).unwrap();
             assert_eq!(res, list![2, 3, 4; arena]);
         }
         {
             let list: GcObj = list![true, true, true; arena];
-            let res = delq(GcObj::TRUE, list.try_into().unwrap(), arena).unwrap();
+            let res = delq(GcObj::TRUE, list.try_into().unwrap()).unwrap();
             assert_eq!(res, GcObj::NIL);
         }
     }
@@ -386,16 +364,12 @@ mod test {
         let arena = &Arena::new(roots);
         {
             let list: GcObj = list![1, 2, 3, 4; arena];
-            let res: GcObj = nreverse(list.try_into().unwrap(), arena)
-                .unwrap()
-                .into_obj(arena);
+            let res: GcObj = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
             assert_eq!(res, list![4, 3, 2, 1; arena]);
         }
         {
             let list: GcObj = list![1; arena];
-            let res: GcObj = nreverse(list.try_into().unwrap(), arena)
-                .unwrap()
-                .into_obj(arena);
+            let res: GcObj = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
             assert_eq!(res, list![1; arena]);
         }
     }

@@ -501,7 +501,7 @@ mod test {
         let stream = quote! {
             fn car<'ob>(list: Gc<List>, arena: &'ob Arena) -> GcObj<'ob> {
                 match list.get() {
-                    List::Cons(cons) => cons.car(arena),
+                    List::Cons(cons) => cons.car(),
                     List::Nil => GcObj::NIL,
                 }
             }

@@ -5,7 +5,6 @@
 use std::cell::RefCell;
 
 use super::super::{
-    arena::Arena,
     cons::Cons,
     env::{sym, Symbol},
     error::{Error, Type},
@@ -15,12 +14,12 @@ use anyhow::Context;
 
 use super::{Callable, Gc, Object};
 
-impl<'ob> Cons {
-    pub(crate) fn try_as_macro(&self, gc: &'ob Arena) -> anyhow::Result<Gc<Callable<'ob>>> {
-        let car = self.car(gc);
+impl Cons {
+    pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
+        let car = self.car();
         match car.get() {
             Object::Symbol(sym) if sym == &sym::MACRO => {
-                let cdr = self.cdr(gc);
+                let cdr = self.cdr();
                 let x = cdr.try_into()?;
                 Ok(x)
             }
@@ -129,16 +128,15 @@ mod test {
 
     use super::*;
 
-    fn wrapper(args: &[GcObj], arena: &Arena) -> Result<i64, Error> {
+    fn wrapper(args: &[GcObj]) -> Result<i64, Error> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,
-            arena,
         ))
     }
 
-    fn inner(arg0: Option<i64>, arg1: &Cons, arena: &Arena) -> i64 {
-        let x: i64 = arg1.car(arena).try_into().unwrap();
+    fn inner(arg0: Option<i64>, arg1: &Cons) -> i64 {
+        let x: i64 = arg1.car().try_into().unwrap();
         arg0.unwrap() + x
     }
 
@@ -150,7 +148,7 @@ mod test {
         // SAFETY: We don't call garbage collect so references are valid
         let obj1 = unsafe { arena.add(Cons::new(1.into(), 2.into())) };
         let vec = vec![obj0, obj1];
-        let res = wrapper(vec.as_slice(), arena);
+        let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());
     }
 }
