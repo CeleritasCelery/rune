@@ -1,7 +1,7 @@
 use darling::FromMeta;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, quote_spanned};
-use syn::{parse_macro_input, spanned::Spanned, Error};
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, Error};
 
 #[proc_macro_attribute]
 pub fn defun(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
@@ -19,6 +19,17 @@ pub fn defun(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
 }
 
 fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
+    if let Some(required) = spec.required {
+        let actual_required = function
+            .args
+            .iter()
+            .filter(|x| x.is_positional_arg())
+            .count();
+        if required as usize > actual_required {
+            return quote! { compile_error!("Spec `required` is larger then the number of arguments provided"); };
+        }
+    }
+
     let body = function.body;
     let subr = function.name;
     let subr_name = subr.to_string();
@@ -28,12 +39,8 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
     let (required, optional, rest) = get_call_signature(&function.args, spec.required);
     let arg_conversion = get_arg_conversion(function.args);
-    let returns_result = match function.output {
-        syn::Type::Path(path) => "Result" == get_path_ident_name(&path),
-        _ => false,
-    };
 
-    let err = if returns_result {
+    let err = if function.fallible {
         quote! {?}
     } else {
         quote! {}
@@ -80,11 +87,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     }
 }
 
-fn get_arg_conversion(args: Vec<(ArgType, syn::Type)>) -> Vec<proc_macro2::TokenStream> {
-    let is_mut = args.iter().any(|(ty, _)| matches!(ty, ArgType::Arena(MUT)));
+fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
+    let is_mut = args.iter().any(|ty| matches!(ty, ArgType::Arena(MUT)));
     args.iter()
         .enumerate()
-        .map(|(idx, (arg_type, ty))| {match arg_type {
+        .map(|(idx, arg_type)| match arg_type {
             ArgType::Arena(_) => quote! {arena},
             ArgType::Env => quote! {env},
             ArgType::Rt(gc) => match gc {
@@ -92,107 +99,68 @@ fn get_arg_conversion(args: Vec<(ArgType, syn::Type)>) -> Vec<proc_macro2::Token
                 Gc::Other => quote! {crate::core::arena::Rt::try_as(&args[#idx])?},
             },
             ArgType::Gc(gc) => {
-                if is_mut {
-                    quote_spanned! {
-                        ty.span() => compile_error!("Can't have raw Gc pointer {ty} is function with mutable Arena");
-                    }
-                } else {
-                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
-                    match gc {
-                        Gc::Obj => bind,
-                        Gc::Other => quote! { std::convert::TryFrom::try_from(#bind)? },
-                    }
-
+                let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
+                match gc {
+                    Gc::Obj => bind,
+                    Gc::Other => quote! { std::convert::TryFrom::try_from(#bind)? },
                 }
-            },
+            }
             ArgType::Slice(gc) => {
                 let bind = quote! {crate::core::arena::Rt::bind_slice(&args[#idx..], arena)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! {crate::core::object::try_from_slice(#bind)?},
                 }
+            }
+            ArgType::SliceRt(gc) => match gc {
+                Gc::Obj => quote! {&args[#idx..]},
+                Gc::Other => unreachable!(),
             },
-            ArgType::SliceRt(gc) => {
-                match gc {
-                    Gc::Obj => quote! {&args[#idx..]},
-                    Gc::Other => quote_spanned!{
-                        ty.span() => compile_error!("Converting to {ty} is unimplemented")
-                    },
-                }
-            },
-            ArgType::Other => {
+            ArgType::Other | ArgType::Option => {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
                 } else {
                     let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
                     quote! { std::convert::TryFrom::try_from(#bind)? }
                 }
-            },
-        }})
+            }
+        })
         .collect()
 }
 
-fn get_call_signature(args: &[(ArgType, syn::Type)], spec_min: Option<u16>) -> (u16, u16, bool) {
-    let min = match spec_min {
-        Some(x) => x as usize,
-        None => 0,
-    };
-
-    let args: Vec<_> = args
-        .iter()
-        .filter(|(x, _)| !x.is_supporting_arg())
-        .collect();
-
-    let rest = match args.last() {
-        Some((_, x)) => is_slice(x),
-        _ => false,
-    };
-
+fn get_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u16, bool) {
     let required = {
-        let last_req = args.iter().rposition(|(_, x)| match x {
-            syn::Type::Path(path) => "Option" != get_path_ident_name(path),
-            syn::Type::Reference(_) => !is_slice(x),
-            _ => false,
-        });
-        match last_req {
-            Some(x) => std::cmp::max(x + 1, min),
+        let actual_required = args.iter().filter(|x| x.is_required_arg()).count();
+        let spec_required = match spec_required {
+            Some(x) => x as usize,
             None => 0,
-        }
+        };
+        std::cmp::max(actual_required, spec_required)
     };
 
-    let len = args.len() - rest as usize;
-    if min > len {
-        panic!("`min` is larger then arguments provided");
-    }
+    let optional = {
+        let pos_args = args.iter().filter(|x| x.is_positional_arg()).count();
+        pos_args - required
+    };
 
-    let optional = len - required;
+    let rest = args
+        .iter()
+        .any(|x| matches!(x, ArgType::Slice(_) | ArgType::SliceRt(_)));
 
     (required as u16, optional as u16, rest)
 }
 
-fn is_slice(arg: &syn::Type) -> bool {
-    match arg {
-        syn::Type::Reference(x) => matches!(x.elem.as_ref(), syn::Type::Slice(_)),
-        _ => false,
-    }
+fn get_path_ident_name(type_path: &syn::TypePath) -> &syn::Ident {
+    &type_path.path.segments.last().unwrap().ident
 }
 
-fn get_path_ident_name(type_path: &syn::TypePath) -> String {
-    type_path.path.segments.last().unwrap().ident.to_string()
-}
-
-struct Function {
-    name: syn::Ident,
-    body: syn::Item,
-    args: Vec<(ArgType, syn::Type)>,
-    output: syn::Type,
-}
-
-impl syn::parse::Parse for Function {
-    fn parse(input: syn::parse::ParseStream) -> Result<Self, Error> {
-        let item: syn::Item = input.parse()?;
-        parse_fn(item)
-    }
+fn map_function_name(name: String) -> String {
+    name.chars()
+        .map(|c| match c {
+            '_' => '-',
+            c => c,
+        })
+        .collect()
 }
 
 const MUT: bool = true;
@@ -211,12 +179,38 @@ enum ArgType {
     Gc(Gc),
     Slice(Gc),
     SliceRt(Gc),
+    Option,
     Other,
 }
 
 impl ArgType {
-    fn is_supporting_arg(&self) -> bool {
-        matches!(self, ArgType::Arena(_) | ArgType::Env)
+    fn is_required_arg(&self) -> bool {
+        use ArgType::*;
+        matches!(self, Rt(_) | Gc(_) | Other)
+    }
+
+    fn is_positional_arg(&self) -> bool {
+        use ArgType::*;
+        matches!(self, Rt(_) | Gc(_) | Other | Option)
+    }
+
+    fn is_rest_arg(&self) -> bool {
+        use ArgType::*;
+        matches!(self, SliceRt(_) | Slice(_))
+    }
+}
+
+struct Function {
+    name: syn::Ident,
+    body: syn::Item,
+    args: Vec<ArgType>,
+    fallible: bool,
+}
+
+impl syn::parse::Parse for Function {
+    fn parse(input: syn::parse::ParseStream) -> Result<Self, Error> {
+        let item: syn::Item = input.parse()?;
+        parse_fn(item)
     }
 }
 
@@ -226,12 +220,14 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
             if sig.unsafety.is_some() {
                 Err(Error::new_spanned(sig, "lisp functions cannot be `unsafe`"))
             } else {
-                let (args, output) = parse_signature(sig)?;
+                let args = parse_signature(sig)?;
+                check_invariants(&args, sig)?;
+                let fallible = return_type_is_result(&sig.output)?;
                 Ok(Function {
                     name: sig.ident.clone(),
                     body: item,
                     args,
-                    output,
+                    fallible,
                 })
             }
         }
@@ -242,7 +238,61 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
     }
 }
 
-fn parse_signature(sig: &syn::Signature) -> Result<(Vec<(ArgType, syn::Type)>, syn::Type), Error> {
+fn check_invariants(args: &Vec<ArgType>, sig: &syn::Signature) -> Result<(), Error> {
+    let is_mut = args.iter().any(|x| matches!(x, ArgType::Arena(MUT)));
+    if is_mut {
+        let mut iter = sig.inputs.iter().zip(args.iter());
+        if let Some((arg, _)) = iter.find(|(_, ty)| matches!(ty, ArgType::Gc(_))) {
+            return Err(Error::new_spanned(
+                arg,
+                "Can't have raw Gc pointer in function with mutable Arena",
+            ));
+        }
+    }
+    let mut iter = sig.inputs.iter().zip(args.iter());
+    if let Some((arg, _)) = iter.find(|(_, ty)| matches!(ty, ArgType::SliceRt(Gc::Other))) {
+        return Err(Error::new_spanned(
+            arg,
+            "Converting an Rt slice to is unimplemented",
+        ));
+    }
+
+    for (arg, ty) in sig.inputs.iter().zip(args.iter()) {
+        if matches!(ty, ArgType::Rt(_)) {
+            if let syn::FnArg::Typed(ty) = arg {
+                if !matches!(ty.ty.as_ref(), syn::Type::Reference(_)) {
+                    return Err(Error::new_spanned(arg, "Can't take Rt by value"));
+                }
+            }
+        }
+    }
+
+    let rest_args = args.iter().filter(|x| x.is_rest_arg()).count();
+    if rest_args > 1 {
+        return Err(Error::new_spanned(
+            sig,
+            "Found duplicate argument slice in signature",
+        ));
+    }
+
+    let first_opt = args.iter().position(|x| matches!(x, ArgType::Option));
+    let last_required = args
+        .iter()
+        .rposition(|x| x.is_required_arg())
+        .unwrap_or_default();
+    if let Some(first_optional) = first_opt {
+        if last_required > first_optional {
+            let arg = sig.inputs.iter().nth(last_required).unwrap();
+            return Err(Error::new_spanned(
+                arg,
+                "Required argument is after the first optional argument",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_signature(sig: &syn::Signature) -> Result<Vec<ArgType>, Error> {
     let mut args = Vec::new();
     for input in sig.inputs.iter() {
         match input {
@@ -251,17 +301,20 @@ fn parse_signature(sig: &syn::Signature) -> Result<(Vec<(ArgType, syn::Type)>, s
             }
             syn::FnArg::Typed(pat_type) => {
                 let ty = pat_type.ty.as_ref().clone();
-                let arg = (get_arg_type(&ty)?, ty);
+                let arg = get_arg_type(&ty)?;
                 args.push(arg)
             }
         }
     }
-    Ok((args, get_signature_return_type(&sig.output)?))
+    Ok(args)
 }
 
-fn get_signature_return_type(output: &syn::ReturnType) -> Result<syn::Type, Error> {
+fn return_type_is_result(output: &syn::ReturnType) -> Result<bool, Error> {
     match output {
-        syn::ReturnType::Type(_, ty) => Ok(ty.as_ref().clone()),
+        syn::ReturnType::Type(_, ty) => match ty.as_ref() {
+            syn::Type::Path(path) => Ok(get_path_ident_name(path) == "Result"),
+            _ => Ok(false),
+        },
         syn::ReturnType::Default => Err(Error::new_spanned(
             output,
             "Lisp Function must return a value",
@@ -269,21 +322,12 @@ fn get_signature_return_type(output: &syn::ReturnType) -> Result<syn::Type, Erro
     }
 }
 
-fn map_function_name(name: String) -> String {
-    name.chars()
-        .map(|c| match c {
-            '_' => '-',
-            c => c,
-        })
-        .collect()
-}
-
 fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
     Ok(match ty {
         syn::Type::Reference(syn::TypeReference {
             elem, mutability, ..
         }) => match elem.as_ref() {
-            syn::Type::Path(path) => match get_path_ident_name(path).as_str() {
+            syn::Type::Path(path) => match get_path_ident_name(path).to_string().as_str() {
                 "Arena" => ArgType::Arena(mutability.is_some()),
                 "Root" => ArgType::Env,
                 "Rt" => get_rt_type(path)?,
@@ -297,8 +341,11 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
             _ => ArgType::Other,
         },
         syn::Type::Path(path) => {
-            if get_path_ident_name(path) == "Rt" {
+            let name = get_path_ident_name(path);
+            if name == "Rt" {
                 get_rt_type(path)?
+            } else if name == "Option" {
+                ArgType::Option
             } else {
                 get_object_type(path)
             }
@@ -384,6 +431,11 @@ mod test {
             Some(2),
             (2, 1, false),
         );
+        test_sig(
+            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Environment>, arena: &mut Arena) -> u8 {0} },
+            None,
+            (1, 0, true),
+        );
     }
 
     fn test_args(args: proc_macro2::TokenStream, expect: &[ArgType]) {
@@ -391,7 +443,7 @@ mod test {
         let function: Function = syn::parse2(stream).unwrap();
         let iter = zip(function.args, expect);
         for (cmp, exp) in iter {
-            assert_eq!(cmp.0, *exp);
+            assert_eq!(cmp, *exp);
         }
     }
 
@@ -404,18 +456,17 @@ mod test {
         test_args(quote! {x: &Rt<Gc<Object>>}, &[ArgType::Rt(Gc::Obj)]);
         test_args(quote! {x: &Rt<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
-        test_args(quote! {x: Option<u8>}, &[ArgType::Other]);
+        test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
         test_args(quote! {x: &[GcObj]}, &[ArgType::Slice(Gc::Obj)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[u8]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
-        test_args(quote! {x: &[Rt<Gc<T>>]}, &[ArgType::SliceRt(Gc::Other)]);
         test_args(quote! {x: &mut Arena}, &[ArgType::Arena(MUT)]);
         test_args(quote! {x: &Arena}, &[ArgType::Arena(false)]);
         test_args(quote! {x: &Root< Environment>}, &[ArgType::Env]);
         test_args(
-            quote! {x: u8, s: &[Rt<GcObj>], y: &Arena, z: &Root< Environment>},
+            quote! {x: u8, s: &[Rt<GcObj>], y: &Arena, z: &Root<Environment>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),
