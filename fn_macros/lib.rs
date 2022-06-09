@@ -436,6 +436,11 @@ mod test {
             None,
             (1, 0, true),
         );
+        test_sig(
+            quote! { fn foo(env: &Root<Environment>, a: &Rt<Gc<foo>>, x: Option<u8>, arena: &mut Arena, b: &[Rt<GcObj>]) -> u8 {0} },
+            None,
+            (1, 1, true),
+        );
     }
 
     fn test_args(args: proc_macro2::TokenStream, expect: &[ArgType]) {
@@ -474,6 +479,21 @@ mod test {
                 ArgType::Env,
             ],
         );
+    }
+
+    fn check_error(stream: proc_macro2::TokenStream) {
+        let function: Result<Function, _> = syn::parse2(stream);
+        assert!(function.is_err());
+    }
+
+    #[test]
+    fn test_error() {
+        check_error(quote! {fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) {}});
+        check_error(quote! {fn foo(a: GcObj, a: &mut Arena) {}});
+        check_error(quote! {fn foo(a: &[Rt<T>]) {}});
+        check_error(quote! {fn foo(a: Rt<GcObj>) {}});
+        check_error(quote! {fn foo(a: u8, b: &[GcObj], c: &[GcObj]) {}});
+        check_error(quote! {fn foo(a: u8, b: Option<u8>, c: u8) {}});
     }
 
     #[test]
