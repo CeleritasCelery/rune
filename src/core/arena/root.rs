@@ -58,10 +58,15 @@ impl Trace for &Cons {
 /// need to trace it. This type will only give us a [`Rt`] (rooted mutable reference) when we
 /// are also holding a reference to the Arena, meaning that garbage collection
 /// cannot happen.
-#[derive(Debug)]
 pub(crate) struct Root<'rt, T> {
     data: *mut T,
     root_set: &'rt RootSet,
+}
+
+impl<T: Debug> Debug for Root<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(unsafe {&*self.data}, f)
+    }
 }
 
 impl<'rt, T> Root<'rt, T> {

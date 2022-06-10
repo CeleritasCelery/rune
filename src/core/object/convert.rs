@@ -14,6 +14,7 @@ use anyhow::Context;
 
 use super::{Callable, Gc, Object};
 
+#[allow(clippy::multiple_inherent_impl)]
 impl Cons {
     pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
         match self.car().get() {
