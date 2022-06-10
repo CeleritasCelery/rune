@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::ptr::addr_of;
 use std::slice::SliceIndex;
@@ -58,22 +59,26 @@ impl Trace for &Cons {
 /// need to trace it. This type will only give us a [`Rt`] (rooted mutable reference) when we
 /// are also holding a reference to the Arena, meaning that garbage collection
 /// cannot happen.
-pub(crate) struct Root<'rt, T> {
+pub(crate) struct Root<'rt, 'a, T> {
     data: *mut T,
     root_set: &'rt RootSet,
+    // This lifetime parameter ensures that functions like mem::swap cannot be
+    // called in a way that would lead to memory unsafety
+    safety: PhantomData<&'a ()>,
 }
 
-impl<T: Debug> Debug for Root<'_, T> {
+impl<T: Debug> Debug for Root<'_, '_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(unsafe {&*self.data}, f)
     }
 }
 
-impl<'rt, T> Root<'rt, T> {
+impl<'rt, T> Root<'rt, '_, T> {
     pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
         Self {
             data: std::ptr::null_mut(),
             root_set,
+            safety: PhantomData,
         }
     }
 
@@ -90,7 +95,7 @@ impl<'rt, T> Root<'rt, T> {
     }
 }
 
-impl<T> Deref for Root<'_, T> {
+impl<T> Deref for Root<'_, '_, T> {
     type Target = Rt<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -99,23 +104,24 @@ impl<T> Deref for Root<'_, T> {
     }
 }
 
-impl<T> AsRef<Rt<T>> for Root<'_, T> {
+impl<T> AsRef<Rt<T>> for Root<'_, '_, T> {
     fn as_ref(&self) -> &Rt<T> {
         self
     }
 }
 
-impl<T: Trace + 'static> Root<'_, T> {
-    pub(crate) unsafe fn init<'a>(root: &'a mut Self, data: &'a mut T) -> &'a mut Self {
+impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
+    pub(crate) unsafe fn init<'a>(root: &'a mut Self, data: &'a mut T) -> &'a mut Root<'rt, 'a, T> {
         assert!(root.data.is_null(), "Attempt to reinit Root");
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
         root.data = dyn_ptr.cast::<T>();
         root.root_set.root_structs.borrow_mut().push(dyn_ptr);
-        root
+        // We need the safety lifetime to match the borrow
+        std::mem::transmute::<&mut Root<'rt, '_, T>, &mut Root<'rt, 'a, T>>(root)
     }
 }
 
-impl<T> Drop for Root<'_, T> {
+impl<T> Drop for Root<'_, '_, T> {
     fn drop(&mut self) {
         assert!(!self.data.is_null(), "Root was dropped while still not set");
         self.root_set.root_structs.borrow_mut().pop();
@@ -265,7 +271,7 @@ impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for &Root<'_, GcObj<'static>> {
+impl<'ob> IntoObject<'ob> for &Root<'_, '_, GcObj<'static>> {
     type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
@@ -273,7 +279,7 @@ impl<'ob> IntoObject<'ob> for &Root<'_, GcObj<'static>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for &mut Root<'_, GcObj<'static>> {
+impl<'ob> IntoObject<'ob> for &mut Root<'_, '_, GcObj<'static>> {
     type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {

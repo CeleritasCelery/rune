@@ -101,14 +101,14 @@ impl<'ob> Iterator for ConsIter<'ob> {
 }
 
 pub(crate) struct ElemStreamIter<'rt, 'rs> {
-    elem: Option<&'rt mut Root<'rs, GcObj<'static>>>,
-    cons: Option<&'rt mut Root<'rs, &'static Cons>>,
+    elem: Option<&'rt mut Root<'rs, 'rt, GcObj<'static>>>,
+    cons: Option<&'rt mut Root<'rs, 'rt, &'static Cons>>,
 }
 
 impl<'rt, 'rs> ElemStreamIter<'rt, 'rs> {
     pub(crate) fn new(
-        elem: Option<&'rt mut Root<'rs, GcObj<'static>>>,
-        cons: Option<&'rt mut Root<'rs, &'static Cons>>,
+        elem: Option<&'rt mut Root<'rs, 'rt, GcObj<'static>>>,
+        cons: Option<&'rt mut Root<'rs, 'rt, &'static Cons>>,
     ) -> Self {
         Self { elem, cons }
     }

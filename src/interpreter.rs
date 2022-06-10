@@ -10,9 +10,9 @@ use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
-struct Interpreter<'id, 'id2, 'brw> {
-    vars: &'brw mut Root<'id, Vec<&'static Cons>>,
-    env: &'brw mut Root<'id2, Environment>,
+struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
+    vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
+    env: &'brw mut Root<'_2, '_4, Environment>,
 }
 
 #[defun]
@@ -40,7 +40,7 @@ pub(crate) fn call<'gc>(
     frame.call_closure(form, args, name, gc)
 }
 
-impl<'brw> Interpreter<'_, '_, 'brw> {
+impl Interpreter<'_, '_, '_, '_, '_> {
     fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = rt.bind(gc);
         match obj.get() {
