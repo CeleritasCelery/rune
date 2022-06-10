@@ -86,7 +86,7 @@ pub(crate) fn load_internal<'ob>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
-    noerror: &Rt<GcObj>,
+    noerror: Option<()>,
     arena: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
@@ -96,9 +96,9 @@ pub(crate) fn load<'ob>(
     };
     match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
         Ok(content) => load_internal(&content, arena, env),
-        Err(e) => match noerror.bind(arena).get() {
-            Object::Nil => Err(e),
-            _ => Ok(false),
+        Err(e) => match noerror {
+            Some(()) => Ok(false),
+            None => Err(e),
         },
     }
 }

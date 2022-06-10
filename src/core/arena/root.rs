@@ -229,6 +229,20 @@ impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
     }
 }
 
+impl TryFrom<&Rt<GcObj<'_>>> for Option<&Rt<Gc<&String>>> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
+        match value.inner.get() {
+            Object::Nil => Ok(None),
+            Object::String(_) => Ok(Some(unsafe {
+                &*(value as *const Rt<GcObj>).cast::<Rt<Gc<&String>>>()
+            })),
+            x => Err(Error::from_object(Type::String, x).into()),
+        }
+    }
+}
+
 impl From<&Rt<GcObj<'_>>> for Option<()> {
     fn from(value: &Rt<GcObj<'_>>) -> Self {
         match value.inner.get() {

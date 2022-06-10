@@ -16,8 +16,7 @@ use super::{Callable, Gc, Object};
 
 impl Cons {
     pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
-        let car = self.car();
-        match car.get() {
+        match self.car().get() {
             Object::Symbol(sym) if sym == &sym::MACRO => {
                 let cdr = self.cdr();
                 let x = cdr.try_into()?;

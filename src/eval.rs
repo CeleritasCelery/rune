@@ -32,7 +32,7 @@ pub(crate) fn apply<'ob>(
         }
     };
     root!(args, args.into_root(), arena);
-    function.call(args, env, arena)
+    function.call(args, env, arena, None)
 }
 
 #[defun]
@@ -44,7 +44,7 @@ pub(crate) fn funcall<'ob>(
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, arena).to_vec().into_root() };
     root!(arg_list, arguments, arena);
-    function.call(arg_list, env, arena)
+    function.call(arg_list, env, arena, None)
 }
 
 defsubr!(apply, funcall);

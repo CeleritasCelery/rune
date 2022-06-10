@@ -7,7 +7,7 @@ use super::object::Object;
 pub(crate) enum Error {
     /// The function or form has the wrong number of arguments. First number is
     /// the expected number, second is the actual.
-    ArgCount(u16, u16),
+    ArgCount(u16, u16, String),
     /// Object was the wrong type.
     Type(Type, Type, String),
 }
@@ -17,7 +17,9 @@ impl std::error::Error for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::ArgCount(exp, act) => write!(f, "Expected {exp} arg(s), found {act}"),
+            Error::ArgCount(exp, act, name) => {
+                write!(f, "Expected {exp} arg(s), found {act} for {name}")
+            }
             Error::Type(exp, act, print) => {
                 write!(f, "expected {exp:?}, found {act:?}: {print}")
             }
@@ -33,6 +35,10 @@ impl Error {
     {
         let obj = obj.into();
         Error::Type(exp, obj.get_type(), obj.to_string())
+    }
+
+    pub(crate) fn arg_count<T: AsRef<str>>(exp: u16, actual: u16, name: T) -> Error {
+        Error::ArgCount(exp, actual, name.as_ref().to_owned())
     }
 }
 

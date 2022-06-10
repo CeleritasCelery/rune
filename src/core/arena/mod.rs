@@ -333,10 +333,10 @@ impl<'ob, 'rt> Arena<'rt> {
             }
         }
 
-        let prev = objects.len();
+        // let prev = objects.len();
         objects.retain(OwnedObject::is_marked);
-        let retained = prev - objects.len();
-        println!("garbage collected: {retained}/{prev}");
+        // let retained = prev - objects.len();
+        // println!("garbage collected: {retained}/{prev}");
         objects.iter().for_each(OwnedObject::unmark);
         self.prev_obj_count = objects.len();
     }

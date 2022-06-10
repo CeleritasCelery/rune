@@ -33,6 +33,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<Environment>,
         arena: &'gc mut Arena,
+        name: Option<&str>,
     ) -> Result<GcObj<'gc>> {
         use crate::interpreter;
         match self.bind(arena).get() {
@@ -40,20 +41,20 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
             Function::SubrFn(f) => (*f).call(args, env, arena),
             Function::Cons(cons) => {
                 root!(cons, arena);
-                interpreter::call(cons, args, env, arena)
+                interpreter::call(cons, args, env, name.unwrap_or("closure"), arena)
             }
-            Function::Symbol(s) => {
-                if let Some(resolved) = s.resolve_callable(arena) {
+            Function::Symbol(sym) => {
+                if let Some(resolved) = sym.resolve_callable(arena) {
                     match resolved.get() {
                         Callable::LispFn(_) => todo!("call lisp functions"),
                         Callable::SubrFn(f) => (*f).call(args, env, arena),
                         Callable::Cons(cons) => {
                             root!(cons, arena);
-                            interpreter::call(cons, args, env, arena)
+                            interpreter::call(cons, args, env, sym.name, arena)
                         }
                     }
                 } else {
-                    Err(anyhow!("Void Function: {}", s))
+                    Err(anyhow!("Void Function: {}", sym))
                 }
             }
         }
@@ -76,7 +77,7 @@ pub(crate) fn mapcar<'ob>(
             while let Some(x) = iter.next() {
                 let obj = x.bind(gc);
                 call_arg.deref_mut(gc).push(obj);
-                let output = function.call(call_arg, env, gc)?;
+                let output = function.call(call_arg, env, gc, None)?;
                 rebind!(output, gc);
                 outputs.deref_mut(gc).push(output);
                 call_arg.deref_mut(gc).clear();
@@ -102,7 +103,7 @@ pub(crate) fn mapc<'ob>(
             element_iter!(elements, cons, gc);
             while let Some(elem) = elements.next() {
                 call_arg.deref_mut(gc).push(elem.bind(gc));
-                function.call(call_arg, env, gc)?;
+                function.call(call_arg, env, gc, None)?;
                 call_arg.deref_mut(gc).clear();
             }
             Ok(sequence.bind(gc).into())
@@ -111,7 +112,7 @@ pub(crate) fn mapc<'ob>(
 }
 
 #[defun]
-pub(crate) fn nreverse<'ob>(seq: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = GcObj::NIL;
     for tail in seq.conses() {
         let tail = tail?;
@@ -241,28 +242,25 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 #[defun]
 fn require<'ob>(
     feature: Symbol,
-    filename: &Rt<GcObj>,
-    noerror: &Rt<GcObj>,
+    filename: Option<&Rt<Gc<&String>>>,
+    noerror: Option<()>,
     env: &mut Root<Environment>,
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
         return Ok(feature.into());
     }
-    let file = match filename.bind(arena).get() {
-        Object::Nil => format!("lisp/{}.el", feature.name),
-        Object::String(file) => file.clone(),
-        x => bail!(Error::from_object(Type::String, x)),
+    let file = match filename {
+        None => format!("lisp/{}.el", feature.name),
+        Some(file) => file.bind(arena).get().clone(),
     };
     let file: GcObj = arena.add(file);
     root!(file, arena);
-    let no_error = Gc::NIL;
-    root!(no_error, arena);
-    match crate::lread::load(file, no_error, arena, env) {
+    match crate::lread::load(file, None, arena, env) {
         Ok(_) => Ok(feature.into()),
-        Err(e) => match noerror.bind(arena).get() {
-            Object::Nil => Err(e),
-            _ => Ok(Gc::NIL),
+        Err(e) => match noerror {
+            Some(()) => Ok(Gc::NIL),
+            None => Err(e),
         },
     }
 }

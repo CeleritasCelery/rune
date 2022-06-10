@@ -926,6 +926,21 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old String> {
+    type Out = Gc<&'new String>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
+impl<'ob> Gc<&'ob String> {
+    pub(crate) fn get(self) -> &'ob String {
+        let (ptr, _) = self.untag();
+        unsafe { String::from_obj_ptr(ptr) }
+    }
+}
+
 impl std::ops::Deref for Gc<&Cons> {
     type Target = Cons;
 

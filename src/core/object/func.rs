@@ -43,13 +43,13 @@ impl FnArgs {
     /// If a function has 3 required args and 2 optional, and it is called with
     /// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
     /// argument should be added to the stack.
-    pub(crate) fn num_of_fill_args(self, args: u16) -> Result<u16> {
+    pub(crate) fn num_of_fill_args(self, args: u16, name: &str) -> Result<u16> {
         if args < self.required {
-            bail!(Error::ArgCount(self.required, args));
+            bail!(Error::ArgCount(self.required, args, name.to_owned()));
         }
         let total = self.required + self.optional;
         if !self.rest && (args > total) {
-            bail!(Error::ArgCount(total, args));
+            bail!(Error::ArgCount(total, args, name.to_owned()));
         }
         Ok(total.saturating_sub(args))
     }
@@ -127,7 +127,7 @@ impl SubrFn {
         {
             let args = args.deref_mut(arena);
             let arg_cnt = args.len() as u16;
-            let fill_args = self.args.num_of_fill_args(arg_cnt)?;
+            let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
             for _ in 0..fill_args {
                 args.push(GcObj::NIL);
             }

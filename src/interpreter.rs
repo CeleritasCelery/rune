@@ -32,11 +32,12 @@ pub(crate) fn call<'gc>(
     form: &Rt<&Cons>,
     args: &mut Root<Vec<GcObj>>,
     env: &mut Root<Environment>,
+    name: &str,
     gc: &'gc mut Arena,
 ) -> Result<GcObj<'gc>> {
     root!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env };
-    frame.call_closure(form, args, gc)
+    frame.call_closure(form, args, name, gc)
 }
 
 impl<'brw> Interpreter<'_, '_, 'brw> {
@@ -101,7 +102,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 Ok(value)
             }
             // (defvar)
-            None => Err(Error::ArgCount(1, 0).into()),
+            None => Err(Error::arg_count(1, 0, "defvar").into()),
         }
     }
 
@@ -156,6 +157,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         arg_list: GcObj<'a>,
         args: Vec<GcObj<'a>>,
         vars: &mut Vec<&'a Cons>,
+        name: &str,
         gc: &'a Arena,
     ) -> Result<()> {
         let (required, optional, rest) = Self::parse_arg_list(arg_list, gc)?;
@@ -166,7 +168,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         // Ensure the minimum number of arguments is present
         ensure!(
             num_actual_args >= num_required_args,
-            Error::ArgCount(num_required_args, num_actual_args)
+            Error::arg_count(num_required_args, num_actual_args, name)
         );
 
         let mut arg_values = args.into_iter();
@@ -189,7 +191,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
             // Ensure too many args were not provided
             ensure!(
                 arg_values.next().is_none(),
-                Error::ArgCount(num_required_args + num_optional_args, num_actual_args)
+                Error::arg_count(num_required_args + num_optional_args, num_actual_args, name)
             );
         }
         Ok(())
@@ -199,6 +201,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         &self,
         forms: &mut ElemStreamIter<'_, '_>,
         args: Vec<GcObj<'a>>,
+        name: &str,
         gc: &'a Arena,
     ) -> Result<Vec<&'a Cons>> {
         // Add closure environment to variables
@@ -215,7 +218,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         let arg_list = forms
             .next()
             .ok_or_else(|| anyhow!("Closure missing argument list"))?;
-        self.bind_args(arg_list.bind(gc), args, &mut vars, gc)?;
+        self.bind_args(arg_list.bind(gc), args, &mut vars, name, gc)?;
         Ok(vars)
     }
 
@@ -223,16 +226,16 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         &mut self,
         closure: &Rt<&Cons>,
         args: &Root<Vec<GcObj>>,
+        name: &str,
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         let closure = closure.bind(gc);
         match closure.car().get() {
             Object::Symbol(sym) if sym == &sym::CLOSURE => {
-                let obj = closure.cdr();
-                element_iter!(forms, obj, gc);
+                element_iter!(forms, closure.cdr(), gc);
                 // TODO: remove this temp vector
                 let args = args.iter().map(|x| x.bind(gc)).collect();
-                let vars = self.bind_variables(&mut forms, args, gc)?;
+                let vars = self.bind_variables(&mut forms, args, name, gc)?;
                 root!(vars, vars.into_root(), gc);
                 let mut call_frame = Interpreter {
                     vars,
@@ -281,7 +284,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                     root!(args, macro_args.into_root(), gc);
                     let macro_func: Gc<Function> = mcro.into();
                     root!(macro_func, gc);
-                    let value = macro_func.call(args, self.env, gc)?;
+                    let value = macro_func.call(args, self.env, gc, Some(name.name))?;
                     root!(value, gc);
                     self.eval_form(value, gc)
                 }
@@ -299,7 +302,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                         if crate::debug::debug_enabled() {
                             println!("({name} {args:?})");
                         }
-                        self.call_closure(form, args, gc)
+                        self.call_closure(form, args, name.name, gc)
                     }
                     other => Err(anyhow!("Invalid Function: {other}")),
                 },
@@ -309,7 +312,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
     fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
         let mut forms = obj.as_list(gc)?;
         let len = forms.len() as u16;
-        ensure!(len == 1, Error::ArgCount(1, len));
+        ensure!(len == 1, Error::arg_count(1, len, "function"));
 
         let form = forms.next().unwrap()?;
         match form.get() {
@@ -351,7 +354,14 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         }
         match &***returned_form {
             Some(x) => Ok(gc.bind(x.bind(gc))),
-            None => Err(Error::ArgCount(prog_num, count).into()),
+            None => {
+                let name = match prog_num {
+                    1 => "prog1",
+                    2 => "prog2",
+                    _ => "progn",
+                };
+                Err(Error::arg_count(prog_num, count, name).into())
+            }
         }
     }
 
@@ -373,7 +383,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         let first: Gc<List> = obj.bind(gc).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
-            List::Nil => bail!(Error::ArgCount(1, 0)),
+            List::Nil => bail!(Error::arg_count(1, 0, "while")),
         };
         root!(condition, gc);
         while self.eval_form(condition, gc)? != GcObj::NIL {
@@ -441,12 +451,12 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         element_iter!(forms, obj, gc);
         let condition = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(Error::ArgCount(2, 0)),
+            None => bail!(Error::arg_count(2, 0, "if")),
         };
         root!(condition, gc);
         let true_branch = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(Error::ArgCount(2, 1)),
+            None => bail!(Error::arg_count(2, 1, "if")),
         };
         root!(true_branch, gc);
         #[allow(clippy::if_not_else)]
@@ -472,12 +482,12 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                     last_value.deref_mut(gc).set(val);
                 }
                 (_, Some(_)) => bail!(Error::from_object(Type::Symbol, var)),
-                (_, None) => bail!(Error::ArgCount(arg_cnt, arg_cnt + 1)),
+                (_, None) => bail!(Error::arg_count(arg_cnt, arg_cnt + 1, "setq")),
             }
             arg_cnt += 2;
         }
         if arg_cnt < 2 {
-            Err(Error::ArgCount(2, 0).into())
+            Err(Error::arg_count(2, 0, "setq").into())
         } else {
             Ok(last_value.bind(gc))
         }
@@ -527,7 +537,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
         let mut forms = value.as_list(gc)?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
-            x => Err(Error::ArgCount(1, x as u16).into()),
+            x => Err(Error::arg_count(1, x as u16, "quote").into()),
         }
     }
 
@@ -551,7 +561,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
                 }
             }
             // (let)
-            None => bail!(Error::ArgCount(1, 0)),
+            None => bail!(Error::arg_count(1, 0, "let")),
         }
         let obj = self.implicit_progn(iter, gc)?;
         rebind!(obj, gc);
