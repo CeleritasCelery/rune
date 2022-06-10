@@ -73,7 +73,7 @@ pub(crate) fn get<'ob>(
     env: &Root<Environment>,
     arena: &'ob Arena,
 ) -> GcObj<'ob> {
-    match env.props().get(&symbol) {
+    match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => arena.bind(element.1.bind(arena)),
             None => GcObj::NIL,
@@ -106,7 +106,7 @@ pub(crate) fn symbol_value<'ob>(
     env: &Root<Environment>,
     arena: &'ob Arena,
 ) -> Option<GcObj<'ob>> {
-    env.vars().get(&symbol).map(|x| x.bind(arena))
+    env.vars.get(&symbol).map(|x| x.bind(arena))
 }
 
 #[defun]
@@ -132,12 +132,12 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 
 #[defun]
 pub(crate) fn boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
-    env.vars().get(&symbol).is_some()
+    env.vars.get(&symbol).is_some()
 }
 
 #[defun]
 pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
-    env.vars().get(&symbol).is_some()
+    env.vars.get(&symbol).is_some()
 }
 
 #[defun]

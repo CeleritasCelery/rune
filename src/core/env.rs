@@ -16,7 +16,7 @@ pub(crate) struct Environment {
 
 impl Environment {
     pub(crate) fn set_var(env: &mut Rt<Environment>, sym: Symbol, value: GcObj) {
-        env.vars_mut().insert(sym, value);
+        env.vars.insert(sym, value);
     }
 
     pub(crate) fn set_prop(
@@ -25,14 +25,13 @@ impl Environment {
         propname: Symbol,
         value: GcObj,
     ) {
-        let props = env.props_mut();
-        match props.get_mut(&symbol) {
+        match env.props.get_mut(&symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
                 None => plist.push((propname, value)),
             },
             None => {
-                props.insert(symbol, vec![(propname, value)]);
+                env.props.insert(symbol, vec![(propname, value)]);
             }
         }
     }

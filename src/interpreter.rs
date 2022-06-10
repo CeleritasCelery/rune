@@ -512,7 +512,7 @@ impl<'brw> Interpreter<'_, '_, 'brw> {
             let mut iter = self.vars.iter().rev();
             match iter.find_map(|cons| (cons.bind(gc).car() == sym).then(|| cons.bind(gc).cdr())) {
                 Some(value) => Ok(value),
-                None => match self.env.vars().get(sym) {
+                None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.bind(gc)),
                     None => Err(anyhow!("Void variable: {sym}")),
                 },

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
-use std::ptr::{addr_of, addr_of_mut};
+use std::ptr::addr_of;
 use std::slice::SliceIndex;
 
 use super::super::{
@@ -419,22 +419,23 @@ where
     }
 }
 
-type Prop = Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>;
-impl Rt<Environment> {
-    pub(crate) fn vars(&self) -> &Rt<HashMap<Symbol, GcObj<'static>>> {
-        unsafe { &*addr_of!(self.inner.vars).cast() }
-    }
+#[allow(non_camel_case_types)]
+pub(crate) struct Environment__root {
+    pub(crate) vars: Rt<HashMap<Symbol, GcObj<'static>>>,
+    pub(crate) props: Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>,
+}
 
-    pub(crate) fn vars_mut(&mut self) -> &mut Rt<HashMap<Symbol, GcObj<'static>>> {
-        unsafe { &mut *addr_of_mut!(self.inner.vars).cast() }
-    }
+impl Deref for Rt<Environment> {
+    type Target = Environment__root;
 
-    pub(crate) fn props(&self) -> &Prop {
-        unsafe { &*addr_of!(self.inner.props).cast() }
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(self as *const Rt<Environment>).cast::<Environment__root>() }
     }
+}
 
-    pub(crate) fn props_mut(&mut self) -> &mut Prop {
-        unsafe { &mut *addr_of_mut!(self.inner.props).cast() }
+impl DerefMut for Rt<Environment> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self as *mut Rt<Environment>).cast::<Environment__root>() }
     }
 }
 
