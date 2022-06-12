@@ -69,7 +69,7 @@ pub(crate) struct Root<'rt, 'a, T> {
 
 impl<T: Debug> Debug for Root<'_, '_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(unsafe {&*self.data}, f)
+        Debug::fmt(unsafe { &*self.data }, f)
     }
 }
 

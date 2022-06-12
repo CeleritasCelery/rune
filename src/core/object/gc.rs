@@ -2,6 +2,8 @@ use sptr::Strict;
 use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
+use crate::hashmap::HashMap;
+
 use super::super::{
     arena::{AllocObject, Allocation, Block},
     cons::Cons,
@@ -12,6 +14,7 @@ use super::super::{
 use super::{LispFn, SubrFn};
 
 pub(crate) type ObjVec<'ob> = Vec<GcObj<'ob>>;
+pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
 
 #[derive(Copy, Clone, Debug)]
@@ -45,6 +48,7 @@ enum Tag {
     True,
     String,
     Vec,
+    HashTable,
     SubrFn,
     LispFn,
 }
@@ -305,6 +309,19 @@ impl<'ob> IntoObject<'ob> for ObjVec<'ob> {
     }
 }
 
+impl<'ob> IntoObject<'ob> for HashTable<'ob> {
+    type Out = &'ob RefCell<HashTable<'ob>>;
+
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+        let ptr = self.alloc_obj(block);
+        unsafe { Self::tag_ptr(ptr) }
+    }
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+        &*Self::cast_ptr(ptr)
+    }
+}
+
 // work around for no GAT's
 #[allow(unused_lifetimes)]
 trait TaggedPtr<'ob>
@@ -368,6 +385,12 @@ impl<'ob> TaggedPtr<'ob> for ObjVec<'ob> {
     type Ptr = <Self as AllocObject>::Output;
     type Output = &'ob RefCell<ObjVec<'ob>>;
     const TAG: Tag = Tag::Vec;
+}
+
+impl<'ob> TaggedPtr<'ob> for HashTable<'ob> {
+    type Ptr = <Self as AllocObject>::Output;
+    type Output = &'ob RefCell<HashTable<'ob>>;
+    const TAG: Tag = Tag::HashTable;
 }
 
 ////////////////////////
@@ -636,6 +659,7 @@ pub(crate) enum Object<'ob> {
     Nil,
     Cons(&'ob Cons),
     Vec(&'ob RefCell<ObjVec<'ob>>),
+    HashTable(&'ob RefCell<HashTable<'ob>>),
     String(&'ob String),
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'static SubrFn),
@@ -652,6 +676,7 @@ impl Object<'_> {
             Object::Nil => Type::Nil,
             Object::Cons(_) => Type::Cons,
             Object::Vec(_) => Type::Vec,
+            Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
             Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
         }
@@ -698,6 +723,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::True => Object::True,
             Tag::String => Object::String(unsafe { String::from_obj_ptr(ptr) }),
             Tag::Vec => Object::Vec(unsafe { ObjVec::from_obj_ptr(ptr) }),
+            Tag::HashTable => Object::HashTable(unsafe { HashTable::from_obj_ptr(ptr) }),
         }
     }
 }
@@ -767,6 +793,12 @@ impl<'ob> From<Gc<&'ob String>> for Gc<Object<'ob>> {
 
 impl<'ob> From<Gc<&'ob RefCell<Vec<GcObj<'ob>>>>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob RefCell<Vec<GcObj<'ob>>>>) -> Self {
+        unsafe { Self::transmute(x) }
+    }
+}
+
+impl<'ob> From<Gc<&'ob RefCell<HashTable<'ob>>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&'ob RefCell<HashTable<'ob>>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -976,6 +1008,7 @@ impl<T> Gc<T> {
             Object::Nil => Gc::NIL,
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
+            Object::HashTable(_) => todo!("implement clone for hashtable"),
         };
         match Gc::<U>::try_from(obj) {
             Ok(x) => x,
@@ -1058,12 +1091,22 @@ impl<T> PartialEq for Gc<T> {
     }
 }
 
+impl<T> Eq for Gc<T> {}
+
+use std::hash::{Hash, Hasher};
+impl<T> Hash for Gc<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ptr.hash(state);
+    }
+}
+
 impl fmt::Display for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Object::Int(x) => write!(f, "{x}"),
             Object::Cons(x) => write!(f, "{x}"),
             Object::Vec(x) => write!(f, "{x:?}"),
+            Object::HashTable(x) => write!(f, "{x:?}"),
             Object::String(x) => write!(f, "\"{x}\""),
             Object::Symbol(x) => write!(f, "{x}"),
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
@@ -1087,6 +1130,7 @@ impl fmt::Debug for Object<'_> {
             Object::Int(x) => write!(f, "{x}"),
             Object::Cons(x) => write!(f, "{x:?}"),
             Object::Vec(x) => write!(f, "{x:?}"),
+            Object::HashTable(x) => write!(f, "{x:?}"),
             Object::String(string) => {
                 write!(
                     f,
@@ -1117,6 +1161,7 @@ pub(crate) enum ObjectAllocation<'ob> {
     Float(&'ob Allocation<f64>),
     Cons(&'ob Cons),
     Vec(&'ob Allocation<RefCell<ObjVec<'ob>>>),
+    HashTable(&'ob Allocation<RefCell<HashTable<'ob>>>),
     String(&'ob Allocation<String>),
     LispFn(&'ob Allocation<LispFn<'ob>>),
     NonAllocated,
@@ -1135,7 +1180,10 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Float => ObjectAllocation::Float(unsafe { &*f64::cast_ptr(ptr) }),
             Tag::String => ObjectAllocation::String(unsafe { &*String::cast_ptr(ptr) }),
             Tag::Vec => ObjectAllocation::Vec(unsafe { &*Vec::cast_ptr(ptr) }),
-            _ => ObjectAllocation::NonAllocated,
+            Tag::HashTable => ObjectAllocation::HashTable(unsafe { &*HashTable::cast_ptr(ptr) }),
+            Tag::Symbol | Tag::Int | Tag::Nil | Tag::True | Tag::SubrFn => {
+                ObjectAllocation::NonAllocated
+            }
         }
     }
 
@@ -1144,6 +1192,7 @@ impl<'ob> Gc<Object<'ob>> {
             ObjectAllocation::Float(x) => x.is_marked(),
             ObjectAllocation::Cons(x) => x.is_marked(),
             ObjectAllocation::Vec(x) => x.is_marked(),
+            ObjectAllocation::HashTable(x) => x.is_marked(),
             ObjectAllocation::String(x) => x.is_marked(),
             ObjectAllocation::LispFn(x) => x.is_marked(),
             ObjectAllocation::NonAllocated => true,
@@ -1160,6 +1209,18 @@ impl<'ob> Gc<Object<'ob>> {
                     .filter_map(|x| x.is_markable().then(|| x.into_raw()));
                 stack.extend(unmarked);
                 vec.mark();
+            }
+            ObjectAllocation::HashTable(table) => {
+                let content = table.borrow();
+                for (k, v) in &*content {
+                    if k.is_markable() {
+                        stack.push(k.into_raw());
+                    }
+                    if v.is_markable() {
+                        stack.push(v.into_raw());
+                    }
+                }
+                table.mark();
             }
             ObjectAllocation::String(x) => x.mark(),
             ObjectAllocation::Cons(x) => x.mark(stack),

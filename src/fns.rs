@@ -1,5 +1,8 @@
+use std::cell::RefCell;
+
 use crate::core::arena::Rt;
 use crate::core::env::Environment;
+use crate::core::object::HashTable;
 use crate::core::{
     arena::{Arena, Root},
     cons::Cons,
@@ -296,21 +299,42 @@ pub(crate) fn nth<'ob>(n: usize, list: Gc<List<'ob>>, arena: &'ob Arena) -> Resu
 }
 
 #[defun]
-pub(crate) fn make_hash_table<'ob>(_keyword_args: &[GcObj<'ob>]) -> GcObj<'ob> {
-    // TODO: Implement
-    GcObj::NIL
+pub(crate) fn make_hash_table<'ob>(
+    keyword_args: &[GcObj<'ob>],
+    gc: &'ob Arena,
+) -> Result<GcObj<'ob>> {
+    if !keyword_args.is_empty() {
+        bail!("Keyword args not supported in make_hash_table. Found {keyword_args:?}")
+    }
+    let map: HashTable = HashTable::with_hasher(std::hash::BuildHasherDefault::default());
+    Ok(gc.add(map))
 }
 
 #[defun]
-pub(crate) fn hash_table_p<'ob>(_obj: GcObj) -> GcObj<'ob> {
-    // TODO: Implement
-    GcObj::NIL
+pub(crate) fn hash_table_p(obj: GcObj) -> bool {
+    matches!(obj.get(), Object::HashTable(_))
 }
 
 #[defun]
-pub(crate) fn puthash<'ob>(_key: GcObj<'ob>, value: GcObj<'ob>, _table: GcObj<'ob>) -> GcObj<'ob> {
-    // TODO: Implement
+pub(crate) fn puthash<'ob>(
+    key: GcObj<'ob>,
+    value: GcObj<'ob>,
+    table: &RefCell<HashTable<'ob>>,
+) -> GcObj<'ob> {
+    table.borrow_mut().insert(key, value);
     value
+}
+
+#[defun]
+pub(crate) fn gethash<'ob>(
+    key: GcObj<'ob>,
+    table: &RefCell<HashTable<'ob>>,
+    dflt: Option<GcObj<'ob>>,
+) -> Option<GcObj<'ob>> {
+    match table.borrow().get(&key) {
+        Some(x) => Some(*x),
+        None => dflt,
+    }
 }
 
 #[defun]
@@ -392,6 +416,7 @@ defsubr!(
     make_hash_table,
     hash_table_p,
     puthash,
+    gethash,
     length,
     nth,
     concat,

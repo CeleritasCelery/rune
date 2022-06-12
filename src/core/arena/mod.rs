@@ -1,5 +1,7 @@
 use super::cons::Cons;
-use super::object::{Gc, GcObj, IntoObject, LispFn, ObjVec, RawInto, SubrFn, WithLifetime};
+use super::object::{
+    Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, SubrFn, WithLifetime,
+};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -53,6 +55,7 @@ enum OwnedObject<'ob> {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons>),
     Vec(Box<Allocation<RefCell<Vec<GcObj<'ob>>>>>),
+    HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
     SubrFn(Box<SubrFn>),
@@ -110,6 +113,7 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::Float(x) => x.unmark(),
             OwnedObject::Cons(x) => x.unmark(),
             OwnedObject::Vec(x) => x.unmark(),
+            OwnedObject::HashTable(x) => x.unmark(),
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::LispFn(x) => x.unmark(),
             OwnedObject::SubrFn(_) => {}
@@ -121,6 +125,7 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::Float(x) => x.is_marked(),
             OwnedObject::Cons(x) => x.is_marked(),
             OwnedObject::Vec(x) => x.is_marked(),
+            OwnedObject::HashTable(x) => x.is_marked(),
             OwnedObject::String(x) => x.is_marked(),
             OwnedObject::LispFn(x) => x.is_marked(),
             OwnedObject::SubrFn(_) => true,
@@ -226,6 +231,28 @@ impl<'ob> AllocObject for ObjVec<'ob> {
             OwnedObject::Vec(Box::new(Allocation::new(ref_cell))),
         );
         if let Some(OwnedObject::Vec(x)) = objects.last() {
+            unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+}
+
+impl<'ob> AllocObject for HashTable<'ob> {
+    type Output = Allocation<RefCell<Self>>;
+
+    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
+        let mut objects = block.objects.borrow_mut();
+        let ref_cell = RefCell::new(self);
+        if CONST {
+            // Leak a borrow so that the hash table cannot be borrowed mutably
+            std::mem::forget(ref_cell.borrow());
+        }
+        Block::<CONST>::register(
+            &mut objects,
+            OwnedObject::HashTable(Box::new(Allocation::new(ref_cell))),
+        );
+        if let Some(OwnedObject::HashTable(x)) = objects.last() {
             unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
         } else {
             unreachable!("object was not the type we just inserted");

@@ -4,12 +4,15 @@
 
 use std::cell::RefCell;
 
-use super::super::{
-    cons::Cons,
-    env::{sym, Symbol},
-    error::{Error, Type},
-};
 use super::GcObj;
+use super::{
+    super::{
+        cons::Cons,
+        env::{sym, Symbol},
+        error::{Error, Type},
+    },
+    HashTable,
+};
 use anyhow::Context;
 
 use super::{Callable, Gc, Object};
@@ -108,6 +111,7 @@ define_unbox!(Float, &'ob f64);
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
 define_unbox!(Vec, &'ob RefCell<Vec<GcObj<'ob>>>);
+define_unbox!(HashTable, &'ob RefCell<HashTable<'ob>>);
 define_unbox!(Symbol, Symbol);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>

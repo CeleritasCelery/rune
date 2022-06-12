@@ -18,7 +18,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::ArgCount(exp, act, name) => {
-                write!(f, "Expected {exp} arg(s), found {act} for {name}")
+                write!(
+                    f,
+                    "Expected {exp} argument(s) for `{name}', but found {act}"
+                )
             }
             Error::Type(exp, act, print) => {
                 write!(f, "expected {exp:?}, found {act:?}: {print}")
@@ -49,6 +52,7 @@ pub(crate) enum Type {
     Nil,
     Cons,
     Vec,
+    HashTable,
     Sequence,
     String,
     Symbol,
