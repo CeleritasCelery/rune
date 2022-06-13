@@ -286,6 +286,7 @@ pub(crate) fn length<'ob>(sequence: GcObj<'ob>, arena: &'ob Arena) -> Result<i64
         Object::Cons(x) => x.elements(arena).len(),
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
+        Object::Nil => 0,
         obj => bail!(Error::from_object(Type::Sequence, obj)),
     };
     Ok(size
