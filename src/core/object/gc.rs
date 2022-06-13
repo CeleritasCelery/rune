@@ -1035,6 +1035,15 @@ impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
     }
 }
 
+impl<'ob> PartialEq<GlobalSymbol> for Gc<Object<'ob>> {
+    fn eq(&self, other: &GlobalSymbol) -> bool {
+        match self.get() {
+            Object::Symbol(x) => x == other,
+            _ => false,
+        }
+    }
+}
+
 impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;

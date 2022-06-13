@@ -317,7 +317,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let form = forms.next().unwrap()?;
         match form.get() {
             Object::Cons(cons) => {
-                if cons.car() == &sym::LAMBDA {
+                if cons.car() == sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self.vars.iter().map(|x| (&*x.bind(gc)).into()).collect();

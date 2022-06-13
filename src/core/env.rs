@@ -76,7 +76,7 @@ pub(crate) type Symbol = &'static GlobalSymbol;
 // compare them with a pointer equal test.
 impl PartialEq for GlobalSymbol {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(&*self, &*other)
+        std::ptr::eq(self, other)
     }
 }
 
@@ -106,8 +106,8 @@ impl GlobalSymbol {
         let ptr = self.func.load(Ordering::Acquire);
         match Strict::addr(ptr) {
             0 => None,
-            // SAFETY: we ensure that value is 0 is not representable in the
-            // enum Function (by making a reference the first element, which will
+            // SAFETY: we ensure that 0 is not representable in the enum
+            // Function (by making a reference the first element, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
             // We can't use AtomicCell due to this issue
             // https://github.com/crossbeam-rs/crossbeam/issues/748 .
@@ -310,6 +310,8 @@ create_symbolmap!(
     EXPORT => {
         crate::data::DEFVAR,
         crate::data::NULL,
+        crate::data::EQ,
+        crate::data::EQUAL,
     }
     SYMBOLS => {
         FUNCTION => "function",
@@ -341,6 +343,8 @@ create_symbolmap!(
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
         CURRENT_LOAD_LIST => "current-load-list",
+        KW_TEST => ":test",
+        KW_WEAKNESS => ":weakness",
     }
     TEST_SYMBOLS => {
         FOO => "foo",

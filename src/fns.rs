@@ -303,9 +303,22 @@ pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
     gc: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
-    if !keyword_args.is_empty() {
-        bail!("Keyword args not supported in make_hash_table. Found {keyword_args:?}")
+    use crate::core::env::sym;
+    if let Some(i) = keyword_args
+        .iter()
+        .step_by(2)
+        .position(|&x| x == sym::KW_TEST)
+    {
+        let val = match keyword_args.get((i * 2) + 1) {
+            Some(x) => *x,
+            None => bail!("Missing keyword value for :test"),
+        };
+        if val != sym::EQ && val != sym::EQUAL {
+            // TODO: we are currently only using `equal', but eq should be okay
+            bail!("only `eq' and `equal' keywords support for make-hash-table :test. Found {val}");
+        }
     }
+    // TODO, the rest of the keywords need to be supported here
     let map: HashTable = HashTable::with_hasher(std::hash::BuildHasherDefault::default());
     Ok(gc.add(map))
 }
