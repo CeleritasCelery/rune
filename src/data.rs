@@ -181,6 +181,14 @@ pub(crate) fn consp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn keywordp(object: GcObj) -> bool {
+    match object.get() {
+        Object::Symbol(s) => s.name.starts_with(':'),
+        _ => false,
+    }
+}
+
+#[defun]
 pub(crate) fn atom(object: GcObj) -> bool {
     !consp(object)
 }
@@ -264,6 +272,7 @@ defsubr!(
     vectorp,
     numberp,
     consp,
+    keywordp,
     atom,
     indirect_function,
 );
