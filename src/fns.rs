@@ -300,6 +300,14 @@ pub(crate) fn nth<'ob>(n: usize, list: Gc<List<'ob>>, arena: &'ob Arena) -> Resu
 }
 
 #[defun]
+pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
+    match list.conses().nth(n) {
+        Some(x) => x.map(Into::into),
+        None => Ok(List::EMPTY),
+    }
+}
+
+#[defun]
 pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
     gc: &'ob Arena,
@@ -395,6 +403,15 @@ mod test {
     }
 
     #[test]
+    fn test_nthcdr() {
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
+        let list = list![1, 2, 3; arena];
+        let res = nthcdr(1, list.try_into().unwrap()).unwrap();
+        assert_eq!(res.get().car(), 2);
+    }
+
+    #[test]
     fn test_nreverse() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
@@ -433,6 +450,7 @@ defsubr!(
     gethash,
     length,
     nth,
+    nthcdr,
     concat,
     append,
     delq,
