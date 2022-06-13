@@ -14,13 +14,26 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     let mut result = String::new();
     let mut last_end = 0;
     let mut iter = objects.iter();
-    for (start, part) in string.match_indices("%s") {
+    let mut escaped = false;
+    let is_format_char = |c: char| {
+        if escaped {
+            escaped = false;
+            false
+        } else if c == '\\' {
+            escaped = true;
+            false
+        } else {
+            c == '%'
+        }
+    };
+    for (start, _) in string.match_indices(is_format_char) {
         result.push_str(&string[last_end..start]);
         let val = iter
             .next()
             .ok_or_else(|| anyhow!("Not enough objects for format string"))?;
+        // TODO: currently handles all format types the same. Need to check the modifier characters.
         result.push_str(&format!("{val}"));
-        last_end = start + part.len();
+        last_end = start + 2;
     }
     ensure!(
         iter.next().is_none(),
