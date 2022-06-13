@@ -380,6 +380,12 @@ fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
     new_string.to_owned()
 }
 
+#[defun]
+fn enable_debug() -> bool {
+    crate::debug::enable_debug();
+    false
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::{arena::RootSet, object::IntoObject};
@@ -463,4 +469,5 @@ defsubr!(
     prin1_to_string,
     substring,
     copy_sequence,
+    enable_debug,
 );
