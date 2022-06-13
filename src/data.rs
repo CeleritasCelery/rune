@@ -189,6 +189,11 @@ pub(crate) fn keywordp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn integerp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Int(_))
+}
+
+#[defun]
 pub(crate) fn atom(object: GcObj) -> bool {
     !consp(object)
 }
@@ -273,6 +278,7 @@ defsubr!(
     numberp,
     consp,
     keywordp,
+    integerp,
     atom,
     indirect_function,
 );

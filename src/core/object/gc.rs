@@ -1090,7 +1090,7 @@ impl<T: fmt::Display> fmt::Display for Gc<T> {
 impl<T: fmt::Debug> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let obj = self.as_obj().get();
-        write!(f, "Gc: {obj}")
+        write!(f, "{obj:?}")
     }
 }
 
