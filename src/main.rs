@@ -138,39 +138,12 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
         Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
         Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, GcObj::NIL);
         Environment::set_var(env, &sym::CURRENT_LOAD_LIST, GcObj::NIL);
+        Environment::set_var(env, &sym::LOAD_PATH, cons!("lisp"; arena));
     }
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");
 
-    let mut buffer = String::from(
-        r#"
-(progn
-    (load "lisp/byte-run.el")
-    (load "lisp/backquote.el")
-    (load "lisp/subr.el")
-    (load "lisp/pcase.el")
-    (load "lisp/gv.el")
-    (load "lisp/inline.el")
-)"#,
-    );
-
-    match crate::lread::load_internal(&buffer, arena, env) {
-        Ok(val) => println!("{val}"),
-        Err(e) => {
-            println!("Error: {e}");
-            return;
-        }
-    }
-
-    crate::debug::enable_debug();
-
-    // Part of cl-lib
-    buffer = String::from(
-        r#"
-(progn
-    (load "lisp/cl-macs.el")
-)"#,
-    );
+    let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);
 
     match crate::lread::load_internal(&buffer, arena, env) {
         Ok(val) => println!("{val}"),

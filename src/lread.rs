@@ -1,7 +1,7 @@
 use crate::core::arena::Rt;
 use crate::core::arena::{Arena, Root};
-use crate::core::env::Environment;
 use crate::core::env::Symbol;
+use crate::core::env::{sym, Environment};
 use crate::core::error::{Error, Type};
 use crate::core::object::{GcObj, Object};
 use crate::reader;
@@ -11,6 +11,7 @@ use fn_macros::defun;
 use anyhow::{bail, ensure, Context, Result};
 
 use std::fs;
+use std::path::{Path, PathBuf};
 
 fn check_lower_bounds(idx: Option<i64>, len: usize) -> Result<usize> {
     let len = len as i64;
@@ -82,20 +83,64 @@ pub(crate) fn load_internal<'ob>(
     }
 }
 
+fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
+    let path = Path::new(path).join(file);
+    if Path::new(&path).exists() {
+        Some(path)
+    } else {
+        let with_ext = path.with_extension("el");
+        Path::new(&with_ext).exists().then(|| with_ext)
+    }
+}
+
 #[defun]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: Option<()>,
-    _nomessage: Option<()>,
+    nomessage: Option<()>,
     arena: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
     let file = match file.bind(arena).get() {
-        Object::String(s) => s,
+        Object::String(x) => x,
         x => bail!(Error::from_object(Type::Symbol, x)),
     };
-    match fs::read_to_string(file).with_context(|| format!("Couldn't open file {file}")) {
+    let final_file = if Path::new(file).exists() {
+        PathBuf::from(file)
+    } else {
+        let load_path = env.deref_mut(arena).vars.get(&sym::LOAD_PATH).unwrap();
+        let paths = load_path
+            .bind(arena)
+            .as_list()
+            .context("`load-path' was not a list")?;
+        let mut final_file = None;
+        for path in paths {
+            match path?.get() {
+                Object::String(path) => {
+                    if let Some(x) = file_in_path(file, path) {
+                        final_file = Some(x);
+                        break;
+                    }
+                }
+                x => {
+                    return Err(Error::from_object(Type::String, x))
+                        .context("Found non-string in `load-path'")
+                }
+            }
+        }
+        match final_file {
+            Some(x) => x,
+            None => bail!("Unable to find file {file} in load-path"),
+        }
+    };
+
+    if nomessage.is_none() {
+        println!("Loading {file}...");
+    }
+    match fs::read_to_string(&final_file)
+        .with_context(|| format!("Couldn't open file {:?}", final_file.as_os_str()))
+    {
         Ok(content) => load_internal(&content, arena, env),
         Err(e) => match noerror {
             Some(()) => Ok(false),
