@@ -134,6 +134,25 @@ pub(crate) fn reverse<'ob>(seq: Gc<List>, arena: &'ob Arena) -> Result<GcObj<'ob
     Ok(tail)
 }
 
+#[defun]
+fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
+    let head = match lists.get(0) {
+        Some(x) => x.into(),
+        None => GcObj::NIL,
+    };
+    let mut tail: Option<&Cons> = None;
+    for list in lists {
+        if let Some(cons) = tail {
+            cons.set_cdr(list.into());
+        }
+        let list = list.conses();
+        for elem in list {
+            tail = Some(elem?);
+        }
+    }
+    Ok(head)
+}
+
 fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
     match seq.get() {
         List::Cons(cons) => {
@@ -263,8 +282,8 @@ fn require<'ob>(
         return Ok(feature.into());
     }
     let file = match filename {
-        None => format!("lisp/{}.el", feature.name),
-        Some(file) => file.bind(arena).get().clone(),
+        None => feature.name,
+        Some(file) => file.bind(arena).get(),
     };
     let file: GcObj = arena.add(file);
     root!(file, arena);
@@ -448,6 +467,34 @@ mod test {
     }
 
     #[test]
+    fn test_nconc() {
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
+        {
+            let res = nconc(&[List::EMPTY]).unwrap();
+            assert!(matches!(res.get(), Object::Nil));
+        }
+        {
+            let list: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let res = nconc(&[list]).unwrap();
+            assert_eq!(res, list![1, 2; arena]);
+        }
+        {
+            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list2: Gc<List> = list![3, 4; arena].try_into().unwrap();
+            let res = nconc(&[list1, list2]).unwrap();
+            assert_eq!(res, list![1, 2, 3, 4; arena]);
+        }
+        {
+            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list2: Gc<List> = list![3, 4; arena].try_into().unwrap();
+            let list3: Gc<List> = list![5, 6; arena].try_into().unwrap();
+            let res = nconc(&[list1, list2, list3]).unwrap();
+            assert_eq!(res, list![1, 2, 3, 4, 5, 6; arena]);
+        }
+    }
+
+    #[test]
     fn test_mapcar() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
@@ -464,6 +511,7 @@ defsubr!(
     mapc,
     reverse,
     nreverse,
+    nconc,
     assq,
     make_hash_table,
     hash_table_p,

@@ -860,6 +860,12 @@ impl<'ob> From<Gc<List<'ob>>> for Gc<Object<'ob>> {
     }
 }
 
+impl<'ob> From<&Gc<List<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: &Gc<List<'ob>>) -> Self {
+        unsafe { Self::transmute(*x) }
+    }
+}
+
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
     type Error = Error;
 
