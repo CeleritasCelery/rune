@@ -1,11 +1,10 @@
 use crate::core::arena::Root;
 
 use super::super::{
-    arena::{Arena, Rt},
+    arena::Rt,
     error::{Error, Type},
     object::{Gc, GcObj, List, Object},
 };
-use super::ConstrainLifetime;
 use streaming_iterator::StreamingIterator;
 
 use anyhow::{anyhow, Result};
@@ -17,21 +16,18 @@ pub(crate) struct ElemIter<'ob> {
     cons: Option<&'ob Cons>,
 }
 
-impl<'brw> Cons {
-    pub(crate) fn elements<'new>(&'brw self, arena: &'new Arena) -> ElemIter<'new> {
-        ElemIter {
-            cons: Some(self.constrain_lifetime(arena)),
-        }
+#[allow(clippy::multiple_inherent_impl)]
+impl Cons {
+    pub(crate) fn elements(&self) -> ElemIter {
+        ElemIter { cons: Some(self) }
     }
 }
 
 impl<'ob> Gc<List<'ob>> {
-    pub(crate) fn elements(self, arena: &'ob Arena) -> ElemIter<'ob> {
+    pub(crate) fn elements(self) -> ElemIter<'ob> {
         match self.get() {
             List::Nil => ElemIter { cons: None },
-            List::Cons(cons) => ElemIter {
-                cons: Some(cons.constrain_lifetime(arena)),
-            },
+            List::Cons(cons) => ElemIter { cons: Some(cons) },
         }
     }
 
@@ -59,12 +55,9 @@ impl<'ob> Iterator for ElemIter<'ob> {
 }
 
 impl<'ob> GcObj<'ob> {
-    pub(crate) fn as_list<'gc>(self, arena: &'gc Arena) -> Result<ElemIter<'gc>> {
+    pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
         match self.get() {
-            Object::Cons(cons) => {
-                let cons = cons.constrain_lifetime(arena);
-                Ok(ElemIter { cons: Some(cons) })
-            }
+            Object::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
             Object::Nil => Ok(ElemIter { cons: None }),
             _ => Err(Error::from_object(Type::List, self).into()),
         }
@@ -188,7 +181,7 @@ macro_rules! element_iter {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::arena::RootSet;
+    use super::super::super::arena::{Arena, RootSet};
     use crate::list;
 
     use super::*;
@@ -198,7 +191,7 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let cons = list![1, 2, 3, 4; arena];
-        let iter = cons.as_list(arena).unwrap();
+        let iter = cons.as_list().unwrap();
         let vec: Result<Vec<_>> = iter.collect();
         assert_eq!(vec.unwrap(), vec![1, 2, 3, 4]);
     }

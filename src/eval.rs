@@ -24,7 +24,7 @@ pub(crate) fn apply<'ob>(
             let end = len - 1;
             let last = &arguments[end];
             let mut args: Vec<_> = arguments[..end].iter().map(|x| x.bind(arena)).collect();
-            for element in last.bind(arena).as_list(arena)? {
+            for element in last.bind(arena).as_list()? {
                 let e = arena.bind(element?);
                 args.push(e);
             }

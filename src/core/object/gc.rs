@@ -1244,6 +1244,7 @@ impl<'ob> Gc<Object<'ob>> {
 }
 
 impl<'ob> List<'ob> {
+    #[cfg(test)]
     pub(crate) fn car(self) -> GcObj<'ob> {
         match self {
             List::Nil => GcObj::NIL,

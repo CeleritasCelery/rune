@@ -63,7 +63,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(forms, gc);
         match cons.car().get() {
             Object::Symbol(sym) => symbol_match! {sym;
-                QUOTE => self.quote(forms.bind(gc), gc),
+                QUOTE => self.quote(forms.bind(gc)),
                 LET => self.eval_let(forms, true, gc),
                 LET_STAR => self.eval_let(forms, false, gc),
                 IF => self.eval_if(forms, gc),
@@ -84,7 +84,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn defvar<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         match forms.next() {
@@ -106,8 +106,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn parse_closure_env<'a>(obj: GcObj<'a>, arena: &'a Arena) -> Result<Vec<&'a Cons>> {
-        let forms = obj.as_list(arena)?;
+    fn parse_closure_env(obj: GcObj) -> Result<Vec<&Cons>> {
+        let forms = obj.as_list()?;
         let mut env = Vec::new();
         for form in forms {
             match form?.get() {
@@ -121,15 +121,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Err(anyhow!("Closure env did not end with `t`"))
     }
 
-    fn parse_arg_list<'a>(
-        bindings: GcObj<'a>,
-        arena: &'a Arena,
-    ) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+    fn parse_arg_list(bindings: GcObj) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
         let mut required = Vec::new();
         let mut optional = Vec::new();
         let mut rest = None;
         let mut arg_type = &mut required;
-        let mut iter = bindings.as_list(arena)?;
+        let mut iter = bindings.as_list()?;
         while let Some(binding) = iter.next() {
             symbol_match! {
                 binding?.try_into()?;
@@ -154,13 +151,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     #[allow(clippy::unused_self)]
     fn bind_args<'a>(
         &self,
-        arg_list: GcObj<'a>,
+        arg_list: GcObj,
         args: Vec<GcObj<'a>>,
         vars: &mut Vec<&'a Cons>,
         name: &str,
         gc: &'a Arena,
     ) -> Result<()> {
-        let (required, optional, rest) = Self::parse_arg_list(arg_list, gc)?;
+        let (required, optional, rest) = Self::parse_arg_list(arg_list)?;
 
         let num_required_args = required.len() as u16;
         let num_optional_args = optional.len() as u16;
@@ -210,7 +207,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let env = forms
             .next()
             .ok_or_else(|| anyhow!("Closure missing environment"))?;
-        let mut vars = Self::parse_closure_env(env.bind(gc), gc)?;
+        let mut vars = Self::parse_closure_env(env.bind(gc))?;
 
         // Add function arguments to variables
         // (closure (t) (x y &rest z) ...)
@@ -247,10 +244,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_call<'a, 'gc>(
+    fn eval_call<'gc>(
         &mut self,
         name: Symbol,
-        obj: &Rt<GcObj<'a>>,
+        obj: &Rt<GcObj>,
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         let resolved = match name.resolve_callable(gc) {
@@ -277,7 +274,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
             Callable::Cons(form) => match form.try_as_macro() {
                 Ok(mcro) => {
-                    let macro_args = obj.bind(gc).as_list(gc)?.collect::<Result<Vec<_>>>()?;
+                    let macro_args = obj.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
                     if crate::debug::debug_enabled() {
                         println!("(macro: {name} {macro_args:?})");
                     }
@@ -310,7 +307,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
     fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
-        let mut forms = obj.as_list(gc)?;
+        let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
         ensure!(len == 1, Error::arg_count(1, len, "function"));
 
@@ -334,9 +331,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progx<'a, 'gc>(
+    fn eval_progx<'gc>(
         &mut self,
-        obj: &Rt<GcObj<'a>>,
+        obj: &Rt<GcObj>,
         prog_num: u16,
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
@@ -365,21 +362,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progn<'a, 'gc>(
-        &mut self,
-        obj: &Rt<GcObj<'a>>,
-        gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         self.implicit_progn(forms, gc)
     }
 
-    fn eval_while<'a, 'gc>(
-        &mut self,
-        obj: &Rt<GcObj<'a>>,
-        gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let first: Gc<List> = obj.bind(gc).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
@@ -394,11 +383,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_cond<'a, 'gc>(
-        &mut self,
-        obj: &Rt<GcObj<'a>>,
-        gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -418,7 +403,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_and<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         root!(last, GcObj::TRUE, gc);
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
@@ -433,7 +418,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(gc.bind(last.bind(gc)))
     }
 
-    fn eval_or<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -446,7 +431,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_if<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         let condition = match forms.next() {
@@ -467,7 +452,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn setq<'a, 'gc>(&mut self, obj: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         let mut arg_cnt = 0;
@@ -520,7 +505,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_set<'a>(&mut self, name: Symbol, new_value: GcObj<'a>, gc: &'a Arena) {
+    fn var_set(&mut self, name: Symbol, new_value: GcObj, gc: &Arena) {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.bind(gc).car() == name)) {
             Some(value) => {
@@ -533,17 +518,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     #[allow(clippy::unused_self)]
-    fn quote<'a, 'gc>(&self, value: GcObj<'a>, gc: &'gc Arena) -> Result<GcObj<'gc>> {
-        let mut forms = value.as_list(gc)?;
+    fn quote<'gc>(&self, value: GcObj<'gc>) -> Result<GcObj<'gc>> {
+        let mut forms = value.as_list()?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
             x => Err(Error::arg_count(1, x as u16, "quote").into()),
         }
     }
 
-    fn eval_let<'a, 'gc>(
+    fn eval_let<'gc>(
         &mut self,
-        form: &Rt<GcObj<'a>>,
+        form: &Rt<GcObj>,
         parallel: bool,
         gc: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
@@ -569,7 +554,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(obj)
     }
 
-    fn let_bind_serial<'a, 'gc>(&mut self, form: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<()> {
+    fn let_bind_serial(&mut self, form: &Rt<GcObj>, gc: &mut Arena) -> Result<()> {
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
@@ -594,11 +579,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(())
     }
 
-    fn let_bind_parallel<'a, 'gc>(
-        &mut self,
-        form: &Rt<GcObj<'a>>,
-        gc: &'gc mut Arena,
-    ) -> Result<()> {
+    fn let_bind_parallel(&mut self, form: &Rt<GcObj>, gc: &mut Arena) -> Result<()> {
         root!(let_bindings, Vec::<&'static Cons>::new(), gc);
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
@@ -625,9 +606,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(())
     }
 
-    fn let_bind_value<'a, 'gc>(
+    fn let_bind_value<'gc>(
         &mut self,
-        cons: &Rt<Gc<&'a Cons>>,
+        cons: &Rt<Gc<&Cons>>,
         gc: &'gc mut Arena,
     ) -> Result<&'gc Cons> {
         element_iter!(iter, gc.bind(cons.bind(gc).cdr()), gc);

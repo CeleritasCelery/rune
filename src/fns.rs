@@ -128,16 +128,16 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 #[defun]
 pub(crate) fn reverse<'ob>(seq: Gc<List>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
     let mut tail = GcObj::NIL;
-    for elem in seq.elements(arena) {
+    for elem in seq.elements() {
         tail = cons!(elem?, tail; arena);
     }
     Ok(tail)
 }
 
-fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>, arena: &'ob Arena) -> Result<()> {
+fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
     match seq.get() {
         List::Cons(cons) => {
-            for elt in cons.elements(arena) {
+            for elt in cons.elements() {
                 list.push(elt?);
             }
         }
@@ -153,19 +153,19 @@ pub(crate) fn append<'ob>(
     arena: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
     let mut list = Vec::new();
-    join(&mut list, append.try_into()?, arena)?;
+    join(&mut list, append.try_into()?)?;
     for seq in sequences {
-        join(&mut list, (*seq).try_into()?, arena)?;
+        join(&mut list, (*seq).try_into()?)?;
     }
     Ok(slice_into_list(&list, None, arena))
 }
 
 #[defun]
-pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, arena: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> GcObj<'ob> {
     match alist.get() {
         List::Nil => GcObj::NIL,
         List::Cons(cons) => cons
-            .elements(arena)
+            .elements()
             .find(|x| match x {
                 Ok(elem) => match elem.get() {
                     Object::Cons(cons) => data::eq(key, cons.car()),
@@ -290,9 +290,9 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
 }
 
 #[defun]
-pub(crate) fn length<'ob>(sequence: GcObj<'ob>, arena: &'ob Arena) -> Result<i64> {
+pub(crate) fn length(sequence: GcObj) -> Result<i64> {
     let size = match sequence.get() {
-        Object::Cons(x) => x.elements(arena).len(),
+        Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
         Object::Nil => 0,
@@ -304,8 +304,8 @@ pub(crate) fn length<'ob>(sequence: GcObj<'ob>, arena: &'ob Arena) -> Result<i64
 }
 
 #[defun]
-pub(crate) fn nth<'ob>(n: usize, list: Gc<List<'ob>>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
-    list.elements(arena).nth(n).unwrap_or(Ok(GcObj::NIL))
+pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
+    list.elements().nth(n).unwrap_or(Ok(GcObj::NIL))
 }
 
 #[defun]
@@ -454,7 +454,7 @@ mod test {
         let element = cons!(5, 6; arena);
         let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
         let list = list.try_into().unwrap();
-        let result = assq(5.into(), list, arena);
+        let result = assq(5.into(), list);
         assert_eq!(result, element);
     }
 }
