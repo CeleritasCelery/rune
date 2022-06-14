@@ -307,6 +307,7 @@ create_symbolmap!(
         crate::alloc::DEFSUBR,
         crate::editfns::DEFSUBR,
         crate::keymap::DEFSUBR,
+        crate::buffer::DEFSUBR,
     }
     EXPORT => {
         crate::data::DEFVAR,

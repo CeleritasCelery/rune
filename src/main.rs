@@ -75,6 +75,7 @@ mod fns;
 mod hashmap;
 mod interpreter;
 mod keymap;
+mod buffer;
 mod lread;
 mod fileio;
 mod opcode;

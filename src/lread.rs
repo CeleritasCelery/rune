@@ -120,7 +120,7 @@ fn find_file_in_load_path(
     }
     match final_file {
         Some(x) => Ok(x),
-        None => bail!("Unable to find file {file} in load-path"),
+        None => bail!("Unable to find file `{file}' in load-path"),
     }
 }
 
