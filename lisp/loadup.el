@@ -136,23 +136,23 @@
 ;; implemented in subr.el.
 (add-hook 'after-load-functions (lambda (f) (garbage-collect)))
 
-(load "version")
+;; (load "version")
 
-(load "widget")
-(load "custom")
-(load "emacs-lisp/map-ynp")
-(load "international/mule")
-(load "international/mule-conf")
-(load "env")
-(load "format")
-(load "bindings")
-(load "window")  ; Needed here for `replace-buffer-in-windows'.
+;; (load "widget")
+;; (load "custom")
+;; (load "emacs-lisp/map-ynp")
+;; (load "international/mule")
+;; (load "international/mule-conf")
+;; (load "env")
+;; (load "format")
+;; (load "bindings")
+;; (load "window")  ; Needed here for `replace-buffer-in-windows'.
 ;; We are now capable of resizing the mini-windows, so give the
 ;; variable its advertised default value (it starts as nil, see
 ;; xdisp.c).
 (setq resize-mini-windows 'grow-only)
 (setq load-source-file-function 'load-with-code-conversion)
-(load "files")
+;; (load "files")
 
 ;; Load-time macro-expansion can only take effect after setting
 ;; load-source-file-function because of where it is called in lread.c.
@@ -167,10 +167,10 @@
   (let ((max-lisp-eval-depth (* 2 max-lisp-eval-depth)))
     (load "emacs-lisp/macroexp")))
 
-(load "cus-face")
-(load "faces")  ; after here, `defface' may be used.
+;; (load "cus-face")
+;; (load "faces")  ; after here, `defface' may be used.
 
-(load "button")
+;; (load "button")
 
 ;; We don't want to store loaddefs.el in the repository because it is
 ;; a generated file; but it is required in order to compile the lisp files.
