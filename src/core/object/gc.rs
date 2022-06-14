@@ -962,6 +962,17 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     }
 }
 
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob String> {
+    type Error = Error;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.tag() {
+            Tag::String => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(Error::from_object(Type::String, value)),
+        }
+    }
+}
+
 impl<'old, 'new> WithLifetime<'new> for Gc<&'old String> {
     type Out = Gc<&'new String>;
 

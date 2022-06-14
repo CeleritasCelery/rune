@@ -240,25 +240,26 @@ impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
     }
 }
 
-impl TryFrom<&Rt<GcObj<'_>>> for Option<&Rt<Gc<&String>>> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
-        match value.inner.get() {
-            Object::Nil => Ok(None),
-            Object::String(_) => Ok(Some(unsafe {
-                &*(value as *const Rt<GcObj>).cast::<Rt<Gc<&String>>>()
-            })),
-            x => Err(Error::from_object(Type::String, x).into()),
-        }
-    }
-}
-
 impl From<&Rt<GcObj<'_>>> for Option<()> {
     fn from(value: &Rt<GcObj<'_>>) -> Self {
         match value.inner.get() {
             Object::Nil => None,
             _ => Some(()),
+        }
+    }
+}
+
+impl Rt<GcObj<'static>> {
+    pub(crate) fn try_as_option<T, E>(&self) -> Result<Option<&Rt<Gc<T>>>, E>
+    where
+        GcObj<'static>: TryInto<Gc<T>, Error = E>,
+    {
+        match self.inner.get() {
+            Object::Nil => Ok(None),
+            _ => {
+                let _: Gc<T> = self.inner.try_into()?;
+                unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
+            }
         }
     }
 }

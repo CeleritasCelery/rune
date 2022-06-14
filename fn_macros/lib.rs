@@ -116,6 +116,9 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
                 Gc::Obj => quote! {&args[#idx..]},
                 Gc::Other => unreachable!(),
             },
+            ArgType::OptionRt => {
+                quote! { crate::core::arena::Rt::try_as_option(&args[#idx])? }
+            }
             ArgType::Other | ArgType::Option => {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
@@ -180,6 +183,7 @@ enum ArgType {
     Slice(Gc),
     SliceRt(Gc),
     Option,
+    OptionRt,
     Other,
 }
 
@@ -191,7 +195,7 @@ impl ArgType {
 
     fn is_positional_arg(&self) -> bool {
         use ArgType::*;
-        matches!(self, Rt(_) | Gc(_) | Other | Option)
+        matches!(self, Rt(_) | Gc(_) | Other | Option | OptionRt)
     }
 
     fn is_rest_arg(&self) -> bool {
@@ -345,7 +349,16 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
             if name == "Rt" {
                 get_rt_type(path)?
             } else if name == "Option" {
-                ArgType::Option
+                let outer = path.path.segments.last().unwrap();
+                match get_generic_param(outer) {
+                    Some(syn::Type::Reference(inner)) => match inner.elem.as_ref() {
+                        syn::Type::Path(path) if get_path_ident_name(path) == "Rt" => {
+                            ArgType::OptionRt
+                        }
+                        _ => ArgType::Option,
+                    },
+                    _ => ArgType::Option,
+                }
             } else {
                 get_object_type(path)
             }
@@ -360,7 +373,7 @@ fn get_object_type(type_path: &syn::TypePath) -> ArgType {
         ArgType::Gc(Gc::Obj)
     } else if outer_type.ident == "Gc" {
         let inner = match get_generic_param(outer_type) {
-            Some(generic) if get_path_ident_name(generic) == "Object" => Gc::Obj,
+            Some(syn::Type::Path(generic)) if get_path_ident_name(generic) == "Object" => Gc::Obj,
             _ => Gc::Other,
         };
         ArgType::Gc(inner)
@@ -372,18 +385,18 @@ fn get_object_type(type_path: &syn::TypePath) -> ArgType {
 fn get_rt_type(type_path: &syn::TypePath) -> Result<ArgType, Error> {
     let segment = type_path.path.segments.last().unwrap();
     match get_generic_param(segment) {
-        Some(inner) => match get_object_type(inner) {
+        Some(syn::Type::Path(inner)) => match get_object_type(inner) {
             ArgType::Gc(gc) => Ok(ArgType::Rt(gc)),
             _ => Err(Error::new_spanned(inner, "Found Rt of non-Gc type")),
         },
-        None => Ok(ArgType::Other),
+        _ => Ok(ArgType::Other),
     }
 }
 
-fn get_generic_param(outer_type: &syn::PathSegment) -> Option<&syn::TypePath> {
+fn get_generic_param(outer_type: &syn::PathSegment) -> Option<&syn::Type> {
     match &outer_type.arguments {
         syn::PathArguments::AngleBracketed(generic) => match generic.args.first().unwrap() {
-            syn::GenericArgument::Type(syn::Type::Path(path)) => Some(path),
+            syn::GenericArgument::Type(ty) => Some(ty),
             _ => None,
         },
         _ => None,
@@ -462,6 +475,7 @@ mod test {
         test_args(quote! {x: &Rt<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
         test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
+        test_args(quote! {x: Option<&Rt<GcObj>>}, &[ArgType::OptionRt]);
         test_args(quote! {x: &[GcObj]}, &[ArgType::Slice(Gc::Obj)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);

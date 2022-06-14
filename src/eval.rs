@@ -1,6 +1,7 @@
 use fn_macros::defun;
 
 use crate::core::arena::Rt;
+use crate::core::object::{Callable, Object};
 use crate::core::{
     arena::{Arena, IntoRoot, Root},
     object::{Function, Gc, GcObj},
@@ -47,4 +48,32 @@ pub(crate) fn funcall<'ob>(
     function.call(arg_list, env, arena, None)
 }
 
-defsubr!(apply, funcall);
+#[defun]
+pub(crate) fn macroexpand<'ob>(
+    form: &Rt<GcObj>,
+    environment: Option<&Rt<GcObj>>,
+    gc: &'ob mut Arena,
+    env: &mut Root<Environment>,
+) -> Result<GcObj<'ob>> {
+    if let Some(x) = environment {
+        unimplemented!("macroexpand override environment: {x:?}")
+    }
+    if let Object::Cons(form) = form.bind(gc).get() {
+        if let Object::Symbol(name) = form.car().get() {
+            if let Some(callable) = name.resolve_callable(gc) {
+                if let Callable::Cons(cons) = callable.get() {
+                    if let Ok(mcro) = cons.try_as_macro() {
+                        let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
+                        root!(args, macro_args.into_root(), gc);
+                        let macro_func: Gc<Function> = mcro.into();
+                        root!(macro_func, gc);
+                        return macro_func.call(args, env, gc, Some(name.name));
+                    }
+                }
+            }
+        }
+    }
+    Ok(form.bind(gc))
+}
+
+defsubr!(apply, funcall, macroexpand);
