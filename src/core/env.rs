@@ -343,6 +343,7 @@ create_symbolmap!(
         SYSTEM_TYPE => "system-type",
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
         CURRENT_LOAD_LIST => "current-load-list",
+        LOAD_PATH => "load-path",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
     }

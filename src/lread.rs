@@ -93,8 +93,38 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     }
 }
 
+fn find_file_in_load_path(
+    file: &str,
+    arena: &Arena,
+    env: &mut Root<Environment>,
+) -> Result<PathBuf> {
+    let load_path = env.deref_mut(arena).vars.get(&sym::LOAD_PATH).unwrap();
+    let paths = load_path
+        .bind(arena)
+        .as_list()
+        .context("`load-path' was not a list")?;
+    let mut final_file = None;
+    for path in paths {
+        match path?.get() {
+            Object::String(path) => {
+                if let Some(x) = file_in_path(file, path) {
+                    final_file = Some(x);
+                    break;
+                }
+            }
+            x => {
+                return Err(Error::from_object(Type::String, x))
+                    .context("Found non-string in `load-path'")
+            }
+        }
+    }
+    match final_file {
+        Some(x) => Ok(x),
+        None => bail!("Unable to find file {file} in load-path"),
+    }
+}
+
 #[defun]
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: Option<()>,
@@ -109,30 +139,7 @@ pub(crate) fn load<'ob>(
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {
-        let load_path = env.deref_mut(arena).vars.get(&sym::LOAD_PATH).unwrap();
-        let paths = load_path
-            .bind(arena)
-            .as_list()
-            .context("`load-path' was not a list")?;
-        let mut final_file = None;
-        for path in paths {
-            match path?.get() {
-                Object::String(path) => {
-                    if let Some(x) = file_in_path(file, path) {
-                        final_file = Some(x);
-                        break;
-                    }
-                }
-                x => {
-                    return Err(Error::from_object(Type::String, x))
-                        .context("Found non-string in `load-path'")
-                }
-            }
-        }
-        match final_file {
-            Some(x) => x,
-            None => bail!("Unable to find file {file} in load-path"),
-        }
+        find_file_in_load_path(file, arena, env)?
     };
 
     if nomessage.is_none() {
