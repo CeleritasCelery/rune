@@ -162,7 +162,7 @@ pub(crate) trait IntoObject<'ob> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for Gc<Object<'ob>> {
+impl<'ob, T> IntoObject<'ob> for Gc<T> {
     type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
@@ -170,12 +170,12 @@ impl<'ob> IntoObject<'ob> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for Option<Gc<Object<'ob>>> {
+impl<'ob, T> IntoObject<'ob> for Option<Gc<T>> {
     type Out = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         match self {
-            Some(x) => unsafe { x.with_lifetime() },
+            Some(x) => unsafe { transmute(x) },
             None => GcObj::NIL,
         }
     }
@@ -447,6 +447,10 @@ impl<'ob> From<i64> for Gc<Number<'ob>> {
 pub(crate) enum List<'ob> {
     Nil,
     Cons(&'ob Cons),
+}
+
+impl List<'_> {
+    pub(crate) const EMPTY: Gc<Self> = Gc::from_tag(Tag::Nil);
 }
 
 impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
@@ -1235,6 +1239,15 @@ impl<'ob> Gc<Object<'ob>> {
             ObjectAllocation::Cons(x) => x.mark(stack),
             ObjectAllocation::LispFn(_) => unimplemented!(),
             ObjectAllocation::NonAllocated => {}
+        }
+    }
+}
+
+impl<'ob> List<'ob> {
+    pub(crate) fn car(self) -> GcObj<'ob> {
+        match self {
+            List::Nil => GcObj::NIL,
+            List::Cons(x) => x.car(),
         }
     }
 }

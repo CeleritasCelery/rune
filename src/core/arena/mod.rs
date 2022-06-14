@@ -435,11 +435,11 @@ mod test {
     fn garbage_collect() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let vec1: Vec<&'static Cons> = Vec::new();
+        let vec1: Vec<GcObj> = Vec::new();
         root!(vec, vec1, arena);
         arena.garbage_collect(false);
-        let cons: Gc<&Cons> = list!["foo", 1, false, "end"; arena];
-        vec.deref_mut(arena).push(&*cons);
+        let cons = list!["foo", 1, false, "end"; arena];
+        vec.deref_mut(arena).push(cons);
         arena.garbage_collect(false);
     }
 }

@@ -219,24 +219,24 @@ defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $arena:expr) => {
-        $arena.add(
+        $arena.add::<_, _, $crate::core::object::Object>(
             #[allow(unused_unsafe)]
             unsafe {
-                crate::core::cons::Cons::new($arena.add($car), $arena.add($cdr))
+                $crate::core::cons::Cons::new($arena.add($car), $arena.add($cdr))
             },
         )
     };
     ($car:expr; $arena:expr) => {
-        $arena.add(unsafe {
-            crate::core::cons::Cons::new($arena.add($car), crate::core::object::GcObj::NIL)
+        $arena.add::<_, _, $crate::core::object::Object>(unsafe {
+            $crate::core::cons::Cons::new($arena.add($car), $crate::core::object::GcObj::NIL)
         })
     };
 }
 
 #[macro_export]
 macro_rules! list {
-    ($x:expr; $arena:expr) => (crate::cons!($x; $arena));
-    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => (crate::cons!($x, list!($($y),+ ; $arena) ; $arena));
+    ($x:expr; $arena:expr) => ($crate::cons!($x; $arena));
+    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => ($crate::cons!($x, list!($($y),+ ; $arena) ; $arena));
 }
 
 #[cfg(test)]
