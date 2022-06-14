@@ -125,6 +125,15 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     Ok(prev)
 }
 
+#[defun]
+pub(crate) fn reverse<'ob>(seq: Gc<List>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
+    let mut tail = GcObj::NIL;
+    for elem in seq.elements(arena) {
+        tail = cons!(elem?, tail; arena);
+    }
+    Ok(tail)
+}
+
 fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>, arena: &'ob Arena) -> Result<()> {
     match seq.get() {
         List::Cons(cons) => {
@@ -259,7 +268,7 @@ fn require<'ob>(
     };
     let file: GcObj = arena.add(file);
     root!(file, arena);
-    match crate::lread::load(file, None, arena, env) {
+    match crate::lread::load(file, None, None, arena, env) {
         Ok(_) => Ok(feature.into()),
         Err(e) => match noerror {
             Some(()) => Ok(Gc::NIL),
@@ -388,7 +397,7 @@ fn enable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{arena::RootSet, object::IntoObject};
+    use crate::core::arena::RootSet;
 
     use super::*;
 
@@ -397,12 +406,12 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         {
-            let list: GcObj = list![1, 2, 3, 1, 4, 1; arena];
+            let list = list![1, 2, 3, 1, 4, 1; arena];
             let res = delq(1.into(), list.try_into().unwrap()).unwrap();
             assert_eq!(res, list![2, 3, 4; arena]);
         }
         {
-            let list: GcObj = list![true, true, true; arena];
+            let list = list![true, true, true; arena];
             let res = delq(GcObj::TRUE, list.try_into().unwrap()).unwrap();
             assert_eq!(res, GcObj::NIL);
         }
@@ -418,18 +427,23 @@ mod test {
     }
 
     #[test]
-    fn test_nreverse() {
+    fn test_reverse() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         {
-            let list: GcObj = list![1, 2, 3, 4; arena];
-            let res: GcObj = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            let list = list![1, 2, 3, 4; arena];
+            let res = nreverse(list.try_into().unwrap()).unwrap();
             assert_eq!(res, list![4, 3, 2, 1; arena]);
         }
         {
-            let list: GcObj = list![1; arena];
-            let res: GcObj = nreverse(list.try_into().unwrap()).unwrap().into_obj(arena);
+            let list = list![1; arena];
+            let res = nreverse(list.try_into().unwrap()).unwrap();
             assert_eq!(res, list![1; arena]);
+        }
+        {
+            let list = list![1, 2, 3; arena];
+            let res = reverse(list.try_into().unwrap(), arena).unwrap();
+            assert_eq!(res, list![3, 2, 1; arena]);
         }
     }
 
@@ -438,7 +452,7 @@ mod test {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let element = cons!(5, 6; arena);
-        let list: GcObj = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
+        let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list, arena);
         assert_eq!(result, element);
@@ -448,6 +462,7 @@ mod test {
 defsubr!(
     mapcar,
     mapc,
+    reverse,
     nreverse,
     assq,
     make_hash_table,

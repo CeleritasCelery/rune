@@ -87,6 +87,7 @@ pub(crate) fn load_internal<'ob>(
 pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: Option<()>,
+    _nomessage: Option<()>,
     arena: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
