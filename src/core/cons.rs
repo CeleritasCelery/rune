@@ -257,7 +257,7 @@ mod test {
         let arena = &Arena::new(roots);
         // TODO: Need to find a way to solve this
         // assert_eq!(16, size_of::<Cons>());
-        let x: GcObj = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
+        let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
         assert!(matches!(x.get(), Object::Cons(_)));
         let cons1 = match x.get() {
             Object::Cons(x) => x,
@@ -281,10 +281,10 @@ mod test {
         let cmp2: GcObj = 9.into();
         assert_eq!(cmp2, cons3.cdr());
 
-        let lhs: GcObj = cons!(5, "foo"; arena);
+        let lhs = cons!(5, "foo"; arena);
         assert_eq!(lhs, cons!(5, "foo"; arena));
         assert_ne!(lhs, cons!(5, "bar"; arena));
-        let lhs: GcObj = list![5, 1, 1.5, "foo"; arena];
+        let lhs = list![5, 1, 1.5, "foo"; arena];
         assert_eq!(lhs, list![5, 1, 1.5, "foo"; arena]);
         assert_ne!(lhs, list![5, 1, 1.5, "bar"; arena]);
     }

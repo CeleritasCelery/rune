@@ -200,7 +200,7 @@ mod test {
     fn cons_iter() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let cons: GcObj = list![1, 2, 3, 4; arena];
+        let cons = list![1, 2, 3, 4; arena];
         let list: Gc<List> = cons.try_into().unwrap();
         let iter = list.conses();
         let expects = vec![1, 2, 3, 4];
@@ -215,7 +215,7 @@ mod test {
         let func = || -> Result<()> {
             let roots = &RootSet::default();
             let arena = &Arena::new(roots);
-            let cons: GcObj = list![1, 2, 3, 4; arena];
+            let cons = list![1, 2, 3, 4; arena];
             element_iter!(iter, cons, arena);
             for expect in 1..=4 {
                 let actual = iter.next().unwrap().bind(arena);

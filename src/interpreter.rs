@@ -321,7 +321,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end = cons!(env, cons.cdr(); gc);
-                    let closure: GcObj = cons!(&sym::CLOSURE, end; gc);
+                    let closure = cons!(&sym::CLOSURE, end; gc);
                     Ok(gc.bind(closure))
                 } else {
                     Ok(cons.into())
@@ -672,7 +672,7 @@ mod test {
         check_interpreter("nil", false, arena);
         check_interpreter("t", true, arena);
         check_interpreter("\"foo\"", "foo", arena);
-        let list: GcObj = list!(1, 2; arena);
+        let list = list!(1, 2; arena);
         root!(list, arena);
         check_interpreter("'(1 2)", list, arena);
     }
@@ -737,12 +737,12 @@ mod test {
     fn test_functions() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let list: GcObj = list![&sym::CLOSURE, list![true; arena]; arena];
+        let list = list![&sym::CLOSURE, list![true; arena]; arena];
         root!(list, arena);
         check_interpreter("(function (lambda))", list, arena);
         let x = intern("x");
         let y = intern("y");
-        let list: GcObj = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
+        let list = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
         root!(list, arena);
         check_interpreter("(function (lambda (x) x))", list, arena);
         let list: GcObj =
@@ -750,21 +750,21 @@ mod test {
         root!(list, arena);
         check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, arena);
 
-        let list: GcObj = list!(5, false; arena);
+        let list = list!(5, false; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5))",
             list,
             arena,
         );
-        let list: GcObj = list!(5, 7; arena);
+        let list = list!(5, 7; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7))",
             list,
             arena,
         );
-        let list: GcObj = list!(5, 7, 11; arena);
+        let list = list!(5, 7, 11; arena);
         root!(list, arena);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
