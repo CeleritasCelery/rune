@@ -149,6 +149,8 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
     (load "lisp/backquote.el")
     (load "lisp/subr.el")
     (load "lisp/pcase.el")
+    (load "lisp/gv.el")
+    (load "lisp/inline.el")
 )"#,
     );
 
@@ -162,10 +164,11 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
 
     crate::debug::enable_debug();
 
+    // Part of cl-lib
     buffer = String::from(
         r#"
 (progn
-    (load "lisp/gv.el")
+    (load "lisp/cl-macs.el")
 )"#,
     );
 
