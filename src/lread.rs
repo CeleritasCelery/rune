@@ -96,9 +96,9 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
 fn find_file_in_load_path(
     file: &str,
     arena: &Arena,
-    env: &mut Root<Environment>,
+    env: &Root<Environment>,
 ) -> Result<PathBuf> {
-    let load_path = env.deref_mut(arena).vars.get(&sym::LOAD_PATH).unwrap();
+    let load_path = env.vars.get(&sym::LOAD_PATH).unwrap();
     let paths = load_path
         .bind(arena)
         .as_list()

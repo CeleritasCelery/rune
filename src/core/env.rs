@@ -299,6 +299,7 @@ create_symbolmap!(
         crate::interpreter::DEFSUBR,
         crate::core::cons::DEFSUBR,
         crate::lread::DEFSUBR,
+        crate::fileio::DEFSUBR,
         crate::data::DEFSUBR,
         crate::fns::DEFSUBR,
         crate::search::DEFSUBR,
@@ -346,6 +347,7 @@ create_symbolmap!(
         LOAD_PATH => "load-path",
         DUMP_MODE => "dump-mode",
         COMMAND_LINE_ARGS => "command-line-args",
+        DEFAULT_DIRECTORY => "default-directory",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
     }

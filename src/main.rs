@@ -76,6 +76,7 @@ mod hashmap;
 mod interpreter;
 mod keymap;
 mod lread;
+mod fileio;
 mod opcode;
 mod reader;
 mod search;
