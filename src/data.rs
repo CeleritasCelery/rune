@@ -199,6 +199,12 @@ pub(crate) fn atom(object: GcObj) -> bool {
 }
 
 #[defun]
+fn byte_code_function_p(_object: GcObj) -> bool {
+    // TODO: implement once byte compiling is added
+    false
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
@@ -280,5 +286,6 @@ defsubr!(
     keywordp,
     integerp,
     atom,
+    byte_code_function_p,
     indirect_function,
 );
