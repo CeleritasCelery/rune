@@ -344,6 +344,8 @@ create_symbolmap!(
         MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
         CURRENT_LOAD_LIST => "current-load-list",
         LOAD_PATH => "load-path",
+        DUMP_MODE => "dump-mode",
+        COMMAND_LINE_ARGS => "command-line-args",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
     }
