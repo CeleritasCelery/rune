@@ -17,8 +17,7 @@ pub(crate) use trace::*;
 /// when it is created.
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
-    roots: RefCell<Vec<GcObj<'static>>>,
-    root_structs: RefCell<Vec<*const dyn Trace>>,
+    roots: RefCell<Vec<*const dyn Trace>>,
 }
 
 /// A block of allocations. This type should be owned by [Arena] and not used
@@ -343,9 +342,6 @@ impl<'ob, 'rt> Arena<'rt> {
         }
         let gray_stack = &mut Vec::new();
         for x in self.root_set.roots.borrow().iter() {
-            x.trace_mark(gray_stack);
-        }
-        for x in self.root_set.root_structs.borrow().iter() {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {

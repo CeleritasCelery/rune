@@ -115,7 +115,7 @@ impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
         assert!(root.data.is_null(), "Attempt to reinit Root");
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
         root.data = dyn_ptr.cast::<T>();
-        root.root_set.root_structs.borrow_mut().push(dyn_ptr);
+        root.root_set.roots.borrow_mut().push(dyn_ptr);
         // We need the safety lifetime to match the borrow
         std::mem::transmute::<&mut Root<'rt, '_, T>, &mut Root<'rt, 'a, T>>(root)
     }
@@ -124,7 +124,7 @@ impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
 impl<T> Drop for Root<'_, '_, T> {
     fn drop(&mut self) {
         assert!(!self.data.is_null(), "Root was dropped while still not set");
-        self.root_set.root_structs.borrow_mut().pop();
+        self.root_set.roots.borrow_mut().pop();
     }
 }
 

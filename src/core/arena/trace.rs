@@ -38,11 +38,11 @@ mod test {
         let roots = &RootSet::default();
         let gc = &mut Arena::new(roots);
         let foo = Foo(7);
-        assert_eq!(roots.root_structs.borrow().len(), 0);
+        assert_eq!(roots.roots.borrow().len(), 0);
         {
             root!(_root, foo, gc);
-            assert_eq!(roots.root_structs.borrow().len(), 1);
+            assert_eq!(roots.roots.borrow().len(), 1);
         }
-        assert_eq!(roots.root_structs.borrow().len(), 0);
+        assert_eq!(roots.roots.borrow().len(), 0);
     }
 }
