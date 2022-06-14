@@ -101,12 +101,6 @@ impl<'old, 'new> WithLifetime<'new> for &'old Cons {
     }
 }
 
-impl<'brw, 'new> ConstrainLifetime<'new, &'new Cons> for &'brw Cons {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'new Cons {
-        unsafe { self.with_lifetime() }
-    }
-}
-
 impl Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
@@ -145,24 +139,6 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-trait ConstrainLifetime<'new, T> {
-    fn constrain_lifetime<const C: bool>(self, cx: &'new Block<C>) -> T;
-}
-
-impl<'old, 'new> ConstrainLifetime<'new, GcObj<'new>> for GcObj<'old> {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> GcObj<'new> {
-        // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe { self.with_lifetime() }
-    }
-}
-
-impl<'old, 'new, 'brw> ConstrainLifetime<'new, &'brw [GcObj<'new>]> for &'brw [GcObj<'old>] {
-    fn constrain_lifetime<const C: bool>(self, _cx: &'new Block<C>) -> &'brw [GcObj<'new>] {
-        // Lifetime is bound to borrow of Block, so it is safe to extend
-        unsafe { std::mem::transmute::<&[GcObj<'old>], &[GcObj<'new>]>(self) }
-    }
-}
-
 define_unbox!(Cons, &'ob Cons);
 
 #[defun]
@@ -198,19 +174,19 @@ fn cdr_safe(object: GcObj) -> GcObj {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &'ob Cons, newcar: GcObj<'ob>) -> GcObj<'ob> {
+fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> GcObj<'ob> {
     cell.set_car(newcar);
     newcar
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &'ob Cons, newcdr: GcObj<'ob>) -> GcObj<'ob> {
+fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> GcObj<'ob> {
     cell.set_cdr(newcdr);
     newcdr
 }
 
 #[defun]
-fn cons<'ob>(car: GcObj<'ob>, cdr: GcObj<'ob>, arena: &'ob Arena) -> GcObj<'ob> {
+fn cons<'ob>(car: GcObj, cdr: GcObj, arena: &'ob Arena) -> GcObj<'ob> {
     crate::cons!(car, cdr; arena)
 }
 
