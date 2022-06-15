@@ -10,4 +10,10 @@ fn set_buffer(buffer_or_name: GcObj) -> GcObj {
     buffer_or_name
 }
 
-defsubr!(set_buffer);
+#[defun]
+fn set_buffer_modified_p(flag: GcObj) -> GcObj {
+    // TODO: implement
+    flag
+}
+
+defsubr!(set_buffer, set_buffer_modified_p);
