@@ -979,6 +979,17 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob String> {
     }
 }
 
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob RefCell<HashTable<'ob>>> {
+    type Error = Error;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.tag() {
+            Tag::HashTable => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(Error::from_object(Type::HashTable, value)),
+        }
+    }
+}
+
 impl<'old, 'new> WithLifetime<'new> for Gc<&'old String> {
     type Out = Gc<&'new String>;
 
