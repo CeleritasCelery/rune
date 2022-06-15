@@ -3076,8 +3076,8 @@ the form NAME which is a shorthand for (NAME NAME)."
             (funcall orig pred1
                      (cl--defstruct-predicate t2))))
      (funcall orig pred1 pred2))))
-(advice-add 'pcase--mutually-exclusive-p
-            :around #'cl--pcase-mutually-exclusive-p)
+;; (advice-add 'pcase--mutually-exclusive-p
+;;             :around #'cl--pcase-mutually-exclusive-p)
 
 
 (defun cl-struct-sequence-type (struct-type)
