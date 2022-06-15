@@ -139,7 +139,14 @@ pub(crate) fn load<'ob>(
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {
-        find_file_in_load_path(file, arena, env)?
+        match find_file_in_load_path(file, arena, env) {
+            Ok(x) => x,
+            Err(e) => if noerror.is_some() {
+                return Ok(false);
+            } else {
+                return Err(e);
+            },
+        }
     };
 
     if nomessage.is_none() {
