@@ -143,6 +143,7 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
         Environment::set_var(env, &sym::LOAD_PATH, cons!("lisp"; arena));
         Environment::set_var(env, &sym::DUMP_MODE, GcObj::NIL);
         Environment::set_var(env, &sym::COMMAND_LINE_ARGS, cons!(""; arena));
+        Environment::set_var(env, &sym::LOAD_HISTORY, GcObj::NIL);
     }
     crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
         .expect("null should be defined");

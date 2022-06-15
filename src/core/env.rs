@@ -349,6 +349,7 @@ create_symbolmap!(
         DUMP_MODE => "dump-mode",
         COMMAND_LINE_ARGS => "command-line-args",
         DEFAULT_DIRECTORY => "default-directory",
+        LOAD_HISTORY => "load-history",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
     }
