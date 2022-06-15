@@ -123,8 +123,11 @@ impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
 
 impl<T> Drop for Root<'_, '_, T> {
     fn drop(&mut self) {
-        assert!(!self.data.is_null(), "Root was dropped while still not set");
-        self.root_set.roots.borrow_mut().pop();
+        if self.data.is_null() {
+            eprintln!("Error: Root was dropped while still not set");
+        } else {
+            self.root_set.roots.borrow_mut().pop();
+        }
     }
 }
 

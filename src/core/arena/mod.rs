@@ -40,10 +40,9 @@ pub(crate) struct Arena<'rt> {
 impl<'rt> Drop for Arena<'rt> {
     fn drop(&mut self) {
         self.garbage_collect(true);
-        assert!(
-            self.block.objects.borrow().is_empty(),
-            "Arena was dropped while still holding data"
-        );
+        if !self.block.objects.borrow().is_empty() {
+            eprintln!("Error: Arena was dropped while still holding data");
+        }
     }
 }
 

@@ -182,7 +182,7 @@ impl AsRef<GlobalSymbol> for SymbolBox {
 // have a garbage collector
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        panic!("Tried to drop {:?}", unsafe { &*self.0 });
+        panic!("Tried to drop Symbol: {:?}", unsafe { &*self.0 });
     }
 }
 
