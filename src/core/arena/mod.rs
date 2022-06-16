@@ -60,9 +60,9 @@ enum OwnedObject<'ob> {
 
 /// A container type that has a mark bit for garbage collection.
 #[derive(Debug)]
-pub(crate) struct Allocation<T> {
+pub(in crate::core) struct Allocation<T> {
     marked: Cell<bool>,
-    pub(crate) data: T,
+    pub(in crate::core) data: T,
 }
 
 impl<T> Allocation<T> {
@@ -73,7 +73,7 @@ impl<T> Allocation<T> {
         }
     }
 
-    pub(crate) fn mark(&self) {
+    pub(in crate::core) fn mark(&self) {
         self.marked.set(true);
     }
 
@@ -81,7 +81,7 @@ impl<T> Allocation<T> {
         self.marked.set(false);
     }
 
-    pub(crate) fn is_marked(&self) -> bool {
+    pub(in crate::core) fn is_marked(&self) -> bool {
         self.marked.get()
     }
 }
@@ -89,14 +89,6 @@ impl<T> Allocation<T> {
 impl<T: PartialEq> PartialEq for Allocation<T> {
     fn eq(&self, other: &Self) -> bool {
         self.data == other.data
-    }
-}
-
-impl<T> Deref for Allocation<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
     }
 }
 
@@ -128,7 +120,7 @@ impl<'ob> OwnedObject<'ob> {
     }
 }
 
-pub(crate) trait AllocObject
+pub(in crate::core) trait AllocObject
 where
     Self: Sized,
 {

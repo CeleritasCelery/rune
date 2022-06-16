@@ -190,7 +190,7 @@ impl<'ob> IntoObject<'ob> for f64 {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
+        &(*Self::cast_ptr(ptr)).data
     }
 }
 
@@ -240,7 +240,7 @@ impl<'ob> IntoObject<'ob> for LispFn<'ob> {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
+        &(*Self::cast_ptr(ptr)).data
     }
 }
 
@@ -266,7 +266,7 @@ impl<'ob> IntoObject<'ob> for String {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
+        &(*Self::cast_ptr(ptr)).data
     }
 }
 
@@ -279,7 +279,7 @@ impl<'ob> IntoObject<'ob> for &str {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*String::cast_ptr(ptr)
+        &(*String::cast_ptr(ptr)).data
     }
 }
 
@@ -292,7 +292,7 @@ impl<'ob> IntoObject<'ob> for ObjVec<'ob> {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
+        &(*Self::cast_ptr(ptr)).data
     }
 }
 
@@ -305,7 +305,7 @@ impl<'ob> IntoObject<'ob> for HashTable<'ob> {
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
+        &(*Self::cast_ptr(ptr)).data
     }
 }
 
@@ -1185,7 +1185,7 @@ impl fmt::Debug for Object<'_> {
     }
 }
 
-pub(crate) enum ObjectAllocation<'ob> {
+enum ObjectAllocation<'ob> {
     Float(&'ob Allocation<f64>),
     Cons(&'ob Cons),
     Vec(&'ob Allocation<RefCell<ObjVec<'ob>>>),
@@ -1230,17 +1230,17 @@ impl<'ob> Gc<Object<'ob>> {
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.get_alloc() {
             ObjectAllocation::Float(x) => x.mark(),
-            ObjectAllocation::Vec(vec) => {
-                let content = vec.borrow();
-                let unmarked = content
+            ObjectAllocation::Vec(vec_alloc) => {
+                let vec = vec_alloc.data.borrow();
+                let unmarked = vec
                     .iter()
                     .filter_map(|x| x.is_markable().then(|| x.into_raw()));
                 stack.extend(unmarked);
-                vec.mark();
+                vec_alloc.mark();
             }
-            ObjectAllocation::HashTable(table) => {
-                let content = table.borrow();
-                for (k, v) in &*content {
+            ObjectAllocation::HashTable(table_alloc) => {
+                let table = table_alloc.data.borrow();
+                for (k, v) in &*table {
                     if k.is_markable() {
                         stack.push(k.into_raw());
                     }
@@ -1248,7 +1248,7 @@ impl<'ob> Gc<Object<'ob>> {
                         stack.push(v.into_raw());
                     }
                 }
-                table.mark();
+                table_alloc.mark();
             }
             ObjectAllocation::String(x) => x.mark(),
             ObjectAllocation::Cons(x) => x.mark(stack),
