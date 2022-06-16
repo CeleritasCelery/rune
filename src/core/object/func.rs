@@ -136,26 +136,6 @@ impl SubrFn {
     }
 }
 
-#[cfg(test)]
-pub(crate) fn new_subr(
-    name: &'static str,
-    subr: BuiltInFn,
-    required: u16,
-    optional: u16,
-    rest: bool,
-) -> SubrFn {
-    SubrFn {
-        name,
-        subr,
-        args: FnArgs {
-            required,
-            optional,
-            rest,
-            advice: false,
-        },
-    }
-}
-
 impl std::fmt::Debug for SubrFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} -> {:?})", &self.name, self.args)

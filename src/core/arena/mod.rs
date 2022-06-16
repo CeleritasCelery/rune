@@ -1,6 +1,6 @@
 use super::cons::Cons;
 use super::object::{
-    Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, SubrFn, WithLifetime,
+    Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime,
 };
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -56,7 +56,6 @@ enum OwnedObject<'ob> {
     HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
-    SubrFn(Box<SubrFn>),
 }
 
 /// A container type that has a mark bit for garbage collection.
@@ -114,7 +113,6 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::HashTable(x) => x.unmark(),
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::LispFn(x) => x.unmark(),
-            OwnedObject::SubrFn(_) => {}
         }
     }
 
@@ -126,7 +124,6 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::HashTable(x) => x.is_marked(),
             OwnedObject::String(x) => x.is_marked(),
             OwnedObject::LispFn(x) => x.is_marked(),
-            OwnedObject::SubrFn(_) => true,
         }
     }
 }
@@ -178,21 +175,6 @@ impl AllocObject for String {
             OwnedObject::String(Box::new(Allocation::new(self))),
         );
         if let Some(OwnedObject::String(x)) = objects.last_mut() {
-            x.as_ref()
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
-    }
-}
-
-impl AllocObject for SubrFn {
-    type Output = SubrFn;
-    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
-        assert!(CONST, "Attempt to add subrFn to non-const arena");
-        let mut objects = block.objects.borrow_mut();
-        let boxed = Box::new(self);
-        Block::<CONST>::register(&mut objects, OwnedObject::SubrFn(boxed));
-        if let Some(OwnedObject::SubrFn(x)) = objects.last() {
             x.as_ref()
         } else {
             unreachable!("object was not the type we just inserted");

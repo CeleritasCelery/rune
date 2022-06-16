@@ -231,19 +231,6 @@ impl<'ob> IntoObject<'ob> for Cons {
     }
 }
 
-impl<'ob> IntoObject<'ob> for SubrFn {
-    type Out = &'static SubrFn;
-
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
-        let ptr = self.alloc_obj(block);
-        Gc::from_ptr(ptr, Tag::SubrFn)
-    }
-
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &*Self::cast_ptr(ptr)
-    }
-}
-
 impl<'ob> IntoObject<'ob> for LispFn<'ob> {
     type Out = &'ob LispFn<'ob>;
 
@@ -358,7 +345,7 @@ impl<'ob> TaggedPtr<'ob> for Cons {
 }
 
 impl<'ob> TaggedPtr<'ob> for SubrFn {
-    type Ptr = <Self as AllocObject>::Output;
+    type Ptr = Self;
     type Output = &'ob SubrFn;
     const TAG: Tag = Tag::SubrFn;
 }
@@ -530,7 +517,7 @@ impl<'ob> Gc<Callable<'ob>> {
         let (ptr, tag) = self.untag();
         match tag {
             Tag::Cons => Callable::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
-            Tag::SubrFn => Callable::SubrFn(unsafe { SubrFn::from_obj_ptr(ptr) }),
+            Tag::SubrFn => Callable::SubrFn(unsafe { &*ptr.cast() }),
             Tag::LispFn => Callable::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
             _ => unreachable!(),
         }
@@ -629,7 +616,7 @@ impl<'ob> Gc<Function<'ob>> {
         let (ptr, tag) = self.untag();
         match tag {
             Tag::Cons => Function::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
-            Tag::SubrFn => Function::SubrFn(unsafe { SubrFn::from_obj_ptr(ptr) }),
+            Tag::SubrFn => Function::SubrFn(unsafe { &*ptr.cast() }),
             Tag::LispFn => Function::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
             Tag::Symbol => Function::Symbol(unsafe { Symbol::from_obj_ptr(ptr) }),
             _ => unreachable!(),
@@ -719,7 +706,7 @@ impl<'ob> Gc<Object<'ob>> {
         match tag {
             Tag::Symbol => Object::Symbol(unsafe { Symbol::from_obj_ptr(ptr) }),
             Tag::Cons => Object::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
-            Tag::SubrFn => Object::SubrFn(unsafe { SubrFn::from_obj_ptr(ptr) }),
+            Tag::SubrFn => Object::SubrFn(unsafe { &*ptr.cast() }),
             Tag::LispFn => Object::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
             Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
             Tag::Float => Object::Float(unsafe { f64::from_obj_ptr(ptr) }),

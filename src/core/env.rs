@@ -132,7 +132,7 @@ impl GlobalSymbol {
     /// Set the function for this symbol. This function is unsafe to call and
     /// requires that the caller:
     /// 1. Has marked the entire function as read only
-    /// 2. Has cloned the function into the `SymbolMap` arena
+    /// 2. Has cloned the function into the `SymbolMap` block
     unsafe fn set_func(&self, func: Gc<Function>) {
         let val = std::mem::transmute(func);
         self.func.store(val, Ordering::Release);
@@ -226,6 +226,15 @@ impl SymbolMap {
             }
         }
     }
+
+    // unsafe fn init_subr(&mut self) {
+    //     for value in self.map.values_mut() {
+    //         let value = &*value.0;
+    //         let addr = value.func.load(Ordering::Acquire);
+    //         if addr != 0 {
+    //         }
+    //     }
+    // }
 
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
         self.map.insert(sym.name, SymbolBox::from_static(sym));
@@ -369,10 +378,8 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use super::super::arena::{Arena, Root, RootSet};
-    use super::super::object::{GcObj, IntoObject, LispFn};
-    use crate::core::env::Environment;
-    use anyhow::Result;
+    use super::super::arena::{Arena, RootSet};
+    use super::super::object::{IntoObject, LispFn};
     use std::mem::size_of;
 
     #[test]
@@ -415,36 +422,5 @@ mod test {
         };
         assert_eq!(after.body.op_codes.get(0).unwrap(), &2);
         assert_eq!(before.body.op_codes.get(0).unwrap(), &1);
-    }
-
-    #[allow(clippy::unnecessary_wraps)]
-    fn dummy<'ob>(
-        vars: &[Rt<GcObj<'static>>],
-        _map: &mut Root<Environment>,
-        arena: &'ob mut Arena,
-    ) -> Result<GcObj<'ob>> {
-        Ok(vars[0].bind(arena))
-    }
-
-    #[test]
-    fn subr() {
-        let bk: &Block<true> = &Block::new_local();
-
-        let inner = GlobalSymbol::new("bar");
-        let sym = unsafe { fix_lifetime(&inner) };
-        let core_func = crate::core::object::new_subr("bar", dummy, 0, 0, false);
-        let func = core_func.into_obj(bk).into();
-        unsafe {
-            sym.set_func(func);
-        }
-
-        if let Function::SubrFn(subr) = sym.get().unwrap().get() {
-            assert_eq!(
-                *subr,
-                crate::core::object::new_subr("bar", dummy, 0, 0, false)
-            );
-        } else {
-            unreachable!("Type should be subr");
-        }
     }
 }
