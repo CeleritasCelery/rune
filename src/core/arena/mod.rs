@@ -1,7 +1,5 @@
 use super::cons::Cons;
-use super::object::{
-    Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime,
-};
+use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;

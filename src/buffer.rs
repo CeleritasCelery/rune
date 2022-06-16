@@ -1,5 +1,3 @@
-
-
 use fn_macros::defun;
 
 use crate::core::object::GcObj;

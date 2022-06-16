@@ -380,6 +380,13 @@ impl<'ob> TaggedPtr<'ob> for HashTable<'ob> {
     const TAG: Tag = Tag::HashTable;
 }
 
+#[allow(clippy::multiple_inherent_impl)]
+impl SubrFn {
+    pub(in crate::core) unsafe fn gc_from_raw_ptr(ptr: *mut SubrFn) -> Gc<&'static SubrFn> {
+        SubrFn::tag_ptr(ptr)
+    }
+}
+
 ////////////////////////
 // Proc macro section //
 ////////////////////////

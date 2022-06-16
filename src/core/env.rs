@@ -1,5 +1,5 @@
 use super::arena::{Arena, Block, Rt, Trace};
-use super::object::{Callable, Function, Gc, GcObj, RawObj};
+use super::object::{Callable, Function, Gc, GcObj, RawObj, SubrFn};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
 use sptr::Strict;
@@ -95,6 +95,21 @@ impl GlobalSymbol {
         GlobalSymbol {
             name,
             func: AtomicPtr::new(Self::NULL),
+        }
+    }
+
+    pub(crate) const unsafe fn new_with_subr(name: &'static str, subr: &'static SubrFn) -> Self {
+        GlobalSymbol {
+            name,
+            func: AtomicPtr::new((subr as *const SubrFn).cast::<u8>() as *mut u8),
+        }
+    }
+
+    unsafe fn tag_subr(&self) {
+        let ptr = self.func.load(Ordering::Acquire);
+        if Strict::addr(ptr) != 0 {
+            let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
+            self.set_func(func.into());
         }
     }
 
@@ -227,15 +242,6 @@ impl SymbolMap {
         }
     }
 
-    // unsafe fn init_subr(&mut self) {
-    //     for value in self.map.values_mut() {
-    //         let value = &*value.0;
-    //         let addr = value.func.load(Ordering::Acquire);
-    //         if addr != 0 {
-    //         }
-    //     }
-    // }
-
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
         self.map.insert(sym.name, SymbolBox::from_static(sym));
     }
@@ -282,10 +288,10 @@ macro_rules! create_symbolmap {
             pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
                 let size: usize = count!($($sym)*) $(+ $subr.len())*;
                 let mut map = SymbolMap::with_capacity(size);
-                $(for (func, sym) in $subr.iter() {
+                $(for sym in $subr.iter() {
                     // SAFETY: built-in subroutine are globally immutable, and
                     // so they are safe to share between threads.
-                    unsafe { sym.set_func(func.into()); }
+                    unsafe { sym.tag_subr(); }
                     map.pre_init(sym);
                 })*;
                 $(map.pre_init(&sym::$sym);)*
