@@ -4,6 +4,8 @@
 
 use std::cell::RefCell;
 
+use crate::core::env::GlobalSymbol;
+
 use super::GcObj;
 use super::{
     super::{
@@ -21,7 +23,9 @@ use super::{Callable, Gc, Object};
 impl Cons {
     pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
         match self.car().get() {
-            Object::Symbol(sym) if sym == &sym::MACRO => {
+            Object::Symbol(GlobalSymbol {
+                sym: sym::MACRO, ..
+            }) => {
                 let cdr = self.cdr();
                 let x = cdr.try_into()?;
                 Ok(x)

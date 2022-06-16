@@ -94,7 +94,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
 }
 
 fn find_file_in_load_path(file: &str, arena: &Arena, env: &Root<Environment>) -> Result<PathBuf> {
-    let load_path = env.vars.get(&sym::LOAD_PATH).unwrap();
+    let load_path = env.vars.get(&*sym::LOAD_PATH).unwrap();
     let paths = load_path
         .bind(arena)
         .as_list()
@@ -140,9 +140,8 @@ pub(crate) fn load<'ob>(
             Err(e) => {
                 if noerror.is_some() {
                     return Ok(false);
-                } else {
-                    return Err(e);
                 }
+                return Err(e);
             }
         }
     };

@@ -12,23 +12,26 @@ macro_rules! defsubr {
     ($($x:ident),+ $(,)?) => (
         #[allow(unused_qualifications)]
         #[doc(hidden)]
-        pub(crate) static DEFSUBR: [&crate::core::env::GlobalSymbol; count!($($x)+)] = [$(&paste::paste!{[<$x:upper>]}),+];
+        pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($x)+)] = [$(crate::core::env::ConstSymbol::new(paste::paste!{[<I $x>]})),+];
+        #[allow(non_snake_case)]
+        pub(crate) mod __symbol_bindings {
+            bind_symbols!($($x),+);
+        }
     );
 }
 
-macro_rules! symbol_match {
-    ($v:expr; $($a:ident => $b:expr,)* @ $wildcard:ident => $e:expr $(,)?) => {
-        match $v {
-            $(v if v == &crate::core::env::sym::$a => $b,)*
-            $wildcard => $e,
+macro_rules! bind_symbols {
+    (@step $_idx:expr,) => {};
+    (@step $idx:expr, $head:ident, $($tail:ident,)*) => (
+        paste::paste!{
+            #[allow(dead_code)]
+            pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::DEFSUBR[$idx];
         }
-    };
-    ($v:expr; $($a:ident => $b:expr ,)* _ => $e:expr $(,)?) => {
-        match $v {
-            $(v if v == &crate::core::env::sym::$a => $b,)*
-            _ => $e,
-        }
-    };
+        bind_symbols!(@step $idx + 1_usize, $($tail,)*);
+    );
+    ($($n:ident),*) => {
+        bind_symbols!(@step 0_usize, $($n,)*);
+    }
 }
 
 macro_rules! define_unbox {

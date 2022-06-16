@@ -1,3 +1,4 @@
+use crate::core::env::GlobalSymbol as Q;
 use crate::core::{
     arena::{Arena, IntoRoot, Root, Rt},
     cons::{Cons, ElemStreamIter},
@@ -62,23 +63,22 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let forms = cons.cdr();
         root!(forms, gc);
         match cons.car().get() {
-            Object::Symbol(sym) => symbol_match! {sym;
-                QUOTE => self.quote(forms.bind(gc)),
-                LET => self.eval_let(forms, true, gc),
-                LET_STAR => self.eval_let(forms, false, gc),
-                IF => self.eval_if(forms, gc),
-                AND => self.eval_and(forms, gc),
-                OR => self.eval_or(forms, gc),
-                COND => self.eval_cond(forms, gc),
-                WHILE => self.eval_while(forms, gc),
-                PROGN => self.eval_progn(forms, gc),
-                PROG1 => self.eval_progx(forms, 1, gc),
-                PROG2 => self.eval_progx(forms, 2, gc),
-                SETQ => self.setq(forms, gc),
-                DEFVAR => self.defvar(forms, gc),
-                DEFCONST => self.defvar(forms, gc),
-                FUNCTION => self.eval_function(forms.bind(gc), gc),
-                @ func => self.eval_call(func, forms, gc),
+            Object::Symbol(sym) => match sym.sym {
+                sym::QUOTE => self.quote(forms.bind(gc)),
+                sym::LET => self.eval_let(forms, true, gc),
+                sym::LET_STAR => self.eval_let(forms, false, gc),
+                sym::IF => self.eval_if(forms, gc),
+                sym::AND => self.eval_and(forms, gc),
+                sym::OR => self.eval_or(forms, gc),
+                sym::COND => self.eval_cond(forms, gc),
+                sym::WHILE => self.eval_while(forms, gc),
+                sym::PROGN => self.eval_progn(forms, gc),
+                sym::PROG1 => self.eval_progx(forms, 1, gc),
+                sym::PROG2 => self.eval_progx(forms, 2, gc),
+                sym::SETQ => self.setq(forms, gc),
+                sym::DEFVAR | sym::DEFCONST => self.defvar(forms, gc),
+                sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
+                _ => self.eval_call(sym, forms, gc),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
         }
@@ -128,10 +128,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let mut arg_type = &mut required;
         let mut iter = bindings.as_list()?;
         while let Some(binding) = iter.next() {
-            symbol_match! {
-                binding?.try_into()?;
-                AND_OPTIONAL => arg_type = &mut optional,
-                AND_REST => {
+            let sym: Symbol = binding?.try_into()?;
+            match sym.sym {
+                sym::AND_OPTIONAL => arg_type = &mut optional,
+                sym::AND_REST => {
                     if let Some(last) = iter.next() {
                         rest = Some(last?.try_into()?);
                         ensure!(
@@ -139,8 +139,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             "Found multiple arguments after &rest"
                         );
                     }
-                },
-                @ sym => {
+                }
+                _ => {
                     arg_type.push(sym);
                 }
             }
@@ -228,7 +228,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> Result<GcObj<'gc>> {
         let closure = closure.bind(gc);
         match closure.car().get() {
-            Object::Symbol(sym) if sym == &sym::CLOSURE => {
+            Object::Symbol(Q {
+                sym: sym::CLOSURE, ..
+            }) => {
                 element_iter!(forms, closure.cdr(), gc);
                 // TODO: remove this temp vector
                 let args = args.iter().map(|x| x.bind(gc)).collect();
@@ -286,7 +288,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.eval_form(value, gc)
                 }
                 Err(_) => match form.car().get() {
-                    Object::Symbol(sym) if sym == &sym::CLOSURE => {
+                    Object::Symbol(Q {
+                        sym: sym::CLOSURE, ..
+                    }) => {
                         let obj = obj.bind(gc);
                         element_iter!(iter, obj, gc);
                         root!(args, Vec::new(), gc);
@@ -314,14 +318,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let form = forms.next().unwrap()?;
         match form.get() {
             Object::Cons(cons) => {
-                if cons.car() == sym::LAMBDA {
+                if cons.car() == *sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self.vars.iter().map(|x| (&*x.bind(gc)).into()).collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end = cons!(env, cons.cdr(); gc);
-                    let closure = cons!(&sym::CLOSURE, end; gc);
+                    let closure = cons!(sym::CLOSURE, end; gc);
                     Ok(gc.bind(closure))
                 } else {
                     Ok(cons.into())
@@ -737,16 +741,16 @@ mod test {
     fn test_functions() {
         let roots = &RootSet::default();
         let arena = &mut Arena::new(roots);
-        let list = list![&sym::CLOSURE, list![true; arena]; arena];
+        let list = list![sym::CLOSURE, list![true; arena]; arena];
         root!(list, arena);
         check_interpreter("(function (lambda))", list, arena);
         let x = intern("x");
         let y = intern("y");
-        let list = list![&sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
+        let list = list![sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
         root!(list, arena);
         check_interpreter("(function (lambda (x) x))", list, arena);
         let list: GcObj =
-            list![&sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena];
+            list![sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena];
         root!(list, arena);
         check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, arena);
 

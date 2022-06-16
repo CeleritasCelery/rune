@@ -9,7 +9,6 @@
     explicit_outlives_requirements,
     missing_copy_implementations,
     noop_method_call,
-    pointer_structural_match,
     semicolon_in_expressions_from_macros,
     trivial_numeric_casts,
     unreachable_pub,
@@ -145,7 +144,7 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
         Environment::set_var(env, &sym::COMMAND_LINE_ARGS, cons!(""; arena));
         Environment::set_var(env, &sym::LOAD_HISTORY, GcObj::NIL);
     }
-    crate::data::defalias(intern("not"), (&sym::NULL).into(), None)
+    crate::data::defalias(intern("not"), (&*sym::NULL).into(), None)
         .expect("null should be defined");
 
     let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);

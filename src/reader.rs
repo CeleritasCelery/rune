@@ -437,11 +437,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
                     let list = self.read_list(i)?;
-                    Ok(list!(&sym::FUNCTION, list; self.arena))
+                    Ok(list!(sym::FUNCTION, list; self.arena))
                 }
                 Some(token) => {
                     let obj = self.read_sexp(token)?;
-                    Ok(list!(&sym::FUNCTION, obj; self.arena))
+                    Ok(list!(sym::FUNCTION, obj; self.arena))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
@@ -538,7 +538,7 @@ mod test {
     fn test_read_symbol() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        check_reader!(&sym::test::FOO, "foo", arena);
+        check_reader!(sym::test::FOO, "foo", arena);
         check_reader!(intern("--1"), "--1", arena);
         check_reader!(intern("1"), "\\1", arena);
         check_reader!(intern("3.0.0"), "3.0.0", arena);
@@ -598,9 +598,9 @@ baz""#,
     fn read_quote() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let quote = &sym::QUOTE;
-        check_reader!(list!(quote, &sym::test::FOO; arena), "(quote foo)", arena);
-        check_reader!(list!(quote, &sym::test::FOO; arena), "'foo", arena);
+        let quote = sym::QUOTE;
+        check_reader!(list!(quote, sym::test::FOO; arena), "(quote foo)", arena);
+        check_reader!(list!(quote, sym::test::FOO; arena), "'foo", arena);
         check_reader!(
             list!(quote, list!(1, 2, 3; arena); arena),
             "'(1 2 3)",
@@ -612,10 +612,10 @@ baz""#,
     fn read_sharp() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        let quote = &sym::FUNCTION;
-        check_reader!(list!(quote, &sym::test::FOO; arena), "#'foo", arena);
+        let quote = sym::FUNCTION;
+        check_reader!(list!(quote, sym::test::FOO; arena), "#'foo", arena);
         check_reader!(
-            list!(quote, list!(intern("lambda"), &sym::test::FOO, false, false; arena); arena),
+            list!(quote, list!(intern("lambda"), sym::test::FOO, false, false; arena); arena),
             "#'(lambda foo () nil)",
             arena
         );

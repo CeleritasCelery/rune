@@ -257,6 +257,19 @@ impl<'ob> IntoObject<'ob> for Symbol {
     }
 }
 
+impl<'ob> IntoObject<'ob> for crate::core::env::ConstSymbol {
+    type Out = Symbol;
+
+    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+        let ptr: *const u8 = std::ptr::addr_of!(*self).cast();
+        Gc::from_ptr(ptr, Tag::Symbol)
+    }
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+        &*Symbol::cast_ptr(ptr)
+    }
+}
+
 impl<'ob> IntoObject<'ob> for String {
     type Out = &'ob String;
 

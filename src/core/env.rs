@@ -62,6 +62,7 @@ impl Trace for Environment {
 #[derive(Debug)]
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
+    pub(crate) sym: ConstSymbol,
     func: AtomicPtr<u8>,
 }
 
@@ -72,11 +73,41 @@ pub(crate) struct GlobalSymbol {
 /// There are no uninterned symbols.
 pub(crate) type Symbol = &'static GlobalSymbol;
 
+#[repr(transparent)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub(crate) struct ConstSymbol(fn() -> Symbol);
+
+impl ConstSymbol {
+    pub(crate) const fn new(f: fn() -> Symbol) -> Self {
+        Self(f)
+    }
+}
+
+impl std::ops::Deref for ConstSymbol {
+    type Target = GlobalSymbol;
+
+    fn deref(&self) -> &Self::Target {
+        self.0()
+    }
+}
+
+impl AsRef<GlobalSymbol> for ConstSymbol {
+    fn as_ref(&self) -> &GlobalSymbol {
+        &*self
+    }
+}
+
 // Since global symbols are globally unique we can
 // compare them with a pointer equal test.
 impl PartialEq for GlobalSymbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
+    }
+}
+
+impl PartialEq<ConstSymbol> for GlobalSymbol {
+    fn eq(&self, other: &ConstSymbol) -> bool {
+        self == other.0()
     }
 }
 
@@ -91,17 +122,23 @@ impl Hash for GlobalSymbol {
 
 impl GlobalSymbol {
     const NULL: *mut u8 = std::ptr::null_mut();
-    pub(crate) const fn new(name: &'static str) -> Self {
+    const fn new(name: &'static str, scrutinee: ConstSymbol) -> Self {
         GlobalSymbol {
             name,
             func: AtomicPtr::new(Self::NULL),
+            sym: scrutinee,
         }
     }
 
-    pub(crate) const unsafe fn new_with_subr(name: &'static str, subr: &'static SubrFn) -> Self {
+    pub(crate) const unsafe fn new_with_subr(
+        name: &'static str,
+        subr: &'static SubrFn,
+        func: fn() -> &'static Self,
+    ) -> Self {
         GlobalSymbol {
             name,
             func: AtomicPtr::new((subr as *const SubrFn).cast::<u8>() as *mut u8),
+            sym: ConstSymbol::new(func),
         }
     }
 
@@ -233,7 +270,7 @@ impl SymbolMap {
                     let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
                     &*name_ptr
                 };
-                let inner = GlobalSymbol::new(static_name);
+                let inner = GlobalSymbol::new(static_name, sym::RUNTIME_SYMBOL);
                 let sym = SymbolBox::new(inner);
                 let ptr: *const GlobalSymbol = sym.as_ref();
                 self.map.insert(static_name, sym);
@@ -266,36 +303,50 @@ impl ObjectMap {
 }
 
 macro_rules! create_symbolmap {
-    (SUBR => {$($subr:expr),* $(,)?}
-     EXPORT => {$($export:path),* $(,)?}
+    (SUBR => {$($($subr:ident)::*),*}
      SYMBOLS => {$($sym:ident => $name:expr),* $(,)?}
      TEST_SYMBOLS => {$($test_sym:ident => $test_name:expr),* $(,)?}
     ) => (
+        #[allow(unused_imports)]
+        #[allow(non_snake_case)]
         pub(crate) mod sym {
-            $(pub(crate) use $export;)*
+            static __RUNTIME_SYMBOL_GLOBAL: GlobalSymbol = GlobalSymbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
+            fn __RUNTIME_SYMBOL_FN () -> Symbol {&__RUNTIME_SYMBOL_GLOBAL}
+            pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
-            use super::GlobalSymbol;
-            $(pub(crate) static $sym: GlobalSymbol = GlobalSymbol::new($name);)*
 
-            #[cfg(test)]
+            $(pub(crate) use $($subr::)*__symbol_bindings::*;)*
+
+                use super::{Symbol, GlobalSymbol, ConstSymbol};
+            $(paste::paste!{
+                static [<G $sym>]: GlobalSymbol = GlobalSymbol::new($name, $sym);
+                fn [<I $sym>] () -> Symbol {&[<G $sym>]}
+                pub(crate) const $sym: ConstSymbol = ConstSymbol::new([<I $sym>]);
+            })*
+
+                #[cfg(test)]
             pub(crate) mod test {
                 use super::GlobalSymbol;
-                $(pub(crate) static $test_sym: GlobalSymbol = GlobalSymbol::new($test_name);)*
+                $(paste::paste!{
+                    static [<G $test_sym>]: GlobalSymbol = GlobalSymbol::new($test_name, $test_sym);
+                    fn [<I $test_sym>] () -> super::Symbol {&[<G $test_sym>]}
+                    pub(crate) const $test_sym: super::ConstSymbol = super::ConstSymbol::new([<I $test_sym>]);
+                })*
             }
         }
 
         lazy_static! {
             pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
-                let size: usize = count!($($sym)*) $(+ $subr.len())*;
+                let size: usize = count!($($sym)*) $(+ $($subr::)*DEFSUBR.len())*;
                 let mut map = SymbolMap::with_capacity(size);
-                $(for sym in $subr.iter() {
+                $(for sym in $($subr::)*DEFSUBR.iter() {
                     // SAFETY: built-in subroutine are globally immutable, and
                     // so they are safe to share between threads.
                     unsafe { sym.tag_subr(); }
                     map.pre_init(sym);
                 })*;
                 $(map.pre_init(&sym::$sym);)*
-                #[cfg(test)]
+                    #[cfg(test)]
                 {
                     $(map.pre_init(&sym::test::$test_sym);)*
                 }
@@ -310,25 +361,19 @@ macro_rules! create_symbolmap {
 
 create_symbolmap!(
     SUBR => {
-        crate::arith::DEFSUBR,
-        crate::interpreter::DEFSUBR,
-        crate::core::cons::DEFSUBR,
-        crate::lread::DEFSUBR,
-        crate::fileio::DEFSUBR,
-        crate::data::DEFSUBR,
-        crate::fns::DEFSUBR,
-        crate::search::DEFSUBR,
-        crate::eval::DEFSUBR,
-        crate::alloc::DEFSUBR,
-        crate::editfns::DEFSUBR,
-        crate::keymap::DEFSUBR,
-        crate::buffer::DEFSUBR,
-    }
-    EXPORT => {
-        crate::data::DEFVAR,
-        crate::data::NULL,
-        crate::data::EQ,
-        crate::data::EQUAL,
+        crate::arith,
+        crate::interpreter,
+        crate::core::cons,
+        crate::lread,
+        crate::fileio,
+        crate::data,
+        crate::fns,
+        crate::search,
+        crate::eval,
+        crate::alloc,
+        crate::editfns,
+        crate::keymap,
+        crate::buffer
     }
     SYMBOLS => {
         FUNCTION => "function",
@@ -392,7 +437,7 @@ mod test {
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
-        assert_eq!(size_of::<isize>() * 3, size_of::<GlobalSymbol>());
+        assert_eq!(size_of::<isize>() * 4, size_of::<GlobalSymbol>());
     }
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
@@ -403,7 +448,7 @@ mod test {
     fn symbol_func() {
         let roots = &RootSet::default();
         let gc = &Arena::new(roots);
-        let inner = GlobalSymbol::new("foo");
+        let inner = GlobalSymbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
         assert!(sym.func(gc).is_none());

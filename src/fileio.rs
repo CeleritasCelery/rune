@@ -23,7 +23,7 @@ pub(crate) fn expand_file_name(
         let path = Path::new(dir);
         path.join(name).to_string_lossy().to_string()
     } else {
-        let dir = env.vars.get(&sym::DEFAULT_DIRECTORY).unwrap();
+        let dir = env.vars.get(&*sym::DEFAULT_DIRECTORY).unwrap();
         match dir.bind(gc).get() {
             Object::String(s) => {
                 let path = Path::new(s);

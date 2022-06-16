@@ -35,6 +35,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
+    let matcher_name = format_ident!("I{}", &subr_name);
     let symbol_name = format_ident!("{}", subr_name.to_ascii_uppercase());
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
     let (required, optional, rest) = get_call_signature(&function.args, spec.required);
@@ -81,7 +82,11 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         }
 
         #[doc(hidden)]
-        pub(crate) static #symbol_name: crate::core::env::GlobalSymbol = unsafe {crate::core::env::GlobalSymbol::new_with_subr(#lisp_name, &#struct_name)};
+        pub(crate) static #symbol_name: crate::core::env::GlobalSymbol = unsafe {crate::core::env::GlobalSymbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
+
+        #[doc(hidden)]
+        #[allow(non_snake_case)]
+        fn #matcher_name() -> &'static crate::core::env::GlobalSymbol { &#symbol_name }
 
         #body
     }
