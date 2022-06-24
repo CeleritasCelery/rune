@@ -3,6 +3,8 @@ use fn_macros::defun;
 use crate::core::object::GcObj;
 use anyhow::{anyhow, ensure, Result};
 
+use std::fmt::Write as _;
+
 #[defun]
 fn message(format_string: &str, args: &[GcObj]) -> String {
     println!("MESSAGE: {format_string} -> {args:?}");
@@ -32,7 +34,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
             .next()
             .ok_or_else(|| anyhow!("Not enough objects for format string"))?;
         // TODO: currently handles all format types the same. Need to check the modifier characters.
-        result.push_str(&format!("{val}"));
+        write!(result, "{val}")?;
         last_end = start + 2;
     }
     ensure!(

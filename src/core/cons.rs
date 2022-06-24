@@ -22,7 +22,7 @@ impl PartialEq for Cons {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct ConstConsError();
+pub(crate) struct ConstConsError;
 
 impl Display for ConstConsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -409,20 +409,20 @@ impl<K, V> Rt<HashMap<K, V>>
 where
     K: Eq + std::hash::Hash,
 {
-    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&Rt<V>>
+    pub(crate) fn get<Q>(&self, k: &Q) -> Option<&Rt<V>>
     where
         K: std::borrow::Borrow<Q>,
-        Q: std::hash::Hash + Eq,
+        Q: ?Sized + std::hash::Hash + Eq,
     {
         self.inner
             .get(k)
             .map(|v| unsafe { &*(v as *const V).cast::<Rt<V>>() })
     }
 
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut Rt<V>>
+    pub(crate) fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut Rt<V>>
     where
         K: std::borrow::Borrow<Q>,
-        Q: std::hash::Hash + Eq,
+        Q: ?Sized + std::hash::Hash + Eq,
     {
         self.inner
             .get_mut(k)
