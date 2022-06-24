@@ -25,6 +25,8 @@
     clippy::print_stdout,
     clippy::as_conversions,
     clippy::similar_names,
+    clippy::self_named_module_files,
+    clippy::module_name_repetitions,
     clippy::shadow_reuse,
     clippy::shadow_same,
     clippy::use_debug,
