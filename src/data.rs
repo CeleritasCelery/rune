@@ -50,7 +50,7 @@ pub(crate) fn set<'ob>(
     env: &mut Root<Environment>,
     gc: &Arena,
 ) -> GcObj<'ob> {
-    Environment::set_var(env.deref_mut(gc), place, newlet);
+    env.deref_mut(gc).set_var(place, newlet);
     newlet
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn put<'ob>(
     env: &mut Root<Environment>,
     gc: &Arena,
 ) -> GcObj<'ob> {
-    Environment::set_prop(env.deref_mut(gc), symbol, propname, value);
+    env.deref_mut(gc).set_prop(symbol, propname, value);
     value
 }
 

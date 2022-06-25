@@ -14,24 +14,19 @@ pub(crate) struct Environment {
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
 }
 
-impl Environment {
-    pub(crate) fn set_var(env: &mut Rt<Environment>, sym: Symbol, value: GcObj) {
-        env.vars.insert(sym, value);
+impl Rt<Environment> {
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) {
+        self.vars.insert(sym, value);
     }
 
-    pub(crate) fn set_prop(
-        env: &mut Rt<Environment>,
-        symbol: Symbol,
-        propname: Symbol,
-        value: GcObj,
-    ) {
-        match env.props.get_mut(&symbol) {
+    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
+        match self.props.get_mut(&symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
                 None => plist.push((propname, value)),
             },
             None => {
-                env.props.insert(symbol, vec![(propname, value)]);
+                self.props.insert(symbol, vec![(propname, value)]);
             }
         }
     }
@@ -122,11 +117,11 @@ impl Hash for GlobalSymbol {
 
 impl GlobalSymbol {
     const NULL: *mut u8 = std::ptr::null_mut();
-    const fn new(name: &'static str, scrutinee: ConstSymbol) -> Self {
+    pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
         GlobalSymbol {
             name,
             func: AtomicPtr::new(Self::NULL),
-            sym: scrutinee,
+            sym,
         }
     }
 
@@ -154,7 +149,7 @@ impl GlobalSymbol {
         Strict::addr(self.func.load(Ordering::Acquire)) != 0
     }
 
-    fn get(&'_ self) -> Option<Gc<Function<'_>>> {
+    fn get(&self) -> Option<Gc<Function>> {
         let ptr = self.func.load(Ordering::Acquire);
         match Strict::addr(ptr) {
             0 => None,
@@ -313,7 +308,6 @@ macro_rules! create_symbolmap {
             static __RUNTIME_SYMBOL_GLOBAL: GlobalSymbol = GlobalSymbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
             fn __RUNTIME_SYMBOL_FN () -> Symbol {&__RUNTIME_SYMBOL_GLOBAL}
             pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
-
 
             $(pub(crate) use $($subr::)*__symbol_bindings::*;)*
 

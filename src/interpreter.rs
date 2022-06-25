@@ -516,7 +516,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 value.bind(gc).set_cdr(new_value);
             }
             None => {
-                Environment::set_var(self.env.deref_mut(gc), name, new_value);
+                self.env.deref_mut(gc).set_var(name, new_value);
             }
         }
     }

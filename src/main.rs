@@ -136,15 +136,16 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
     use crate::core::env::sym;
     {
         let env = env.deref_mut(arena);
-        Environment::set_var(env, &sym::EMACS_VERSION, arena.add("28.1"));
-        Environment::set_var(env, &sym::LEXICAL_BINDING, GcObj::TRUE);
-        Environment::set_var(env, &sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-        Environment::set_var(env, &sym::MINIBUFFER_LOCAL_MAP, GcObj::NIL);
-        Environment::set_var(env, &sym::CURRENT_LOAD_LIST, GcObj::NIL);
-        Environment::set_var(env, &sym::LOAD_PATH, cons!("lisp"; arena));
-        Environment::set_var(env, &sym::DUMP_MODE, GcObj::NIL);
-        Environment::set_var(env, &sym::COMMAND_LINE_ARGS, cons!(""; arena));
-        Environment::set_var(env, &sym::LOAD_HISTORY, GcObj::NIL);
+        env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
+        env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
+        env.set_var(&sym::LEXICAL_BINDING, GcObj::TRUE);
+        env.set_var(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
+        env.set_var(&sym::MINIBUFFER_LOCAL_MAP, GcObj::NIL);
+        env.set_var(&sym::CURRENT_LOAD_LIST, GcObj::NIL);
+        env.set_var(&sym::LOAD_PATH, cons!("lisp"; arena));
+        env.set_var(&sym::DUMP_MODE, GcObj::NIL);
+        env.set_var(&sym::COMMAND_LINE_ARGS, cons!(""; arena));
+        env.set_var(&sym::LOAD_HISTORY, GcObj::NIL);
     }
     crate::data::defalias(intern("not"), (&*sym::NULL).into(), None)
         .expect("null should be defined");
