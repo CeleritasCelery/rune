@@ -229,7 +229,7 @@ impl AsRef<GlobalSymbol> for SymbolBox {
 // have a garbage collector
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        panic!("Tried to drop Symbol: {:?}", unsafe { &*self.0 });
+        eprintln!("Error: Tried to drop Symbol: {:?}", unsafe { &*self.0 });
     }
 }
 
@@ -245,18 +245,7 @@ impl SymbolMap {
     }
 
     fn intern(&mut self, name: &str) -> Symbol {
-        // SAFETY: We can guarantee that the reference is static because we have
-        // no methods to remove items from SymbolMap and SymbolMap has a private
-        // constructor, so the only one that exists is the one we create in this
-        // module, which is static.
-        unsafe { &*self.get_symbol(name) }
-    }
-
-    // This is my work around for there being no Entry API that takes a
-    // reference.
-    // https://internals.rust-lang.org/t/pre-rfc-abandonning-morals-in-the-name-of-performance-the-raw-entry-api/7043
-    fn get_symbol(&mut self, name: &str) -> *const GlobalSymbol {
-        match self.map.get(name) {
+        let sym = match self.map.get(name) {
             Some(x) => x.0,
             None => {
                 let name = name.to_owned();
@@ -271,11 +260,21 @@ impl SymbolMap {
                 self.map.insert(static_name, sym);
                 ptr
             }
-        }
+        };
+        // SAFETY: We can guarantee that the reference is static because we have
+        // no methods to remove items from SymbolMap and SymbolMap has a private
+        // constructor, so the only one that exists is the one we create in this
+        // module, which is static.
+        unsafe { &*sym }
     }
 
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
-        self.map.insert(sym.name, SymbolBox::from_static(sym));
+        match self.map.get(sym.name) {
+            Some(_) => panic!("Attempt to intitalize {} twice", sym.name),
+            None => {
+                self.map.insert(sym.name, SymbolBox::from_static(sym));
+            }
+        }
     }
 }
 
@@ -318,7 +317,7 @@ macro_rules! create_symbolmap {
                 pub(crate) const $sym: ConstSymbol = ConstSymbol::new([<I $sym>]);
             })*
 
-                #[cfg(test)]
+            #[cfg(test)]
             pub(crate) mod test {
                 use super::GlobalSymbol;
                 $(paste::paste!{
@@ -327,6 +326,14 @@ macro_rules! create_symbolmap {
                     pub(crate) const $test_sym: super::ConstSymbol = super::ConstSymbol::new([<I $test_sym>]);
                 })*
             }
+        }
+
+        #[allow(unused_qualifications)]
+        pub(crate) fn init_variables<'ob>(
+            arena: &'ob crate::core::arena::Arena,
+            env: &mut crate::core::arena::Rt<crate::core::env::Environment>
+        ) {
+            $($($subr::)*__init_vars(arena, env);)*
         }
 
         lazy_static! {
@@ -340,7 +347,7 @@ macro_rules! create_symbolmap {
                     map.pre_init(sym);
                 })*;
                 $(map.pre_init(&sym::$sym);)*
-                    #[cfg(test)]
+                #[cfg(test)]
                 {
                     $(map.pre_init(&sym::test::$test_sym);)*
                 }
@@ -367,6 +374,7 @@ create_symbolmap!(
         crate::alloc,
         crate::editfns,
         crate::keymap,
+        crate::emacs,
         crate::buffer
     }
     SYMBOLS => {
@@ -394,16 +402,9 @@ create_symbolmap!(
         IF => "if",
         AND => "and",
         OR => "or",
-        LEXICAL_BINDING => "lexical-binding",
-        EMACS_VERSION => "emacs-version",
-        SYSTEM_TYPE => "system-type",
-        MINIBUFFER_LOCAL_MAP => "minibuffer-local-map",
-        CURRENT_LOAD_LIST => "current-load-list",
         LOAD_PATH => "load-path",
-        DUMP_MODE => "dump-mode",
         COMMAND_LINE_ARGS => "command-line-args",
         DEFAULT_DIRECTORY => "default-directory",
-        LOAD_HISTORY => "load-history",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
     }
@@ -436,6 +437,11 @@ mod test {
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
         std::mem::transmute::<&'_ GlobalSymbol, &'static GlobalSymbol>(inner)
+    }
+
+    #[test]
+    fn init() {
+        intern("foo");
     }
 
     #[test]

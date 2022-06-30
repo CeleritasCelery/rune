@@ -11,6 +11,9 @@ fn message(format_string: &str, args: &[GcObj]) -> String {
     format_string.to_owned()
 }
 
+defvar!(MESSAGE_NAME, "message-name");
+defvar!(MESSAGE_TYPE, "message-type", "new message");
+
 #[defun]
 fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     let mut result = String::new();
@@ -45,7 +48,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     Ok(result)
 }
 
-defsubr!(message, format);
+defsubr!(message, format; VARS => {MESSAGE_NAME, MESSAGE_TYPE});
 
 #[cfg(test)]
 mod test {

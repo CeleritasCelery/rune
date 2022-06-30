@@ -72,6 +72,7 @@ mod buffer;
 mod data;
 mod debug;
 mod editfns;
+mod emacs;
 mod eval;
 mod fileio;
 mod fns;
@@ -86,7 +87,6 @@ mod search;
 use crate::core::{
     arena::{Arena, Root, RootSet},
     env::{intern, Environment},
-    object::GcObj,
 };
 use std::env;
 use std::io::{self, Write};
@@ -136,16 +136,9 @@ fn load(env: &mut Root<Environment>, arena: &mut Arena) {
     use crate::core::env::sym;
     {
         let env = env.deref_mut(arena);
-        env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
-        env.set_var(&sym::EMACS_VERSION, arena.add("28.1"));
-        env.set_var(&sym::LEXICAL_BINDING, GcObj::TRUE);
-        env.set_var(&sym::SYSTEM_TYPE, arena.add("gnu/linux"));
-        env.set_var(&sym::MINIBUFFER_LOCAL_MAP, GcObj::NIL);
-        env.set_var(&sym::CURRENT_LOAD_LIST, GcObj::NIL);
+        crate::core::env::init_variables(arena, env);
         env.set_var(&sym::LOAD_PATH, cons!("lisp"; arena));
-        env.set_var(&sym::DUMP_MODE, GcObj::NIL);
         env.set_var(&sym::COMMAND_LINE_ARGS, cons!(""; arena));
-        env.set_var(&sym::LOAD_HISTORY, GcObj::NIL);
     }
     crate::data::defalias(intern("not"), (&*sym::NULL).into(), None)
         .expect("null should be defined");

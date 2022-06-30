@@ -165,7 +165,11 @@ pub(crate) fn intern(string: &str) -> Symbol {
     crate::core::env::intern(string)
 }
 
-defsubr!(load, read_from_string, intern);
+defvar!(LEXICAL_BINDING, "lexical-binding", true);
+defvar!(CURRENT_LOAD_LIST, "current-load-list");
+defvar!(LOAD_HISTORY, "load-history");
+
+defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY});
 
 #[cfg(test)]
 mod test {

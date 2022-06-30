@@ -9,13 +9,53 @@ macro_rules! count {
 }
 
 macro_rules! defsubr {
-    ($($x:ident),+ $(,)?) => (
+    ($($fn_sym:ident),+ $(,)? $(; VARS => {$($var_sym:ident),+ $(,)?})?) => (
         #[allow(unused_qualifications)]
         #[doc(hidden)]
-        pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($x)+)] = [$(crate::core::env::ConstSymbol::new(paste::paste!{[<I $x>]})),+];
+        pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)?)] =
+            [
+                $(crate::core::env::ConstSymbol::new(paste::paste!{[<I $fn_sym>]})),+ ,
+                $($(crate::core::env::ConstSymbol::new(paste::paste!{[<I $var_sym>]})),+)?
+            ];
+
+        #[allow(unused_qualifications)]
+        pub(crate) fn __init_vars<'ob>(_arena: &'ob crate::core::arena::Arena, _env: &mut crate::core::arena::Rt<crate::core::env::Environment>) {
+            paste::paste!(
+                $($(
+                    _env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_arena));
+                )+)?
+            );
+        }
         #[allow(non_snake_case)]
         pub(crate) mod __symbol_bindings {
-            bind_symbols!($($x),+);
+            bind_symbols!($($fn_sym),+ , $($($var_sym),+)?);
+        }
+    );
+}
+
+macro_rules! defvar {
+    ($sym:ident, $name:literal) => (
+        paste::paste!{
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
+            #[allow(non_snake_case)]
+            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            #[allow(non_snake_case)]
+            #[allow(unused_qualifications)]
+            fn [<__INIT_ $sym>]<'ob> (_: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
+                crate::core::object::Gc::NIL
+            }
+        }
+    );
+    ($sym:ident, $name:literal, $value:expr) => (
+        paste::paste!{
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
+            #[allow(non_snake_case)]
+            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            #[allow(non_snake_case)]
+            #[allow(unused_qualifications)]
+            fn [<__INIT_ $sym>]<'ob> (arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
+                arena.add($value)
+            }
         }
     );
 }
@@ -25,11 +65,12 @@ macro_rules! bind_symbols {
     (@step $idx:expr, $head:ident, $($tail:ident,)*) => (
         paste::paste!{
             #[allow(dead_code)]
+            #[doc(hidden)]
             pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::DEFSUBR[$idx];
         }
         bind_symbols!(@step $idx + 1_usize, $($tail,)*);
     );
-    ($($n:ident),*) => {
+    ($($n:ident),* $(,)?) => {
         bind_symbols!(@step 0_usize, $($n,)*);
     }
 }

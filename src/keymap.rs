@@ -36,10 +36,15 @@ pub(crate) fn define_key<'ob>(
     GcObj::NIL
 }
 
+defvar!(MINIBUFFER_LOCAL_MAP, "minibuffer-local-map");
+
 defsubr!(
     make_keymap,
     make_sparse_keymap,
     use_global_map,
     set_keymap_parent,
-    define_key
+    define_key;
+    VARS => {
+        MINIBUFFER_LOCAL_MAP
+    }
 );
