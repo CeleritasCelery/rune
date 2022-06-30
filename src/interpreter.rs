@@ -321,7 +321,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 if cons.car() == *sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
-                        let env: Vec<_> = self.vars.iter().map(|x| (&*x.bind(gc)).into()).collect();
+                        let env: Vec<_> = self.vars.iter().map(|x| x.bind(gc).into()).collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; gc)), gc)
                     };
                     let end = cons!(env, cons.cdr(); gc);
