@@ -133,14 +133,8 @@ fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
 }
 
 fn load(env: &mut Root<Environment>, arena: &mut Arena) {
-    use crate::core::env::sym;
-    {
-        let env = env.deref_mut(arena);
-        crate::core::env::init_variables(arena, env);
-        env.set_var(&sym::LOAD_PATH, cons!("lisp"; arena));
-        env.set_var(&sym::COMMAND_LINE_ARGS, cons!(""; arena));
-    }
-    crate::data::defalias(intern("not"), (&*sym::NULL).into(), None)
+    crate::core::env::init_variables(arena, env.deref_mut(arena));
+    crate::data::defalias(intern("not"), (&*crate::core::env::sym::NULL).into(), None)
         .expect("null should be defined");
 
     let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);

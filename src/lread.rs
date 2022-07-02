@@ -168,8 +168,9 @@ pub(crate) fn intern(string: &str) -> Symbol {
 defvar!(LEXICAL_BINDING, "lexical-binding", true);
 defvar!(CURRENT_LOAD_LIST, "current-load-list");
 defvar!(LOAD_HISTORY, "load-history");
+defvar!(LOAD_PATH, "load-path", list!("lisp"));
 
-defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY});
+defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY, LOAD_PATH});
 
 #[cfg(test)]
 mod test {

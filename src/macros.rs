@@ -46,6 +46,18 @@ macro_rules! defvar {
             }
         }
     );
+    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (
+        paste::paste!{
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
+            #[allow(non_snake_case)]
+            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            #[allow(non_snake_case)]
+            #[allow(unused_qualifications)]
+            fn [<__INIT_ $sym>]<'ob> (arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
+                crate::list!($($values),+; arena)
+            }
+        }
+    );
     ($sym:ident, $name:literal, $value:expr) => (
         paste::paste!{
             static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));

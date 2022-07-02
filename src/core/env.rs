@@ -402,8 +402,6 @@ create_symbolmap!(
         IF => "if",
         AND => "and",
         OR => "or",
-        LOAD_PATH => "load-path",
-        COMMAND_LINE_ARGS => "command-line-args",
         DEFAULT_DIRECTORY => "default-directory",
         KW_TEST => ":test",
         KW_WEAKNESS => ":weakness",
