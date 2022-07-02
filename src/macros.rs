@@ -10,23 +10,26 @@ macro_rules! count {
 
 macro_rules! defsubr {
     ($($fn_sym:ident),+ $(,)? $(; VARS => {$($var_sym:ident),+ $(,)?})?) => (
-        #[allow(unused_qualifications)]
-        #[doc(hidden)]
-        pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)?)] =
-            [
-                $(crate::core::env::ConstSymbol::new(paste::paste!{[<I $fn_sym>]})),+ ,
-                $($(crate::core::env::ConstSymbol::new(paste::paste!{[<I $var_sym>]})),+)?
+        paste::paste!{
+            #[allow(unused_qualifications)]
+            #[doc(hidden)]
+            pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)?)] = [
+                $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $fn_sym>])),+ ,
+                $($(crate::core::env::ConstSymbol::new([<__FN_PTR_ $var_sym>])),+)?
             ];
 
-        #[allow(unused_qualifications)]
-        pub(crate) fn __init_vars<'ob>(_arena: &'ob crate::core::arena::Arena, _env: &mut crate::core::arena::Rt<crate::core::env::Environment>) {
-            paste::paste!(
-                $($(
-                    _env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_arena));
-                )+)?
-            );
+            #[allow(unused_qualifications)]
+            #[doc(hidden)]
+            pub(crate) fn __init_vars<'ob>(
+                _arena: &'ob crate::core::arena::Arena,
+                _env: &mut crate::core::arena::Rt<crate::core::env::Environment>
+            ) {
+                $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_arena));)+)?
+            }
         }
+
         #[allow(non_snake_case)]
+        #[doc(hidden)]
         pub(crate) mod __symbol_bindings {
             bind_symbols!($($fn_sym),+ , $($($var_sym),+)?);
         }
@@ -34,42 +37,26 @@ macro_rules! defsubr {
 }
 
 macro_rules! defvar {
-    ($sym:ident, $name:literal) => (
+    (@internal $sym:ident, $name:literal, $arena:ident, $value:expr) => (
         paste::paste!{
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
+                $name,
+                crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
+            );
             #[allow(non_snake_case)]
-            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            #[doc(hidden)]
+            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
-            fn [<__INIT_ $sym>]<'ob> (_: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
-                crate::core::object::Gc::NIL
+            #[doc(hidden)]
+            fn [<__INIT_ $sym>]<'ob> ($arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
+                $value
             }
         }
     );
-    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (
-        paste::paste!{
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
-            #[allow(non_snake_case)]
-            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
-            #[allow(non_snake_case)]
-            #[allow(unused_qualifications)]
-            fn [<__INIT_ $sym>]<'ob> (arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
-                crate::list!($($values),+; arena)
-            }
-        }
-    );
-    ($sym:ident, $name:literal, $value:expr) => (
-        paste::paste!{
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new($name, crate::core::env::ConstSymbol::new([<I $sym>]));
-            #[allow(non_snake_case)]
-            fn [<I $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
-            #[allow(non_snake_case)]
-            #[allow(unused_qualifications)]
-            fn [<__INIT_ $sym>]<'ob> (arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
-                arena.add($value)
-            }
-        }
-    );
+    ($sym:ident, $name:literal) => (defvar!(@internal $sym, $name, _a, crate::core::object::Gc::NIL););
+    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, $name, arena, crate::list!($($values),+; arena)););
+    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, arena, arena.add($value)););
 }
 
 macro_rules! bind_symbols {
