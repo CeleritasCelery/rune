@@ -297,10 +297,7 @@ impl ObjectMap {
 }
 
 macro_rules! create_symbolmap {
-    (SUBR => {$($($subr:ident)::*),*}
-     SYMBOLS => {$($sym:ident => $name:expr),* $(,)?}
-     TEST_SYMBOLS => {$($test_sym:ident => $test_name:expr),* $(,)?}
-    ) => (
+    ($($($subr:ident)::*),*) => (
         #[allow(unused_imports)]
         #[allow(non_snake_case)]
         pub(crate) mod sym {
@@ -311,21 +308,6 @@ macro_rules! create_symbolmap {
             $(pub(crate) use $($subr::)*__symbol_bindings::*;)*
 
                 use super::{Symbol, GlobalSymbol, ConstSymbol};
-            $(paste::paste!{
-                static [<G $sym>]: GlobalSymbol = GlobalSymbol::new($name, $sym);
-                fn [<I $sym>] () -> Symbol {&[<G $sym>]}
-                pub(crate) const $sym: ConstSymbol = ConstSymbol::new([<I $sym>]);
-            })*
-
-            #[cfg(test)]
-            pub(crate) mod test {
-                use super::GlobalSymbol;
-                $(paste::paste!{
-                    static [<G $test_sym>]: GlobalSymbol = GlobalSymbol::new($test_name, $test_sym);
-                    fn [<I $test_sym>] () -> super::Symbol {&[<G $test_sym>]}
-                    pub(crate) const $test_sym: super::ConstSymbol = super::ConstSymbol::new([<I $test_sym>]);
-                })*
-            }
         }
 
         #[allow(unused_qualifications)]
@@ -338,7 +320,7 @@ macro_rules! create_symbolmap {
 
         lazy_static! {
             pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
-                let size: usize = count!($($sym)*) $(+ $($subr::)*DEFSUBR.len())*;
+                let size: usize = 0_usize $(+ $($subr::)*DEFSUBR.len())*;
                 let mut map = SymbolMap::with_capacity(size);
                 $(for sym in $($subr::)*DEFSUBR.iter() {
                     // SAFETY: built-in subroutine are globally immutable, and
@@ -346,11 +328,6 @@ macro_rules! create_symbolmap {
                     unsafe { sym.tag_subr(); }
                     map.pre_init(sym);
                 })*;
-                $(map.pre_init(&sym::$sym);)*
-                #[cfg(test)]
-                {
-                    $(map.pre_init(&sym::test::$test_sym);)*
-                }
                 ObjectMap {
                     map,
                     block: Block::new_global(),
@@ -361,56 +338,20 @@ macro_rules! create_symbolmap {
 }
 
 create_symbolmap!(
-    SUBR => {
-        crate::arith,
-        crate::interpreter,
-        crate::core::cons,
-        crate::lread,
-        crate::fileio,
-        crate::data,
-        crate::fns,
-        crate::search,
-        crate::eval,
-        crate::alloc,
-        crate::editfns,
-        crate::keymap,
-        crate::emacs,
-        crate::buffer
-    }
-    SYMBOLS => {
-        FUNCTION => "function",
-        QUOTE => "quote",
-        MACRO => "macro",
-        UNQUOTE => ",",
-        SPLICE => ",@",
-        BACKQUOTE => "`",
-        NIL => "nil",
-        TRUE => "t",
-        AND_OPTIONAL => "&optional",
-        AND_REST => "&rest",
-        LAMBDA => "lambda",
-        CLOSURE => "closure",
-        WHILE => "while",
-        PROGN => "progn",
-        PROG1 => "prog1",
-        PROG2 => "prog2",
-        SETQ => "setq",
-        DEFCONST => "defconst",
-        COND => "cond",
-        LET => "let",
-        LET_STAR => "let*",
-        IF => "if",
-        AND => "and",
-        OR => "or",
-        DEFAULT_DIRECTORY => "default-directory",
-        KW_TEST => ":test",
-        KW_WEAKNESS => ":weakness",
-    }
-    TEST_SYMBOLS => {
-        FOO => "foo",
-        BAR => "bar",
-        BAZ => "baz",
-    }
+    crate::arith,
+    crate::interpreter,
+    crate::core::cons,
+    crate::lread,
+    crate::fileio,
+    crate::data,
+    crate::fns,
+    crate::search,
+    crate::eval,
+    crate::alloc,
+    crate::editfns,
+    crate::keymap,
+    crate::emacs,
+    crate::buffer
 );
 
 /// Intern a new symbol based on `name`

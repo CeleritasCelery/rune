@@ -59,6 +59,20 @@ macro_rules! defvar {
     ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, arena, arena.add($value)););
 }
 
+macro_rules! defsym {
+    ($sym:ident, $name:literal) => {
+        paste::paste! {
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
+                $name,
+                crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
+            );
+            #[allow(non_snake_case)]
+            #[doc(hidden)]
+            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+        }
+    };
+}
+
 macro_rules! bind_symbols {
     (@step $_idx:expr,) => {};
     (@step $idx:expr, $head:ident, $($tail:ident,)*) => (

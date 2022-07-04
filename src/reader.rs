@@ -538,7 +538,7 @@ mod test {
     fn test_read_symbol() {
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
-        check_reader!(sym::test::FOO, "foo", arena);
+        check_reader!(sym::IF, "if", arena);
         check_reader!(intern("--1"), "--1", arena);
         check_reader!(intern("1"), "\\1", arena);
         check_reader!(intern("3.0.0"), "3.0.0", arena);
@@ -599,8 +599,8 @@ baz""#,
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let quote = sym::QUOTE;
-        check_reader!(list!(quote, sym::test::FOO; arena), "(quote foo)", arena);
-        check_reader!(list!(quote, sym::test::FOO; arena), "'foo", arena);
+        check_reader!(list!(quote, sym::IF; arena), "(quote if)", arena);
+        check_reader!(list!(quote, sym::IF; arena), "'if", arena);
         check_reader!(
             list!(quote, list!(1, 2, 3; arena); arena),
             "'(1 2 3)",
@@ -613,10 +613,10 @@ baz""#,
         let roots = &RootSet::default();
         let arena = &Arena::new(roots);
         let quote = sym::FUNCTION;
-        check_reader!(list!(quote, sym::test::FOO; arena), "#'foo", arena);
+        check_reader!(list!(quote, sym::IF; arena), "#'if", arena);
         check_reader!(
-            list!(quote, list!(intern("lambda"), sym::test::FOO, false, false; arena); arena),
-            "#'(lambda foo () nil)",
+            list!(quote, list!(intern("lambda"), sym::IF, false, false; arena); arena),
+            "#'(lambda if () nil)",
             arena
         );
         assert_error("#", Error::MissingQuotedItem(0), arena);
