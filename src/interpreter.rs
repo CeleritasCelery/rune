@@ -513,7 +513,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.bind(gc).car() == name)) {
             Some(value) => {
-                value.bind(gc).set_cdr(new_value);
+                value
+                    .bind(gc)
+                    .set_cdr(new_value)
+                    .expect("variables should never be immutable");
             }
             None => {
                 self.env.deref_mut(gc).set_var(name, new_value);

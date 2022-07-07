@@ -1038,7 +1038,7 @@ impl<T> Gc<T> {
     {
         let obj = match self.into().get() {
             Object::Int(x) => x.into(),
-            Object::Cons(x) => x.clone_in(bk).into_obj(bk).into(),
+            Object::Cons(x) => x.clone_in(bk),
             Object::String(x) => x.clone().into_obj(bk).into(),
             Object::Symbol(x) => x.into(),
             Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),

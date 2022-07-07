@@ -144,9 +144,12 @@ impl AllocObject for f64 {
 
 impl AllocObject for Cons {
     type Output = Cons;
-    fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
+    fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(&mut objects, OwnedObject::Cons(Box::new(self)));
+        if CONST {
+            self.mark_const();
+        }
+        Block::<CONST>::register(&mut objects, OwnedObject::Cons(Box::new(self)));
         if let Some(OwnedObject::Cons(x)) = objects.last() {
             x.as_ref()
         } else {

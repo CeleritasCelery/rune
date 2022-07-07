@@ -119,7 +119,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = GcObj::NIL;
     for tail in seq.conses() {
         let tail = tail?;
-        tail.set_cdr(prev);
+        tail.set_cdr(prev)?;
         prev = tail.into();
     }
     Ok(prev)
@@ -143,7 +143,7 @@ fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
     let mut tail: Option<&Cons> = None;
     for list in lists {
         if let Some(cons) = tail {
-            cons.set_cdr(list.into());
+            cons.set_cdr(list.into())?;
         }
         let list = list.conses();
         for elem in list {
@@ -211,7 +211,7 @@ fn delete_from_list<'ob>(
         let tail = tail?;
         if eq_fn(tail.car(), elt) {
             if let Some(prev_tail) = &mut prev {
-                prev_tail.set_cdr(tail.cdr());
+                prev_tail.set_cdr(tail.cdr())?;
             } else {
                 head = tail.cdr();
             }

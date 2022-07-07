@@ -1,5 +1,5 @@
 use super::arena::{Arena, Block, Rt, Trace};
-use super::object::{Callable, Function, Gc, GcObj, RawObj, SubrFn};
+use super::object::{Callable, Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
 use sptr::Strict;
@@ -156,14 +156,14 @@ impl GlobalSymbol {
             // SAFETY: we ensure that 0 is not representable in the enum
             // Function (by making a reference the first element, which will
             // never be null). So it is safe to use 0 as niche value for `None`.
-            // We can't use AtomicCell due to this issue
-            // https://github.com/crossbeam-rs/crossbeam/issues/748 .
+            // We can't use AtomicCell due to this issue:
+            // https://github.com/crossbeam-rs/crossbeam/issues/748
             _ => Some(unsafe { Gc::from_raw_ptr(ptr) }),
         }
     }
 
-    pub(crate) fn func<'a>(&self, gc: &'a Arena) -> Option<Gc<Function<'a>>> {
-        self.get().map(|x| x.clone_in(gc))
+    pub(crate) fn func<'a>(&self, _gc: &'a Arena) -> Option<Gc<Function<'a>>> {
+        self.get().map(|x| unsafe { x.with_lifetime() })
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
@@ -375,7 +375,7 @@ mod test {
     }
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
-        std::mem::transmute::<&'_ GlobalSymbol, &'static GlobalSymbol>(inner)
+        std::mem::transmute::<&GlobalSymbol, &'static GlobalSymbol>(inner)
     }
 
     #[test]
@@ -412,5 +412,30 @@ mod test {
         };
         assert_eq!(after.body.op_codes.first().unwrap(), &2);
         assert_eq!(before.body.op_codes.first().unwrap(), &1);
+    }
+
+    #[test]
+    fn test_mutability() {
+        let roots = &RootSet::default();
+        let arena = &Arena::new(roots);
+        let cons = list!(1, 2, 3; arena);
+        assert_eq!(cons, list!(1, 2, 3; arena));
+        // is mutable
+        if let crate::core::object::Object::Cons(cons) = cons.get() {
+            cons.set_car(4.into()).unwrap();
+        } else {
+            unreachable!();
+        }
+        assert_eq!(cons, list!(4, 2, 3; arena));
+        let sym = intern("cons-test");
+        crate::data::fset(sym, cons).unwrap();
+        // is not mutable
+        if let Function::Cons(cons) = sym.func(arena).unwrap().get() {
+            assert!(cons.set_car(5.into()).is_err());
+            let obj: GcObj = cons.into();
+            assert_eq!(obj, list!(4, 2, 3; arena));
+        } else {
+            unreachable!();
+        }
     }
 }

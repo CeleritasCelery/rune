@@ -1,6 +1,6 @@
 use super::arena::{Arena, Block};
-use super::object::{Gc, GcObj, List, Object, RawObj, WithLifetime};
-use anyhow::Result;
+use super::object::{Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
+use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
@@ -11,6 +11,7 @@ pub(crate) use iter::*;
 
 pub(crate) struct Cons {
     marked: Cell<bool>,
+    mutable: bool,
     car: Cell<RawObj>,
     cdr: Cell<RawObj>,
 }
@@ -21,24 +22,6 @@ impl PartialEq for Cons {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct ConstConsError;
-
-impl Display for ConstConsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Attempt to mutate constant cons cell")
-    }
-}
-
-impl std::error::Error for ConstConsError {}
-
-impl<'new> Cons {
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Cons {
-        // TODO: this is not sound because we return a Cons directly
-        unsafe { Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk)) }
-    }
-}
-
 impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
     // the stack. Otherwise it could outlive it's objects since it has no
@@ -46,9 +29,14 @@ impl Cons {
     pub(crate) unsafe fn new(car: GcObj, cdr: GcObj) -> Self {
         Self {
             marked: Cell::new(false),
+            mutable: true,
             car: Cell::new(car.into_raw()),
             cdr: Cell::new(cdr.into_raw()),
         }
+    }
+
+    pub(in crate::core) fn mark_const(&mut self) {
+        self.mutable = false;
     }
 
     pub(crate) fn car(&self) -> GcObj {
@@ -59,12 +47,30 @@ impl Cons {
         unsafe { GcObj::from_raw(self.cdr.get()) }
     }
 
-    pub(crate) fn set_car(&self, new_car: GcObj) {
-        self.car.set(new_car.into_raw());
+    pub(crate) fn set_car(&self, new_car: GcObj) -> Result<()> {
+        if self.mutable {
+            self.car.set(new_car.into_raw());
+            Ok(())
+        } else {
+            Err(anyhow!("Attempt to call set-car on immutable cons cell"))
+        }
     }
 
-    pub(crate) fn set_cdr(&self, new_cdr: GcObj) {
-        self.cdr.set(new_cdr.into_raw());
+    pub(crate) fn set_cdr(&self, new_cdr: GcObj) -> Result<()> {
+        if self.mutable {
+            self.cdr.set(new_cdr.into_raw());
+            Ok(())
+        } else {
+            Err(anyhow!("Attempt to call set-cdr on immutable cons cell"))
+        }
+    }
+
+    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> GcObj<'new> {
+        unsafe {
+            Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk))
+                .into_obj(bk)
+                .into()
+        }
     }
 
     #[allow(clippy::wrong_self_convention)]
@@ -174,15 +180,15 @@ fn cdr_safe(object: GcObj) -> GcObj {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> GcObj<'ob> {
-    cell.set_car(newcar);
-    newcar
+fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    cell.set_car(newcar)?;
+    Ok(newcar)
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> GcObj<'ob> {
-    cell.set_cdr(newcdr);
-    newcdr
+fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    cell.set_cdr(newcdr)?;
+    Ok(newcdr)
 }
 
 #[defun]
@@ -242,7 +248,7 @@ mod test {
 
         let start_str = "start".to_owned();
         assert_eq!(arena.add(start_str), cons1.car());
-        cons1.set_car(arena.add("start2"));
+        cons1.set_car(arena.add("start2")).unwrap();
         let start2_str = "start2".to_owned();
         assert_eq!(arena.add(start2_str), cons1.car());
 
