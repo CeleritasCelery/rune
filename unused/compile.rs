@@ -497,7 +497,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                     let_bindings.push(Some(!sym));
                     self.const_ref(Object::NIL, Some(!sym))?;
                 }
-                _ => bail!(Error::from_object(Type::Cons, binding)),
+                _ => bail!(TypeError::from_object(Type::Cons, binding)),
             }
             len += 1;
         }
@@ -531,7 +531,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
                 }
                 // (let (x))
                 Object::Symbol(sym) => self.const_ref(Object::NIL, Some(!sym))?,
-                _ => bail!(Error::from_object(Type::Cons, binding)),
+                _ => bail!(TypeError::from_object(Type::Cons, binding)),
             }
             len += 1;
         }
@@ -1201,7 +1201,7 @@ mod test {
             [Constant0, Duplicate, VarSet1, Ret],
             [false, &sym::test::FOO]
         );
-        check_error("(let (foo 1))", Error::from_object(Type::Cons, 1.into()));
+        check_error("(let (foo 1))", TypeError::from_object(Type::Cons, 1.into()));
     }
 
     const fn get_jump_slots(offset: i16) -> (u8, u8) {
@@ -1376,7 +1376,7 @@ mod test {
             [Constant0, Constant1, Constant2, Call1, Constant3, Constant2, Call1, Call2, Ret],
             [&sym::test::FOO, &sym::test::BAR, 1, &sym::test::BAZ]
         );
-        check_error("(foo . 1)", Error::from_object(Type::List, 1.into()));
+        check_error("(foo . 1)", TypeError::from_object(Type::List, 1.into()));
     }
 
     fn check_lambda<'ob>(sexp: &str, func: LispFn<'ob>, comp_arena: &'ob Arena) {
@@ -1467,7 +1467,7 @@ mod test {
 
         check_error(
             "(function (lambda (x 1) x))",
-            Error::from_object(Type::Symbol, 1.into()),
+            TypeError::from_object(Type::Symbol, 1.into()),
         );
     }
 
@@ -1530,13 +1530,13 @@ mod test {
     fn errors() {
         check_error("(quote)", Error::ArgCount(1, 0));
         check_error("(quote 1 2)", Error::ArgCount(1, 2));
-        check_error("(let (1))", Error::from_object(Type::Cons, 1.into()));
+        check_error("(let (1))", TypeError::from_object(Type::Cons, 1.into()));
         check_error("(let ((foo 1 2)))", CompError::LetValueCount);
         check_error(
             "(let ((foo . 1)))",
-            Error::from_object(Type::List, 1.into()),
+            TypeError::from_object(Type::List, 1.into()),
         );
-        check_error("(let (()))", Error::from_object(Type::Cons, Object::NIL));
+        check_error("(let (()))", TypeError::from_object(Type::Cons, Object::NIL));
         check_error("(let)", Error::ArgCount(1, 0));
     }
 }

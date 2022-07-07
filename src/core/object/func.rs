@@ -1,6 +1,6 @@
 use super::super::{
     arena::{Arena, Block, Root},
-    error::Error,
+    error::ArgError,
 };
 use super::GcObj;
 use crate::opcode::OpCode;
@@ -45,11 +45,11 @@ impl FnArgs {
     /// argument should be added to the stack.
     pub(crate) fn num_of_fill_args(self, args: u16, name: &str) -> Result<u16> {
         if args < self.required {
-            bail!(Error::ArgCount(self.required, args, name.to_owned()));
+            bail!(ArgError::new(self.required, args, name));
         }
         let total = self.required + self.optional;
         if !self.rest && (args > total) {
-            bail!(Error::ArgCount(total, args, name.to_owned()));
+            bail!(ArgError::new(total, args, name));
         }
         Ok(total.saturating_sub(args))
     }

@@ -3,7 +3,7 @@ use crate::core::{
     arena::{Arena, IntoRoot, Root, Rt},
     cons::{Cons, ElemStreamIter},
     env::{sym, Environment, Symbol},
-    error::{Error, Type},
+    error::{ArgError, Type, TypeError},
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
 use crate::{element_iter, rebind, root};
@@ -102,7 +102,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 Ok(value)
             }
             // (defvar)
-            None => Err(Error::arg_count(1, 0, "defvar").into()),
+            None => Err(ArgError::new(1, 0, "defvar").into()),
         }
     }
 
@@ -165,7 +165,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         // Ensure the minimum number of arguments is present
         ensure!(
             num_actual_args >= num_required_args,
-            Error::arg_count(num_required_args, num_actual_args, name)
+            ArgError::new(num_required_args, num_actual_args, name)
         );
 
         let mut arg_values = args.into_iter();
@@ -188,7 +188,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // Ensure too many args were not provided
             ensure!(
                 arg_values.next().is_none(),
-                Error::arg_count(num_required_args + num_optional_args, num_actual_args, name)
+                ArgError::new(num_required_args + num_optional_args, num_actual_args, name)
             );
         }
         Ok(())
@@ -242,7 +242,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 };
                 call_frame.implicit_progn(forms, gc)
             }
-            other => Err(Error::from_object(Type::Func, other).into()),
+            other => Err(TypeError::new(Type::Func, other).into()),
         }
     }
 
@@ -313,7 +313,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
-        ensure!(len == 1, Error::arg_count(1, len, "function"));
+        ensure!(len == 1, ArgError::new(1, len, "function"));
 
         let form = forms.next().unwrap()?;
         match form.get() {
@@ -361,7 +361,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     2 => "prog2",
                     _ => "progn",
                 };
-                Err(Error::arg_count(prog_num, count, name).into())
+                Err(ArgError::new(prog_num, count, name).into())
             }
         }
     }
@@ -376,7 +376,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let first: Gc<List> = obj.bind(gc).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
-            List::Nil => bail!(Error::arg_count(1, 0, "while")),
+            List::Nil => bail!(ArgError::new(1, 0, "while")),
         };
         root!(condition, gc);
         while self.eval_form(condition, gc)? != GcObj::NIL {
@@ -440,12 +440,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         element_iter!(forms, obj, gc);
         let condition = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(Error::arg_count(2, 0, "if")),
+            None => bail!(ArgError::new(2, 0, "if")),
         };
         root!(condition, gc);
         let true_branch = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(Error::arg_count(2, 1, "if")),
+            None => bail!(ArgError::new(2, 1, "if")),
         };
         root!(true_branch, gc);
         #[allow(clippy::if_not_else)]
@@ -470,13 +470,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.var_set(var, val, gc);
                     last_value.deref_mut(gc).set(val);
                 }
-                (_, Some(_)) => bail!(Error::from_object(Type::Symbol, var)),
-                (_, None) => bail!(Error::arg_count(arg_cnt, arg_cnt + 1, "setq")),
+                (_, Some(_)) => bail!(TypeError::new(Type::Symbol, var)),
+                (_, None) => bail!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
             }
             arg_cnt += 2;
         }
         if arg_cnt < 2 {
-            Err(Error::arg_count(2, 0, "setq").into())
+            Err(ArgError::new(2, 0, "setq").into())
         } else {
             Ok(last_value.bind(gc))
         }
@@ -529,7 +529,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let mut forms = value.as_list()?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
-            x => Err(Error::arg_count(1, x as u16, "quote").into()),
+            x => Err(ArgError::new(1, x as u16, "quote").into()),
         }
     }
 
@@ -553,7 +553,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 }
             }
             // (let)
-            None => bail!(Error::arg_count(1, 0, "let")),
+            None => bail!(ArgError::new(1, 0, "let")),
         }
         let obj = self.implicit_progn(iter, gc)?;
         rebind!(obj, gc);
@@ -580,7 +580,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.vars.deref_mut(gc).push(obj);
                 }
                 // (let (1))
-                x => bail!(Error::from_object(Type::Cons, x)),
+                x => bail!(TypeError::new(Type::Cons, x)),
             }
         }
         Ok(())
@@ -606,7 +606,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     let_bindings.deref_mut(gc).push(cons);
                 }
                 // (let (1))
-                x => bail!(Error::from_object(Type::Cons, x)),
+                x => bail!(TypeError::new(Type::Cons, x)),
             }
         }
         self.vars.deref_mut(gc).append(let_bindings.deref_mut(gc));

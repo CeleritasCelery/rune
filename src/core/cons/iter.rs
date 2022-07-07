@@ -1,8 +1,6 @@
-use crate::core::arena::Root;
-
 use super::super::{
-    arena::Rt,
-    error::{Error, Type},
+    arena::{Root, Rt},
+    error::{Type, TypeError},
     object::{Gc, GcObj, List, Object},
 };
 use streaming_iterator::StreamingIterator;
@@ -59,7 +57,7 @@ impl<'ob> GcObj<'ob> {
         match self.get() {
             Object::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
             Object::Nil => Ok(ElemIter { cons: None }),
-            _ => Err(Error::from_object(Type::List, self).into()),
+            _ => Err(TypeError::new(Type::List, self).into()),
         }
     }
 }

@@ -10,7 +10,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Arena, Block, RootSet, Trace};
-use crate::core::error::{Error, Type};
+use crate::core::error::{Type, TypeError};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::HashMap;
 
@@ -238,7 +238,7 @@ impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
     fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
         match value.inner.get() {
             Object::Symbol(sym) => Ok(sym),
-            x => Err(Error::from_object(Type::Symbol, x).into()),
+            x => Err(TypeError::new(Type::Symbol, x).into()),
         }
     }
 }

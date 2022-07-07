@@ -8,7 +8,7 @@ use super::super::{
     arena::{AllocObject, Allocation, Block},
     cons::Cons,
     env::{GlobalSymbol, Symbol},
-    error::{Error, Type},
+    error::{Type, TypeError},
 };
 
 use super::{LispFn, SubrFn};
@@ -655,7 +655,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<Callable<'ob>> {
 
     fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::Symbol => Err(Error::from_object(Type::Func, value).into()),
+            Tag::Symbol => Err(TypeError::new(Type::Func, value).into()),
             _ => unsafe { Ok(Self::transmute(value)) },
         }
     }
@@ -839,24 +839,24 @@ impl<'ob> From<Gc<Number<'ob>>> for Gc<Object<'ob>> {
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int | Tag::Float => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::Number, value)),
+            _ => Err(TypeError::new(Type::Number, value)),
         }
     }
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int | Tag::Float => unsafe { Ok(Some(transmute(value))) },
             Tag::Nil => Ok(None),
-            _ => Err(Error::from_object(Type::Number, value)),
+            _ => Err(TypeError::new(Type::Number, value)),
         }
     }
 }
@@ -874,12 +874,12 @@ impl<'ob> From<&Gc<List<'ob>>> for Gc<Object<'ob>> {
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Nil | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::List, value)),
+            _ => Err(TypeError::new(Type::List, value)),
         }
     }
 }
@@ -891,14 +891,14 @@ impl<'ob> From<Gc<Function<'ob>>> for Gc<Object<'ob>> {
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::LispFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
                 Ok(Self::transmute(value))
             },
-            _ => Err(Error::from_object(Type::Func, value)),
+            _ => Err(TypeError::new(Type::Func, value)),
         }
     }
 }
@@ -910,12 +910,12 @@ impl<'ob> From<Gc<Callable<'ob>>> for Gc<Object<'ob>> {
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Callable<'ob>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::LispFn | Tag::SubrFn | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::Func, value)),
+            _ => Err(TypeError::new(Type::Func, value)),
         }
     }
 }
@@ -925,12 +925,12 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Callable<'ob>> {
 ///////////////////////////
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Int => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::Int, value)),
+            _ => Err(TypeError::new(Type::Int, value)),
         }
     }
 }
@@ -957,12 +957,12 @@ impl From<&Cons> for Gc<&Cons> {
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::Cons => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::Cons, value)),
+            _ => Err(TypeError::new(Type::Cons, value)),
         }
     }
 }
@@ -976,23 +976,23 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob String> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::String => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::String, value)),
+            _ => Err(TypeError::new(Type::String, value)),
         }
     }
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob RefCell<HashTable<'ob>>> {
-    type Error = Error;
+    type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
             Tag::HashTable => unsafe { Ok(Self::transmute(value)) },
-            _ => Err(Error::from_object(Type::HashTable, value)),
+            _ => Err(TypeError::new(Type::HashTable, value)),
         }
     }
 }

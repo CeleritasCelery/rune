@@ -11,7 +11,7 @@ use super::{
     super::{
         cons::Cons,
         env::{sym, Symbol},
-        error::{Error, Type},
+        error::{ArgError, Type, TypeError},
     },
     HashTable,
 };
@@ -30,7 +30,7 @@ impl Cons {
                 let x = cdr.try_into()?;
                 Ok(x)
             }
-            x => Err(Error::from_object(Type::Symbol, x).into()),
+            x => Err(TypeError::new(Type::Symbol, x).into()),
         }
     }
 }
@@ -42,7 +42,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for usize {
             Object::Int(x) => x
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {}", x)),
-            x => Err(Error::from_object(Type::Int, x).into()),
+            x => Err(TypeError::new(Type::Int, x).into()),
         }
     }
 }
@@ -58,13 +58,13 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
                 }
             },
             Object::Nil => Ok(None),
-            _ => Err(Error::from_object(Type::Int, obj).into()),
+            _ => Err(TypeError::new(Type::Int, obj).into()),
         }
     }
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for bool {
-    type Error = Error;
+    type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
         match obj.get() {
             Object::Nil => Ok(false),
@@ -74,7 +74,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for bool {
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
-    type Error = Error;
+    type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
         match obj.get() {
             Object::Nil => Ok(None),
@@ -136,7 +136,7 @@ mod test {
 
     use super::*;
 
-    fn wrapper(args: &[GcObj]) -> Result<i64, Error> {
+    fn wrapper(args: &[GcObj]) -> Result<i64, TypeError> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,

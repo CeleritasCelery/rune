@@ -7,7 +7,7 @@ use crate::core::{
     arena::{Arena, Root},
     cons::Cons,
     env::Symbol,
-    error::{Error, Type},
+    error::{Type, TypeError},
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
 use crate::{data, element_iter, rebind, root};
@@ -315,7 +315,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
         Object::Nil => 0,
-        obj => bail!(Error::from_object(Type::Sequence, obj)),
+        obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
     Ok(size
         .try_into()
@@ -395,7 +395,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, arena: &'ob Arena) -> Result<GcObj<'ob>> 
         Object::String(_) | Object::Vec(_) | Object::Nil | Object::Cons(_) => {
             Ok(arg.clone_in(arena))
         }
-        _ => Err(Error::from_object(Type::Sequence, arg).into()),
+        _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }
 

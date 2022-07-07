@@ -2,7 +2,7 @@ use crate::core::arena::Rt;
 use crate::core::arena::{Arena, Root};
 use crate::core::env::Symbol;
 use crate::core::env::{sym, Environment};
-use crate::core::error::{Error, Type};
+use crate::core::error::{Type, TypeError};
 use crate::core::object::{GcObj, Object};
 use crate::reader;
 use crate::{interpreter, root};
@@ -109,7 +109,7 @@ fn find_file_in_load_path(file: &str, arena: &Arena, env: &Root<Environment>) ->
                 }
             }
             x => {
-                return Err(Error::from_object(Type::String, x))
+                return Err(TypeError::new(Type::String, x))
                     .context("Found non-string in `load-path'")
             }
         }
@@ -130,7 +130,7 @@ pub(crate) fn load<'ob>(
 ) -> Result<bool> {
     let file = match file.bind(arena).get() {
         Object::String(x) => x,
-        x => bail!(Error::from_object(Type::Symbol, x)),
+        x => bail!(TypeError::new(Type::Symbol, x)),
     };
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
