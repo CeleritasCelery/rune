@@ -24,15 +24,31 @@ impl IntoRoot<GcObj<'static>> for GcObj<'_> {
     }
 }
 
+impl IntoRoot<GcObj<'static>> for &Rt<GcObj<'_>> {
+    unsafe fn into_root(self) -> GcObj<'static> {
+        self.inner.with_lifetime()
+    }
+}
+
 impl IntoRoot<&'static Cons> for &Cons {
     unsafe fn into_root(self) -> &'static Cons {
         self.with_lifetime()
     }
 }
 
-impl<'ob> IntoRoot<(Symbol, GcObj<'static>)> for (Symbol, GcObj<'ob>) {
-    unsafe fn into_root(self) -> (Symbol, GcObj<'static>) {
-        (self.0, self.1.with_lifetime())
+impl IntoRoot<Symbol> for Symbol {
+    unsafe fn into_root(self) -> Symbol {
+        self
+    }
+}
+
+impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
+where
+    T: IntoRoot<Tx>,
+    U: IntoRoot<Ux>,
+{
+    unsafe fn into_root(self) -> (Tx, Ux) {
+        (self.0.into_root(), self.1.into_root())
     }
 }
 
@@ -51,6 +67,23 @@ impl<T> Trace for Gc<T> {
 impl Trace for &Cons {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         Cons::mark(self, stack);
+    }
+}
+
+impl<T, U> Trace for (T, U)
+where
+    T: Trace,
+    U: Trace,
+{
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        self.0.mark(stack);
+        self.1.mark(stack);
+    }
+}
+
+impl Trace for Symbol {
+    fn mark(&self, _stack: &mut Vec<RawObj>) {
+        // TODO: implement
     }
 }
 
@@ -167,6 +200,14 @@ impl<T: ?Sized + Debug> Debug for Rt<T> {
 impl<T: PartialEq> PartialEq<T> for Rt<T> {
     fn eq(&self, other: &T) -> bool {
         self.inner == *other
+    }
+}
+
+impl Deref for Rt<Symbol> {
+    type Target = Symbol;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
@@ -378,10 +419,6 @@ impl<T> Rt<Vec<T>> {
     }
     pub(crate) fn truncate(&mut self, len: usize) {
         self.inner.truncate(len);
-    }
-
-    pub(crate) fn append(&mut self, other: &mut Self) {
-        self.inner.append(&mut other.inner);
     }
 
     pub(crate) fn clear(&mut self) {

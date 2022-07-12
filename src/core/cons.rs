@@ -73,11 +73,6 @@ impl Cons {
         }
     }
 
-    #[allow(clippy::wrong_self_convention)]
-    pub(crate) fn into_raw(&self) -> *const Self {
-        self as *const Self
-    }
-
     pub(crate) fn mark(&self, stack: &mut Vec<RawObj>) {
         let cdr = self.cdr();
         if cdr.is_markable() {

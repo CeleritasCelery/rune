@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::core::env::GlobalSymbol as Q;
 use crate::core::{
     arena::{Arena, IntoRoot, Root, Rt},
@@ -7,9 +9,58 @@ use crate::core::{
     object::{Callable, Function, Gc, GcObj, List, Object},
 };
 use crate::{element_iter, rebind, root};
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
+
+#[derive(Debug)]
+pub(crate) struct EvalError {
+    backtrace: Vec<String>,
+    error: anyhow::Error,
+}
+
+impl std::error::Error for EvalError {}
+
+impl Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let error = &self.error;
+        writeln!(f, "{error}")?;
+        for x in &self.backtrace {
+            writeln!(f, "{x}")?;
+        }
+        Ok(())
+    }
+}
+
+impl EvalError {
+    fn new(error: anyhow::Error) -> Self {
+        Self {
+            backtrace: Vec::new(),
+            error,
+        }
+    }
+
+    fn with_trace(error: anyhow::Error, trace: String) -> Self {
+        Self {
+            backtrace: vec![trace],
+            error,
+        }
+    }
+}
+
+impl From<anyhow::Error> for EvalError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::new(e)
+    }
+}
+
+impl From<TypeError> for EvalError {
+    fn from(e: TypeError) -> Self {
+        Self::new(e.into())
+    }
+}
+
+type LispResult<'ob> = std::result::Result<GcObj<'ob>, EvalError>;
 
 struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
     vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
@@ -24,7 +75,7 @@ pub(crate) fn eval<'ob>(
     arena: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     arena.garbage_collect(false);
-    root!(vars, Vec::<&'static Cons>::new(), arena);
+    root!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env };
     interpreter.eval_form(form, arena)
 }
@@ -78,7 +129,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::SETQ => self.setq(forms, gc),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, gc),
                 sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
-                _ => self.eval_call(sym, forms, gc),
+                _ => self.eval_call(sym, forms, gc).map_err(|e| anyhow!(e)),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
         }
@@ -251,10 +302,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         name: Symbol,
         obj: &Rt<GcObj>,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> LispResult<'gc> {
         let resolved = match name.resolve_callable(gc) {
             Some(x) => x,
-            None => bail!("Invalid function: {name}"),
+            None => {
+                return Err(EvalError::new(anyhow!("Invalid function: {name}")));
+            }
         };
 
         match resolved.get() {
@@ -272,7 +325,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     println!("({name} {args:?})");
                 }
                 gc.garbage_collect(false);
-                (*func).call(args, self.env, gc)
+
+                (*func)
+                    .call(args, self.env, gc)
+                    .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))
             }
             Callable::Cons(form) => match form.try_as_macro() {
                 Ok(mcro) => {
@@ -283,9 +339,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     root!(args, macro_args.into_root(), gc);
                     let macro_func: Gc<Function> = mcro.into();
                     root!(macro_func, gc);
-                    let value = macro_func.call(args, self.env, gc, Some(name.name))?;
+                    let value = macro_func
+                        .call(args, self.env, gc, Some(name.name))
+                        .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))?;
                     root!(value, gc);
-                    self.eval_form(value, gc)
+                    self.eval_form(value, gc).map_err(EvalError::new)
                 }
                 Err(_) => match form.car().get() {
                     Object::Symbol(Q {
@@ -304,8 +362,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             println!("({name} {args:?})");
                         }
                         self.call_closure(form, args, name.name, gc)
+                            .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))
                     }
-                    other => Err(anyhow!("Invalid Function: {other}")),
+                    other => Err(anyhow!("Invalid Function: {other}").into()),
                 },
             },
         }
@@ -542,14 +601,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let form = form.bind(gc);
         element_iter!(iter, form, gc);
         let prev_len = self.vars.len();
+        root!(dynamic_bindings, Vec::new(), gc);
         match iter.next() {
             // (let x ...)
             Some(x) => {
                 let obj = x;
                 if parallel {
-                    self.let_bind_parallel(obj, gc)?;
+                    self.let_bind_parallel(obj, dynamic_bindings, gc)?;
                 } else {
-                    self.let_bind_serial(obj, gc)?;
+                    self.let_bind_serial(obj, dynamic_bindings, gc)?;
                 }
             }
             // (let)
@@ -557,11 +617,59 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
         let obj = self.implicit_progn(iter, gc)?;
         rebind!(obj, gc);
+        // Remove old bindings
         self.vars.deref_mut(gc).truncate(prev_len);
+        for binding in dynamic_bindings.iter() {
+            let var: Symbol = &binding.0;
+            let val = &binding.1;
+
+            if let Some(current_val) = self.env.deref_mut(gc).vars.get_mut(var) {
+                current_val.set(val);
+            } else {
+                unreachable!("Variable {var} not longer exists");
+            }
+        }
         Ok(obj)
     }
 
-    fn let_bind_serial(&mut self, form: &Rt<GcObj>, gc: &mut Arena) -> Result<()> {
+    fn let_bind_serial(
+        &mut self,
+        form: &Rt<GcObj>,
+        dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
+        gc: &mut Arena,
+    ) -> Result<()> {
+        let form = form.bind(gc);
+        element_iter!(bindings, form, gc);
+        while let Some(binding) = bindings.next() {
+            let obj = binding.bind(gc);
+            let (var, val) = match obj.get() {
+                // (let ((x y)))
+                Object::Cons(_) => self.let_bind_value(binding.as_cons(), gc)?,
+                // (let (x))
+                Object::Symbol(sym) => (sym, GcObj::NIL),
+                // (let (1))
+                x => bail!(TypeError::new(Type::Cons, x)),
+            };
+            rebind!(val, gc);
+            if let Some(current_val) = self.env.deref_mut(gc).vars.get_mut(var) {
+                let prev_val = current_val.bind(gc);
+                dynamic_bindings.deref_mut(gc).push((var, prev_val));
+                current_val.set(val);
+            } else {
+                let cons: &Cons = cons!(var, val; gc).try_into().unwrap();
+                self.vars.deref_mut(gc).push(cons);
+            }
+        }
+        Ok(())
+    }
+
+    fn let_bind_parallel(
+        &mut self,
+        form: &Rt<GcObj>,
+        dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
+        gc: &mut Arena,
+    ) -> Result<()> {
+        root!(let_bindings, Vec::new(), gc);
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
@@ -569,55 +677,39 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             match obj.get() {
                 // (let ((x y)))
                 Object::Cons(_) => {
-                    let var = self.let_bind_value(binding.as_cons(), gc)?;
+                    let (sym, var) = self.let_bind_value(binding.as_cons(), gc)?;
                     rebind!(var, gc);
-                    self.vars.deref_mut(gc).push(var);
+                    let_bindings.deref_mut(gc).push((sym, var));
                 }
                 // (let (x))
-                Object::Symbol(_) => {
-                    let val = cons!(obj; gc);
-                    let obj: &Cons = val.try_into().unwrap();
-                    self.vars.deref_mut(gc).push(obj);
+                Object::Symbol(sym) => {
+                    let_bindings.deref_mut(gc).push((sym, GcObj::NIL));
                 }
                 // (let (1))
                 x => bail!(TypeError::new(Type::Cons, x)),
             }
         }
-        Ok(())
-    }
-
-    fn let_bind_parallel(&mut self, form: &Rt<GcObj>, gc: &mut Arena) -> Result<()> {
-        root!(let_bindings, Vec::<&'static Cons>::new(), gc);
-        let form = form.bind(gc);
-        element_iter!(bindings, form, gc);
-        while let Some(binding) = bindings.next() {
-            let obj = binding.bind(gc);
-            match obj.get() {
-                // (let ((x y)))
-                Object::Cons(_) => {
-                    let var = self.let_bind_value(binding.as_cons(), gc)?;
-                    rebind!(var, gc);
-                    let_bindings.deref_mut(gc).push(var);
-                }
-                // (let (x))
-                Object::Symbol(_) => {
-                    let val = cons!(obj; gc);
-                    let cons: &Cons = val.try_into().unwrap();
-                    let_bindings.deref_mut(gc).push(cons);
-                }
-                // (let (1))
-                x => bail!(TypeError::new(Type::Cons, x)),
+        for binding in let_bindings.iter() {
+            let var: Symbol = &binding.0;
+            let val = &binding.1;
+            if let Some(current_val) = self.env.deref_mut(gc).vars.get_mut(var) {
+                let prev_val = current_val.bind(gc);
+                dynamic_bindings.deref_mut(gc).push((var, prev_val));
+                current_val.set(val);
+            } else {
+                let val = val.bind(gc);
+                let cons: &Cons = cons!(var, val; gc).try_into().unwrap();
+                self.vars.deref_mut(gc).push(cons);
             }
         }
-        self.vars.deref_mut(gc).append(let_bindings.deref_mut(gc));
         Ok(())
     }
 
-    fn let_bind_value<'gc>(
+    fn let_bind_value<'ob>(
         &mut self,
         cons: &Rt<Gc<&Cons>>,
-        gc: &'gc mut Arena,
-    ) -> Result<&'gc Cons> {
+        gc: &'ob mut Arena,
+    ) -> Result<(Symbol, GcObj<'ob>)> {
         element_iter!(iter, gc.bind(cons.bind(gc).cdr()), gc);
         let value = match iter.next() {
             // (let ((x y)))
@@ -626,11 +718,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             None => GcObj::NIL,
         };
         // (let ((x y z ..)))
-        ensure!(iter.is_empty(), "Let binding forms can only have 1 value");
+        ensure!(iter.is_empty(), "Let binding can only have 1 value");
         rebind!(value, gc);
-        let name: Symbol = cons.bind(gc).car().try_into()?;
-        let val = cons!(name, value; gc);
-        Ok(val.try_into().unwrap())
+        let name: Symbol = cons
+            .bind(gc)
+            .car()
+            .try_into()
+            .context("let variable must be a symbol")?;
+        Ok((name, value))
     }
 
     fn implicit_progn<'gc>(
@@ -698,6 +793,20 @@ mod test {
         check_interpreter("(let ((x 1)) (setq x 2) x)", 2, arena);
         check_interpreter("(let* ())", false, arena);
         check_interpreter("(let* ((x 1) (y x)) y)", 1, arena);
+    }
+
+    #[test]
+    fn dyn_variables() {
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(progn (defvar foo 1) foo)", 1, arena);
+        check_interpreter("(progn (defvar foo 1) (let ((foo 3)) foo))", 3, arena);
+        check_interpreter("(progn (defvar foo 1) (let ((foo 3))) foo)", 1, arena);
+        check_interpreter(
+            "(progn (defvar foo 1) (let (bar) (let ((foo 3)) (setq bar foo)) bar))",
+            3,
+            arena,
+        );
     }
 
     #[test]
@@ -786,6 +895,11 @@ mod test {
         let arena = &mut Arena::new(roots);
         check_interpreter("(let ((x #'(lambda (x) x))) (funcall x 5))", 5, arena);
         check_interpreter("(let ((x #'(lambda () 3))) (funcall x))", 3, arena);
+        check_interpreter(
+            "(progn (defvar foo 1) (let ((x #'(lambda () foo)) (foo 5)) (funcall x)))",
+            5,
+            arena,
+        );
         check_interpreter(
             "(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))",
             10,
