@@ -97,6 +97,7 @@ defsym!(AND_OPTIONAL, "&optional");
 defsym!(AND_REST, "&rest");
 defsym!(LAMBDA, "lambda");
 defsym!(CLOSURE, "closure");
+defsym!(CONDITION_CASE, "condition-case");
 defsym!(WHILE, "while");
 defsym!(PROGN, "progn");
 defsym!(PROG1, "prog1");
@@ -109,6 +110,8 @@ defsym!(LET_STAR, "let*");
 defsym!(IF, "if");
 defsym!(AND, "and");
 defsym!(OR, "or");
+defsym!(ERROR, "error");
+defsym!(DEBUG, "debug");
 
 defsubr!(
     apply,
@@ -126,6 +129,7 @@ defsubr!(
     AND_REST,
     LAMBDA,
     CLOSURE,
+    CONDITION_CASE,
     WHILE,
     PROGN,
     PROG1,
@@ -138,4 +142,6 @@ defsubr!(
     IF,
     AND,
     OR,
+    ERROR,
+    DEBUG,
 );

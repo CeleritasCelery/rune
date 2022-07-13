@@ -1,18 +1,14 @@
 use std::cell::RefCell;
 
-use crate::core::arena::Rt;
-use crate::core::env::Environment;
-use crate::core::object::HashTable;
 use crate::core::{
-    arena::{Arena, Root},
+    arena::{Arena, Root, Rt},
     cons::Cons,
-    env::Symbol,
+    env::{Environment, Symbol},
     error::{Type, TypeError},
-    object::{Callable, Function, Gc, GcObj, List, Object},
+    object::{Callable, Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{data, element_iter, rebind, root};
-use anyhow::anyhow;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -358,7 +354,7 @@ pub(crate) fn make_hash_table<'ob>(
     if let Some(i) = keyword_args
         .iter()
         .step_by(2)
-        .position(|&x| x == *sym::KW_TEST)
+        .position(|&x| x == sym::KW_TEST)
     {
         let val = match keyword_args.get((i * 2) + 1) {
             Some(x) => *x,

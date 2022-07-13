@@ -384,7 +384,7 @@ impl<'ob, 'brw> Compiler<'ob, 'brw> {
         if len == 1 {
             match forms.next().unwrap()? {
                 Object::Cons(cons) => match cons.car() {
-                    Object::Symbol(s) if !s == &sym::LAMBDA => self.compile_lambda(cons.cdr()),
+                    Object::Symbol(s) if s == sym::LAMBDA => self.compile_lambda(cons.cdr()),
                     _ => self.const_ref(Object::Cons(cons), None),
                 },
                 sym => self.const_ref(sym, None),
@@ -1055,10 +1055,10 @@ mod test {
     ) -> Result<LispFn<'ob>> {
         match obj {
             Object::Cons(sexp) => match sexp.car() {
-                Object::Symbol(sym) if sym == &sym::FUNCTION => {
+                Object::Symbol(sym) if sym == sym::FUNCTION => {
                     compile_lambda(sexp.cdr(), env, arena)
                 }
-                Object::Symbol(sym) if sym == &sym::LAMBDA => {
+                Object::Symbol(sym) if sym == sym::LAMBDA => {
                     let (upvalues, func) = compile_closure(sexp.cdr(), None, env, arena)?;
                     debug_assert!(upvalues.is_empty());
                     Ok(func)

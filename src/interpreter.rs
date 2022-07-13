@@ -129,6 +129,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::SETQ => self.setq(forms, gc),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, gc),
                 sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
+                sym::CONDITION_CASE => self.condition_case(forms, gc),
                 _ => self.eval_call(sym, forms, gc).map_err(|e| anyhow!(e)),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
@@ -223,18 +224,18 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
         for name in required {
             let val = arg_values.next().unwrap();
-            vars.push(cons!(name, val; gc).try_into().unwrap());
+            vars.push(cons!(name, val; gc).as_cons());
         }
 
         for name in optional {
             let val = arg_values.next().unwrap_or_default();
-            vars.push(cons!(name, val; gc).try_into().unwrap());
+            vars.push(cons!(name, val; gc).as_cons());
         }
 
         if let Some(rest_name) = rest {
             let values = arg_values.as_slice();
             let list = crate::fns::slice_into_list(values, None, gc);
-            vars.push(cons!(rest_name, list; gc).try_into().unwrap());
+            vars.push(cons!(rest_name, list; gc).as_cons());
         } else {
             // Ensure too many args were not provided
             ensure!(
@@ -377,7 +378,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let form = forms.next().unwrap()?;
         match form.get() {
             Object::Cons(cons) => {
-                if cons.car() == *sym::LAMBDA {
+                if cons.car() == sym::LAMBDA {
                     let env = {
                         // TODO: remove temp vector
                         let env: Vec<_> = self.vars.iter().map(|x| x.bind(gc).into()).collect();
@@ -656,7 +657,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 dynamic_bindings.deref_mut(gc).push((var, prev_val));
                 current_val.set(val);
             } else {
-                let cons: &Cons = cons!(var, val; gc).try_into().unwrap();
+                let cons = cons!(var, val; gc).as_cons();
                 self.vars.deref_mut(gc).push(cons);
             }
         }
@@ -698,7 +699,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 current_val.set(val);
             } else {
                 let val = val.bind(gc);
-                let cons: &Cons = cons!(var, val; gc).try_into().unwrap();
+                let cons = cons!(var, val; gc).as_cons();
                 self.vars.deref_mut(gc).push(cons);
             }
         }
@@ -741,6 +742,58 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
         Ok(last.deref_mut(gc).bind(gc))
     }
+
+    pub(crate) fn condition_case<'ob>(
+        &mut self,
+        form: &Rt<GcObj>,
+        gc: &'ob mut Arena,
+    ) -> Result<GcObj<'ob>> {
+        let form = form.bind(gc);
+        element_iter!(forms, form, gc);
+        let var = match forms.next() {
+            Some(x) => x.bind(gc),
+            None => bail!(ArgError::new(2, 0, "condition-case")),
+        };
+        root!(var, gc);
+        let bodyform = match forms.next() {
+            Some(x) => x,
+            None => bail!(ArgError::new(2, 1, "condition-case")),
+        };
+        match self.eval_form(bodyform, gc) {
+            Ok(x) => {
+                rebind!(x, gc);
+                Ok(x)
+            }
+            Err(e) => {
+                while let Some(handler) = forms.next() {
+                    match handler.bind(gc).get() {
+                        Object::Cons(cons) => {
+                            let condition = cons.car();
+                            ensure!(
+                                condition == sym::ERROR
+                                    || condition == (&*sym::DEBUG, &*sym::ERROR),
+                                "non-error conditions {condition} not yet supported"
+                            );
+                            let binding = list!(var, sym::ERROR, format!("{e}"); gc).as_cons();
+                            self.vars.deref_mut(gc).push(binding);
+                            let list: Gc<List> = match cons.cdr().try_into() {
+                                Ok(x) => x,
+                                Err(_) => return Ok(GcObj::NIL),
+                            };
+                            element_iter!(handlers, list, gc);
+                            let result = self.implicit_progn(handlers, gc)?;
+                            rebind!(result, gc);
+                            self.vars.deref_mut(gc).pop();
+                            return Ok(result);
+                        }
+                        Object::Nil => {}
+                        invalid => bail!("Invalid condition handler: {invalid}"),
+                    }
+                }
+                Err(e)
+            }
+        }
+    }
 }
 
 defsubr!(eval);
@@ -763,6 +816,14 @@ mod test {
         rebind!(compare, arena);
         let expect: GcObj = expect.into_obj(arena).copy_as_obj();
         assert_eq!(compare, expect);
+    }
+
+    fn check_error<'ob>(test_str: &str, arena: &'ob mut Arena) {
+        root!(env, Environment::default(), arena);
+        println!("Test String: {}", test_str);
+        let obj = crate::reader::read(test_str, arena).unwrap().0;
+        root!(obj, arena);
+        assert!(eval(obj, None, env, arena).is_err());
     }
 
     #[test]
@@ -931,5 +992,20 @@ mod test {
             false,
             arena,
         );
+    }
+
+    #[test]
+    fn test_condition_case() {
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(condition-case nil nil)", false, arena);
+        check_interpreter("(condition-case nil 1)", 1, arena);
+        check_interpreter("(condition-case nil (if) (error 7))", 7, arena);
+        check_interpreter("(condition-case nil (if) (error 7 9 11))", 11, arena);
+        check_interpreter("(condition-case nil (if) (error . 7))", false, arena);
+        check_interpreter("(condition-case nil (if) ((debug error) 7))", 7, arena);
+        check_error("(condition-case nil (if))", arena);
+        check_error("(condition-case nil (if) nil)", arena);
+        check_error("(condition-case nil (if) 5 (error 7))", arena);
     }
 }

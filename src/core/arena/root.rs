@@ -417,6 +417,11 @@ impl<T> Rt<Vec<T>> {
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
     }
+
+    pub(crate) fn pop(&mut self) {
+        self.inner.pop();
+    }
+
     pub(crate) fn truncate(&mut self, len: usize) {
         self.inner.truncate(len);
     }

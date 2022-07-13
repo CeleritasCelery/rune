@@ -2,6 +2,7 @@ use sptr::Strict;
 use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
+use crate::core::env::ConstSymbol;
 use crate::hashmap::HashMap;
 
 use super::super::{
@@ -257,7 +258,7 @@ impl<'ob> IntoObject<'ob> for Symbol {
     }
 }
 
-impl<'ob> IntoObject<'ob> for crate::core::env::ConstSymbol {
+impl<'ob> IntoObject<'ob> for ConstSymbol {
     type Out = Symbol;
 
     fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
@@ -1083,6 +1084,15 @@ impl<'ob> PartialEq<GlobalSymbol> for Gc<Object<'ob>> {
     }
 }
 
+impl<'ob> PartialEq<ConstSymbol> for Gc<Object<'ob>> {
+    fn eq(&self, other: &ConstSymbol) -> bool {
+        match self.get() {
+            Object::Symbol(x) => x == other,
+            _ => false,
+        }
+    }
+}
+
 impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;
@@ -1102,9 +1112,30 @@ impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
     }
 }
 
-impl Gc<Object<'_>> {
+impl<'ob, T, U> PartialEq<(T, U)> for Gc<Object<'ob>>
+where
+    T: Into<GcObj<'ob>> + Copy,
+    U: Into<GcObj<'ob>> + Copy,
+{
+    fn eq(&self, other: &(T, U)) -> bool {
+        if let Object::Cons(x) = self.get() {
+            let first: GcObj = other.0.into();
+            let second: GcObj = other.1.into();
+            if let Object::Cons(cdr) = x.cdr().get() {
+                return x.car() == first && cdr.car() == second && cdr.cdr() == GcObj::NIL;
+            }
+        }
+        false
+    }
+}
+
+impl<'ob> Gc<Object<'ob>> {
     pub(crate) const TRUE: Self = Gc::from_tag(Tag::True);
     pub(crate) const NIL: Self = Gc::from_tag(Tag::Nil);
+
+    pub(crate) fn as_cons(self) -> &'ob Cons {
+        self.try_into().unwrap()
+    }
 }
 
 impl Default for Gc<Object<'_>> {
