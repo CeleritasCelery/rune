@@ -323,6 +323,18 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
 }
 
 #[defun]
+pub(crate) fn safe_length(sequence: GcObj) -> i64 {
+    let size = match sequence.get() {
+        Object::Cons(x) => x.elements().len(),
+        Object::Vec(x) => x.borrow().len(),
+        Object::String(x) => x.len(),
+        _ => 0,
+    };
+    size.try_into()
+        .expect("conversion from usize to isize should never fail")
+}
+
+#[defun]
 pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
     list.elements().nth(n).unwrap_or(Ok(GcObj::NIL))
 }
@@ -520,6 +532,7 @@ defsubr!(
     puthash,
     gethash,
     length,
+    safe_length,
     nth,
     nthcdr,
     concat,
