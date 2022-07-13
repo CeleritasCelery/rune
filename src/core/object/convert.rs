@@ -4,7 +4,7 @@
 
 use std::cell::RefCell;
 
-use crate::core::env::GlobalSymbol;
+use crate::core::env::GlobalSymbol as Q;
 
 use super::GcObj;
 use super::{
@@ -23,7 +23,7 @@ use super::{Callable, Gc, Object};
 impl Cons {
     pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
         match self.car().get() {
-            Object::Symbol(GlobalSymbol {
+            Object::Symbol(Q {
                 sym: sym::MACRO, ..
             }) => {
                 let cdr = self.cdr();

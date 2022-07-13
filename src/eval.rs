@@ -6,6 +6,7 @@ use crate::core::{
     arena::{Arena, IntoRoot, Root},
     object::{Function, Gc, GcObj},
 };
+use crate::fns::assq;
 use crate::root;
 
 use crate::core::env::Environment;
@@ -55,11 +56,16 @@ pub(crate) fn macroexpand<'ob>(
     gc: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<GcObj<'ob>> {
-    if let Some(x) = environment {
-        unimplemented!("macroexpand override environment: {x:?}")
-    }
     if let Object::Cons(form) = form.bind(gc).get() {
         if let Object::Symbol(name) = form.car().get() {
+            // Override the macro based on ENVIRONMENT
+            let name = match environment {
+                Some(env) => match assq(name.into(), env.bind(gc).try_into()?).get() {
+                    Object::Cons(cons) => cons.cdr().try_into()?,
+                    _ => name,
+                },
+                _ => name,
+            };
             if let Some(callable) = name.resolve_callable(gc) {
                 if let Callable::Cons(cons) = callable.get() {
                     if let Ok(mcro) = cons.try_as_macro() {
@@ -67,7 +73,10 @@ pub(crate) fn macroexpand<'ob>(
                         root!(args, macro_args.into_root(), gc);
                         let macro_func: Gc<Function> = mcro.into();
                         root!(macro_func, gc);
-                        return macro_func.call(args, env, gc, Some(name.name));
+                        let result = macro_func.call(args, env, gc, Some(name.name))?;
+                        root!(result, gc);
+                        // recursively expand the macro's
+                        return macroexpand(result, environment, gc, env);
                     }
                 }
             }
