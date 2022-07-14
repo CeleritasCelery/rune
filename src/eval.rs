@@ -1,17 +1,19 @@
 use fn_macros::defun;
+use streaming_iterator::StreamingIterator;
 
 use crate::core::arena::Rt;
+use crate::core::error::{Type, TypeError};
 use crate::core::object::{Callable, Object};
 use crate::core::{
     arena::{Arena, IntoRoot, Root},
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
-use crate::root;
+use crate::{element_iter, root};
 
 use crate::core::env::Environment;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 #[defun]
 pub(crate) fn apply<'ob>(
@@ -47,6 +49,56 @@ pub(crate) fn funcall<'ob>(
     let arguments = unsafe { Rt::bind_slice(arguments, arena).to_vec().into_root() };
     root!(arg_list, arguments, arena);
     function.call(arg_list, env, arena, None)
+}
+
+#[defun]
+fn run_hooks<'ob>(
+    hooks: &[Rt<GcObj>],
+    env: &mut Root<Environment>,
+    cx: &'ob mut Arena,
+) -> Result<GcObj<'ob>> {
+    for hook in hooks {
+        match hook.bind(cx).get() {
+            Object::Symbol(sym) => {
+                if let Some(val) = env.vars.get(sym) {
+                    let val = val.bind(cx);
+                    if let Object::Cons(hook_list) = val.get() {
+                        root!(args, Vec::new(), cx);
+                        element_iter!(hooks, hook_list, cx);
+                        while let Some(hook) = hooks.next() {
+                            let func: &Rt<Gc<Function>> = hook.try_as()?;
+                            func.call(args, env, cx, None)?;
+                        }
+                    } else {
+                        let func: Gc<Function> = val.try_into()?;
+                        root!(func, cx);
+                        root!(args, Vec::new(), cx);
+                        func.call(args, env, cx, None)?;
+                    }
+                }
+            }
+            x => bail!(TypeError::new(Type::Symbol, x)),
+        }
+    }
+    Ok(GcObj::NIL)
+}
+
+#[defun]
+fn autoload_do_load<'ob>(
+    fundef: GcObj<'ob>,
+    funname: Option<GcObj>,
+    _macro_only: Option<GcObj>,
+) -> GcObj<'ob> {
+    // TODO: implement
+    println!("autoload-do-load: fundef: {fundef}, funname: {funname:?}");
+    fundef
+}
+
+#[defun]
+fn autoload<'ob>(function: GcObj<'ob>, file: GcObj) -> GcObj<'ob> {
+    // TODO: implement
+    println!("autoload: function: {function}, file: {file}");
+    GcObj::NIL
 }
 
 #[defun]
@@ -110,12 +162,16 @@ defsym!(LET_STAR, "let*");
 defsym!(IF, "if");
 defsym!(AND, "and");
 defsym!(OR, "or");
+defsym!(INTERACTIVE, "interactive");
 defsym!(ERROR, "error");
 defsym!(DEBUG, "debug");
 
 defsubr!(
     apply,
     funcall,
+    run_hooks,
+    autoload,
+    autoload_do_load,
     macroexpand,
     FUNCTION,
     QUOTE,
@@ -142,6 +198,7 @@ defsubr!(
     IF,
     AND,
     OR,
+    INTERACTIVE,
     ERROR,
     DEBUG,
 );

@@ -129,6 +129,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::SETQ => self.setq(forms, gc),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, gc),
                 sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
+                sym::INTERACTIVE => Ok(GcObj::NIL), // TODO: implement
                 sym::CONDITION_CASE => self.condition_case(forms, gc),
                 _ => self.eval_call(sym, forms, gc).map_err(|e| anyhow!(e)),
             },
