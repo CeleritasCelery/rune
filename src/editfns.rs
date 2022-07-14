@@ -6,9 +6,10 @@ use anyhow::{anyhow, ensure, Result};
 use std::fmt::Write as _;
 
 #[defun]
-fn message(format_string: &str, args: &[GcObj]) -> String {
-    println!("MESSAGE: {format_string} -> {args:?}");
-    format_string.to_owned()
+fn message(format_string: &str, args: &[GcObj]) -> Result<String> {
+    let message = format(format_string, args)?;
+    println!("MESSAGE: {message}");
+    Ok(message)
 }
 
 defvar!(MESSAGE_NAME, "message-name");

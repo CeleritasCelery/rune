@@ -6,5 +6,3 @@
 (load "inline")
 (load "cconv")
 
-;; (enable-debug)
-;; (macroexp--expand-all '(when x y))
