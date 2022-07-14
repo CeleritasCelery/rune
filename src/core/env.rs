@@ -106,6 +106,12 @@ impl PartialEq<ConstSymbol> for GlobalSymbol {
     }
 }
 
+impl PartialEq<GlobalSymbol> for ConstSymbol {
+    fn eq(&self, other: &GlobalSymbol) -> bool {
+        self.0() == other
+    }
+}
+
 impl Eq for GlobalSymbol {}
 
 impl Hash for GlobalSymbol {

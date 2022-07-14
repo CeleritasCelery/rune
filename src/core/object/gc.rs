@@ -1112,23 +1112,6 @@ impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob, T, U> PartialEq<(T, U)> for Gc<Object<'ob>>
-where
-    T: Into<GcObj<'ob>> + Copy,
-    U: Into<GcObj<'ob>> + Copy,
-{
-    fn eq(&self, other: &(T, U)) -> bool {
-        if let Object::Cons(x) = self.get() {
-            let first: GcObj = other.0.into();
-            let second: GcObj = other.1.into();
-            if let Object::Cons(cdr) = x.cdr().get() {
-                return x.car() == first && cdr.car() == second && cdr.cdr() == GcObj::NIL;
-            }
-        }
-        false
-    }
-}
-
 impl<'ob> Gc<Object<'ob>> {
     pub(crate) const TRUE: Self = Gc::from_tag(Tag::True);
     pub(crate) const NIL: Self = Gc::from_tag(Tag::Nil);

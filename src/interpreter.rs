@@ -765,15 +765,26 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 Ok(x)
             }
             Err(e) => {
+                const CONDITION_ERROR: &str = "Invalid condition handler:";
                 while let Some(handler) = forms.next() {
                     match handler.bind(gc).get() {
                         Object::Cons(cons) => {
+                            // Check that conditions match
                             let condition = cons.car();
-                            ensure!(
-                                condition == sym::ERROR
-                                    || condition == (&*sym::DEBUG, &*sym::ERROR),
-                                "non-error conditions {condition} not yet supported"
-                            );
+                            match condition.get() {
+                                Object::Symbol(s) if s == &sym::ERROR => {}
+                                Object::Cons(cons) => {
+                                    for x in cons.elements() {
+                                        let x = x?;
+                                        ensure!(
+                                            x == sym::DEBUG || x == sym::ERROR,
+                                            "non-error conditions {x} not yet supported"
+                                        );
+                                    }
+                                }
+                                _ => bail!("{CONDITION_ERROR} {condition}"),
+                            }
+                            // Call handlers with error
                             let binding = list!(var, sym::ERROR, format!("{e}"); gc).as_cons();
                             self.vars.deref_mut(gc).push(binding);
                             let list: Gc<List> = match cons.cdr().try_into() {
@@ -787,7 +798,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             return Ok(result);
                         }
                         Object::Nil => {}
-                        invalid => bail!("Invalid condition handler: {invalid}"),
+                        invalid => bail!("{CONDITION_ERROR} {invalid}"),
                     }
                 }
                 Err(e)
