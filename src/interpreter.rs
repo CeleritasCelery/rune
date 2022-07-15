@@ -130,11 +130,18 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, gc),
                 sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
                 sym::INTERACTIVE => Ok(GcObj::NIL), // TODO: implement
+                sym::CATCH => self.catch(forms, gc),
                 sym::CONDITION_CASE => self.condition_case(forms, gc),
                 _ => self.eval_call(sym, forms, gc).map_err(|e| anyhow!(e)),
             },
             other => Err(anyhow!("Invalid Function: {other}")),
         }
+    }
+
+    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+        element_iter!(forms, obj.bind(gc), gc);
+        let _tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
+        self.implicit_progn(forms, gc)
     }
 
     fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
