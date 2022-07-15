@@ -653,17 +653,17 @@ If ALIST is non-nil, the new pairs are prepended to it."
                (cl--class-name (symbol-value tag)))))
       (funcall orig-fun object)))
 
-;;;###autoload
-(define-minor-mode cl-old-struct-compat-mode
-  "Enable backward compatibility with old-style structs.
-This can be needed when using code byte-compiled using the old
-macro-expansion of `cl-defstruct' that used vectors objects instead
-of record objects."
-  :global t
-  (cond
-   (cl-old-struct-compat-mode
-    (advice-add 'type-of :around #'cl--old-struct-type-of))
-   (t
-    (advice-remove 'type-of #'cl--old-struct-type-of))))
+;; ;;;###autoload
+;; (define-minor-mode cl-old-struct-compat-mode
+;;   "Enable backward compatibility with old-style structs.
+;; This can be needed when using code byte-compiled using the old
+;; macro-expansion of `cl-defstruct' that used vectors objects instead
+;; of record objects."
+;;   :global t
+;;   (cond
+;;    (cl-old-struct-compat-mode
+;;     (advice-add 'type-of :around #'cl--old-struct-type-of))
+;;    (t
+;;     (advice-remove 'type-of #'cl--old-struct-type-of))))
 
 ;;; cl-lib.el ends here
