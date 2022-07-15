@@ -4,8 +4,6 @@
 
 use std::cell::RefCell;
 
-use crate::core::env::GlobalSymbol as Q;
-
 use super::GcObj;
 use super::{
     super::{
@@ -21,16 +19,11 @@ use super::{Callable, Gc, Object};
 
 #[allow(clippy::multiple_inherent_impl)]
 impl Cons {
-    pub(crate) fn try_as_macro(&self) -> anyhow::Result<Gc<Callable>> {
-        match self.car().get() {
-            Object::Symbol(Q {
-                sym: sym::MACRO, ..
-            }) => {
-                let cdr = self.cdr();
-                let x = cdr.try_into()?;
-                Ok(x)
-            }
-            x => Err(TypeError::new(Type::Symbol, x).into()),
+    pub(crate) fn try_as_macro(&self) -> Result<Gc<Callable>, TypeError> {
+        if self.car() == sym::MACRO {
+            self.cdr().try_into()
+        } else {
+            Err(TypeError::new(Type::Symbol, self.car()))
         }
     }
 }

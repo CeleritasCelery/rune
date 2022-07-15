@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{element_iter, root};
 
-use crate::core::env::Environment;
+use crate::core::env::{Environment, Symbol};
 
 use anyhow::{bail, Result};
 
@@ -86,11 +86,10 @@ fn run_hooks<'ob>(
 #[defun]
 fn autoload_do_load<'ob>(
     fundef: GcObj<'ob>,
-    funname: Option<GcObj>,
+    _funname: Option<GcObj>,
     _macro_only: Option<GcObj>,
 ) -> GcObj<'ob> {
     // TODO: implement
-    println!("autoload-do-load: fundef: {fundef}, funname: {funname:?}");
     fundef
 }
 
@@ -110,31 +109,37 @@ pub(crate) fn macroexpand<'ob>(
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.bind(gc).get() {
         if let Object::Symbol(name) = form.car().get() {
-            // Override the macro based on ENVIRONMENT
-            let name = match environment {
+            // shadow the macro based on ENVIRONMENT
+            let func: Option<Gc<Function>> = match environment {
                 Some(env) => match assq(name.into(), env.bind(gc).try_into()?).get() {
-                    Object::Cons(cons) => cons.cdr().try_into()?,
-                    _ => name,
+                    Object::Cons(cons) => Some(cons.cdr().try_into()?),
+                    _ => get_macro_func(name, gc),
                 },
-                _ => name,
+                _ => get_macro_func(name, gc),
             };
-            if let Some(callable) = name.resolve_callable(gc) {
-                if let Callable::Cons(cons) = callable.get() {
-                    if let Ok(mcro) = cons.try_as_macro() {
-                        let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
-                        root!(args, macro_args.into_root(), gc);
-                        let macro_func: Gc<Function> = mcro.into();
-                        root!(macro_func, gc);
-                        let result = macro_func.call(args, env, gc, Some(name.name))?;
-                        root!(result, gc);
-                        // recursively expand the macro's
-                        return macroexpand(result, environment, gc, env);
-                    }
-                }
+            if let Some(macro_func) = func {
+                let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
+                root!(args, macro_args.into_root(), gc);
+                root!(macro_func, gc);
+                let result = macro_func.call(args, env, gc, Some(name.name))?;
+                root!(result, gc);
+                // recursively expand the macro's
+                return macroexpand(result, environment, gc, env);
             }
         }
     }
     Ok(form.bind(gc))
+}
+
+fn get_macro_func<'ob>(name: Symbol, gc: &'ob Arena) -> Option<Gc<Function<'ob>>> {
+    if let Some(callable) = name.resolve_callable(gc) {
+        if let Callable::Cons(cons) = callable.get() {
+            if let Ok(mcro) = cons.try_as_macro() {
+                return Some(mcro.into());
+            }
+        }
+    }
+    None
 }
 
 defsym!(FUNCTION, "function");
@@ -163,6 +168,7 @@ defsym!(IF, "if");
 defsym!(AND, "and");
 defsym!(OR, "or");
 defsym!(INTERACTIVE, "interactive");
+defsym!(CATCH, "catch");
 defsym!(ERROR, "error");
 defsym!(DEBUG, "debug");
 
@@ -199,6 +205,7 @@ defsubr!(
     AND,
     OR,
     INTERACTIVE,
+    CATCH,
     ERROR,
     DEBUG,
 );
