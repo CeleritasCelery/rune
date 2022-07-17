@@ -132,10 +132,10 @@ pub(crate) fn reverse<'ob>(seq: Gc<List>, arena: &'ob Arena) -> Result<GcObj<'ob
 
 #[defun]
 fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
-    let head = match lists.get(0) {
-        Some(x) => x.into(),
-        None => GcObj::NIL,
-    };
+    let head = lists
+        .iter()
+        .find(|&&x| x != List::EMPTY)
+        .unwrap_or_default();
     let mut tail: Option<&Cons> = None;
     for list in lists {
         if let Some(cons) = tail {
@@ -146,17 +146,14 @@ fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
             tail = Some(elem?);
         }
     }
-    Ok(head)
+    Ok(head.into())
 }
 
 fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
-    match seq.get() {
-        List::Cons(cons) => {
-            for elt in cons.elements() {
-                list.push(elt?);
-            }
+    if let List::Cons(cons) = seq.get() {
+        for elt in cons.elements() {
+            list.push(elt?);
         }
-        List::Nil => {}
     }
     Ok(())
 }
@@ -482,7 +479,7 @@ mod test {
         let arena = &Arena::new(roots);
         {
             let res = nconc(&[List::EMPTY]).unwrap();
-            assert!(matches!(res.get(), Object::Nil));
+            assert!(res == GcObj::NIL);
         }
         {
             let list: Gc<List> = list![1, 2; arena].try_into().unwrap();
@@ -501,6 +498,18 @@ mod test {
             let list3: Gc<List> = list![5, 6; arena].try_into().unwrap();
             let res = nconc(&[list1, list2, list3]).unwrap();
             assert_eq!(res, list![1, 2, 3, 4, 5, 6; arena]);
+        }
+        {
+            let list1: Gc<List> = GcObj::NIL.try_into().unwrap();
+            let list2: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let res = nconc(&[list1, list2]).unwrap();
+            assert_eq!(res, list![1, 2; arena]);
+        }
+        {
+            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list2: Gc<List> = GcObj::NIL.try_into().unwrap();
+            let res = nconc(&[list1, list2]).unwrap();
+            assert_eq!(res, list![1, 2; arena]);
         }
     }
 

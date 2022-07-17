@@ -7,6 +7,7 @@ This would let the Object lifetime be covariant instead of invariant. But the pr
 * rename arena to variable to something other then GC
 * Add a lifetime parameter to Symbols
 I hate to do this but it is requirement if we want to garbage collect them ever. We need to track which ones are on the stack versus not, the same as we do for all variables.
+* See if we can remove the callable type
 * define benchmarks
 * Steps to add a new object
 - define in arena.rs

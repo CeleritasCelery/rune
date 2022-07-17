@@ -751,7 +751,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(last.deref_mut(gc).bind(gc))
     }
 
-    pub(crate) fn condition_case<'ob>(
+    fn condition_case<'ob>(
         &mut self,
         form: &Rt<GcObj>,
         gc: &'ob mut Arena,

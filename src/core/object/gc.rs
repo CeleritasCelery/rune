@@ -1133,6 +1133,18 @@ impl Default for &Gc<Object<'_>> {
     }
 }
 
+impl Default for Gc<List<'_>> {
+    fn default() -> Self {
+        List::EMPTY
+    }
+}
+
+impl Default for &Gc<List<'_>> {
+    fn default() -> Self {
+        &List::EMPTY
+    }
+}
+
 impl<T: fmt::Display> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let obj = self.as_obj().get();
