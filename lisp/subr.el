@@ -464,18 +464,8 @@ i.e., subtract 2 * most-negative-fixnum from VALUE before shifting it."
 ;; `cl--compiler-macro-cXXr' in cl-macs.el.  If you amend either one,
 ;; you may want to amend the other, too.
 (defun internal--compiler-macro-cXXr (form x)
-  (let* ((head (car form))
-         (n (symbol-name (car form)))
-         (i (- (length n) 2)))
-    (if (not (string-match "c[ad]+r\\'" n))
-        (if (and (fboundp head) (symbolp (symbol-function head)))
-            (internal--compiler-macro-cXXr (cons (symbol-function head) (cdr form))
-                                     x)
-          (error "Compiler macro for cXXr applied to non-cXXr form"))
-      (while (> i (match-beginning 0))
-        (setq x (list (if (eq (aref n i) ?a) 'car 'cdr) x))
-        (setq i (1- i)))
-      x)))
+  ;; RUNE BOOTSTRAP
+  form)
 
 (defun caar (x)
   "Return the car of the car of X."
