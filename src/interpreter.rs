@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use crate::core::env::GlobalSymbol as Q;
 use crate::core::{
     arena::{Arena, IntoRoot, Root, Rt},
     cons::{Cons, ElemStreamIter},
@@ -46,6 +45,11 @@ impl EvalError {
             error,
         }
     }
+
+    fn add_trace(mut self, trace: String) -> Self {
+        self.backtrace.push(trace);
+        self
+    }
 }
 
 impl From<anyhow::Error> for EvalError {
@@ -60,7 +64,7 @@ impl From<TypeError> for EvalError {
     }
 }
 
-type LispResult<'ob> = std::result::Result<GcObj<'ob>, EvalError>;
+type EvalResult<'ob> = std::result::Result<GcObj<'ob>, EvalError>;
 
 struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
     vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
@@ -89,7 +93,9 @@ pub(crate) fn call<'gc>(
 ) -> Result<GcObj<'gc>> {
     root!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env };
-    frame.call_closure(form, args, name, gc)
+    frame
+        .call_closure(form, args, name, gc)
+        .map_err(|e| anyhow!(e))
 }
 
 impl Interpreter<'_, '_, '_, '_, '_> {
@@ -260,7 +266,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         args: Vec<GcObj<'a>>,
         name: &str,
         gc: &'a Arena,
-    ) -> Result<Vec<&'a Cons>> {
+    ) -> Result<Vec<&'a Cons>, EvalError> {
         // Add closure environment to variables
         // (closure ((x . 1) (y . 2) t) ...)
         //          ^^^^^^^^^^^^^^^^^^^
@@ -285,12 +291,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         args: &Root<Vec<GcObj>>,
         name: &str,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> EvalResult<'gc> {
         let closure = closure.bind(gc);
         match closure.car().get() {
-            Object::Symbol(Q {
-                sym: sym::CLOSURE, ..
-            }) => {
+            Object::Symbol(s) if s == &sym::CLOSURE => {
                 element_iter!(forms, closure.cdr(), gc);
                 // TODO: remove this temp vector
                 let args = args.iter().map(|x| x.bind(gc)).collect();
@@ -300,7 +304,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     vars,
                     env: self.env,
                 };
-                call_frame.implicit_progn(forms, gc)
+                call_frame.implicit_progn(forms, gc).map_err(EvalError::new)
             }
             other => Err(TypeError::new(Type::Func, other).into()),
         }
@@ -311,7 +315,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         name: Symbol,
         obj: &Rt<GcObj>,
         gc: &'gc mut Arena,
-    ) -> LispResult<'gc> {
+    ) -> EvalResult<'gc> {
         let resolved = match name.resolve_callable(gc) {
             Some(x) => x,
             None => {
@@ -355,9 +359,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.eval_form(value, gc).map_err(EvalError::new)
                 }
                 Err(_) => match form.car().get() {
-                    Object::Symbol(Q {
-                        sym: sym::CLOSURE, ..
-                    }) => {
+                    Object::Symbol(s) if s == &sym::CLOSURE => {
                         let obj = obj.bind(gc);
                         element_iter!(iter, obj, gc);
                         root!(args, Vec::new(), gc);
@@ -371,7 +373,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             println!("({name} {args:?})");
                         }
                         self.call_closure(form, args, name.name, gc)
-                            .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))
+                            .map_err(|e| e.add_trace(format!("({name} {args:?})")))
                     }
                     other => Err(anyhow!("Invalid Function: {other}").into()),
                 },
@@ -751,11 +753,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(last.deref_mut(gc).bind(gc))
     }
 
-    fn condition_case<'ob>(
-        &mut self,
-        form: &Rt<GcObj>,
-        gc: &'ob mut Arena,
-    ) -> Result<GcObj<'ob>> {
+    fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, gc: &'ob mut Arena) -> Result<GcObj<'ob>> {
         let form = form.bind(gc);
         element_iter!(forms, form, gc);
         let var = match forms.next() {
