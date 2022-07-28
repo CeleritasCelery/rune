@@ -32,11 +32,15 @@ impl Display for EvalError {
 }
 
 impl EvalError {
-    fn new(error: anyhow::Error) -> Self {
+    fn new_error(error: anyhow::Error) -> Self {
         Self {
             backtrace: Vec::new(),
             error,
         }
+    }
+
+    fn new(error: impl Into<Self>) -> Self {
+        error.into()
     }
 
     fn with_trace(error: anyhow::Error, trace: String) -> Self {
@@ -54,14 +58,47 @@ impl EvalError {
 
 impl From<anyhow::Error> for EvalError {
     fn from(e: anyhow::Error) -> Self {
-        Self::new(e)
+        Self::new_error(e)
+    }
+}
+
+impl From<String> for EvalError {
+    fn from(e: String) -> Self {
+        Self::new_error(anyhow!(e))
+    }
+}
+
+impl From<&'static str> for EvalError {
+    fn from(e: &'static str) -> Self {
+        Self::new_error(anyhow!(e))
     }
 }
 
 impl From<TypeError> for EvalError {
     fn from(e: TypeError) -> Self {
-        Self::new(e.into())
+        Self::new_error(e.into())
     }
+}
+
+impl From<ArgError> for EvalError {
+    fn from(e: ArgError) -> Self {
+        Self::new_error(e.into())
+    }
+}
+
+impl From<std::convert::Infallible> for EvalError {
+    fn from(e: std::convert::Infallible) -> Self {
+        Self::new_error(e.into())
+    }
+}
+
+macro_rules! error {
+    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (EvalError::new_error(anyhow!($msg, $($args),*)));
+    ($err:expr) => (EvalError::new($err));
+}
+
+macro_rules! bail_err {
+    ($($args:expr),* $(,)?) => (return Err(error!($($args),*)));
 }
 
 type EvalResult<'ob> = std::result::Result<GcObj<'ob>, EvalError>;
@@ -81,7 +118,7 @@ pub(crate) fn eval<'ob>(
     arena.garbage_collect(false);
     root!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env };
-    interpreter.eval_form(form, arena)
+    interpreter.eval_form(form, arena).map_err(Into::into)
 }
 
 pub(crate) fn call<'gc>(
@@ -90,16 +127,14 @@ pub(crate) fn call<'gc>(
     env: &mut Root<Environment>,
     name: &str,
     gc: &'gc mut Arena,
-) -> Result<GcObj<'gc>> {
+) -> EvalResult<'gc> {
     root!(vars, Vec::new(), gc);
     let mut frame = Interpreter { vars, env };
-    frame
-        .call_closure(form, args, name, gc)
-        .map_err(|e| anyhow!(e))
+    frame.call_closure(form, args, name, gc)
 }
 
 impl Interpreter<'_, '_, '_, '_, '_> {
-    fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = rt.bind(gc);
         match obj.get() {
             Object::Symbol(sym) => self.var_ref(sym, gc),
@@ -115,7 +150,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         cons: &Rt<Gc<&Cons>>,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> EvalResult<'gc> {
         let cons = cons.bind(gc);
         let forms = cons.cdr();
         root!(forms, gc);
@@ -138,19 +173,19 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::INTERACTIVE => Ok(GcObj::NIL), // TODO: implement
                 sym::CATCH => self.catch(forms, gc),
                 sym::CONDITION_CASE => self.condition_case(forms, gc),
-                _ => self.eval_call(sym, forms, gc).map_err(|e| anyhow!(e)),
+                _ => self.eval_call(sym, forms, gc),
             },
-            other => Err(anyhow!("Invalid Function: {other}")),
+            other => Err(error!("Invalid Function: {other}")),
         }
     }
 
-    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         element_iter!(forms, obj.bind(gc), gc);
         let _tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
         self.implicit_progn(forms, gc)
     }
 
-    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         match forms.next() {
@@ -266,7 +301,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         args: Vec<GcObj<'a>>,
         name: &str,
         gc: &'a Arena,
-    ) -> Result<Vec<&'a Cons>, EvalError> {
+    ) -> Result<Vec<&'a Cons>> {
         // Add closure environment to variables
         // (closure ((x . 1) (y . 2) t) ...)
         //          ^^^^^^^^^^^^^^^^^^^
@@ -304,7 +339,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     vars,
                     env: self.env,
                 };
-                call_frame.implicit_progn(forms, gc).map_err(EvalError::new)
+                call_frame.implicit_progn(forms, gc)
             }
             other => Err(TypeError::new(Type::Func, other).into()),
         }
@@ -318,9 +353,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> EvalResult<'gc> {
         let resolved = match name.resolve_callable(gc) {
             Some(x) => x,
-            None => {
-                return Err(EvalError::new(anyhow!("Invalid function: {name}")));
-            }
+            None => bail_err!("Invalid function: {name}"),
         };
 
         match resolved.get() {
@@ -356,7 +389,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                         .call(args, self.env, gc, Some(name.name))
                         .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))?;
                     root!(value, gc);
-                    self.eval_form(value, gc).map_err(EvalError::new)
+                    self.eval_form(value, gc)
                 }
                 Err(_) => match form.car().get() {
                     Object::Symbol(s) if s == &sym::CLOSURE => {
@@ -380,10 +413,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             },
         }
     }
-    fn eval_function<'a>(&mut self, obj: GcObj<'a>, gc: &'a Arena) -> Result<GcObj<'a>> {
+    fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, gc: &'ob Arena) -> EvalResult<'ob> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
-        ensure!(len == 1, ArgError::new(1, len, "function"));
+        if len != 1 {
+            bail_err!(ArgError::new(1, len, "function"))
+        }
 
         let form = forms.next().unwrap()?;
         match form.get() {
@@ -410,7 +445,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         obj: &Rt<GcObj>,
         prog_num: u16,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> EvalResult<'gc> {
         let mut count = 0;
         root!(returned_form, None, gc);
         let obj = obj.bind(gc);
@@ -436,17 +471,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         self.implicit_progn(forms, gc)
     }
 
-    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let first: Gc<List> = obj.bind(gc).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
-            List::Nil => bail!(ArgError::new(1, 0, "while")),
+            List::Nil => bail_err!(ArgError::new(1, 0, "while")),
         };
         root!(condition, gc);
         while self.eval_form(condition, gc)? != GcObj::NIL {
@@ -457,7 +492,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -477,7 +512,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         root!(last, GcObj::TRUE, gc);
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
@@ -492,7 +527,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(gc.bind(last.bind(gc)))
     }
 
-    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         while let Some(form) = forms.next() {
@@ -505,17 +540,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         let condition = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(ArgError::new(2, 0, "if")),
+            None => bail_err!(ArgError::new(2, 0, "if")),
         };
         root!(condition, gc);
         let true_branch = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(ArgError::new(2, 1, "if")),
+            None => bail_err!(ArgError::new(2, 1, "if")),
         };
         root!(true_branch, gc);
         #[allow(clippy::if_not_else)]
@@ -526,7 +561,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> Result<GcObj<'gc>> {
+    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = obj.bind(gc);
         element_iter!(forms, obj, gc);
         let mut arg_cnt = 0;
@@ -540,8 +575,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.var_set(var, val, gc);
                     last_value.deref_mut(gc).set(val);
                 }
-                (_, Some(_)) => bail!(TypeError::new(Type::Symbol, var)),
-                (_, None) => bail!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
+                (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
+                (_, None) => bail_err!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
             }
             arg_cnt += 2;
         }
@@ -564,7 +599,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_ref<'a>(&self, sym: Symbol, gc: &'a Arena) -> Result<GcObj<'a>> {
+    fn var_ref<'ob>(&self, sym: Symbol, gc: &'ob Arena) -> EvalResult<'ob> {
         if sym.name.starts_with(':') {
             Ok(sym.into())
         } else {
@@ -573,7 +608,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 Some(value) => Ok(value),
                 None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.bind(gc)),
-                    None => Err(anyhow!("Void variable: {sym}")),
+                    None => Err(error!("Void variable: {sym}")),
                 },
             }
         }
@@ -595,7 +630,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     #[allow(clippy::unused_self)]
-    fn quote<'gc>(&self, value: GcObj<'gc>) -> Result<GcObj<'gc>> {
+    fn quote<'gc>(&self, value: GcObj<'gc>) -> EvalResult<'gc> {
         let mut forms = value.as_list()?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
@@ -608,7 +643,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         form: &Rt<GcObj>,
         parallel: bool,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> EvalResult<'gc> {
         let form = form.bind(gc);
         element_iter!(iter, form, gc);
         let prev_len = self.vars.len();
@@ -624,7 +659,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 }
             }
             // (let)
-            None => bail!(ArgError::new(1, 0, "let")),
+            None => bail_err!(ArgError::new(1, 0, "let")),
         }
         let obj = self.implicit_progn(iter, gc)?;
         rebind!(obj, gc);
@@ -743,7 +778,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         mut forms: ElemStreamIter<'_, '_>,
         gc: &'gc mut Arena,
-    ) -> Result<GcObj<'gc>> {
+    ) -> EvalResult<'gc> {
         root!(last, GcObj::NIL, gc);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form, gc)?;
@@ -753,17 +788,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(last.deref_mut(gc).bind(gc))
     }
 
-    fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, gc: &'ob mut Arena) -> Result<GcObj<'ob>> {
+    fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, gc: &'ob mut Arena) -> EvalResult<'ob> {
         let form = form.bind(gc);
         element_iter!(forms, form, gc);
         let var = match forms.next() {
             Some(x) => x.bind(gc),
-            None => bail!(ArgError::new(2, 0, "condition-case")),
+            None => bail_err!(ArgError::new(2, 0, "condition-case")),
         };
         root!(var, gc);
         let bodyform = match forms.next() {
             Some(x) => x,
-            None => bail!(ArgError::new(2, 1, "condition-case")),
+            None => bail_err!(ArgError::new(2, 1, "condition-case")),
         };
         match self.eval_form(bodyform, gc) {
             Ok(x) => {
@@ -782,13 +817,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                                 Object::Cons(cons) => {
                                     for x in cons.elements() {
                                         let x = x?;
-                                        ensure!(
-                                            x == sym::DEBUG || x == sym::ERROR,
-                                            "non-error conditions {x} not yet supported"
-                                        );
+                                        if x != sym::DEBUG && x != sym::ERROR {
+                                            bail_err!("non-error conditions {x} not yet supported")
+                                        }
                                     }
                                 }
-                                _ => bail!("{CONDITION_ERROR} {condition}"),
+                                _ => bail_err!("{CONDITION_ERROR} {condition}"),
                             }
                             // Call handlers with error
                             let binding = list!(var, sym::ERROR, format!("{e}"); gc).as_cons();
@@ -804,7 +838,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             return Ok(result);
                         }
                         Object::Nil => {}
-                        invalid => bail!("{CONDITION_ERROR} {invalid}"),
+                        invalid => bail_err!("{CONDITION_ERROR} {invalid}"),
                     }
                 }
                 Err(e)

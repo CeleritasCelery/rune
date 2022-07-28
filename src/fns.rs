@@ -41,6 +41,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
             Function::Cons(cons) => {
                 root!(cons, arena);
                 interpreter::call(cons, args, env, name.unwrap_or("closure"), arena)
+                    .map_err(Into::into)
             }
             Function::Symbol(sym) => {
                 if let Some(resolved) = sym.resolve_callable(arena) {
@@ -49,7 +50,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
                         Callable::SubrFn(f) => (*f).call(args, env, arena),
                         Callable::Cons(cons) => {
                             root!(cons, arena);
-                            interpreter::call(cons, args, env, sym.name, arena)
+                            interpreter::call(cons, args, env, sym.name, arena).map_err(Into::into)
                         }
                     }
                 } else {
