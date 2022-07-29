@@ -43,15 +43,15 @@ impl EvalError {
         error.into()
     }
 
-    fn with_trace(error: anyhow::Error, trace: String) -> Self {
+    fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
         Self {
-            backtrace: vec![trace],
+            backtrace: vec![format!("{name} {args:?}")],
             error,
         }
     }
 
-    fn add_trace(mut self, trace: String) -> Self {
-        self.backtrace.push(trace);
+    fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
+        self.backtrace.push(format!("{name} {args:?}"));
         self
     }
 }
@@ -195,149 +195,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn parse_closure_env(obj: GcObj) -> Result<Vec<&Cons>> {
-        let forms = obj.as_list()?;
-        let mut env = Vec::new();
-        for form in forms {
-            match form?.get() {
-                Object::Cons(pair) => {
-                    env.push(pair);
-                }
-                Object::True => return Ok(env),
-                x => bail!("Invalid closure environment member: {x}"),
-            }
-        }
-        Err(anyhow!("Closure env did not end with `t`"))
-    }
-
-    fn parse_arg_list(bindings: GcObj) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
-        let mut required = Vec::new();
-        let mut optional = Vec::new();
-        let mut rest = None;
-        let mut arg_type = &mut required;
-        let mut iter = bindings.as_list()?;
-        while let Some(binding) = iter.next() {
-            let sym: Symbol = binding?.try_into()?;
-            match sym.sym {
-                sym::AND_OPTIONAL => arg_type = &mut optional,
-                sym::AND_REST => {
-                    if let Some(last) = iter.next() {
-                        rest = Some(last?.try_into()?);
-                        ensure!(
-                            iter.next().is_none(),
-                            "Found multiple arguments after &rest"
-                        );
-                    }
-                }
-                _ => {
-                    arg_type.push(sym);
-                }
-            }
-        }
-        Ok((required, optional, rest))
-    }
-
-    #[allow(clippy::unused_self)]
-    fn bind_args<'a>(
-        &self,
-        arg_list: GcObj,
-        args: Vec<GcObj<'a>>,
-        vars: &mut Vec<&'a Cons>,
-        name: &str,
-        gc: &'a Arena,
-    ) -> Result<()> {
-        let (required, optional, rest) = Self::parse_arg_list(arg_list)?;
-
-        let num_required_args = required.len() as u16;
-        let num_optional_args = optional.len() as u16;
-        let num_actual_args = args.len() as u16;
-        // Ensure the minimum number of arguments is present
-        ensure!(
-            num_actual_args >= num_required_args,
-            ArgError::new(num_required_args, num_actual_args, name)
-        );
-
-        let mut arg_values = args.into_iter();
-
-        for name in required {
-            let val = arg_values.next().unwrap();
-            vars.push(cons!(name, val; gc).as_cons());
-        }
-
-        for name in optional {
-            let val = arg_values.next().unwrap_or_default();
-            vars.push(cons!(name, val; gc).as_cons());
-        }
-
-        if let Some(rest_name) = rest {
-            let values = arg_values.as_slice();
-            let list = crate::fns::slice_into_list(values, None, gc);
-            vars.push(cons!(rest_name, list; gc).as_cons());
-        } else {
-            // Ensure too many args were not provided
-            ensure!(
-                arg_values.next().is_none(),
-                ArgError::new(num_required_args + num_optional_args, num_actual_args, name)
-            );
-        }
-        Ok(())
-    }
-
-    fn bind_variables<'a>(
-        &self,
-        forms: &mut ElemStreamIter<'_, '_>,
-        args: Vec<GcObj<'a>>,
-        name: &str,
-        gc: &'a Arena,
-    ) -> Result<Vec<&'a Cons>> {
-        // Add closure environment to variables
-        // (closure ((x . 1) (y . 2) t) ...)
-        //          ^^^^^^^^^^^^^^^^^^^
-        let env = forms
-            .next()
-            .ok_or_else(|| anyhow!("Closure missing environment"))?;
-        let mut vars = Self::parse_closure_env(env.bind(gc))?;
-
-        // Add function arguments to variables
-        // (closure (t) (x y &rest z) ...)
-        //              ^^^^^^^^^^^^^
-        let arg_list = forms
-            .next()
-            .ok_or_else(|| anyhow!("Closure missing argument list"))?;
-        self.bind_args(arg_list.bind(gc), args, &mut vars, name, gc)?;
-        Ok(vars)
-    }
-
-    fn call_closure<'gc>(
-        &mut self,
-        closure: &Rt<&Cons>,
-        args: &Root<Vec<GcObj>>,
-        name: &str,
-        gc: &'gc mut Arena,
-    ) -> EvalResult<'gc> {
-        gc.garbage_collect(false);
-        let closure = closure.bind(gc);
-        match closure.car().get() {
-            Object::Symbol(s) if s == &sym::CLOSURE => {
-                element_iter!(forms, closure.cdr(), gc);
-                // TODO: remove this temp vector
-                let args = args.iter().map(|x| x.bind(gc)).collect();
-                let vars = self.bind_variables(&mut forms, args, name, gc)?;
-                root!(vars, vars.into_root(), gc);
-                let mut call_frame = Interpreter {
-                    vars,
-                    env: self.env,
-                };
-                call_frame.implicit_progn(forms, gc)
-            }
-            other => Err(TypeError::new(Type::Func, other).into()),
-        }
-    }
-
     fn eval_call<'gc>(
         &mut self,
         name: Symbol,
-        obj: &Rt<GcObj>,
+        args: &Rt<GcObj>,
         gc: &'gc mut Arena,
     ) -> EvalResult<'gc> {
         let func = match name.follow_indirect(gc) {
@@ -347,7 +208,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
         if let Function::Cons(form) = func.get() {
             if let Ok(mcro) = form.try_as_macro() {
-                let macro_args = obj.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
+                let macro_args = args.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
                 root!(args, macro_args.into_root(), gc);
                 root!(mcro, gc);
                 let value = mcro.call(args, self.env, gc, Some(name.name))?;
@@ -357,7 +218,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
 
         root!(func, gc);
-        let obj = obj.bind(gc);
+        let obj = args.bind(gc);
         element_iter!(iter, obj, gc);
         root!(args, Vec::new(), gc);
         while let Some(x) = iter.next() {
@@ -815,14 +676,10 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f)
                 .call(args, env, arena)
-                .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})"))),
+                .map_err(|e| EvalError::with_trace(e, name, args)),
             Function::Cons(cons) => {
                 root!(cons, arena);
-                root!(vars, Vec::new(), arena);
-                let mut frame = Interpreter { vars, env };
-                frame
-                    .call_closure(cons, args, name, arena)
-                    .map_err(|e| e.add_trace(format!("({name} {args:?})")))
+                call_closure(cons, args, name, env, arena).map_err(|e| e.add_trace(name, args))
             }
             Function::Symbol(sym) => {
                 if let Some(func) = sym.follow_indirect(arena) {
@@ -834,6 +691,138 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
             }
         }
     }
+}
+
+fn call_closure<'gc>(
+    closure: &Rt<&Cons>,
+    args: &Root<Vec<GcObj>>,
+    name: &str,
+    env: &mut Root<Environment>,
+    gc: &'gc mut Arena,
+) -> EvalResult<'gc> {
+    gc.garbage_collect(false);
+    let closure = closure.bind(gc);
+    match closure.car().get() {
+        Object::Symbol(s) if s == &sym::CLOSURE => {
+            element_iter!(forms, closure.cdr(), gc);
+            // TODO: remove this temp vector
+            let args = args.iter().map(|x| x.bind(gc)).collect();
+            let vars = bind_variables(&mut forms, args, name, gc)?;
+            root!(vars, vars.into_root(), gc);
+            Interpreter { vars, env }.implicit_progn(forms, gc)
+        }
+        other => Err(TypeError::new(Type::Func, other).into()),
+    }
+}
+
+fn bind_variables<'a>(
+    forms: &mut ElemStreamIter<'_, '_>,
+    args: Vec<GcObj<'a>>,
+    name: &str,
+    gc: &'a Arena,
+) -> Result<Vec<&'a Cons>> {
+    // Add closure environment to variables
+    // (closure ((x . 1) (y . 2) t) ...)
+    //          ^^^^^^^^^^^^^^^^^^^
+    let env = forms
+        .next()
+        .ok_or_else(|| anyhow!("Closure missing environment"))?;
+    let mut vars = parse_closure_env(env.bind(gc))?;
+
+    // Add function arguments to variables
+    // (closure (t) (x y &rest z) ...)
+    //              ^^^^^^^^^^^^^
+    let arg_list = forms
+        .next()
+        .ok_or_else(|| anyhow!("Closure missing argument list"))?;
+    bind_args(arg_list.bind(gc), args, &mut vars, name, gc)?;
+    Ok(vars)
+}
+
+fn parse_closure_env(obj: GcObj) -> Result<Vec<&Cons>> {
+    let forms = obj.as_list()?;
+    let mut env = Vec::new();
+    for form in forms {
+        match form?.get() {
+            Object::Cons(pair) => {
+                env.push(pair);
+            }
+            Object::True => return Ok(env),
+            x => bail!("Invalid closure environment member: {x}"),
+        }
+    }
+    Err(anyhow!("Closure env did not end with `t`"))
+}
+
+fn bind_args<'a>(
+    arg_list: GcObj,
+    args: Vec<GcObj<'a>>,
+    vars: &mut Vec<&'a Cons>,
+    name: &str,
+    gc: &'a Arena,
+) -> Result<()> {
+    let (required, optional, rest) = parse_arg_list(arg_list)?;
+
+    let num_required_args = required.len() as u16;
+    let num_optional_args = optional.len() as u16;
+    let num_actual_args = args.len() as u16;
+    // Ensure the minimum number of arguments is present
+    ensure!(
+        num_actual_args >= num_required_args,
+        ArgError::new(num_required_args, num_actual_args, name)
+    );
+
+    let mut arg_values = args.into_iter();
+
+    for name in required {
+        let val = arg_values.next().unwrap();
+        vars.push(cons!(name, val; gc).as_cons());
+    }
+
+    for name in optional {
+        let val = arg_values.next().unwrap_or_default();
+        vars.push(cons!(name, val; gc).as_cons());
+    }
+
+    if let Some(rest_name) = rest {
+        let values = arg_values.as_slice();
+        let list = crate::fns::slice_into_list(values, None, gc);
+        vars.push(cons!(rest_name, list; gc).as_cons());
+    } else {
+        // Ensure too many args were not provided
+        ensure!(
+            arg_values.next().is_none(),
+            ArgError::new(num_required_args + num_optional_args, num_actual_args, name)
+        );
+    }
+    Ok(())
+}
+
+fn parse_arg_list(bindings: GcObj) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+    let mut required = Vec::new();
+    let mut optional = Vec::new();
+    let mut rest = None;
+    let mut arg_type = &mut required;
+    let mut iter = bindings.as_list()?;
+    while let Some(binding) = iter.next() {
+        let sym: Symbol = binding?.try_into()?;
+        match sym.sym {
+            sym::AND_OPTIONAL => arg_type = &mut optional,
+            sym::AND_REST => {
+                if let Some(last) = iter.next() {
+                    rest = Some(last?.try_into()?);
+                    ensure!(
+                        iter.next().is_none(),
+                        "Found multiple arguments after &rest"
+                    );
+                }
+            }
+            _ => {
+                arg_type.push(sym);
+            }
+        }
+    }
+    Ok((required, optional, rest))
 }
 
 defsubr!(eval);
