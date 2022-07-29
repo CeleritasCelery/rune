@@ -5,10 +5,10 @@ use crate::core::{
     cons::Cons,
     env::{Environment, Symbol},
     error::{Type, TypeError},
-    object::{Callable, Function, Gc, GcObj, HashTable, List, Object},
+    object::{Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{data, element_iter, rebind, root};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -24,41 +24,6 @@ pub(crate) fn slice_into_list<'ob>(
 #[defun]
 pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String {
     format!("{object}")
-}
-
-impl<'ob> Rt<Gc<Function<'ob>>> {
-    pub(crate) fn call<'gc>(
-        &self,
-        args: &mut Root<Vec<GcObj<'static>>>,
-        env: &mut Root<Environment>,
-        arena: &'gc mut Arena,
-        name: Option<&str>,
-    ) -> Result<GcObj<'gc>> {
-        use crate::interpreter;
-        match self.bind(arena).get() {
-            Function::LispFn(_) => todo!("call lisp functions"),
-            Function::SubrFn(f) => (*f).call(args, env, arena),
-            Function::Cons(cons) => {
-                root!(cons, arena);
-                interpreter::call(cons, args, env, name.unwrap_or("closure"), arena)
-                    .map_err(Into::into)
-            }
-            Function::Symbol(sym) => {
-                if let Some(resolved) = sym.resolve_callable(arena) {
-                    match resolved.get() {
-                        Callable::LispFn(_) => todo!("call lisp functions"),
-                        Callable::SubrFn(f) => (*f).call(args, env, arena),
-                        Callable::Cons(cons) => {
-                            root!(cons, arena);
-                            interpreter::call(cons, args, env, sym.name, arena).map_err(Into::into)
-                        }
-                    }
-                } else {
-                    Err(anyhow!("Void Function: {}", sym))
-                }
-            }
-        }
-    }
 }
 
 #[defun]

@@ -121,18 +121,6 @@ pub(crate) fn eval<'ob>(
     interpreter.eval_form(form, arena).map_err(Into::into)
 }
 
-pub(crate) fn call<'gc>(
-    form: &Rt<&Cons>,
-    args: &mut Root<Vec<GcObj>>,
-    env: &mut Root<Environment>,
-    name: &str,
-    gc: &'gc mut Arena,
-) -> EvalResult<'gc> {
-    root!(vars, Vec::new(), gc);
-    let mut frame = Interpreter { vars, env };
-    frame.call_closure(form, args, name, gc)
-}
-
 impl Interpreter<'_, '_, '_, '_, '_> {
     fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         let obj = rt.bind(gc);
@@ -327,6 +315,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         name: &str,
         gc: &'gc mut Arena,
     ) -> EvalResult<'gc> {
+        gc.garbage_collect(false);
         let closure = closure.bind(gc);
         match closure.car().get() {
             Object::Symbol(s) if s == &sym::CLOSURE => {
@@ -356,63 +345,31 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             None => bail_err!("Invalid function: {name}"),
         };
 
-        match resolved.get() {
-            Callable::LispFn(_) => todo!("call lisp functions in interpreter"),
-            Callable::SubrFn(func) => {
-                let obj = obj.bind(gc);
-                element_iter!(iter, obj, gc);
-                root!(args, Vec::new(), gc);
-                while let Some(x) = iter.next() {
-                    let result = self.eval_form(x, gc)?;
-                    rebind!(result, gc);
-                    args.deref_mut(gc).push(result);
-                }
-                if crate::debug::debug_enabled() {
-                    println!("({name} {args:?})");
-                }
-                gc.garbage_collect(false);
-
-                (*func)
-                    .call(args, self.env, gc)
-                    .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))
+        if let Callable::Cons(form) = resolved.get() {
+            if let Ok(mcro) = form.try_as_macro() {
+                let macro_args = obj.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
+                root!(args, macro_args.into_root(), gc);
+                let macro_func: Gc<Function> = mcro.into();
+                root!(macro_func, gc);
+                let value = macro_func.call(args, self.env, gc, Some(name.name))?;
+                root!(value, gc);
+                return self.eval_form(value, gc);
             }
-            Callable::Cons(form) => match form.try_as_macro() {
-                Ok(mcro) => {
-                    let macro_args = obj.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
-                    if crate::debug::debug_enabled() {
-                        println!("(macro: {name} {macro_args:?})");
-                    }
-                    root!(args, macro_args.into_root(), gc);
-                    let macro_func: Gc<Function> = mcro.into();
-                    root!(macro_func, gc);
-                    let value = macro_func
-                        .call(args, self.env, gc, Some(name.name))
-                        .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})")))?;
-                    root!(value, gc);
-                    self.eval_form(value, gc)
-                }
-                Err(_) => match form.car().get() {
-                    Object::Symbol(s) if s == &sym::CLOSURE => {
-                        let obj = obj.bind(gc);
-                        element_iter!(iter, obj, gc);
-                        root!(args, Vec::new(), gc);
-                        root!(form, gc);
-                        while let Some(x) = iter.next() {
-                            let result = self.eval_form(x, gc)?;
-                            rebind!(result, gc);
-                            args.deref_mut(gc).push(result);
-                        }
-                        if crate::debug::debug_enabled() {
-                            println!("({name} {args:?})");
-                        }
-                        self.call_closure(form, args, name.name, gc)
-                            .map_err(|e| e.add_trace(format!("({name} {args:?})")))
-                    }
-                    other => Err(anyhow!("Invalid Function: {other}").into()),
-                },
-            },
         }
+
+        let func: Gc<Function> = resolved.into();
+        root!(func, gc);
+        let obj = obj.bind(gc);
+        element_iter!(iter, obj, gc);
+        root!(args, Vec::new(), gc);
+        while let Some(x) = iter.next() {
+            let result = self.eval_form(x, gc)?;
+            rebind!(result, gc);
+            args.deref_mut(gc).push(result);
+        }
+        func.call(args, self.env, gc, Some(name.name))
     }
+
     fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, gc: &'ob Arena) -> EvalResult<'ob> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
@@ -842,6 +799,41 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     }
                 }
                 Err(e)
+            }
+        }
+    }
+}
+
+impl<'ob> Rt<Gc<Function<'ob>>> {
+    pub(crate) fn call<'gc>(
+        &self,
+        args: &mut Root<Vec<GcObj<'static>>>,
+        env: &mut Root<Environment>,
+        arena: &'gc mut Arena,
+        name: Option<&str>,
+    ) -> EvalResult<'gc> {
+        let name = name.unwrap_or("closure");
+        match self.bind(arena).get() {
+            Function::LispFn(_) => todo!("call lisp functions"),
+            Function::SubrFn(f) => (*f)
+                .call(args, env, arena)
+                .map_err(|e| EvalError::with_trace(e, format!("({name} {args:?})"))),
+            Function::Cons(cons) => {
+                root!(cons, arena);
+                root!(vars, Vec::new(), arena);
+                let mut frame = Interpreter { vars, env };
+                frame
+                    .call_closure(cons, args, name, arena)
+                    .map_err(|e| e.add_trace(format!("({name} {args:?})")))
+            }
+            Function::Symbol(sym) => {
+                if let Some(resolved) = sym.resolve_callable(arena) {
+                    let resolved: Gc<Function> = resolved.into();
+                    root!(resolved, arena);
+                    resolved.call(args, env, arena, Some(name))
+                } else {
+                    Err(error!("Void Function: {}", sym))
+                }
             }
         }
     }
