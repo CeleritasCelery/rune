@@ -8,7 +8,8 @@ use crate::core::{
     object::{Function, Gc, GcObj, List, Object},
 };
 use crate::{element_iter, rebind, root};
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::Result as AnyResult;
+use anyhow::{anyhow, bail, ensure, Context};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -101,7 +102,7 @@ macro_rules! bail_err {
     ($($args:expr),* $(,)?) => (return Err(error!($($args),*)));
 }
 
-type EvalResult<'ob> = std::result::Result<GcObj<'ob>, EvalError>;
+type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
 
 struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
     vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
@@ -114,7 +115,7 @@ pub(crate) fn eval<'ob>(
     _lexical: Option<()>,
     env: &mut Root<Environment>,
     arena: &'ob mut Arena,
-) -> Result<GcObj<'ob>> {
+) -> Result<GcObj<'ob>, anyhow::Error> {
     arena.garbage_collect(false);
     root!(vars, Vec::new(), arena);
     let mut interpreter = Interpreter { vars, env };
@@ -208,7 +209,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
         if let Function::Cons(form) = func.get() {
             if let Ok(mcro) = form.try_as_macro() {
-                let macro_args = args.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
+                let macro_args = args.bind(gc).as_list()?.collect::<AnyResult<Vec<_>>>()?;
                 root!(args, macro_args.into_root(), gc);
                 root!(mcro, gc);
                 let value = mcro.call(args, self.env, gc, Some(name.name))?;
@@ -499,7 +500,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         form: &Rt<GcObj>,
         dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
         gc: &mut Arena,
-    ) -> Result<()> {
+    ) -> Result<(), EvalError> {
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
         while let Some(binding) = bindings.next() {
@@ -510,7 +511,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 // (let (x))
                 Object::Symbol(sym) => (sym, GcObj::NIL),
                 // (let (1))
-                x => bail!(TypeError::new(Type::Cons, x)),
+                x => bail_err!(TypeError::new(Type::Cons, x)),
             };
             rebind!(val, gc);
             if let Some(current_val) = self.env.deref_mut(gc).vars.get_mut(var) {
@@ -530,7 +531,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         form: &Rt<GcObj>,
         dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
         gc: &mut Arena,
-    ) -> Result<()> {
+    ) -> Result<(), EvalError> {
         root!(let_bindings, Vec::new(), gc);
         let form = form.bind(gc);
         element_iter!(bindings, form, gc);
@@ -548,7 +549,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     let_bindings.deref_mut(gc).push((sym, GcObj::NIL));
                 }
                 // (let (1))
-                x => bail!(TypeError::new(Type::Cons, x)),
+                x => bail_err!(TypeError::new(Type::Cons, x)),
             }
         }
         for binding in let_bindings.iter() {
@@ -571,7 +572,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         cons: &Rt<Gc<&Cons>>,
         gc: &'ob mut Arena,
-    ) -> Result<(Symbol, GcObj<'ob>)> {
+    ) -> Result<(Symbol, GcObj<'ob>), EvalError> {
         element_iter!(iter, gc.bind(cons.bind(gc).cdr()), gc);
         let value = match iter.next() {
             // (let ((x y)))
@@ -580,7 +581,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             None => GcObj::NIL,
         };
         // (let ((x y z ..)))
-        ensure!(iter.is_empty(), "Let binding can only have 1 value");
+        if !iter.is_empty() {
+            bail_err!("Let binding can only have 1 value");
+        }
         rebind!(value, gc);
         let name: Symbol = cons
             .bind(gc)
@@ -720,7 +723,7 @@ fn bind_variables<'a>(
     args: Vec<GcObj<'a>>,
     name: &str,
     gc: &'a Arena,
-) -> Result<Vec<&'a Cons>> {
+) -> AnyResult<Vec<&'a Cons>> {
     // Add closure environment to variables
     // (closure ((x . 1) (y . 2) t) ...)
     //          ^^^^^^^^^^^^^^^^^^^
@@ -739,7 +742,7 @@ fn bind_variables<'a>(
     Ok(vars)
 }
 
-fn parse_closure_env(obj: GcObj) -> Result<Vec<&Cons>> {
+fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
     let forms = obj.as_list()?;
     let mut env = Vec::new();
     for form in forms {
@@ -760,7 +763,7 @@ fn bind_args<'a>(
     vars: &mut Vec<&'a Cons>,
     name: &str,
     gc: &'a Arena,
-) -> Result<()> {
+) -> AnyResult<()> {
     let (required, optional, rest) = parse_arg_list(arg_list)?;
 
     let num_required_args = required.len() as u16;
@@ -798,7 +801,7 @@ fn bind_args<'a>(
     Ok(())
 }
 
-fn parse_arg_list(bindings: GcObj) -> Result<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
     let mut required = Vec::new();
     let mut optional = Vec::new();
     let mut rest = None;
