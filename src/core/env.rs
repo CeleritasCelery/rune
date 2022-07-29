@@ -1,5 +1,5 @@
 use super::arena::{Arena, Block, Rt, Trace};
-use super::object::{Callable, Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
+use super::object::{Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
 use sptr::Strict;
@@ -173,12 +173,11 @@ impl GlobalSymbol {
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn resolve_callable<'ob>(&self, gc: &'ob Arena) -> Option<Gc<Callable<'ob>>> {
+    pub(crate) fn follow_indirect<'ob>(&self, gc: &'ob Arena) -> Option<Gc<Function<'ob>>> {
         let func = self.func(gc)?;
         match func.get() {
-            Function::Symbol(sym) => sym.resolve_callable(gc),
-            // If it is not a symbol this conversion is infallible
-            _ => Some(func.try_into().unwrap()),
+            Function::Symbol(sym) => sym.follow_indirect(gc),
+            _ => Some(func),
         }
     }
 

@@ -241,7 +241,7 @@ pub(crate) fn aset<'ob>(
 #[defun]
 pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, gc: &'ob Arena) -> GcObj<'ob> {
     match object.get() {
-        Object::Symbol(sym) => match sym.resolve_callable(gc) {
+        Object::Symbol(sym) => match sym.follow_indirect(gc) {
             Some(func) => func.into(),
             None => GcObj::NIL,
         },

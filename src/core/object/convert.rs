@@ -4,7 +4,6 @@
 
 use std::cell::RefCell;
 
-use super::GcObj;
 use super::{
     super::{
         cons::Cons,
@@ -13,13 +12,14 @@ use super::{
     },
     HashTable,
 };
+use super::{Function, GcObj};
 use anyhow::Context;
 
-use super::{Callable, Gc, Object};
+use super::{Gc, Object};
 
 #[allow(clippy::multiple_inherent_impl)]
 impl Cons {
-    pub(crate) fn try_as_macro(&self) -> Result<Gc<Callable>, TypeError> {
+    pub(crate) fn try_as_macro(&self) -> Result<Gc<Function>, TypeError> {
         if self.car() == sym::MACRO {
             self.cdr().try_into()
         } else {

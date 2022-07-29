@@ -5,7 +5,7 @@ use crate::core::{
     cons::{Cons, ElemStreamIter},
     env::{sym, Environment, Symbol},
     error::{ArgError, Type, TypeError},
-    object::{Callable, Function, Gc, GcObj, List, Object},
+    object::{Function, Gc, GcObj, List, Object},
 };
 use crate::{element_iter, rebind, root};
 use anyhow::{anyhow, bail, ensure, Context, Result};
@@ -340,24 +340,22 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         obj: &Rt<GcObj>,
         gc: &'gc mut Arena,
     ) -> EvalResult<'gc> {
-        let resolved = match name.resolve_callable(gc) {
+        let func = match name.follow_indirect(gc) {
             Some(x) => x,
             None => bail_err!("Invalid function: {name}"),
         };
 
-        if let Callable::Cons(form) = resolved.get() {
+        if let Function::Cons(form) = func.get() {
             if let Ok(mcro) = form.try_as_macro() {
                 let macro_args = obj.bind(gc).as_list()?.collect::<Result<Vec<_>>>()?;
                 root!(args, macro_args.into_root(), gc);
-                let macro_func: Gc<Function> = mcro.into();
-                root!(macro_func, gc);
-                let value = macro_func.call(args, self.env, gc, Some(name.name))?;
+                root!(mcro, gc);
+                let value = mcro.call(args, self.env, gc, Some(name.name))?;
                 root!(value, gc);
                 return self.eval_form(value, gc);
             }
         }
 
-        let func: Gc<Function> = resolved.into();
         root!(func, gc);
         let obj = obj.bind(gc);
         element_iter!(iter, obj, gc);
@@ -812,7 +810,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
         arena: &'gc mut Arena,
         name: Option<&str>,
     ) -> EvalResult<'gc> {
-        let name = name.unwrap_or("closure");
+        let name = name.unwrap_or("lambda");
         match self.bind(arena).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => (*f)
@@ -827,10 +825,9 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
                     .map_err(|e| e.add_trace(format!("({name} {args:?})")))
             }
             Function::Symbol(sym) => {
-                if let Some(resolved) = sym.resolve_callable(arena) {
-                    let resolved: Gc<Function> = resolved.into();
-                    root!(resolved, arena);
-                    resolved.call(args, env, arena, Some(name))
+                if let Some(func) = sym.follow_indirect(arena) {
+                    root!(func, arena);
+                    func.call(args, env, arena, Some(name))
                 } else {
                     Err(error!("Void Function: {}", sym))
                 }

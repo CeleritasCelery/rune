@@ -499,52 +499,6 @@ impl<'ob> From<&'ob Cons> for Gc<List<'ob>> {
     }
 }
 
-// Callable
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum Callable<'ob> {
-    LispFn(&'ob LispFn<'ob>),
-    SubrFn(&'static SubrFn),
-    Cons(&'ob Cons),
-}
-
-impl<'old, 'new> WithLifetime<'new> for Gc<Callable<'old>> {
-    type Out = Gc<Callable<'new>>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-impl<'ob> From<Gc<&'ob Cons>> for Gc<Callable<'ob>> {
-    fn from(x: Gc<&'ob Cons>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'static SubrFn>> for Gc<Callable<'ob>> {
-    fn from(x: Gc<&'static SubrFn>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Callable<'ob>> {
-    fn from(x: Gc<&'ob LispFn<'ob>>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> Gc<Callable<'ob>> {
-    pub(crate) fn get(self) -> Callable<'ob> {
-        let (ptr, tag) = self.untag();
-        match tag {
-            Tag::Cons => Callable::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
-            Tag::SubrFn => Callable::SubrFn(unsafe { &*ptr.cast() }),
-            Tag::LispFn => Callable::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
-            _ => unreachable!(),
-        }
-    }
-}
-
 // Function
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
@@ -641,23 +595,6 @@ impl<'ob> Gc<Function<'ob>> {
             Tag::LispFn => Function::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
             Tag::Symbol => Function::Symbol(unsafe { Symbol::from_obj_ptr(ptr) }),
             _ => unreachable!(),
-        }
-    }
-}
-
-impl<'ob> From<Gc<Callable<'ob>>> for Gc<Function<'ob>> {
-    fn from(obj: Gc<Callable<'ob>>) -> Self {
-        unsafe { Self::transmute(obj) }
-    }
-}
-
-impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<Callable<'ob>> {
-    type Error = anyhow::Error;
-
-    fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
-            Tag::Symbol => Err(TypeError::new(Type::Func, value).into()),
-            _ => unsafe { Ok(Self::transmute(value)) },
         }
     }
 }
@@ -899,23 +836,6 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
             Tag::LispFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
                 Ok(Self::transmute(value))
             },
-            _ => Err(TypeError::new(Type::Func, value)),
-        }
-    }
-}
-
-impl<'ob> From<Gc<Callable<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<Callable<'ob>>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Callable<'ob>> {
-    type Error = TypeError;
-
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
-            Tag::LispFn | Tag::SubrFn | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::Func, value)),
         }
     }

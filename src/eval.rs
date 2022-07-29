@@ -3,7 +3,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::core::arena::Rt;
 use crate::core::error::{Type, TypeError};
-use crate::core::object::{Callable, Object};
+use crate::core::object::Object;
 use crate::core::{
     arena::{Arena, IntoRoot, Root},
     object::{Function, Gc, GcObj},
@@ -134,11 +134,9 @@ pub(crate) fn macroexpand<'ob>(
 }
 
 fn get_macro_func<'ob>(name: Symbol, gc: &'ob Arena) -> Option<Gc<Function<'ob>>> {
-    if let Some(callable) = name.resolve_callable(gc) {
-        if let Callable::Cons(cons) = callable.get() {
-            if let Ok(mcro) = cons.try_as_macro() {
-                return Some(mcro.into());
-            }
+    if let Some(callable) = name.follow_indirect(gc) {
+        if let Function::Cons(cons) = callable.get() {
+            return cons.try_as_macro().ok();
         }
     }
     None
