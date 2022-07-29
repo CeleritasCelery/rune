@@ -677,9 +677,13 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
         let name = name.unwrap_or("lambda");
         match self.bind(arena).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
-            Function::SubrFn(f) => (*f)
-                .call(args, env, arena)
-                .map_err(|e| EvalError::with_trace(e, name, args)),
+            Function::SubrFn(f) => {
+                (*f).call(args, env, arena)
+                    .map_err(|e| match e.downcast::<EvalError>() {
+                        Ok(err) => err.add_trace(name, args),
+                        Err(e) => EvalError::with_trace(e, name, args),
+                    })
+            }
             Function::Cons(cons) => {
                 root!(cons, arena);
                 call_closure(cons, args, name, env, arena).map_err(|e| e.add_trace(name, args))
