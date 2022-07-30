@@ -139,7 +139,7 @@
 ;; (load "version")
 
 ;; (load "widget")
-;; (load "custom")
+(load "custom")
 ;; (load "emacs-lisp/map-ynp")
 ;; (load "international/mule")
 ;; (load "international/mule-conf")

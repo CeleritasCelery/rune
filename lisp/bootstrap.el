@@ -5,4 +5,4 @@
 (load "gv")
 (load "inline")
 (load "cconv")
-
+(load "bytecomp")
