@@ -99,10 +99,12 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
         .map(|(idx, arg_type)| match arg_type {
             ArgType::Arena(_) => quote! {arena},
             ArgType::Env => quote! {env},
+            // Rt<Gc<..>>
             ArgType::Rt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx]},
                 Gc::Other => quote! {crate::core::arena::Rt::try_as(&args[#idx])?},
             },
+            // Gc<..>
             ArgType::Gc(gc) => {
                 let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
                 match gc {
@@ -110,6 +112,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
                     Gc::Other => quote! { std::convert::TryFrom::try_from(#bind)? },
                 }
             }
+            // &[Gc<..>]
             ArgType::Slice(gc) => {
                 let bind = quote! {crate::core::arena::Rt::bind_slice(&args[#idx..], arena)};
                 match gc {
@@ -117,14 +120,25 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
                     Gc::Other => quote! {crate::core::object::try_from_slice(#bind)?},
                 }
             }
+            // &[Rt<Gc<..>>]
             ArgType::SliceRt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx..]},
                 Gc::Other => unreachable!(),
             },
+            // Option<Rt<Gc<..>>>
             ArgType::OptionRt => {
                 quote! { crate::core::arena::Rt::try_as_option(&args[#idx])? }
             }
-            ArgType::Other | ArgType::Option => {
+            // Option<T>
+            ArgType::Option => {
+                if is_mut {
+                    quote! { std::convert::TryFrom::try_from(&args[#idx])? }
+                } else {
+                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
+                    quote! { crate::core::object::Gc::try_from_option(#bind)? }
+                }
+            }
+            ArgType::Other => {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
                 } else {

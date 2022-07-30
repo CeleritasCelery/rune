@@ -856,6 +856,20 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
     }
 }
 
+// This function is needed due to the lack of specialization and there being a
+// blanket impl for From<T> for Option<T>
+impl<'ob> GcObj<'ob> {
+    pub(crate) fn try_from_option<T, E>(value: GcObj<'ob>) -> Result<Option<T>, E>
+    where
+        GcObj<'ob>: TryInto<T, Error = E>,
+    {
+        match value.tag() {
+            Tag::Nil => Ok(None),
+            _ => Ok(Some(value.try_into()?)),
+        }
+    }
+}
+
 impl Gc<i64> {
     pub(crate) fn get(self) -> i64 {
         let (ptr, _) = self.untag();
