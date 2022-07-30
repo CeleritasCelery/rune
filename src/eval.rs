@@ -154,6 +154,29 @@ fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>)
     GcObj::NIL
 }
 
+#[defun]
+fn set_default_toplevel_value<'ob>(
+    symbol: Symbol,
+    value: GcObj,
+    env: &'ob mut Root<Environment>,
+    gc: &'ob Arena,
+) -> GcObj<'ob> {
+    env.deref_mut(gc).set_var(symbol, value);
+    GcObj::NIL
+}
+
+#[defun]
+fn set_default<'ob>(
+    symbol: Symbol,
+    value: GcObj<'ob>,
+    env: &'ob mut Root<Environment>,
+    gc: &'ob Arena,
+) -> GcObj<'ob> {
+    // TODO: implement buffer local variables
+    env.deref_mut(gc).set_var(symbol, value);
+    value
+}
+
 defsym!(FUNCTION, "function");
 defsym!(QUOTE, "quote");
 defsym!(MACRO, "macro");
@@ -193,6 +216,8 @@ defsubr!(
     autoload_do_load,
     macroexpand,
     internal__define_uninitialized_variable,
+    set_default_toplevel_value,
+    set_default,
     FUNCTION,
     QUOTE,
     MACRO,
