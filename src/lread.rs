@@ -149,7 +149,17 @@ pub(crate) fn load<'ob>(
     if nomessage.is_none() {
         println!("Loading {file}...");
     }
-    match fs::read_to_string(&final_file)
+    let new_load_file = arena.add(final_file.to_string_lossy().to_string());
+    let prev_load_file = match env.deref_mut(arena).vars.get_mut(&*sym::LOAD_FILE_NAME) {
+        Some(val) => {
+            let prev = val.bind(arena);
+            val.set(new_load_file);
+            prev
+        }
+        None => GcObj::NIL,
+    };
+    root!(prev_load_file, arena);
+    let result = match fs::read_to_string(&final_file)
         .with_context(|| format!("Couldn't open file {:?}", final_file.as_os_str()))
     {
         Ok(content) => load_internal(&content, arena, env),
@@ -157,7 +167,11 @@ pub(crate) fn load<'ob>(
             Some(()) => Ok(false),
             None => Err(e),
         },
-    }
+    };
+    env.deref_mut(arena)
+        .vars
+        .insert(&sym::LOAD_FILE_NAME, prev_load_file.bind(arena));
+    result
 }
 
 #[defun]
@@ -169,8 +183,9 @@ defvar!(LEXICAL_BINDING, "lexical-binding", true);
 defvar!(CURRENT_LOAD_LIST, "current-load-list");
 defvar!(LOAD_HISTORY, "load-history");
 defvar!(LOAD_PATH, "load-path", list!("lisp"));
+defvar!(LOAD_FILE_NAME, "load-file-name", false);
 
-defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY, LOAD_PATH});
+defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY, LOAD_PATH, LOAD_FILE_NAME});
 
 #[cfg(test)]
 mod test {
