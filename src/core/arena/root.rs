@@ -197,6 +197,12 @@ impl<T: ?Sized + Debug> Debug for Rt<T> {
     }
 }
 
+impl PartialEq for Rt<GcObj<'_>> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
 impl<T: PartialEq> PartialEq<T> for Rt<T> {
     fn eq(&self, other: &T) -> bool {
         self.inner == *other
@@ -480,6 +486,8 @@ where
 pub(crate) struct Environment__root {
     pub(crate) vars: Rt<HashMap<Symbol, GcObj<'static>>>,
     pub(crate) props: Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>,
+    pub(crate) catch_stack: Rt<Vec<GcObj<'static>>>,
+    pub(crate) thrown: Rt<(GcObj<'static>, GcObj<'static>)>,
 }
 
 impl Deref for Rt<Environment> {

@@ -169,6 +169,7 @@ defsym!(AND, "and");
 defsym!(OR, "or");
 defsym!(INTERACTIVE, "interactive");
 defsym!(CATCH, "catch");
+defsym!(THROW, "throw");
 defsym!(ERROR, "error");
 defsym!(DEBUG, "debug");
 
@@ -206,6 +207,7 @@ defsubr!(
     OR,
     INTERACTIVE,
     CATCH,
+    THROW,
     ERROR,
     DEBUG,
 );

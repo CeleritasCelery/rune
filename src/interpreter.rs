@@ -16,15 +16,16 @@ use streaming_iterator::StreamingIterator;
 #[derive(Debug)]
 pub(crate) struct EvalError {
     backtrace: Vec<String>,
-    error: anyhow::Error,
+    error: Option<anyhow::Error>,
 }
 
 impl std::error::Error for EvalError {}
 
 impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let error = &self.error;
-        writeln!(f, "{error}")?;
+        if let Some(e) = &self.error {
+            writeln!(f, "{e}")?;
+        }
         for x in &self.backtrace {
             writeln!(f, "{x}")?;
         }
@@ -36,7 +37,7 @@ impl EvalError {
     fn new_error(error: anyhow::Error) -> Self {
         Self {
             backtrace: Vec::new(),
-            error,
+            error: Some(error),
         }
     }
 
@@ -47,7 +48,7 @@ impl EvalError {
     fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
         Self {
             backtrace: vec![format!("{name} {args:?}")],
-            error,
+            error: Some(error),
         }
     }
 
@@ -161,6 +162,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::FUNCTION => self.eval_function(forms.bind(gc), gc),
                 sym::INTERACTIVE => Ok(GcObj::NIL), // TODO: implement
                 sym::CATCH => self.catch(forms, gc),
+                sym::THROW => self.throw(forms.bind(gc), gc),
                 sym::CONDITION_CASE => self.condition_case(forms, gc),
                 _ => self.eval_call(sym, forms, gc),
             },
@@ -170,13 +172,57 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn catch<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
         element_iter!(forms, obj.bind(gc), gc);
-        let _tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
-        self.implicit_progn(forms, gc)
+        let tag = forms
+            .next()
+            .ok_or_else(|| ArgError::new(1, 0, "catch"))?
+            .bind(gc);
+        // push this tag on the catch stack
+        self.env.deref_mut(gc).catch_stack.push(tag);
+        let result = match self.implicit_progn(forms, gc) {
+            Ok(x) => {
+                rebind!(x, gc);
+                Ok(x)
+            }
+            Err(e) => {
+                let tag = self.env.catch_stack.last().unwrap();
+                if e.error.is_none() && *tag == self.env.thrown.0 {
+                    Ok(self.env.thrown.1.bind(gc))
+                } else {
+                    // Either this was not a throw or the tag does not match
+                    // this catch block
+                    Err(e)
+                }
+            }
+        };
+        // pop this tag from the catch stack
+        self.env.deref_mut(gc).catch_stack.pop();
+        result
+    }
+
+    fn throw<'gc>(&mut self, obj: GcObj, gc: &'gc Arena) -> EvalResult<'gc> {
+        let mut forms = obj.as_list()?;
+        let len = forms.len() as u16;
+        if len != 2 {
+            bail_err!(ArgError::new(2, len, "throw"));
+        }
+        let tag = forms.next().unwrap()?;
+        let value = forms.next().unwrap()?;
+        let env = self.env.deref_mut(gc);
+        if env.catch_stack.iter().any(|x| x.bind(gc) == tag) {
+            env.thrown.0.set(tag);
+            env.thrown.1.set(value);
+            // a None error means this a throw
+            Err(EvalError {
+                error: None,
+                backtrace: Vec::new(),
+            })
+        } else {
+            Err(error!("No catch for {tag}"))
+        }
     }
 
     fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, gc: &'gc mut Arena) -> EvalResult<'gc> {
-        let obj = obj.bind(gc);
-        element_iter!(forms, obj, gc);
+        element_iter!(forms, obj.bind(gc), gc);
         match forms.next() {
             // (defvar x ...)
             Some(x) => {
@@ -626,6 +672,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
             Err(e) => {
                 const CONDITION_ERROR: &str = "Invalid condition handler:";
+                if e.error.is_none() {
+                    // This is a throw
+                    return Err(e);
+                }
                 while let Some(handler) = forms.next() {
                     match handler.bind(gc).get() {
                         Object::Cons(cons) => {
@@ -1043,5 +1093,26 @@ mod test {
         check_error("(condition-case nil (if))", arena);
         check_error("(condition-case nil (if) nil)", arena);
         check_error("(condition-case nil (if) 5 (error 7))", arena);
+    }
+
+    #[test]
+    fn test_throw_catch() {
+        let roots = &RootSet::default();
+        let arena = &mut Arena::new(roots);
+        check_interpreter("(catch nil)", false, arena);
+        check_interpreter("(catch nil nil)", false, arena);
+        check_interpreter("(catch 1 (throw 1 2))", 2, arena);
+        check_interpreter("(catch 1 (throw 1 2) 3)", 2, arena);
+        check_interpreter("(catch 1 5 (throw 1 2) 3)", 2, arena);
+        check_interpreter("(catch 1 (throw 1 2) (if))", 2, arena);
+        check_interpreter("(condition-case nil (throw 1 2) (error 3))", 3, arena);
+        check_interpreter(
+            "(catch 1 (condition-case nil (throw 1 2) (error 3)))",
+            2,
+            arena,
+        );
+        check_interpreter("(catch 1 (catch 2 (throw 1 3)))", 3, arena);
+        check_error("(throw 1 2)", arena);
+        check_error("(catch 2 (throw 3 4))", arena);
     }
 }

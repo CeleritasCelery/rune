@@ -8,10 +8,13 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
 
+#[allow(dead_code)]
 #[derive(Debug, Default)]
 pub(crate) struct Environment {
     pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
+    pub(crate) catch_stack: Vec<GcObj<'static>>,
+    pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
 }
 
 impl Rt<Environment> {
@@ -42,6 +45,11 @@ impl Trace for Environment {
                 x.1.mark(stack);
             }
         }
+        for x in &self.catch_stack {
+            x.mark(stack);
+        }
+        self.thrown.0.mark(stack);
+        self.thrown.1.mark(stack);
     }
 }
 
