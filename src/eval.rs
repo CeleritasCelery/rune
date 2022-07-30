@@ -64,21 +64,26 @@ fn run_hooks<'ob>(
             Object::Symbol(sym) => {
                 if let Some(val) = env.vars.get(sym) {
                     let val = val.bind(cx);
-                    if let Object::Cons(hook_list) = val.get() {
-                        root!(args, Vec::new(), cx);
-                        element_iter!(hooks, hook_list, cx);
-                        while let Some(hook) = hooks.next() {
-                            let func: &Rt<Gc<Function>> = hook.try_as()?;
+                    match val.get() {
+                        Object::Cons(hook_list) => {
+                            element_iter!(hooks, hook_list, cx);
+                            while let Some(hook) = hooks.next() {
+                                let func: &Rt<Gc<Function>> = hook.try_as()?;
+                                root!(args, Vec::new(), cx);
+                                func.call(args, env, cx, None)?;
+                            }
+                        }
+                        Object::Nil => {}
+                        _ => {
+                            let func: Gc<Function> = val.try_into()?;
+                            root!(func, cx);
+                            root!(args, Vec::new(), cx);
                             func.call(args, env, cx, None)?;
                         }
-                    } else {
-                        let func: Gc<Function> = val.try_into()?;
-                        root!(func, cx);
-                        root!(args, Vec::new(), cx);
-                        func.call(args, env, cx, None)?;
                     }
                 }
             }
+            Object::Nil => {}
             x => bail!(TypeError::new(Type::Symbol, x)),
         }
     }
