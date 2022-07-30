@@ -8,7 +8,7 @@ use crate::core::{
     object::{Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{data, element_iter, rebind, root};
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -139,13 +139,30 @@ pub(crate) fn append<'ob>(
 
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> GcObj<'ob> {
+    alist_get(key, alist, data::eq)
+}
+
+#[defun]
+pub(crate) fn assoc<'ob>(
+    key: GcObj<'ob>,
+    alist: Gc<List<'ob>>,
+    testfn: Option<GcObj>,
+) -> Result<GcObj<'ob>> {
+    ensure!(
+        testfn.is_none(),
+        "test functions for assoc not yet supported"
+    );
+    Ok(alist_get(key, alist, data::equal))
+}
+
+fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcObj<'ob> {
     match alist.get() {
         List::Nil => GcObj::NIL,
         List::Cons(cons) => cons
             .elements()
             .find(|x| match x {
                 Ok(elem) => match elem.get() {
-                    Object::Cons(cons) => data::eq(key, cons.car()),
+                    Object::Cons(cons) => testfn(key, cons.car()),
                     _ => false,
                 },
                 _ => false,
@@ -497,6 +514,7 @@ defsubr!(
     nreverse,
     nconc,
     assq,
+    assoc,
     make_hash_table,
     hash_table_p,
     puthash,
