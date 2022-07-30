@@ -142,6 +142,13 @@ fn get_macro_func<'ob>(name: Symbol, gc: &'ob Arena) -> Option<Gc<Function<'ob>>
     None
 }
 
+#[defun]
+#[allow(non_snake_case)]
+fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>) -> GcObj {
+    // TODO: implement doc strings
+    GcObj::NIL
+}
+
 defsym!(FUNCTION, "function");
 defsym!(QUOTE, "quote");
 defsym!(MACRO, "macro");
@@ -180,6 +187,7 @@ defsubr!(
     autoload,
     autoload_do_load,
     macroexpand,
+    internal__define_uninitialized_variable,
     FUNCTION,
     QUOTE,
     MACRO,
