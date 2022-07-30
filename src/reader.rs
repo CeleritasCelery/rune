@@ -419,14 +419,14 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
-    /// Read an octal escape (e.g. `#0759`)
-    fn read_octal(&mut self, pos: usize) -> Result<GcObj<'ob>> {
+    /// Read number with specificed radix
+    fn read_radix(&mut self, pos: usize, radix: u8) -> Result<GcObj<'ob>> {
         match self.tokens.next() {
-            Some(Token::Ident(ident)) => match usize::from_str_radix(ident, 8) {
+            Some(Token::Ident(ident)) => match usize::from_str_radix(ident, radix.into()) {
                 Ok(x) => Ok(self.arena.add(x as i64)),
-                Err(_) => Err(Error::ParseInt(8, pos)),
+                Err(_) => Err(Error::ParseInt(radix, pos)),
             },
-            _ => Err(Error::ParseInt(8, pos)),
+            _ => Err(Error::ParseInt(radix, pos)),
         }
     }
 
@@ -445,7 +445,9 @@ impl<'a, 'ob> Reader<'a, 'ob> {
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
-            Some('o') => self.read_octal(pos),
+            Some('b') => self.read_radix(pos, 2),
+            Some('o') => self.read_radix(pos, 8),
+            Some('x') => self.read_radix(pos, 16),
             Some(chr) => Err(Error::UnknownMacroCharacter(chr, pos)),
             None => Err(Error::MissingQuotedItem(pos)),
         }
@@ -523,6 +525,12 @@ mod test {
         check_reader!(1, "#o001", arena);
         check_reader!(8, "#o10", arena);
         check_reader!(2385, "#o4521", arena);
+        check_reader!(0b1, "#b001", arena);
+        check_reader!(0b10, "#b10", arena);
+        check_reader!(0b101_1101, "#b1011101", arena);
+        check_reader!(0x1, "#x001", arena);
+        check_reader!(0x10, "#x10", arena);
+        check_reader!(0xdead_beef, "#xDeAdBeEf", arena);
     }
 
     #[test]
