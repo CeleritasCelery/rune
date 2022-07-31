@@ -655,7 +655,7 @@ baz""#,
         assert_error("  (1 (2 3 4", Error::MissingCloseParen(5), arena);
         assert_error(" \"foo", Error::MissingStringDel(1), arena);
         assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr(9), arena);
-        assert_error("(1 3 )", Error::UnexpectedChar('', 5), arena);
+        assert_error("(1 3 \0)", Error::UnexpectedChar('\0', 5), arena);
         assert_error(" '", Error::MissingQuotedItem(1), arena);
         assert_error(" )", Error::ExtraCloseParen(1), arena);
     }
