@@ -6,10 +6,10 @@ use crate::core::env::ConstSymbol;
 use crate::hashmap::HashMap;
 
 use super::super::{
-    arena::{AllocObject, Allocation, Block},
     cons::Cons,
     env::{GlobalSymbol, Symbol},
     error::{Type, TypeError},
+    gc::{AllocObject, Allocation, Block},
 };
 
 use super::{LispFn, SubrFn};

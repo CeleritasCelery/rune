@@ -1,15 +1,16 @@
 use std::fmt::Display;
 
 use crate::core::{
-    arena::{Arena, IntoRoot, Root, Rt},
     cons::{Cons, ElemStreamIter},
     env::{sym, Environment, Symbol},
     error::{ArgError, Type, TypeError},
+    gc::{Context, IntoRoot, Root, Rt},
     object::{Function, Gc, GcObj, List, Object},
 };
 use crate::{element_iter, rebind, root};
+use anyhow::Context as _;
 use anyhow::Result as AnyResult;
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{anyhow, bail, ensure};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -115,7 +116,7 @@ pub(crate) fn eval<'ob>(
     form: &Rt<GcObj>,
     _lexical: Option<()>,
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>, anyhow::Error> {
     cx.garbage_collect(false);
     root!(vars, Vec::new(), cx);
@@ -124,7 +125,7 @@ pub(crate) fn eval<'ob>(
 }
 
 impl Interpreter<'_, '_, '_, '_, '_> {
-    fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = rt.bind(cx);
         match obj.get() {
             Object::Symbol(sym) => self.var_ref(sym, cx),
@@ -139,7 +140,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     pub(crate) fn eval_sexp<'gc>(
         &mut self,
         cons: &Rt<Gc<&Cons>>,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         let cons = cons.bind(cx);
         let forms = cons.cdr();
@@ -170,7 +171,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         element_iter!(forms, obj.bind(cx), cx);
         let tag = forms
             .next()
@@ -199,7 +200,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         result
     }
 
-    fn throw<'gc>(&mut self, obj: GcObj, cx: &'gc Arena) -> EvalResult<'gc> {
+    fn throw<'gc>(&mut self, obj: GcObj, cx: &'gc Context) -> EvalResult<'gc> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
         if len != 2 {
@@ -221,7 +222,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         element_iter!(forms, obj.bind(cx), cx);
         match forms.next() {
             // (defvar x ...)
@@ -246,7 +247,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         name: Symbol,
         args: &Rt<GcObj>,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         let func = match name.follow_indirect(cx) {
             Some(x) => x,
@@ -276,7 +277,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         func.call(args, self.env, cx, Some(name.name))
     }
 
-    fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, cx: &'ob Arena) -> EvalResult<'ob> {
+    fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, cx: &'ob Context) -> EvalResult<'ob> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
         if len != 1 {
@@ -307,7 +308,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         obj: &Rt<GcObj>,
         prog_num: u16,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         let mut count = 0;
         root!(returned_form, None, cx);
@@ -334,13 +335,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
         self.implicit_progn(forms, cx)
     }
 
-    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let first: Gc<List> = obj.bind(cx).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
@@ -355,7 +356,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
@@ -375,7 +376,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         root!(last, GcObj::TRUE, cx);
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
@@ -390,7 +391,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(cx.bind(last.bind(cx)))
     }
 
-    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
@@ -403,7 +404,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
         let condition = match forms.next() {
@@ -424,7 +425,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Arena) -> EvalResult<'gc> {
+    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
         element_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
@@ -452,7 +453,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn pairs<'ob>(
         iter: &mut ElemStreamIter<'_, '_>,
-        cx: &'ob Arena,
+        cx: &'ob Context,
     ) -> Option<(GcObj<'ob>, Option<GcObj<'ob>>)> {
         #[allow(clippy::manual_map)]
         if let Some(first) = iter.next() {
@@ -462,7 +463,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_ref<'ob>(&self, sym: Symbol, cx: &'ob Arena) -> EvalResult<'ob> {
+    fn var_ref<'ob>(&self, sym: Symbol, cx: &'ob Context) -> EvalResult<'ob> {
         if sym.name.starts_with(':') {
             Ok(sym.into())
         } else {
@@ -477,7 +478,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Arena) {
+    fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.bind(cx).car() == name)) {
             Some(value) => {
@@ -505,7 +506,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         form: &Rt<GcObj>,
         parallel: bool,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         let form = form.bind(cx);
         element_iter!(iter, form, cx);
@@ -545,7 +546,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         form: &Rt<GcObj>,
         dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
-        cx: &mut Arena,
+        cx: &mut Context,
     ) -> Result<(), EvalError> {
         let form = form.bind(cx);
         element_iter!(bindings, form, cx);
@@ -576,7 +577,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         form: &Rt<GcObj>,
         dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
-        cx: &mut Arena,
+        cx: &mut Context,
     ) -> Result<(), EvalError> {
         root!(let_bindings, Vec::new(), cx);
         let form = form.bind(cx);
@@ -617,7 +618,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn let_bind_value<'ob>(
         &mut self,
         cons: &Rt<Gc<&Cons>>,
-        cx: &'ob mut Arena,
+        cx: &'ob mut Context,
     ) -> Result<(Symbol, GcObj<'ob>), EvalError> {
         element_iter!(iter, cx.bind(cons.bind(cx).cdr()), cx);
         let value = match iter.next() {
@@ -642,7 +643,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn implicit_progn<'gc>(
         &mut self,
         mut forms: ElemStreamIter<'_, '_>,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         root!(last, GcObj::NIL, cx);
         while let Some(form) = forms.next() {
@@ -653,7 +654,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(last.deref_mut(cx).bind(cx))
     }
 
-    fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Arena) -> EvalResult<'ob> {
+    fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let form = form.bind(cx);
         element_iter!(forms, form, cx);
         let var = match forms.next() {
@@ -721,7 +722,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<Environment>,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
         name: Option<&str>,
     ) -> EvalResult<'gc> {
         let name = name.unwrap_or("lambda");
@@ -755,7 +756,7 @@ fn call_closure<'gc>(
     args: &Root<Vec<GcObj>>,
     name: &str,
     env: &mut Root<Environment>,
-    cx: &'gc mut Arena,
+    cx: &'gc mut Context,
 ) -> EvalResult<'gc> {
     cx.garbage_collect(false);
     let closure = closure.bind(cx);
@@ -776,7 +777,7 @@ fn bind_variables<'a>(
     forms: &mut ElemStreamIter<'_, '_>,
     args: Vec<GcObj<'a>>,
     name: &str,
-    cx: &'a Arena,
+    cx: &'a Context,
 ) -> AnyResult<Vec<&'a Cons>> {
     // Add closure environment to variables
     // (closure ((x . 1) (y . 2) t) ...)
@@ -816,7 +817,7 @@ fn bind_args<'a>(
     args: Vec<GcObj<'a>>,
     vars: &mut Vec<&'a Cons>,
     name: &str,
-    cx: &'a Arena,
+    cx: &'a Context,
 ) -> AnyResult<()> {
     let (required, optional, rest) = parse_arg_list(arg_list)?;
 
@@ -886,11 +887,11 @@ defsubr!(eval);
 
 #[cfg(test)]
 mod test {
-    use crate::core::{arena::RootSet, env::intern, object::IntoObject};
+    use crate::core::{env::intern, gc::RootSet, object::IntoObject};
 
     use super::*;
 
-    fn check_interpreter<'ob, T>(test_str: &str, expect: T, cx: &'ob mut Arena)
+    fn check_interpreter<'ob, T>(test_str: &str, expect: T, cx: &'ob mut Context)
     where
         T: IntoObject<'ob>,
     {
@@ -904,7 +905,7 @@ mod test {
         assert_eq!(compare, expect);
     }
 
-    fn check_error<'ob>(test_str: &str, cx: &'ob mut Arena) {
+    fn check_error<'ob>(test_str: &str, cx: &'ob mut Context) {
         root!(env, Environment::default(), cx);
         println!("Test String: {}", test_str);
         let obj = crate::reader::read(test_str, cx).unwrap().0;
@@ -915,204 +916,204 @@ mod test {
     #[test]
     fn basic() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("1", 1, arena);
-        check_interpreter("1.5", 1.5, arena);
-        check_interpreter("nil", false, arena);
-        check_interpreter("t", true, arena);
-        check_interpreter("\"foo\"", "foo", arena);
-        let list = list!(1, 2; arena);
-        root!(list, arena);
-        check_interpreter("'(1 2)", list, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("1", 1, cx);
+        check_interpreter("1.5", 1.5, cx);
+        check_interpreter("nil", false, cx);
+        check_interpreter("t", true, cx);
+        check_interpreter("\"foo\"", "foo", cx);
+        let list = list!(1, 2; cx);
+        root!(list, cx);
+        check_interpreter("'(1 2)", list, cx);
     }
 
     #[test]
     fn variables() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(let ())", false, arena);
-        check_interpreter("(let (x) x)", false, arena);
-        check_interpreter("(let ((x 1)) x)", 1, arena);
-        check_interpreter("(let ((x 1)))", false, arena);
-        check_interpreter("(let ((x 1) (y 2)) x y)", 2, arena);
-        check_interpreter("(let ((x 1)) (let ((x 3)) x))", 3, arena);
-        check_interpreter("(let ((x 1)) (let ((y 3)) x))", 1, arena);
-        check_interpreter("(let ((x 1)) (setq x 2) x)", 2, arena);
-        check_interpreter("(let* ())", false, arena);
-        check_interpreter("(let* ((x 1) (y x)) y)", 1, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(let ())", false, cx);
+        check_interpreter("(let (x) x)", false, cx);
+        check_interpreter("(let ((x 1)) x)", 1, cx);
+        check_interpreter("(let ((x 1)))", false, cx);
+        check_interpreter("(let ((x 1) (y 2)) x y)", 2, cx);
+        check_interpreter("(let ((x 1)) (let ((x 3)) x))", 3, cx);
+        check_interpreter("(let ((x 1)) (let ((y 3)) x))", 1, cx);
+        check_interpreter("(let ((x 1)) (setq x 2) x)", 2, cx);
+        check_interpreter("(let* ())", false, cx);
+        check_interpreter("(let* ((x 1) (y x)) y)", 1, cx);
     }
 
     #[test]
     fn dyn_variables() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(progn (defvar foo 1) foo)", 1, arena);
-        check_interpreter("(progn (defvar foo 1) (let ((foo 3)) foo))", 3, arena);
-        check_interpreter("(progn (defvar foo 1) (let ((foo 3))) foo)", 1, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(progn (defvar foo 1) foo)", 1, cx);
+        check_interpreter("(progn (defvar foo 1) (let ((foo 3)) foo))", 3, cx);
+        check_interpreter("(progn (defvar foo 1) (let ((foo 3))) foo)", 1, cx);
         check_interpreter(
             "(progn (defvar foo 1) (let (bar) (let ((foo 3)) (setq bar foo)) bar))",
             3,
-            arena,
+            cx,
         );
     }
 
     #[test]
     fn conditionals() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(if nil 1)", false, arena);
-        check_interpreter("(if t 1)", 1, arena);
-        check_interpreter("(if nil 1 2)", 2, arena);
-        check_interpreter("(if t 1 2)", 1, arena);
-        check_interpreter("(if nil 1 2 3)", 3, arena);
-        check_interpreter("(and)", true, arena);
-        check_interpreter("(and 1)", 1, arena);
-        check_interpreter("(and 1 2)", 2, arena);
-        check_interpreter("(and 1 nil)", false, arena);
-        check_interpreter("(and nil 1)", false, arena);
-        check_interpreter("(or)", false, arena);
-        check_interpreter("(or nil)", false, arena);
-        check_interpreter("(or nil 1)", 1, arena);
-        check_interpreter("(or 1 2)", 1, arena);
-        check_interpreter("(cond)", false, arena);
-        check_interpreter("(cond nil)", false, arena);
-        check_interpreter("(cond (1))", 1, arena);
-        check_interpreter("(cond (1 2))", 2, arena);
-        check_interpreter("(cond (nil 1) (2 3))", 3, arena);
-        check_interpreter("(cond (nil 1) (2 3) (4 5))", 3, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(if nil 1)", false, cx);
+        check_interpreter("(if t 1)", 1, cx);
+        check_interpreter("(if nil 1 2)", 2, cx);
+        check_interpreter("(if t 1 2)", 1, cx);
+        check_interpreter("(if nil 1 2 3)", 3, cx);
+        check_interpreter("(and)", true, cx);
+        check_interpreter("(and 1)", 1, cx);
+        check_interpreter("(and 1 2)", 2, cx);
+        check_interpreter("(and 1 nil)", false, cx);
+        check_interpreter("(and nil 1)", false, cx);
+        check_interpreter("(or)", false, cx);
+        check_interpreter("(or nil)", false, cx);
+        check_interpreter("(or nil 1)", 1, cx);
+        check_interpreter("(or 1 2)", 1, cx);
+        check_interpreter("(cond)", false, cx);
+        check_interpreter("(cond nil)", false, cx);
+        check_interpreter("(cond (1))", 1, cx);
+        check_interpreter("(cond (1 2))", 2, cx);
+        check_interpreter("(cond (nil 1) (2 3))", 3, cx);
+        check_interpreter("(cond (nil 1) (2 3) (4 5))", 3, cx);
     }
 
     #[test]
     fn special_forms() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(prog1 1 2 3)", 1, arena);
-        check_interpreter("(prog2 1 2 3)", 2, arena);
-        check_interpreter("(progn 1 2 3 4)", 4, arena);
-        check_interpreter("(function 1)", 1, arena);
-        check_interpreter("(quote 1)", 1, arena);
-        check_interpreter("(if 1 2 3)", 2, arena);
-        check_interpreter("(if nil 2 3)", 3, arena);
-        check_interpreter("(if (and 1 nil) 2 3)", 3, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(prog1 1 2 3)", 1, cx);
+        check_interpreter("(prog2 1 2 3)", 2, cx);
+        check_interpreter("(progn 1 2 3 4)", 4, cx);
+        check_interpreter("(function 1)", 1, cx);
+        check_interpreter("(quote 1)", 1, cx);
+        check_interpreter("(if 1 2 3)", 2, cx);
+        check_interpreter("(if nil 2 3)", 3, cx);
+        check_interpreter("(if (and 1 nil) 2 3)", 3, cx);
     }
 
     #[test]
     fn test_functions() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        let list = list![sym::CLOSURE, list![true; arena]; arena];
-        root!(list, arena);
-        check_interpreter("(function (lambda))", list, arena);
+        let cx = &mut Context::new(roots);
+        let list = list![sym::CLOSURE, list![true; cx]; cx];
+        root!(list, cx);
+        check_interpreter("(function (lambda))", list, cx);
         let x = intern("x");
         let y = intern("y");
-        let list = list![sym::CLOSURE, list![true; arena], list![x; arena], x; arena];
-        root!(list, arena);
-        check_interpreter("(function (lambda (x) x))", list, arena);
+        let list = list![sym::CLOSURE, list![true; cx], list![x; cx], x; cx];
+        root!(list, cx);
+        check_interpreter("(function (lambda (x) x))", list, cx);
         let list: GcObj =
-            list![sym::CLOSURE, list![cons!(y, 1; arena), true; arena], list![x; arena], x; arena];
-        root!(list, arena);
-        check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, arena);
+            list![sym::CLOSURE, list![cons!(y, 1; cx), true; cx], list![x; cx], x; cx];
+        root!(list, cx);
+        check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, cx);
 
-        let list = list!(5, false; arena);
-        root!(list, arena);
+        let list = list!(5, false; cx);
+        root!(list, cx);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5))",
             list,
-            arena,
+            cx,
         );
-        let list = list!(5, 7; arena);
-        root!(list, arena);
+        let list = list!(5, 7; cx);
+        root!(list, cx);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7))",
             list,
-            arena,
+            cx,
         );
-        let list = list!(5, 7, 11; arena);
-        root!(list, arena);
+        let list = list!(5, 7, 11; cx);
+        root!(list, cx);
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
             list,
-            arena,
+            cx,
         );
     }
 
     #[test]
     fn test_call() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(let ((x #'(lambda (x) x))) (funcall x 5))", 5, arena);
-        check_interpreter("(let ((x #'(lambda () 3))) (funcall x))", 3, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(let ((x #'(lambda (x) x))) (funcall x 5))", 5, cx);
+        check_interpreter("(let ((x #'(lambda () 3))) (funcall x))", 3, cx);
         check_interpreter(
             "(progn (defvar foo 1) (let ((x #'(lambda () foo)) (foo 5)) (funcall x)))",
             5,
-            arena,
+            cx,
         );
         check_interpreter(
             "(progn (defalias 'int-test-call #'(lambda (x) (+ x 3)))  (int-test-call 7))",
             10,
-            arena,
+            cx,
         );
         // Test closures
-        check_interpreter("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7, arena);
+        check_interpreter("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7, cx);
         check_interpreter(
             "(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))",
             10,
-            arena,
+            cx,
         );
         // Test that closures capture their environments
         check_interpreter(
             "(progn (setq func (let ((x 3)) #'(lambda (y) (+ y x)))) (funcall func 5))",
             8,
-            arena,
+            cx,
         );
         // Test multiple closures
-        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16, arena);
+        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16, cx);
         // Test that closures close over variables
-        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9, arena);
+        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9, cx);
         // Test that closures in global function close over values and not
         // variables
-        check_interpreter("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8, arena);
+        check_interpreter("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8, cx);
 
         check_interpreter(
             "(progn (read-from-string (prin1-to-string (make-hash-table))) nil)",
             false,
-            arena,
+            cx,
         );
     }
 
     #[test]
     fn test_condition_case() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(condition-case nil nil)", false, arena);
-        check_interpreter("(condition-case nil 1)", 1, arena);
-        check_interpreter("(condition-case nil (if) (error 7))", 7, arena);
-        check_interpreter("(condition-case nil (if) (error 7 9 11))", 11, arena);
-        check_interpreter("(condition-case nil (if) (error . 7))", false, arena);
-        check_interpreter("(condition-case nil (if) ((debug error) 7))", 7, arena);
-        check_error("(condition-case nil (if))", arena);
-        check_error("(condition-case nil (if) nil)", arena);
-        check_error("(condition-case nil (if) 5 (error 7))", arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(condition-case nil nil)", false, cx);
+        check_interpreter("(condition-case nil 1)", 1, cx);
+        check_interpreter("(condition-case nil (if) (error 7))", 7, cx);
+        check_interpreter("(condition-case nil (if) (error 7 9 11))", 11, cx);
+        check_interpreter("(condition-case nil (if) (error . 7))", false, cx);
+        check_interpreter("(condition-case nil (if) ((debug error) 7))", 7, cx);
+        check_error("(condition-case nil (if))", cx);
+        check_error("(condition-case nil (if) nil)", cx);
+        check_error("(condition-case nil (if) 5 (error 7))", cx);
     }
 
     #[test]
     fn test_throw_catch() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        check_interpreter("(catch nil)", false, arena);
-        check_interpreter("(catch nil nil)", false, arena);
-        check_interpreter("(catch 1 (throw 1 2))", 2, arena);
-        check_interpreter("(catch 1 (throw 1 2) 3)", 2, arena);
-        check_interpreter("(catch 1 5 (throw 1 2) 3)", 2, arena);
-        check_interpreter("(catch 1 (throw 1 2) (if))", 2, arena);
-        check_interpreter("(condition-case nil (throw 1 2) (error 3))", 3, arena);
+        let cx = &mut Context::new(roots);
+        check_interpreter("(catch nil)", false, cx);
+        check_interpreter("(catch nil nil)", false, cx);
+        check_interpreter("(catch 1 (throw 1 2))", 2, cx);
+        check_interpreter("(catch 1 (throw 1 2) 3)", 2, cx);
+        check_interpreter("(catch 1 5 (throw 1 2) 3)", 2, cx);
+        check_interpreter("(catch 1 (throw 1 2) (if))", 2, cx);
+        check_interpreter("(condition-case nil (throw 1 2) (error 3))", 3, cx);
         check_interpreter(
             "(catch 1 (condition-case nil (throw 1 2) (error 3)))",
             2,
-            arena,
+            cx,
         );
-        check_interpreter("(catch 1 (catch 2 (throw 1 3)))", 3, arena);
-        check_error("(throw 1 2)", arena);
-        check_error("(catch 2 (throw 3 4))", arena);
+        check_interpreter("(catch 1 (catch 2 (throw 1 3)))", 3, cx);
+        check_error("(throw 1 2)", cx);
+        check_error("(catch 2 (throw 3 4))", cx);
     }
 }

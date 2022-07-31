@@ -1,10 +1,10 @@
 use super::super::{
-    arena::{Arena, Block, Root},
     error::ArgError,
+    gc::{Block, Context, Root},
 };
 use super::GcObj;
 use crate::opcode::OpCode;
-use crate::{core::arena::Rt, opcode::CodeVec};
+use crate::{core::gc::Rt, opcode::CodeVec};
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -107,7 +107,7 @@ impl<'ob> Default for LispFn<'ob> {
 pub(crate) type BuiltInFn = for<'ob> fn(
     &[Rt<GcObj<'static>>],
     &mut Root<crate::core::env::Environment>,
-    &'ob mut Arena,
+    &'ob mut Context,
 ) -> Result<GcObj<'ob>>;
 
 pub(crate) struct SubrFn {
@@ -122,7 +122,7 @@ impl SubrFn {
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<crate::core::env::Environment>,
-        cx: &'gc mut Arena,
+        cx: &'gc mut Context,
     ) -> Result<GcObj<'gc>> {
         {
             let args = args.deref_mut(cx);
@@ -153,17 +153,17 @@ impl PartialEq for SubrFn {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::arena::RootSet;
+    use super::super::super::gc::RootSet;
     use super::super::Object;
     use super::*;
 
     #[test]
     fn function() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let constant: GcObj = arena.add(1);
+        let cx = &Context::new(roots);
+        let constant: GcObj = cx.add(1);
         let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
-        let obj: GcObj = arena.add(lisp_fn);
+        let obj: GcObj = cx.add(lisp_fn);
         assert!(matches!(obj.get(), Object::LispFn(_)));
         format!("{}", obj);
         let func = match obj.get() {

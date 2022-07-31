@@ -1,10 +1,10 @@
 use crate::core::object::{Expression, GcObj, LispFn};
-use crate::core::{arena::Arena, env::Symbol};
+use crate::core::{env::Symbol, gc::Context};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
 #[defun]
-pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> {
     let mut head = GcObj::NIL;
     for object in objects.iter().rev() {
         head = cons!(*object, head; cx);

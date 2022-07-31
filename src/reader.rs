@@ -1,8 +1,8 @@
 //! Lisp reader that reads an object from a string.
 
 use crate::core::{
-    arena::Arena,
     env::{intern, sym, Symbol},
+    gc::Context,
     object::GcObj,
 };
 use crate::fns;
@@ -281,7 +281,7 @@ fn intern_symbol(symbol: &str) -> Symbol {
 
 /// Parse a symbol from a string. This will either by a true symbol or a number
 /// literal.
-fn parse_symbol<'a>(slice: &str, cx: &'a Arena) -> GcObj<'a> {
+fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> GcObj<'a> {
     match slice.parse::<i64>() {
         Ok(num) => cx.add(num),
         Err(_) => match slice.parse::<f64>() {
@@ -344,8 +344,8 @@ fn escaped(escaped: &mut bool, chr: char) -> bool {
 struct Reader<'a, 'ob> {
     /// The iterator over the tokens in the current slice.
     tokens: Tokenizer<'a>,
-    /// New objects are allocated in the arena.
-    cx: &'ob Arena<'ob>,
+    /// New objects are allocated in the context.
+    cx: &'ob Context<'ob>,
 }
 
 impl<'a, 'ob> Reader<'a, 'ob> {
@@ -472,7 +472,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
-pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Arena) -> Result<(GcObj<'ob>, usize)> {
+pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Context) -> Result<(GcObj<'ob>, usize)> {
     let mut reader = Reader {
         tokens: Tokenizer::new(slice),
         cx,
@@ -485,7 +485,7 @@ pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Arena) -> Result<(GcObj<'ob
 
 #[cfg(test)]
 mod test {
-    use crate::core::arena::RootSet;
+    use crate::core::gc::RootSet;
 
     use super::*;
 
@@ -503,144 +503,132 @@ mod test {
     }
 
     macro_rules! check_reader {
-        ($expect:expr, $compare:expr, $arena:expr) => {{
-            let obj: GcObj = $arena.add($expect);
-            assert_eq!(obj, read($compare, $arena).unwrap().0)
+        ($expect:expr, $compare:expr, $cx:expr) => {{
+            let obj: GcObj = $cx.add($expect);
+            assert_eq!(obj, read($compare, $cx).unwrap().0)
         }};
     }
 
     #[test]
     fn test_read_number() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!(5, "5", arena);
-        check_reader!(49, "49", arena);
-        check_reader!(-105, "-105", arena);
-        check_reader!(1.5, "1.5", arena);
-        check_reader!(-3.0, "-3.0", arena);
-        check_reader!(1, "+1", arena);
-        check_reader!(1, "001", arena);
-        check_reader!(1, "#o001", arena);
-        check_reader!(8, "#o10", arena);
-        check_reader!(2385, "#o4521", arena);
-        check_reader!(0b1, "#b001", arena);
-        check_reader!(0b10, "#b10", arena);
-        check_reader!(0b101_1101, "#b1011101", arena);
-        check_reader!(0x1, "#x001", arena);
-        check_reader!(0x10, "#x10", arena);
-        check_reader!(0xdead_beef, "#xDeAdBeEf", arena);
+        let cx = &Context::new(roots);
+        check_reader!(5, "5", cx);
+        check_reader!(49, "49", cx);
+        check_reader!(-105, "-105", cx);
+        check_reader!(1.5, "1.5", cx);
+        check_reader!(-3.0, "-3.0", cx);
+        check_reader!(1, "+1", cx);
+        check_reader!(1, "001", cx);
+        check_reader!(1, "#o001", cx);
+        check_reader!(8, "#o10", cx);
+        check_reader!(2385, "#o4521", cx);
+        check_reader!(0b1, "#b001", cx);
+        check_reader!(0b10, "#b10", cx);
+        check_reader!(0b101_1101, "#b1011101", cx);
+        check_reader!(0x1, "#x001", cx);
+        check_reader!(0x10, "#x10", cx);
+        check_reader!(0xdead_beef, "#xDeAdBeEf", cx);
     }
 
     #[test]
     fn read_bool() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!(false, "nil", arena);
-        check_reader!(false, "()", arena);
-        check_reader!(true, "t", arena);
+        let cx = &Context::new(roots);
+        check_reader!(false, "nil", cx);
+        check_reader!(false, "()", cx);
+        check_reader!(true, "t", cx);
     }
 
     #[test]
     fn test_read_symbol() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!(sym::IF, "if", arena);
-        check_reader!(intern("--1"), "--1", arena);
-        check_reader!(intern("1"), "\\1", arena);
-        check_reader!(intern("3.0.0"), "3.0.0", arena);
-        check_reader!(intern("1+"), "1+", arena);
-        check_reader!(intern("+1"), "\\+1", arena);
-        check_reader!(intern(" x"), "\\ x", arena);
-        check_reader!(intern("\\x"), "\\\\x", arena);
-        check_reader!(intern("x.y"), "x.y", arena);
-        check_reader!(intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)", arena);
-        check_reader!(intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}", arena);
+        let cx = &Context::new(roots);
+        check_reader!(sym::IF, "if", cx);
+        check_reader!(intern("--1"), "--1", cx);
+        check_reader!(intern("1"), "\\1", cx);
+        check_reader!(intern("3.0.0"), "3.0.0", cx);
+        check_reader!(intern("1+"), "1+", cx);
+        check_reader!(intern("+1"), "\\+1", cx);
+        check_reader!(intern(" x"), "\\ x", cx);
+        check_reader!(intern("\\x"), "\\\\x", cx);
+        check_reader!(intern("x.y"), "x.y", cx);
+        check_reader!(intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)", cx);
+        check_reader!(intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}", cx);
     }
 
     #[test]
     fn test_read_string() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!("foo", r#""foo""#, arena);
-        check_reader!("foo bar", r#""foo bar""#, arena);
-        check_reader!("foo\nbar\t\r", r#""foo\nbar\t\r""#, arena);
+        let cx = &Context::new(roots);
+        check_reader!("foo", r#""foo""#, cx);
+        check_reader!("foo bar", r#""foo bar""#, cx);
+        check_reader!("foo\nbar\t\r", r#""foo\nbar\t\r""#, cx);
         check_reader!(
             "foobarbaz",
             r#""foo\ bar\
 baz""#,
-            arena
+            cx
         );
     }
 
     #[test]
     fn test_read_cons() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!(false, "()", arena);
-        check_reader!(cons!(1, 2; arena), "(1 . 2)", arena);
-        check_reader!(list!(1; arena), "(1)", arena);
-        check_reader!(list!("foo"; arena), "(\"foo\")", arena);
+        let cx = &Context::new(roots);
+        check_reader!(false, "()", cx);
+        check_reader!(cons!(1, 2; cx), "(1 . 2)", cx);
+        check_reader!(list!(1; cx), "(1)", cx);
+        check_reader!(list!("foo"; cx), "(\"foo\")", cx);
+        check_reader!(cons!(1, cons!(1.5, "foo"; cx); cx), "(1 1.5 . \"foo\")", cx);
         check_reader!(
-            cons!(1, cons!(1.5, "foo"; arena); arena),
-            "(1 1.5 . \"foo\")",
-            arena
-        );
-        check_reader!(
-            list!("foo", cons!(1, 1.5; arena); arena),
+            list!("foo", cons!(1, 1.5; cx); cx),
             "(\"foo\" (1 . 1.5))",
-            arena
+            cx
         );
-        check_reader!(list!(1, 1.5; arena), "(1 1.5)", arena);
-        check_reader!(list!(1, 1.5, -7; arena), "(1 1.5 -7)", arena);
-        check_reader!(list!(1, 1.5, intern("."); arena), "(1 1.5 .)", arena);
-        check_reader!(
-            list!(1, 1.5, intern("..."), 2; arena),
-            "(1 1.5 ... 2)",
-            arena
-        );
+        check_reader!(list!(1, 1.5; cx), "(1 1.5)", cx);
+        check_reader!(list!(1, 1.5, -7; cx), "(1 1.5 -7)", cx);
+        check_reader!(list!(1, 1.5, intern("."); cx), "(1 1.5 .)", cx);
+        check_reader!(list!(1, 1.5, intern("..."), 2; cx), "(1 1.5 ... 2)", cx);
     }
 
     #[test]
     fn read_quote() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         let quote = sym::QUOTE;
-        check_reader!(list!(quote, sym::IF; arena), "(quote if)", arena);
-        check_reader!(list!(quote, sym::IF; arena), "'if", arena);
-        check_reader!(
-            list!(quote, list!(1, 2, 3; arena); arena),
-            "'(1 2 3)",
-            arena
-        );
+        check_reader!(list!(quote, sym::IF; cx), "(quote if)", cx);
+        check_reader!(list!(quote, sym::IF; cx), "'if", cx);
+        check_reader!(list!(quote, list!(1, 2, 3; cx); cx), "'(1 2 3)", cx);
     }
 
     #[test]
     fn read_sharp() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         let quote = sym::FUNCTION;
-        check_reader!(list!(quote, sym::IF; arena), "#'if", arena);
+        check_reader!(list!(quote, sym::IF; cx), "#'if", cx);
         check_reader!(
-            list!(quote, list!(intern("lambda"), sym::IF, false, false; arena); arena),
+            list!(quote, list!(intern("lambda"), sym::IF, false, false; cx); cx),
             "#'(lambda if () nil)",
-            arena
+            cx
         );
-        assert_error("#", Error::MissingQuotedItem(0), arena);
-        assert_error("#'", Error::MissingQuotedItem(0), arena);
-        assert_error("#a", Error::UnknownMacroCharacter('a', 0), arena);
+        assert_error("#", Error::MissingQuotedItem(0), cx);
+        assert_error("#'", Error::MissingQuotedItem(0), cx);
+        assert_error("#a", Error::UnknownMacroCharacter('a', 0), cx);
     }
 
     #[test]
     fn test_read_vec() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        check_reader!(vec![], "[]", arena);
-        check_reader!(vec_into![1], "[1]", arena);
-        check_reader!(vec_into![1, 2], "[1 2]", arena);
-        check_reader!(vec_into![1, 2, 3], "[1 2 3]", arena);
+        let cx = &Context::new(roots);
+        check_reader!(vec![], "[]", cx);
+        check_reader!(vec_into![1], "[1]", cx);
+        check_reader!(vec_into![1, 2], "[1 2]", cx);
+        check_reader!(vec_into![1, 2, 3], "[1 2 3]", cx);
     }
 
-    fn assert_error(input: &str, error: Error, cx: &Arena) {
+    fn assert_error(input: &str, error: Error, cx: &Context) {
         let result = read(input, cx).err().unwrap();
         assert_eq!(result, error);
     }
@@ -648,23 +636,23 @@ baz""#,
     #[test]
     fn reader_error() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        assert_error("", Error::EmptyStream, arena);
-        assert_error(" (1 2", Error::MissingCloseParen(1), arena);
-        assert_error("  (1 (2 3) 4", Error::MissingCloseParen(2), arena);
-        assert_error("  (1 (2 3 4", Error::MissingCloseParen(5), arena);
-        assert_error(" \"foo", Error::MissingStringDel(1), arena);
-        assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr(9), arena);
-        assert_error("(1 3 \0)", Error::UnexpectedChar('\0', 5), arena);
-        assert_error(" '", Error::MissingQuotedItem(1), arena);
-        assert_error(" )", Error::ExtraCloseParen(1), arena);
+        let cx = &Context::new(roots);
+        assert_error("", Error::EmptyStream, cx);
+        assert_error(" (1 2", Error::MissingCloseParen(1), cx);
+        assert_error("  (1 (2 3) 4", Error::MissingCloseParen(2), cx);
+        assert_error("  (1 (2 3 4", Error::MissingCloseParen(5), cx);
+        assert_error(" \"foo", Error::MissingStringDel(1), cx);
+        assert_error("(1 2 . 3 4)", Error::ExtraItemInCdr(9), cx);
+        assert_error("(1 3 \0)", Error::UnexpectedChar('\0', 5), cx);
+        assert_error(" '", Error::MissingQuotedItem(1), cx);
+        assert_error(" )", Error::ExtraCloseParen(1), cx);
     }
 
     #[test]
     fn comments() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        assert_error(" ; comment ", Error::EmptyStream, arena);
-        check_reader!(1, "; comment \n  1", arena);
+        let cx = &Context::new(roots);
+        assert_error(" ; comment ", Error::EmptyStream, cx);
+        check_reader!(1, "; comment \n  1", cx);
     }
 }

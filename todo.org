@@ -4,13 +4,11 @@
 * Objects
 ** implement vec without lifetime parameter
 This would let the Object lifetime be covariant instead of invariant. But the problem is that we need to reimplement everything for our vec type. I actually don't think invariance will be such a problem once we update the gc borrowing.
-* rename arena to variable to something other then GC
 * Add a lifetime parameter to Symbols
 I hate to do this but it is requirement if we want to garbage collect them ever. We need to track which ones are on the stack versus not, the same as we do for all variables.
-* See if we can remove the callable type
 * define benchmarks
 * Steps to add a new object
-- define in arena.rs
+- define in gc.rs
 - add boxing function
 - define in object
 - implement intoObject

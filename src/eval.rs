@@ -1,11 +1,11 @@
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
-use crate::core::arena::Rt;
 use crate::core::error::{Type, TypeError};
+use crate::core::gc::Rt;
 use crate::core::object::Object;
 use crate::core::{
-    arena::{Arena, IntoRoot, Root},
+    gc::{Context, IntoRoot, Root},
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
@@ -20,7 +20,7 @@ pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
         0 => Vec::new(),
@@ -44,7 +44,7 @@ pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
     root!(arg_list, arguments, cx);
@@ -55,7 +55,7 @@ pub(crate) fn funcall<'ob>(
 fn run_hooks<'ob>(
     hooks: &[Rt<GcObj>],
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     for hook in hooks {
         match hook.bind(cx).get() {
@@ -109,7 +109,7 @@ fn autoload<'ob>(function: GcObj<'ob>, file: GcObj) -> GcObj<'ob> {
 pub(crate) fn macroexpand<'ob>(
     form: &Rt<GcObj>,
     environment: Option<&Rt<GcObj>>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
     env: &mut Root<Environment>,
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.bind(cx).get() {
@@ -136,7 +136,7 @@ pub(crate) fn macroexpand<'ob>(
     Ok(form.bind(cx))
 }
 
-fn get_macro_func<'ob>(name: Symbol, cx: &'ob Arena) -> Option<Gc<Function<'ob>>> {
+fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
     if let Some(callable) = name.follow_indirect(cx) {
         if let Function::Cons(cons) = callable.get() {
             return cons.try_as_macro().ok();
@@ -157,7 +157,7 @@ fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
     value: GcObj,
     env: &'ob mut Root<Environment>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_var(symbol, value);
     GcObj::NIL
@@ -168,7 +168,7 @@ fn set_default<'ob>(
     symbol: Symbol,
     value: GcObj<'ob>,
     env: &'ob mut Root<Environment>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> GcObj<'ob> {
     // TODO: implement buffer local variables
     env.deref_mut(cx).set_var(symbol, value);

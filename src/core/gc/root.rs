@@ -9,7 +9,7 @@ use super::super::{
     env::{Environment, Symbol},
     object::{GcObj, RawObj},
 };
-use super::{Arena, Block, RootSet, Trace};
+use super::{Block, Context, RootSet, Trace};
 use crate::core::error::{Type, TypeError};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::HashMap;
@@ -90,7 +90,7 @@ impl Trace for Symbol {
 /// Represents a Rooted object T. The purpose of this type is we cannot have
 /// mutable references to the inner data, because the garbage collector will
 /// need to trace it. This type will only give us a mut [`Rt`] (rooted mutable
-/// reference) when we are also holding a reference to the Arena, meaning that
+/// reference) when we are also holding a reference to the Context, meaning that
 /// garbage collection cannot happen.
 pub(crate) struct Root<'rt, 'a, T> {
     data: *mut T,
@@ -115,7 +115,7 @@ impl<'rt, T> Root<'rt, '_, T> {
         }
     }
 
-    pub(crate) fn deref_mut<'a>(&'a mut self, _cx: &'a Arena) -> &'a mut Rt<T> {
+    pub(crate) fn deref_mut<'a>(&'a mut self, _cx: &'a Context) -> &'a mut Rt<T> {
         unsafe { self.deref_mut_unchecked() }
     }
 
@@ -166,19 +166,19 @@ impl<T> Drop for Root<'_, '_, T> {
 
 #[macro_export]
 macro_rules! root {
-    ($ident:ident, $arena:ident) => {
+    ($ident:ident, $cx:ident) => {
         let mut rooted = unsafe { $crate::core::object::WithLifetime::with_lifetime($ident) };
-        let mut root: $crate::core::arena::Root<_> =
-            unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
-        let $ident = unsafe { $crate::core::arena::Root::init(&mut root, &mut rooted) };
+        let mut root: $crate::core::gc::Root<_> =
+            unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
+        let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
     };
-    ($ident:ident, $value:expr, $arena:ident) => {
+    ($ident:ident, $value:expr, $cx:ident) => {
         // TODO: see if this can be removed
         #[allow(unused_unsafe)]
         let mut rooted = unsafe { $value };
-        let mut root: $crate::core::arena::Root<_> =
-            unsafe { $crate::core::arena::Root::new($arena.get_root_set()) };
-        let $ident = unsafe { $crate::core::arena::Root::init(&mut root, &mut rooted) };
+        let mut root: $crate::core::gc::Root<_> =
+            unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
+        let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
     };
 }
 
@@ -218,7 +218,7 @@ impl Deref for Rt<Symbol> {
 }
 
 impl<T> Rt<T> {
-    pub(crate) fn bind<'ob, U>(&self, _: &'ob Arena) -> U
+    pub(crate) fn bind<'ob, U>(&self, _: &'ob Context) -> U
     where
         T: WithLifetime<'ob, Out = U> + Copy,
     {
@@ -234,14 +234,14 @@ impl<T> Rt<T> {
 }
 
 impl<T> Rt<[T]> {
-    pub(crate) fn as_ref<'ob, U>(&self, _: &'ob Arena) -> &'ob [U]
+    pub(crate) fn as_ref<'ob, U>(&self, _: &'ob Context) -> &'ob [U]
     where
         T: WithLifetime<'ob, Out = U>,
     {
         unsafe { &*(addr_of!(self.inner) as *const [U]) }
     }
 
-    pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Arena) -> &'ob [U]
+    pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Context) -> &'ob [U]
     where
         T: WithLifetime<'ob, Out = U>,
     {
@@ -513,16 +513,16 @@ mod test {
     #[test]
     fn indexing() {
         let root = &RootSet::default();
-        let arena = &Arena::new(root);
+        let cx = &Context::new(root);
         let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![] };
 
         vec.push(GcObj::NIL);
-        assert!(matches!(vec[0].bind(arena).get(), Object::Nil));
-        let str1 = arena.add("str1");
-        let str2 = arena.add("str2");
+        assert!(matches!(vec[0].bind(cx).get(), Object::Nil));
+        let str1 = cx.add("str1");
+        let str2 = cx.add("str2");
         vec.push(str1);
         vec.push(str2);
         let slice = &vec[0..3];
-        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref(arena));
+        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref(cx));
     }
 }

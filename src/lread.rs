@@ -1,14 +1,15 @@
-use crate::core::arena::Rt;
-use crate::core::arena::{Arena, Root};
 use crate::core::env::Symbol;
 use crate::core::env::{sym, Environment};
 use crate::core::error::{Type, TypeError};
+use crate::core::gc::Rt;
+use crate::core::gc::{Context, Root};
 use crate::core::object::{GcObj, Object};
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::Context as _;
+use anyhow::{bail, ensure, Result};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,7 +41,7 @@ pub(crate) fn read_from_string<'ob>(
     string: &str,
     start: Option<i64>,
     end: Option<i64>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     let len = string.len();
     let start = check_lower_bounds(start, len)?;
@@ -58,7 +59,7 @@ pub(crate) fn read_from_string<'ob>(
 
 pub(crate) fn load_internal<'ob>(
     contents: &str,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
     let mut pos = 0;
@@ -93,7 +94,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     }
 }
 
-fn find_file_in_load_path(file: &str, cx: &Arena, env: &Root<Environment>) -> Result<PathBuf> {
+fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Environment>) -> Result<PathBuf> {
     let load_path = env.vars.get(&*sym::LOAD_PATH).unwrap();
     let paths = load_path
         .bind(cx)
@@ -125,7 +126,7 @@ pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: Option<()>,
     nomessage: Option<()>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
     let file = match file.bind(cx).get() {
@@ -191,20 +192,20 @@ defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_
 mod test {
 
     use super::*;
-    use crate::core::arena::RootSet;
+    use crate::core::gc::RootSet;
     use crate::root;
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
-        root!(env, Environment::default(), arena);
-        load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", arena, env).unwrap();
+        let cx = &mut Context::new(roots);
+        root!(env, Environment::default(), cx);
+        load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", cx, env).unwrap();
 
-        let obj = reader::read("(+ foo bar baz)", arena).unwrap().0;
-        root!(obj, arena);
-        let val = interpreter::eval(obj, None, env, arena).unwrap();
+        let obj = reader::read("(+ foo bar baz)", cx).unwrap().0;
+        root!(obj, cx);
+        let val = interpreter::eval(obj, None, env, cx).unwrap();
         assert_eq!(val, 4.5);
     }
 }

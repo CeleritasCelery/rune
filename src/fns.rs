@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 
 use crate::core::{
-    arena::{Arena, Root, Rt},
     cons::Cons,
     env::{Environment, Symbol},
     error::{Type, TypeError},
+    gc::{Context, Root, Rt},
     object::{Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{data, element_iter, rebind, root};
@@ -15,7 +15,7 @@ use streaming_iterator::StreamingIterator;
 pub(crate) fn slice_into_list<'ob>(
     slice: &[GcObj<'ob>],
     tail: Option<GcObj<'ob>>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> GcObj<'ob> {
     let from_end = slice.iter().rev();
     from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; cx))
@@ -31,7 +31,7 @@ pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
         List::Nil => Ok(GcObj::NIL),
@@ -59,7 +59,7 @@ pub(crate) fn mapc<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
         List::Nil => Ok(GcObj::NIL),
@@ -88,7 +88,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 }
 
 #[defun]
-pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Arena) -> Result<GcObj<'ob>> {
+pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     let mut tail = GcObj::NIL;
     for elem in seq.elements() {
         tail = cons!(elem?, tail; cx);
@@ -127,7 +127,7 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 pub(crate) fn append<'ob>(
     append: GcObj<'ob>,
     sequences: &[GcObj<'ob>],
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     let mut list = Vec::new();
     join(&mut list, append.try_into()?)?;
@@ -251,7 +251,7 @@ fn require<'ob>(
     filename: Option<&Rt<Gc<&String>>>,
     noerror: Option<()>,
     env: &mut Root<Environment>,
-    cx: &'ob mut Arena,
+    cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
         return Ok(feature.into());
@@ -327,7 +327,7 @@ defsym!(KW_TEST, ":test");
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     use crate::core::env::sym;
     if let Some(i) = keyword_args
@@ -377,7 +377,7 @@ pub(crate) fn gethash<'ob>(
 }
 
 #[defun]
-fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Arena) -> Result<GcObj<'ob>> {
+fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match arg.get() {
         Object::String(_) | Object::Vec(_) | Object::Nil | Object::Cons(_) => Ok(arg.clone_in(cx)),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
@@ -403,21 +403,21 @@ fn enable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::arena::RootSet;
+    use crate::core::gc::RootSet;
 
     use super::*;
 
     #[test]
     fn test_delq() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         {
-            let list = list![1, 2, 3, 1, 4, 1; arena];
+            let list = list![1, 2, 3, 1, 4, 1; cx];
             let res = delq(1.into(), list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![2, 3, 4; arena]);
+            assert_eq!(res, list![2, 3, 4; cx]);
         }
         {
-            let list = list![true, true, true; arena];
+            let list = list![true, true, true; cx];
             let res = delq(GcObj::TRUE, list.try_into().unwrap()).unwrap();
             assert_eq!(res, GcObj::NIL);
         }
@@ -426,8 +426,8 @@ mod test {
     #[test]
     fn test_nthcdr() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let list = list![1, 2, 3; arena];
+        let cx = &Context::new(roots);
+        let list = list![1, 2, 3; cx];
         let res = nthcdr(1, list.try_into().unwrap()).unwrap();
         assert_eq!(res.get().car(), 2);
     }
@@ -435,70 +435,70 @@ mod test {
     #[test]
     fn test_reverse() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         {
-            let list = list![1, 2, 3, 4; arena];
+            let list = list![1, 2, 3, 4; cx];
             let res = nreverse(list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![4, 3, 2, 1; arena]);
+            assert_eq!(res, list![4, 3, 2, 1; cx]);
         }
         {
-            let list = list![1; arena];
+            let list = list![1; cx];
             let res = nreverse(list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![1; arena]);
+            assert_eq!(res, list![1; cx]);
         }
         {
-            let list = list![1, 2, 3; arena];
-            let res = reverse(list.try_into().unwrap(), arena).unwrap();
-            assert_eq!(res, list![3, 2, 1; arena]);
+            let list = list![1, 2, 3; cx];
+            let res = reverse(list.try_into().unwrap(), cx).unwrap();
+            assert_eq!(res, list![3, 2, 1; cx]);
         }
     }
 
     #[test]
     fn test_nconc() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         {
             let res = nconc(&[List::EMPTY]).unwrap();
             assert!(res == GcObj::NIL);
         }
         {
-            let list: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list: Gc<List> = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list]).unwrap();
-            assert_eq!(res, list![1, 2; arena]);
+            assert_eq!(res, list![1, 2; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
-            let list2: Gc<List> = list![3, 4; arena].try_into().unwrap();
+            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
+            let list2: Gc<List> = list![3, 4; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2, 3, 4; arena]);
+            assert_eq!(res, list![1, 2, 3, 4; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
-            let list2: Gc<List> = list![3, 4; arena].try_into().unwrap();
-            let list3: Gc<List> = list![5, 6; arena].try_into().unwrap();
+            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
+            let list2: Gc<List> = list![3, 4; cx].try_into().unwrap();
+            let list3: Gc<List> = list![5, 6; cx].try_into().unwrap();
             let res = nconc(&[list1, list2, list3]).unwrap();
-            assert_eq!(res, list![1, 2, 3, 4, 5, 6; arena]);
+            assert_eq!(res, list![1, 2, 3, 4, 5, 6; cx]);
         }
         {
             let list1: Gc<List> = GcObj::NIL.try_into().unwrap();
-            let list2: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list2: Gc<List> = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2; arena]);
+            assert_eq!(res, list![1, 2; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; arena].try_into().unwrap();
+            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
             let list2: Gc<List> = GcObj::NIL.try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2; arena]);
+            assert_eq!(res, list![1, 2; cx]);
         }
     }
 
     #[test]
     fn test_mapcar() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let element = cons!(5, 6; arena);
-        let list = list![cons!(1, 2; arena), cons!(3, 4; arena), element; arena];
+        let cx = &Context::new(roots);
+        let element = cons!(5, 6; cx);
+        let list = list![cons!(1, 2; cx), cons!(3, 4; cx), element; cx];
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list);
         assert_eq!(result, element);

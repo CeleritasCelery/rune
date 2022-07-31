@@ -1,4 +1,4 @@
-use super::arena::{Arena, Block, Rt, Trace};
+use super::gc::{Block, Context, Rt, Trace};
 use super::object::{Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
 use lazy_static::lazy_static;
@@ -176,12 +176,12 @@ impl GlobalSymbol {
         }
     }
 
-    pub(crate) fn func<'a>(&self, _cx: &'a Arena) -> Option<Gc<Function<'a>>> {
+    pub(crate) fn func<'a>(&self, _cx: &'a Context) -> Option<Gc<Function<'a>>> {
         self.get().map(|x| unsafe { x.with_lifetime() })
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Arena) -> Option<Gc<Function<'ob>>> {
+    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
         let func = self.func(cx)?;
         match func.get() {
             Function::Symbol(sym) => sym.follow_indirect(cx),
@@ -302,7 +302,7 @@ impl ObjectMap {
         #[cfg(miri)]
         new_func.get().set_as_miri_root();
         // SAFETY: The object is marked read-only and we have cloned
-        // in the map's arena, so calling this function is safe.
+        // in the map's context, so calling this function is safe.
         unsafe {
             symbol.set_func(new_func);
         }
@@ -325,8 +325,8 @@ macro_rules! create_symbolmap {
 
         #[allow(unused_qualifications)]
         pub(crate) fn init_variables<'ob>(
-            cx: &'ob crate::core::arena::Arena,
-            env: &mut crate::core::arena::Rt<crate::core::env::Environment>
+            cx: &'ob crate::core::gc::Context,
+            env: &mut crate::core::gc::Rt<crate::core::env::Environment>
         ) {
             $($($subr::)*__init_vars(cx, env);)*
         }
@@ -376,7 +376,7 @@ pub(crate) fn intern(name: &str) -> Symbol {
 mod test {
     use super::*;
 
-    use super::super::arena::{Arena, RootSet};
+    use super::super::gc::{Context, RootSet};
     use super::super::object::{IntoObject, LispFn};
     use std::mem::size_of;
 
@@ -399,7 +399,7 @@ mod test {
     #[test]
     fn symbol_func() {
         let roots = &RootSet::default();
-        let gc = &Arena::new(roots);
+        let gc = &Context::new(roots);
         let inner = GlobalSymbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
@@ -430,23 +430,23 @@ mod test {
     #[test]
     fn test_mutability() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let cons = list!(1, 2, 3; arena);
-        assert_eq!(cons, list!(1, 2, 3; arena));
+        let cx = &Context::new(roots);
+        let cons = list!(1, 2, 3; cx);
+        assert_eq!(cons, list!(1, 2, 3; cx));
         // is mutable
         if let crate::core::object::Object::Cons(cons) = cons.get() {
             cons.set_car(4.into()).unwrap();
         } else {
             unreachable!();
         }
-        assert_eq!(cons, list!(4, 2, 3; arena));
+        assert_eq!(cons, list!(4, 2, 3; cx));
         let sym = intern("cons-test");
         crate::data::fset(sym, cons).unwrap();
         // is not mutable
-        if let Function::Cons(cons) = sym.func(arena).unwrap().get() {
+        if let Function::Cons(cons) = sym.func(cx).unwrap().get() {
             assert!(cons.set_car(5.into()).is_err());
             let obj: GcObj = cons.into();
-            assert_eq!(obj, list!(4, 2, 3; arena));
+            assert_eq!(obj, list!(4, 2, 3; cx));
         } else {
             unreachable!();
         }

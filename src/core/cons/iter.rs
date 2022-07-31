@@ -1,6 +1,6 @@
 use super::super::{
-    arena::{Root, Rt},
     error::{Type, TypeError},
+    gc::{Root, Rt},
     object::{Gc, GcObj, List, Object},
 };
 use streaming_iterator::StreamingIterator;
@@ -150,8 +150,8 @@ macro_rules! element_iter {
         let mut root_elem = None;
         #[allow(unused_assignments)]
         let mut root_cons = None;
-        let mut gc_root_elem = unsafe { $crate::core::arena::Root::new($gc.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::core::arena::Root::new($gc.get_root_set()) };
+        let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($gc.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($gc.get_root_set()) };
         let list: $crate::core::object::Gc<$crate::core::object::List> = $obj.try_into()?;
         #[allow(unused_mut)]
         let mut $ident = if let $crate::core::object::List::Cons(cons) = list.get() {
@@ -159,11 +159,11 @@ macro_rules! element_iter {
                 root_elem = Some($crate::core::object::GcObj::NIL);
                 root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
                 $crate::core::cons::ElemStreamIter::new(
-                    Some($crate::core::arena::Root::init(
+                    Some($crate::core::gc::Root::init(
                         &mut gc_root_elem,
                         root_elem.as_mut().unwrap(),
                     )),
-                    Some($crate::core::arena::Root::init(
+                    Some($crate::core::gc::Root::init(
                         &mut gc_root_cons,
                         root_cons.as_mut().unwrap(),
                     )),
@@ -179,7 +179,7 @@ macro_rules! element_iter {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::arena::{Arena, RootSet};
+    use super::super::super::gc::{Context, RootSet};
     use crate::list;
 
     use super::*;
@@ -187,8 +187,8 @@ mod test {
     #[test]
     fn elem_iter() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let cons = list![1, 2, 3, 4; arena];
+        let cx = &Context::new(roots);
+        let cons = list![1, 2, 3, 4; cx];
         let iter = cons.as_list().unwrap();
         let vec: Result<Vec<_>> = iter.collect();
         assert_eq!(vec.unwrap(), vec![1, 2, 3, 4]);
@@ -197,8 +197,8 @@ mod test {
     #[test]
     fn cons_iter() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let cons = list![1, 2, 3, 4; arena];
+        let cx = &Context::new(roots);
+        let cons = list![1, 2, 3, 4; cx];
         let list: Gc<List> = cons.try_into().unwrap();
         let iter = list.conses();
         let expects = vec![1, 2, 3, 4];
@@ -212,11 +212,11 @@ mod test {
     fn stream_iter() {
         let func = || -> Result<()> {
             let roots = &RootSet::default();
-            let arena = &Arena::new(roots);
-            let cons = list![1, 2, 3, 4; arena];
-            element_iter!(iter, cons, arena);
+            let cx = &Context::new(roots);
+            let cons = list![1, 2, 3, 4; cx];
+            element_iter!(iter, cons, cx);
             for expect in 1..=4 {
-                let actual = iter.next().unwrap().bind(arena);
+                let actual = iter.next().unwrap().bind(cx);
                 assert_eq!(actual, expect);
             }
             assert!(iter.is_empty());

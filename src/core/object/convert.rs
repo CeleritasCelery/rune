@@ -125,7 +125,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::super::super::arena::{Arena, RootSet};
+    use super::super::super::gc::{Context, RootSet};
 
     use super::*;
 
@@ -144,10 +144,10 @@ mod test {
     #[test]
     fn test() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let obj0 = arena.add(5);
+        let cx = &Context::new(roots);
+        let obj0 = cx.add(5);
         // SAFETY: We don't call garbage collect so references are valid
-        let obj1 = unsafe { arena.add(Cons::new(1.into(), 2.into())) };
+        let obj1 = unsafe { cx.add(Cons::new(1.into(), 2.into())) };
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

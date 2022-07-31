@@ -20,7 +20,7 @@ This project contains one library of derived macros in ~fn_macros/~. This define
 - [[file:src/object/mod.rs][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types are also found here.
 - [[file:src/reader.rs][reader]] :: The emacs lisp reader that translates a string to a cons cell. Due to the simple nature of lisp syntax, the reader is hand rolled and does not rely on any parsing libraries.
 - [[file:src/symbol.rs][symbol]] :: The global obarray. Symbols are always interned and shared between threads. Currently function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them. Time will tell if this experiment will be successful.
-- [[file:src/arena/mod.rs][arena]] :: Contains the arena allocator and garbage collector. All code for rooting and managing objects live here as well.
+- [[file:src/core/gc.rs][gc]] :: Contains the allocator and garbage collector. All code for rooting and managing objects live here as well.
 - [[file:src/interpreter.rs][interpreter]] :: The basic elisp interpreter. This is used only to bootstrap the elisp byte-compiler.
 - [[file:src/fns.rs][fns]], [[file:src/data.rs][data]], [[file:src/alloc.rs][alloc]] :: These modules contain definitions of builtin in functions. Some of these are just stubbed out until the functionality is actually needed.
 

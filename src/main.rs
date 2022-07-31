@@ -85,8 +85,8 @@ mod reader;
 mod search;
 
 use crate::core::{
-    arena::{Arena, Root, RootSet},
     env::{intern, Environment},
+    gc::{Context, Root, RootSet},
 };
 use std::env;
 use std::io::{self, Write};
@@ -97,7 +97,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Root<Environment>, cx: &mut Arena) {
+fn repl(env: &mut Root<Environment>, cx: &mut Context) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -132,7 +132,7 @@ fn repl(env: &mut Root<Environment>, cx: &mut Arena) {
     }
 }
 
-fn load(env: &mut Root<Environment>, cx: &mut Arena) {
+fn load(env: &mut Root<Environment>, cx: &mut Context) {
     crate::core::env::init_variables(cx, env.deref_mut(cx));
     crate::data::defalias(intern("not"), (&*crate::core::env::sym::NULL).into(), None)
         .expect("null should be defined");
@@ -147,8 +147,8 @@ fn load(env: &mut Root<Environment>, cx: &mut Arena) {
 
 fn main() {
     let roots = &RootSet::default();
-    let arena = &mut Arena::new(roots);
-    root!(env, Environment::default(), arena);
+    let cx = &mut Context::new(roots);
+    root!(env, Environment::default(), cx);
     let mut arg_load = false;
     let mut arg_repl = false;
 
@@ -165,10 +165,10 @@ fn main() {
     }
 
     if arg_load {
-        load(env, arena);
+        load(env, cx);
     }
 
     if arg_repl {
-        repl(env, arena);
+        repl(env, cx);
     }
 }

@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::sync::Mutex;
 
 use crate::core::{
-    arena::{Arena, Root},
     cons::Cons,
     env::{Environment, Symbol, INTERNED_SYMBOLS},
+    gc::{Context, Root},
     object::{Function, Gc, GcObj, Object},
 };
 use crate::hashmap::HashSet;
@@ -48,7 +48,7 @@ pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: GcObj<'ob>,
     env: &mut Root<Environment>,
-    cx: &Arena,
+    cx: &Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_var(place, newlet);
     newlet
@@ -60,7 +60,7 @@ pub(crate) fn put<'ob>(
     propname: Symbol,
     value: GcObj<'ob>,
     env: &mut Root<Environment>,
-    cx: &Arena,
+    cx: &Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_prop(symbol, propname, value);
     value
@@ -71,7 +71,7 @@ pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
     env: &Root<Environment>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> GcObj<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
@@ -93,7 +93,7 @@ pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
         None => GcObj::NIL,
@@ -104,7 +104,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Arena) -> GcObj<'ob>
 pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
     env: &Root<Environment>,
-    cx: &'ob Arena,
+    cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
     env.vars.get(&symbol).map(|x| x.bind(cx))
 }
@@ -210,7 +210,7 @@ pub(crate) fn defvar<'ob>(
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
     env: &mut Root<Environment>,
-    cx: &Arena,
+    cx: &Context,
 ) -> GcObj<'ob> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env, cx)
@@ -239,7 +239,7 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
     match object.get() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),

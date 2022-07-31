@@ -21,10 +21,10 @@ macro_rules! defsubr {
             #[allow(unused_qualifications)]
             #[doc(hidden)]
             pub(crate) fn __init_vars<'ob>(
-                _arena: &'ob crate::core::arena::Arena,
-                _env: &mut crate::core::arena::Rt<crate::core::env::Environment>
+                _cx: &'ob crate::core::gc::Context,
+                _env: &mut crate::core::gc::Rt<crate::core::env::Environment>
             ) {
-                $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_arena));)+)?
+                $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_cx));)+)?
             }
         }
 
@@ -37,7 +37,7 @@ macro_rules! defsubr {
 }
 
 macro_rules! defvar {
-    (@internal $sym:ident, $name:literal, $arena:ident, $value:expr) => (
+    (@internal $sym:ident, $name:literal, $cx:ident, $value:expr) => (
         paste::paste!{
             static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
                 $name,
@@ -49,14 +49,14 @@ macro_rules! defvar {
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            fn [<__INIT_ $sym>]<'ob> ($arena: &'ob crate::core::arena::Arena) -> crate::core::object::GcObj<'ob> {
+            fn [<__INIT_ $sym>]<'ob> ($cx: &'ob crate::core::gc::Context) -> crate::core::object::GcObj<'ob> {
                 $value
             }
         }
     );
     ($sym:ident, $name:literal) => (defvar!(@internal $sym, $name, _a, crate::core::object::Gc::NIL););
-    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, $name, arena, crate::list!($($values),+; arena)););
-    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, arena, arena.add($value)););
+    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, $name, cx, crate::list!($($values),+; cx)););
+    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
 }
 
 macro_rules! defsym {
@@ -125,10 +125,10 @@ macro_rules! define_unbox {
 
 #[cfg(test)]
 macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $arena:expr) => {vec![$(crate::core::object::IntoObject::into_obj($x, $arena).into()),+]};
+    ($($x:expr),+ $(,)?; $cx:expr) => {vec![$(crate::core::object::IntoObject::into_obj($x, $cx).into()),+]};
 }
 
 #[cfg(test)]
 macro_rules! into_objects {
-    ($($x:expr),+ $(,)?; $arena:expr) => {($(crate::core::object::IntoObject::into_obj($x, $arena).into()),+)};
+    ($($x:expr),+ $(,)?; $cx:expr) => {($(crate::core::object::IntoObject::into_obj($x, $cx).into()),+)};
 }

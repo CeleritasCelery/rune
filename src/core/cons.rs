@@ -1,4 +1,4 @@
-use super::arena::{Arena, Block};
+use super::gc::{Block, Context};
 use super::object::{Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
@@ -187,7 +187,7 @@ fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
 }
 
 #[defun]
-fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Arena) -> GcObj<'ob> {
+fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
     crate::cons!(car, cdr; cx)
 }
 
@@ -195,30 +195,30 @@ defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);
 
 #[macro_export]
 macro_rules! cons {
-    ($car:expr, $cdr:expr; $arena:expr) => {
-        $arena.add::<_, _, $crate::core::object::Object>(
+    ($car:expr, $cdr:expr; $cx:expr) => {
+        $cx.add::<_, _, $crate::core::object::Object>(
             #[allow(unused_unsafe)]
             unsafe {
-                $crate::core::cons::Cons::new($arena.add($car), $arena.add($cdr))
+                $crate::core::cons::Cons::new($cx.add($car), $cx.add($cdr))
             },
         )
     };
-    ($car:expr; $arena:expr) => {
-        $arena.add::<_, _, $crate::core::object::Object>(unsafe {
-            $crate::core::cons::Cons::new($arena.add($car), $crate::core::object::GcObj::NIL)
+    ($car:expr; $cx:expr) => {
+        $cx.add::<_, _, $crate::core::object::Object>(unsafe {
+            $crate::core::cons::Cons::new($cx.add($car), $crate::core::object::GcObj::NIL)
         })
     };
 }
 
 #[macro_export]
 macro_rules! list {
-    ($x:expr; $arena:expr) => ($crate::cons!($x; $arena));
-    ($x:expr, $($y:expr),+ $(,)? ; $arena:expr) => ($crate::cons!($x, list!($($y),+ ; $arena) ; $arena));
+    ($x:expr; $cx:expr) => ($crate::cons!($x; $cx));
+    ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => ($crate::cons!($x, list!($($y),+ ; $cx) ; $cx));
 }
 
 #[cfg(test)]
 mod test {
-    use super::super::arena::RootSet;
+    use super::super::gc::RootSet;
     use super::*;
 
     fn as_cons(obj: GcObj) -> Option<&Cons> {
@@ -231,10 +231,10 @@ mod test {
     #[test]
     fn cons() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         // TODO: Need to find a way to solve this
         // assert_eq!(16, size_of::<Cons>());
-        let x = cons!("start", cons!(7, cons!(5, 9; arena); arena); arena);
+        let x = cons!("start", cons!(7, cons!(5, 9; cx); cx); cx);
         assert!(matches!(x.get(), Object::Cons(_)));
         let cons1 = match x.get() {
             Object::Cons(x) => x,
@@ -242,10 +242,10 @@ mod test {
         };
 
         let start_str = "start".to_owned();
-        assert_eq!(arena.add(start_str), cons1.car());
-        cons1.set_car(arena.add("start2")).unwrap();
+        assert_eq!(cx.add(start_str), cons1.car());
+        cons1.set_car(cx.add("start2")).unwrap();
         let start2_str = "start2".to_owned();
-        assert_eq!(arena.add(start2_str), cons1.car());
+        assert_eq!(cx.add(start2_str), cons1.car());
 
         let cons2 = as_cons(cons1.cdr()).expect("expected cons");
 
@@ -258,11 +258,11 @@ mod test {
         let cmp2: GcObj = 9.into();
         assert_eq!(cmp2, cons3.cdr());
 
-        let lhs = cons!(5, "foo"; arena);
-        assert_eq!(lhs, cons!(5, "foo"; arena));
-        assert_ne!(lhs, cons!(5, "bar"; arena));
-        let lhs = list![5, 1, 1.5, "foo"; arena];
-        assert_eq!(lhs, list![5, 1, 1.5, "foo"; arena]);
-        assert_ne!(lhs, list![5, 1, 1.5, "bar"; arena]);
+        let lhs = cons!(5, "foo"; cx);
+        assert_eq!(lhs, cons!(5, "foo"; cx));
+        assert_ne!(lhs, cons!(5, "bar"; cx));
+        let lhs = list![5, 1, 1.5, "foo"; cx];
+        assert_eq!(lhs, list![5, 1, 1.5, "foo"; cx]);
+        assert_ne!(lhs, list![5, 1, 1.5, "bar"; cx]);
     }
 }

@@ -22,7 +22,7 @@ impl<T: Trace> Trace for Option<T> {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::arena::{Arena, RootSet};
+    use super::super::super::gc::{Context, RootSet};
     use super::*;
     use crate::root;
 
@@ -36,7 +36,7 @@ mod test {
     #[test]
     fn test_trace_root() {
         let roots = &RootSet::default();
-        let gc = &mut Arena::new(roots);
+        let gc = &mut Context::new(roots);
         let foo = Foo(7);
         assert_eq!(roots.roots.borrow().len(), 0);
         {

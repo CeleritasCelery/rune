@@ -11,14 +11,14 @@ mod trace;
 pub(crate) use root::*;
 pub(crate) use trace::*;
 
-/// A global store of all gc roots. This struct should be passed to the [Arena]
+/// A global store of all gc roots. This struct should be passed to the [Context]
 /// when it is created.
 #[derive(Default, Debug)]
 pub(crate) struct RootSet {
     roots: RefCell<Vec<*const dyn Trace>>,
 }
 
-/// A block of allocations. This type should be owned by [Arena] and not used
+/// A block of allocations. This type should be owned by [Context] and not used
 /// directly.
 #[derive(Debug)]
 pub(crate) struct Block<const CONST: bool> {
@@ -26,20 +26,20 @@ pub(crate) struct Block<const CONST: bool> {
 }
 
 /// Owns all allocations and creates objects. All objects have
-/// a lifetime tied to the borrow of their `Arena`. When the
-/// `Arena` goes out of scope, no objects should be accessible.
+/// a lifetime tied to the borrow of their `Context`. When the
+/// `Context` goes out of scope, no objects should be accessible.
 #[derive(Debug)]
-pub(crate) struct Arena<'rt> {
+pub(crate) struct Context<'rt> {
     pub(crate) block: Block<false>,
     root_set: &'rt RootSet,
     prev_obj_count: usize,
 }
 
-impl<'rt> Drop for Arena<'rt> {
+impl<'rt> Drop for Context<'rt> {
     fn drop(&mut self) {
         self.garbage_collect(true);
         if !self.block.objects.borrow().is_empty() {
-            eprintln!("Error: Arena was dropped while still holding data");
+            eprintln!("Error: Context was dropped while still holding data");
         }
     }
 }
@@ -254,7 +254,7 @@ impl<const CONST: bool> Block<CONST> {
         SINGLETON_CHECK.with(|x| {
             assert!(
                 !x.get(),
-                "There was already and active arena when this arena was created"
+                "There was already and active context when this context was created"
             );
             x.set(true);
         });
@@ -277,9 +277,9 @@ impl<const CONST: bool> Block<CONST> {
     }
 }
 
-impl<'ob, 'rt> Arena<'rt> {
+impl<'ob, 'rt> Context<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        Arena {
+        Context {
             block: Block::new_local(),
             root_set: roots,
             prev_obj_count: 0,
@@ -344,7 +344,7 @@ impl<'ob, 'rt> Arena<'rt> {
     }
 }
 
-impl<'rt> Deref for Arena<'rt> {
+impl<'rt> Deref for Context<'rt> {
     type Target = Block<false>;
 
     fn deref(&self) -> &Self::Target {
@@ -352,7 +352,7 @@ impl<'rt> Deref for Arena<'rt> {
     }
 }
 
-impl<'rt> AsRef<Block<false>> for Arena<'rt> {
+impl<'rt> AsRef<Block<false>> for Context<'rt> {
     fn as_ref(&self) -> &Block<false> {
         &self.block
     }
@@ -363,27 +363,27 @@ impl<const CONST: bool> Drop for Block<CONST> {
     // contract.
     fn drop(&mut self) {
         SINGLETON_CHECK.with(|s| {
-            assert!(s.get(), "Arena singleton check was overwritten");
+            assert!(s.get(), "Context singleton check was overwritten");
             s.set(false);
         });
     }
 }
 
-/// Rebinds an object so that it is bound to an immutable borrow of [Arena]
+/// Rebinds an object so that it is bound to an immutable borrow of [Context]
 /// instead of a mutable borrow. This can release the mutable borrow and allow
-/// arena to be used for other things.
+/// Context to be used for other things.
 ///
 /// # Examples
 ///
 /// ```
-/// let object = func_taking_mut_arena(&mut Arena);
-/// rebind!(object, arena);
+/// let object = func_taking_mut_context(&mut cx);
+/// rebind!(object, cx);
 /// ```
 #[macro_export]
 macro_rules! rebind {
-    ($item:ident, $arena:ident) => {
+    ($item:ident, $cx:ident) => {
         let bits = $item.into_raw();
-        let $item = unsafe { $arena.rebind_raw_ptr(bits) };
+        let $item = unsafe { $cx.rebind_raw_ptr(bits) };
     };
 }
 
@@ -392,29 +392,29 @@ mod test {
     use crate::root;
 
     use super::*;
-    fn bind_to_mut<'ob>(cx: &'ob mut Arena) -> GcObj<'ob> {
+    fn bind_to_mut<'ob>(cx: &'ob mut Context) -> GcObj<'ob> {
         cx.add("invariant")
     }
 
     #[test]
     fn test_reborrow() {
         let roots = &RootSet::default();
-        let mut arena = Arena::new(roots);
-        let obj = bind_to_mut(&mut arena);
-        rebind!(obj, arena);
-        let _ = "foo".into_obj(&arena);
+        let mut cx = Context::new(roots);
+        let obj = bind_to_mut(&mut cx);
+        rebind!(obj, cx);
+        let _ = "foo".into_obj(&cx);
         assert_eq!(obj, "invariant");
     }
 
     #[test]
     fn garbage_collect() {
         let roots = &RootSet::default();
-        let arena = &mut Arena::new(roots);
+        let cx = &mut Context::new(roots);
         let vec1: Vec<GcObj> = Vec::new();
-        root!(vec, vec1, arena);
-        arena.garbage_collect(false);
-        let cons = list!["foo", 1, false, "end"; arena];
-        vec.deref_mut(arena).push(cons);
-        arena.garbage_collect(false);
+        root!(vec, vec1, cx);
+        cx.garbage_collect(false);
+        let cons = list!["foo", 1, false, "end"; cx];
+        vec.deref_mut(cx).push(cons);
+        cx.garbage_collect(false);
     }
 }

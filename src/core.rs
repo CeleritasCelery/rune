@@ -4,4 +4,4 @@ pub(crate) mod env;
 pub(crate) mod error;
 pub(crate) mod object;
 #[macro_use]
-pub(crate) mod arena;
+pub(crate) mod gc;

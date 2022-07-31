@@ -3,8 +3,8 @@ use std::path::Path;
 use fn_macros::defun;
 
 use crate::core::{
-    arena::{Arena, Root},
     env::{sym, Environment},
+    gc::{Context, Root},
     object::Object,
 };
 
@@ -13,7 +13,7 @@ pub(crate) fn expand_file_name(
     name: &str,
     default_directory: Option<&str>,
     env: &Root<Environment>,
-    cx: &Arena,
+    cx: &Context,
 ) -> String {
     // TODO: this needs to be tested to ensure it has the same behavior as GNU
     // Emacs. It doesn't do any normalization for one thing.

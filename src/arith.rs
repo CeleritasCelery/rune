@@ -22,7 +22,7 @@ impl<'ob> Gc<Number<'ob>> {
 impl<'ob> IntoObject<'ob> for NumberValue {
     type Out = Number<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob crate::core::arena::Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &'ob crate::core::gc::Block<C>) -> Gc<Self::Out> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => block.add(x),
@@ -258,15 +258,15 @@ defsubr!(
 mod test {
     use super::*;
     use crate::core::{
-        arena::{Arena, RootSet},
+        gc::{Context, RootSet},
         object::IntoObject,
     };
 
     #[test]
     fn test_add() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; arena);
+        let cx = &Context::new(roots);
+        let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; cx);
 
         assert_eq!(add(&[]), NumberValue::Int(0));
         assert_eq!(add(&[int7, int13]), NumberValue::Int(20));
@@ -276,8 +276,8 @@ mod test {
     #[test]
     fn test_sub() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let int13 = into_objects!(13; arena);
+        let cx = &Context::new(roots);
+        let int13 = into_objects!(13; cx);
 
         assert_eq!(sub(None, &[]), NumberValue::Int(0));
         assert_eq!(sub(Some(7.into()), &[]), NumberValue::Int(-7));
@@ -287,8 +287,8 @@ mod test {
     #[test]
     fn test_mul() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let args = vec_into_object![7, 13; arena];
+        let cx = &Context::new(roots);
+        let args = vec_into_object![7, 13; cx];
 
         assert_eq!(mul(&[]), NumberValue::Int(1));
         assert_eq!(mul(&args), NumberValue::Int(91));
@@ -297,25 +297,22 @@ mod test {
     #[test]
     fn test_div() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
 
-        assert_eq!(
-            div(12.0.into_obj(arena).into(), &[]),
-            NumberValue::Float(12.0)
-        );
+        assert_eq!(div(12.0.into_obj(cx).into(), &[]), NumberValue::Float(12.0));
         assert_eq!(div(12.into(), &[5.into(), 2.into()]), NumberValue::Int(1));
     }
 
     #[test]
     fn test_eq() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
+        let cx = &Context::new(roots);
         let int1 = 1.into();
-        let float1: Gc<Number> = arena.add(1.0);
-        let float1_1 = arena.add(1.1);
+        let float1: Gc<Number> = cx.add(1.0);
+        let float1_1 = cx.add(1.1);
 
         assert!(num_eq(int1, &[]));
-        assert!(num_eq(int1, &[arena.add(1.0)]));
+        assert!(num_eq(int1, &[cx.add(1.0)]));
         assert!(num_eq(float1, &[1.into()]));
         assert!(!num_eq(float1, &[1.into(), 1.into(), float1_1]));
     }
@@ -323,9 +320,9 @@ mod test {
     #[test]
     fn test_cmp() {
         let roots = &RootSet::default();
-        let arena = &Arena::new(roots);
-        let (float1_1, float2_1) = into_objects![1.1, 2.1; arena];
-        let float1 = 1.0.into_obj(arena).into();
+        let cx = &Context::new(roots);
+        let (float1_1, float2_1) = into_objects![1.1, 2.1; cx];
+        let float1 = 1.0.into_obj(cx).into();
 
         assert!(less_than(1.into(), &[]));
         assert!(less_than(1.into(), &[float1_1]));
