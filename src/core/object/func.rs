@@ -122,17 +122,17 @@ impl SubrFn {
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<crate::core::env::Environment>,
-        arena: &'gc mut Arena,
+        cx: &'gc mut Arena,
     ) -> Result<GcObj<'gc>> {
         {
-            let args = args.deref_mut(arena);
+            let args = args.deref_mut(cx);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
             for _ in 0..fill_args {
                 args.push(GcObj::NIL);
             }
         }
-        (self.subr)(args, env, arena)
+        (self.subr)(args, env, cx)
     }
 }
 

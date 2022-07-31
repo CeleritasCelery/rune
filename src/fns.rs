@@ -15,10 +15,10 @@ use streaming_iterator::StreamingIterator;
 pub(crate) fn slice_into_list<'ob>(
     slice: &[GcObj<'ob>],
     tail: Option<GcObj<'ob>>,
-    arena: &'ob Arena,
+    cx: &'ob Arena,
 ) -> GcObj<'ob> {
     let from_end = slice.iter().rev();
-    from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; arena))
+    from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; cx))
 }
 
 #[defun]
@@ -31,25 +31,25 @@ pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
     env: &mut Root<Environment>,
-    gc: &'ob mut Arena,
+    cx: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    match sequence.bind(gc).get() {
+    match sequence.bind(cx).get() {
         List::Nil => Ok(GcObj::NIL),
         List::Cons(cons) => {
-            root!(outputs, Vec::new(), gc);
-            root!(call_arg, Vec::new(), gc);
-            element_iter!(iter, cons, gc);
+            root!(outputs, Vec::new(), cx);
+            root!(call_arg, Vec::new(), cx);
+            element_iter!(iter, cons, cx);
             while let Some(x) = iter.next() {
-                let obj = x.bind(gc);
-                call_arg.deref_mut(gc).push(obj);
-                let output = function.call(call_arg, env, gc, None)?;
-                rebind!(output, gc);
-                outputs.deref_mut(gc).push(output);
-                call_arg.deref_mut(gc).clear();
+                let obj = x.bind(cx);
+                call_arg.deref_mut(cx).push(obj);
+                let output = function.call(call_arg, env, cx, None)?;
+                rebind!(output, cx);
+                outputs.deref_mut(cx).push(output);
+                call_arg.deref_mut(cx).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.as_slice().as_ref(gc);
-            Ok(slice_into_list(slice, None, gc))
+            let slice = outputs.as_slice().as_ref(cx);
+            Ok(slice_into_list(slice, None, cx))
         }
     }
 }
@@ -59,19 +59,19 @@ pub(crate) fn mapc<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
     env: &mut Root<Environment>,
-    gc: &'ob mut Arena,
+    cx: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    match sequence.bind(gc).get() {
+    match sequence.bind(cx).get() {
         List::Nil => Ok(GcObj::NIL),
         List::Cons(cons) => {
-            root!(call_arg, Vec::new(), gc);
-            element_iter!(elements, cons, gc);
+            root!(call_arg, Vec::new(), cx);
+            element_iter!(elements, cons, cx);
             while let Some(elem) = elements.next() {
-                call_arg.deref_mut(gc).push(elem.bind(gc));
-                function.call(call_arg, env, gc, None)?;
-                call_arg.deref_mut(gc).clear();
+                call_arg.deref_mut(cx).push(elem.bind(cx));
+                function.call(call_arg, env, cx, None)?;
+                call_arg.deref_mut(cx).clear();
             }
-            Ok(sequence.bind(gc).into())
+            Ok(sequence.bind(cx).into())
         }
     }
 }
@@ -88,10 +88,10 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 }
 
 #[defun]
-pub(crate) fn reverse<'ob>(seq: Gc<List>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
+pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Arena) -> Result<GcObj<'ob>> {
     let mut tail = GcObj::NIL;
     for elem in seq.elements() {
-        tail = cons!(elem?, tail; arena);
+        tail = cons!(elem?, tail; cx);
     }
     Ok(tail)
 }
@@ -127,14 +127,14 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 pub(crate) fn append<'ob>(
     append: GcObj<'ob>,
     sequences: &[GcObj<'ob>],
-    arena: &'ob Arena,
+    cx: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
     let mut list = Vec::new();
     join(&mut list, append.try_into()?)?;
     for seq in sequences {
         join(&mut list, (*seq).try_into()?)?;
     }
-    Ok(slice_into_list(&list, None, arena))
+    Ok(slice_into_list(&list, None, cx))
 }
 
 #[defun]
@@ -251,18 +251,18 @@ fn require<'ob>(
     filename: Option<&Rt<Gc<&String>>>,
     noerror: Option<()>,
     env: &mut Root<Environment>,
-    arena: &'ob mut Arena,
+    cx: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {
         return Ok(feature.into());
     }
     let file = match filename {
         None => feature.name,
-        Some(file) => file.bind(arena).get(),
+        Some(file) => file.bind(cx).get(),
     };
-    let file: GcObj = arena.add(file);
-    root!(file, arena);
-    match crate::lread::load(file, None, None, arena, env) {
+    let file: GcObj = cx.add(file);
+    root!(file, cx);
+    match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.into()),
         Err(e) => match noerror {
             Some(()) => Ok(Gc::NIL),
@@ -327,7 +327,7 @@ defsym!(KW_TEST, ":test");
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
-    gc: &'ob Arena,
+    cx: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
     use crate::core::env::sym;
     if let Some(i) = keyword_args
@@ -346,7 +346,7 @@ pub(crate) fn make_hash_table<'ob>(
     }
     // TODO, the rest of the keywords need to be supported here
     let map: HashTable = HashTable::with_hasher(std::hash::BuildHasherDefault::default());
-    Ok(gc.add(map))
+    Ok(cx.add(map))
 }
 
 #[defun]
@@ -377,11 +377,9 @@ pub(crate) fn gethash<'ob>(
 }
 
 #[defun]
-fn copy_sequence<'ob>(arg: GcObj<'ob>, arena: &'ob Arena) -> Result<GcObj<'ob>> {
+fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Arena) -> Result<GcObj<'ob>> {
     match arg.get() {
-        Object::String(_) | Object::Vec(_) | Object::Nil | Object::Cons(_) => {
-            Ok(arg.clone_in(arena))
-        }
+        Object::String(_) | Object::Vec(_) | Object::Nil | Object::Cons(_) => Ok(arg.clone_in(cx)),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }

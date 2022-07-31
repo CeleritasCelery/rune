@@ -392,8 +392,8 @@ mod test {
     use crate::root;
 
     use super::*;
-    fn bind_to_mut<'ob>(arena: &'ob mut Arena) -> GcObj<'ob> {
-        arena.add("invariant")
+    fn bind_to_mut<'ob>(cx: &'ob mut Arena) -> GcObj<'ob> {
+        cx.add("invariant")
     }
 
     #[test]

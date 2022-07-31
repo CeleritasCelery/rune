@@ -40,30 +40,30 @@ pub(crate) fn read_from_string<'ob>(
     string: &str,
     start: Option<i64>,
     end: Option<i64>,
-    arena: &'ob Arena,
+    cx: &'ob Arena,
 ) -> Result<GcObj<'ob>> {
     let len = string.len();
     let start = check_lower_bounds(start, len)?;
     let end = check_upper_bounds(end, len)?;
 
-    let (obj, new_pos) = match reader::read(&string[start..end], arena) {
+    let (obj, new_pos) = match reader::read(&string[start..end], cx) {
         Ok((obj, pos)) => (obj, pos),
         Err(mut e) => {
             e.update_pos(start);
             bail!(e);
         }
     };
-    Ok(cons!(obj, new_pos as i64; arena))
+    Ok(cons!(obj, new_pos as i64; cx))
 }
 
 pub(crate) fn load_internal<'ob>(
     contents: &str,
-    arena: &'ob mut Arena,
+    cx: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
-        let (obj, new_pos) = match reader::read(&contents[pos..], arena) {
+        let (obj, new_pos) = match reader::read(&contents[pos..], cx) {
             Ok((obj, pos)) => (obj, pos),
             Err(reader::Error::EmptyStream) => return Ok(true),
             Err(mut e) => {
@@ -76,8 +76,8 @@ pub(crate) fn load_internal<'ob>(
             println!("-----READ START-----\n {content}");
             println!("-----READ END-----");
         }
-        root!(obj, arena);
-        interpreter::eval(obj, None, env, arena)?;
+        root!(obj, cx);
+        interpreter::eval(obj, None, env, cx)?;
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
@@ -93,10 +93,10 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     }
 }
 
-fn find_file_in_load_path(file: &str, arena: &Arena, env: &Root<Environment>) -> Result<PathBuf> {
+fn find_file_in_load_path(file: &str, cx: &Arena, env: &Root<Environment>) -> Result<PathBuf> {
     let load_path = env.vars.get(&*sym::LOAD_PATH).unwrap();
     let paths = load_path
-        .bind(arena)
+        .bind(cx)
         .as_list()
         .context("`load-path' was not a list")?;
     let mut final_file = None;
@@ -125,17 +125,17 @@ pub(crate) fn load<'ob>(
     file: &Rt<GcObj>,
     noerror: Option<()>,
     nomessage: Option<()>,
-    arena: &'ob mut Arena,
+    cx: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<bool> {
-    let file = match file.bind(arena).get() {
+    let file = match file.bind(cx).get() {
         Object::String(x) => x,
         x => bail!(TypeError::new(Type::Symbol, x)),
     };
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {
-        match find_file_in_load_path(file, arena, env) {
+        match find_file_in_load_path(file, cx, env) {
             Ok(x) => x,
             Err(e) => {
                 if noerror.is_some() {
@@ -149,28 +149,28 @@ pub(crate) fn load<'ob>(
     if nomessage.is_none() {
         println!("Loading {file}...");
     }
-    let new_load_file = arena.add(final_file.to_string_lossy().to_string());
-    let prev_load_file = match env.deref_mut(arena).vars.get_mut(&*sym::LOAD_FILE_NAME) {
+    let new_load_file = cx.add(final_file.to_string_lossy().to_string());
+    let prev_load_file = match env.deref_mut(cx).vars.get_mut(&*sym::LOAD_FILE_NAME) {
         Some(val) => {
-            let prev = val.bind(arena);
+            let prev = val.bind(cx);
             val.set(new_load_file);
             prev
         }
         None => GcObj::NIL,
     };
-    root!(prev_load_file, arena);
+    root!(prev_load_file, cx);
     let result = match fs::read_to_string(&final_file)
         .with_context(|| format!("Couldn't open file {:?}", final_file.as_os_str()))
     {
-        Ok(content) => load_internal(&content, arena, env),
+        Ok(content) => load_internal(&content, cx, env),
         Err(e) => match noerror {
             Some(()) => Ok(false),
             None => Err(e),
         },
     };
-    env.deref_mut(arena)
+    env.deref_mut(cx)
         .vars
-        .insert(&sym::LOAD_FILE_NAME, prev_load_file.bind(arena));
+        .insert(&sym::LOAD_FILE_NAME, prev_load_file.bind(cx));
     result
 }
 

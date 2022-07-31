@@ -176,15 +176,15 @@ impl GlobalSymbol {
         }
     }
 
-    pub(crate) fn func<'a>(&self, _gc: &'a Arena) -> Option<Gc<Function<'a>>> {
+    pub(crate) fn func<'a>(&self, _cx: &'a Arena) -> Option<Gc<Function<'a>>> {
         self.get().map(|x| unsafe { x.with_lifetime() })
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn follow_indirect<'ob>(&self, gc: &'ob Arena) -> Option<Gc<Function<'ob>>> {
-        let func = self.func(gc)?;
+    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Arena) -> Option<Gc<Function<'ob>>> {
+        let func = self.func(cx)?;
         match func.get() {
-            Function::Symbol(sym) => sym.follow_indirect(gc),
+            Function::Symbol(sym) => sym.follow_indirect(cx),
             _ => Some(func),
         }
     }
@@ -325,10 +325,10 @@ macro_rules! create_symbolmap {
 
         #[allow(unused_qualifications)]
         pub(crate) fn init_variables<'ob>(
-            arena: &'ob crate::core::arena::Arena,
+            cx: &'ob crate::core::arena::Arena,
             env: &mut crate::core::arena::Rt<crate::core::env::Environment>
         ) {
-            $($($subr::)*__init_vars(arena, env);)*
+            $($($subr::)*__init_vars(cx, env);)*
         }
 
         lazy_static! {

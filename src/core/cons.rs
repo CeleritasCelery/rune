@@ -187,8 +187,8 @@ fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
 }
 
 #[defun]
-fn cons<'ob>(car: GcObj, cdr: GcObj, arena: &'ob Arena) -> GcObj<'ob> {
-    crate::cons!(car, cdr; arena)
+fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Arena) -> GcObj<'ob> {
+    crate::cons!(car, cdr; cx)
 }
 
 defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);

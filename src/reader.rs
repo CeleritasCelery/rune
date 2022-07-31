@@ -281,15 +281,15 @@ fn intern_symbol(symbol: &str) -> Symbol {
 
 /// Parse a symbol from a string. This will either by a true symbol or a number
 /// literal.
-fn parse_symbol<'a>(slice: &str, arena: &'a Arena) -> GcObj<'a> {
+fn parse_symbol<'a>(slice: &str, cx: &'a Arena) -> GcObj<'a> {
     match slice.parse::<i64>() {
-        Ok(num) => arena.add(num),
+        Ok(num) => cx.add(num),
         Err(_) => match slice.parse::<f64>() {
-            Ok(num) => arena.add(num),
+            Ok(num) => cx.add(num),
             Err(_) => match slice {
                 "nil" => GcObj::NIL,
                 "t" => GcObj::TRUE,
-                _ => arena.add(intern_symbol(slice)),
+                _ => cx.add(intern_symbol(slice)),
             },
         },
     }
@@ -345,7 +345,7 @@ struct Reader<'a, 'ob> {
     /// The iterator over the tokens in the current slice.
     tokens: Tokenizer<'a>,
     /// New objects are allocated in the arena.
-    arena: &'ob Arena<'ob>,
+    cx: &'ob Arena<'ob>,
 }
 
 impl<'a, 'ob> Reader<'a, 'ob> {
@@ -373,15 +373,13 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
-                Token::CloseParen(_) => {
-                    return Ok(fns::slice_into_list(&objects, None, self.arena))
-                }
+                Token::CloseParen(_) => return Ok(fns::slice_into_list(&objects, None, self.cx)),
                 Token::Ident(".") => {
                     let cdr = self.read_cdr(delim)?;
                     if cdr.is_none() {
-                        objects.push(parse_symbol(".", self.arena));
+                        objects.push(parse_symbol(".", self.cx));
                     }
-                    return Ok(fns::slice_into_list(&objects, cdr, self.arena));
+                    return Ok(fns::slice_into_list(&objects, cdr, self.cx));
                 }
                 tok => objects.push(self.read_sexp(tok)?),
             }
@@ -393,7 +391,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
-                Token::CloseBracket(_) => return Ok(self.arena.add(objects)),
+                Token::CloseBracket(_) => return Ok(self.cx.add(objects)),
                 tok => objects.push(self.read_sexp(tok)?),
             }
         }
@@ -406,7 +404,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
-        Ok(list!(symbol, obj; self.arena))
+        Ok(list!(symbol, obj; self.cx))
     }
 
     /// read a quoted character (e.g. `?a`)
@@ -423,7 +421,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_radix(&mut self, pos: usize, radix: u8) -> Result<GcObj<'ob>> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => match usize::from_str_radix(ident, radix.into()) {
-                Ok(x) => Ok(self.arena.add(x as i64)),
+                Ok(x) => Ok(self.cx.add(x as i64)),
                 Err(_) => Err(Error::ParseInt(radix, pos)),
             },
             _ => Err(Error::ParseInt(radix, pos)),
@@ -437,11 +435,11 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
                     let list = self.read_list(i)?;
-                    Ok(list!(sym::FUNCTION, list; self.arena))
+                    Ok(list!(sym::FUNCTION, list; self.cx))
                 }
                 Some(token) => {
                     let obj = self.read_sexp(token)?;
-                    Ok(list!(sym::FUNCTION, obj; self.arena))
+                    Ok(list!(sym::FUNCTION, obj; self.cx))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
             },
@@ -465,8 +463,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Backquote(i) => self.quote_item(i, &sym::BACKQUOTE),
             Token::Sharp(i) => self.read_sharp(i),
             Token::QuestionMark(i) => self.read_char_quote(i),
-            Token::Ident(x) => Ok(parse_symbol(x, self.arena)),
-            Token::String(x) => Ok(self.arena.add(unescape_string(x))),
+            Token::Ident(x) => Ok(parse_symbol(x, self.cx)),
+            Token::String(x) => Ok(self.cx.add(unescape_string(x))),
             Token::Error(e) => Err(e),
         }
     }
@@ -474,10 +472,10 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
-pub(crate) fn read<'a, 'ob>(slice: &'a str, arena: &'ob Arena) -> Result<(GcObj<'ob>, usize)> {
+pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Arena) -> Result<(GcObj<'ob>, usize)> {
     let mut reader = Reader {
         tokens: Tokenizer::new(slice),
-        arena,
+        cx,
     };
     match reader.tokens.next() {
         Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
@@ -642,8 +640,8 @@ baz""#,
         check_reader!(vec_into![1, 2, 3], "[1 2 3]", arena);
     }
 
-    fn assert_error(input: &str, error: Error, arena: &Arena) {
-        let result = read(input, arena).err().unwrap();
+    fn assert_error(input: &str, error: Error, cx: &Arena) {
+        let result = read(input, cx).err().unwrap();
         assert_eq!(result, error);
     }
 

@@ -87,11 +87,11 @@ impl Trace for Symbol {
     }
 }
 
-/// Represents a Root object T. The purpose of this type is we cannot have
+/// Represents a Rooted object T. The purpose of this type is we cannot have
 /// mutable references to the inner data, because the garbage collector will
-/// need to trace it. This type will only give us a [`Rt`] (rooted mutable reference) when we
-/// are also holding a reference to the Arena, meaning that garbage collection
-/// cannot happen.
+/// need to trace it. This type will only give us a mut [`Rt`] (rooted mutable
+/// reference) when we are also holding a reference to the Arena, meaning that
+/// garbage collection cannot happen.
 pub(crate) struct Root<'rt, 'a, T> {
     data: *mut T,
     root_set: &'rt RootSet,
@@ -115,7 +115,7 @@ impl<'rt, T> Root<'rt, '_, T> {
         }
     }
 
-    pub(crate) fn deref_mut<'a>(&'a mut self, _gc: &'a Arena) -> &'a mut Rt<T> {
+    pub(crate) fn deref_mut<'a>(&'a mut self, _cx: &'a Arena) -> &'a mut Rt<T> {
         unsafe { self.deref_mut_unchecked() }
     }
 

@@ -4,10 +4,10 @@ use anyhow::{ensure, Result};
 use fn_macros::defun;
 
 #[defun]
-pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], arena: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Arena) -> GcObj<'ob> {
     let mut head = GcObj::NIL;
     for object in objects.iter().rev() {
-        head = cons!(*object, head; arena);
+        head = cons!(*object, head; cx);
     }
     head
 }

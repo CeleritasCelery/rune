@@ -97,7 +97,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
+fn repl(env: &mut Root<Environment>, cx: &mut Arena) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -114,7 +114,7 @@ fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
         if !parens_closed(&buffer) {
             continue;
         }
-        let (obj, _) = match reader::read(&buffer, arena) {
+        let (obj, _) = match reader::read(&buffer, cx) {
             Ok(obj) => obj,
             Err(e) => {
                 println!("Error: {e}");
@@ -123,8 +123,8 @@ fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
             }
         };
 
-        root!(obj, arena);
-        match interpreter::eval(obj, None, env, arena) {
+        root!(obj, cx);
+        match interpreter::eval(obj, None, env, cx) {
             Ok(val) => println!("{val}"),
             Err(e) => println!("Error: {e}"),
         }
@@ -132,14 +132,14 @@ fn repl(env: &mut Root<Environment>, arena: &mut Arena) {
     }
 }
 
-fn load(env: &mut Root<Environment>, arena: &mut Arena) {
-    crate::core::env::init_variables(arena, env.deref_mut(arena));
+fn load(env: &mut Root<Environment>, cx: &mut Arena) {
+    crate::core::env::init_variables(cx, env.deref_mut(cx));
     crate::data::defalias(intern("not"), (&*crate::core::env::sym::NULL).into(), None)
         .expect("null should be defined");
 
     let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);
 
-    match crate::lread::load_internal(&buffer, arena, env) {
+    match crate::lread::load_internal(&buffer, cx, env) {
         Ok(val) => println!("{val}"),
         Err(e) => println!("Error: {e}"),
     }

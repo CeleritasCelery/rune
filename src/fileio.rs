@@ -13,7 +13,7 @@ pub(crate) fn expand_file_name(
     name: &str,
     default_directory: Option<&str>,
     env: &Root<Environment>,
-    gc: &Arena,
+    cx: &Arena,
 ) -> String {
     // TODO: this needs to be tested to ensure it has the same behavior as GNU
     // Emacs. It doesn't do any normalization for one thing.
@@ -24,7 +24,7 @@ pub(crate) fn expand_file_name(
         path.join(name).to_string_lossy().to_string()
     } else {
         let dir = env.vars.get(&*sym::DEFAULT_DIRECTORY).unwrap();
-        match dir.bind(gc).get() {
+        match dir.bind(cx).get() {
             Object::String(s) => {
                 let path = Path::new(s);
                 path.join(name).to_string_lossy().to_string()

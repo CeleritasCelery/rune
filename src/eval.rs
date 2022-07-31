@@ -20,23 +20,23 @@ pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
     env: &mut Root<Environment>,
-    arena: &'ob mut Arena,
+    cx: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
         0 => Vec::new(),
         len => {
             let end = len - 1;
             let last = &arguments[end];
-            let mut args: Vec<_> = arguments[..end].iter().map(|x| x.bind(arena)).collect();
-            for element in last.bind(arena).as_list()? {
-                let e = arena.bind(element?);
+            let mut args: Vec<_> = arguments[..end].iter().map(|x| x.bind(cx)).collect();
+            for element in last.bind(cx).as_list()? {
+                let e = cx.bind(element?);
                 args.push(e);
             }
             args
         }
     };
-    root!(args, args.into_root(), arena);
-    function.call(args, env, arena, None).map_err(Into::into)
+    root!(args, args.into_root(), cx);
+    function.call(args, env, cx, None).map_err(Into::into)
 }
 
 #[defun]
@@ -44,13 +44,11 @@ pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
     env: &mut Root<Environment>,
-    arena: &'ob mut Arena,
+    cx: &'ob mut Arena,
 ) -> Result<GcObj<'ob>> {
-    let arguments = unsafe { Rt::bind_slice(arguments, arena).to_vec().into_root() };
-    root!(arg_list, arguments, arena);
-    function
-        .call(arg_list, env, arena, None)
-        .map_err(Into::into)
+    let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
+    root!(arg_list, arguments, cx);
+    function.call(arg_list, env, cx, None).map_err(Into::into)
 }
 
 #[defun]
@@ -111,35 +109,35 @@ fn autoload<'ob>(function: GcObj<'ob>, file: GcObj) -> GcObj<'ob> {
 pub(crate) fn macroexpand<'ob>(
     form: &Rt<GcObj>,
     environment: Option<&Rt<GcObj>>,
-    gc: &'ob mut Arena,
+    cx: &'ob mut Arena,
     env: &mut Root<Environment>,
 ) -> Result<GcObj<'ob>> {
-    if let Object::Cons(form) = form.bind(gc).get() {
+    if let Object::Cons(form) = form.bind(cx).get() {
         if let Object::Symbol(name) = form.car().get() {
             // shadow the macro based on ENVIRONMENT
             let func: Option<Gc<Function>> = match environment {
-                Some(env) => match assq(name.into(), env.bind(gc).try_into()?).get() {
+                Some(env) => match assq(name.into(), env.bind(cx).try_into()?).get() {
                     Object::Cons(cons) => Some(cons.cdr().try_into()?),
-                    _ => get_macro_func(name, gc),
+                    _ => get_macro_func(name, cx),
                 },
-                _ => get_macro_func(name, gc),
+                _ => get_macro_func(name, cx),
             };
             if let Some(macro_func) = func {
                 let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
-                root!(args, macro_args.into_root(), gc);
-                root!(macro_func, gc);
-                let result = macro_func.call(args, env, gc, Some(name.name))?;
-                root!(result, gc);
+                root!(args, macro_args.into_root(), cx);
+                root!(macro_func, cx);
+                let result = macro_func.call(args, env, cx, Some(name.name))?;
+                root!(result, cx);
                 // recursively expand the macro's
-                return macroexpand(result, environment, gc, env);
+                return macroexpand(result, environment, cx, env);
             }
         }
     }
-    Ok(form.bind(gc))
+    Ok(form.bind(cx))
 }
 
-fn get_macro_func<'ob>(name: Symbol, gc: &'ob Arena) -> Option<Gc<Function<'ob>>> {
-    if let Some(callable) = name.follow_indirect(gc) {
+fn get_macro_func<'ob>(name: Symbol, cx: &'ob Arena) -> Option<Gc<Function<'ob>>> {
+    if let Some(callable) = name.follow_indirect(cx) {
         if let Function::Cons(cons) = callable.get() {
             return cons.try_as_macro().ok();
         }
@@ -159,9 +157,9 @@ fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
     value: GcObj,
     env: &'ob mut Root<Environment>,
-    gc: &'ob Arena,
+    cx: &'ob Arena,
 ) -> GcObj<'ob> {
-    env.deref_mut(gc).set_var(symbol, value);
+    env.deref_mut(cx).set_var(symbol, value);
     GcObj::NIL
 }
 
@@ -170,10 +168,10 @@ fn set_default<'ob>(
     symbol: Symbol,
     value: GcObj<'ob>,
     env: &'ob mut Root<Environment>,
-    gc: &'ob Arena,
+    cx: &'ob Arena,
 ) -> GcObj<'ob> {
     // TODO: implement buffer local variables
-    env.deref_mut(gc).set_var(symbol, value);
+    env.deref_mut(cx).set_var(symbol, value);
     value
 }
 

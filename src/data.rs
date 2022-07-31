@@ -48,9 +48,9 @@ pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: GcObj<'ob>,
     env: &mut Root<Environment>,
-    gc: &Arena,
+    cx: &Arena,
 ) -> GcObj<'ob> {
-    env.deref_mut(gc).set_var(place, newlet);
+    env.deref_mut(cx).set_var(place, newlet);
     newlet
 }
 
@@ -60,9 +60,9 @@ pub(crate) fn put<'ob>(
     propname: Symbol,
     value: GcObj<'ob>,
     env: &mut Root<Environment>,
-    gc: &Arena,
+    cx: &Arena,
 ) -> GcObj<'ob> {
-    env.deref_mut(gc).set_prop(symbol, propname, value);
+    env.deref_mut(cx).set_prop(symbol, propname, value);
     value
 }
 
@@ -71,11 +71,11 @@ pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
     env: &Root<Environment>,
-    arena: &'ob Arena,
+    cx: &'ob Arena,
 ) -> GcObj<'ob> {
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
-            Some(element) => arena.bind(element.1.bind(arena)),
+            Some(element) => cx.bind(element.1.bind(cx)),
             None => GcObj::NIL,
         },
         None => GcObj::NIL,
@@ -93,8 +93,8 @@ pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> GcObj<'ob> {
-    match symbol.func(gc) {
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Arena) -> GcObj<'ob> {
+    match symbol.func(cx) {
         Some(f) => f.into(),
         None => GcObj::NIL,
     }
@@ -104,9 +104,9 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, gc: &'ob Arena) -> GcObj<'ob>
 pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
     env: &Root<Environment>,
-    arena: &'ob Arena,
+    cx: &'ob Arena,
 ) -> Option<GcObj<'ob>> {
-    env.vars.get(&symbol).map(|x| x.bind(arena))
+    env.vars.get(&symbol).map(|x| x.bind(cx))
 }
 
 #[defun]
@@ -210,10 +210,10 @@ pub(crate) fn defvar<'ob>(
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
     env: &mut Root<Environment>,
-    gc: &Arena,
+    cx: &Arena,
 ) -> GcObj<'ob> {
     let value = initvalue.unwrap_or_default();
-    set(symbol, value, env, gc)
+    set(symbol, value, env, cx)
 }
 
 #[defun]
@@ -239,9 +239,9 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, gc: &'ob Arena) -> GcObj<'ob> {
+pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Arena) -> GcObj<'ob> {
     match object.get() {
-        Object::Symbol(sym) => match sym.follow_indirect(gc) {
+        Object::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),
             None => GcObj::NIL,
         },

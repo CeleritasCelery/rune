@@ -51,10 +51,10 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         // return val is bound to the mutable borrow, meaning we can use them
         // both in the into_obj function. Similar to the rebind! macro.
         quote! {
-            let ptr = arena as *mut crate::core::arena::Arena;
+            let ptr = cx as *mut crate::core::arena::Arena;
             let val = #subr(#(#arg_conversion),*)#err;
-            let arena: &'ob mut crate::core::arena::Arena = unsafe {&mut *ptr};
-            Ok(crate::core::object::IntoObject::into_obj(val, arena).into())
+            let cx: &'ob mut crate::core::arena::Arena = unsafe {&mut *ptr};
+            Ok(crate::core::object::IntoObject::into_obj(val, cx).into())
         };
 
     quote! {
@@ -76,7 +76,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         fn #func_name<'ob, 'id>(
             args: &[crate::core::arena::Rt<crate::core::object::GcObj<'static>>],
             env: &mut crate::core::arena::Root<crate::core::env::Environment>,
-            arena: &'ob mut crate::core::arena::Arena,
+            cx: &'ob mut crate::core::arena::Arena,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
             #subr_call
         }
@@ -97,7 +97,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
     args.iter()
         .enumerate()
         .map(|(idx, arg_type)| match arg_type {
-            ArgType::Arena(_) => quote! {arena},
+            ArgType::Arena(_) => quote! {cx},
             ArgType::Env => quote! {env},
             // Rt<Gc<..>>
             ArgType::Rt(gc) => match gc {
@@ -106,7 +106,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
             },
             // Gc<..>
             ArgType::Gc(gc) => {
-                let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
+                let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], cx)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! { std::convert::TryFrom::try_from(#bind)? },
@@ -114,7 +114,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
             }
             // &[Gc<..>]
             ArgType::Slice(gc) => {
-                let bind = quote! {crate::core::arena::Rt::bind_slice(&args[#idx..], arena)};
+                let bind = quote! {crate::core::arena::Rt::bind_slice(&args[#idx..], cx)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! {crate::core::object::try_from_slice(#bind)?},
@@ -134,7 +134,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
                 } else {
-                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
+                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], cx)};
                     quote! { crate::core::object::Gc::try_from_option(#bind)? }
                 }
             }
@@ -142,7 +142,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<proc_macro2::TokenStream> {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
                 } else {
-                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], arena)};
+                    let bind = quote! {crate::core::arena::Rt::bind(&args[#idx], cx)};
                     quote! { std::convert::TryFrom::try_from(#bind)? }
                 }
             }
@@ -464,12 +464,12 @@ mod test {
             (2, 1, false),
         );
         test_sig(
-            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Environment>, arena: &mut Arena) -> u8 {0} },
+            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Environment>, cx: &mut Arena) -> u8 {0} },
             None,
             (1, 0, true),
         );
         test_sig(
-            quote! { fn foo(env: &Root<Environment>, a: &Rt<Gc<foo>>, x: Option<u8>, arena: &mut Arena, b: &[Rt<GcObj>]) -> u8 {0} },
+            quote! { fn foo(env: &Root<Environment>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Arena, b: &[Rt<GcObj>]) -> u8 {0} },
             None,
             (1, 1, true),
         );
@@ -532,7 +532,7 @@ mod test {
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob>(list: Gc<List>, arena: &'ob Arena) -> GcObj<'ob> {
+            fn car<'ob>(list: Gc<List>, cx: &'ob Arena) -> GcObj<'ob> {
                 match list.get() {
                     List::Cons(cons) => cons.car(),
                     List::Nil => GcObj::NIL,
