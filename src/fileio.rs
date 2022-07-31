@@ -3,7 +3,7 @@ use std::path::Path;
 use fn_macros::defun;
 
 use crate::core::{
-    env::{sym, Environment},
+    env::{sym, Env},
     gc::{Context, Root},
     object::Object,
 };
@@ -12,7 +12,7 @@ use crate::core::{
 pub(crate) fn expand_file_name(
     name: &str,
     default_directory: Option<&str>,
-    env: &Root<Environment>,
+    env: &Root<Env>,
     cx: &Context,
 ) -> String {
     // TODO: this needs to be tested to ensure it has the same behavior as GNU

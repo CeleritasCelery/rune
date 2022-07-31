@@ -75,7 +75,7 @@ fn expand(function: Function, spec: Spec) -> proc_macro2::TokenStream {
         #[allow(non_snake_case)]
         fn #func_name<'ob, 'id>(
             args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
-            env: &mut crate::core::gc::Root<crate::core::env::Environment>,
+            env: &mut crate::core::gc::Root<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
             #subr_call
@@ -464,12 +464,12 @@ mod test {
             (2, 1, false),
         );
         test_sig(
-            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Environment>, cx: &mut Context) -> u8 {0} },
+            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Env>, cx: &mut Context) -> u8 {0} },
             None,
             (1, 0, true),
         );
         test_sig(
-            quote! { fn foo(env: &Root<Environment>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<GcObj>]) -> u8 {0} },
+            quote! { fn foo(env: &Root<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<GcObj>]) -> u8 {0} },
             None,
             (1, 1, true),
         );
@@ -502,9 +502,9 @@ mod test {
         test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
-        test_args(quote! {x: &Root< Environment>}, &[ArgType::Env]);
+        test_args(quote! {x: &Root<Env>}, &[ArgType::Env]);
         test_args(
-            quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Root<Environment>},
+            quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Root<Env>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),

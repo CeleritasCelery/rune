@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::core::{
     cons::{Cons, ElemStreamIter},
-    env::{sym, Environment, Symbol},
+    env::{sym, Env, Symbol},
     error::{ArgError, Type, TypeError},
     gc::{Context, IntoRoot, Root, Rt},
     object::{Function, Gc, GcObj, List, Object},
@@ -108,14 +108,14 @@ type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
 
 struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
     vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
-    env: &'brw mut Root<'_2, '_4, Environment>,
+    env: &'brw mut Root<'_2, '_4, Env>,
 }
 
 #[defun]
 pub(crate) fn eval<'ob>(
     form: &Rt<GcObj>,
     _lexical: Option<()>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>, anyhow::Error> {
     cx.garbage_collect(false);
@@ -721,7 +721,7 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
     pub(crate) fn call<'gc>(
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
-        env: &mut Root<Environment>,
+        env: &mut Root<Env>,
         cx: &'gc mut Context,
         name: Option<&str>,
     ) -> EvalResult<'gc> {
@@ -755,7 +755,7 @@ fn call_closure<'gc>(
     closure: &Rt<&Cons>,
     args: &Root<Vec<GcObj>>,
     name: &str,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'gc mut Context,
 ) -> EvalResult<'gc> {
     cx.garbage_collect(false);
@@ -895,7 +895,7 @@ mod test {
     where
         T: IntoObject<'ob>,
     {
-        root!(env, Environment::default(), cx);
+        root!(env, Env::default(), cx);
         println!("Test String: {}", test_str);
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
@@ -906,7 +906,7 @@ mod test {
     }
 
     fn check_error<'ob>(test_str: &str, cx: &'ob mut Context) {
-        root!(env, Environment::default(), cx);
+        root!(env, Env::default(), cx);
         println!("Test String: {}", test_str);
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);

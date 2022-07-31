@@ -1,7 +1,7 @@
 //! The main bytecode interpeter.
 use crate::arena::Arena;
 use crate::compile::compile;
-use crate::core::env::Environment;
+use crate::core::env::Env
 use crate::object::{Callable, Expression, LispFn, Object, SubrFn};
 use crate::opcode::OpCode;
 use crate::symbol::Symbol;

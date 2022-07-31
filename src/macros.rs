@@ -22,7 +22,7 @@ macro_rules! defsubr {
             #[doc(hidden)]
             pub(crate) fn __init_vars<'ob>(
                 _cx: &'ob crate::core::gc::Context,
-                _env: &mut crate::core::gc::Rt<crate::core::env::Environment>
+                _env: &mut crate::core::gc::Rt<crate::core::env::Env>
             ) {
                 $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_cx));)+)?
             }

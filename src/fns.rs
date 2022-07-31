@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use crate::core::{
     cons::Cons,
-    env::{Environment, Symbol},
+    env::{Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, Root, Rt},
     object::{Function, Gc, GcObj, HashTable, List, Object},
@@ -30,7 +30,7 @@ pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String
 pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
@@ -58,7 +58,7 @@ pub(crate) fn mapcar<'ob>(
 pub(crate) fn mapc<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
@@ -250,7 +250,7 @@ fn require<'ob>(
     feature: Symbol,
     filename: Option<&Rt<Gc<&String>>>,
     noerror: Option<()>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     if crate::data::FEATURES.lock().unwrap().contains(feature) {

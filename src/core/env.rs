@@ -10,14 +10,14 @@ use std::sync::Mutex;
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
-pub(crate) struct Environment {
+pub(crate) struct Env {
     pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
 }
 
-impl Rt<Environment> {
+impl Rt<Env> {
     pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) {
         self.vars.insert(sym, value);
     }
@@ -35,7 +35,7 @@ impl Rt<Environment> {
     }
 }
 
-impl Trace for Environment {
+impl Trace for Env {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         for x in self.vars.values() {
             x.mark(stack);
@@ -326,7 +326,7 @@ macro_rules! create_symbolmap {
         #[allow(unused_qualifications)]
         pub(crate) fn init_variables<'ob>(
             cx: &'ob crate::core::gc::Context,
-            env: &mut crate::core::gc::Rt<crate::core::env::Environment>
+            env: &mut crate::core::gc::Rt<crate::core::env::Env>,
         ) {
             $($($subr::)*__init_vars(cx, env);)*
         }

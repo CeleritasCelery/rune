@@ -85,7 +85,7 @@ mod reader;
 mod search;
 
 use crate::core::{
-    env::{intern, Environment},
+    env::{intern, Env},
     gc::{Context, Root, RootSet},
 };
 use std::env;
@@ -97,7 +97,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Root<Environment>, cx: &mut Context) {
+fn repl(env: &mut Root<Env>, cx: &mut Context) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -132,7 +132,7 @@ fn repl(env: &mut Root<Environment>, cx: &mut Context) {
     }
 }
 
-fn load(env: &mut Root<Environment>, cx: &mut Context) {
+fn load(env: &mut Root<Env>, cx: &mut Context) {
     crate::core::env::init_variables(cx, env.deref_mut(cx));
     crate::data::defalias(intern("not"), (&*crate::core::env::sym::NULL).into(), None)
         .expect("null should be defined");
@@ -148,7 +148,7 @@ fn load(env: &mut Root<Environment>, cx: &mut Context) {
 fn main() {
     let roots = &RootSet::default();
     let cx = &mut Context::new(roots);
-    root!(env, Environment::default(), cx);
+    root!(env, Env::default(), cx);
     let mut arg_load = false;
     let mut arg_repl = false;
 

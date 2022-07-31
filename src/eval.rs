@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{element_iter, root};
 
-use crate::core::env::{Environment, Symbol};
+use crate::core::env::{Env, Symbol};
 
 use anyhow::{bail, Result};
 
@@ -19,7 +19,7 @@ use anyhow::{bail, Result};
 pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
@@ -43,7 +43,7 @@ pub(crate) fn apply<'ob>(
 pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
@@ -54,7 +54,7 @@ pub(crate) fn funcall<'ob>(
 #[defun]
 fn run_hooks<'ob>(
     hooks: &[Rt<GcObj>],
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     for hook in hooks {
@@ -110,7 +110,7 @@ pub(crate) fn macroexpand<'ob>(
     form: &Rt<GcObj>,
     environment: Option<&Rt<GcObj>>,
     cx: &'ob mut Context,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.bind(cx).get() {
         if let Object::Symbol(name) = form.car().get() {
@@ -156,7 +156,7 @@ fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>)
 fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
     value: GcObj,
-    env: &'ob mut Root<Environment>,
+    env: &'ob mut Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_var(symbol, value);
@@ -167,7 +167,7 @@ fn set_default_toplevel_value<'ob>(
 fn set_default<'ob>(
     symbol: Symbol,
     value: GcObj<'ob>,
-    env: &'ob mut Root<Environment>,
+    env: &'ob mut Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     // TODO: implement buffer local variables

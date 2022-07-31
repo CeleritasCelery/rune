@@ -1,5 +1,5 @@
 use crate::core::env::Symbol;
-use crate::core::env::{sym, Environment};
+use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::gc::{Context, Root};
@@ -60,7 +60,7 @@ pub(crate) fn read_from_string<'ob>(
 pub(crate) fn load_internal<'ob>(
     contents: &str,
     cx: &'ob mut Context,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
 ) -> Result<bool> {
     let mut pos = 0;
     loop {
@@ -94,7 +94,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     }
 }
 
-fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Environment>) -> Result<PathBuf> {
+fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<PathBuf> {
     let load_path = env.vars.get(&*sym::LOAD_PATH).unwrap();
     let paths = load_path
         .bind(cx)
@@ -127,7 +127,7 @@ pub(crate) fn load<'ob>(
     noerror: Option<()>,
     nomessage: Option<()>,
     cx: &'ob mut Context,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
 ) -> Result<bool> {
     let file = match file.bind(cx).get() {
         Object::String(x) => x,
@@ -200,7 +200,7 @@ mod test {
     fn test_load() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Environment::default(), cx);
+        root!(env, Env::default(), cx);
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", cx, env).unwrap();
 
         let obj = reader::read("(+ foo bar baz)", cx).unwrap().0;

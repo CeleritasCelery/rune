@@ -106,7 +106,7 @@ impl<'ob> Default for LispFn<'ob> {
 
 pub(crate) type BuiltInFn = for<'ob> fn(
     &[Rt<GcObj<'static>>],
-    &mut Root<crate::core::env::Environment>,
+    &mut Root<crate::core::env::Env>,
     &'ob mut Context,
 ) -> Result<GcObj<'ob>>;
 
@@ -121,7 +121,7 @@ impl SubrFn {
     pub(crate) fn call<'gc>(
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
-        env: &mut Root<crate::core::env::Environment>,
+        env: &mut Root<crate::core::env::Env>,
         cx: &'gc mut Context,
     ) -> Result<GcObj<'gc>> {
         {

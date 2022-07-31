@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use crate::core::{
     cons::Cons,
-    env::{Environment, Symbol, INTERNED_SYMBOLS},
+    env::{Env, Symbol, INTERNED_SYMBOLS},
     gc::{Context, Root},
     object::{Function, Gc, GcObj, Object},
 };
@@ -47,7 +47,7 @@ pub(crate) fn defalias(
 pub(crate) fn set<'ob>(
     place: Symbol,
     newlet: GcObj<'ob>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_var(place, newlet);
@@ -59,7 +59,7 @@ pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: GcObj<'ob>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &Context,
 ) -> GcObj<'ob> {
     env.deref_mut(cx).set_prop(symbol, propname, value);
@@ -70,7 +70,7 @@ pub(crate) fn put<'ob>(
 pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    env: &Root<Environment>,
+    env: &Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     match env.props.get(&symbol) {
@@ -103,7 +103,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'o
 #[defun]
 pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
-    env: &Root<Environment>,
+    env: &Root<Env>,
     cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
     env.vars.get(&symbol).map(|x| x.bind(cx))
@@ -131,12 +131,12 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 }
 
 #[defun]
-pub(crate) fn boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
+pub(crate) fn boundp(symbol: Symbol, env: &Root<Env>) -> bool {
     env.vars.get(&symbol).is_some()
 }
 
 #[defun]
-pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Environment>) -> bool {
+pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
     env.vars.get(&symbol).is_some()
 }
 
@@ -209,7 +209,7 @@ pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
-    env: &mut Root<Environment>,
+    env: &mut Root<Env>,
     cx: &Context,
 ) -> GcObj<'ob> {
     let value = initvalue.unwrap_or_default();
