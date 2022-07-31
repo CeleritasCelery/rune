@@ -185,7 +185,7 @@ macro_rules! root {
 /// A Rooted type. If a type is wrapped in Rt, it is known to be rooted and hold
 /// items passed garbage collection. This type is never used as an owned type,
 /// only a reference. This ensures that underlying data does not move. In order
-/// to access the inner data, the [`bind`] method must be used.
+/// to access the inner data, the [`Rt::bind`] method must be used.
 #[repr(transparent)]
 pub(crate) struct Rt<T: ?Sized> {
     inner: T,
