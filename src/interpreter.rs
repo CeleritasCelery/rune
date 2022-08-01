@@ -7,7 +7,7 @@ use crate::core::{
     gc::{Context, IntoRoot, Root, Rt},
     object::{Function, Gc, GcObj, List, Object},
 };
-use crate::{rebind, root, rooted_iter};
+use crate::{root, rooted_iter};
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
@@ -176,10 +176,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         // push this tag on the catch stack
         self.env.deref_mut(cx).catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
-            Ok(x) => {
-                rebind!(x, cx);
-                Ok(x)
-            }
+            Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 let tag = self.env.catch_stack.last().unwrap();
                 if e.error.is_none() && *tag == self.env.thrown.0 {
@@ -226,11 +223,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 let name: Symbol = x.bind(cx).try_into()?;
                 let value = match forms.next() {
                     // (defvar x y)
-                    Some(value) => self.eval_form(value, cx)?,
+                    Some(value) => rebind!(self.eval_form(value, cx)?, cx),
                     // (defvar x)
                     None => GcObj::NIL,
                 };
-                rebind!(value, cx);
                 self.var_set(name, value, cx);
                 Ok(value)
             }
@@ -261,12 +257,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
         }
 
-        root!(func, cx);
         rooted_iter!(iter, args, cx);
+        root!(func, cx);
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
-            let result = self.eval_form(x, cx)?;
-            rebind!(result, cx);
+            let result = rebind!(self.eval_form(x, cx)?, cx);
             args.deref_mut(cx).push(result);
         }
         func.call(args, self.env, cx, Some(name.name))
@@ -308,10 +303,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(returned_form, None, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
-            let value = self.eval_form(form, cx)?;
+            let value = rebind!(self.eval_form(form, cx)?, cx);
             count += 1;
             if prog_num == count {
-                rebind!(value, cx);
                 returned_form.deref_mut(cx).set(value);
             }
         }
@@ -355,8 +349,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 let condition = self.eval_form(first, cx)?;
                 if condition != GcObj::NIL {
                     return if clause.is_empty() {
-                        rebind!(condition, cx);
-                        Ok(condition)
+                        Ok(rebind!(condition, cx))
                     } else {
                         self.implicit_progn(clause, cx)
                     };
@@ -370,11 +363,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(last, GcObj::TRUE, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
-            let result = self.eval_form(form, cx)?;
+            let result = rebind!(self.eval_form(form, cx)?, cx);
             if result == GcObj::NIL {
                 return Ok(GcObj::NIL);
             }
-            rebind!(result, cx);
             last.deref_mut(cx).set(result);
         }
         Ok(last.bind(cx))
@@ -385,8 +377,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         while let Some(form) = forms.next() {
             let result = self.eval_form(form, cx)?;
             if result != GcObj::NIL {
-                rebind!(result, cx);
-                return Ok(result);
+                return Ok(rebind!(result, cx));
             }
         }
         Ok(GcObj::NIL)
@@ -420,8 +411,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             match (var.get(), val) {
                 (Object::Symbol(var), Some(val)) => {
                     root!(val, cx);
-                    let val = self.eval_form(val, cx)?;
-                    rebind!(val, cx);
+                    let val = rebind!(self.eval_form(val, cx)?, cx);
                     self.var_set(var, val, cx);
                     last_value.deref_mut(cx).set(val);
                 }
@@ -510,8 +500,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // (let)
             None => bail_err!(ArgError::new(1, 0, "let")),
         }
-        let obj = self.implicit_progn(iter, cx)?;
-        rebind!(obj, cx);
+        let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
         self.vars.deref_mut(cx).truncate(prev_len);
         for binding in dynamic_bindings.iter() {
@@ -544,7 +533,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             };
-            rebind!(val, cx);
+            let val = rebind!(val, cx);
             if let Some(current_val) = self.env.deref_mut(cx).vars.get_mut(var) {
                 dynamic_bindings.deref_mut(cx).push((var, &*current_val));
                 current_val.set(val);
@@ -570,7 +559,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let (sym, var) = self.let_bind_value(binding.as_cons(), cx)?;
-                    rebind!(var, cx);
+                    let var = rebind!(var, cx);
                     let_bindings.deref_mut(cx).push((sym, var));
                 }
                 // (let (x))
@@ -603,7 +592,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         rooted_iter!(iter, cons.bind(cx).cdr(), cx);
         let value = match iter.next() {
             // (let ((x y)))
-            Some(x) => self.eval_form(x, cx)?,
+            Some(x) => rebind!(self.eval_form(x, cx)?, cx),
             // (let ((x)))
             None => GcObj::NIL,
         };
@@ -611,7 +600,6 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         if !iter.is_empty() {
             bail_err!("Let binding can only have 1 value");
         }
-        rebind!(value, cx);
         let name: Symbol = cons
             .bind(cx)
             .car()
@@ -627,8 +615,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> EvalResult<'gc> {
         root!(last, GcObj::NIL, cx);
         while let Some(form) = forms.next() {
-            let value = self.eval_form(form, cx)?;
-            rebind!(value, cx);
+            let value = rebind!(self.eval_form(form, cx)?, cx);
             last.deref_mut(cx).set(value);
         }
         Ok(last.bind(cx))
@@ -646,10 +633,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             None => bail_err!(ArgError::new(2, 1, "condition-case")),
         };
         match self.eval_form(bodyform, cx) {
-            Ok(x) => {
-                rebind!(x, cx);
-                Ok(x)
-            }
+            Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 const CONDITION_ERROR: &str = "Invalid condition handler:";
                 if e.error.is_none() {
@@ -681,8 +665,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                                 Err(_) => return Ok(GcObj::NIL),
                             };
                             rooted_iter!(handlers, list, cx);
-                            let result = self.implicit_progn(handlers, cx)?;
-                            rebind!(result, cx);
+                            let result = rebind!(self.implicit_progn(handlers, cx)?, cx);
                             self.vars.deref_mut(cx).pop();
                             return Ok(result);
                         }
@@ -878,8 +861,7 @@ mod test {
         println!("Test String: {}", test_str);
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
-        let compare = eval(obj, None, env, cx).unwrap();
-        rebind!(compare, cx);
+        let compare = rebind!(eval(obj, None, env, cx).unwrap(), cx);
         let expect: GcObj = expect.into_obj(cx).copy_as_obj();
         assert_eq!(compare, expect);
     }

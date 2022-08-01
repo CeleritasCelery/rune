@@ -7,7 +7,7 @@ use crate::core::{
     gc::{Context, Root, Rt},
     object::{Function, Gc, GcObj, HashTable, List, Object},
 };
-use crate::{data, rebind, root, rooted_iter};
+use crate::{data, root, rooted_iter};
 use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -42,8 +42,7 @@ pub(crate) fn mapcar<'ob>(
             while let Some(x) = iter.next() {
                 let obj = x.bind(cx);
                 call_arg.deref_mut(cx).push(obj);
-                let output = function.call(call_arg, env, cx, None)?;
-                rebind!(output, cx);
+                let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
                 outputs.deref_mut(cx).push(output);
                 call_arg.deref_mut(cx).clear();
             }

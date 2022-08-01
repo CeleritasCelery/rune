@@ -381,9 +381,11 @@ impl<const CONST: bool> Drop for Block<CONST> {
 /// ```
 #[macro_export]
 macro_rules! rebind {
-    ($item:ident, $cx:ident) => {
-        let bits = $item.into_raw();
-        let $item = unsafe { $cx.rebind_raw_ptr(bits) };
+    ($value:expr, $cx:ident) => {
+        unsafe {
+            let bits = $value.into_raw();
+            $cx.rebind_raw_ptr(bits)
+        }
     };
 }
 
@@ -400,8 +402,7 @@ mod test {
     fn test_reborrow() {
         let roots = &RootSet::default();
         let mut cx = Context::new(roots);
-        let obj = bind_to_mut(&mut cx);
-        rebind!(obj, cx);
+        let obj = rebind!(bind_to_mut(&mut cx), cx);
         let _ = "foo".into_obj(&cx);
         assert_eq!(obj, "invariant");
     }
