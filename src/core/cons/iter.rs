@@ -144,7 +144,7 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 }
 
 #[macro_export]
-macro_rules! element_iter {
+macro_rules! rooted_iter {
     ($ident:ident, $obj:expr, $gc:ident) => {
         #[allow(unused_assignments)]
         let mut root_elem = None;
@@ -214,7 +214,7 @@ mod test {
             let roots = &RootSet::default();
             let cx = &Context::new(roots);
             let cons = list![1, 2, 3, 4; cx];
-            element_iter!(iter, cons, cx);
+            rooted_iter!(iter, cons, cx);
             for expect in 1..=4 {
                 let actual = iter.next().unwrap().bind(cx);
                 assert_eq!(actual, expect);

@@ -171,6 +171,12 @@ pub(crate) fn numberp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn markerp(_: GcObj) -> bool {
+    // TODO: implement
+    false
+}
+
+#[defun]
 pub(crate) fn vectorp(object: GcObj) -> bool {
     matches!(object.get(), Object::Vec(_))
 }
@@ -282,6 +288,7 @@ defsubr!(
     functionp,
     vectorp,
     numberp,
+    markerp,
     consp,
     keywordp,
     integerp,

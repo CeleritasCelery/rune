@@ -9,7 +9,7 @@ use crate::core::{
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
-use crate::{element_iter, root};
+use crate::{rooted_iter, root};
 
 use crate::core::env::{Env, Symbol};
 
@@ -64,7 +64,7 @@ fn run_hooks<'ob>(
                     let val = val.bind(cx);
                     match val.get() {
                         Object::Cons(hook_list) => {
-                            element_iter!(hooks, hook_list, cx);
+                            rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next() {
                                 let func: &Rt<Gc<Function>> = hook.try_as()?;
                                 root!(args, Vec::new(), cx);

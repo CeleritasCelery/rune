@@ -7,7 +7,7 @@ use crate::core::{
     gc::{Context, IntoRoot, Root, Rt},
     object::{Function, Gc, GcObj, List, Object},
 };
-use crate::{element_iter, rebind, root};
+use crate::{rooted_iter, rebind, root};
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
@@ -172,7 +172,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn catch<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
-        element_iter!(forms, obj.bind(cx), cx);
+        rooted_iter!(forms, obj.bind(cx), cx);
         let tag = forms
             .next()
             .ok_or_else(|| ArgError::new(1, 0, "catch"))?
@@ -223,7 +223,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
-        element_iter!(forms, obj.bind(cx), cx);
+        rooted_iter!(forms, obj.bind(cx), cx);
         match forms.next() {
             // (defvar x ...)
             Some(x) => {
@@ -267,7 +267,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
         root!(func, cx);
         let obj = args.bind(cx);
-        element_iter!(iter, obj, cx);
+        rooted_iter!(iter, obj, cx);
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
             let result = self.eval_form(x, cx)?;
@@ -313,7 +313,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let mut count = 0;
         root!(returned_form, None, cx);
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let value = self.eval_form(form, cx)?;
             count += 1;
@@ -337,7 +337,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         self.implicit_progn(forms, cx)
     }
 
@@ -350,7 +350,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(condition, cx);
         while self.eval_form(condition, cx)? != GcObj::NIL {
             let obj = obj.bind(cx);
-            element_iter!(forms, obj, cx);
+            rooted_iter!(forms, obj, cx);
             self.implicit_progn(forms, cx)?;
         }
         Ok(GcObj::NIL)
@@ -358,9 +358,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
-            element_iter!(clause, form.bind(cx), cx);
+            rooted_iter!(clause, form.bind(cx), cx);
             if let Some(first) = clause.next() {
                 let condition = self.eval_form(first, cx)?;
                 if condition != GcObj::NIL {
@@ -379,7 +379,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         root!(last, GcObj::TRUE, cx);
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form, cx)?;
             if result == GcObj::NIL {
@@ -393,7 +393,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form, cx)?;
             if result != GcObj::NIL {
@@ -406,7 +406,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         let condition = match forms.next() {
             Some(x) => x.bind(cx),
             None => bail_err!(ArgError::new(2, 0, "if")),
@@ -427,7 +427,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn setq<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         let obj = obj.bind(cx);
-        element_iter!(forms, obj, cx);
+        rooted_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
         root!(last_value, GcObj::NIL, cx);
         while let Some((var, val)) = Self::pairs(&mut forms, cx) {
@@ -509,7 +509,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         cx: &'gc mut Context,
     ) -> EvalResult<'gc> {
         let form = form.bind(cx);
-        element_iter!(iter, form, cx);
+        rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
         root!(dynamic_bindings, Vec::new(), cx);
         match iter.next() {
@@ -549,7 +549,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         cx: &mut Context,
     ) -> Result<(), EvalError> {
         let form = form.bind(cx);
-        element_iter!(bindings, form, cx);
+        rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
             let obj = binding.bind(cx);
             let (var, val) = match obj.get() {
@@ -581,7 +581,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> Result<(), EvalError> {
         root!(let_bindings, Vec::new(), cx);
         let form = form.bind(cx);
-        element_iter!(bindings, form, cx);
+        rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
             let obj = binding.bind(cx);
             match obj.get() {
@@ -620,7 +620,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         cons: &Rt<Gc<&Cons>>,
         cx: &'ob mut Context,
     ) -> Result<(Symbol, GcObj<'ob>), EvalError> {
-        element_iter!(iter, cx.bind(cons.bind(cx).cdr()), cx);
+        rooted_iter!(iter, cx.bind(cons.bind(cx).cdr()), cx);
         let value = match iter.next() {
             // (let ((x y)))
             Some(x) => self.eval_form(x, cx)?,
@@ -656,7 +656,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let form = form.bind(cx);
-        element_iter!(forms, form, cx);
+        rooted_iter!(forms, form, cx);
         let var = match forms.next() {
             Some(x) => x.bind(cx),
             None => bail_err!(ArgError::new(2, 0, "condition-case")),
@@ -701,7 +701,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                                 Ok(x) => x,
                                 Err(_) => return Ok(GcObj::NIL),
                             };
-                            element_iter!(handlers, list, cx);
+                            rooted_iter!(handlers, list, cx);
                             let result = self.implicit_progn(handlers, cx)?;
                             rebind!(result, cx);
                             self.vars.deref_mut(cx).pop();
@@ -762,7 +762,7 @@ fn call_closure<'gc>(
     let closure = closure.bind(cx);
     match closure.car().get() {
         Object::Symbol(s) if s == &sym::CLOSURE => {
-            element_iter!(forms, closure.cdr(), cx);
+            rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector
             let args = args.iter().map(|x| x.bind(cx)).collect();
             let vars = bind_variables(&mut forms, args, name, cx)?;
