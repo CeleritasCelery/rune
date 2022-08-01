@@ -18,9 +18,9 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl IntoRoot<GcObj<'static>> for GcObj<'_> {
+impl<T> IntoRoot<GcObj<'static>> for Gc<T> {
     unsafe fn into_root(self) -> GcObj<'static> {
-        self.with_lifetime()
+        self.as_obj().with_lifetime()
     }
 }
 
@@ -33,6 +33,13 @@ impl IntoRoot<GcObj<'static>> for &Rt<GcObj<'_>> {
 impl IntoRoot<&'static Cons> for &Cons {
     unsafe fn into_root(self) -> &'static Cons {
         self.with_lifetime()
+    }
+}
+
+impl IntoRoot<GcObj<'static>> for &Cons {
+    unsafe fn into_root(self) -> GcObj<'static> {
+        let obj: GcObj = self.into();
+        obj.into_root()
     }
 }
 

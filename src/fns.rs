@@ -7,7 +7,7 @@ use crate::core::{
     gc::{Context, Root, Rt},
     object::{Function, Gc, GcObj, HashTable, List, Object},
 };
-use crate::{data, rooted_iter, rebind, root};
+use crate::{data, rebind, root, rooted_iter};
 use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -67,7 +67,7 @@ pub(crate) fn mapc<'ob>(
             root!(call_arg, Vec::new(), cx);
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next() {
-                call_arg.deref_mut(cx).push(elem.bind(cx));
+                call_arg.deref_mut(cx).push(elem);
                 function.call(call_arg, env, cx, None)?;
                 call_arg.deref_mut(cx).clear();
             }

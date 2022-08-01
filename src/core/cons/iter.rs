@@ -145,16 +145,23 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 
 #[macro_export]
 macro_rules! rooted_iter {
-    ($ident:ident, $obj:expr, $gc:ident) => {
+    ($ident:ident, $value:expr, $cx:ident) => {
+        // Allocate stack space for potential roots
         #[allow(unused_assignments)]
         let mut root_elem = None;
         #[allow(unused_assignments)]
         let mut root_cons = None;
-        let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($gc.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($gc.get_root_set()) };
-        let list: $crate::core::object::Gc<$crate::core::object::List> = $obj.try_into()?;
+        // Create roots, but don't initialize them
+        let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
+        let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
+        // Convert the value into a list
+        let obj: $crate::core::object::GcObj =
+            unsafe { $crate::core::gc::IntoRoot::into_root($value) };
+        let list: $crate::core::object::Gc<$crate::core::object::List> = obj.try_into()?;
         #[allow(unused_mut)]
         let mut $ident = if let $crate::core::object::List::Cons(cons) = list.get() {
+            // If the list is not empty, then initialize the roots and put them
+            // in the stack space reserved
             unsafe {
                 root_elem = Some($crate::core::object::GcObj::NIL);
                 root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
@@ -170,6 +177,8 @@ macro_rules! rooted_iter {
                 )
             }
         } else {
+            // If the list is empty, forget the roots and return an iterator
+            // that will yield None
             std::mem::forget(gc_root_elem);
             std::mem::forget(gc_root_cons);
             $crate::core::cons::ElemStreamIter::new(None, None)

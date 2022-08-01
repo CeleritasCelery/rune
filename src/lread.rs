@@ -150,7 +150,7 @@ pub(crate) fn load<'ob>(
     if nomessage.is_none() {
         println!("Loading {file}...");
     }
-    let new_load_file = cx.add(final_file.to_string_lossy().to_string());
+    let new_load_file: GcObj = cx.add(final_file.to_string_lossy().to_string());
     let prev_load_file = match env.deref_mut(cx).vars.get_mut(&*sym::LOAD_FILE_NAME) {
         Some(val) => {
             let prev = val.bind(cx);
@@ -171,7 +171,7 @@ pub(crate) fn load<'ob>(
     };
     env.deref_mut(cx)
         .vars
-        .insert(&sym::LOAD_FILE_NAME, prev_load_file.bind(cx));
+        .insert(&sym::LOAD_FILE_NAME, &**prev_load_file);
     result
 }
 

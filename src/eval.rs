@@ -9,7 +9,7 @@ use crate::core::{
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
-use crate::{rooted_iter, root};
+use crate::{root, rooted_iter};
 
 use crate::core::env::{Env, Symbol};
 
