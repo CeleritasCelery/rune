@@ -14,52 +14,55 @@ use crate::core::error::{Type, TypeError};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::HashMap;
 
-pub(crate) trait IntoRoot<T> {
-    unsafe fn into_root(self) -> T;
+pub(crate) trait IntoRoot {
+    type Out;
+    unsafe fn into_root(self) -> Self::Out;
 }
 
-impl<T> IntoRoot<GcObj<'static>> for Gc<T> {
-    unsafe fn into_root(self) -> GcObj<'static> {
-        self.as_obj().with_lifetime()
+impl<T, U> IntoRoot for Gc<T>
+where
+    Gc<T>: WithLifetime<'static, Out = U>,
+{
+    type Out = U;
+    unsafe fn into_root(self) -> U {
+        self.with_lifetime()
     }
 }
 
-impl IntoRoot<GcObj<'static>> for &Rt<GcObj<'_>> {
+impl IntoRoot for &Rt<GcObj<'_>> {
+    type Out = GcObj<'static>;
     unsafe fn into_root(self) -> GcObj<'static> {
         self.inner.with_lifetime()
     }
 }
 
-impl IntoRoot<&'static Cons> for &Cons {
+impl IntoRoot for &Cons {
+    type Out = &'static Cons;
     unsafe fn into_root(self) -> &'static Cons {
         self.with_lifetime()
     }
 }
 
-impl IntoRoot<GcObj<'static>> for &Cons {
-    unsafe fn into_root(self) -> GcObj<'static> {
-        let obj: GcObj = self.into();
-        obj.into_root()
-    }
-}
-
-impl IntoRoot<Symbol> for Symbol {
+impl IntoRoot for Symbol {
+    type Out = Symbol;
     unsafe fn into_root(self) -> Symbol {
         self
     }
 }
 
-impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
+impl<T, U, Tx, Ux> IntoRoot for (T, U)
 where
-    T: IntoRoot<Tx>,
-    U: IntoRoot<Ux>,
+    T: IntoRoot<Out = Tx>,
+    U: IntoRoot<Out = Ux>,
 {
+    type Out = (Tx, Ux);
     unsafe fn into_root(self) -> (Tx, Ux) {
         (self.0.into_root(), self.1.into_root())
     }
 }
 
-impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
+impl<T: IntoRoot<Out = U>, U> IntoRoot for Vec<T> {
+    type Out = Vec<U>;
     unsafe fn into_root(self) -> Vec<U> {
         self.into_iter().map(|x| x.into_root()).collect()
     }
@@ -174,7 +177,7 @@ impl<T> Drop for Root<'_, '_, T> {
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $cx:ident) => {
-        let mut rooted = unsafe { $crate::core::object::WithLifetime::with_lifetime($ident) };
+        let mut rooted = unsafe { $crate::core::gc::IntoRoot::into_root($ident) };
         let mut root: $crate::core::gc::Root<_> =
             unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
@@ -278,7 +281,7 @@ impl<T> Rt<Gc<T>> {
 
     pub(crate) fn set<U>(&mut self, item: U)
     where
-        U: IntoRoot<Gc<T>>,
+        U: IntoRoot<Out = Gc<T>>,
     {
         unsafe {
             self.inner = item.into_root();
@@ -427,7 +430,7 @@ impl<T> Rt<Vec<T>> {
         unsafe { &*(self.inner.as_slice() as *const [T] as *const Rt<[T]>) }
     }
 
-    pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
+    pub(crate) fn push<U: IntoRoot<Out = T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
     }
 
@@ -484,7 +487,7 @@ where
             .map(|v| unsafe { &mut *(v as *mut V).cast::<Rt<V>>() })
     }
 
-    pub(crate) fn insert<R: IntoRoot<V>>(&mut self, k: K, v: R) {
+    pub(crate) fn insert<R: IntoRoot<Out = V>>(&mut self, k: K, v: R) {
         self.inner.insert(k, unsafe { v.into_root() });
     }
 }

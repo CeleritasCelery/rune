@@ -155,8 +155,7 @@ macro_rules! rooted_iter {
         let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         // Convert the value into a list
-        let obj: $crate::core::object::GcObj =
-            unsafe { $crate::core::gc::IntoRoot::into_root($value) };
+        let obj = unsafe { $crate::core::gc::IntoRoot::into_root($value) };
         let list: $crate::core::object::Gc<$crate::core::object::List> = obj.try_into()?;
         #[allow(unused_mut)]
         let mut $ident = if let $crate::core::object::List::Cons(cons) = list.get() {

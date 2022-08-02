@@ -385,15 +385,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
         rooted_iter!(forms, obj, cx);
-        let condition = match forms.next() {
-            Some(x) => x.bind(cx),
-            None => bail_err!(ArgError::new(2, 0, "if")),
-        };
+        let condition = forms.next().ok_or_else(|| ArgError::new(2, 0, "if"))?;
         root!(condition, cx);
-        let true_branch = match forms.next() {
-            Some(x) => x.bind(cx),
-            None => bail_err!(ArgError::new(2, 1, "if")),
-        };
+        let true_branch = forms.next().ok_or_else(|| ArgError::new(2, 1, "if"))?;
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
         if self.eval_form(condition, cx)? != GcObj::NIL {
@@ -524,8 +518,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> Result<(), EvalError> {
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
-            let obj = binding.bind(cx);
-            let (var, val) = match obj.get() {
+            let (var, val) = match binding.bind(cx).get() {
                 // (let ((x y)))
                 Object::Cons(_) => self.let_bind_value(binding.as_cons(), cx)?,
                 // (let (x))
@@ -554,8 +547,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(let_bindings, Vec::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
-            let obj = binding.bind(cx);
-            match obj.get() {
+            match binding.bind(cx).get() {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let (sym, var) = self.let_bind_value(binding.as_cons(), cx)?;
