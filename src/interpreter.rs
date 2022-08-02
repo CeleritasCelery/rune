@@ -174,7 +174,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         rooted_iter!(forms, obj, cx);
         let tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
         // push this tag on the catch stack
-        self.env.deref_mut(cx).catch_stack.push(tag);
+        self.env.as_mut(cx).catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
@@ -189,7 +189,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
         };
         // pop this tag from the catch stack
-        self.env.deref_mut(cx).catch_stack.pop();
+        self.env.as_mut(cx).catch_stack.pop();
         result
     }
 
@@ -201,7 +201,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
         let tag = forms.next().unwrap()?;
         let value = forms.next().unwrap()?;
-        let env = self.env.deref_mut(cx);
+        let env = self.env.as_mut(cx);
         if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
             env.thrown.0.set(tag);
             env.thrown.1.set(value);
@@ -262,7 +262,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
             let result = rebind!(self.eval_form(x, cx)?, cx);
-            args.deref_mut(cx).push(result);
+            args.as_mut(cx).push(result);
         }
         func.call(args, self.env, cx, Some(name.name))
     }
@@ -306,7 +306,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             let value = rebind!(self.eval_form(form, cx)?, cx);
             count += 1;
             if prog_num == count {
-                returned_form.deref_mut(cx).set(value);
+                returned_form.as_mut(cx).set(value);
             }
         }
         match &***returned_form {
@@ -367,7 +367,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             if result == GcObj::NIL {
                 return Ok(GcObj::NIL);
             }
-            last.deref_mut(cx).set(result);
+            last.as_mut(cx).set(result);
         }
         Ok(last.bind(cx))
     }
@@ -407,7 +407,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     root!(val, cx);
                     let val = rebind!(self.eval_form(val, cx)?, cx);
                     self.var_set(var, val, cx);
-                    last_value.deref_mut(cx).set(val);
+                    last_value.as_mut(cx).set(val);
                 }
                 (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
                 (_, None) => bail_err!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
@@ -458,7 +458,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     .expect("variables should never be immutable");
             }
             None => {
-                self.env.deref_mut(cx).set_var(name, new_value);
+                self.env.as_mut(cx).set_var(name, new_value);
             }
         }
     }
@@ -496,12 +496,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
         let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
-        self.vars.deref_mut(cx).truncate(prev_len);
+        self.vars.as_mut(cx).truncate(prev_len);
         for binding in dynamic_bindings.iter() {
             let var: Symbol = &binding.0;
             let val = &binding.1;
 
-            if let Some(current_val) = self.env.deref_mut(cx).vars.get_mut(var) {
+            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
                 current_val.set(val);
             } else {
                 unreachable!("Variable {var} not longer exists");
@@ -527,12 +527,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             };
             let val = rebind!(val, cx);
-            if let Some(current_val) = self.env.deref_mut(cx).vars.get_mut(var) {
-                dynamic_bindings.deref_mut(cx).push((var, &*current_val));
+            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
+                dynamic_bindings.as_mut(cx).push((var, &*current_val));
                 current_val.set(val);
             } else {
                 let cons = cons!(var, val; cx).as_cons();
-                self.vars.deref_mut(cx).push(cons);
+                self.vars.as_mut(cx).push(cons);
             }
         }
         Ok(())
@@ -552,11 +552,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 Object::Cons(_) => {
                     let (sym, var) = self.let_bind_value(binding.as_cons(), cx)?;
                     let var = rebind!(var, cx);
-                    let_bindings.deref_mut(cx).push((sym, var));
+                    let_bindings.as_mut(cx).push((sym, var));
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    let_bindings.deref_mut(cx).push((sym, GcObj::NIL));
+                    let_bindings.as_mut(cx).push((sym, GcObj::NIL));
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
@@ -565,12 +565,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         for binding in let_bindings.iter() {
             let var: Symbol = &binding.0;
             let val = &binding.1;
-            if let Some(current_val) = self.env.deref_mut(cx).vars.get_mut(var) {
-                dynamic_bindings.deref_mut(cx).push((var, &*current_val));
+            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
+                dynamic_bindings.as_mut(cx).push((var, &*current_val));
                 current_val.set(val);
             } else {
                 let cons = cons!(var, val; cx).as_cons();
-                self.vars.deref_mut(cx).push(cons);
+                self.vars.as_mut(cx).push(cons);
             }
         }
         Ok(())
@@ -608,7 +608,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(last, GcObj::NIL, cx);
         while let Some(form) = forms.next() {
             let value = rebind!(self.eval_form(form, cx)?, cx);
-            last.deref_mut(cx).set(value);
+            last.as_mut(cx).set(value);
         }
         Ok(last.bind(cx))
     }
@@ -651,14 +651,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             }
                             // Call handlers with error
                             let binding = list!(var, sym::ERROR, format!("{e}"); cx).as_cons();
-                            self.vars.deref_mut(cx).push(binding);
+                            self.vars.as_mut(cx).push(binding);
                             let list: Gc<List> = match cons.cdr().try_into() {
                                 Ok(x) => x,
                                 Err(_) => return Ok(GcObj::NIL),
                             };
                             rooted_iter!(handlers, list, cx);
                             let result = rebind!(self.implicit_progn(handlers, cx)?, cx);
-                            self.vars.deref_mut(cx).pop();
+                            self.vars.as_mut(cx).pop();
                             return Ok(result);
                         }
                         Object::Nil => {}

@@ -159,7 +159,7 @@ fn set_default_toplevel_value<'ob>(
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
-    env.deref_mut(cx).set_var(symbol, value);
+    env.as_mut(cx).set_var(symbol, value);
     GcObj::NIL
 }
 
@@ -171,7 +171,7 @@ fn set_default<'ob>(
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     // TODO: implement buffer local variables
-    env.deref_mut(cx).set_var(symbol, value);
+    env.as_mut(cx).set_var(symbol, value);
     value
 }
 

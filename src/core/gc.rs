@@ -415,7 +415,7 @@ mod test {
         root!(vec, vec1, cx);
         cx.garbage_collect(false);
         let cons = list!["foo", 1, false, "end"; cx];
-        vec.deref_mut(cx).push(cons);
+        vec.as_mut(cx).push(cons);
         cx.garbage_collect(false);
     }
 }

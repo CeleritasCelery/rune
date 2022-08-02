@@ -125,7 +125,7 @@ impl<'rt, T> Root<'rt, '_, T> {
         }
     }
 
-    pub(crate) fn deref_mut<'a>(&'a mut self, _cx: &'a Context) -> &'a mut Rt<T> {
+    pub(crate) fn as_mut<'a>(&'a mut self, _cx: &'a Context) -> &'a mut Rt<T> {
         unsafe { self.deref_mut_unchecked() }
     }
 

@@ -133,7 +133,7 @@ fn repl(env: &mut Root<Env>, cx: &mut Context) {
 }
 
 fn load(env: &mut Root<Env>, cx: &mut Context) {
-    crate::core::env::init_variables(cx, env.deref_mut(cx));
+    crate::core::env::init_variables(cx, env.as_mut(cx));
     crate::data::defalias(intern("not"), (&*crate::core::env::sym::NULL).into(), None)
         .expect("null should be defined");
 

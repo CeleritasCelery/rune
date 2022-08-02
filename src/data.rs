@@ -50,7 +50,7 @@ pub(crate) fn set<'ob>(
     env: &mut Root<Env>,
     cx: &Context,
 ) -> GcObj<'ob> {
-    env.deref_mut(cx).set_var(place, newlet);
+    env.as_mut(cx).set_var(place, newlet);
     newlet
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn put<'ob>(
     env: &mut Root<Env>,
     cx: &Context,
 ) -> GcObj<'ob> {
-    env.deref_mut(cx).set_prop(symbol, propname, value);
+    env.as_mut(cx).set_prop(symbol, propname, value);
     value
 }
 

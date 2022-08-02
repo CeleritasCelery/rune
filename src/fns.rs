@@ -41,10 +41,10 @@ pub(crate) fn mapcar<'ob>(
             rooted_iter!(iter, cons, cx);
             while let Some(x) = iter.next() {
                 let obj = x.bind(cx);
-                call_arg.deref_mut(cx).push(obj);
+                call_arg.as_mut(cx).push(obj);
                 let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
-                outputs.deref_mut(cx).push(output);
-                call_arg.deref_mut(cx).clear();
+                outputs.as_mut(cx).push(output);
+                call_arg.as_mut(cx).clear();
             }
             // TODO: remove this intermediate vector
             let slice = outputs.as_slice().as_ref(cx);
@@ -66,9 +66,9 @@ pub(crate) fn mapc<'ob>(
             root!(call_arg, Vec::new(), cx);
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next() {
-                call_arg.deref_mut(cx).push(elem);
+                call_arg.as_mut(cx).push(elem);
                 function.call(call_arg, env, cx, None)?;
-                call_arg.deref_mut(cx).clear();
+                call_arg.as_mut(cx).clear();
             }
             Ok(sequence.bind(cx).into())
         }

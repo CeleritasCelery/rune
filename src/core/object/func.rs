@@ -125,7 +125,7 @@ impl SubrFn {
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
         {
-            let args = args.deref_mut(cx);
+            let args = args.as_mut(cx);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
             for _ in 0..fill_args {
