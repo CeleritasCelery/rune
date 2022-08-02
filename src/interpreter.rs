@@ -4,7 +4,7 @@ use crate::core::{
     cons::{Cons, ElemStreamIter},
     env::{sym, Env, Symbol},
     error::{ArgError, Type, TypeError},
-    gc::{Context, IntoRoot, Root, Rt},
+    gc::{Context, Root, Rt},
     object::{Function, Gc, GcObj, List, Object},
 };
 use crate::{root, rooted_iter};
@@ -249,7 +249,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         if let Function::Cons(form) = func.get() {
             if let Ok(mcro) = form.try_as_macro() {
                 let macro_args = args.bind(cx).as_list()?.collect::<AnyResult<Vec<_>>>()?;
-                root!(args, macro_args.into_root(), cx);
+                root!(args, move(macro_args), cx);
                 root!(mcro, cx);
                 let value = mcro.call(args, self.env, cx, Some(name.name))?;
                 root!(value, cx);
@@ -720,7 +720,7 @@ fn call_closure<'gc>(
             // TODO: remove this temp vector
             let args = args.iter().map(|x| x.bind(cx)).collect();
             let vars = bind_variables(&mut forms, args, name, cx)?;
-            root!(vars, vars.into_root(), cx);
+            root!(vars, move(vars), cx);
             Interpreter { vars, env }.implicit_progn(forms, cx)
         }
         other => Err(TypeError::new(Type::Func, other).into()),

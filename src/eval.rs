@@ -35,7 +35,7 @@ pub(crate) fn apply<'ob>(
             args
         }
     };
-    root!(args, args.into_root(), cx);
+    root!(args, move(args), cx);
     function.call(args, env, cx, None).map_err(Into::into)
 }
 
@@ -124,7 +124,7 @@ pub(crate) fn macroexpand<'ob>(
             };
             if let Some(macro_func) = func {
                 let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
-                root!(args, macro_args.into_root(), cx);
+                root!(args, move(macro_args), cx);
                 root!(macro_func, cx);
                 let result = macro_func.call(args, env, cx, Some(name.name))?;
                 root!(result, cx);

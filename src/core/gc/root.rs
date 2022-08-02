@@ -177,15 +177,21 @@ impl<T> Drop for Root<'_, '_, T> {
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $cx:ident) => {
-        let mut rooted = unsafe { $crate::core::gc::IntoRoot::into_root($ident) };
-        let mut root: $crate::core::gc::Root<_> =
-            unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
-        let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
+        root!(
+            $ident,
+            unsafe { $crate::core::gc::IntoRoot::into_root($ident) },
+            $cx
+        );
+    };
+    ($ident:ident, move($value:expr), $cx:ident) => {
+        root!(
+            $ident,
+            unsafe { $crate::core::gc::IntoRoot::into_root($value) },
+            $cx
+        );
     };
     ($ident:ident, $value:expr, $cx:ident) => {
-        // TODO: see if this can be removed
-        #[allow(unused_unsafe)]
-        let mut rooted = unsafe { $value };
+        let mut rooted = $value;
         let mut root: $crate::core::gc::Root<_> =
             unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
