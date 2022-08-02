@@ -210,8 +210,8 @@ impl PartialEq for Rt<GcObj<'_>> {
     }
 }
 
-impl<T: PartialEq> PartialEq<T> for Rt<T> {
-    fn eq(&self, other: &T) -> bool {
+impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
+    fn eq(&self, other: &U) -> bool {
         self.inner == *other
     }
 }
