@@ -438,8 +438,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter.find_map(|cons| (cons.bind(cx).car() == sym).then(|| cons.bind(cx).cdr())) {
-                Some(value) => Ok(value),
+            match iter.find_map(|cons| (cons.car() == sym).then(|| cons.cdr())) {
+                Some(value) => Ok(value.bind(cx)),
                 None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.bind(cx)),
                     None => Err(error!("Void variable: {sym}")),
@@ -450,7 +450,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.bind(cx).car() == name)) {
+        match iter.find(|cons| (cons.car() == name)) {
             Some(value) => {
                 value
                     .bind(cx)
@@ -713,8 +713,7 @@ fn call_closure<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
-    let closure = closure.bind(cx);
-    match closure.car().get() {
+    match closure.car().bind(cx).get() {
         Object::Symbol(s) if s == &sym::CLOSURE => {
             rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector

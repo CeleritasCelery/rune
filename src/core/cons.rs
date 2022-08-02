@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
+use std::ptr::addr_of;
 
 mod iter;
 
@@ -91,6 +92,14 @@ impl Cons {
 
     pub(crate) fn is_marked(&self) -> bool {
         self.marked.get()
+    }
+
+    pub(crate) fn addr_car(&self) -> *const GcObj {
+        addr_of!(self.car).cast::<GcObj>()
+    }
+
+    pub(crate) fn addr_cdr(&self) -> *const GcObj {
+        addr_of!(self.cdr).cast::<GcObj>()
     }
 }
 

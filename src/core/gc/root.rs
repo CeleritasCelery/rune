@@ -358,6 +358,14 @@ impl Rt<&Cons> {
     pub(crate) fn set(&mut self, item: &Cons) {
         self.inner = unsafe { std::mem::transmute(item) }
     }
+
+    pub(crate) fn car(&self) -> &Rt<GcObj> {
+        unsafe { &*self.inner.addr_car().cast::<Rt<GcObj>>() }
+    }
+
+    pub(crate) fn cdr(&self) -> &Rt<GcObj> {
+        unsafe { &*self.inner.addr_cdr().cast::<Rt<GcObj>>() }
+    }
 }
 
 impl<T, U> Deref for Rt<(T, U)> {
