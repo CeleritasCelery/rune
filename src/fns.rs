@@ -172,6 +172,32 @@ fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcOb
     }
 }
 
+#[defun]
+fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+    match alist.get() {
+        List::Nil => Ok(GcObj::NIL),
+        List::Cons(cons) => {
+            let first = copy_alist_elem(cons.car(), cx);
+            let head = cons!(first; cx);
+            let mut tail = head.as_cons();
+
+            for elem in cons.cdr().as_list()? {
+                let copy = copy_alist_elem(elem?, cx);
+                tail.set_cdr(cons!(copy; cx)).unwrap();
+                tail = tail.cdr().as_cons();
+            }
+            Ok(head)
+        }
+    }
+}
+
+fn copy_alist_elem<'ob>(elem: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
+    match elem.get() {
+        Object::Cons(cons) => cons!(cons.car(), cons.cdr(); cx),
+        _ => elem,
+    }
+}
+
 type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
 
 fn delete_from_list<'ob>(
@@ -502,6 +528,16 @@ mod test {
         let result = assq(5.into(), list);
         assert_eq!(result, element);
     }
+
+    #[test]
+    fn test_copy_alist() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let alist = list![cons!(1, 2; cx), cons!(3, 4; cx), cons!(5, 6; cx); cx];
+        let list = alist.try_into().unwrap();
+        let result = copy_alist(list, cx).unwrap();
+        assert_eq!(alist, result);
+    }
 }
 
 defsubr!(
@@ -512,6 +548,7 @@ defsubr!(
     nconc,
     assq,
     assoc,
+    copy_alist,
     make_hash_table,
     hash_table_p,
     puthash,
