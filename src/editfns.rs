@@ -1,7 +1,7 @@
 use fn_macros::defun;
 
-use crate::core::object::GcObj;
-use anyhow::{anyhow, ensure, Result};
+use crate::core::object::{GcObj, Object};
+use anyhow::{bail, ensure, Result};
 
 use std::fmt::Write as _;
 
@@ -34,11 +34,14 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     };
     for (start, _) in string.match_indices(is_format_char) {
         result.push_str(&string[last_end..start]);
-        let val = iter
-            .next()
-            .ok_or_else(|| anyhow!("Not enough objects for format string"))?;
         // TODO: currently handles all format types the same. Need to check the modifier characters.
-        write!(result, "{val}")?;
+        match iter.next() {
+            Some(val) => match val.get() {
+                Object::String(s) => result.push_str(s),
+                obj => write!(result, "{obj}")?,
+            },
+            None => bail!("Not enough objects for format string"),
+        }
         last_end = start + 2;
     }
     ensure!(
