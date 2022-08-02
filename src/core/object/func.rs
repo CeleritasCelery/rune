@@ -118,12 +118,12 @@ pub(crate) struct SubrFn {
 define_unbox!(SubrFn, Func, &'ob SubrFn);
 
 impl SubrFn {
-    pub(crate) fn call<'gc>(
+    pub(crate) fn call<'ob>(
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<crate::core::env::Env>,
-        cx: &'gc mut Context,
-    ) -> Result<GcObj<'gc>> {
+        cx: &'ob mut Context,
+    ) -> Result<GcObj<'ob>> {
         {
             let args = args.deref_mut(cx);
             let arg_cnt = args.len() as u16;

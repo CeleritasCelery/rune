@@ -125,7 +125,7 @@ pub(crate) fn eval<'ob>(
 }
 
 impl Interpreter<'_, '_, '_, '_, '_> {
-    fn eval_form<'a, 'gc>(&mut self, rt: &Rt<GcObj<'a>>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_form<'a, 'ob>(&mut self, rt: &Rt<GcObj<'a>>, cx: &'ob mut Context) -> EvalResult<'ob> {
         match rt.bind(cx).get() {
             Object::Symbol(sym) => self.var_ref(sym, cx),
             Object::Cons(_) => {
@@ -136,11 +136,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    pub(crate) fn eval_sexp<'gc>(
+    pub(crate) fn eval_sexp<'ob>(
         &mut self,
         cons: &Rt<Gc<&Cons>>,
-        cx: &'gc mut Context,
-    ) -> EvalResult<'gc> {
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
         let cons = cons.bind(cx);
         let forms = cons.cdr();
         root!(forms, cx);
@@ -170,7 +170,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn catch<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn catch<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
         // push this tag on the catch stack
@@ -193,7 +193,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         result
     }
 
-    fn throw<'gc>(&mut self, obj: GcObj, cx: &'gc Context) -> EvalResult<'gc> {
+    fn throw<'ob>(&mut self, obj: GcObj, cx: &'ob Context) -> EvalResult<'ob> {
         let mut forms = obj.as_list()?;
         let len = forms.len() as u16;
         if len != 2 {
@@ -215,7 +215,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn defvar<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn defvar<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         match forms.next() {
             // (defvar x ...)
@@ -235,12 +235,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_call<'gc>(
+    fn eval_call<'ob>(
         &mut self,
         name: Symbol,
         args: &Rt<GcObj>,
-        cx: &'gc mut Context,
-    ) -> EvalResult<'gc> {
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
         let func = match name.follow_indirect(cx) {
             Some(x) => x,
             None => bail_err!("Invalid function: {name}"),
@@ -293,12 +293,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progx<'gc>(
+    fn eval_progx<'ob>(
         &mut self,
         obj: &Rt<GcObj>,
         prog_num: u16,
-        cx: &'gc mut Context,
-    ) -> EvalResult<'gc> {
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
         let mut count = 0;
         root!(returned_form, None, cx);
         rooted_iter!(forms, obj, cx);
@@ -322,12 +322,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_progn<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_progn<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         self.implicit_progn(forms, cx)
     }
 
-    fn eval_while<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_while<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let first: Gc<List> = obj.bind(cx).try_into()?;
         let condition = match first.get() {
             List::Cons(cons) => cons.car(),
@@ -341,7 +341,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_cond<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_cond<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             rooted_iter!(clause, form, cx);
@@ -359,7 +359,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_and<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_and<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         root!(last, GcObj::TRUE, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
@@ -372,7 +372,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(last.bind(cx))
     }
 
-    fn eval_or<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_or<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form, cx)?;
@@ -383,7 +383,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(GcObj::NIL)
     }
 
-    fn eval_if<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn eval_if<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let condition = forms.next().ok_or_else(|| ArgError::new(2, 0, "if"))?;
         root!(condition, cx);
@@ -397,7 +397,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn setq<'gc>(&mut self, obj: &Rt<GcObj>, cx: &'gc mut Context) -> EvalResult<'gc> {
+    fn setq<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
         root!(last_value, GcObj::NIL, cx);
@@ -464,7 +464,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     #[allow(clippy::unused_self)]
-    fn quote<'gc>(&self, value: GcObj<'gc>) -> EvalResult<'gc> {
+    fn quote<'ob>(&self, value: GcObj<'ob>) -> EvalResult<'ob> {
         let mut forms = value.as_list()?;
         match forms.len() {
             1 => Ok(forms.next().unwrap()?),
@@ -472,12 +472,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn eval_let<'gc>(
+    fn eval_let<'ob>(
         &mut self,
         form: &Rt<GcObj>,
         parallel: bool,
-        cx: &'gc mut Context,
-    ) -> EvalResult<'gc> {
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
         root!(dynamic_bindings, Vec::new(), cx);
@@ -600,11 +600,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok((name, value))
     }
 
-    fn implicit_progn<'gc>(
+    fn implicit_progn<'ob>(
         &mut self,
         mut forms: ElemStreamIter<'_, '_>,
-        cx: &'gc mut Context,
-    ) -> EvalResult<'gc> {
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
         root!(last, GcObj::NIL, cx);
         while let Some(form) = forms.next() {
             let value = rebind!(self.eval_form(form, cx)?, cx);
@@ -671,14 +671,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 }
 
-impl<'ob> Rt<Gc<Function<'ob>>> {
-    pub(crate) fn call<'gc>(
+impl Rt<Gc<Function<'_>>> {
+    pub(crate) fn call<'ob>(
         &self,
         args: &mut Root<Vec<GcObj<'static>>>,
         env: &mut Root<Env>,
-        cx: &'gc mut Context,
+        cx: &'ob mut Context,
         name: Option<&str>,
-    ) -> EvalResult<'gc> {
+    ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
         match self.bind(cx).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
@@ -705,13 +705,13 @@ impl<'ob> Rt<Gc<Function<'ob>>> {
     }
 }
 
-fn call_closure<'gc>(
+fn call_closure<'ob>(
     closure: &Rt<&Cons>,
     args: &Root<Vec<GcObj>>,
     name: &str,
     env: &mut Root<Env>,
-    cx: &'gc mut Context,
-) -> EvalResult<'gc> {
+    cx: &'ob mut Context,
+) -> EvalResult<'ob> {
     cx.garbage_collect(false);
     let closure = closure.bind(cx);
     match closure.car().get() {
