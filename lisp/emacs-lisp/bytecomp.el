@@ -1052,9 +1052,10 @@ message buffer `default-directory'."
 
 (defvar emacs-lisp-compilation--current-file nil)
 
-(define-compilation-mode emacs-lisp-compilation-mode "elisp-compile"
-  "The variant of `compilation-mode' used for emacs-lisp compilation buffers."
-  (setq-local emacs-lisp-compilation--current-file nil))
+;; RUNE BOOTSTRAP
+;; (define-compilation-mode emacs-lisp-compilation-mode "elisp-compile"
+;;   "The variant of `compilation-mode' used for emacs-lisp compilation buffers."
+;;   (setq-local emacs-lisp-compilation--current-file nil))
 
 (defun emacs-lisp-compilation-recompile ()
   "Recompile the previously byte-compiled file."
