@@ -125,8 +125,8 @@ pub(crate) fn eval<'ob>(
 }
 
 impl Interpreter<'_, '_, '_, '_, '_> {
-    fn eval_form<'a, 'ob>(&mut self, rt: &Rt<GcObj<'a>>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        match rt.bind(cx).get() {
+    fn eval_form<'ob>(&mut self, rt: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
+        match rt.get(cx) {
             Object::Symbol(sym) => self.var_ref(sym, cx),
             Object::Cons(_) => {
                 let x = rt.try_as().unwrap();
@@ -518,7 +518,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> Result<(), EvalError> {
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
-            let (var, val) = match binding.bind(cx).get() {
+            let (var, val) = match binding.get(cx) {
                 // (let ((x y)))
                 Object::Cons(_) => self.let_bind_value(binding.as_cons(), cx)?,
                 // (let (x))
@@ -547,7 +547,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(let_bindings, Vec::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
-            match binding.bind(cx).get() {
+            match binding.get(cx) {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let (sym, var) = self.let_bind_value(binding.as_cons(), cx)?;
@@ -633,7 +633,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     return Err(e);
                 }
                 while let Some(handler) = forms.next() {
-                    match handler.bind(cx).get() {
+                    match handler.get(cx) {
                         Object::Cons(cons) => {
                             // Check that conditions match
                             let condition = cons.car();
@@ -713,7 +713,7 @@ fn call_closure<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
-    match closure.car().bind(cx).get() {
+    match closure.car().get(cx) {
         Object::Symbol(s) if s == &sym::CLOSURE => {
             rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector

@@ -330,6 +330,12 @@ impl Rt<GcObj<'static>> {
     }
 }
 
+impl Rt<GcObj<'_>> {
+    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
+        self.bind(cx).get()
+    }
+}
+
 impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
     type Out = Object<'ob>;
 
@@ -541,7 +547,7 @@ mod test {
         let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![] };
 
         vec.push(GcObj::NIL);
-        assert!(matches!(vec[0].bind(cx).get(), Object::Nil));
+        assert!(matches!(vec[0].get(cx), Object::Nil));
         let str1 = cx.add("str1");
         let str2 = cx.add("str2");
         vec.push(str1);

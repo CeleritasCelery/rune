@@ -129,7 +129,7 @@ pub(crate) fn load<'ob>(
     cx: &'ob mut Context,
     env: &mut Root<Env>,
 ) -> Result<bool> {
-    let file = match file.bind(cx).get() {
+    let file = match file.get(cx) {
         Object::String(x) => x,
         x => bail!(TypeError::new(Type::Symbol, x)),
     };

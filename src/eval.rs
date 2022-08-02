@@ -58,7 +58,7 @@ fn run_hooks<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     for hook in hooks {
-        match hook.bind(cx).get() {
+        match hook.get(cx) {
             Object::Symbol(sym) => {
                 if let Some(val) = env.vars.get(sym) {
                     let val = val.bind(cx);
@@ -112,7 +112,7 @@ pub(crate) fn macroexpand<'ob>(
     cx: &'ob mut Context,
     env: &mut Root<Env>,
 ) -> Result<GcObj<'ob>> {
-    if let Object::Cons(form) = form.bind(cx).get() {
+    if let Object::Cons(form) = form.get(cx) {
         if let Object::Symbol(name) = form.car().get() {
             // shadow the macro based on ENVIRONMENT
             let func: Option<Gc<Function>> = match environment {
