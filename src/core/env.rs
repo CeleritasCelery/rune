@@ -399,7 +399,6 @@ mod test {
     use super::*;
 
     use super::super::gc::{Context, RootSet};
-    use super::super::object::{IntoObject, LispFn};
     use std::mem::size_of;
 
     #[test]
@@ -420,32 +419,32 @@ mod test {
     #[test]
     fn symbol_func() {
         let roots = &RootSet::default();
-        let gc = &Context::new(roots);
+        let cx = &Context::new(roots);
         let inner = GlobalSymbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name);
-        assert!(sym.func(gc).is_none());
-        let func1 = LispFn::new(vec![1].into(), vec![], 0, 0, false);
+        assert!(sym.func(cx).is_none());
+        let func1 = cons!(1; cx);
         unsafe {
-            sym.set_func(func1.into_obj(gc).into());
+            sym.set_func(func1.try_into().unwrap());
         }
-        let cell1 = sym.func(gc).unwrap();
+        let cell1 = sym.func(cx).unwrap();
         let before = match cell1.get() {
-            Function::LispFn(x) => x,
+            Function::Cons(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
-        assert_eq!(before.body.op_codes.first().unwrap(), &1);
-        let func2 = LispFn::new(vec![2].into(), vec![], 0, 0, false);
+        assert_eq!(before.car(), 1);
+        let func2 = cons!(2; cx);
         unsafe {
-            sym.set_func(func2.into_obj(gc).into());
+            sym.set_func(func2.try_into().unwrap());
         }
-        let cell2 = sym.func(gc).unwrap();
+        let cell2 = sym.func(cx).unwrap();
         let after = match cell2.get() {
-            Function::LispFn(x) => x,
+            Function::Cons(x) => x,
             _ => unreachable!("Type should be a lisp function"),
         };
-        assert_eq!(after.body.op_codes.first().unwrap(), &2);
-        assert_eq!(before.body.op_codes.first().unwrap(), &1);
+        assert_eq!(after.car(), 2);
+        assert_eq!(before.car(), 1);
     }
 
     #[test]

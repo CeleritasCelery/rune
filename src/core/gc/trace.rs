@@ -36,11 +36,11 @@ mod test {
     #[test]
     fn test_trace_root() {
         let roots = &RootSet::default();
-        let gc = &mut Context::new(roots);
+        let cx = &mut Context::new(roots);
         let foo = Foo(7);
         assert_eq!(roots.roots.borrow().len(), 0);
         {
-            root!(_root, foo, gc);
+            root!(_root, foo, cx);
             assert_eq!(roots.roots.borrow().len(), 1);
         }
         assert_eq!(roots.roots.borrow().len(), 0);

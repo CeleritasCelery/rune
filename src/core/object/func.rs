@@ -3,8 +3,7 @@ use super::super::{
     gc::{Block, Context, Root},
 };
 use super::GcObj;
-use crate::opcode::OpCode;
-use crate::{core::gc::Rt, opcode::CodeVec};
+use crate::core::gc::Rt;
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -38,6 +37,9 @@ pub(crate) struct LispFn<'ob> {
     pub(crate) args: FnArgs,
 }
 
+#[derive(PartialEq, Clone, Default, Debug)]
+pub(crate) struct CodeVec(Vec<u8>);
+
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.
     /// If a function has 3 required args and 2 optional, and it is called with
@@ -57,29 +59,6 @@ impl FnArgs {
 
 define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
 
-impl<'ob> LispFn<'ob> {
-    pub(crate) fn new(
-        op_codes: CodeVec,
-        constants: Vec<GcObj<'ob>>,
-        required: u16,
-        optional: u16,
-        rest: bool,
-    ) -> Self {
-        LispFn {
-            body: Expression {
-                op_codes,
-                constants,
-            },
-            args: FnArgs {
-                required,
-                optional,
-                rest,
-                advice: false,
-            },
-        }
-    }
-}
-
 impl<'old, 'new> LispFn<'old> {
     pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn<'new> {
         LispFn {
@@ -89,18 +68,6 @@ impl<'old, 'new> LispFn<'old> {
             },
             args: self.args,
         }
-    }
-}
-
-impl<'ob> Default for LispFn<'ob> {
-    fn default() -> Self {
-        LispFn::new(
-            vec_into![OpCode::Constant0, OpCode::Ret].into(),
-            vec![GcObj::NIL],
-            0,
-            0,
-            false,
-        )
     }
 }
 
@@ -148,32 +115,5 @@ impl PartialEq for SubrFn {
         let lhs = self.subr as *const BuiltInFn;
         let rhs = other.subr as *const BuiltInFn;
         lhs == rhs
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::super::super::gc::RootSet;
-    use super::super::Object;
-    use super::*;
-
-    #[test]
-    fn function() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let constant: GcObj = cx.add(1);
-        let lisp_fn = LispFn::new(vec_into![0, 1, 2].into(), vec![constant], 0, 0, false);
-        let obj: GcObj = cx.add(lisp_fn);
-        assert!(matches!(obj.get(), Object::LispFn(_)));
-        format!("{}", obj);
-        let func = match obj.get() {
-            Object::LispFn(x) => x,
-            _ => unreachable!("expected lispfn"),
-        };
-        assert_eq!(func.body.op_codes, vec_into![0, 1, 2].into());
-        assert_eq!(func.body.constants, vec![1]);
-        assert_eq!(func.args.required, 0);
-        assert_eq!(func.args.optional, 0);
-        assert!(!func.args.rest);
     }
 }
