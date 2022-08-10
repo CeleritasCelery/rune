@@ -186,7 +186,20 @@ defvar!(LOAD_HISTORY);
 defvar!(LOAD_PATH, list!("lisp"));
 defvar!(LOAD_FILE_NAME, false);
 
-defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY, LOAD_PATH, LOAD_FILE_NAME});
+define_symbols!(
+    FUNCS => {
+        load,
+        read_from_string,
+        intern,
+    }
+    VARS => {
+        LEXICAL_BINDING,
+        CURRENT_LOAD_LIST,
+        LOAD_HISTORY,
+        LOAD_PATH,
+        LOAD_FILE_NAME
+    }
+);
 
 #[cfg(test)]
 mod test {

@@ -836,7 +836,7 @@ fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Optio
     Ok((required, optional, rest))
 }
 
-defsubr!(eval);
+define_symbols!(FUNCS => {eval});
 
 #[cfg(test)]
 mod test {

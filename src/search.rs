@@ -12,4 +12,4 @@ fn string_equal(s1: &str, s2: &str) -> bool {
     s1 == s2
 }
 
-defsubr!(string_match, string_equal);
+define_symbols!(FUNCS => {string_match, string_equal});

@@ -175,75 +175,48 @@ fn set_default<'ob>(
     value
 }
 
-defsym!(UNQUOTE, ",");
-defsym!(SPLICE, ",@");
-defsym!(BACKQUOTE, "`");
-defsym!(NIL, "nil");
-defsym!(TRUE, "t");
-defsym!(AND_OPTIONAL, "&optional");
-defsym!(AND_REST, "&rest");
-defsym!(LET_STAR, "let*");
-defsym!(FUNCTION);
-defsym!(QUOTE);
-defsym!(MACRO);
-defsym!(LAMBDA);
-defsym!(CLOSURE);
-defsym!(CONDITION_CASE);
-defsym!(WHILE);
-defsym!(PROGN);
-defsym!(PROG1);
-defsym!(PROG2);
-defsym!(SETQ);
-defsym!(DEFCONST);
-defsym!(COND);
-defsym!(LET);
-defsym!(IF);
-defsym!(AND);
-defsym!(OR);
-defsym!(INTERACTIVE);
-defsym!(CATCH);
-defsym!(THROW);
-defsym!(ERROR);
-defsym!(DEBUG);
-
-defsubr!(
-    apply,
-    funcall,
-    run_hooks,
-    autoload,
-    autoload_do_load,
-    macroexpand,
-    internal__define_uninitialized_variable,
-    set_default_toplevel_value,
-    set_default,
-    FUNCTION,
-    QUOTE,
-    MACRO,
-    UNQUOTE,
-    SPLICE,
-    BACKQUOTE,
-    NIL,
-    TRUE,
-    AND_OPTIONAL,
-    AND_REST,
-    LAMBDA,
-    CLOSURE,
-    CONDITION_CASE,
-    WHILE,
-    PROGN,
-    PROG1,
-    PROG2,
-    SETQ,
-    DEFCONST,
-    COND,
-    LET,
-    LET_STAR,
-    IF,
-    AND,
-    OR,
-    INTERACTIVE,
-    CATCH,
-    THROW,
-    ERROR,
-    DEBUG,
+define_symbols!(
+    FUNCS => {
+        apply,
+        funcall,
+        run_hooks,
+        autoload,
+        autoload_do_load,
+        macroexpand,
+        internal__define_uninitialized_variable,
+        set_default_toplevel_value,
+        set_default,
+    }
+    SYMS => {
+        FUNCTION,
+        QUOTE,
+        MACRO,
+        UNQUOTE = ",",
+        SPLICE = ",@",
+        BACKQUOTE = "`",
+        NIL,
+        TRUE = "t",
+        AND_OPTIONAL = "&optional",
+        AND_REST = "&rest",
+        LAMBDA,
+        CLOSURE,
+        CONDITION_CASE,
+        WHILE,
+        PROGN,
+        PROG1,
+        PROG2,
+        SETQ,
+        DEFCONST,
+        COND,
+        LET,
+        LET_STAR = "let*",
+        IF,
+        AND,
+        OR,
+        INTERACTIVE,
+        CATCH,
+        THROW,
+        ERROR,
+        DEBUG,
+    }
 );

@@ -347,8 +347,6 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
     }
 }
 
-defsym!(KW_TEST);
-
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
@@ -540,35 +538,39 @@ mod test {
     }
 }
 
-defsubr!(
-    mapcar,
-    mapc,
-    reverse,
-    nreverse,
-    nconc,
-    assq,
-    assoc,
-    copy_alist,
-    make_hash_table,
-    hash_table_p,
-    puthash,
-    gethash,
-    length,
-    safe_length,
-    nth,
-    nthcdr,
-    concat,
-    append,
-    delq,
-    delete,
-    memq,
-    member,
-    defvaralias,
-    featurep,
-    require,
-    prin1_to_string,
-    substring,
-    copy_sequence,
-    enable_debug,
-    KW_TEST,
+define_symbols!(
+    FUNCS => {
+        mapcar,
+        mapc,
+        reverse,
+        nreverse,
+        nconc,
+        assq,
+        assoc,
+        copy_alist,
+        make_hash_table,
+        hash_table_p,
+        puthash,
+        gethash,
+        length,
+        safe_length,
+        nth,
+        nthcdr,
+        concat,
+        append,
+        delq,
+        delete,
+        memq,
+        member,
+        defvaralias,
+        featurep,
+        require,
+        prin1_to_string,
+        substring,
+        copy_sequence,
+        enable_debug,
+    }
+    SYMS => {
+        KW_TEST,
+    }
 );

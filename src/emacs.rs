@@ -12,8 +12,10 @@ defvar!(COMMAND_LINE_ARGS, list!(""));
 defvar!(DEFAULT_DIRECTORY, "");
 defvar!(NONINTERACTIVE, true);
 
-defsubr!(
-    kill_emacs;
+define_symbols!(
+    FUNCS => {
+        kill_emacs,
+    }
     VARS => {
         EMACS_VERSION,
         SYSTEM_TYPE,

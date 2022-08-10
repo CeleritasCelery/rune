@@ -200,7 +200,7 @@ fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
     crate::cons!(car, cdr; cx)
 }
 
-defsubr!(car, cdr, cons, setcar, setcdr, car_safe, cdr_safe);
+define_symbols!(FUNCS => {car, cdr, cons, setcar, setcdr, car_safe, cdr_safe});
 
 #[macro_export]
 macro_rules! cons {

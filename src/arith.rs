@@ -237,21 +237,23 @@ pub(crate) fn modulo(x: Gc<Number>, y: Gc<Number>) -> NumberValue {
     x.val() % y.val()
 }
 
-defsubr!(
-    add,
-    sub,
-    mul,
-    div,
-    plus_one,
-    minus_one,
-    num_eq,
-    num_ne,
-    less_than,
-    less_than_or_eq,
-    greater_than,
-    greater_than_or_eq,
-    logior,
-    modulo,
+define_symbols!(
+    FUNCS => {
+        add,
+        sub,
+        mul,
+        div,
+        plus_one,
+        minus_one,
+        num_eq,
+        num_ne,
+        less_than,
+        less_than_or_eq,
+        greater_than,
+        greater_than_or_eq,
+        logior,
+        modulo,
+    }
 );
 
 #[cfg(test)]

@@ -52,7 +52,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     Ok(result)
 }
 
-defsubr!(message, format; VARS => {MESSAGE_NAME, MESSAGE_TYPE});
+define_symbols!(FUNCS => {message, format} VARS => {MESSAGE_NAME, MESSAGE_TYPE});
 
 #[cfg(test)]
 mod test {

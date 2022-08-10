@@ -60,11 +60,13 @@ fn make_symbol(name: &str) -> Symbol {
     crate::core::env::intern(name)
 }
 
-defsubr!(
-    list,
-    make_closure,
-    make_vector,
-    vector,
-    purecopy,
-    make_symbol
+define_symbols!(
+    FUNCS => {
+        list,
+        make_closure,
+        make_vector,
+        vector,
+        purecopy,
+        make_symbol,
+    }
 );

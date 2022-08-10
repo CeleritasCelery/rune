@@ -1,21 +1,23 @@
-#[allow(unused_qualifications)]
-macro_rules! vec_into {
-    ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
-}
-
 macro_rules! count {
     ( $x:tt $($xs:tt)* ) => (1_usize + count!($($xs)*));
     () => (0_usize);
 }
 
-macro_rules! defsubr {
-    ($($fn_sym:ident),+ $(,)? $(; VARS => {$($var_sym:ident),+ $(,)?})?) => (
+macro_rules! define_symbols {
+    (
+        FUNCS => {$($fn_sym:ident),+ $(,)?}
+        $(VARS => {$($var_sym:ident),+ $(,)?})?
+        $(SYMS => {$($raw_sym:ident $(= $raw_name:literal)?),+ $(,)?})?
+    ) => (
         paste::paste!{
+            $($(__defsym!($raw_sym $(, $raw_name)?);)+)?
+
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)?)] = [
-                $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $fn_sym>])),+ ,
-                $($(crate::core::env::ConstSymbol::new([<__FN_PTR_ $var_sym>])),+)?
+            pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)? $($($raw_sym)+)?)] = [
+                $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $fn_sym>])),+
+                $(, $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $var_sym>])),+)?
+                $(, $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $raw_sym>])),+)?
             ];
 
             #[allow(unused_qualifications)]
@@ -31,9 +33,42 @@ macro_rules! defsubr {
         #[allow(non_snake_case)]
         #[doc(hidden)]
         pub(crate) mod __symbol_bindings {
-            bind_symbols!($($fn_sym),+ , $($($var_sym),+)?);
+            __bind_symbols!($($fn_sym),+ $(, $($var_sym),+)? $(, $($raw_sym),+)?);
         }
     );
+}
+
+#[doc(hidden)]
+macro_rules! __bind_symbols {
+    (@step $_idx:expr,) => {};
+    (@step $idx:expr, $head:ident, $($tail:ident,)*) => (
+        paste::paste!{
+            #[allow(dead_code)]
+            #[doc(hidden)]
+            pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::DEFSUBR[$idx];
+        }
+        __bind_symbols!(@step $idx + 1_usize, $($tail,)*);
+    );
+    ($($n:ident),* $(,)?) => {
+        __bind_symbols!(@step 0_usize, $($n,)*);
+    }
+}
+
+#[doc(hidden)]
+macro_rules! __defsym {
+    (@internal $sym:ident, $name:expr) => {
+        paste::paste! {
+            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
+                $name,
+                crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
+            );
+            #[allow(non_snake_case)]
+            #[doc(hidden)]
+            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+        }
+    };
+    ($sym:ident) => (__defsym!(@internal $sym, fn_macros::varname!($sym)););
+    ($sym:ident, $name:literal) => (__defsym!(@internal $sym, $name););
 }
 
 macro_rules! defvar {
@@ -58,37 +93,6 @@ macro_rules! defvar {
     ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
     ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
     ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
-}
-
-macro_rules! defsym {
-    (@internal $sym:ident, $name:expr) => {
-        paste::paste! {
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
-                $name,
-                crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
-            );
-            #[allow(non_snake_case)]
-            #[doc(hidden)]
-            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
-        }
-    };
-    ($sym:ident) => (defsym!(@internal $sym, fn_macros::varname!($sym)););
-    ($sym:ident, $name:literal) => (defsym!(@internal $sym, $name););
-}
-
-macro_rules! bind_symbols {
-    (@step $_idx:expr,) => {};
-    (@step $idx:expr, $head:ident, $($tail:ident,)*) => (
-        paste::paste!{
-            #[allow(dead_code)]
-            #[doc(hidden)]
-            pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::DEFSUBR[$idx];
-        }
-        bind_symbols!(@step $idx + 1_usize, $($tail,)*);
-    );
-    ($($n:ident),* $(,)?) => {
-        bind_symbols!(@step 0_usize, $($n,)*);
-    }
 }
 
 macro_rules! define_unbox {
@@ -124,6 +128,10 @@ macro_rules! define_unbox {
             }
         }
     };
+}
+
+macro_rules! vec_into {
+    ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
 }
 
 #[cfg(test)]

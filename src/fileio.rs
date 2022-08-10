@@ -43,4 +43,4 @@ fn file_directory_p(filename: &str) -> bool {
     }
 }
 
-defsubr!(expand_file_name, file_directory_p);
+define_symbols!(FUNCS => {expand_file_name, file_directory_p});

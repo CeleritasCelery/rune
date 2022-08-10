@@ -14,4 +14,4 @@ fn set_buffer_modified_p(flag: GcObj) -> GcObj {
     flag
 }
 
-defsubr!(set_buffer, set_buffer_modified_p);
+define_symbols!(FUNCS => {set_buffer, set_buffer_modified_p});
