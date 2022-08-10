@@ -10,11 +10,14 @@ macro_rules! define_symbols {
         $(SYMS => {$($raw_sym:ident $(= $raw_name:literal)?),+ $(,)?})?
     ) => (
         paste::paste!{
+            // declare the raw symbols (no function or variable bindings). The
+            // other types have been declared previously with defun! and defvar!
             $($(__defsym!($raw_sym $(, $raw_name)?);)+)?
 
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            pub(crate) const DEFSUBR: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)? $($($raw_sym)+)?)] = [
+            // Create a constant list of all symbols being defined
+            pub(crate) const __SYMBOLS: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)? $($($raw_sym)+)?)] = [
                 $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $fn_sym>])),+
                 $(, $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $var_sym>])),+)?
                 $(, $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $raw_sym>])),+)?
@@ -22,6 +25,7 @@ macro_rules! define_symbols {
 
             #[allow(unused_qualifications)]
             #[doc(hidden)]
+            // Create a function that will initialze all variables
             pub(crate) fn __init_vars<'ob>(
                 _cx: &'ob crate::core::gc::Context,
                 _env: &mut crate::core::gc::Rt<crate::core::env::Env>
@@ -33,6 +37,8 @@ macro_rules! define_symbols {
         #[allow(non_snake_case)]
         #[doc(hidden)]
         pub(crate) mod __symbol_bindings {
+            // Create global constant symbols. These will be re-exported in the
+            // sym module.
             __bind_symbols!($($fn_sym),+ $(, $($var_sym),+)? $(, $($raw_sym),+)?);
         }
     );
@@ -45,7 +51,7 @@ macro_rules! __bind_symbols {
         paste::paste!{
             #[allow(dead_code)]
             #[doc(hidden)]
-            pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::DEFSUBR[$idx];
+            pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::__SYMBOLS[$idx];
         }
         __bind_symbols!(@step $idx + 1_usize, $($tail,)*);
     );

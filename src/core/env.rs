@@ -66,6 +66,7 @@ impl Trace for Env {
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
     pub(crate) sym: ConstSymbol,
+    pub(crate) is_const: bool,
     func: AtomicPtr<u8>,
 }
 
@@ -132,9 +133,12 @@ impl Hash for GlobalSymbol {
 impl GlobalSymbol {
     const NULL: *mut u8 = std::ptr::null_mut();
     pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
+        // We have to do this workaround because starts_with is not const
+        let is_const = name.as_bytes()[0] == b':';
         GlobalSymbol {
             name,
             func: AtomicPtr::new(Self::NULL),
+            is_const,
             sym,
         }
     }
@@ -147,10 +151,17 @@ impl GlobalSymbol {
         GlobalSymbol {
             name,
             func: AtomicPtr::new((subr as *const SubrFn).cast::<u8>() as *mut u8),
+            is_const: false,
             sym: ConstSymbol::new(func),
         }
     }
 
+    // This is workaround due to the limitations of const functions in rust. We
+    // need to bind the function to the symbol when it is declared with
+    // #[defun], but tagging the value is not const, so we can't initialize it
+    // with a tagged value. Instead we put the untagged value in the function
+    // cell and then use this function to ensure it get's tagged before first
+    // use.
     unsafe fn tag_subr(&self) {
         let ptr = self.func.load(Ordering::Acquire);
         if Strict::addr(ptr) != 0 {
@@ -310,17 +321,18 @@ impl ObjectMap {
 }
 
 macro_rules! create_symbolmap {
-    ($($($subr:ident)::*),*) => (
+    ($($($mod:ident)::*),*) => (
         #[allow(unused_imports)]
         #[allow(non_snake_case)]
         pub(crate) mod sym {
+            use super::{Symbol, GlobalSymbol, ConstSymbol};
+            // This GlobalSymbol is assinged to every runtime symbol created.
             static __RUNTIME_SYMBOL_GLOBAL: GlobalSymbol = GlobalSymbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
             fn __RUNTIME_SYMBOL_FN () -> Symbol {&__RUNTIME_SYMBOL_GLOBAL}
             pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
-            $(pub(crate) use $($subr::)*__symbol_bindings::*;)*
-
-                use super::{Symbol, GlobalSymbol, ConstSymbol};
+            // Re-export all symbols in this module
+            $(pub(crate) use $($mod::)*__symbol_bindings::*;)*
         }
 
         #[allow(unused_qualifications)]
@@ -328,16 +340,17 @@ macro_rules! create_symbolmap {
             cx: &'ob crate::core::gc::Context,
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
         ) {
-            $($($subr::)*__init_vars(cx, env);)*
+            $($($mod::)*__init_vars(cx, env);)*
         }
 
         lazy_static! {
             pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
-                let size: usize = 0_usize $(+ $($subr::)*DEFSUBR.len())*;
+                let size: usize = 0_usize $(+ $($mod::)*__SYMBOLS.len())*;
                 let mut map = SymbolMap::with_capacity(size);
-                $(for sym in $($subr::)*DEFSUBR.iter() {
-                    // SAFETY: built-in subroutine are globally immutable, and
-                    // so they are safe to share between threads.
+                $(for sym in $($mod::)*__SYMBOLS.iter() {
+                    // SAFETY: We know that the function values are un-tagged,
+                    // and that only subr's have been defined in the symbols, so
+                    // it is safe to tag all function cell's as subr's
                     unsafe { sym.tag_subr(); }
                     map.pre_init(sym);
                 })*;
@@ -384,7 +397,6 @@ mod test {
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
-        assert_eq!(size_of::<isize>() * 4, size_of::<GlobalSymbol>());
     }
 
     unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {

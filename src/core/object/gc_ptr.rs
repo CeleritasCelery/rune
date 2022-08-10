@@ -696,10 +696,17 @@ impl<'ob> From<Gc<&'ob f64>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Symbol> for Gc<Object<'ob>> {
-    fn from(x: Symbol) -> Self {
+impl<'ob> From<&GlobalSymbol> for Gc<Object<'ob>> {
+    fn from(x: &GlobalSymbol) -> Self {
         let ptr = x as *const GlobalSymbol;
         unsafe { Symbol::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
+    fn from(x: ConstSymbol) -> Self {
+        let sym: &GlobalSymbol = &x;
+        sym.into()
     }
 }
 

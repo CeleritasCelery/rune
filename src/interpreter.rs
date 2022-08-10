@@ -434,7 +434,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn var_ref<'ob>(&self, sym: Symbol, cx: &'ob Context) -> EvalResult<'ob> {
-        if sym.name.starts_with(':') {
+        if sym.is_const {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
