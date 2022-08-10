@@ -180,11 +180,11 @@ pub(crate) fn intern(string: &str) -> Symbol {
     crate::core::env::intern(string)
 }
 
-defvar!(LEXICAL_BINDING, "lexical-binding", true);
-defvar!(CURRENT_LOAD_LIST, "current-load-list");
-defvar!(LOAD_HISTORY, "load-history");
-defvar!(LOAD_PATH, "load-path", list!("lisp"));
-defvar!(LOAD_FILE_NAME, "load-file-name", false);
+defvar!(LEXICAL_BINDING, true);
+defvar!(CURRENT_LOAD_LIST);
+defvar!(LOAD_HISTORY);
+defvar!(LOAD_PATH, list!("lisp"));
+defvar!(LOAD_FILE_NAME, false);
 
 defsubr!(load, read_from_string, intern; VARS => {LEXICAL_BINDING, CURRENT_LOAD_LIST, LOAD_HISTORY, LOAD_PATH, LOAD_FILE_NAME});
 

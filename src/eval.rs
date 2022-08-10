@@ -175,9 +175,6 @@ fn set_default<'ob>(
     value
 }
 
-defsym!(FUNCTION, "function");
-defsym!(QUOTE, "quote");
-defsym!(MACRO, "macro");
 defsym!(UNQUOTE, ",");
 defsym!(SPLICE, ",@");
 defsym!(BACKQUOTE, "`");
@@ -185,26 +182,29 @@ defsym!(NIL, "nil");
 defsym!(TRUE, "t");
 defsym!(AND_OPTIONAL, "&optional");
 defsym!(AND_REST, "&rest");
-defsym!(LAMBDA, "lambda");
-defsym!(CLOSURE, "closure");
-defsym!(CONDITION_CASE, "condition-case");
-defsym!(WHILE, "while");
-defsym!(PROGN, "progn");
-defsym!(PROG1, "prog1");
-defsym!(PROG2, "prog2");
-defsym!(SETQ, "setq");
-defsym!(DEFCONST, "defconst");
-defsym!(COND, "cond");
-defsym!(LET, "let");
 defsym!(LET_STAR, "let*");
-defsym!(IF, "if");
-defsym!(AND, "and");
-defsym!(OR, "or");
-defsym!(INTERACTIVE, "interactive");
-defsym!(CATCH, "catch");
-defsym!(THROW, "throw");
-defsym!(ERROR, "error");
-defsym!(DEBUG, "debug");
+defsym!(FUNCTION);
+defsym!(QUOTE);
+defsym!(MACRO);
+defsym!(LAMBDA);
+defsym!(CLOSURE);
+defsym!(CONDITION_CASE);
+defsym!(WHILE);
+defsym!(PROGN);
+defsym!(PROG1);
+defsym!(PROG2);
+defsym!(SETQ);
+defsym!(DEFCONST);
+defsym!(COND);
+defsym!(LET);
+defsym!(IF);
+defsym!(AND);
+defsym!(OR);
+defsym!(INTERACTIVE);
+defsym!(CATCH);
+defsym!(THROW);
+defsym!(ERROR);
+defsym!(DEBUG);
 
 defsubr!(
     apply,

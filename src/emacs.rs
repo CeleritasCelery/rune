@@ -5,12 +5,12 @@ fn kill_emacs() -> bool {
     false
 }
 
-defvar!(EMACS_VERSION, "emacs-version", "27.1");
-defvar!(SYSTEM_TYPE, "system-type", "darwin");
-defvar!(DUMP_MODE, "dump-mode");
-defvar!(COMMAND_LINE_ARGS, "command-line-args", list!(""));
-defvar!(DEFAULT_DIRECTORY, "default-directory", "");
-defvar!(NONINTERACTIVE, "noninteractive", true);
+defvar!(EMACS_VERSION, "27.1");
+defvar!(SYSTEM_TYPE, "darwin");
+defvar!(DUMP_MODE);
+defvar!(COMMAND_LINE_ARGS, list!(""));
+defvar!(DEFAULT_DIRECTORY, "");
+defvar!(NONINTERACTIVE, true);
 
 defsubr!(
     kill_emacs;

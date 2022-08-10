@@ -37,7 +37,7 @@ macro_rules! defsubr {
 }
 
 macro_rules! defvar {
-    (@internal $sym:ident, $name:literal, $cx:ident, $value:expr) => (
+    (@internal $sym:ident, $name:expr, $cx:ident, $value:expr) => (
         paste::paste!{
             static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
                 $name,
@@ -54,13 +54,14 @@ macro_rules! defvar {
             }
         }
     );
-    ($sym:ident, $name:literal) => (defvar!(@internal $sym, $name, _a, crate::core::object::Gc::NIL););
-    ($sym:ident, $name:literal, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, $name, cx, crate::list!($($values),+; cx)););
+    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::Gc::NIL););
+    ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
+    ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
     ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
 }
 
 macro_rules! defsym {
-    ($sym:ident, $name:literal) => {
+    (@internal $sym:ident, $name:expr) => {
         paste::paste! {
             static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
                 $name,
@@ -71,6 +72,8 @@ macro_rules! defsym {
             fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
         }
     };
+    ($sym:ident) => (defsym!(@internal $sym, fn_macros::varname!($sym)););
+    ($sym:ident, $name:literal) => (defsym!(@internal $sym, $name););
 }
 
 macro_rules! bind_symbols {

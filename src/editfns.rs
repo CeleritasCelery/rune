@@ -12,8 +12,8 @@ fn message(format_string: &str, args: &[GcObj]) -> Result<String> {
     Ok(message)
 }
 
-defvar!(MESSAGE_NAME, "message-name");
-defvar!(MESSAGE_TYPE, "message-type", "new message");
+defvar!(MESSAGE_NAME);
+defvar!(MESSAGE_TYPE, "new message");
 
 #[defun]
 fn format(string: &str, objects: &[GcObj]) -> Result<String> {

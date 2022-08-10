@@ -347,7 +347,7 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
     }
 }
 
-defsym!(KW_TEST, ":test");
+defsym!(KW_TEST);
 
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
