@@ -37,7 +37,6 @@ impl ArgError {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Type {
     Int,
-    True,
     Nil,
     Cons,
     Vec,

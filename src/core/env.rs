@@ -143,6 +143,15 @@ impl GlobalSymbol {
         }
     }
 
+    pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
+        GlobalSymbol {
+            name,
+            func: AtomicPtr::new(Self::NULL),
+            is_const: true,
+            sym,
+        }
+    }
+
     pub(crate) const unsafe fn new_with_subr(
         name: &'static str,
         subr: &'static SubrFn,

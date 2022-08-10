@@ -288,7 +288,7 @@ fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> GcObj<'a> {
             Ok(num) => cx.add(num),
             Err(_) => match slice {
                 "nil" => GcObj::NIL,
-                "t" => GcObj::TRUE,
+                "t" => sym::TRUE.into(),
                 _ => cx.add(intern_symbol(slice)),
             },
         },

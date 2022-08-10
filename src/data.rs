@@ -152,7 +152,7 @@ pub(crate) fn nlistp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn symbolp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Symbol(_) | Object::Nil | Object::True)
+    matches!(object.get(), Object::Symbol(_) | Object::Nil)
 }
 
 #[defun]

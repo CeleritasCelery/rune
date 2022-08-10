@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{root, rooted_iter};
 
-use crate::core::env::{Env, Symbol};
+use crate::core::env::{ConstSymbol, Env, GlobalSymbol, Symbol};
 
 use anyhow::{bail, Result};
 
@@ -175,6 +175,17 @@ fn set_default<'ob>(
     value
 }
 
+// This is special case where we want to declare `t' to be a constant variable.
+// Only keywords, nil, and t are constant. And keywords are handled by the
+// define_symbols code. This one needs to be manual.
+static TRUE: GlobalSymbol = GlobalSymbol::new_const("t", ConstSymbol::new(__FN_PTR_TRUE));
+
+#[allow(non_snake_case)]
+#[doc(hidden)]
+fn __FN_PTR_TRUE() -> &'static GlobalSymbol {
+    &TRUE
+}
+
 define_symbols!(
     FUNCS => {
         apply,
@@ -186,6 +197,7 @@ define_symbols!(
         internal__define_uninitialized_variable,
         set_default_toplevel_value,
         set_default,
+        TRUE,
     }
     SYMS => {
         FUNCTION,
@@ -195,7 +207,6 @@ define_symbols!(
         SPLICE = ",@",
         BACKQUOTE = "`",
         NIL,
-        TRUE = "t",
         AND_OPTIONAL = "&optional",
         AND_REST = "&rest",
         LAMBDA,

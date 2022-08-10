@@ -46,7 +46,6 @@ enum Tag {
     Float,
     Cons,
     Nil,
-    True,
     String,
     Vec,
     HashTable,
@@ -213,7 +212,10 @@ impl<'ob> IntoObject<'ob> for bool {
 
     fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
         match self {
-            true => Gc::from_tag(Tag::True),
+            true => {
+                let sym: Symbol = &crate::core::env::sym::TRUE;
+                Gc::from_ptr(sym, Tag::Symbol)
+            }
             false => Gc::from_tag(Tag::Nil),
         }
     }
@@ -249,8 +251,7 @@ impl<'ob> IntoObject<'ob> for Symbol {
     type Out = Symbol;
 
     fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
-        let ptr: *const u8 = (self as *const GlobalSymbol).cast();
-        Gc::from_ptr(ptr, Tag::Symbol)
+        Gc::from_ptr(self, Tag::Symbol)
     }
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
@@ -604,7 +605,6 @@ pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob f64),
     Symbol(Symbol),
-    True,
     Nil,
     Cons(&'ob Cons),
     Vec(&'ob RefCell<ObjVec<'ob>>),
@@ -621,7 +621,6 @@ impl Object<'_> {
             Object::Int(_) => Type::Int,
             Object::Float(_) => Type::Float,
             Object::Symbol(_) => Type::Symbol,
-            Object::True => Type::True,
             Object::Nil => Type::Nil,
             Object::Cons(_) => Type::Cons,
             Object::Vec(_) => Type::Vec,
@@ -669,7 +668,6 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
             Tag::Float => Object::Float(unsafe { f64::from_obj_ptr(ptr) }),
             Tag::Nil => Object::Nil,
-            Tag::True => Object::True,
             Tag::String => Object::String(unsafe { String::from_obj_ptr(ptr) }),
             Tag::Vec => Object::Vec(unsafe { ObjVec::from_obj_ptr(ptr) }),
             Tag::HashTable => Object::HashTable(unsafe { HashTable::from_obj_ptr(ptr) }),
@@ -985,7 +983,6 @@ impl<T> Gc<T> {
             Object::Symbol(x) => x.into(),
             Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
-            Object::True => Gc::TRUE,
             Object::Nil => Gc::NIL,
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
@@ -1054,7 +1051,6 @@ impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
 }
 
 impl<'ob> Gc<Object<'ob>> {
-    pub(crate) const TRUE: Self = Gc::from_tag(Tag::True);
     pub(crate) const NIL: Self = Gc::from_tag(Tag::Nil);
 
     pub(crate) fn as_cons(self) -> &'ob Cons {
@@ -1126,7 +1122,6 @@ impl fmt::Display for Object<'_> {
             Object::Symbol(x) => write!(f, "{x}"),
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::True => write!(f, "t"),
             Object::Nil => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
@@ -1159,7 +1154,6 @@ impl fmt::Debug for Object<'_> {
             Object::Symbol(x) => write!(f, "{x}"),
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::True => write!(f, "t"),
             Object::Nil => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
@@ -1196,9 +1190,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::String => ObjectAllocation::String(unsafe { &*String::cast_ptr(ptr) }),
             Tag::Vec => ObjectAllocation::Vec(unsafe { &*Vec::cast_ptr(ptr) }),
             Tag::HashTable => ObjectAllocation::HashTable(unsafe { &*HashTable::cast_ptr(ptr) }),
-            Tag::Symbol | Tag::Int | Tag::Nil | Tag::True | Tag::SubrFn => {
-                ObjectAllocation::NonAllocated
-            }
+            Tag::Symbol | Tag::Int | Tag::Nil | Tag::SubrFn => ObjectAllocation::NonAllocated,
         }
     }
 

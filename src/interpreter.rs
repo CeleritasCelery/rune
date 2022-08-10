@@ -360,7 +360,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn eval_and<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        root!(last, GcObj::TRUE, cx);
+        let t: GcObj = sym::TRUE.into();
+        root!(last, t, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = rebind!(self.eval_form(form, cx)?, cx);
@@ -758,7 +759,7 @@ fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
             Object::Cons(pair) => {
                 env.push(pair);
             }
-            Object::True => return Ok(env),
+            Object::Symbol(s) if s == &sym::TRUE => return Ok(env),
             x => bail!("Invalid closure environment member: {x}"),
         }
     }

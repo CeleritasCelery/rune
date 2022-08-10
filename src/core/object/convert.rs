@@ -96,7 +96,7 @@ where
 impl<'ob> From<bool> for GcObj<'ob> {
     fn from(b: bool) -> Self {
         if b {
-            GcObj::TRUE
+            sym::TRUE.into()
         } else {
             GcObj::NIL
         }

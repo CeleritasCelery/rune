@@ -426,7 +426,7 @@ fn enable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::gc::RootSet;
+    use crate::core::{env::sym, gc::RootSet};
 
     use super::*;
 
@@ -441,7 +441,7 @@ mod test {
         }
         {
             let list = list![true, true, true; cx];
-            let res = delq(GcObj::TRUE, list.try_into().unwrap()).unwrap();
+            let res = delq(sym::TRUE.into(), list.try_into().unwrap()).unwrap();
             assert_eq!(res, GcObj::NIL);
         }
     }
