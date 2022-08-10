@@ -66,8 +66,7 @@ impl Trace for Env {
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
     pub(crate) sym: ConstSymbol,
-    pub(crate) is_const: bool,
-    func: AtomicPtr<u8>,
+    func: Option<AtomicPtr<u8>>,
 }
 
 /// A static reference to a [`GlobalSymbol`]. These
@@ -134,20 +133,18 @@ impl GlobalSymbol {
     const NULL: *mut u8 = std::ptr::null_mut();
     pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
         // We have to do this workaround because starts_with is not const
-        let is_const = name.as_bytes()[0] == b':';
-        GlobalSymbol {
-            name,
-            func: AtomicPtr::new(Self::NULL),
-            is_const,
-            sym,
-        }
+        let func = if name.as_bytes()[0] == b':' {
+            None
+        } else {
+            Some(AtomicPtr::new(Self::NULL))
+        };
+        GlobalSymbol { name, sym, func }
     }
 
     pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
         GlobalSymbol {
             name,
-            func: AtomicPtr::new(Self::NULL),
-            is_const: true,
+            func: None,
             sym,
         }
     }
@@ -159,10 +156,15 @@ impl GlobalSymbol {
     ) -> Self {
         GlobalSymbol {
             name,
-            func: AtomicPtr::new((subr as *const SubrFn).cast::<u8>() as *mut u8),
-            is_const: false,
+            func: Some(AtomicPtr::new(
+                (subr as *const SubrFn).cast::<u8>() as *mut u8
+            )),
             sym: ConstSymbol::new(func),
         }
+    }
+
+    pub(crate) const fn is_const(&self) -> bool {
+        self.func.is_none()
     }
 
     // This is workaround due to the limitations of const functions in rust. We
@@ -172,28 +174,35 @@ impl GlobalSymbol {
     // cell and then use this function to ensure it get's tagged before first
     // use.
     unsafe fn tag_subr(&self) {
-        let ptr = self.func.load(Ordering::Acquire);
-        if Strict::addr(ptr) != 0 {
-            let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
-            self.set_func(func.into());
+        if let Some(func) = &self.func {
+            let ptr = func.load(Ordering::Acquire);
+            if Strict::addr(ptr) != 0 {
+                let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
+                self.set_func(func.into());
+            }
         }
     }
 
     pub(crate) fn has_func(&self) -> bool {
-        Strict::addr(self.func.load(Ordering::Acquire)) != 0
+        match &self.func {
+            Some(func) => Strict::addr(func.load(Ordering::Acquire)) != 0,
+            None => false,
+        }
     }
 
     fn get(&self) -> Option<Gc<Function>> {
-        let ptr = self.func.load(Ordering::Acquire);
-        match Strict::addr(ptr) {
-            0 => None,
-            // SAFETY: we ensure that 0 is not representable in the enum
-            // Function (by making a reference the first element, which will
-            // never be null). So it is safe to use 0 as niche value for `None`.
-            // We can't use AtomicCell due to this issue:
-            // https://github.com/crossbeam-rs/crossbeam/issues/748
-            _ => Some(unsafe { Gc::from_raw_ptr(ptr) }),
+        if let Some(func) = &self.func {
+            let ptr = func.load(Ordering::Acquire);
+            if Strict::addr(ptr) != 0 {
+                // SAFETY: we ensure that 0 is not representable in the enum
+                // Function (by making a reference the first element, which will
+                // never be null). So it is safe to use 0 as niche value for
+                // `None`. We can't use AtomicCell due to this issue:
+                // https://github.com/crossbeam-rs/crossbeam/issues/748
+                return Some(unsafe { Gc::from_raw_ptr(ptr) });
+            }
         }
+        None
     }
 
     pub(crate) fn func<'a>(&self, _cx: &'a Context) -> Option<Gc<Function<'a>>> {
@@ -213,13 +222,16 @@ impl GlobalSymbol {
     /// requires that the caller:
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` block
+    /// 3. Ensured the symbol is not constant
     unsafe fn set_func(&self, func: Gc<Function>) {
         let val = std::mem::transmute(func);
-        self.func.store(val, Ordering::Release);
+        self.func.as_ref().unwrap().store(val, Ordering::Release);
     }
 
     pub(crate) fn unbind_func(&self) {
-        self.func.store(Self::NULL, Ordering::Release);
+        if let Some(func) = &self.func {
+            func.store(Self::NULL, Ordering::Release);
+        }
     }
 }
 
@@ -316,15 +328,23 @@ impl ObjectMap {
         self.map.intern(name)
     }
 
-    #[allow(clippy::unused_self)]
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) {
-        let new_func = func.clone_in(&self.block);
-        #[cfg(miri)]
-        new_func.get().set_as_miri_root();
-        // SAFETY: The object is marked read-only and we have cloned
-        // in the map's context, so calling this function is safe.
-        unsafe {
-            symbol.set_func(new_func);
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> anyhow::Result<()> {
+        match symbol.func {
+            Some(_) => {
+                let new_func = func.clone_in(&self.block);
+                #[cfg(miri)]
+                new_func.get().set_as_miri_root();
+                // SAFETY: The object is marked read-only, we have cloned in the
+                // map's context, and it is not const, so calling this function
+                // is safe.
+                unsafe {
+                    symbol.set_func(new_func);
+                }
+                Ok(())
+            }
+            None => Err(anyhow::anyhow!(
+                "Attempt to set a constant symbol: {symbol}"
+            )),
         }
     }
 }

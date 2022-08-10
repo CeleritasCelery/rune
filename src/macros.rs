@@ -138,6 +138,7 @@ macro_rules! define_unbox {
     };
 }
 
+#[cfg(test)]
 macro_rules! vec_into {
     ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
 }

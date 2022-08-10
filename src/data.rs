@@ -5,7 +5,7 @@ use crate::core::{
     cons::Cons,
     env::{Env, Symbol, INTERNED_SYMBOLS},
     gc::{Context, Root},
-    object::{Function, Gc, GcObj, Object},
+    object::{GcObj, Object},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -18,18 +18,14 @@ lazy_static! {
     });
 }
 
-fn set_global_function(symbol: Symbol, func: Gc<Function>) {
-    let map = INTERNED_SYMBOLS.lock().unwrap();
-    map.set_func(symbol, func);
-}
-
 #[defun]
 pub(crate) fn fset(symbol: Symbol, definition: GcObj) -> Result<Symbol> {
     if definition == GcObj::NIL {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
-        set_global_function(symbol, func);
+        let map = INTERNED_SYMBOLS.lock().unwrap();
+        map.set_func(symbol, func)?;
     }
     Ok(symbol)
 }
