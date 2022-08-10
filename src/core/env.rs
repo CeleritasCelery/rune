@@ -1,6 +1,7 @@
 use super::gc::{Block, Context, Rt, Trace};
 use super::object::{Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
+use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
 use sptr::Strict;
 use std::fmt;
@@ -18,8 +19,13 @@ pub(crate) struct Env {
 }
 
 impl Rt<Env> {
-    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) {
-        self.vars.insert(sym, value);
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
+        if sym.is_const() {
+            Err(anyhow!("Attempt to set a constant symbol: {sym}"))
+        } else {
+            self.vars.insert(sym, value);
+            Ok(())
+        }
     }
 
     pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
@@ -328,7 +334,7 @@ impl ObjectMap {
         self.map.intern(name)
     }
 
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> anyhow::Result<()> {
+    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> Result<()> {
         match symbol.func {
             Some(_) => {
                 let new_func = func.clone_in(&self.block);
@@ -342,9 +348,7 @@ impl ObjectMap {
                 }
                 Ok(())
             }
-            None => Err(anyhow::anyhow!(
-                "Attempt to set a constant symbol: {symbol}"
-            )),
+            None => Err(anyhow!("Attempt to set a constant symbol: {symbol}")),
         }
     }
 }

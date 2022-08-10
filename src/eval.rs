@@ -158,9 +158,9 @@ fn set_default_toplevel_value<'ob>(
     value: GcObj,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
-) -> GcObj<'ob> {
-    env.as_mut(cx).set_var(symbol, value);
-    GcObj::NIL
+) -> Result<GcObj<'ob>> {
+    env.as_mut(cx).set_var(symbol, value)?;
+    Ok(GcObj::NIL)
 }
 
 #[defun]
@@ -169,10 +169,10 @@ fn set_default<'ob>(
     value: GcObj<'ob>,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
-) -> GcObj<'ob> {
+) -> Result<GcObj<'ob>> {
     // TODO: implement buffer local variables
-    env.as_mut(cx).set_var(symbol, value);
-    value
+    env.as_mut(cx).set_var(symbol, value)?;
+    Ok(value)
 }
 
 // This is special case where we want to declare `t' to be a constant variable.

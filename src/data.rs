@@ -45,9 +45,9 @@ pub(crate) fn set<'ob>(
     newlet: GcObj<'ob>,
     env: &mut Root<Env>,
     cx: &Context,
-) -> GcObj<'ob> {
-    env.as_mut(cx).set_var(place, newlet);
-    newlet
+) -> Result<GcObj<'ob>> {
+    env.as_mut(cx).set_var(place, newlet)?;
+    Ok(newlet)
 }
 
 #[defun]
@@ -213,7 +213,7 @@ pub(crate) fn defvar<'ob>(
     _docstring: Option<&String>,
     env: &mut Root<Env>,
     cx: &Context,
-) -> GcObj<'ob> {
+) -> Result<GcObj<'ob>> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env, cx)
 }

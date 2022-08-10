@@ -227,7 +227,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     // (defvar x)
                     None => GcObj::NIL,
                 };
-                self.var_set(name, value, cx);
+                self.var_set(name, value, cx)?;
                 Ok(value)
             }
             // (defvar)
@@ -407,7 +407,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 (Object::Symbol(var), Some(val)) => {
                     root!(val, cx);
                     let val = rebind!(self.eval_form(val, cx)?, cx);
-                    self.var_set(var, val, cx);
+                    self.var_set(var, val, cx)?;
                     last_value.as_mut(cx).set(val);
                 }
                 (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
@@ -449,7 +449,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) {
+    fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) -> AnyResult<()> {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.car() == name)) {
             Some(value) => {
@@ -457,10 +457,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     .bind(cx)
                     .set_cdr(new_value)
                     .expect("variables should never be immutable");
+                Ok(())
             }
-            None => {
-                self.env.as_mut(cx).set_var(name, new_value);
-            }
+            None => self.env.as_mut(cx).set_var(name, new_value),
         }
     }
 
