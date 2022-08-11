@@ -1,5 +1,5 @@
 use super::gc::{Block, Context};
-use super::object::{Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
+use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
@@ -132,7 +132,7 @@ fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{car} ")?;
             print_rest(cdr, f)
         }
-        Object::Nil => write!(f, "{car})"),
+        Object::Symbol(s) if s.nil() => write!(f, "{car})"),
         cdr => write!(f, "{car} . {cdr})"),
     }
 }
@@ -144,7 +144,7 @@ fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "{car:?} ")?;
             print_rest(cdr, f)
         }
-        Object::Nil => write!(f, "{car:?})"),
+        Object::Symbol(s) if s.nil() => write!(f, "{car:?})"),
         cdr => write!(f, "{car:?} . {cdr:?})"),
     }
 }
@@ -155,7 +155,7 @@ define_unbox!(Cons, &'ob Cons);
 fn car(list: Gc<List>) -> GcObj {
     match list.get() {
         List::Cons(cons) => cons.car(),
-        List::Nil => GcObj::NIL,
+        List::Nil => nil(),
     }
 }
 
@@ -163,7 +163,7 @@ fn car(list: Gc<List>) -> GcObj {
 fn cdr(list: Gc<List>) -> GcObj {
     match list.get() {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => GcObj::NIL,
+        List::Nil => nil(),
     }
 }
 
@@ -171,7 +171,7 @@ fn cdr(list: Gc<List>) -> GcObj {
 fn car_safe(object: GcObj) -> GcObj {
     match object.get() {
         Object::Cons(cons) => cons.car(),
-        _ => GcObj::NIL,
+        _ => nil(),
     }
 }
 
@@ -179,7 +179,7 @@ fn car_safe(object: GcObj) -> GcObj {
 fn cdr_safe(object: GcObj) -> GcObj {
     match object.get() {
         Object::Cons(cons) => cons.cdr(),
-        _ => GcObj::NIL,
+        _ => nil(),
     }
 }
 
@@ -214,7 +214,7 @@ macro_rules! cons {
     };
     ($car:expr; $cx:expr) => {
         $cx.add::<_, _, $crate::core::object::Object>(unsafe {
-            $crate::core::cons::Cons::new($cx.add($car), $crate::core::object::GcObj::NIL)
+            $crate::core::cons::Cons::new($cx.add($car), $crate::core::object::nil())
         })
     };
 }

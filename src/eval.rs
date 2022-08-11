@@ -3,7 +3,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::Object;
+use crate::core::object::{nil, Object};
 use crate::core::{
     gc::{Context, IntoRoot, Root},
     object::{Function, Gc, GcObj},
@@ -71,7 +71,7 @@ fn run_hooks<'ob>(
                                 func.call(args, env, cx, None)?;
                             }
                         }
-                        Object::Nil => {}
+                        Object::Symbol(s) if s.nil() => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
@@ -81,11 +81,10 @@ fn run_hooks<'ob>(
                     }
                 }
             }
-            Object::Nil => {}
             x => bail!(TypeError::new(Type::Symbol, x)),
         }
     }
-    Ok(GcObj::NIL)
+    Ok(nil())
 }
 
 #[defun]
@@ -102,7 +101,7 @@ fn autoload_do_load<'ob>(
 fn autoload<'ob>(function: GcObj<'ob>, file: GcObj) -> GcObj<'ob> {
     // TODO: implement
     println!("autoload: function: {function}, file: {file}");
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
@@ -149,7 +148,7 @@ fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob
 #[allow(non_snake_case)]
 fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>) -> GcObj {
     // TODO: implement doc strings
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
@@ -160,7 +159,7 @@ fn set_default_toplevel_value<'ob>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     env.as_mut(cx).set_var(symbol, value)?;
-    Ok(GcObj::NIL)
+    Ok(nil())
 }
 
 #[defun]
@@ -186,6 +185,14 @@ fn __FN_PTR_TRUE() -> &'static GlobalSymbol {
     &TRUE
 }
 
+static NIL: GlobalSymbol = GlobalSymbol::new_const("nil", ConstSymbol::new(__FN_PTR_NIL));
+
+#[allow(non_snake_case)]
+#[doc(hidden)]
+fn __FN_PTR_NIL() -> &'static GlobalSymbol {
+    &NIL
+}
+
 define_symbols!(
     FUNCS => {
         apply,
@@ -198,6 +205,7 @@ define_symbols!(
         set_default_toplevel_value,
         set_default,
         TRUE,
+        NIL,
     }
     SYMS => {
         FUNCTION,
@@ -206,7 +214,6 @@ define_symbols!(
         UNQUOTE = ",",
         SPLICE = ",@",
         BACKQUOTE = "`",
-        NIL,
         AND_OPTIONAL = "&optional",
         AND_REST = "&rest",
         LAMBDA,

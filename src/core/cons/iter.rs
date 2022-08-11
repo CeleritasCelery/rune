@@ -1,5 +1,4 @@
 use super::super::{
-    error::{Type, TypeError},
     gc::{Root, Rt},
     object::{Gc, GcObj, List, Object},
 };
@@ -42,7 +41,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
             Some(cons) => {
                 (*self).cons = match cons.cdr().get() {
                     Object::Cons(next) => Some(next),
-                    Object::Nil => None,
+                    Object::Symbol(s) if s.nil() => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons.car()))
@@ -54,10 +53,10 @@ impl<'ob> Iterator for ElemIter<'ob> {
 
 impl<'ob> GcObj<'ob> {
     pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
-        match self.get() {
-            Object::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
-            Object::Nil => Ok(ElemIter { cons: None }),
-            _ => Err(TypeError::new(Type::List, self).into()),
+        let list: Gc<List> = self.try_into()?;
+        match list.get() {
+            List::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
+            List::Nil => Ok(ElemIter { cons: None }),
         }
     }
 }
@@ -82,7 +81,7 @@ impl<'ob> Iterator for ConsIter<'ob> {
             List::Cons(cons) => {
                 self.list = match cons.cdr().get() {
                     Object::Cons(next) => List::Cons(next),
-                    Object::Nil => List::Nil,
+                    Object::Symbol(s) if s.nil() => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons))
@@ -162,7 +161,7 @@ macro_rules! rooted_iter {
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {
-                root_elem = Some($crate::core::object::GcObj::NIL);
+                root_elem = Some($crate::core::object::nil());
                 root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
                 $crate::core::cons::ElemStreamIter::new(
                     Some($crate::core::gc::Root::init(

@@ -5,7 +5,7 @@ use crate::core::{
     cons::Cons,
     env::{Env, Symbol, INTERNED_SYMBOLS},
     gc::{Context, Root},
-    object::{GcObj, Object},
+    object::{nil, GcObj, Object},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -20,7 +20,7 @@ lazy_static! {
 
 #[defun]
 pub(crate) fn fset(symbol: Symbol, definition: GcObj) -> Result<Symbol> {
-    if definition == GcObj::NIL {
+    if definition == nil() {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
@@ -72,9 +72,9 @@ pub(crate) fn get<'ob>(
     match env.props.get(&symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => cx.bind(element.1.bind(cx)),
-            None => GcObj::NIL,
+            None => nil(),
         },
-        None => GcObj::NIL,
+        None => nil(),
     }
 }
 
@@ -92,7 +92,7 @@ pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
-        None => GcObj::NIL,
+        None => nil(),
     }
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
 
 #[defun]
 pub(crate) fn null(obj: GcObj) -> bool {
-    matches!(obj.get(), Object::Nil)
+    obj.nil()
 }
 
 #[defun]
@@ -138,7 +138,11 @@ pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
 
 #[defun]
 pub(crate) fn listp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Nil | Object::Cons(_))
+    match object.get() {
+        Object::Symbol(s) if s.nil() => true,
+        Object::Cons(_) => true,
+        _ => false,
+    }
 }
 
 #[defun]
@@ -148,7 +152,7 @@ pub(crate) fn nlistp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn symbolp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Symbol(_) | Object::Nil)
+    matches!(object.get(), Object::Symbol(_))
 }
 
 #[defun]
@@ -245,7 +249,7 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
     match object.get() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),
-            None => GcObj::NIL,
+            None => nil(),
         },
         _ => object,
     }

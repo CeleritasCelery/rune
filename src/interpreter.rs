@@ -5,7 +5,7 @@ use crate::core::{
     env::{sym, Env, Symbol},
     error::{ArgError, Type, TypeError},
     gc::{Context, Root, Rt},
-    object::{Function, Gc, GcObj, List, Object},
+    object::{nil, qtrue, Function, Gc, GcObj, List, Object},
 };
 use crate::{root, rooted_iter};
 use anyhow::Context as _;
@@ -160,7 +160,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::SETQ => self.setq(forms, cx),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, cx),
                 sym::FUNCTION => self.eval_function(forms.bind(cx), cx),
-                sym::INTERACTIVE => Ok(GcObj::NIL), // TODO: implement
+                sym::INTERACTIVE => Ok(nil()), // TODO: implement
                 sym::CATCH => self.catch(forms, cx),
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
@@ -225,7 +225,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     // (defvar x y)
                     Some(value) => rebind!(self.eval_form(value, cx)?, cx),
                     // (defvar x)
-                    None => GcObj::NIL,
+                    None => nil(),
                 };
                 self.var_set(name, value, cx)?;
                 Ok(value)
@@ -334,11 +334,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             List::Nil => bail_err!(ArgError::new(1, 0, "while")),
         };
         root!(condition, cx);
-        while self.eval_form(condition, cx)? != GcObj::NIL {
+        while self.eval_form(condition, cx)? != nil() {
             rooted_iter!(forms, obj, cx);
             self.implicit_progn(forms, cx)?;
         }
-        Ok(GcObj::NIL)
+        Ok(nil())
     }
 
     fn eval_cond<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
@@ -347,7 +347,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             rooted_iter!(clause, form, cx);
             if let Some(first) = clause.next() {
                 let condition = self.eval_form(first, cx)?;
-                if condition != GcObj::NIL {
+                if condition != nil() {
                     return if clause.is_empty() {
                         Ok(rebind!(condition, cx))
                     } else {
@@ -356,17 +356,16 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 }
             }
         }
-        Ok(GcObj::NIL)
+        Ok(nil())
     }
 
     fn eval_and<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        let t: GcObj = sym::TRUE.into();
-        root!(last, t, cx);
+        root!(last, qtrue(), cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = rebind!(self.eval_form(form, cx)?, cx);
-            if result == GcObj::NIL {
-                return Ok(GcObj::NIL);
+            if result == nil() {
+                return Ok(nil());
             }
             last.as_mut(cx).set(result);
         }
@@ -377,11 +376,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
             let result = self.eval_form(form, cx)?;
-            if result != GcObj::NIL {
+            if result != nil() {
                 return Ok(rebind!(result, cx));
             }
         }
-        Ok(GcObj::NIL)
+        Ok(nil())
     }
 
     fn eval_if<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
@@ -391,7 +390,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let true_branch = forms.next().ok_or_else(|| ArgError::new(2, 1, "if"))?;
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
-        if self.eval_form(condition, cx)? != GcObj::NIL {
+        if self.eval_form(condition, cx)? != nil() {
             self.eval_form(true_branch, cx)
         } else {
             self.implicit_progn(forms, cx)
@@ -401,7 +400,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn setq<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
-        root!(last_value, GcObj::NIL, cx);
+        root!(last_value, nil(), cx);
         while let Some((var, val)) = Self::pairs(&mut forms, cx) {
             match (var.get(), val) {
                 (Object::Symbol(var), Some(val)) => {
@@ -522,7 +521,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 // (let ((x y)))
                 Object::Cons(_) => self.let_bind_value(binding.as_cons(), cx)?,
                 // (let (x))
-                Object::Symbol(sym) => (sym, GcObj::NIL),
+                Object::Symbol(sym) => (sym, nil()),
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             };
@@ -556,7 +555,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    let_bindings.as_mut(cx).push((sym, GcObj::NIL));
+                    let_bindings.as_mut(cx).push((sym, nil()));
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
@@ -586,7 +585,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // (let ((x y)))
             Some(x) => rebind!(self.eval_form(x, cx)?, cx),
             // (let ((x)))
-            None => GcObj::NIL,
+            None => nil(),
         };
         // (let ((x y z ..)))
         if !iter.is_empty() {
@@ -605,7 +604,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         mut forms: ElemStreamIter<'_, '_>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        root!(last, GcObj::NIL, cx);
+        root!(last, nil(), cx);
         while let Some(form) = forms.next() {
             let value = rebind!(self.eval_form(form, cx)?, cx);
             last.as_mut(cx).set(value);
@@ -654,14 +653,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                             self.vars.as_mut(cx).push(binding);
                             let list: Gc<List> = match cons.cdr().try_into() {
                                 Ok(x) => x,
-                                Err(_) => return Ok(GcObj::NIL),
+                                Err(_) => return Ok(nil()),
                             };
                             rooted_iter!(handlers, list, cx);
                             let result = rebind!(self.implicit_progn(handlers, cx)?, cx);
                             self.vars.as_mut(cx).pop();
                             return Ok(result);
                         }
-                        Object::Nil => {}
+                        Object::Symbol(s) if s.nil() => {}
                         invalid => bail_err!("{CONDITION_ERROR} {invalid}"),
                     }
                 }

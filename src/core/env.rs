@@ -169,8 +169,14 @@ impl GlobalSymbol {
         }
     }
 
+    #[inline(always)]
     pub(crate) const fn is_const(&self) -> bool {
         self.func.is_none()
+    }
+
+    #[inline(always)]
+    pub(crate) fn nil(&self) -> bool {
+        self == &sym::NIL
     }
 
     // This is workaround due to the limitations of const functions in rust. We

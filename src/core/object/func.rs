@@ -1,8 +1,11 @@
-use super::super::{
-    error::ArgError,
-    gc::{Block, Context, Root},
-};
 use super::GcObj;
+use super::{
+    super::{
+        error::ArgError,
+        gc::{Block, Context, Root},
+    },
+    nil,
+};
 use crate::core::gc::Rt;
 use std::fmt;
 
@@ -96,7 +99,7 @@ impl SubrFn {
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
             for _ in 0..fill_args {
-                args.push(GcObj::NIL);
+                args.push(nil());
             }
         }
         (self.subr)(args, env, cx)

@@ -10,7 +10,7 @@ use super::{
         env::{sym, Symbol},
         error::{ArgError, Type, TypeError},
     },
-    HashTable,
+    nil, qtrue, HashTable,
 };
 use super::{Function, GcObj};
 use anyhow::Context;
@@ -50,7 +50,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
                     Err(e).with_context(|| format!("Integer must be positive, but was {}", x))
                 }
             },
-            Object::Nil => Ok(None),
+            Object::Symbol(s) if s.nil() => Ok(None),
             _ => Err(TypeError::new(Type::Int, obj).into()),
         }
     }
@@ -59,20 +59,14 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
 impl<'ob> TryFrom<GcObj<'ob>> for bool {
     type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
-        match obj.get() {
-            Object::Nil => Ok(false),
-            _ => Ok(true),
-        }
+        Ok(obj.nil())
     }
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
     type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
-        match obj.get() {
-            Object::Nil => Ok(None),
-            _ => Ok(Some(())),
-        }
+        Ok(obj.nil().then_some(()))
     }
 }
 
@@ -96,9 +90,9 @@ where
 impl<'ob> From<bool> for GcObj<'ob> {
     fn from(b: bool) -> Self {
         if b {
-            sym::TRUE.into()
+            qtrue()
         } else {
-            GcObj::NIL
+            nil()
         }
     }
 }
@@ -118,7 +112,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => GcObj::NIL,
+            None => nil(),
         }
     }
 }

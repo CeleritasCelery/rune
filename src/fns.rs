@@ -5,7 +5,7 @@ use crate::core::{
     env::{Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, Root, Rt},
-    object::{Function, Gc, GcObj, HashTable, List, Object},
+    object::{nil, Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{data, root, rooted_iter};
 use anyhow::{bail, ensure, Result};
@@ -34,7 +34,7 @@ pub(crate) fn mapcar<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
-        List::Nil => Ok(GcObj::NIL),
+        List::Nil => Ok(nil()),
         List::Cons(cons) => {
             root!(outputs, Vec::new(), cx);
             root!(call_arg, Vec::new(), cx);
@@ -61,7 +61,7 @@ pub(crate) fn mapc<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.bind(cx).get() {
-        List::Nil => Ok(GcObj::NIL),
+        List::Nil => Ok(nil()),
         List::Cons(cons) => {
             root!(call_arg, Vec::new(), cx);
             rooted_iter!(elements, cons, cx);
@@ -77,7 +77,7 @@ pub(crate) fn mapc<'ob>(
 
 #[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
-    let mut prev = GcObj::NIL;
+    let mut prev = nil();
     for tail in seq.conses() {
         let tail = tail?;
         tail.set_cdr(prev)?;
@@ -88,7 +88,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 
 #[defun]
 pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    let mut tail = GcObj::NIL;
+    let mut tail = nil();
     for elem in seq.elements() {
         tail = cons!(elem?, tail; cx);
     }
@@ -107,9 +107,9 @@ fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
         };
     }
 
-    Ok(match lists.iter().find(|&&x| x != List::EMPTY) {
+    Ok(match lists.iter().find(|&&x| x != List::empty()) {
         Some(x) => x.into(),
-        None => GcObj::NIL,
+        None => nil(),
     })
 }
 
@@ -156,7 +156,7 @@ pub(crate) fn assoc<'ob>(
 
 fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcObj<'ob> {
     match alist.get() {
-        List::Nil => GcObj::NIL,
+        List::Nil => nil(),
         List::Cons(cons) => cons
             .elements()
             .find(|x| match x {
@@ -175,7 +175,7 @@ fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcOb
 #[defun]
 fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match alist.get() {
-        List::Nil => Ok(GcObj::NIL),
+        List::Nil => Ok(nil()),
         List::Cons(cons) => {
             let first = copy_alist_elem(cons.car(), cx);
             let head = cons!(first; cx);
@@ -240,7 +240,7 @@ fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> R
     match val {
         Some(Ok(elem)) => Ok(elem.into()),
         Some(Err(e)) => Err(e),
-        None => Ok(GcObj::NIL),
+        None => Ok(nil()),
     }
 }
 
@@ -290,7 +290,7 @@ fn require<'ob>(
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.into()),
         Err(e) => match noerror {
-            Some(()) => Ok(Gc::NIL),
+            Some(()) => Ok(nil()),
             None => Err(e),
         },
     }
@@ -314,7 +314,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.borrow().len(),
         Object::String(x) => x.len(),
-        Object::Nil => 0,
+        Object::Symbol(s) if s.nil() => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
     Ok(size
@@ -336,14 +336,14 @@ pub(crate) fn safe_length(sequence: GcObj) -> i64 {
 
 #[defun]
 pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
-    list.elements().nth(n).unwrap_or(Ok(GcObj::NIL))
+    list.elements().nth(n).unwrap_or_else(|| Ok(nil()))
 }
 
 #[defun]
 pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
     match list.conses().nth(n) {
         Some(x) => x.map(Into::into),
-        None => Ok(List::EMPTY),
+        None => Ok(List::empty()),
     }
 }
 
@@ -402,7 +402,8 @@ pub(crate) fn gethash<'ob>(
 #[defun]
 fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match arg.get() {
-        Object::String(_) | Object::Vec(_) | Object::Nil | Object::Cons(_) => Ok(arg.clone_in(cx)),
+        Object::Symbol(s) if s.nil() => Ok(arg.clone_in(cx)),
+        Object::String(_) | Object::Vec(_) | Object::Cons(_) => Ok(arg.clone_in(cx)),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }
@@ -426,7 +427,7 @@ fn enable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{env::sym, gc::RootSet};
+    use crate::core::{gc::RootSet, object::qtrue};
 
     use super::*;
 
@@ -441,8 +442,8 @@ mod test {
         }
         {
             let list = list![true, true, true; cx];
-            let res = delq(sym::TRUE.into(), list.try_into().unwrap()).unwrap();
-            assert_eq!(res, GcObj::NIL);
+            let res = delq(qtrue(), list.try_into().unwrap()).unwrap();
+            assert_eq!(res, nil());
         }
     }
 
@@ -481,8 +482,8 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         {
-            let res = nconc(&[List::EMPTY]).unwrap();
-            assert!(res == GcObj::NIL);
+            let res = nconc(&[List::empty()]).unwrap();
+            assert!(res == nil());
         }
         {
             let list: Gc<List> = list![1, 2; cx].try_into().unwrap();
@@ -503,14 +504,14 @@ mod test {
             assert_eq!(res, list![1, 2, 3, 4, 5, 6; cx]);
         }
         {
-            let list1: Gc<List> = GcObj::NIL.try_into().unwrap();
+            let list1: Gc<List> = nil().try_into().unwrap();
             let list2: Gc<List> = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
         {
             let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
-            let list2: Gc<List> = GcObj::NIL.try_into().unwrap();
+            let list2: Gc<List> = nil().try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }

@@ -1,29 +1,29 @@
 use fn_macros::defun;
 
-use crate::core::object::GcObj;
+use crate::core::object::{nil, GcObj};
 
 #[defun]
 pub(crate) fn make_keymap(_string: Option<&String>) -> GcObj {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
 pub(crate) fn make_sparse_keymap(_string: Option<&String>) -> GcObj {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
 pub(crate) fn use_global_map(_keymap: GcObj) -> GcObj {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
 pub(crate) fn set_keymap_parent<'ob>(_keymap: GcObj<'ob>, _parent: GcObj<'ob>) -> GcObj<'ob> {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 #[defun]
@@ -33,7 +33,7 @@ pub(crate) fn define_key<'ob>(
     _def: GcObj<'ob>,
 ) -> GcObj<'ob> {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 defvar!(MINIBUFFER_LOCAL_MAP);

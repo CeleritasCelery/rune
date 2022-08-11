@@ -27,8 +27,17 @@ unsafe impl Send for RawObj {}
 
 impl Default for RawObj {
     fn default() -> Self {
-        Self { ptr: Gc::NIL.ptr }
+        Self { ptr: nil().ptr }
     }
+}
+
+#[inline(always)]
+pub(crate) fn nil<'a>() -> GcObj<'a> {
+    crate::core::env::sym::NIL.into()
+}
+
+pub(crate) fn qtrue<'a>() -> GcObj<'a> {
+    crate::core::env::sym::TRUE.into()
 }
 
 #[derive(Copy, Clone)]
@@ -45,7 +54,6 @@ enum Tag {
     Int,
     Float,
     Cons,
-    Nil,
     String,
     Vec,
     HashTable,
@@ -67,11 +75,6 @@ impl<T> Gc<T> {
             std::mem::size_of::<*const ()>()
         );
         let ptr = Strict::map_addr(ptr.cast::<u8>(), |x| (x << 8) | tag as usize);
-        Self::new(ptr)
-    }
-
-    const fn from_tag(tag: Tag) -> Self {
-        let ptr = sptr::invalid(tag as usize);
         Self::new(ptr)
     }
 
@@ -176,7 +179,7 @@ impl<'ob, T> IntoObject<'ob> for Option<Gc<T>> {
     fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
         match self {
             Some(x) => unsafe { transmute(x) },
-            None => GcObj::NIL,
+            None => nil(),
         }
     }
 }
@@ -216,7 +219,10 @@ impl<'ob> IntoObject<'ob> for bool {
                 let sym: Symbol = &crate::core::env::sym::TRUE;
                 Gc::from_ptr(sym, Tag::Symbol)
             }
-            false => Gc::from_tag(Tag::Nil),
+            false => {
+                let sym: Symbol = &crate::core::env::sym::NIL;
+                Gc::from_ptr(sym, Tag::Symbol)
+            }
         }
     }
 }
@@ -459,7 +465,10 @@ pub(crate) enum List<'ob> {
 }
 
 impl List<'_> {
-    pub(crate) const EMPTY: Gc<Self> = Gc::from_tag(Tag::Nil);
+    pub(crate) fn empty() -> Gc<Self> {
+        let sym: Symbol = &crate::core::env::sym::NIL;
+        Gc::from_ptr(sym, Tag::Symbol)
+    }
 }
 
 impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
@@ -486,7 +495,7 @@ impl<'ob> Gc<List<'ob>> {
     pub(crate) fn get(self) -> List<'ob> {
         let (ptr, tag) = self.untag();
         match tag {
-            Tag::Nil => List::Nil,
+            Tag::Symbol => List::Nil,
             Tag::Cons => List::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
             _ => unreachable!(),
         }
@@ -605,7 +614,6 @@ pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob f64),
     Symbol(Symbol),
-    Nil,
     Cons(&'ob Cons),
     Vec(&'ob RefCell<ObjVec<'ob>>),
     HashTable(&'ob RefCell<HashTable<'ob>>),
@@ -621,7 +629,6 @@ impl Object<'_> {
             Object::Int(_) => Type::Int,
             Object::Float(_) => Type::Float,
             Object::Symbol(_) => Type::Symbol,
-            Object::Nil => Type::Nil,
             Object::Cons(_) => Type::Cons,
             Object::Vec(_) => Type::Vec,
             Object::HashTable(_) => Type::HashTable,
@@ -667,7 +674,6 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::LispFn => Object::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
             Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
             Tag::Float => Object::Float(unsafe { f64::from_obj_ptr(ptr) }),
-            Tag::Nil => Object::Nil,
             Tag::String => Object::String(unsafe { String::from_obj_ptr(ptr) }),
             Tag::Vec => Object::Vec(unsafe { ObjVec::from_obj_ptr(ptr) }),
             Tag::HashTable => Object::HashTable(unsafe { HashTable::from_obj_ptr(ptr) }),
@@ -796,10 +802,10 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
-            Tag::Int | Tag::Float => unsafe { Ok(Some(transmute(value))) },
-            Tag::Nil => Ok(None),
-            _ => Err(TypeError::new(Type::Number, value)),
+        if value.nil() {
+            Ok(None)
+        } else {
+            value.try_into().map(Some)
         }
     }
 }
@@ -820,8 +826,9 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
-            Tag::Nil | Tag::Cons => unsafe { Ok(Self::transmute(value)) },
+        match value.get() {
+            Object::Symbol(s) if s.nil() => unsafe { Ok(Self::transmute(value)) },
+            Object::Cons(_) => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
     }
@@ -868,10 +875,15 @@ impl<'ob> GcObj<'ob> {
     where
         GcObj<'ob>: TryInto<T, Error = E>,
     {
-        match value.tag() {
-            Tag::Nil => Ok(None),
-            _ => Ok(Some(value.try_into()?)),
+        if value.nil() {
+            Ok(None)
+        } else {
+            Ok(Some(value.try_into()?))
         }
+    }
+
+    pub(crate) fn nil(self) -> bool {
+        self == crate::core::env::sym::NIL
     }
 }
 
@@ -983,7 +995,6 @@ impl<T> Gc<T> {
             Object::Symbol(x) => x.into(),
             Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
-            Object::Nil => Gc::NIL,
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
             Object::HashTable(_) => todo!("implement clone for hashtable"),
@@ -1051,8 +1062,6 @@ impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
 }
 
 impl<'ob> Gc<Object<'ob>> {
-    pub(crate) const NIL: Self = Gc::from_tag(Tag::Nil);
-
     pub(crate) fn as_cons(self) -> &'ob Cons {
         self.try_into().unwrap()
     }
@@ -1060,25 +1069,13 @@ impl<'ob> Gc<Object<'ob>> {
 
 impl Default for Gc<Object<'_>> {
     fn default() -> Self {
-        Gc::NIL
-    }
-}
-
-impl Default for &Gc<Object<'_>> {
-    fn default() -> Self {
-        &Gc::NIL
+        nil()
     }
 }
 
 impl Default for Gc<List<'_>> {
     fn default() -> Self {
-        List::EMPTY
-    }
-}
-
-impl Default for &Gc<List<'_>> {
-    fn default() -> Self {
-        &List::EMPTY
+        List::empty()
     }
 }
 
@@ -1122,7 +1119,6 @@ impl fmt::Display for Object<'_> {
             Object::Symbol(x) => write!(f, "{x}"),
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::Nil => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
@@ -1154,7 +1150,6 @@ impl fmt::Debug for Object<'_> {
             Object::Symbol(x) => write!(f, "{x}"),
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::Nil => write!(f, "nil"),
             Object::Float(x) => {
                 if x.fract() == 0.0_f64 {
                     write!(f, "{x:.1}")
@@ -1190,7 +1185,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::String => ObjectAllocation::String(unsafe { &*String::cast_ptr(ptr) }),
             Tag::Vec => ObjectAllocation::Vec(unsafe { &*Vec::cast_ptr(ptr) }),
             Tag::HashTable => ObjectAllocation::HashTable(unsafe { &*HashTable::cast_ptr(ptr) }),
-            Tag::Symbol | Tag::Int | Tag::Nil | Tag::SubrFn => ObjectAllocation::NonAllocated,
+            Tag::Symbol | Tag::Int | Tag::SubrFn => ObjectAllocation::NonAllocated,
         }
     }
 
@@ -1241,7 +1236,7 @@ impl<'ob> List<'ob> {
     #[cfg(test)]
     pub(crate) fn car(self) -> GcObj<'ob> {
         match self {
-            List::Nil => GcObj::NIL,
+            List::Nil => nil(),
             List::Cons(x) => x.car(),
         }
     }

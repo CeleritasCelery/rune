@@ -1,10 +1,10 @@
-use crate::core::object::GcObj;
+use crate::core::object::{nil, GcObj};
 use fn_macros::defun;
 
 #[defun]
 fn string_match<'ob>(_regexp: &str, _string: &str, _start: Option<i64>) -> GcObj<'ob> {
     // TODO: implement
-    GcObj::NIL
+    nil()
 }
 
 #[defun]

@@ -16,6 +16,7 @@ macro_rules! define_symbols {
 
             #[allow(unused_qualifications)]
             #[doc(hidden)]
+            #[allow(non_snake_case)]
             // Create a constant list of all symbols being defined
             pub(crate) const __SYMBOLS: [crate::core::env::ConstSymbol; count!($($fn_sym)+ $($($var_sym)+)? $($($raw_sym)+)?)] = [
                 $(crate::core::env::ConstSymbol::new([<__FN_PTR_ $fn_sym>])),+
@@ -51,6 +52,7 @@ macro_rules! __bind_symbols {
         paste::paste!{
             #[allow(dead_code)]
             #[doc(hidden)]
+            #[allow(non_snake_case)]
             pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::__SYMBOLS[$idx];
         }
         __bind_symbols!(@step $idx + 1_usize, $($tail,)*);
@@ -82,6 +84,7 @@ macro_rules! __defsym {
 macro_rules! defvar {
     (@internal $sym:ident, $name:expr, $cx:ident, $value:expr) => (
         paste::paste!{
+            #[allow(non_snake_case)]
             static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
                 $name,
                 crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
@@ -97,7 +100,7 @@ macro_rules! defvar {
             }
         }
     );
-    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::Gc::NIL););
+    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::nil()););
     ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
     ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
     ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
@@ -126,8 +129,8 @@ macro_rules! define_unbox {
             type Error = crate::core::error::TypeError;
             fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
                 match obj.get() {
+                    crate::core::object::Object::Symbol(s) if s.nil() => Ok(None),
                     crate::core::object::Object::$ident(x) => Ok(Some(x)),
-                    crate::core::object::Object::Nil => Ok(None),
                     _ => Err(crate::core::error::TypeError::new(
                         crate::core::error::Type::$ty,
                         obj,

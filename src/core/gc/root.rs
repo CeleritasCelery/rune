@@ -308,10 +308,7 @@ impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
 
 impl From<&Rt<GcObj<'_>>> for Option<()> {
     fn from(value: &Rt<GcObj<'_>>) -> Self {
-        match value.inner.get() {
-            Object::Nil => None,
-            _ => Some(()),
-        }
+        value.inner.nil().then_some(())
     }
 }
 
@@ -320,12 +317,11 @@ impl Rt<GcObj<'static>> {
     where
         GcObj<'static>: TryInto<Gc<T>, Error = E>,
     {
-        match self.inner.get() {
-            Object::Nil => Ok(None),
-            _ => {
-                let _: Gc<T> = self.inner.try_into()?;
-                unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
-            }
+        if self.inner.nil() {
+            Ok(None)
+        } else {
+            let _: Gc<T> = self.inner.try_into()?;
+            unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
         }
     }
 }
@@ -536,7 +532,8 @@ impl DerefMut for Rt<Env> {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::object::Object;
+    use crate::core::object::nil;
+
     use super::super::RootSet;
     use super::*;
 
@@ -546,13 +543,13 @@ mod test {
         let cx = &Context::new(root);
         let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![] };
 
-        vec.push(GcObj::NIL);
-        assert!(matches!(vec[0].get(cx), Object::Nil));
+        vec.push(nil());
+        assert_eq!(vec[0], nil());
         let str1 = cx.add("str1");
         let str2 = cx.add("str2");
         vec.push(str1);
         vec.push(str2);
         let slice = &vec[0..3];
-        assert_eq!(vec![GcObj::NIL, str1, str2], slice.as_ref(cx));
+        assert_eq!(vec![nil(), str1, str2], slice.as_ref(cx));
     }
 }

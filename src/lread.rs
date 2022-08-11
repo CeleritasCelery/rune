@@ -3,7 +3,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::gc::{Context, Root};
-use crate::core::object::{GcObj, Object};
+use crate::core::object::{nil, GcObj, Object};
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
@@ -157,7 +157,7 @@ pub(crate) fn load<'ob>(
             val.set(new_load_file);
             prev
         }
-        None => GcObj::NIL,
+        None => nil(),
     };
     root!(prev_load_file, cx);
     let result = match fs::read_to_string(&final_file)

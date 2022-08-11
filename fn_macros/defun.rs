@@ -67,6 +67,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         }
 
         #[doc(hidden)]
+        #[allow(non_snake_case)]
         pub(crate) static #symbol_name: crate::core::env::GlobalSymbol = unsafe {crate::core::env::GlobalSymbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
 
         #[doc(hidden)]
@@ -518,7 +519,7 @@ mod test {
             fn car<'ob>(list: Gc<List>, cx: &'ob Context) -> GcObj<'ob> {
                 match list.get() {
                     List::Cons(cons) => cons.car(),
-                    List::Nil => GcObj::NIL,
+                    List::Nil => nil(),
                 }
             }
         };
