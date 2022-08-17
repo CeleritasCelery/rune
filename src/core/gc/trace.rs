@@ -1,10 +1,38 @@
+use crate::hashmap::{HashMap, HashSet};
+
 use super::super::object::RawObj;
 
 pub(crate) trait Trace {
     fn mark(&self, stack: &mut Vec<RawObj>);
 }
 
+impl<T: Trace, U: Trace> Trace for (T, U) {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        self.0.mark(stack);
+        self.1.mark(stack);
+    }
+}
+
 impl<T: Trace> Trace for Vec<T> {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        for x in self {
+            x.mark(stack);
+        }
+    }
+}
+
+impl<K: Trace, V: Trace> Trace for HashMap<K, V> {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        for key in self.keys() {
+            key.mark(stack);
+        }
+        for value in self.values() {
+            value.mark(stack);
+        }
+    }
+}
+
+impl<T: Trace> Trace for HashSet<T> {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         for x in self {
             x.mark(stack);

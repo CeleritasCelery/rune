@@ -45,17 +45,10 @@ impl Rt<Env> {
 
 impl Trace for Env {
     fn mark(&self, stack: &mut Vec<RawObj>) {
-        for x in self.vars.values() {
-            x.mark(stack);
-        }
-        for vec in self.props.values() {
-            for x in vec {
-                x.1.mark(stack);
-            }
-        }
+        self.vars.mark(stack);
+        self.props.mark(stack);
         self.catch_stack.mark(stack);
-        self.thrown.0.mark(stack);
-        self.thrown.1.mark(stack);
+        self.thrown.mark(stack);
     }
 }
 

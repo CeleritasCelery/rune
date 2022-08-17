@@ -88,17 +88,6 @@ impl Trace for &Cons {
     }
 }
 
-impl<T, U> Trace for (T, U)
-where
-    T: Trace,
-    U: Trace,
-{
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        self.0.mark(stack);
-        self.1.mark(stack);
-    }
-}
-
 impl Trace for Symbol {
     fn mark(&self, _stack: &mut Vec<RawObj>) {
         // TODO: implement
