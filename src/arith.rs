@@ -202,7 +202,7 @@ fn cmp(
     numbers
         .iter()
         .try_fold(number.val(), |acc, &x| {
-            cmp(&acc, &x.val()).then(|| NumberValue::Int(0))
+            cmp(&acc, &x.val()).then_some(NumberValue::Int(0))
         })
         .is_some()
 }

@@ -86,11 +86,11 @@ pub(crate) fn load_internal<'ob>(
 
 fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     let path = Path::new(path).join(file);
-    if Path::new(&path).exists() {
+    if path.exists() {
         Some(path)
     } else {
         let with_ext = path.with_extension("el");
-        Path::new(&with_ext).exists().then(|| with_ext)
+        with_ext.exists().then_some(with_ext)
     }
 }
 

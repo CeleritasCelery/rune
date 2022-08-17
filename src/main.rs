@@ -20,6 +20,8 @@
 #![allow(
     clippy::undocumented_unsafe_blocks, // Will enable this later
     clippy::todo,
+    clippy::std_instead_of_core,
+    clippy::std_instead_of_alloc,
     clippy::unimplemented,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
@@ -43,11 +45,12 @@
     clippy::separated_literal_suffix,
     clippy::unreachable,
     clippy::panic_in_result_fn,
+    clippy::arithmetic,
     clippy::integer_arithmetic,
+    clippy::float_arithmetic,
     clippy::pattern_type_mismatch,
     clippy::indexing_slicing,
     clippy::cast_precision_loss,
-    clippy::float_arithmetic,
     clippy::default_numeric_fallback,
     clippy::box_collection,
     clippy::cast_possible_truncation,
@@ -58,6 +61,7 @@
     clippy::unwrap_in_result,
     clippy::unwrap_used,
     clippy::expect_used,
+    clippy::assertions_on_result_states,
     clippy::single_match_else,
     clippy::panic
 )]

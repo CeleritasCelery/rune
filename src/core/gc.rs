@@ -319,7 +319,7 @@ impl<'ob, 'rt> Context<'rt> {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (&**x).mark(gray_stack);
+                (**x).mark(gray_stack);
             }
         }
         while !gray_stack.is_empty() {
