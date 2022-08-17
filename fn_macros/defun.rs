@@ -422,7 +422,7 @@ pub(crate) struct Spec {
 mod test {
     use super::*;
 
-    fn test_sig(stream: proc_macro2::TokenStream, min: Option<u16>, expect: (u16, u16, bool)) {
+    fn test_sig(stream: TokenStream, min: Option<u16>, expect: (u16, u16, bool)) {
         let function: Function = syn::parse2(stream).unwrap();
         assert_eq!(get_call_signature(&function.args, min), expect);
     }
@@ -459,7 +459,7 @@ mod test {
         );
     }
 
-    fn test_args(args: proc_macro2::TokenStream, expect: &[ArgType]) {
+    fn test_args(args: TokenStream, expect: &[ArgType]) {
         let stream = quote! {fn foo(#args) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
         let iter = std::iter::zip(function.args, expect);
@@ -498,7 +498,7 @@ mod test {
         );
     }
 
-    fn check_error(stream: proc_macro2::TokenStream) {
+    fn check_error(stream: TokenStream) {
         let function: Result<Function, _> = syn::parse2(stream);
         assert!(function.is_err());
     }

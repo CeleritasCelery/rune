@@ -2,6 +2,7 @@ use super::gc::{Block, Context, Rt, Trace};
 use super::object::{Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
+use fn_macros::trace;
 use lazy_static::lazy_static;
 use sptr::Strict;
 use std::fmt;
@@ -11,6 +12,7 @@ use std::sync::Mutex;
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
+#[trace]
 pub(crate) struct Env {
     pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
@@ -51,9 +53,7 @@ impl Trace for Env {
                 x.1.mark(stack);
             }
         }
-        for x in &self.catch_stack {
-            x.mark(stack);
-        }
+        self.catch_stack.mark(stack);
         self.thrown.0.mark(stack);
         self.thrown.1.mark(stack);
     }

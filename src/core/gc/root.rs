@@ -6,7 +6,7 @@ use std::slice::SliceIndex;
 
 use super::super::{
     cons::Cons,
-    env::{Env, Symbol},
+    env::Symbol,
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
@@ -51,7 +51,8 @@ impl IntoRoot for Symbol {
 }
 
 impl<T, Tx> IntoRoot for Option<T>
-where T: IntoRoot<Out = Tx>,
+where
+    T: IntoRoot<Out = Tx>,
 {
     type Out = Option<Tx>;
     unsafe fn into_root(self) -> Self::Out {
@@ -517,6 +518,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 impl<T> Rt<HashSet<T>>
 where
     T: Eq + std::hash::Hash,
@@ -533,29 +535,6 @@ where
 
     pub(crate) fn insert<R: IntoRoot<Out = T>>(&mut self, value: R) -> bool {
         self.inner.insert(unsafe { value.into_root() })
-    }
-}
-
-#[allow(non_camel_case_types)]
-#[doc(hidden)]
-pub(crate) struct Environment__root {
-    pub(crate) vars: Rt<HashMap<Symbol, GcObj<'static>>>,
-    pub(crate) props: Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>,
-    pub(crate) catch_stack: Rt<Vec<GcObj<'static>>>,
-    pub(crate) thrown: Rt<(GcObj<'static>, GcObj<'static>)>,
-}
-
-impl Deref for Rt<Env> {
-    type Target = Environment__root;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Rt<Env>).cast::<Environment__root>() }
-    }
-}
-
-impl DerefMut for Rt<Env> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut Rt<Env>).cast::<Environment__root>() }
     }
 }
 
