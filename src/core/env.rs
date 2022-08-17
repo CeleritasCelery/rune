@@ -1,8 +1,8 @@
-use super::gc::{Block, Context, Rt, Trace};
-use super::object::{Function, Gc, GcObj, RawObj, SubrFn, WithLifetime};
+use super::gc::{Block, Context, Rt};
+use super::object::{Function, Gc, GcObj, SubrFn, WithLifetime};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
-use fn_macros::trace;
+use fn_macros::Trace;
 use lazy_static::lazy_static;
 use sptr::Strict;
 use std::fmt;
@@ -11,8 +11,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
 
 #[allow(dead_code)]
-#[derive(Debug, Default)]
-#[trace]
+#[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
     pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
@@ -40,15 +39,6 @@ impl Rt<Env> {
                 self.props.insert(symbol, vec![(propname, value)]);
             }
         }
-    }
-}
-
-impl Trace for Env {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        self.vars.mark(stack);
-        self.props.mark(stack);
-        self.catch_stack.mark(stack);
-        self.thrown.mark(stack);
     }
 }
 
