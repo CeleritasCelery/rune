@@ -1,8 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
-use std::ptr::addr_of;
-use std::slice::SliceIndex;
+use std::ops::{Deref, DerefMut};
 
 use super::super::{
     cons::Cons,
@@ -257,15 +255,6 @@ impl<T> Rt<T> {
     {
         self.inner.with_lifetime()
     }
-}
-
-impl<T> Rt<[T]> {
-    pub(crate) fn as_ref<'ob, U>(&self, _: &'ob Context) -> &'ob [U]
-    where
-        T: WithLifetime<'ob, Out = U>,
-    {
-        unsafe { &*(addr_of!(self.inner) as *const [U]) }
-    }
 
     pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Context) -> &'ob [U]
     where
@@ -396,15 +385,14 @@ impl<T, U> DerefMut for Rt<(T, U)> {
 
 impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
-
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Self).cast::<Option<Rt<T>>>() }
+        unsafe { &*(self as *const Self).cast::<Self::Target>() }
     }
 }
 
 impl<T> DerefMut for Rt<Option<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut Rt<Option<T>>).cast::<Option<Rt<T>>>() }
+        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
@@ -416,76 +404,24 @@ impl Rt<Option<GcObj<'static>>> {
     }
 }
 
-impl<T, I: SliceIndex<[T]>> Index<I> for Rt<Vec<T>> {
-    type Output = Rt<I::Output>;
-
-    fn index(&self, index: I) -> &Self::Output {
-        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Rt<I::Output>) }
-    }
-}
-
-impl<T, I: SliceIndex<[T]>> IndexMut<I> for Rt<Vec<T>> {
-    fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        unsafe {
-            &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
-                as *mut Rt<I::Output>)
-        }
-    }
-}
-
-impl<T, I: SliceIndex<[T]>> Index<I> for Rt<[T]> {
-    type Output = Rt<I::Output>;
-
-    fn index(&self, index: I) -> &Self::Output {
-        unsafe { &*(Index::index(&self.inner, index) as *const I::Output as *const Rt<I::Output>) }
-    }
-}
-
-impl<T, I: SliceIndex<[T]>> IndexMut<I> for Rt<[T]> {
-    fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        unsafe {
-            &mut *(IndexMut::index_mut(&mut self.inner, index) as *mut I::Output
-                as *mut Rt<I::Output>)
-        }
-    }
-}
-
 impl<T> Rt<Vec<T>> {
-    pub(crate) fn as_slice(&self) -> &Rt<[T]> {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.inner.as_slice() as *const [T] as *const Rt<[T]>) }
-    }
-
     pub(crate) fn push<U: IntoRoot<Out = T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
-    }
-
-    pub(crate) fn pop(&mut self) {
-        self.inner.pop();
-    }
-
-    pub(crate) fn truncate(&mut self, len: usize) {
-        self.inner.truncate(len);
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.inner.clear();
     }
 }
 
 impl<T> Deref for Rt<Vec<T>> {
-    type Target = [Rt<T>];
-
+    type Target = Vec<Rt<T>>;
     fn deref(&self) -> &Self::Target {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &*(self.inner.as_slice() as *const [T] as *const [Rt<T>]) }
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &*(self as *const Self).cast::<Self::Target>() }
     }
 }
 
 impl<T> DerefMut for Rt<Vec<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: `Gc<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self.inner.as_mut_slice() as *mut [T] as *mut [Rt<T>]) }
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
@@ -493,28 +429,23 @@ impl<K, V> Rt<HashMap<K, V>>
 where
     K: Eq + std::hash::Hash,
 {
-    pub(crate) fn get<Q>(&self, k: &Q) -> Option<&Rt<V>>
-    where
-        K: std::borrow::Borrow<Q>,
-        Q: ?Sized + std::hash::Hash + Eq,
-    {
-        self.inner
-            .get(k)
-            .map(|v| unsafe { &*(v as *const V).cast::<Rt<V>>() })
-    }
-
-    pub(crate) fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut Rt<V>>
-    where
-        K: std::borrow::Borrow<Q>,
-        Q: ?Sized + std::hash::Hash + Eq,
-    {
-        self.inner
-            .get_mut(k)
-            .map(|v| unsafe { &mut *(v as *mut V).cast::<Rt<V>>() })
-    }
-
     pub(crate) fn insert<R: IntoRoot<Out = V>>(&mut self, k: K, v: R) {
         self.inner.insert(k, unsafe { v.into_root() });
+    }
+}
+
+impl<K, V> Deref for Rt<HashMap<K, V>> {
+    type Target = HashMap<K, Rt<V>>;
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+    }
+}
+
+impl<K, V> DerefMut for Rt<HashMap<K, V>> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
@@ -523,18 +454,23 @@ impl<T> Rt<HashSet<T>>
 where
     T: Eq + std::hash::Hash,
 {
-    pub(crate) fn get<Q>(&self, value: &Q) -> Option<&Rt<T>>
-    where
-        T: std::borrow::Borrow<Q>,
-        Q: ?Sized + std::hash::Hash + Eq,
-    {
-        self.inner
-            .get(value)
-            .map(|v| unsafe { &*(v as *const T).cast::<Rt<T>>() })
-    }
-
     pub(crate) fn insert<R: IntoRoot<Out = T>>(&mut self, value: R) -> bool {
         self.inner.insert(unsafe { value.into_root() })
+    }
+}
+
+impl<T> Deref for Rt<HashSet<T>> {
+    type Target = HashSet<Rt<T>>;
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+    }
+}
+
+impl<T> DerefMut for Rt<HashSet<T>> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
@@ -558,6 +494,6 @@ mod test {
         vec.push(str1);
         vec.push(str2);
         let slice = &vec[0..3];
-        assert_eq!(vec![nil(), str1, str2], slice.as_ref(cx));
+        assert_eq!(vec![nil(), str1, str2], Rt::bind_slice(slice, cx));
     }
 }

@@ -47,7 +47,7 @@ pub(crate) fn mapcar<'ob>(
                 call_arg.as_mut(cx).clear();
             }
             // TODO: remove this intermediate vector
-            let slice = outputs.as_slice().as_ref(cx);
+            let slice = Rt::bind_slice(outputs, cx);
             Ok(slice_into_list(slice, None, cx))
         }
     }
