@@ -12,7 +12,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::error::{Type, TypeError};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
-use crate::hashmap::HashMap;
+use crate::hashmap::{HashMap, HashSet};
 
 pub(crate) trait IntoRoot {
     type Out;
@@ -47,6 +47,15 @@ impl IntoRoot for Symbol {
     type Out = Symbol;
     unsafe fn into_root(self) -> Symbol {
         self
+    }
+}
+
+impl<T, Tx> IntoRoot for Option<T>
+where T: IntoRoot<Out = Tx>,
+{
+    type Out = Option<Tx>;
+    unsafe fn into_root(self) -> Self::Out {
+        self.map(|x| x.into_root())
     }
 }
 
@@ -508,7 +517,27 @@ where
     }
 }
 
+impl<T> Rt<HashSet<T>>
+where
+    T: Eq + std::hash::Hash,
+{
+    pub(crate) fn get<Q>(&self, value: &Q) -> Option<&Rt<T>>
+    where
+        T: std::borrow::Borrow<Q>,
+        Q: ?Sized + std::hash::Hash + Eq,
+    {
+        self.inner
+            .get(value)
+            .map(|v| unsafe { &*(v as *const T).cast::<Rt<T>>() })
+    }
+
+    pub(crate) fn insert<R: IntoRoot<Out = T>>(&mut self, value: R) -> bool {
+        self.inner.insert(unsafe { value.into_root() })
+    }
+}
+
 #[allow(non_camel_case_types)]
+#[doc(hidden)]
 pub(crate) struct Environment__root {
     pub(crate) vars: Rt<HashMap<Symbol, GcObj<'static>>>,
     pub(crate) props: Rt<HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>>,
