@@ -132,6 +132,12 @@ pub(crate) fn boundp(symbol: Symbol, env: &Root<Env>) -> bool {
 }
 
 #[defun]
+pub(crate) fn makunbound(symbol: Symbol, env: &mut Root<Env>, cx: &Context) -> Symbol {
+    env.as_mut(cx).vars.remove(symbol);
+    symbol
+}
+
+#[defun]
 pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
     env.vars.get(&symbol).is_some()
 }
@@ -281,6 +287,7 @@ define_symbols!(
         fmakunbound,
         fboundp,
         boundp,
+        makunbound,
         default_boundp,
         listp,
         nlistp,
