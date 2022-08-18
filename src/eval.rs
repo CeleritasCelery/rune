@@ -152,6 +152,11 @@ fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>)
 }
 
 #[defun]
+fn special_variable_p(symbol: Symbol, env: &Root<Env>) -> bool {
+    env.special_variables.contains(symbol)
+}
+
+#[defun]
 fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
     value: GcObj,
@@ -204,6 +209,7 @@ define_symbols!(
         internal__define_uninitialized_variable,
         set_default_toplevel_value,
         set_default,
+        special_variable_p,
         TRUE,
         NIL,
     }
