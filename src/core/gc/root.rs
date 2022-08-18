@@ -1,4 +1,6 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -8,6 +10,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
+use crate::core::env::GlobalSymbol;
 use crate::core::error::{Type, TypeError};
 use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
@@ -29,6 +32,13 @@ where
 }
 
 impl IntoRoot for &Rt<GcObj<'_>> {
+    type Out = GcObj<'static>;
+    unsafe fn into_root(self) -> GcObj<'static> {
+        self.inner.with_lifetime()
+    }
+}
+
+impl IntoRoot for &mut Rt<GcObj<'_>> {
     type Out = GcObj<'static>;
     unsafe fn into_root(self) -> GcObj<'static> {
         self.inner.with_lifetime()
@@ -217,6 +227,14 @@ impl PartialEq for Rt<GcObj<'_>> {
     }
 }
 
+impl PartialEq for Rt<Symbol> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl Eq for Rt<Symbol> {}
+
 impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
     fn eq(&self, other: &U) -> bool {
         self.inner == *other
@@ -231,9 +249,25 @@ impl Deref for Rt<Symbol> {
     }
 }
 
+impl Borrow<GlobalSymbol> for Rt<Symbol> {
+    fn borrow(&self) -> &GlobalSymbol {
+        self.inner
+    }
+}
+
+impl<T> Hash for Rt<T>
+where
+    T: Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+    }
+}
+
 impl<'new, T, U> WithLifetime<'new> for Option<T>
-where T: WithLifetime<'new, Out = U>,
-    U: 'new
+where
+    T: WithLifetime<'new, Out = U>,
+    U: 'new,
 {
     type Out = Option<U>;
 
@@ -251,11 +285,11 @@ impl<'new> WithLifetime<'new> for Symbol {
 }
 
 impl<'new, T, U, Tx, Ux> WithLifetime<'new> for (T, U)
-where T: WithLifetime<'new, Out = Tx>,
-      U: WithLifetime<'new, Out = Ux>,
-      Tx: 'new,
-      Ux: 'new,
-
+where
+    T: WithLifetime<'new, Out = Tx>,
+    U: WithLifetime<'new, Out = Ux>,
+    Tx: 'new,
+    Ux: 'new,
 {
     type Out = (Tx, Ux);
 
@@ -450,7 +484,7 @@ impl<T> DerefMut for Rt<Vec<T>> {
 
 impl<K, V> Rt<HashMap<K, V>>
 where
-    K: Eq + std::hash::Hash,
+    K: Eq + Hash,
 {
     pub(crate) fn insert<R: IntoRoot<Out = V>>(&mut self, k: K, v: R) {
         self.inner.insert(k, unsafe { v.into_root() });
@@ -475,7 +509,7 @@ impl<K, V> DerefMut for Rt<HashMap<K, V>> {
 #[allow(dead_code)]
 impl<T> Rt<HashSet<T>>
 where
-    T: Eq + std::hash::Hash,
+    T: Eq + Hash,
 {
     pub(crate) fn insert<R: IntoRoot<Out = T>>(&mut self, value: R) -> bool {
         self.inner.insert(unsafe { value.into_root() })
