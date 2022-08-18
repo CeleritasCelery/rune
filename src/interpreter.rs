@@ -228,6 +228,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     None => nil(),
                 };
                 self.var_set(name, value, cx)?;
+                self.env.as_mut(cx).special_variables.insert(name);
+                // If this variable was unbound previously in the binding stack,
+                // we will bind it to the new value
+                for binding in self.env.as_mut(cx).binding_stack.iter_mut() {
+                    if binding.0 == name && binding.1.is_none() {
+                        binding.1.set(value);
+                    }
+                }
                 Ok(value)
             }
             // (defvar)
@@ -526,15 +534,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             };
-            let val = rebind!(val, cx);
-            let env = &mut **self.env.as_mut(cx);
-            if let Some(current_val) = env.vars.get_mut(var) {
-                env.binding_stack.push((var, Some(&*current_val)));
-                current_val.set(val);
-            } else {
-                let cons = cons!(var, val; cx).as_cons();
-                self.vars.as_mut(cx).push(cons);
-            }
+            self.create_let_binding(var, rebind!(val, cx), cx);
         }
         Ok(())
     }
@@ -558,18 +558,30 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             }
         }
-        let bindings = Rt::bind_slice(let_bindings, cx);
-        for (var, val) in bindings {
-            let env = &mut **self.env.as_mut(cx);
-            if let Some(current_val) = env.vars.get_mut(var) {
-                env.binding_stack.push((*var, Some(&*current_val)));
-                current_val.set(*val);
-            } else {
-                let cons = cons!(*var, *val; cx).as_cons();
-                self.vars.as_mut(cx).push(cons);
-            }
+        for (var, val) in Rt::bind_slice(let_bindings, cx) {
+            self.create_let_binding(var, *val, cx);
         }
         Ok(())
+    }
+
+    fn create_let_binding(&mut self, var: Symbol, val: GcObj, cx: &Context) {
+        let env = &mut **self.env.as_mut(cx);
+        // TODO: replace with entry API
+        if env.special_variables.contains(var) {
+            // special && bound
+            if let Some(current_val) = env.vars.get_mut(var) {
+                env.binding_stack.push((var, Some(&*current_val)));
+                current_val.set(val);
+            // special && unbound
+            } else {
+                env.vars.insert(var, val);
+                env.binding_stack.push((var, None::<GcObj>));
+            }
+        } else {
+            // not special
+            let cons = cons!(var, val; cx).as_cons();
+            self.vars.as_mut(cx).push(cons);
+        }
     }
 
     fn let_bind_value<'ob>(
@@ -901,6 +913,13 @@ mod test {
         check_interpreter(
             "(progn (defvar foo 1) (let (bar) (let ((foo 3)) (setq bar foo)) bar))",
             3,
+            cx,
+        );
+        // Special but unbound
+        check_interpreter("(progn (defvar foo 1) (makunbound 'foo) (let ((fn #'(lambda () (defvar foo 3))) (foo 7)) (funcall fn)) foo)", 3, cx);
+        check_interpreter(
+            "(progn (defvar foo 1) (makunbound 'foo) (let ((foo 7)) foo))",
+            7,
             cx,
         );
     }
