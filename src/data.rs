@@ -251,6 +251,18 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
+pub(crate) fn aref<'ob>(array: &RefCell<Vec<GcObj<'ob>>>, idx: usize) -> Result<GcObj<'ob>> {
+    let vec = array.borrow();
+    match vec.get(idx) {
+        Some(x) => Ok(*x),
+        None => {
+            let len = vec.len();
+            Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+        }
+    }
+}
+
+#[defun]
 pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
     match object.get() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
@@ -278,6 +290,7 @@ define_symbols!(
         make_variable_buffer_local,
         fset,
         aset,
+        aref,
         defalias,
         provide,
         symbol_function,
