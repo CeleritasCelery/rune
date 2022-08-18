@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use crate::core::{
     cons::Cons,
     env::{Env, Symbol, INTERNED_SYMBOLS},
+    error::{Type, TypeError},
     gc::{Context, Root},
     object::{nil, GcObj, Object},
 };
@@ -251,14 +252,26 @@ pub(crate) fn aset<'ob>(
 }
 
 #[defun]
-pub(crate) fn aref<'ob>(array: &RefCell<Vec<GcObj<'ob>>>, idx: usize) -> Result<GcObj<'ob>> {
-    let vec = array.borrow();
-    match vec.get(idx) {
-        Some(x) => Ok(*x),
-        None => {
-            let len = vec.len();
-            Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
+    match array.get() {
+        Object::Vec(vec) => {
+            let vec = vec.borrow();
+            match vec.get(idx) {
+                Some(x) => Ok(*x),
+                None => {
+                    let len = vec.len();
+                    Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+                }
+            }
         }
+        Object::String(string) => match string.chars().nth(idx) {
+            Some(x) => Ok((x as i64).into()),
+            None => {
+                let len = string.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+            }
+        },
+        x => Err(TypeError::new(Type::Vec, x).into()),
     }
 }
 
