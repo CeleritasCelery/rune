@@ -1,6 +1,6 @@
 use super::gc::{Block, Context, Rt};
 use super::object::{Function, Gc, GcObj, SubrFn, WithLifetime};
-use crate::hashmap::HashMap;
+use crate::hashmap::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
 use lazy_static::lazy_static;
@@ -17,6 +17,8 @@ pub(crate) struct Env {
     pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
+    pub(crate) special_variables: HashSet<Symbol>,
+    pub(crate) binding_stack: Vec<(Symbol, Option<GcObj<'static>>)>,
 }
 
 impl Rt<Env> {

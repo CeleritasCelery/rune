@@ -19,10 +19,11 @@ pub(crate) trait IntoRoot {
 
 impl<T, U> IntoRoot for Gc<T>
 where
-    Gc<T>: WithLifetime<'static, Out = U>,
+    Gc<T>: WithLifetime<'static, Out = Gc<U>>,
+    U: 'static,
 {
-    type Out = U;
-    unsafe fn into_root(self) -> U {
+    type Out = Gc<U>;
+    unsafe fn into_root(self) -> Self::Out {
         self.with_lifetime()
     }
 }
@@ -227,6 +228,39 @@ impl Deref for Rt<Symbol> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<'new, T, U> WithLifetime<'new> for Option<T>
+where T: WithLifetime<'new, Out = U>,
+    U: 'new
+{
+    type Out = Option<U>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        self.map(|x| x.with_lifetime())
+    }
+}
+
+impl<'new> WithLifetime<'new> for Symbol {
+    type Out = Symbol;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        self
+    }
+}
+
+impl<'new, T, U, Tx, Ux> WithLifetime<'new> for (T, U)
+where T: WithLifetime<'new, Out = Tx>,
+      U: WithLifetime<'new, Out = Ux>,
+      Tx: 'new,
+      Ux: 'new,
+
+{
+    type Out = (Tx, Ux);
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        (self.0.with_lifetime(), self.1.with_lifetime())
     }
 }
 

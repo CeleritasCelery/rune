@@ -479,15 +479,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> EvalResult<'ob> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
-        root!(dynamic_bindings, Vec::new(), cx);
+        let binding_stack_len = self.env.binding_stack.len();
         match iter.next() {
             // (let x ...)
             Some(x) => {
                 let obj = x;
                 if parallel {
-                    self.let_bind_parallel(obj, dynamic_bindings, cx)?;
+                    self.let_bind_parallel(obj, cx)?;
                 } else {
-                    self.let_bind_serial(obj, dynamic_bindings, cx)?;
+                    self.let_bind_serial(obj, cx)?;
                 }
             }
             // (let)
@@ -496,25 +496,26 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
         self.vars.as_mut(cx).truncate(prev_len);
-        for binding in dynamic_bindings.iter() {
-            let var: Symbol = &binding.0;
-            let val = &binding.1;
 
-            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
-                current_val.set(val);
+        // splitting borrows
+        let env = &mut **self.env.as_mut(cx);
+        for binding in env.binding_stack.drain(binding_stack_len..) {
+            let var = &*binding.0;
+            let val = &*binding.1;
+            if let Some(val) = val {
+                if let Some(current_val) = env.vars.get_mut(var) {
+                    current_val.set(val);
+                } else {
+                    env.vars.insert(var, val);
+                }
             } else {
-                unreachable!("Variable {var} not longer exists");
+                env.vars.remove(var);
             }
         }
         Ok(obj)
     }
 
-    fn let_bind_serial(
-        &mut self,
-        form: &Rt<GcObj>,
-        dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
-        cx: &mut Context,
-    ) -> Result<(), EvalError> {
+    fn let_bind_serial(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<(), EvalError> {
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
             let (var, val) = match binding.get(cx) {
@@ -526,8 +527,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             };
             let val = rebind!(val, cx);
-            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
-                dynamic_bindings.as_mut(cx).push((var, &*current_val));
+            let env = &mut **self.env.as_mut(cx);
+            if let Some(current_val) = env.vars.get_mut(var) {
+                env.binding_stack.push((var, Some(&*current_val)));
                 current_val.set(val);
             } else {
                 let cons = cons!(var, val; cx).as_cons();
@@ -537,12 +539,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(())
     }
 
-    fn let_bind_parallel(
-        &mut self,
-        form: &Rt<GcObj>,
-        dynamic_bindings: &mut Root<Vec<(Symbol, GcObj<'static>)>>,
-        cx: &mut Context,
-    ) -> Result<(), EvalError> {
+    fn let_bind_parallel(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<(), EvalError> {
         root!(let_bindings, Vec::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
@@ -561,14 +558,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             }
         }
-        for binding in let_bindings.iter() {
-            let var: Symbol = &binding.0;
-            let val = &binding.1;
-            if let Some(current_val) = self.env.as_mut(cx).vars.get_mut(var) {
-                dynamic_bindings.as_mut(cx).push((var, &*current_val));
-                current_val.set(val);
+        let bindings = Rt::bind_slice(let_bindings, cx);
+        for (var, val) in bindings {
+            let env = &mut **self.env.as_mut(cx);
+            if let Some(current_val) = env.vars.get_mut(var) {
+                env.binding_stack.push((*var, Some(&*current_val)));
+                current_val.set(*val);
             } else {
-                let cons = cons!(var, val; cx).as_cons();
+                let cons = cons!(*var, *val; cx).as_cons();
                 self.vars.as_mut(cx).push(cons);
             }
         }
