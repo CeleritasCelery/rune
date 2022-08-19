@@ -6,7 +6,7 @@ use crate::core::{
     env::{Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, Root},
-    object::{nil, GcObj, Object, Gc},
+    object::{nil, Gc, GcObj, Object},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -231,6 +231,12 @@ fn byte_code_function_p(_object: GcObj) -> bool {
 }
 
 #[defun]
+fn bufferp(_object: GcObj) -> bool {
+    // TODO: Implement once buffers are added
+    false
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
@@ -343,6 +349,7 @@ define_symbols!(
         integerp,
         atom,
         byte_code_function_p,
+        bufferp,
         indirect_function,
     }
 );
