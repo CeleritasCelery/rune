@@ -117,12 +117,8 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<TokenStream> {
             }
             // Option<T>
             ArgType::Option => {
-                if is_mut {
-                    quote! { std::convert::TryFrom::try_from(&args[#idx])? }
-                } else {
-                    let bind = quote! {crate::core::gc::Rt::bind(&args[#idx], cx)};
-                    quote! { crate::core::object::Gc::try_from_option(#bind)? }
-                }
+                let bind = quote! {crate::core::gc::Rt::bind(&args[#idx], cx)};
+                quote! { crate::core::object::Gc::try_from_option(#bind)? }
             }
             ArgType::Other => {
                 if is_mut {

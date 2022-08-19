@@ -733,6 +733,10 @@ impl<'ob> From<Gc<()>> for Gc<Object<'ob>> {
     }
 }
 
+impl From<Gc<Object<'_>>> for () {
+    fn from(_: Gc<Object>) { }
+}
+
 impl<'ob> From<Gc<bool>> for Gc<Object<'ob>> {
     fn from(x: Gc<bool>) -> Self {
         unsafe { Self::transmute(x) }

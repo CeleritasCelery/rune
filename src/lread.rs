@@ -129,6 +129,8 @@ pub(crate) fn load<'ob>(
     cx: &'ob mut Context,
     env: &mut Root<Env>,
 ) -> Result<bool> {
+    let noerror = noerror.is_some();
+    let nomessage = nomessage.is_some();
     let file = match file.get(cx) {
         Object::String(x) => x,
         x => bail!(TypeError::new(Type::Symbol, x)),
@@ -139,15 +141,15 @@ pub(crate) fn load<'ob>(
         match find_file_in_load_path(file, cx, env) {
             Ok(x) => x,
             Err(e) => {
-                if noerror.is_some() {
-                    return Ok(false);
+                return match noerror {
+                    true => Ok(false),
+                    false => Err(e),
                 }
-                return Err(e);
             }
         }
     };
 
-    if nomessage.is_none() {
+    if !nomessage {
         println!("Loading {file}...");
     }
     let new_load_file: GcObj = cx.add(final_file.to_string_lossy().to_string());
@@ -165,8 +167,8 @@ pub(crate) fn load<'ob>(
     {
         Ok(content) => load_internal(&content, cx, env),
         Err(e) => match noerror {
-            Some(()) => Ok(false),
-            None => Err(e),
+            true => Ok(false),
+            false => Err(e),
         },
     };
     env.as_mut(cx)
