@@ -250,6 +250,11 @@ pub(crate) fn memq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'o
 }
 
 #[defun]
+pub(crate) fn memql<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    member_of_list(elt, list, data::eql)
+}
+
+#[defun]
 pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     member_of_list(elt, list, data::equal)
 }
@@ -562,6 +567,7 @@ define_symbols!(
         delq,
         delete,
         memq,
+        memql,
         member,
         defvaralias,
         featurep,

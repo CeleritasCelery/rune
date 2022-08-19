@@ -90,6 +90,14 @@ pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
+pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
+    match (obj1.get(), obj2.get()) {
+        (Object::Float(f1), Object::Float(f2)) => f1.to_bits() == f2.to_bits(),
+        _ => obj1.ptr_eq(obj2),
+    }
+}
+
+#[defun]
 pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
@@ -296,6 +304,7 @@ define_symbols!(
     FUNCS => {
         eq,
         equal,
+        eql,
         set,
         put,
         get,
