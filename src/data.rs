@@ -6,7 +6,7 @@ use crate::core::{
     env::{Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, Root},
-    object::{nil, GcObj, Object},
+    object::{nil, GcObj, Object, Gc},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -95,6 +95,11 @@ pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
         (Object::Float(f1), Object::Float(f2)) => f1.to_bits() == f2.to_bits(),
         _ => obj1.ptr_eq(obj2),
     }
+}
+
+#[defun]
+fn logand(int_or_markers: &[Gc<i64>]) -> i64 {
+    int_or_markers.iter().fold(0, |accum, x| accum & x.get())
 }
 
 #[defun]
@@ -305,6 +310,7 @@ define_symbols!(
         eq,
         equal,
         eql,
+        logand,
         set,
         put,
         get,
