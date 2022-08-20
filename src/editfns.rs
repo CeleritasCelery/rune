@@ -52,7 +52,17 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     Ok(result)
 }
 
-define_symbols!(FUNCS => {message, format} VARS => {MESSAGE_NAME, MESSAGE_TYPE});
+#[defun]
+fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
+    let formatted = format(string, objects)?;
+    // TODO: implement support for `text-quoting-style`.
+    Ok(formatted
+        .chars()
+        .map(|c| if matches!(c, '`' | '\'') { '"' } else { c })
+        .collect())
+}
+
+define_symbols!(FUNCS => {message, format, format_message} VARS => {MESSAGE_NAME, MESSAGE_TYPE});
 
 #[cfg(test)]
 mod test {
