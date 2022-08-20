@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -211,9 +211,15 @@ pub(crate) struct Rt<T: ?Sized> {
     inner: T,
 }
 
-impl<T: ?Sized + Debug> Debug for Rt<T> {
+impl<T: Debug> Debug for Rt<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner, f)
+    }
+}
+
+impl<T: Display> Display for Rt<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.inner, f)
     }
 }
 
