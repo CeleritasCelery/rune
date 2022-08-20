@@ -90,7 +90,7 @@ fn run_hooks<'ob>(
 #[defun]
 pub(crate) fn autoload_do_load<'ob>(
     fundef: &Rt<GcObj>,
-    funname: Option<&Rt<GcObj>>,
+    funname: Option<&Rt<Gc<Symbol>>>,
     macro_only: Option<&Rt<GcObj>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
@@ -98,10 +98,6 @@ pub(crate) fn autoload_do_load<'ob>(
     // TODO: want to handle the case where the file is already loaded.
     match fundef.bind(cx).get() {
         Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-            ensure!(
-                funname.is_none(),
-                "autoload-do-load funname is not yet implemented"
-            );
             ensure!(
                 macro_only.is_none(),
                 "autoload-do-load macro-only is not yet implemented"
@@ -121,7 +117,13 @@ pub(crate) fn autoload_do_load<'ob>(
             );
             root!(file, cx);
             crate::lread::load(file, None, None, cx, env)?;
-            Ok(nil())
+            match funname {
+                Some(func) => match func.bind(cx).get().func(cx) {
+                    Some(x) => Ok(x.into()),
+                    None => Err(anyhow!("autoload of {func} did not provide a definition")),
+                },
+                _ => Ok(nil()),
+            }
         }
         _ => Ok(fundef.bind(cx)),
     }

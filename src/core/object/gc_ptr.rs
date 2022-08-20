@@ -855,6 +855,16 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
     }
 }
 
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Symbol> {
+    type Error = TypeError;
+    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+        match value.get() {
+            Object::Symbol(_) => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(TypeError::new(Type::Symbol, value)),
+        }
+    }
+}
+
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
     type Error = TypeError;
 
@@ -916,6 +926,13 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
+impl Gc<Symbol> {
+    pub(crate) fn get(self) -> Symbol {
+        let (ptr, _) = self.untag();
+        unsafe { Symbol::from_obj_ptr(ptr) }
+    }
+}
+
 impl From<&Cons> for Gc<&Cons> {
     fn from(x: &Cons) -> Self {
         let ptr = x as *const Cons;
@@ -937,6 +954,13 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
 impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     type Out = Gc<&'new Cons>;
 
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
+impl<'new> WithLifetime<'new> for Gc<Symbol> {
+    type Out = Gc<Symbol>;
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
