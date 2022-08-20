@@ -3,7 +3,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::gc::{Context, Root};
-use crate::core::object::{nil, GcObj, Object};
+use crate::core::object::{nil, Gc, GcObj, Object};
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
@@ -123,7 +123,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
 
 #[defun]
 pub(crate) fn load<'ob>(
-    file: &Rt<GcObj>,
+    file: &Rt<Gc<&String>>,
     noerror: Option<()>,
     nomessage: Option<()>,
     cx: &'ob mut Context,
@@ -131,10 +131,7 @@ pub(crate) fn load<'ob>(
 ) -> Result<bool> {
     let noerror = noerror.is_some();
     let nomessage = nomessage.is_some();
-    let file = match file.get(cx) {
-        Object::String(x) => x,
-        x => bail!(TypeError::new(Type::Symbol, x)),
-    };
+    let file: &String = file;
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {

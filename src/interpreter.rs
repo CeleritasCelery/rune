@@ -253,9 +253,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Some(x) => x,
             None => bail_err!("Invalid function: {name}"),
         };
+        root!(func, cx);
 
-        if let Function::Cons(form) = func.get() {
-            if let Ok(mcro) = form.try_as_macro() {
+        match func.get(cx) {
+            Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+                crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)?;
+                func.as_mut(cx).set(name.follow_indirect(cx).unwrap());
+            }
+            Function::Cons(form) if form.car() == sym::MACRO => {
+                let mcro: Gc<Function> = form.cdr().try_into()?;
                 let macro_args = args.bind(cx).as_list()?.collect::<AnyResult<Vec<_>>>()?;
                 root!(args, move(macro_args), cx);
                 root!(mcro, cx);
@@ -263,10 +269,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
+            _ => (),
         }
 
         rooted_iter!(iter, args, cx);
-        root!(func, cx);
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
             let result = rebind!(self.eval_form(x, cx)?, cx);
@@ -688,6 +694,7 @@ impl Rt<Gc<Function<'_>>> {
         name: Option<&str>,
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
+        debug!("calling {self:?}");
         match self.bind(cx).get() {
             Function::LispFn(_) => todo!("call lisp functions"),
             Function::SubrFn(f) => {
@@ -697,14 +704,26 @@ impl Rt<Gc<Function<'_>>> {
                         Err(e) => EvalError::with_trace(e, name, args),
                     })
             }
-            Function::Cons(cons) => {
-                root!(cons, cx);
-                call_closure(cons, args, name, env, cx).map_err(|e| e.add_trace(name, args))
-            }
+            Function::Cons(_) => call_closure(self.try_as().unwrap(), args, name, env, cx)
+                .map_err(|e| e.add_trace(name, args)),
             Function::Symbol(sym) => {
                 if let Some(func) = sym.follow_indirect(cx) {
-                    root!(func, cx);
-                    func.call(args, env, cx, Some(name))
+                    match func.get() {
+                        Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+                            // TODO: inifinite loop if autoload does not resolve
+                            crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
+                            if let Some(func) = sym.follow_indirect(cx) {
+                                root!(func, cx);
+                                func.call(args, env, cx, Some(sym.name))
+                            } else {
+                                Err(error!("autoload for {sym} failed to define function"))
+                            }
+                        }
+                        _ => {
+                            root!(func, cx);
+                            func.call(args, env, cx, Some(sym.name))
+                        }
+                    }
                 } else {
                     Err(error!("Void Function: {}", sym))
                 }
@@ -714,14 +733,15 @@ impl Rt<Gc<Function<'_>>> {
 }
 
 fn call_closure<'ob>(
-    closure: &Rt<&Cons>,
+    closure: &Rt<Gc<&Cons>>,
     args: &Root<Vec<GcObj>>,
     name: &str,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
-    match closure.car().get(cx) {
+    let closure: &Cons = closure.bind(cx).get();
+    match closure.car().get() {
         Object::Symbol(s) if s == &sym::CLOSURE => {
             rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector

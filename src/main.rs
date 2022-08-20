@@ -70,11 +70,12 @@
 mod macros;
 #[macro_use]
 mod core;
+#[macro_use]
+mod debug;
 mod alloc;
 mod arith;
 mod buffer;
 mod data;
-mod debug;
 mod editfns;
 mod emacs;
 mod eval;

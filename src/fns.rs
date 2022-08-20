@@ -287,10 +287,10 @@ fn require<'ob>(
         return Ok(feature.into());
     }
     let file = match filename {
-        None => feature.name,
         Some(file) => file.bind(cx).get(),
+        None => feature.name,
     };
-    let file: GcObj = cx.add(file);
+    let file: Gc<&String> = cx.add(file);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.into()),

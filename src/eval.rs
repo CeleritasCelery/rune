@@ -11,9 +11,9 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{root, rooted_iter};
 
-use crate::core::env::{ConstSymbol, Env, GlobalSymbol, Symbol};
+use crate::core::env::{sym, ConstSymbol, Env, GlobalSymbol, Symbol};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 
 #[defun]
 pub(crate) fn apply<'ob>(
@@ -88,20 +88,60 @@ fn run_hooks<'ob>(
 }
 
 #[defun]
-fn autoload_do_load<'ob>(
-    fundef: GcObj<'ob>,
-    _funname: Option<GcObj>,
-    _macro_only: Option<GcObj>,
-) -> GcObj<'ob> {
-    // TODO: implement
-    fundef
+pub(crate) fn autoload_do_load<'ob>(
+    fundef: &Rt<GcObj>,
+    funname: Option<&Rt<GcObj>>,
+    macro_only: Option<&Rt<GcObj>>,
+    env: &mut Root<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>> {
+    // TODO: want to handle the case where the file is already loaded.
+    match fundef.bind(cx).get() {
+        Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+            ensure!(
+                funname.is_none(),
+                "autoload-do-load funname is not yet implemented"
+            );
+            ensure!(
+                macro_only.is_none(),
+                "autoload-do-load macro-only is not yet implemented"
+            );
+            let mut elem = cons.elements();
+            elem.next(); // autoload
+            let file: Gc<&String> = elem
+                .next()
+                .ok_or_else(|| anyhow!("Malformed autoload"))??
+                .try_into()?;
+            ensure!(
+                elem.all(|x| match x {
+                    Ok(x) => x.nil(),
+                    Err(_) => false,
+                }),
+                "autoload arguments are not yet implemented"
+            );
+            root!(file, cx);
+            crate::lread::load(file, None, None, cx, env)?;
+            Ok(nil())
+        }
+        _ => Ok(fundef.bind(cx)),
+    }
 }
 
 #[defun]
-fn autoload<'ob>(function: GcObj<'ob>, file: GcObj) -> GcObj<'ob> {
-    // TODO: implement
-    println!("autoload: function: {function}, file: {file}");
-    nil()
+fn autoload(
+    function: Symbol,
+    file: &str,
+    docstring: Option<GcObj>,
+    interactive: Option<GcObj>,
+    load_type: Option<GcObj>,
+    cx: &Context,
+) -> Result<Symbol> {
+    if function.has_func() {
+        Ok(&sym::NIL)
+    } else {
+        let autoload = list![sym::AUTOLOAD, file, docstring, interactive, load_type; cx];
+        crate::data::fset(function, autoload)
+    }
 }
 
 #[defun]

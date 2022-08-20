@@ -7,6 +7,7 @@ This would let the Object lifetime be covariant instead of invariant. But the pr
 * Add a lifetime parameter to Symbols
 I hate to do this but it is requirement if we want to garbage collect them ever. We need to track which ones are on the stack versus not, the same as we do for all variables.
 * define benchmarks
+* implement auto-loading
 * Steps to add a new object
 - define in gc.rs
 - add boxing function

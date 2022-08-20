@@ -18,3 +18,11 @@ pub(crate) fn enable_debug() {
 pub(crate) fn disable_debug() {
     FLAG.store(false, Ordering::Release);
 }
+
+macro_rules! debug {
+    ($($arg:tt)*) => {{
+        if crate::debug::debug_enabled() {
+            println!($($arg)*);
+        }
+    }}
+}

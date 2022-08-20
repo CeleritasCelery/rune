@@ -12,7 +12,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::GlobalSymbol;
 use crate::core::error::{Type, TypeError};
-use crate::core::object::{Gc, IntoObject, Object, WithLifetime};
+use crate::core::object::{Function, Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
 pub(crate) trait IntoRoot {
@@ -31,30 +31,26 @@ where
     }
 }
 
-impl IntoRoot for &Rt<GcObj<'_>> {
-    type Out = GcObj<'static>;
-    unsafe fn into_root(self) -> GcObj<'static> {
-        self.inner.with_lifetime()
-    }
-}
-
-impl IntoRoot for &mut Rt<GcObj<'_>> {
-    type Out = GcObj<'static>;
-    unsafe fn into_root(self) -> GcObj<'static> {
-        self.inner.with_lifetime()
+impl<T, U> IntoRoot for &Rt<Gc<T>>
+where
+    Gc<T>: IntoRoot<Out = Gc<U>> + Copy,
+{
+    type Out = Gc<U>;
+    unsafe fn into_root(self) -> Self::Out {
+        self.inner.into_root()
     }
 }
 
 impl IntoRoot for &Cons {
     type Out = &'static Cons;
-    unsafe fn into_root(self) -> &'static Cons {
+    unsafe fn into_root(self) -> Self::Out {
         self.with_lifetime()
     }
 }
 
 impl IntoRoot for Symbol {
     type Out = Symbol;
-    unsafe fn into_root(self) -> Symbol {
+    unsafe fn into_root(self) -> Self::Out {
         self
     }
 }
@@ -75,14 +71,14 @@ where
     U: IntoRoot<Out = Ux>,
 {
     type Out = (Tx, Ux);
-    unsafe fn into_root(self) -> (Tx, Ux) {
+    unsafe fn into_root(self) -> Self::Out {
         (self.0.into_root(), self.1.into_root())
     }
 }
 
 impl<T: IntoRoot<Out = U>, U> IntoRoot for Vec<T> {
     type Out = Vec<U>;
-    unsafe fn into_root(self) -> Vec<U> {
+    unsafe fn into_root(self) -> Self::Out {
         self.into_iter().map(|x| x.into_root()).collect()
     }
 }
@@ -255,6 +251,20 @@ impl Borrow<GlobalSymbol> for Rt<Symbol> {
     }
 }
 
+impl Deref for Rt<Gc<&String>> {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.get()
+    }
+}
+
+impl AsRef<String> for Rt<Gc<&String>> {
+    fn as_ref(&self) -> &String {
+        self
+    }
+}
+
 impl<T> Hash for Rt<T>
 where
     T: Hash,
@@ -322,6 +332,7 @@ impl<T> Rt<T> {
 }
 
 impl<T> Rt<Gc<T>> {
+    /// Like `TryFrom`, but needed to due no specialization
     pub(crate) fn try_as<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
@@ -329,6 +340,15 @@ impl<T> Rt<Gc<T>> {
         let _: Gc<U> = self.inner.try_into()?;
         // SAFETY: This is safe because all Gc types have the same representation
         unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
+    }
+
+    /// Like `From`, but needed to due no specialization
+    pub(crate) fn use_as<U>(&self) -> &Rt<Gc<U>>
+    where
+        Gc<T>: Into<Gc<U>> + Copy,
+    {
+        // SAFETY: This is safe because all Gc types have the same representation
+        unsafe { &*((self as *const Self).cast::<Rt<Gc<U>>>()) }
     }
 
     // TODO: see if this can be removed
@@ -384,6 +404,12 @@ impl Rt<GcObj<'static>> {
 
 impl Rt<GcObj<'_>> {
     pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
+        self.bind(cx).get()
+    }
+}
+
+impl Rt<Gc<Function<'_>>> {
+    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Function<'ob> {
         self.bind(cx).get()
     }
 }

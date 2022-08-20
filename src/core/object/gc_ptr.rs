@@ -734,7 +734,7 @@ impl<'ob> From<Gc<()>> for Gc<Object<'ob>> {
 }
 
 impl From<Gc<Object<'_>>> for () {
-    fn from(_: Gc<Object>) { }
+    fn from(_: Gc<Object>) {}
 }
 
 impl<'ob> From<Gc<bool>> for Gc<Object<'ob>> {
@@ -841,6 +841,17 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
 impl<'ob> From<Gc<Function<'ob>>> for Gc<Object<'ob>> {
     fn from(x: Gc<Function<'ob>>) -> Self {
         unsafe { Self::transmute(x) }
+    }
+}
+
+impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
+    type Error = TypeError;
+
+    fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
+        match value.get() {
+            Function::Cons(_) => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(TypeError::new(Type::Cons, value)),
+        }
     }
 }
 
