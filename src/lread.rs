@@ -179,6 +179,19 @@ pub(crate) fn intern(string: &str) -> Symbol {
     crate::core::env::intern(string)
 }
 
+#[defun]
+pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> {
+    ensure!(obarray.is_none(), "intern-soft obarray not implemented");
+    match string.get() {
+        Object::Symbol(sym) => Ok(sym),
+        Object::String(string) => {
+            let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
+            Ok(map.get(string).unwrap_or(&sym::NIL))
+        }
+        x => Err(TypeError::new(Type::String, x).into()),
+    }
+}
+
 defvar!(LEXICAL_BINDING, true);
 defvar!(CURRENT_LOAD_LIST);
 defvar!(LOAD_HISTORY);
@@ -190,6 +203,7 @@ define_symbols!(
         load,
         read_from_string,
         intern,
+        intern_soft,
     }
     VARS => {
         LEXICAL_BINDING,

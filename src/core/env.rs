@@ -286,6 +286,15 @@ impl SymbolMap {
         }
     }
 
+    fn get(&self, name: &str) -> Option<Symbol> {
+        unsafe {
+            self.map.get(name).map(|x| {
+                let ptr: *const GlobalSymbol = x.as_ref();
+                &*ptr
+            })
+        }
+    }
+
     fn intern(&mut self, name: &str) -> Symbol {
         let sym = match self.map.get(name) {
             Some(x) => x.0,
@@ -341,6 +350,10 @@ impl ObjectMap {
             }
             None => Err(anyhow!("Attempt to set a constant symbol: {symbol}")),
         }
+    }
+
+    pub(crate) fn get(&self, name: &str) -> Option<Symbol> {
+        self.map.get(name)
     }
 }
 
