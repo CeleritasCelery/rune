@@ -11,6 +11,7 @@ defvar!(DUMP_MODE);
 defvar!(COMMAND_LINE_ARGS, list!(""));
 defvar!(DEFAULT_DIRECTORY, "");
 defvar!(NONINTERACTIVE, true);
+defvar!(AFTER_INIT_TIME);
 
 define_symbols!(
     FUNCS => {
@@ -22,6 +23,7 @@ define_symbols!(
         DUMP_MODE,
         COMMAND_LINE_ARGS,
         DEFAULT_DIRECTORY,
-        NONINTERACTIVE
+        NONINTERACTIVE,
+        AFTER_INIT_TIME,
     }
 );
