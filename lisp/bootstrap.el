@@ -6,4 +6,5 @@
 (load "inline")
 (load "cconv")
 (load "warnings") ;; should be autoloaded
+(load "stubs")
 (load "bytecomp")
