@@ -181,6 +181,11 @@ pub(crate) fn functionp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn subrp(object: GcObj) -> bool {
+    matches!(object.get(), Object::SubrFn(_))
+}
+
+#[defun]
 pub(crate) fn stringp(object: GcObj) -> bool {
     matches!(object.get(), Object::String(_))
 }
@@ -341,6 +346,7 @@ define_symbols!(
         stringp,
         symbolp,
         functionp,
+        subrp,
         vectorp,
         numberp,
         markerp,
