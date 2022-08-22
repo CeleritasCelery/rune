@@ -1272,10 +1272,12 @@ nil.")
   "Log a byte-compilation warning.
 STRING, FILL and LEVEL are as described in
 `byte-compile-log-warning-function', which see."
-  (funcall byte-compile-log-warning-function
-           string byte-compile-last-position
-           fill
-           level))
+  ;; RUNE BOOTSTRAP
+  ;; (funcall byte-compile-log-warning-function
+  ;;          string byte-compile-last-position
+  ;;          fill
+  ;;          level)
+  (message "%s" string))
 
 (defun byte-compile--log-warning-for-byte-compile (string &optional
                                                           _position
