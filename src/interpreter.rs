@@ -936,7 +936,11 @@ mod test {
             cx,
         );
         // Special but unbound
-        check_interpreter("(progn (defvar foo 1) (makunbound 'foo) (let ((fn #'(lambda () (defvar foo 3))) (foo 7)) (funcall fn)) foo)", 3, cx);
+        check_interpreter(
+            "(progn (defvar foo 1) (makunbound 'foo) (let ((fn #'(lambda () (defvar foo 3))) (foo 7)) (funcall fn)) foo)",
+            3,
+            cx,
+        );
         check_interpreter(
             "(progn (defvar foo 1) (makunbound 'foo) (let ((foo 7)) foo))",
             7,
@@ -1054,12 +1058,24 @@ mod test {
             cx,
         );
         // Test multiple closures
-        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))", -16, cx);
+        check_interpreter(
+            "(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (+ y x)) #'(lambda (y) (- y x))))) (* (funcall (car funcs) 5) (funcall (cdr funcs) 1)))",
+            -16,
+            cx,
+        );
         // Test that closures close over variables
-        check_interpreter("(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))", 9, cx);
+        check_interpreter(
+            "(progn (setq funcs (let ((x 3)) (cons #'(lambda (y) (setq x y)) #'(lambda (y) (+ y x))))) (funcall (car funcs) 5) (funcall (cdr funcs) 4))",
+            9,
+            cx,
+        );
         // Test that closures in global function close over values and not
         // variables
-        check_interpreter("(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))", 8, cx);
+        check_interpreter(
+            "(progn (setq func (let ((x 3)) (defalias 'int-test-no-cap #'(lambda (y) (+ y x))) #'(lambda (y) (setq x y)))) (funcall func 4) (int-test-no-cap 5))",
+            8,
+            cx,
+        );
 
         check_interpreter(
             "(progn (read-from-string (prin1-to-string (make-hash-table))) nil)",

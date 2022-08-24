@@ -242,14 +242,18 @@ pub(crate) fn modulo(x: Gc<Number>, y: Gc<Number>) -> NumberValue {
     x.val() % y.val()
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
     let y = y.val();
-    if x > y { x } else { y }
+    let ret = if x > y { x } else { y };
+    ret
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
     let y = y.val();
-    if x < y { x } else { y }
+    let ret = if x < y { x } else { y };
+    ret
 }
 
 #[defun]

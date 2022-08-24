@@ -111,7 +111,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
             }
             x => {
                 return Err(TypeError::new(Type::String, x))
-                    .context("Found non-string in `load-path'")
+                    .context("Found non-string in `load-path'");
             }
         }
     }
@@ -141,7 +141,7 @@ pub(crate) fn load<'ob>(
                 return match noerror {
                     true => Ok(false),
                     false => Err(e),
-                }
+                };
             }
         }
     };
