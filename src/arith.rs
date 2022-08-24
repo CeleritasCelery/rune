@@ -232,9 +232,38 @@ pub(crate) fn logior(ints_or_markers: &[Gc<i64>]) -> i64 {
     ints_or_markers.iter().fold(0, |acc, x| acc | x.get())
 }
 
+#[defun]
+fn logand(int_or_markers: &[Gc<i64>]) -> i64 {
+    int_or_markers.iter().fold(0, |accum, x| accum & x.get())
+}
+
 #[defun(name = "mod")]
 pub(crate) fn modulo(x: Gc<Number>, y: Gc<Number>) -> NumberValue {
     x.val() % y.val()
+}
+
+fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
+    let y = y.val();
+    if x > y { x } else { y }
+}
+
+fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
+    let y = y.val();
+    if x < y { x } else { y }
+}
+
+#[defun]
+fn max(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+    number_or_markers
+        .iter()
+        .fold(number_or_marker.val(), max_val)
+}
+
+#[defun]
+fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+    number_or_markers
+        .iter()
+        .fold(number_or_marker.val(), min_val)
 }
 
 define_symbols!(
@@ -252,7 +281,10 @@ define_symbols!(
         greater_than,
         greater_than_or_eq,
         logior,
+        logand,
         modulo,
+        min,
+        max,
     }
 );
 
@@ -330,5 +362,16 @@ mod test {
         assert!(less_than(1.into(), &[float1_1]));
         assert!(!less_than(float1, &[1.into()]));
         assert!(less_than(float1, &[float1_1, 2.into(), float2_1]));
+    }
+
+    #[test]
+    fn test_max_min() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let (float1_1, float2_1) = into_objects![1.1, 2.1; cx];
+        let float1 = 1.0.into_obj(cx).into();
+
+        assert_eq!(max(float1, &[float2_1, float1_1, float1]), float2_1.val());
+        assert_eq!(min(float1_1, &[float1, float2_1, float1]), float1.val());
     }
 }
