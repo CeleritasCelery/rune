@@ -1,7 +1,7 @@
 use crate::core::{
     env::Env,
     gc::{Context, Root},
-    object::{nil, GcObj},
+    object::{nil, Gc, GcObj, List},
 };
 use anyhow::{ensure, Result};
 use fancy_regex::Regex;
@@ -56,14 +56,33 @@ fn match_data<'ob>(
 
 #[defun]
 fn set_match_data<'ob>(
-    list: GcObj,
+    list: Gc<List>,
     _reseat: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     // TODO: add reseat when markers implemented
-    env.as_mut(cx).match_data.set(list);
+    let obj: GcObj = list.into();
+    env.as_mut(cx).match_data.set(obj);
     nil()
+}
+
+#[defun]
+fn match_beginning<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+    env.match_data
+        .bind(cx)
+        .as_list()?
+        .nth(subexp)
+        .unwrap_or_else(|| Ok(nil()))
+}
+
+#[defun]
+fn match_end<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+    env.match_data
+        .bind(cx)
+        .as_list()?
+        .nth(subexp + 1)
+        .unwrap_or_else(|| Ok(nil()))
 }
 
 #[defun]
@@ -71,4 +90,4 @@ fn string_equal(s1: &str, s2: &str) -> bool {
     s1 == s2
 }
 
-define_symbols!(FUNCS => {string_match, match_data, set_match_data, string_equal});
+define_symbols!(FUNCS => {string_match, match_data, set_match_data, match_beginning, match_end, string_equal});
