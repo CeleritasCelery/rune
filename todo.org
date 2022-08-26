@@ -1,13 +1,13 @@
 #+title: Next steps for Rune
-* GC
-** Add trace derive
 * Objects
 ** implement vec without lifetime parameter
 This would let the Object lifetime be covariant instead of invariant. But the problem is that we need to reimplement everything for our vec type. I actually don't think invariance will be such a problem once we update the gc borrowing.
 * Add a lifetime parameter to Symbols
 I hate to do this but it is requirement if we want to garbage collect them ever. We need to track which ones are on the stack versus not, the same as we do for all variables.
 * define benchmarks
-* implement auto-loading
+* Define special forms as subr's
+Currently symbol-function of a special form will return nil
+
 * Steps to add a new object
 - define in gc.rs
 - add boxing function
