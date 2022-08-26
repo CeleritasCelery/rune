@@ -267,6 +267,7 @@ define_symbols!(
         LAMBDA,
         CLOSURE,
         CONDITION_CASE,
+        UNWIND_PROTECT,
         WHILE,
         PROGN,
         PROG1,

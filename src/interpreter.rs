@@ -164,6 +164,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::CATCH => self.catch(forms, cx),
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
+                sym::UNWIND_PROTECT => self.unwind_protect(forms, cx),
                 _ => self.eval_call(sym, forms, cx),
             },
             other => Err(error!("Invalid Function: {other}")),
@@ -625,6 +626,19 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             last.as_mut(cx).set(value);
         }
         Ok(last.bind(cx))
+    }
+
+    fn unwind_protect<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
+        rooted_iter!(forms, obj, cx);
+        let body = forms
+            .next()
+            .ok_or_else(|| ArgError::new(1, 0, "unwind-protect"))?;
+        let result = match self.eval_form(body, cx) {
+            Ok(x) => Ok(rebind!(x, cx)),
+            Err(e) => Err(e),
+        };
+        self.implicit_progn(forms, cx)?;
+        result
     }
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
