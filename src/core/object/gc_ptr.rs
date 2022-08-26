@@ -694,6 +694,20 @@ impl<'ob> From<i64> for Gc<Object<'ob>> {
     }
 }
 
+impl<'ob> From<usize> for Gc<Object<'ob>> {
+    fn from(x: usize) -> Self {
+        let ptr = sptr::invalid(x);
+        unsafe { i64::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<i32> for Gc<Object<'ob>> {
+    fn from(x: i32) -> Self {
+        let ptr = sptr::invalid(x as usize);
+        unsafe { i64::tag_ptr(ptr).into() }
+    }
+}
+
 impl<'ob> From<Gc<&'ob f64>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob f64>) -> Self {
         unsafe { Self::transmute(x) }

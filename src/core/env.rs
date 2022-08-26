@@ -19,6 +19,7 @@ pub(crate) struct Env {
     pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
     pub(crate) special_variables: HashSet<Symbol>,
     pub(crate) binding_stack: Vec<(Symbol, Option<GcObj<'static>>)>,
+    pub(crate) match_data: GcObj<'static>,
 }
 
 impl Rt<Env> {

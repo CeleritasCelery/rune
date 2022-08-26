@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.55"
+fancy-regex = "0.10.0"
 float-cmp = "0.9.0"
 fn_macros = { version = "0.1.0", path = "fn_macros" }
 lazy_static = "1.4.0"
