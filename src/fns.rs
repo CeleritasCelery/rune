@@ -7,7 +7,7 @@ use crate::core::{
     gc::{Context, Root, Rt},
     object::{nil, Function, Gc, GcObj, HashTable, List, Object},
 };
-use crate::{data, root, rooted_iter};
+use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
@@ -19,6 +19,24 @@ pub(crate) fn slice_into_list<'ob>(
 ) -> GcObj<'ob> {
     let from_end = slice.iter().rev();
     from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; cx))
+}
+
+#[defun]
+pub(crate) fn eq(obj1: GcObj, obj2: GcObj) -> bool {
+    obj1.ptr_eq(obj2)
+}
+
+#[defun]
+pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
+    obj1 == obj2
+}
+
+#[defun]
+pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
+    match (obj1.get(), obj2.get()) {
+        (Object::Float(f1), Object::Float(f2)) => f1.to_bits() == f2.to_bits(),
+        _ => obj1.ptr_eq(obj2),
+    }
 }
 
 #[defun]
@@ -138,7 +156,7 @@ pub(crate) fn append<'ob>(
 
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> GcObj<'ob> {
-    alist_get(key, alist, data::eq)
+    alist_get(key, alist, eq)
 }
 
 #[defun]
@@ -151,7 +169,7 @@ pub(crate) fn assoc<'ob>(
         testfn.is_none(),
         "test functions for assoc not yet supported"
     );
-    Ok(alist_get(key, alist, data::equal))
+    Ok(alist_get(key, alist, equal))
 }
 
 fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcObj<'ob> {
@@ -224,12 +242,12 @@ fn delete_from_list<'ob>(
 
 #[defun]
 pub(crate) fn delete<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    delete_from_list(elt, list, data::equal)
+    delete_from_list(elt, list, equal)
 }
 
 #[defun]
 pub(crate) fn delq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    delete_from_list(elt, list, data::eq)
+    delete_from_list(elt, list, eq)
 }
 
 fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> Result<GcObj<'ob>> {
@@ -246,17 +264,17 @@ fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> R
 
 #[defun]
 pub(crate) fn memq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    member_of_list(elt, list, data::eq)
+    member_of_list(elt, list, eq)
 }
 
 #[defun]
 pub(crate) fn memql<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    member_of_list(elt, list, data::eql)
+    member_of_list(elt, list, eql)
 }
 
 #[defun]
 pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    member_of_list(elt, list, data::equal)
+    member_of_list(elt, list, equal)
 }
 
 #[defun]
@@ -546,6 +564,9 @@ mod test {
 
 define_symbols!(
     FUNCS => {
+        eq,
+        equal,
+        eql,
         mapcar,
         mapc,
         reverse,
