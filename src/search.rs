@@ -55,8 +55,20 @@ fn match_data<'ob>(
 }
 
 #[defun]
+fn set_match_data<'ob>(
+    list: GcObj,
+    _reseat: Option<()>,
+    env: &mut Root<Env>,
+    cx: &'ob Context,
+) -> GcObj<'ob> {
+    // TODO: add reseat when markers implemented
+    env.as_mut(cx).match_data.set(list);
+    nil()
+}
+
+#[defun]
 fn string_equal(s1: &str, s2: &str) -> bool {
     s1 == s2
 }
 
-define_symbols!(FUNCS => {string_match, match_data, string_equal});
+define_symbols!(FUNCS => {string_match, match_data, set_match_data, string_equal});
