@@ -6,7 +6,7 @@ use crate::core::{
     env::{Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, Root},
-    object::{nil, GcObj, Object},
+    object::{nil, Gc, GcObj, Number, Object},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -237,6 +237,20 @@ fn bufferp(_object: GcObj) -> bool {
 }
 
 #[defun]
+fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> Gc<Number<'ob>> {
+    // TODO: Handle trailing characters, which should be ignored
+    let base = base.unwrap_or(10);
+    let string = string.trim();
+    match i64::from_str_radix(string, base as u32) {
+        Ok(x) => x.into(),
+        Err(_) => match string.parse::<f64>() {
+            Ok(x) => cx.add(x),
+            Err(_) => 0.into(),
+        },
+    }
+}
+
+#[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
@@ -350,6 +364,7 @@ define_symbols!(
         atom,
         byte_code_function_p,
         bufferp,
+        string_to_number,
         indirect_function,
     }
 );
