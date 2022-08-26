@@ -40,6 +40,12 @@ pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
+fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
+    // TODO: implement text properties
+    equal(o1, o2)
+}
+
+#[defun]
 pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String {
     format!("{object}")
 }
@@ -567,6 +573,7 @@ define_symbols!(
         eq,
         equal,
         eql,
+        equal_including_properties,
         mapcar,
         mapc,
         reverse,
