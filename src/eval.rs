@@ -269,6 +269,7 @@ define_symbols!(
         CONDITION_CASE,
         UNWIND_PROTECT,
         WHILE,
+        INLINE,
         PROGN,
         PROG1,
         PROG2,

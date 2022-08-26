@@ -154,7 +154,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::OR => self.eval_or(forms, cx),
                 sym::COND => self.eval_cond(forms, cx),
                 sym::WHILE => self.eval_while(forms, cx),
-                sym::PROGN => self.eval_progn(forms, cx),
+                sym::PROGN | sym::INLINE => self.eval_progn(forms, cx),
                 sym::PROG1 => self.eval_progx(forms, 1, cx),
                 sym::PROG2 => self.eval_progx(forms, 2, cx),
                 sym::SETQ => self.setq(forms, cx),
