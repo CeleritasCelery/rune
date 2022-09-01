@@ -524,7 +524,7 @@ mod test {
         check_reader!(0b101_1101, "#b1011101", cx);
         check_reader!(0x1, "#x001", cx);
         check_reader!(0x10, "#x10", cx);
-        check_reader!(0xdead_beef, "#xDeAdBeEf", cx);
+        check_reader!(0xdead_beef_i64, "#xDeAdBeEf", cx);
     }
 
     #[test]

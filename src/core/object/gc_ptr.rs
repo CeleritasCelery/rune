@@ -210,6 +210,32 @@ impl<'ob> IntoObject<'ob> for i64 {
     }
 }
 
+impl<'ob> IntoObject<'ob> for i32 {
+    type Out = i64;
+
+    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+        let ptr: *const i64 = sptr::invalid(self as usize);
+        unsafe { i64::tag_ptr(ptr) }
+    }
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+        Strict::addr(ptr) as i64
+    }
+}
+
+impl<'ob> IntoObject<'ob> for usize {
+    type Out = i64;
+
+    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+        let ptr: *const i64 = sptr::invalid(self);
+        unsafe { i64::tag_ptr(ptr) }
+    }
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+        Strict::addr(ptr) as i64
+    }
+}
+
 impl<'ob> IntoObject<'ob> for bool {
     type Out = bool;
 
