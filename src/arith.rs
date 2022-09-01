@@ -304,32 +304,25 @@ mod test {
     fn test_add() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let (int1, int7, int13, float2_5) = into_objects!(1, 7, 13, 2.5; cx);
-
         assert_eq!(add(&[]), NumberValue::Int(0));
-        assert_eq!(add(&[int7, int13]), NumberValue::Int(20));
-        assert_eq!(add(&[int1, float2_5]), NumberValue::Float(3.5));
+        assert_eq!(add(&[7.into(), 13.into()]), NumberValue::Int(20));
+        assert_eq!(add(&[1.into(), cx.add(2.5)]), NumberValue::Float(3.5));
+        assert_eq!(add(&[0.into(), (-1).into()]), NumberValue::Int(-1));
     }
 
     #[test]
     fn test_sub() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let int13 = into_objects!(13; cx);
-
         assert_eq!(sub(None, &[]), NumberValue::Int(0));
         assert_eq!(sub(Some(7.into()), &[]), NumberValue::Int(-7));
-        assert_eq!(sub(Some(7.into()), &[int13]), NumberValue::Int(-6));
+        assert_eq!(sub(Some(7.into()), &[13.into()]), NumberValue::Int(-6));
+        assert_eq!(sub(Some(0.into()), &[(-1).into()]), NumberValue::Int(1));
     }
 
     #[test]
     fn test_mul() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let args = vec_into_object![7, 13; cx];
-
         assert_eq!(mul(&[]), NumberValue::Int(1));
-        assert_eq!(mul(&args), NumberValue::Int(91));
+        assert_eq!(mul(&[7.into(), 13.into()]), NumberValue::Int(91));
+        assert_eq!(mul(&[(-1).into(), 1.into()]), NumberValue::Int(-1));
     }
 
     #[test]
@@ -337,7 +330,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
 
-        assert_eq!(div(12.0.into_obj(cx).into(), &[]), NumberValue::Float(12.0));
+        assert_eq!(div(cx.add(12.0), &[]), NumberValue::Float(12.0));
         assert_eq!(div(12.into(), &[5.into(), 2.into()]), NumberValue::Int(1));
     }
 

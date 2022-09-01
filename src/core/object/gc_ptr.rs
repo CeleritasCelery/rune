@@ -79,7 +79,7 @@ impl<T> Gc<T> {
     }
 
     fn untag(self) -> (*const u8, Tag) {
-        let ptr = Strict::map_addr(self.ptr, |x| x >> 8);
+        let ptr = Strict::map_addr(self.ptr, |x| ((x as isize) >> 8) as usize);
         let tag = self.tag();
         (ptr, tag)
     }

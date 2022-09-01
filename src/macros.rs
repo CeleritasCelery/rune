@@ -147,11 +147,6 @@ macro_rules! vec_into {
 }
 
 #[cfg(test)]
-macro_rules! vec_into_object {
-    ($($x:expr),+ $(,)?; $cx:expr) => {vec![$(crate::core::object::IntoObject::into_obj($x, $cx).into()),+]};
-}
-
-#[cfg(test)]
 macro_rules! into_objects {
     ($($x:expr),+ $(,)?; $cx:expr) => {($(crate::core::object::IntoObject::into_obj($x, $cx).into()),+)};
 }
