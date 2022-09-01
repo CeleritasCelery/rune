@@ -3,10 +3,10 @@ use std::sync::Mutex;
 
 use crate::core::{
     cons::Cons,
-    env::{Env, Symbol, INTERNED_SYMBOLS},
+    env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, Root},
-    object::{nil, Gc, GcObj, Number, Object},
+    object::{nil, Gc, GcObj, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -251,6 +251,19 @@ pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
 }
 
 #[defun]
+fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> GcObj<'ob> {
+    let min = subr.args.required as usize;
+    let max: GcObj = {
+        if subr.args.rest {
+            sym::MANY.into()
+        } else {
+            (min + subr.args.optional as usize).into()
+        }
+    };
+    cons!(min, max; cx)
+}
+
+#[defun]
 pub(crate) fn aset<'ob>(
     array: &RefCell<Vec<GcObj<'ob>>>,
     idx: usize,
@@ -314,6 +327,7 @@ define_symbols!(
         get,
         defvar,
         make_variable_buffer_local,
+        subr_arity,
         fset,
         aset,
         aref,
@@ -345,5 +359,8 @@ define_symbols!(
         bufferp,
         string_to_number,
         indirect_function,
+    }
+    SYMS => {
+        MANY,
     }
 );
