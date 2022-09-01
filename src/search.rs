@@ -15,9 +15,9 @@ fn string_match<'ob>(
     env: &mut Root<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    let start = start.unwrap_or(0) as usize;
-    let re = Regex::new(regexp)?;
+    let re = Regex::new(&lisp_regex_to_rust(regexp))?;
 
+    let start = start.unwrap_or(0) as usize;
     if let Some(matches) = re.captures_iter(&string[start..]).next() {
         let mut all: Vec<GcObj> = Vec::new();
         let all_matches = matches?;
@@ -34,6 +34,22 @@ fn string_match<'ob>(
     }
 }
 
+// Invert the escaping of parens. i.e. \( => ( and ( => \(
+fn lisp_regex_to_rust(regexp: &str) -> String {
+    let mut norm_regex = String::new();
+    let mut chars = regexp.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '(' => norm_regex.push_str("\\("),
+            ')' => norm_regex.push_str("\\)"),
+            '\\' if matches!(chars.peek(), Some('(' | ')')) => {
+                norm_regex.push(chars.next().unwrap());
+            }
+            c => norm_regex.push(c),
+        }
+    }
+    norm_regex
+}
 #[defun]
 fn match_data<'ob>(
     integer: Option<()>,
@@ -88,6 +104,19 @@ fn match_end<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Result<Gc
 #[defun]
 fn string_equal(s1: &str, s2: &str) -> bool {
     s1 == s2
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn lisp_regex() {
+        assert_eq!(lisp_regex_to_rust("foo"), "foo");
+        assert_eq!(lisp_regex_to_rust("\\foo"), "\\foo");
+        assert_eq!(lisp_regex_to_rust("\\(foo\\)"), "(foo)");
+        assert_eq!(lisp_regex_to_rust("(foo)"), "\\(foo\\)");
+    }
 }
 
 define_symbols!(FUNCS => {string_match, match_data, set_match_data, match_beginning, match_end, string_equal});

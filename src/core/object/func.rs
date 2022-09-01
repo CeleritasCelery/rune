@@ -12,7 +12,7 @@ use std::fmt;
 use anyhow::{bail, Result};
 
 /// Argument requirments to a function.
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct FnArgs {
     /// a &rest argument.
     pub(crate) rest: bool,
