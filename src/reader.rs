@@ -619,9 +619,9 @@ baz""#,
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         check_reader!(vec![], "[]", cx);
-        check_reader!(vec_into![1], "[1]", cx);
-        check_reader!(vec_into![1, 2], "[1 2]", cx);
-        check_reader!(vec_into![1, 2, 3], "[1 2 3]", cx);
+        check_reader!(vec![1.into()], "[1]", cx);
+        check_reader!(vec![1.into(), 2.into()], "[1 2]", cx);
+        check_reader!(vec![1.into(), 2.into(), 3.into()], "[1 2 3]", cx);
     }
 
     fn assert_error(input: &str, error: Error, cx: &Context) {

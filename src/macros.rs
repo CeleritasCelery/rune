@@ -140,13 +140,3 @@ macro_rules! define_unbox {
         }
     };
 }
-
-#[cfg(test)]
-macro_rules! vec_into {
-    ($($x:expr),+ $(,)?) => {vec![$($x.into()),+]};
-}
-
-#[cfg(test)]
-macro_rules! into_objects {
-    ($($x:expr),+ $(,)?; $cx:expr) => {($(crate::core::object::IntoObject::into_obj($x, $cx).into()),+)};
-}

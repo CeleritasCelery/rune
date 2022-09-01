@@ -295,10 +295,7 @@ define_symbols!(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::core::{
-        gc::{Context, RootSet},
-        object::IntoObject,
-    };
+    use crate::core::gc::{Context, RootSet};
 
     #[test]
     fn test_add() {
@@ -352,23 +349,26 @@ mod test {
     fn test_cmp() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let (float1_1, float2_1) = into_objects![1.1, 2.1; cx];
-        let float1 = 1.0.into_obj(cx).into();
-
         assert!(less_than(1.into(), &[]));
-        assert!(less_than(1.into(), &[float1_1]));
-        assert!(!less_than(float1, &[1.into()]));
-        assert!(less_than(float1, &[float1_1, 2.into(), float2_1]));
+        assert!(less_than(1.into(), &[cx.add(1.1)]));
+        assert!(!less_than(cx.add(1.0), &[1.into()]));
+        assert!(less_than(
+            cx.add(1.0),
+            &[cx.add(1.1), 2.into(), cx.add(2.1)]
+        ));
     }
 
     #[test]
     fn test_max_min() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let (float1_1, float2_1) = into_objects![1.1, 2.1; cx];
-        let float1 = 1.0.into_obj(cx).into();
-
-        assert_eq!(max(float1, &[float2_1, float1_1, float1]), float2_1.val());
-        assert_eq!(min(float1_1, &[float1, float2_1, float1]), float1.val());
+        assert_eq!(
+            max(cx.add(1.0), &[cx.add(2.1), cx.add(1.1), cx.add(1.0)]),
+            cx.add(2.1).val()
+        );
+        assert_eq!(
+            min(cx.add(1.1), &[cx.add(1.0), cx.add(2.1), cx.add(1.0)]),
+            cx.add(1.0).val()
+        );
     }
 }
