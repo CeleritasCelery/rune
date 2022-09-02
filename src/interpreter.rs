@@ -343,14 +343,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn eval_while<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        let first: Gc<List> = obj.bind(cx).try_into()?;
-        let condition = match first.get() {
-            List::Cons(cons) => cons.car(),
-            List::Nil => bail_err!(ArgError::new(1, 0, "while")),
+        let first = {
+            let list: Gc<List> = obj.bind(cx).try_into()?;
+            match list.get() {
+                List::Nil => bail_err!(ArgError::new(1, 0, "while")),
+                List::Cons(cons) => cons,
+            }
         };
-        root!(condition, cx);
+        root!(first, cx);
+        let condition = first.car();
         while self.eval_form(condition, cx)? != nil() {
-            rooted_iter!(forms, obj, cx);
+            rooted_iter!(forms, first.cdr(), cx);
             self.implicit_progn(forms, cx)?;
         }
         Ok(nil())
@@ -986,6 +989,18 @@ mod test {
         check_interpreter("(cond (1 2))", 2, cx);
         check_interpreter("(cond (nil 1) (2 3))", 3, cx);
         check_interpreter("(cond (nil 1) (2 3) (4 5))", 3, cx);
+    }
+
+    #[test]
+    fn test_loops() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        check_interpreter(
+            "(let ((i 3) (x 0)) (while (> i 0) (setq x (+ x i) i (1- i) )) x)",
+            6,
+            cx,
+        );
+        check_interpreter("(let ((i 3) (x 0)) (while (progn (setq x (1- x)) (> i 0)) (setq x (+ x i) i (1- i) )) x)", 2, cx);
     }
 
     #[test]
