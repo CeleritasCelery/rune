@@ -343,17 +343,17 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn eval_while<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        let first = {
+        let (condition, body) = {
             let list: Gc<List> = obj.bind(cx).try_into()?;
             match list.get() {
                 List::Nil => bail_err!(ArgError::new(1, 0, "while")),
-                List::Cons(cons) => cons,
+                List::Cons(cons) => (cons.car(), cons.cdr()),
             }
         };
-        root!(first, cx);
-        let condition = first.car();
+        root!(condition, cx);
+        root!(body, cx);
         while self.eval_form(condition, cx)? != nil() {
-            rooted_iter!(forms, first.cdr(), cx);
+            rooted_iter!(forms, &**body, cx);
             self.implicit_progn(forms, cx)?;
         }
         Ok(nil())
@@ -456,8 +456,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(sym.into())
         } else {
             let mut iter = self.vars.iter().rev();
-            match iter.find_map(|cons| (cons.car() == sym).then(|| cons.cdr())) {
-                Some(value) => Ok(value.bind(cx)),
+            match iter.find_map(|cons| (cons.car(cx) == sym).then(|| cons.cdr(cx))) {
+                Some(value) => Ok(value),
                 None => match self.env.vars.get(sym) {
                     Some(v) => Ok(v.bind(cx)),
                     None => Err(error!("Void variable: {sym}")),
@@ -468,7 +468,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) -> AnyResult<()> {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.car() == name)) {
+        match iter.find(|cons| (cons.car(cx) == name)) {
             Some(value) => {
                 value
                     .bind(cx)
