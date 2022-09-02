@@ -481,7 +481,7 @@ pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Context) -> Result<(GcObj<'
 
 #[cfg(test)]
 mod test {
-    use crate::core::gc::RootSet;
+    use crate::core::{gc::RootSet, object::ObjVec};
 
     use super::*;
 
@@ -618,10 +618,13 @@ baz""#,
     fn test_read_vec() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        check_reader!(vec![], "[]", cx);
-        check_reader!(vec![1.into()], "[1]", cx);
-        check_reader!(vec![1.into(), 2.into()], "[1 2]", cx);
-        check_reader!(vec![1.into(), 2.into(), 3.into()], "[1 2 3]", cx);
+        check_reader!(Vec::<GcObj>::new(), "[]", cx);
+        let vec: ObjVec = vec![1.into()];
+        check_reader!(vec, "[1]", cx);
+        let vec: ObjVec = vec![1.into(), 2.into()];
+        check_reader!(vec, "[1 2]", cx);
+        let vec: ObjVec = vec![1.into(), 2.into(), 3.into()];
+        check_reader!(vec, "[1 2 3]", cx);
     }
 
     fn assert_error(input: &str, error: Error, cx: &Context) {

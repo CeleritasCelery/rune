@@ -413,6 +413,7 @@ create_symbolmap!(
     crate::eval,
     crate::alloc,
     crate::editfns,
+    crate::character,
     crate::keymap,
     crate::emacs,
     crate::buffer

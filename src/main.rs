@@ -74,6 +74,7 @@ mod core;
 mod debug;
 mod alloc;
 mod arith;
+mod character;
 mod buffer;
 mod data;
 mod editfns;
