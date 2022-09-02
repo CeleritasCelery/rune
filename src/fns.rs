@@ -451,6 +451,12 @@ fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
 #[defun]
 fn enable_debug() -> bool {
     crate::debug::enable_debug();
+    true
+}
+
+#[defun]
+fn disable_debug() -> bool {
+    crate::debug::disable_debug();
     false
 }
 
@@ -604,6 +610,7 @@ define_symbols!(
         substring,
         copy_sequence,
         enable_debug,
+        disable_debug,
     }
     SYMS => {
         KW_TEST,
