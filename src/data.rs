@@ -154,7 +154,12 @@ pub(crate) fn symbolp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn functionp(object: GcObj) -> bool {
-    matches!(object.get(), Object::LispFn(_) | Object::SubrFn(_))
+    match object.get() {
+        Object::LispFn(_) | Object::SubrFn(_) => true,
+        Object::Cons(cons) => cons.car() == sym::CLOSURE,
+        Object::Symbol(sym) => sym.has_func(),
+        _ => false,
+    }
 }
 
 #[defun]
