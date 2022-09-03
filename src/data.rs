@@ -202,6 +202,11 @@ pub(crate) fn integerp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn floatp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Float(_))
+}
+
+#[defun]
 pub(crate) fn atom(object: GcObj) -> bool {
     !consp(object)
 }
@@ -354,6 +359,7 @@ define_symbols!(
         consp,
         keywordp,
         integerp,
+        floatp,
         atom,
         byte_code_function_p,
         bufferp,
