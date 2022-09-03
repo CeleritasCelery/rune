@@ -414,6 +414,7 @@ create_symbolmap!(
     crate::alloc,
     crate::editfns,
     crate::character,
+    crate::floatfns,
     crate::keymap,
     crate::emacs,
     crate::buffer
