@@ -1,4 +1,6 @@
-use crate::core::object::{nil, Expression, GcObj, LispFn};
+use std::cell::RefCell;
+
+use crate::core::object::{nil, CodeVec, Expression, FnArgs, GcObj, LispFn, ObjVec};
 use crate::core::{env::Symbol, gc::Context};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
@@ -41,6 +43,34 @@ pub(crate) fn make_closure<'ob>(
 }
 
 #[defun]
+fn make_byte_code<'ob>(
+    arglist: i64,
+    byte_code: &RefCell<Vec<u8>>,
+    constants: &RefCell<ObjVec<'ob>>,
+    _depth: usize,
+    _docstring: Option<GcObj>,
+    _interactive_spec: Option<GcObj>,
+    _elements: &[GcObj],
+) -> LispFn<'ob> {
+    let arglist = arglist as u16;
+    let required = arglist & 0x7F;
+    let optional = arglist >> 8 & 0x7F;
+    let rest = arglist & 0x80 != 0;
+    LispFn {
+        body: Expression {
+            op_codes: CodeVec(byte_code.borrow().clone()),
+            constants: constants.borrow().clone(),
+        },
+        args: FnArgs {
+            rest,
+            required,
+            optional,
+            advice: false,
+        },
+    }
+}
+
+#[defun]
 fn make_vector(length: usize, init: GcObj) -> Vec<GcObj> {
     vec![init; length]
 }
@@ -65,6 +95,7 @@ define_symbols!(
         list,
         make_closure,
         make_vector,
+        make_byte_code,
         vector,
         purecopy,
         make_symbol,
