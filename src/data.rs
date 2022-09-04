@@ -274,6 +274,21 @@ fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> GcObj<'ob> {
 }
 
 #[defun]
+fn ash(value: i64, count: i64) -> i64 {
+    let shift = if count >= 0 {
+        std::ops::Shl::shl
+    } else {
+        std::ops::Shr::shr
+    };
+    let result = shift(value.abs(), count.abs());
+    if value >= 0 {
+        result
+    } else {
+        -result
+    }
+}
+
+#[defun]
 pub(crate) fn aset<'ob>(
     array: &RefCell<Vec<GcObj<'ob>>>,
     idx: usize,
@@ -330,6 +345,19 @@ pub(crate) fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Symbol {
     feature
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_ash() {
+        assert_eq!(ash(4, 1), 8);
+        assert_eq!(ash(4, -1), 2);
+        assert_eq!(ash(-8, -1), -4);
+        assert_eq!(ash(-8, 1), -16);
+    }
+}
+
 define_symbols!(
     FUNCS => {
         set,
@@ -338,6 +366,7 @@ define_symbols!(
         defvar,
         make_variable_buffer_local,
         subr_arity,
+        ash,
         fset,
         aset,
         aref,
