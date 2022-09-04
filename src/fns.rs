@@ -167,15 +167,19 @@ pub(crate) fn append<'ob>(
 
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    alist_get(key, alist, eq)
+    for elem in alist.elements() {
+        if let Object::Cons(cons) = elem?.get() && eq(key, cons.car()) {
+            return Ok(cons.into())
+        }
+    }
+    Ok(nil())
 }
 
 #[defun]
 fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     for elem in alist.elements() {
-        match elem?.get() {
-            Object::Cons(cons) if eq(key, cons.cdr()) => return Ok(cons.into()),
-            _ => {}
+        if let Object::Cons(cons) = elem?.get() && eq(key, cons.cdr()) {
+            return Ok(cons.into())
         }
     }
     Ok(nil())
@@ -191,24 +195,15 @@ pub(crate) fn assoc<'ob>(
         testfn.is_none(),
         "test functions for assoc not yet supported"
     );
-    alist_get(key, alist, equal)
+    for elem in alist.elements() {
+        if let Object::Cons(cons) = elem?.get() && equal(key, cons.car()) {
+            return Ok(cons.into())
+        }
+    }
+    Ok(nil())
 }
 
 type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
-
-fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> Result<GcObj<'ob>> {
-    Ok(alist
-        .elements()
-        .find(|x| match x {
-            Ok(elem) => match elem.get() {
-                Object::Cons(cons) => testfn(key, cons.car()),
-                _ => false,
-            },
-            _ => false,
-        })
-        .transpose()?
-        .unwrap_or_default())
-}
 
 #[defun]
 fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
