@@ -39,6 +39,7 @@ pub(crate) enum Type {
     Int,
     Cons,
     Vec,
+    ByteVec,
     HashTable,
     Sequence,
     String,
