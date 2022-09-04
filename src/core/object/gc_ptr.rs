@@ -1228,14 +1228,14 @@ impl fmt::Display for Object<'_> {
                     write!(f, "{x} ")?;
                 }
                 write!(f, "]")
-            },
+            }
             Object::ByteVec(vec) => {
                 write!(f, "[")?;
                 for x in vec.borrow().iter() {
                     write!(f, "{x} ")?;
                 }
                 write!(f, "]")
-            },
+            }
             Object::HashTable(x) => write!(f, "{x:?}"),
             Object::String(x) => write!(f, "\"{x}\""),
             Object::Symbol(x) => write!(f, "{x}"),
