@@ -157,7 +157,7 @@ pub(crate) fn macroexpand<'ob>(
         if let Object::Symbol(name) = form.car().get() {
             // shadow the macro based on ENVIRONMENT
             let func: Option<Gc<Function>> = match environment {
-                Some(env) => match assq(name.into(), env.bind(cx).try_into()?).get() {
+                Some(env) => match assq(name.into(), env.bind(cx).try_into()?)?.get() {
                     Object::Cons(cons) => Some(cons.cdr().try_into()?),
                     _ => get_macro_func(name, cx),
                 },

@@ -161,8 +161,19 @@ pub(crate) fn append<'ob>(
 }
 
 #[defun]
-pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> GcObj<'ob> {
+pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     alist_get(key, alist, eq)
+}
+
+#[defun]
+fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+    for elem in alist.elements() {
+        match elem?.get() {
+            Object::Cons(cons) if eq(key, cons.cdr()) => return Ok(cons.into()),
+            _ => {}
+        }
+    }
+    Ok(nil())
 }
 
 #[defun]
@@ -175,25 +186,23 @@ pub(crate) fn assoc<'ob>(
         testfn.is_none(),
         "test functions for assoc not yet supported"
     );
-    Ok(alist_get(key, alist, equal))
+    alist_get(key, alist, equal)
 }
 
-fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> GcObj<'ob> {
-    match alist.get() {
-        List::Nil => nil(),
-        List::Cons(cons) => cons
-            .elements()
-            .find(|x| match x {
-                Ok(elem) => match elem.get() {
-                    Object::Cons(cons) => testfn(key, cons.car()),
-                    _ => false,
-                },
+type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
+
+fn alist_get<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>, testfn: EqFunc) -> Result<GcObj<'ob>> {
+    Ok(alist
+        .elements()
+        .find(|x| match x {
+            Ok(elem) => match elem.get() {
+                Object::Cons(cons) => testfn(key, cons.car()),
                 _ => false,
-            })
-            .transpose()
-            .expect("should never return error value")
-            .unwrap_or_default(),
-    }
+            },
+            _ => false,
+        })
+        .transpose()?
+        .unwrap_or_default())
 }
 
 #[defun]
@@ -221,8 +230,6 @@ fn copy_alist_elem<'ob>(elem: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
         _ => elem,
     }
 }
-
-type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
 
 fn delete_from_list<'ob>(
     elt: GcObj<'ob>,
@@ -559,7 +566,7 @@ mod test {
         let element = cons!(5, 6; cx);
         let list = list![cons!(1, 2; cx), cons!(3, 4; cx), element; cx];
         let list = list.try_into().unwrap();
-        let result = assq(5.into(), list);
+        let result = assq(5.into(), list).unwrap();
         assert_eq!(result, element);
     }
 
@@ -586,6 +593,7 @@ define_symbols!(
         nreverse,
         nconc,
         assq,
+        rassq,
         assoc,
         copy_alist,
         make_hash_table,
