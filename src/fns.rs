@@ -12,6 +12,11 @@ use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
+#[defun]
+fn identity(arg: GcObj) -> GcObj {
+    arg
+}
+
 pub(crate) fn slice_into_list<'ob>(
     slice: &[GcObj<'ob>],
     tail: Option<GcObj<'ob>>,
@@ -583,6 +588,7 @@ mod test {
 
 define_symbols!(
     FUNCS => {
+        identity,
         eq,
         equal,
         eql,
