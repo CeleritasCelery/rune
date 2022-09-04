@@ -6,7 +6,7 @@ use super::{
     },
     nil,
 };
-use crate::core::gc::Rt;
+use crate::core::gc::{Rt, Trace};
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -41,7 +41,7 @@ pub(crate) struct LispFn<'ob> {
 }
 
 #[derive(PartialEq, Clone, Default, Debug)]
-pub(crate) struct CodeVec(Vec<u8>);
+pub(crate) struct CodeVec(pub(crate) Vec<u8>);
 
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.
@@ -71,6 +71,12 @@ impl<'old, 'new> LispFn<'old> {
             },
             args: self.args,
         }
+    }
+}
+
+impl Trace for LispFn<'_> {
+    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+        self.body.constants.mark(stack);
     }
 }
 

@@ -3,6 +3,7 @@ use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
 use crate::core::env::ConstSymbol;
+use crate::core::gc::Trace;
 use crate::hashmap::HashMap;
 
 use super::super::{
@@ -1353,7 +1354,10 @@ impl<'ob> Gc<Object<'ob>> {
             }
             ObjectAllocation::String(x) => x.mark(),
             ObjectAllocation::Cons(x) => x.mark(stack),
-            ObjectAllocation::LispFn(_) => unimplemented!(),
+            ObjectAllocation::LispFn(x) => {
+                x.data.mark(stack);
+                x.mark();
+            },
             ObjectAllocation::NonAllocated => {}
         }
     }
