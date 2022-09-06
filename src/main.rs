@@ -12,7 +12,6 @@
     semicolon_in_expressions_from_macros,
     trivial_numeric_casts,
     unreachable_pub,
-    unused_crate_dependencies,
     unused_lifetimes
 )]
 // Enable all clippy lints, and then selectivly disable the ones we don't want
