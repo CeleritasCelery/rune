@@ -3,12 +3,13 @@ use fn_macros::defun;
 use crate::core::object::{GcObj, Object};
 use anyhow::{bail, ensure, Result};
 
-use std::fmt::Write as _;
+use std::{fmt::Write as _, io::Write};
 
 #[defun]
 fn message(format_string: &str, args: &[GcObj]) -> Result<String> {
     let message = format(format_string, args)?;
     println!("MESSAGE: {message}");
+    std::io::stdout().flush()?;
     Ok(message)
 }
 
