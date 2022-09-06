@@ -17,8 +17,15 @@ rustc-hash = "1.1.0"
 sptr = "0.3.2"
 streaming-iterator = "0.1.5"
 
+[dev-dependencies]
+backtrace-on-stack-overflow = "0.2.0"
+
 [profile.dev.build-override]
 opt-level = 3
+
+[profile.fast-debug]
+inherits = "release"
+debug = true
 
 [features]
 default = []
