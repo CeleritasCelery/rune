@@ -1,7 +1,7 @@
 * Rune
 *R* ust *UN* der *E* macs
 
-This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using rust as an host language.
+This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using rust as an host language. See the [[file:details.org][design doc]] for more details.
 ** Status
 The goal of this project is to eventually bootstrap [[https://github.com/emacs-mirror/emacs/commits/master/lisp/emacs-lisp/bytecomp.el][bytecomp.el]], which would enable this project to use the same byte compiler as Emacs. This would let me fuzz my vm against emacs byte code to help find issues. The project currently features a elisp interpreter to enable bootstrap. The files bootstrapped so far are:
 - ~byte-run.el~
