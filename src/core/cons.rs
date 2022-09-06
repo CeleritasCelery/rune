@@ -114,38 +114,45 @@ impl<'old, 'new> WithLifetime<'new> for &'old Cons {
 impl Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
-        print_rest(self, f)
+        let mut cons = self;
+
+        loop {
+            write!(f, "{}", cons.car())?;
+            match cons.cdr().get() {
+                Object::Cons(tail) => {
+                    cons = tail;
+                    f.write_char(' ')?;
+                }
+                Object::Symbol(s) if s.nil() => break,
+                x => {
+                    write!(f, ". {x}")?;
+                    break;
+                }
+            }
+        }
+        f.write_char(')')
     }
 }
 
 impl Debug for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_char('(')?;
-        print_rest_debug(self, f)
-    }
-}
-
-fn print_rest(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car();
-    match cons.cdr().get() {
-        Object::Cons(cdr) => {
-            write!(f, "{car} ")?;
-            print_rest(cdr, f)
+        let mut cons = self;
+        loop {
+            write!(f, "{:?}", cons.car())?;
+            match cons.cdr().get() {
+                Object::Cons(tail) => {
+                    cons = tail;
+                    f.write_char(' ')?;
+                }
+                Object::Symbol(s) if s.nil() => break,
+                end => {
+                    write!(f, " . {end:?}")?;
+                    break;
+                }
+            }
         }
-        Object::Symbol(s) if s.nil() => write!(f, "{car})"),
-        cdr => write!(f, "{car} . {cdr})"),
-    }
-}
-
-fn print_rest_debug(cons: &Cons, f: &mut fmt::Formatter) -> fmt::Result {
-    let car = cons.car();
-    match cons.cdr().get() {
-        Object::Cons(cdr) => {
-            write!(f, "{car:?} ")?;
-            print_rest(cdr, f)
-        }
-        Object::Symbol(s) if s.nil() => write!(f, "{car:?})"),
-        cdr => write!(f, "{car:?} . {cdr:?})"),
+        f.write_char(')')
     }
 }
 
