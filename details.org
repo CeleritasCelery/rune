@@ -1,0 +1,489 @@
+#+title: rune
+* overview
+I want to learn rust, and I also have a real interest in compilers, Garbage collectors, optimizations etc. And of course I really like emacs. I think I could put all of these things together and build and emacs lisp interpreter in rust from scratch. This would be very similar to the crafting interpreters version. I could start out with just a simple elisp parser, then start to add things like GC, and byte code. Eventually I could try something like [[https://gtk-rs.org/][gtk-rs]] to even make a GUI window. Of course right now I am imagining myself building it all the way to a fully functional Emacs that people could use at their day job, but that would be a ton of work. Nice thing is that I can just build it in steps and eventually I will find a spot where it is really hard. That will give me more appreciation for what Emacs already has implemented. I can stop there having learned all sorts of cool things along the way. And who knows, if I kept at this for years I could maybe have the dream of building my own emacsen. The goal would be to be completely compatible with current user space elisp. But I am really building my own editor that happens to run elisp.
+
+** Why rust?
+The real reason is because I want to play with rust. I seriously doubt this will actually go anywhere. There are 1500 defuns in C currently within Emacs. But I wonder how many of those I can remove? I can see the [[https://github.com/remacs/remacs/wiki/Progress][break-down]] on the remacs page of what functions they have been porting. I really don't want to copy remacs because I want this to be a learning experience for me. However if I got far along in this I could reuse the crate from remacs. They are packaging them up just for that reason.
+
+** Licensing
+Take any license that is open and permissive. Including GPL, MIT, and Apache. The first party code would be all GPL, but that would not stop others from contributing. This could offer a real advantage over regular emacs if this ever became a thing. This effectively means that the code will never be made part of the actual emacs, because the license will not match the requirements of FSF. But GNU Emacs would not use rust anyways because LLVM is not GPL.
+
+* Goals
+** GUI
+Separate the GUI code from the backend code. So that you could make the front end with GTK, QT, or terminal and it would not matter. What would be really cool is creating bindings to the different GUI primitives in elisp, so that you could write and elisp package that did cool GUI stuff. You would note even need to write rust. All you would need for a new frontend would be to add some rust bindings and then define some bindings in elisp. Then we would have a intermediate representation of what the buffer is supposed to look like. The cool part about this is that you could add extensions (such as floating windows) with just an elisp package.
+
+** Modular
+Make it so that any component can be a crate and removed and repackaged. We can change string representation without issue. We can change GC without issue. We can change GUI toolkit without issue. We can change the interpreter without issue. Make everything easier to change and replace.
+
+** Garbage collector
+I think the best GC for emacs would be a compacting, generational GC. That should be much easier to write then a concurrent GC. We would run the generational GC anytime we are in an idle state. That means that each command will trigger gc, but only for the generation that it created. We could also run it when the minibuffer is torn down and after loading a file. If we have predefined points where we run the generational GC, then we will hopefully only need to run it when the user is executing very rarely. We could have nested generations so that nested commands (such as minibuffer) would be each cleaning their own generation.
+
+*** links
+There is no perfect crate the gives me what I want. [[https://crates.io/crates/cgc-single-threaded][alpha compacting generational GC]] [[https://github.com/Manishearth/rust-gc][mature mark and sweep GC]] [[https://github.com/redradist/ferris-gc][thread safe GC]]
+
+** Unit tested
+This will really help me get in the habit. Try writing simple unit tests that will make sure you are not breaking anything as you develop. You might thank yourself later.
+
+** Performance
+Having good performance in all cases is very critical. Specifically want to handle long lines, sinking input, and text properties to be very fast. Everything will be byte compiled when it is read so we don't need and interpreter and a byte code engine. Just one. We can also take advantage of things like trace trees to get optimization.
+
+*** function calls
+Current elisp function calls are very slow, even in byte code. They have to be looked up in global hash each time. My idea to solve this is to have an array that contains a pointer to every named symbol. Then we have a hash table that maps symbols to indexes. When a function is first run, all the calls are replaced with the index in the array. That way a function call is just a array access and follow pointer. Still not as fast as having the start address like compiled languages, but since any elisp function can be replaced at any time we can't have that. If a function is changed then we just update the pointer in the array. That way it is always correct but still faster. In a trace tree we could even inline the call to the address since we can check if the function will be changed.
+
+*** JIT vs AOT
+As of Emacs 28, There is [[https://akrl.sdf.org/gccemacs.html][native compilation]] in Emacs! This allows Elisp functions to be compiled to C code. By doing so you can remove the overhead of the bytecode interpreter and optimizing the code as a single compilation unit (better code).
+
+However there are a few things you loose by compiling ahead-of-time:
+
+1. You don't have any type information. Since elisp is dynamically typed, you have to assume that your input arguments can be any type. Sometimes you can do [[https://akrl.sdf.org/gccemacs.html#orge596749][type inference]] because the built-in function usually have type requirements, but it is limited in the elisp world.
+2. You don't know what code paths are most important. Since the code has never been run when it is compiled, you don't know what code paths are "hot". So everything is compiled the same.
+
+Both of these can be solved with a little run time information. If you are able to profile the code as it runs, you can see what types it gets called with (which is usually the only types it will use) and you know which functions get called frequently. This allows for more aggressive optimizations then AOT and let's you only compile the functions that actually matter, because 95% of them are not worth the effort.
+
+There have been some efforts to JIT compile Emacs lisp. The most [[https://lists.gnu.org/archive/html/emacs-devel/2018-08/msg00393.html][recent attempt]] was in 2018, but it ended up not going anywhere.
+
+**** trace trees
+Use meta-tracing to track through loops. When we find a hot loop we can start to trace execution to see what values are changing and their respective types. Then we put guards around the types we assume are not going to change, as well as any branches that will take us out of our trace, and then compile just that loop to LLVM IR. This will be faster then compiling everything because we inline every part of the trace, and we know the types of the variables we are going to be using. We can promote certain variables as well as remove uneeded checks. We can also unbox integers and floats. Even just removing the Byte code interpreter will be a big speed up. Though it seems that you would want to have some IR versions of common functions like ~car~ so that LLVM can optimize those.
+
+The current [[https://rocky.github.io/elisp-bytecode.pdf][Emacs lisp Byte Code]] has many opcodes that are just common elisp functions. The point of this is just to remove the cost of function look up for common functions. If function look up get fast enough then there is no need for all these extra opcodes.
+
+Compiling to machine code is similar to the gccemacs project, but we are only focusing on hot loops and not doing ahead of time compiling. The reason for this is that machine compiling most of the code is waste. Most of the time is spent in loops, and if it not in loops then slow operations are usually IO bound.
+
+Also by compiling ahead of time, we loose out on all the run time information and optimizations. For example we can inline almost all functions in hot loop. We also know the types of the variables in the loops so we can unbox them and remove uneeded checks. We can check if dynamic variables are updated in the loop, and if not then we can promote them and make them constants. We can also inline lambda functions. This means that hot loop trace code will be much faster then pre compiled code. And we only have to compile a very small portion of the code.
+
+***** lambdas
+It would guess that lambda's are often inside loops, since we pass them in as higher order functions. That makes inlining lambdas in traces very helpful. So my thought is to make lambdas a fixed size array [[https://nullprogram.com/blog/2014/01/04/][like it is now]]. Then if the array address has changed you know the lambda has been updated and you can't use the trace. But if the lambda has not changed, then you can still use the trace you had before.
+
+***** issues
+- How do you handle cases where you have a branch in the loop and it can be taken about 50% of the time. Do you have a branching trace?
+- how big do you make the traces? When do start and when do say it is not worth it? This will all take tuning.
+- Is there a way to eliminate the need to push and pop from the stack so much? Or is that overhead even really an issue. If you emit IR for all the common functions then you can just have data flow IR with out the functions calls and LLVM can inline those.
+
+***** FTL JIT using LLVM backend
+[[https://webkit.org/blog/3362/introducing-the-webkit-ftl-jit/][link]]
+
+The original FTL JIT for Webkit uses LLVM for its final compilation stage. This goes into some detail about some of the approaches they use. One really cool thing here they use the barlet GC algorithm. This has the benefit of letting them unbox values in the C code as well as not worry about GC with LLVM. Essentially this algorithim is for handling GC with obscure roots.
+
+[[https://www.hpl.hp.com/techreports/Compaq-DEC/WRL-88-2.pdf][Bartlett GC]]
+
+A few years later FTL switched to B3 as a backend instead of LLVM. THe problem being that LLVM was just too slow. Often times the loop would be complete before the out of band LLVM compilation had completed. If I was using this for something like Emacs that would not be as big of deal because we be profiling between sessions so slow compilations would not have a lot of impact. Still good to note though.
+*** measure performance
+The only real way to know if an optimization is worth doing is to measure it. But even when you measure it can turn out that it is not worth the complexity. Anything less then 5% is certainly not worth it (especially since benchmarks can change wildly). Normally you want at least a 2x gain from an optimization. An example of a speed up that is not worth it is [[https://akrl.sdf.org/gccemacs.html#org2785354][pure function propagation in gccemacs]]. If you exclude the fibinacci sequences (which having a compile time resolvable program is very rare), then the total speed up on microbenchmarks is only 3%. Some of the benchmarks even got slower after the run.
+
+*** concurrency
+I have been thinking a lot about a model for async in Emacs. The traditional async await model is not really a good one because text editors are very CPU heavy, and are not often blocked by other applications. But it would be great to exploit multi-core on modern hardware. Maybe even just in a limited context. But I would need to find scenarios where data sharing is very limited to really exploit multithreading.
+
+The area that I thought this could be really helpful would be in updating buffers in the background. Currently sinking input and parsing background compilation buffers can really slow down your main thread (your only thread). Imagine if you could have multiple buffers that were getting updated in the background and it did not impact your main thread. The only thing that you should be doing on your main thread is what the user is actively waiting for. My idea is to have a buffer local lock that a thread can obtain before it accesses a buffer. Once that lock is obtained then the thread knows that it is the only code that can modify or read the buffer. You could even lock specific regions of the buffer if that would be better. Then you can accept process output, run processing functions and syntax highlighting on it, and anything else without bothering the main thread.
+
+The problem with this is sharing interpreter data. You want to have access to the same functions and variables that the main thread has. But you also don't want to copy all the data around all the time. So my thought is that only the main thread can update global state. If a buffer thread updates a variable then it will go on a thread local stack that is always searched first before looking in the global state. We could also disallow buffer threads from redefining functions. The only way that a buffer thread can get data back to the main thread is through something like message passing. You could even have a hook that is run on messages from the buffer thread. They would just wait in queue until received. Maybe you could also do futures with these buffer threads. If you need the result of something they are doing you could await them. If not, just let them do their thing and ignore their return.
+
+Other things that would be great to have as async would be filesystem IO, network IO, and shell output. That lets you do async IO.
+
+How do you handle when the main thread changes some a variable that the buffer thread is using. Then that could create some very difficult bugs.
+
+**** proposal
+Been thinking about async more and I think I have a pretty good start. There is the main interpreter thread and then child threads. Threads share no variables. When you start a child thread it inherits only the variables that are let bound at the time of it's definition. Or maybe give it an exclusive list. But from then on it has it's own variable space. Even if variable lookup is more expensive in child threads it won't matter a ton. Functions are bit harder because you don't know which functions will be called ahead of time. However my idea was that there would be two function spaces, main and child. Main behaves like normal, but anytime a child thread calls a function, if it is not in child function space it sends a message to the main thread to request the definition of that function. It then copies it over to the thread space. Since child threads can't change functions it would be basically be read only. Then if the main thread updates a function it can send a message to the child function space. Once all the child threads are idle the function can be updated.
+
+The big question here is does this actually improve the user experience. In order to do something useful you would need to get access to buffers and stuff like that. Maybe you can put those behind mutexs. But if you do that then still have the problem of now you are trying to manage a bunch of state shared across threads. What happens if the main user thread wants to access a buffer and a thread is holding the mutex? That makes for a bad experience.
+
+***** sharing data
+When you launch a thread you need to have some way to pass in variables that you want to transfer. I think a good way to do this would be to make is easy to copy variables over. And each thread would have it's own variables. However when sending data back, it can either be with the return value, which will be wrapped in a future, or you can use channels to send data around. I don't think it will be possible to avoid locks though.
+
+Also something to consider is where the data will live. When you send a message the object is in the local processes heap. But you want it to be in the receivers heap. In erlang it tries to get a lock on the other process and copy it directly to their heap. If not it will just copy it to a temp area. I think using a temp area is the cleanest thing. Basically when you put an object on the queue it will copy it to a new allocation. These objects will never be garbage collected. But once the receiver takes it will keep a pointer to that object. Only when it does a GC will it copy it over to it's own heap and free the temp allocation.
+
+**** coroutine based flow
+I have been reading more about async (should probably actually do something with it at some point) and I think I have a better pictures. The model is as follows. The only shared objects are buffers (which include all their buffer local bindings) and the global state. When you launch a new command it aquires the mutex for the global state and runs. If you put some code in a ~go~ block it will run that code on another thread. But this new thread does not have access to the global state, and any globals you want it to use need to be explicitly copied over when called. This ~go~ block returns a goroutine, which behaves like a promise. When you call ~await~ on that goroutine it get a value from thread. If no value is available yet, it will suspend your process until something is ready. This means that if you are the main process you will release the global state mutex, which gives control back to the user. Once the promise is fullfilled, the executor will resume your process. If you had the global state mutex before, you will need to wait for it to lock again. But goroutines can return more then a single value. They essentially an implicit channel. Just like coroutines can yield multiple times, so can goroutines. Each time you call ~await~ it will try to get the next value yielded. If the goroutine has terminated it will just return nil. This means that we can't return nil normally. However that will not work very well since many functions return nil. So maybe it will just signal an ~end-of-sequence~ when it is done like emacs does for generators. That way it will behave the same.
+
+One difference between goroutines and coroutines is that coroutines can take arguments on each resume, but goroutines can't. Also channels allow for more flexible structuring and they can be buffered. But right now the goroutine yield is not buffered. So you have to block for every yield. But we could add buffering to the ~go~ call. Or maybe it would be easier to just go all in and embrace a full CPS style system with first class channels. The one thing I don't like about that is that makes your program less structured.
+
+**** clojure core.async
+Concurrency in clojure is supposed to be really top notch. So I decided to look at their big concurrency library [[https://www.braveclojure.com/core-async/][core.async]]. It is all based on message passing and channels (which is similar to what ~go~ uses, another concurrency language.) This means that none of the "goroutines" share state or data. All sharing is transfered via channels. You can have multiple senders and receivers for a channel. You can also block on channels or "park" which means that you give control to other goroutines and it will get back to your eventually. But the main thread (called the REPL thread) will always block. You also have ~alt!~ which will will take the first of to show up of several channels. There is also ~poll!~ and ~offer!~ which will check the channel but never wait. One key thing to note with clojure is that all IO is blocking (cannot park) so if you have long running IO you should start a new thread so that you don't occupy a whole goroutine. You can only run ~2 + number of cores~ total goroutines at a time.
+
+***** sharing functions
+I [[https://www.reddit.com/r/Clojure/comments/isczlr/how_does_clojure_share_functions_among_threads/][asked on reddit]] How clojure shares functions and apparently you can redefine function in the REPL thread and will propagate to the threads without restarting. One of the problems with porting this to Emacs is that it is a 2-lisp, meaning that each symbol has a variable and function slot. So you have to find out some way to share function bindings without sharing variable bindings. As far as updating functions goes, If all functions were global, and were referenced via pointers, so long as updating the pointer was an atomic operation you could just update the pointer to the new function cell when you want to change the function. Any thread that is using the old version will continue to do so until the next call. You would just need to make sure that you didn't GC that function until all goroutines are done.
+
+*** evaluation
+The real questions to ask about concurrency is does it actually improve the user experience. Because if not then it is not worth doing. For one thing concurrency makes for some really nasty bugs and performance problems. It is also much harder to reason about. Also most of the time spent in Emacs is just waiting. Every single keypress Emacs goes off and does some work then sits and wait for you. The thing we want the most if a responsive user experience. If any sort of concurrency compromises that then we are worse off. Most long running work in Emacs is not really helped by concurrency. I can see the benefit of a model where we have something like greenthreads that are run in the same process. So long as they checked for user input at a regular interval to make sure the main flow control was not trying to do something, you could potentially have these little helper functions running at all times doing little bits of work like syntax highlighting, processing input, and waiting on IO. But as soon as you have a green thread that takes a long time to run you end up making the user experience worse. And you would really have no control over that. It seems like in an application where responsiveness is key, you can't have multiple threads running. The only clear distinction I can see is to have the UI run on it's own thread so that it never feels unresponsive. But in Emacs the UI is so tightly coupled to the interpreter that I don't know if even that would be possible.
+
+*** Global functions or no?
+Should functions be stored in global immutable memory locations? It really depends on how often mutation is used.
+**** advantages
+- faster calls, no need to hashmap lookup. But could this be overriden by the cost of copying constants?
+- no need to copy function between threads
+
+**** disadvantages
+- more complex, need to think about memory safety and concurrency bugs
+- does not exactly model Emacs
+- Might not be able to implement mutable [[id:oclosures][OClosures]]
+
+**** How to handle global immutable
+- add a bit to the cons cell that marks it immutable. Anytime ~setcar~ or ~setcdr~ is used they need to check this bit. We could even hide this bit in an extra bit range so that you don't normally see it. For example you could have an 8-bit tag with the 9th bit the mutation flag. When you unbox you just shift by 9. Or always mask it off when getting the tag. We will need to do something similar for the mark bit.
+- Always make copies of global constants when they are used (or at least the first time). That would make this data safe to mutate, but adds more overhead.
+- Use a copy on write scheme. This avoid the errors.
+- Copy when it is added to another collection. I don't like this because it makes the cheap operation ~cons~ more expensive.
+
+*** bytecount - fast counting in rust
+https://docs.rs/bytecount/0.6.0/bytecount/
+*** Counting Newlines Really Fast
+https://llogiq.github.io/2016/09/24/newline.html
+
+This also has some code to count the number of UTF-8 characters in a sequence. It does this by noting that all trailing utf-8 chars start with 10 so any byte that does not start with that must be start of character. Assumes valid utf8.
+** FFI
+It may be easy to see this as an attempt to rewrite the emacs core in rust, but really this is an attempt to rewrite [[https://archive.fosdem.org/2020/schedule/event/emacsthoughts/][emacs in emacs lisp]]. The way we do this is with an FFI. Everything that is not runtime will be either emacs lisp or an FFI. This means that our rust core can be much smaller then the C core, which is 400K lines of code. The current module system can be removed, because a module is just a crappy FFI. And a module requires you to write C (or whatever language) but an FFI does not. You can just write the bindings.
+
+I would model the FFI interface after a combination of [[https://github.com/skeeto/elisp-ffi][Chris Wellons]] and[[https://github.com/tromey/emacs-ffi][Tom Tromey's]]. I would take the interface of Wellon's (use a single function ~ffi-call~) but use the implementation of Tromey's (I.e. Don't use pipes and handle the types the same way he does). The advtange of Wellon's idea of running the FFI in a separate process is that if the FFI lib crashes is does not impact emacs.
+
+It would be really cool if we offered both options so that you could develop your ffi bindings with the sub-process and then use the in-process one for actual deployment. Or maybe just run the FFI code in a separate thread. But then that mean an extra thread per lisp thread, which will blow up quickly. Plus the hand-off could get expensive. But many be if you just enabled in on a per library basis it would not be so bad. Just design the abstraction in a way that it does not matter. Just pass a pointer to a subthread to run it there or run it in the local thread.
+
+I like the ffi-call idea more then the define-ffi-function, because you don't have to create an function for an ffi if you don't want to. This lets multiple packages use the same FFI without knowledge of each other and we don't have to worry about creating the same function multiple times.
+** Quality of life
+*** reader macros
+Reader macros are controversial. They enable some pretty amazing super powers (just look at racket) but they can also make code harder to read and mess with parsing tools. The only place where I think reader macros could be really great is in fixing the "[[https://xkcd.com/1638/][backslash hell]]" due to double escaping everything. Consider these examples and how they would be improved with a regex reader macro:
+
+- current :: ="\\`\\\\\\(\\(a\\|b\\|c\\)\\(d\\|e\\)\\\\)\\'"=
+- reader :: =#r"\`\\((a|b|c)(d|e)\)\'"=
+
+- current :: ="\\(\\`\\|[^\\]\\)\\(\\\\\\\\\\)*\\(\\\\\\?\\)\\'"=
+- reader :: =#r"(\`|[^\])(\\\\\)*(\\\?)\'"=
+
+
+* Details
+** stack
+Traditional emacs uses recursion to implement calls, meaning that every function call will also push on the C stack. Meaning that having lisp eval depth go too far and you will crash emacs. That is why they limit it to 800 by default. It makes the implementation very simple because you can use the recursion to keep track of your stack frame. And you can just unwind your stack to unwind the lisp stack. However this also means you have to be careful to not stack overflow and it makes it hard to implement things like coroutines. If you are using those (or elisp threads) you need to unwind the stack
+
+** Storing data
+*** Buffer representation
+Emacs has traditionally used the gap buffer to store data, but most modern editors will use something like a [[https://en.wikipedia.org/wiki/Rope_(data_structure)][rope]] to store the text state. I was really looking at the crate [[https://docs.rs/xi-rope/0.3.0/xi_rope/][xi-rope]] for doing the basic buffer implementation. The nice thing about ropes is that insertion at an arbitrary point is very cheap and they have ~log n~ worst case behavior. However this comes with some trade offs. The first is that searching is much more expensive, as described in [[https://github.com/xi-editor/xi-editor/issues/1192][this issue]]. Basically since most fast search tools are expecting a continuous chunk of data, They don't work over structures that are broken into spans like ropes. So when xi is doing multi-line matching it has to parse the entire rope, allocate and copy it out into an array. Then it can run the regex and throw away that buffer it created. This leads to terrible performance on large buffers. To be fair the average case is better because if the matching is not multi-line it only has to copy one line at time into a new buffer. And best case is that it can just pass a slice if the rope leaf has the entire line in it. But still, very expensive worst case searching. There is an [[https://github.com/rust-lang/regex/issues/42][open issue]] in the rust regex crate to add support for stream input, but it would really hurt performance so they would have to redo a lot of stuff.
+
+As with everything, there are [[https://github.com/emacs-ng/emacs-ng/issues/378#issuecomment-907680382][tradeoffs]]. I don't think a rope is great choice. And honestly a gap buffer is [[http://www.goodmath.org/blog/2009/02/18/gap-buffers-or-dont-get-tied-up-with-ropes/][pretty fast]]. There are only two big problems with gap buffers, finding arbitrary lines, and how to solve regex, because gap buffers are still not contiguous, even if they are better then ropes.
+
+**** find lines in a gap buffer
+If I say that I want to go to any arbitrary line in a gap buffer, how to do I do that efficiently? In current emacs it has to scan from your cursor to the line you want, which can be very expensive. Ropes handle this really well because they can hold metrics like a binary tree so you can do a binary B-Tree search to go to a line. My idea is to do the same thing but not store text, only store counts. Basicly build a B-Tree of the number of newlines in each chunk of a buffer. I still don't know the size a chunk. The obvious ones are ~u8~ (256) which seems too small and ~u16~ (65536) which seems too big. It all depends on how fast I can scan to the point. I could pick something in the middle if that was good trade off. I want to use the [[https://crates.io/crates/bytecount][bytecount]] crate to do the counting because it blazing fast. Either way I can just search the B-Tree to find chunk that has the line and then scan for the line. The exact same method could be used to store code-points or any of metric I want to track. And the nice thing is since I know the exact size of B-Tree when creating the buffer, I can allocate it without any points and use offsets, to get to the different chunks.
+
+*** Pointer Tagging
+[[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.39.4394&rep=rep1&type=pdf][link]]
+**** Tagged Arithmetic
+
+| op      | low any | low zero | high any | high zero | sign ext |
+|---------+---------+----------+----------+-----------+----------|
+| is      |       3 |        2 |        3 |         2 |        4 |
+| wrap    |       2 |        1 |        4 |         2 |        0 |
+| unwrap  |       1 |        1 |        2 |         2 |        0 |
+| negate  |       2 |        1 |        3 |         3 |        1 |
+| add/sub |       2 |        1 |        4 |         4 |        4 |
+| mul     |       5 |        2 |        5 |         5 |        3 |
+| div     |       5 |        2 |        6 |         6 |        3 |
+| ineq    |       2 |        2 |        4 |         4 |        2 |
+| total   |      22 |       12 |       31 |        28 |       17 |
+#+TBLFM: $2=vsum(@2..@-1)::$3=vsum(@2..@-1)::$4=vsum(@2..@-1)::$5=vsum(@2..@-1)::$6=vsum(@2..@-1)
+
+Seems like either low-zero or sign ext is the way to go. The biggest problem
+with sign ext is the expensive ~is~ test. But is also doesn't have a cost to
+wrapping and unwrapping. But with low-zero we can do arithmetic without
+unwrapping, which could make up for it.
+*** CDR coding
+[2020-08-17 Mon 13:25]
+[[https://cpsc.yale.edu/sites/default/files/files/tr362.pdf][original paper]]
+[[http://www.faqs.org/faqs/lisp-faq/part2/section-9.html][description]]
+
+CDR coding is a technique of list compaction. One of the problems with linked
+lists is that they are very space inefficient. They take twice as much memory as
+an array (and if you include the garbage collector, they take 3 times as much).
+They also have really poor locality. The cons cells can be scattered all around
+the heap. CDR coding is based on the observation that the majority of the time,
+the cdr of a cons cells is just another cons cell (that is how we build lists
+after all). So the idea is if a cons cell is followed by another cons cell, you
+just put the element immediately after instead. This basically makes it an
+array. Now you have to do some extra management because linked lists are more
+flexible then arrays and you have to handle all those special cases. The basic
+idea is as follows.
+
+The CAR of a cons cell has a special tag that indicates what type is. This can be
+1. Regular cons (the cdr is the next cons cell)
+2. Compacted cons (the cdr is the next object)
+3. Indirection cell (This is actually a pointer to a different list that should
+   be used instead. This is used when we use ~setcdr~ or similar destructive
+   functions.)
+
+These types can be encoding in the tag bits. So a cdr-coded list would ideally
+be a whole bunch of compacted cons with one regular cons to terminate. Worse
+case is a nasty mess with a bunch of indirection cells and half filled arrays.
+Consing can just add new elements to the array if they are not occupied. However
+you cannot reallocate, so if you run out of buffer you need to use a regular
+cons pair to point to some new memory.
+
+The things that make this tricky is knowing how big your buffer is (how many cons
+you can add before need a new block). There are several ways to handle this.
+
+1. Allocate cons vectors on a power of 2 alignment. Then you know how much space
+   you have just by checking the lower bits of the address. They will be all
+   zero at the start and all one at the end. Picking the width of a cache line
+   would be a good fit.
+2. Allocate some kind of markers in the extra space and then mark the end of the
+   vector (the start of the longest list) with a special flag so you know you
+   can keep growing. These markers in the empty space can tell you how much room
+   you have left.
+3. Use a look up table based on the range of address. This is a more expensive
+   option, but does not require a tag and allows for arbitrary sized vectors.
+
+My best approach would be to use the alignment technique. We could allocate
+larger arrays if we knew we could, but consing would have to allocate a new
+block every time it reached the boundary. The buffer could be larger, but we
+don't know. I also kind of like the empty space marker idea. We would need to
+make sure to initialize the empty area so some ~void~ value so that we would not
+accidentally overwrite some other cell.
+
+Also if you had a compacting garbage collector you could take a list that was
+all over the place with indirection cells and poor utilization and compact it
+back into a single large vector.
+**** trade offs
+Everything has trade offs, and I am not even sure that CDR coding would increase
+speed. I don't really care about the memory savings. Here are the trade offs as
+I see them. My guess would be best case < 10% improvement in list heavy code.
+But then I have seen in rust that linked lists are about 10x slower then
+vectors.
+***** advantages
+- better cache locality would could mean fewer fetches to memory. These can be
+  expensive so this is a really savings. Normal cons lists have a compaction of
+  50%, and an 8-wide vector coded list has a locality of 88%.
+- Faster GC. Only need a pointer to the whole vector not each cons cells. And
+  with some other tricks like pushing the old cdr to the GC stack after a setcdr
+  we would only have to mark the first element.
+***** disadvantages
+- more complex code. You have to add all the special case handling to all your
+  list functions and GC.
+- more expensive car and cdr functions. You need to be always checking the type
+  to determine behavior. The cdr function alone will have 3 additional branches
+  per call. This will offset some of the gains. But how much can't be told
+  without measuring.
+- terrible worse case. You could in theory create a list that was
+  just tons of indirect cells. Which means every look up has to chase many
+  pointers. But that would be very hard and come from non idiomatic code.
+*** String properties
+String properties are stored as intervals on the string. The GNU Emacs uses an
+[[https://en.wikipedia.org/wiki/Interval_tree][interval tree]] as defined in [[file:~/emacs-git/src/intervals.c::static void][interval.c]]. There is an interval tree implementation
+in rust as part of the [[https://github.com/rust-bio/rust-bio/tree/master/src/data_structures/interval_tree][rust-bio]] crate. There are actually two different
+implementation here, and the array packed one looks more interesting. It is
+based on the optimized one in [[https://github.com/lh3/cgranges][cgranges.]] Will have to benchmark.
+
+Actually the text properties in Emacs [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Not-Intervals.html][are not intervals]]. This is because
+intervals have the problem that they are not preserved across insertion and
+deletions. The link explains it well, but the basic idea is that two similar
+intervals that are next to each other are treated differently then a single
+interval with the same bounds. Text properties don't have that distinction.
+However overlays are true intervals. And apparently overlays have O(n) behavior
+and text properties have O(log n).
+
+It seems like you could unify these systems and just use intervals. You would
+need to either have some code that merge adjacent intervals, or normalize them
+when they are queried. But this does not seem to be an insurmountable problem.
+*** Floats
+Currently Emacs [[file:~/emacs-git/src/alloc.c::make_float (double float_value)][heap allocates all floats]]. This works fine since Emacs is much more of an
+integer based computing environment. You could avoid the boxing by using f32
+types, but then you loose precision without any way to get it back. However I
+had an idea for storing some of the floats in the lisp object itself.
+
+I did a quick analysis of the float literals in my emacs package repo. 90% of
+them were between 0.01 - 100. So my idea is to store small set of exponent
+values in the object. Lets assume IEEE 754 double-precision floats and a 8 bit
+tag. The floating point has 11 bits of exponent and 1 bit for the sign. If we
+also use the sign bit we have 12 bits in total. We remove the 8 for the tag and
+we have 4 exponent bits for our compact float (assuming only positive values).
+This gives us 16 exponent values, to work with. With this range ~2^-8~ - ~2^7~. We
+have values from [0.004, 256). This will include the 90% of float literals plus
+some.
+
+The way this would work is this: When we are converting a float to a lisp object
+we would check if it is in the range for our compact format. If so, we overwrite
+the upper 12 bits (11 exponent + 1 sign) with a 4 bit exponent and a 8 bit tag
+(could also shift to put that tag at the bottom). Converting the compact
+exponent to the real exponent will just be a matter of arithmetic. Exponents are
+calculated by taking the exponent field and subtracting 1023. This splits them
+into positive and negative exponents. So our 4 bit exponent should be in the
+range of 1015-1030. This will translate into -8 - 7. So to convert our compact
+exponent to the real one we just add 1015.
+
+if we treat the exponent + sign field as a unsigned int, then all negative
+numbers will be excluded from compact format because they will appear outside of
+the range.
+
+Another common float number is 0.0. This would not get covered in our compact
+form, but we could encode it as all zeros. We would have to make a special case
+to handle it. We would need profiling to determine if it would be worth it to
+make this optimization. It would be the overhead of the extra branch in the
+boxing code vs the overhead of allocating 0 as a heap float.
+*** big num conversion
+I am not a fan of automatic big num conversion for 3 reasons.
+1. YANGI. The range of values that can fix in a ~64-bit fixnum is way bigger then most use cases ever need. And we are 64 bit only, so this makes more sense then for 32 bit systems. If you happen to be doing calculations in the quadrillions then you will probably be aware of it and can just use a bignum.
+2. Its not free. Even though you don't use this you have to pay for it on every calculation. And it is actually two separate checks. You need to check the operation did not overflow and then check that the resulting number will still fit in the fixnum size.
+3. It makes JIT/native-code type inference harder. You can no longer assume that ~add~ will be ~(i64 i64) -> i64~. Everything now has to become (~i64 i64) -> i64/Bignum~. Which makes type propagation less useful and requires guards everywhere. It also does not translate as nicely to machine code.
+
+** regexp
+We could use the [[https://github.com/fancy-regex/fancy-regex][fancy-regex]] crate, since it is like the normal regex crate but with fallback to a slower engine to support some fancy features. However we would need to fix [[https://github.com/fancy-regex/fancy-regex/issues/84][fancy-regex/fancy-regex#84]] before we could use it in earnest.
+*** Gap buffer
+Since the gap buffer is not contiguous we still have a problem with regex. If the pattern is not multi-line then all we need to do is move the cursor to a line boundary and we are good to go. We can either zero -out the gap or ignore matches that span it. However it is not as easy with multi-line patterns. In that case my idea was to still move the cursor to a line boundary, but we will also need to modify the regex to ignore the gap. This means at very least we need to handle ~^~, ~$~, and patterns that match a null byte. So the pattern ~^foo\nbar$~ would need to become ~^*foo\n(\0*\n)?bar$~ or something like that. But what if we are trying to search for null bytes at the start of the line? Now that become harder.Maybe null is not the best pad character because you might actually see that in a real buffer. Maybe just a unusual marker to the start of the gap like ~\0\1\2\3\4~ (The first 5 ascii characters) and then match that. So the pattern ~foo\nbar~ becomes ~foo\n(\0\1\2\3\4.+\n)?bar~. That pattern looks longer but that turns the start of the gap into a literal that will almost never show up in real text. But also we need to be careful because the gap does not have to be valid unicode and that could break things. We will need to take care of that.
+
+We don't need to add null padding to the single line case because we can place a newline before and after the gap so that are distinct lines. Basically treat the gap like a line of nulls. If we can move the gap to start or the end of the buffer then it becomes really easy because we can just do all regex searches like normal and ignore the gap. In general if we can move the gap outside the regexp range then we don't have to worry about it.
+
+Either way while this might have some bad performance corners (I.e. Need to move from the middle of document all the way to the start If it has no newlines) but those will be very rare. The general case will quite fast. Not sure about JIT lock which will need to run on the document with every keypress. This may lead to thrashing where we have to move the cursor after every insertion, but generally the cursor is near the end of the line. Will need to think about this more. Gap buffer could use streaming regex to.
+*** Syntax
+For the most part Emacs regex is pretty similar to "other" regex engines. However there are several things that are unique that need to be handled. Most of these can be handled by a regex pattern preprocessor. For example ~()~ and ~\(\)~ have the opposite meaning from normal regex engines.
+
+However one that I think will be hard is the  syntax classes. The syntax class can be updated on the fly and can include a large range of characters. It might be possible to create a pattern that matches everything in the syntax class and use that for matching, but I am afraid that would be large.
+
+We would really need to do some fuzzy to ensure the same behavior between the current engine and a new one.
+
+** object model
+Currently all lisp objects hold either a immediate value (like int) or a pointer to some heap allocated object. When we create lisp object we make it a GC pointer so that it does not get dropped. This means that every object is GC by default. This has some issues. Unless an object is in a Gc collection (the stack) then the data could become invalid at any point. We prevent this by not running GC during rust functions, but that could get expensive. It means that in long running rust functions we will have to do all sorts of tricks to make sure the GC does not free objects we are still using. Another issue is this couples our lispObj to the gc module. However this is the most ergononmic solution since we can implement copy for the objects and they can be used freely. Until you need to GC that is. This means that technically our current model is unsound. Another thing to consider is that this option will make it basically impossible to have gc collector run in another thread, because you have live objects that cannot be accessed from the roots.
+
+Another option is remove Gc from objects and implement drop. This would make lisp objects behave just like enums, in that they would drop when they go out of scope. When you get an object from the interpreter, it would always return a reference. That way you could never own some data that is still in the interpreter without cloning it. However this will make aliasing a problem. How do you create two lisp objects that point to the same underlying data. This is done all the time in the VM. You could require unsafe code when aliasing. Or you could add safe functions that allow aliasing in a particular data structure. For example you could have Duplicate function for a stack. This function takes an index and puts a duplicate on top. This is unsafe under the hood, but safe API because we know that we still own the data. What we don't want is data that something else owns to get aliased into the VM. But this means that every GC'ed structure needs to have these aliasing functions. And you need some way to share aliases between collections (the stack and a function).
+
+Another thing to consider is mutability. Are there ways to make interior mutability safe for things like cons cells and strings? Normally you don't want aliases to data that you are mutating. However I don't know if this can be avoided. There is no way to dynamically check for aliasing without a refcell.
+*** arena's
+All objects need to be allocated in some arena, so we are going to change it so that the arena own the data and lispobjects are just aliases to it. We could change lisp objects to use actual reference semantics (I.e. No copy) But I feel like that will just make things messier. Also I have learned that using references are just translated to pointers. So if we use references, we have another level of indirection that we don't want.
+*** Two different models
+The fundamental problem is that the lisp object model and the rust object model. The model expects every allocation to have an 1 owner and that the allocation will be dropped when the object goes out of scope. The lisp model expects data to have many owners, and an allocation will be dropped when GC proves there are no more references to it. So my idea is to have two different object types. The underlying representation will be identical, but the way they are used will be different.
+**** owned objects
+These will not implement copy and also implement drop. This will make working in rust easier because we follow it's ownership semantics. But it also means we can't have multiple heads on a cons list and we can't control where a object is allocated.
+**** referenced objects
+These will implement copy but not drop. This means that we can build any structure we want, and control allocation. These will need to be GC'ed.
+**** interop
+When you are constructing an object to return to the lisp vm you will use the owned objects almost all the time. When we get objects from the VM they will be reference objects. I am still not sure if it would be better to make these a different object type, or just return a reference to the object. Probably should just start with a reference and then update as needed. So we may not even need a reference type defined, because a true reference already meets the bill. Only reason we would need something else would be for performance.
+*** should we add lifetimes to the objects?
+Since the lifetime of the actual data is tied to the arena, does it make sense to add lifetimes to all our objects? This would make "sure" that objects can't outlive their arena, and that objects returned from rust call aren't using the same arena. This would happen in two cases
+- objects are put in a struct that lives globally
+- the rust function creates a new arena and returns that.
+
+Both of these seem like they could be avoided pretty easily. The other concern is when doing unit testing we want the arena to clean up after the test. But so long as the arena is declared at the top of the test and the test does not put objects in global structs.
+
+The reason we may not want lifetimes is because they can be a real pain, and their is no good way to put lifetimed objects in struct (since this is a self-referencial struct, which rust hates). Which means we need to cheat everytime we have to put something in a stack or struct. Because at the end of the day we are not using lifetimes for memory managment, we are using garbage collection. The only thing we really need to avoid is objects getting collected that are still in use.
+
+There is a third option, where we declare =lispobj= as =object<'static>=, which means that it will behave the extact same, but give us the option to limit the lifetimes if we wanted to.
+*** tagged objects or enums
+**** objects
+- convert arrays in place
+- have a function object for symbols
+**** enum
+- much cleaner code
+- no need for .val function
+
+only need to create into and tryinto traits to work with this.
+*** Emacs symbol definition
+[[https://debbugs.gnu.org/cgi/bugreport.cgi?bug=43601][uninterned symbols confusion]]
+[[file:~/emacs-git/src/lisp.h::struct Lisp_Symbol][emacs source]]
+#+begin_src c
+struct Lisp_Symbol
+{
+  union
+  {
+    struct
+    {
+      bool_bf gcmarkbit : 1;
+
+      /* Indicates where the value can be found:
+         0 : it's a plain var, the value is in the `value' field.
+         1 : it's a varalias, the value is really in the `alias' symbol.
+         2 : it's a localized var, the value is in the `blv' object.
+         3 : it's a forwarding variable, the value is in `forward'.  */
+      ENUM_BF (symbol_redirect) redirect : 3;
+
+      /* 0 : normal case, just set the value
+         1 : constant, cannot set, e.g. nil, t, :keywords.
+         2 : trap the write, call watcher functions.  */
+      ENUM_BF (symbol_trapped_write) trapped_write : 2;
+
+      /* Interned state of the symbol.  This is an enumerator from
+         enum symbol_interned.  */
+      unsigned interned : 2;
+
+      /* True means that this variable has been explicitly declared
+         special (with `defvar' etc), and shouldn't be lexically bound.  */
+      bool_bf declared_special : 1;
+
+      /* True if pointed to from purespace and hence can't be GC'd.  */
+      bool_bf pinned : 1;
+
+      /* The symbol's name, as a Lisp string.  */
+      Lisp_Object name;
+
+      /* Value of the symbol or Qunbound if unbound.  Which alternative of the
+         union is used depends on the `redirect' field above.  */
+      union {
+        Lisp_Object value;
+        struct Lisp_Symbol *alias;
+        struct Lisp_Buffer_Local_Value *blv;
+        lispfwd fwd;
+      } val;
+
+      /* Function value of the symbol or Qnil if not fboundp.  */
+      Lisp_Object function;
+
+      /* The symbol's property list.  */
+      Lisp_Object plist;
+
+      /* Next symbol in obarray bucket, if the symbol is interned.  */
+      struct Lisp_Symbol *next;
+    } s;
+    GCALIGNED_UNION_MEMBER
+  } u;
+};
+#+end_src
+***
+*** Heap only types
+It would be useful to have some types that will only ever live on the heap. This would let us store meta-data (like constness or mark bits) at an alignment offset. And since every reference we get is on the heap, we can access the meta-data with pointer Arithmetic. The other nice part of this is that we could remove inner lifetimes (such as ~&'a Cons<'a>~) because we know that the data it points to is garbage collected and will live at least as long as the reference, due to being traceable.
+** Garbage collection
+I have been heavily inspired by other rust gc projects. I want to use the afine types to make a safe and ergonomic API.
+
+Here is an [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][overview]] of my implementation so far.
+*** Rooting
+Libraries like shifgrethor have two gc types. There is ~Gc~ which means that an item is rooted. Passing something to a stack root macro will give you a ~Gc<T>~. If this type contains a ~GcStore~ is can be transitivley rooted. I am thinking of taking the same approach. There will be a ~Gc~ type that hold rooted values. Then we also have a ~GcRoot~ value that is an object but rooted. A ref to a ~GcRoot~ can be converted to an object, and the lifetime will be tied to the borrow of GcRoot. We need to make sure that you can't get a ~GcRoot~ out of the object that is rooted. So what do we do about ~pop~? Do we need to wrap ~Vec~ in some type to keep it from being accessed in that way. Or maybe you can only convert a ~&GcRoot~ to an ~Object~ with a ~Gc~. As in it will always be unsafe. We will have to generate accessor methods.
+
+Could we do something with closures? Like have a method that takes a type and let you modify things in a closure (where variables can't escape).
+
+So we will have a trait the defines some methods that take a ~Gc<T>~ and then provides a special token that let you call methods to create and ~AsRef~ the ~GcRoot~. We will unsafe rebind the lifetimes to only the scope of that method so that nothing can leak or escape.
+
+Or maybe it doesn't even have to be a method? Maybe it is just a function that takes a closure. Make sure to take the arena too so that Gc will not be called. A function would keep me from have to implement a trait everywhere for every new type.
+
+* features
+** reader macros
+[[https://gist.github.com/chaitanyagupta/9324402][reader macros in CL]] Not really sure how to make the syntax for these. But I could totally add reader macros to elisp, since I have to implement the reader.
+
+** async
+Some simple things like refresh buffer or font lock could happen async. What I think would be really cool would be to open a file ~less~ style and just read the first part and display it. Then we could finish reading the rest of the file in the background. If something wanted info about later parts of the buffer, we would just block that call until the part of the buffer was ready.
+
+** tree-sitter
+Use [[https://github.com/ubolonton/emacs-tree-sitter][tree sitter]] to parse the files by default. I know that this is kind of out of scope, because all the parsing AFAIK is done in elisp, but tree-sitter is implemented in rust so that makes it easy.
+
+We can also just make tree sitter a FFI binding so that it does not have be part of the core. My biggest problem with Tree-sitter as it stands now is that the grammers are defined in javascript and reading that has a dependency on node.js. In order to make this more emacsy we would want the grammar defined in elisp and have no node or js dependencies at all. We want to make it really easy to define new grammers for languages. That will take some work.
+
+** better IO
+Read from file-descriptors like stdin as well redirect errors to their own buffer. Could maybe implement pipes so as to build a better eshell.
+
+** abstract data structures
+The most common lisp object is a list, and usually this is implemented as a linked list. But you could abstract away the data structure and implement it in different ways depending on the performance characteristics needed. For example linked lists are easy to insert in the middle. Arrays are faster for integration. Hash tables are faster for key look up (like alist). In fact, if you used a [[id:3EA61CCB-8B7D-4AEA-8E38-8D9C561B4DD5][packed hash]] You could use a hash table to look up items in a linked list in constant time. You would have to have some heuristics to determine the best data structure for a type, because they all have downsides.
+
+** more advanced layout tools
+HTML rendering in Emacs is terrible because there are no good tools for veritical layout (I.e. columns). You can use lines to divide a document into horizontal sections, but columar layout is hard. I was thinking that you could add special markers to parts of line to indicate column boundaries. These could have different behaviors depending on the text properties. For example you could say that this column always wraps at 80 chars or a certain width. You could say that that a column truncates after so long. The "column markers" would be zero width so you could still scan the document as a contiguous set of characters. This would let you implement spreadsheets in emacs that were more robust then org mode ones. You could also add web margins to ~shr~. By making the box property smarter you could draw around how columns of text and would not even need to add ascii boxes in tables. You could define column markers for the whole buffer so that it would be consistent even when editing.
+
+Another part of this is making text property lookup extremely fast so that these sort of things don't slow it down. One of the test of this would be to have a text based table that is then entirely overlaid with one that lets you sort columns and feels more natural. Then the text based one would still represent the source but you would get all the niceness of table based editing. Another test of text property speed would be code folding on arbitrary large section of the code.
+
+* rust libraries
+- [[https://gtk-rs.org/][gkt-rs]] :: GTK bindings for rust
+- [[https://github.com/rust-qt/ritual][rust-qt]] :: Gt bindings for rust
+- [[https://github.com/BurntSushi/ripgrep/issues/126][libripgrep]] :: file parsing and regex engine
+
+** Rust encoding - convert from different encodings in rust
+https://github.com/lifthrasiir/rust-encoding
+** Chardet: character encoding detection for rust
+https://github.com/thuleqaid/rust-chardet
+** num_bigint: bigint for rust
+https://docs.rs/num-bigint/0.2.6/num_bigint/
+* references
+[[https://github.com/Wilfred/emacsbench][emacsbench]]
+
+[[https://github.com/remacs/remacs/issues/499][emacs string encoding]]
+
+[[https://github.com/remacs/remacs][remacs]]
+
+* Notes
+Using a recursive calling convention. Stack overflowed after 6879 iterations. That gives me a rough idea of how deep my recursion can go.
