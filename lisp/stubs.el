@@ -8,3 +8,7 @@
 (defun help-add-fundoc-usage (docstring arglist)
   "stub of function for bootstrapping"
   docstring)
+
+(defun substitute-command-keys (string &optional no-face)
+  "stub of function for bootstrapping"
+  string)

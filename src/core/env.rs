@@ -336,6 +336,11 @@ impl ObjectMap {
     }
 
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> Result<()> {
+        // TODO: Remove once bytecode is implemented. Right now we are ignoring
+        // bytecode functions since they can't execute
+        if matches!(func.get(), Function::LispFn(_)) {
+            return Ok(());
+        }
         match symbol.func {
             Some(_) => {
                 let new_func = func.clone_in(&self.block);
