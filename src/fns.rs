@@ -168,8 +168,10 @@ pub(crate) fn append<'ob>(
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() && eq(key, cons.car()) {
-            return Ok(cons.into())
+        if let Object::Cons(cons) = elem?.get() {
+            if eq(key, cons.car()) {
+                return Ok(cons.into());
+            }
         }
     }
     Ok(nil())
@@ -178,8 +180,10 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'
 #[defun]
 fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() && eq(key, cons.cdr()) {
-            return Ok(cons.into())
+        if let Object::Cons(cons) = elem?.get() {
+            if eq(key, cons.cdr()) {
+                return Ok(cons.into());
+            }
         }
     }
     Ok(nil())
@@ -196,8 +200,10 @@ pub(crate) fn assoc<'ob>(
         "test functions for assoc not yet supported"
     );
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() && equal(key, cons.car()) {
-            return Ok(cons.into())
+        if let Object::Cons(cons) = elem?.get() {
+            if equal(key, cons.car()) {
+                return Ok(cons.into());
+            }
         }
     }
     Ok(nil())
