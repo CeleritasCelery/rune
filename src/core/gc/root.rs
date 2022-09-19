@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -10,8 +9,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::env::GlobalSymbol;
-use crate::core::error::{Type, TypeError};
+use crate::core::env::ConstSymbol;
 use crate::core::object::{Function, Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
@@ -28,6 +26,16 @@ where
     type Out = Gc<U>;
     unsafe fn into_root(self) -> Self::Out {
         self.with_lifetime()
+    }
+}
+
+impl<T> IntoRoot for &Root<'_, '_, T>
+where
+    T: Copy,
+{
+    type Out = T;
+    unsafe fn into_root(self) -> Self::Out {
+        *self.data
     }
 }
 
@@ -48,10 +56,17 @@ impl IntoRoot for &Cons {
     }
 }
 
-impl IntoRoot for Symbol {
-    type Out = Symbol;
+impl IntoRoot for Symbol<'_> {
+    type Out = Symbol<'static>;
     unsafe fn into_root(self) -> Self::Out {
-        self
+        self.with_lifetime()
+    }
+}
+
+impl IntoRoot for ConstSymbol {
+    type Out = Symbol<'static>;
+    unsafe fn into_root(self) -> Self::Out {
+        (&*self).with_lifetime()
     }
 }
 
@@ -95,7 +110,7 @@ impl Trace for &Cons {
     }
 }
 
-impl Trace for Symbol {
+impl Trace for Symbol<'_> {
     fn mark(&self, _stack: &mut Vec<RawObj>) {
         // TODO: implement when symbols are collected
     }
@@ -112,12 +127,6 @@ pub(crate) struct Root<'rt, 'a, T> {
     // This lifetime parameter ensures that functions like mem::swap cannot be
     // called in a way that would lead to memory unsafety
     safety: PhantomData<&'a ()>,
-}
-
-impl<T: Debug> Debug for Root<'_, '_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(unsafe { &*self.data }, f)
-    }
 }
 
 impl<'rt, T> Root<'rt, '_, T> {
@@ -154,6 +163,18 @@ impl<T> Deref for Root<'_, '_, T> {
 impl<T> AsRef<Rt<T>> for Root<'_, '_, T> {
     fn as_ref(&self) -> &Rt<T> {
         self
+    }
+}
+
+impl<T: Debug> Debug for Root<'_, '_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: Display> Display for Root<'_, '_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&**self, f)
     }
 }
 
@@ -229,31 +250,17 @@ impl PartialEq for Rt<GcObj<'_>> {
     }
 }
 
-impl PartialEq for Rt<Symbol> {
+impl PartialEq for Rt<Symbol<'_>> {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl Eq for Rt<Symbol> {}
+impl Eq for Rt<Symbol<'_>> {}
 
 impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
     fn eq(&self, other: &U) -> bool {
         self.inner == *other
-    }
-}
-
-impl Deref for Rt<Symbol> {
-    type Target = Symbol;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl Borrow<GlobalSymbol> for Rt<Symbol> {
-    fn borrow(&self) -> &GlobalSymbol {
-        self.inner
     }
 }
 
@@ -289,14 +296,6 @@ where
 
     unsafe fn with_lifetime(self) -> Self::Out {
         self.map(|x| x.with_lifetime())
-    }
-}
-
-impl<'new> WithLifetime<'new> for Symbol {
-    type Out = Symbol;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        self
     }
 }
 
@@ -357,7 +356,8 @@ impl<T> Rt<Gc<T>> {
         unsafe { &*((self as *const Self).cast::<Rt<Gc<U>>>()) }
     }
 
-    // TODO: see if this can be removed
+    // TODO: Find a way to remove this method. We should never need to guess
+    // if something is cons
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
         match self.inner.as_obj().get() {
             crate::core::object::Object::Cons(_) => unsafe {
@@ -373,17 +373,6 @@ impl<T> Rt<Gc<T>> {
     {
         unsafe {
             self.inner = item.into_root();
-        }
-    }
-}
-
-impl TryFrom<&Rt<GcObj<'_>>> for Symbol {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
-        match value.inner.get() {
-            Object::Symbol(sym) => Ok(sym),
-            x => Err(TypeError::new(Type::Symbol, x).into()),
         }
     }
 }
@@ -416,6 +405,12 @@ impl Rt<GcObj<'_>> {
 
 impl Rt<Gc<Function<'_>>> {
     pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Function<'ob> {
+        self.bind(cx).get()
+    }
+}
+
+impl Rt<Gc<&Cons>> {
+    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> &'ob Cons {
         self.bind(cx).get()
     }
 }
@@ -518,8 +513,15 @@ impl<K, V> Rt<HashMap<K, V>>
 where
     K: Eq + Hash,
 {
-    pub(crate) fn insert<R: IntoRoot<Out = V>>(&mut self, k: K, v: R) {
-        self.inner.insert(k, unsafe { v.into_root() });
+    pub(crate) fn insert<Kx: IntoRoot<Out = K>, Vx: IntoRoot<Out = V>>(&mut self, k: Kx, v: Vx) {
+        self.inner
+            .insert(unsafe { k.into_root() }, unsafe { v.into_root() });
+    }
+
+    pub(crate) fn get<Q: IntoRoot<Out = K>>(&self, k: Q) -> Option<&Rt<V>> {
+        self.inner
+            .get(unsafe { &k.into_root() })
+            .map(|x| unsafe { &*(x as *const V).cast::<Rt<V>>() })
     }
 }
 
@@ -543,8 +545,12 @@ impl<T> Rt<HashSet<T>>
 where
     T: Eq + Hash,
 {
-    pub(crate) fn insert<R: IntoRoot<Out = T>>(&mut self, value: R) -> bool {
+    pub(crate) fn insert<Tx: IntoRoot<Out = T>>(&mut self, value: Tx) -> bool {
         self.inner.insert(unsafe { value.into_root() })
+    }
+
+    pub(crate) fn contains<Q: IntoRoot<Out = T>>(&self, value: Q) -> bool {
+        self.inner.contains(unsafe { &value.into_root() })
     }
 }
 

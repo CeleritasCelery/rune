@@ -130,14 +130,14 @@ pub(crate) fn autoload_do_load<'ob>(
 }
 
 #[defun]
-fn autoload(
-    function: Symbol,
+fn autoload<'ob>(
+    function: Symbol<'ob>,
     file: &str,
     docstring: Option<GcObj>,
     interactive: Option<GcObj>,
     load_type: Option<GcObj>,
-    cx: &Context,
-) -> Result<Symbol> {
+    cx: &'ob Context,
+) -> Result<Symbol<'ob>> {
     if function.has_func() {
         Ok(&sym::NIL)
     } else {
@@ -188,7 +188,10 @@ fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob
 
 #[defun]
 #[allow(non_snake_case)]
-fn internal__define_uninitialized_variable(_symbol: Symbol, _doc: Option<GcObj>) -> GcObj {
+fn internal__define_uninitialized_variable<'ob>(
+    _symbol: Symbol<'ob>,
+    _doc: Option<GcObj>,
+) -> GcObj<'ob> {
     // TODO: implement doc strings
     nil()
 }

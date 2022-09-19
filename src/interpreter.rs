@@ -165,7 +165,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
                 sym::UNWIND_PROTECT => self.unwind_protect(forms, cx),
-                _ => self.eval_call(sym, forms, cx),
+                _ => {
+                    root!(sym, cx);
+                    self.eval_call(sym, forms, cx)
+                }
             },
             other => Err(error!("Invalid Function: {other}")),
         }
@@ -222,18 +225,19 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // (defvar x ...)
             Some(x) => {
                 let name: Symbol = x.bind(cx).try_into()?;
+                root!(name, cx);
                 let value = match forms.next() {
                     // (defvar x y)
                     Some(value) => rebind!(self.eval_form(value, cx)?, cx),
                     // (defvar x)
                     None => nil(),
                 };
-                self.var_set(name, value, cx)?;
-                self.env.as_mut(cx).special_variables.insert(name);
+                self.var_set(name.bind(cx), value, cx)?;
+                self.env.as_mut(cx).special_variables.insert(&*name);
                 // If this variable was unbound previously in the binding stack,
                 // we will bind it to the new value
                 for binding in self.env.as_mut(cx).binding_stack.iter_mut() {
-                    if binding.0 == name && binding.1.is_none() {
+                    if **name == binding.0 && binding.1.is_none() {
                         binding.1.set(value);
                     }
                 }
@@ -246,11 +250,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_call<'ob>(
         &mut self,
-        name: Symbol,
+        name: &Rt<Symbol>,
         args: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let func = match name.follow_indirect(cx) {
+        let func = match name.bind(cx).follow_indirect(cx) {
             Some(x) => x,
             None => bail_err!("Invalid function: {name}"),
         };
@@ -259,14 +263,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         match func.get(cx) {
             Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                 crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)?;
-                func.as_mut(cx).set(name.follow_indirect(cx).unwrap());
+                func.as_mut(cx)
+                    .set(name.bind(cx).follow_indirect(cx).unwrap());
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
                 let macro_args = args.bind(cx).as_list()?.collect::<AnyResult<Vec<_>>>()?;
                 root!(args, move(macro_args), cx);
                 root!(mcro, cx);
-                let value = mcro.call(args, self.env, cx, Some(name.name))?;
+                let value = mcro.call(args, self.env, cx, Some(name.bind(cx).name))?;
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
@@ -279,7 +284,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             let result = rebind!(self.eval_form(x, cx)?, cx);
             args.as_mut(cx).push(result);
         }
-        func.call(args, self.env, cx, Some(name.name))
+        func.call(args, self.env, cx, Some(name.bind(cx).name))
     }
 
     fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, cx: &'ob Context) -> EvalResult<'ob> {
@@ -422,9 +427,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         while let Some((var, val)) = Self::pairs(&mut forms, cx) {
             match (var.get(), val) {
                 (Object::Symbol(var), Some(val)) => {
+                    root!(var, cx);
                     root!(val, cx);
                     let val = rebind!(self.eval_form(val, cx)?, cx);
-                    self.var_set(var, val, cx)?;
+                    self.var_set(var.bind(cx), val, cx)?;
                     last_value.as_mut(cx).set(val);
                 }
                 (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
@@ -518,7 +524,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         // splitting borrows
         let env = &mut **self.env.as_mut(cx);
         for binding in env.binding_stack.drain(binding_stack_len..) {
-            let var = &*binding.0;
+            let var = binding.bind(cx).0;
             let val = &*binding.1;
             if let Some(val) = val {
                 if let Some(current_val) = env.vars.get_mut(var) {
@@ -536,15 +542,26 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn let_bind_serial(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<(), EvalError> {
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
-            let (var, val) = match binding.get(cx) {
+            match binding.get(cx) {
                 // (let ((x y)))
-                Object::Cons(_) => self.let_bind_value(binding.as_cons(), cx)?,
+                Object::Cons(_) => {
+                    let cons = binding.as_cons();
+                    let val = self.let_bind_value(cons, cx)?;
+                    let val = rebind!(val, cx);
+                    let var: Symbol = cons
+                        .get(cx)
+                        .car()
+                        .try_into()
+                        .context("let variable must be a symbol")?;
+                    self.create_let_binding(var, val, cx);
+                }
                 // (let (x))
-                Object::Symbol(sym) => (sym, nil()),
+                Object::Symbol(sym) => {
+                    self.create_let_binding(sym, nil(), cx);
+                }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
-            };
-            self.create_let_binding(var, rebind!(val, cx), cx);
+            }
         }
         Ok(())
     }
@@ -556,8 +573,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             match binding.get(cx) {
                 // (let ((x y)))
                 Object::Cons(_) => {
-                    let (sym, var) = self.let_bind_value(binding.as_cons(), cx)?;
+                    let cons = binding.as_cons();
+                    let var = self.let_bind_value(cons, cx)?;
                     let var = rebind!(var, cx);
+                    let sym: Symbol = cons
+                        .get(cx)
+                        .car()
+                        .try_into()
+                        .context("let variable must be a symbol")?;
                     let_bindings.as_mut(cx).push((sym, var));
                 }
                 // (let (x))
@@ -598,7 +621,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         &mut self,
         cons: &Rt<Gc<&Cons>>,
         cx: &'ob mut Context,
-    ) -> Result<(Symbol, GcObj<'ob>), EvalError> {
+    ) -> Result<GcObj<'ob>, EvalError> {
         rooted_iter!(iter, cons.bind(cx).cdr(), cx);
         let value = match iter.next() {
             // (let ((x y)))
@@ -610,12 +633,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         if !iter.is_empty() {
             bail_err!("Let binding can only have 1 value");
         }
-        let name: Symbol = cons
-            .bind(cx)
-            .car()
-            .try_into()
-            .context("let variable must be a symbol")?;
-        Ok((name, value))
+        Ok(value)
     }
 
     fn implicit_progn<'ob>(
@@ -728,10 +746,11 @@ impl Rt<Gc<Function<'_>>> {
                     match func.get() {
                         Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                             // TODO: inifinite loop if autoload does not resolve
+                            root!(sym, cx);
                             crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
-                            if let Some(func) = sym.follow_indirect(cx) {
+                            if let Some(func) = sym.bind(cx).follow_indirect(cx) {
                                 root!(func, cx);
-                                func.call(args, env, cx, Some(sym.name))
+                                func.call(args, env, cx, Some(sym.bind(cx).name))
                             } else {
                                 Err(error!("autoload for {sym} failed to define function"))
                             }
@@ -757,7 +776,7 @@ fn call_closure<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
-    let closure: &Cons = closure.bind(cx).get();
+    let closure: &Cons = closure.get(cx);
     match closure.car().get() {
         Object::Symbol(s) if s == &sym::CLOSURE => {
             rooted_iter!(forms, closure.cdr(), cx);
@@ -1024,11 +1043,13 @@ mod test {
         let list = list![sym::CLOSURE, list![true; cx]; cx];
         root!(list, cx);
         check_interpreter("(function (lambda))", list, cx);
-        let x = intern("x");
-        let y = intern("y");
+        let x = intern("x", cx);
         let list = list![sym::CLOSURE, list![true; cx], list![x; cx], x; cx];
         root!(list, cx);
         check_interpreter("(function (lambda (x) x))", list, cx);
+        // TODO: fix this duplicate intern
+        let x = intern("x", cx);
+        let y = intern("y", cx);
         let list: GcObj =
             list![sym::CLOSURE, list![cons!(y, 1; cx), true; cx], list![x; cx], x; cx];
         root!(list, cx);

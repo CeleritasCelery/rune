@@ -3,7 +3,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::gc::{Context, Root};
-use crate::core::object::{nil, Gc, GcObj, Object};
+use crate::core::object::{nil, Gc, GcObj, Object, WithLifetime};
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
@@ -170,23 +170,27 @@ pub(crate) fn load<'ob>(
     };
     env.as_mut(cx)
         .vars
-        .insert(&sym::LOAD_FILE_NAME, &**prev_load_file);
+        .insert(&*sym::LOAD_FILE_NAME, &**prev_load_file);
     result
 }
 
 #[defun]
-pub(crate) fn intern(string: &str) -> Symbol {
-    crate::core::env::intern(string)
+pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> Symbol<'ob> {
+    crate::core::env::intern(string, cx)
 }
 
 #[defun]
 pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.get() {
+        // TODO: We should only return here if the symbol is interned
         Object::Symbol(sym) => Ok(sym),
         Object::String(string) => {
             let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
-            Ok(map.get(string).unwrap_or(&sym::NIL))
+            match map.get(string) {
+                Some(sym) => Ok(unsafe { sym.with_lifetime() }),
+                None => Ok(&sym::NIL),
+            }
         }
         x => Err(TypeError::new(Type::String, x).into()),
     }

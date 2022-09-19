@@ -258,7 +258,7 @@ impl<'a> Iterator for Tokenizer<'a> {
     }
 }
 
-fn intern_symbol(symbol: &str) -> Symbol {
+fn intern_symbol<'ob>(symbol: &str, cx: &'ob Context) -> Symbol<'ob> {
     let mut escaped = false;
     let is_not_escape = |c: &char| {
         if escaped {
@@ -273,9 +273,9 @@ fn intern_symbol(symbol: &str) -> Symbol {
     };
     if symbol.contains('\\') {
         let escaped_slice: String = symbol.chars().filter(is_not_escape).collect();
-        intern(escaped_slice.as_str())
+        intern(escaped_slice.as_str(), cx)
     } else {
-        intern(symbol)
+        intern(symbol, cx)
     }
 }
 
@@ -286,7 +286,7 @@ fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> GcObj<'a> {
         Ok(num) => cx.add(num),
         Err(_) => match slice.parse::<f64>() {
             Ok(num) => cx.add(num),
-            Err(_) => cx.add(intern_symbol(slice)),
+            Err(_) => cx.add(intern_symbol(slice, cx)),
         },
     }
 }
@@ -541,16 +541,16 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         check_reader!(sym::IF, "if", cx);
-        check_reader!(intern("--1"), "--1", cx);
-        check_reader!(intern("1"), "\\1", cx);
-        check_reader!(intern("3.0.0"), "3.0.0", cx);
-        check_reader!(intern("1+"), "1+", cx);
-        check_reader!(intern("+1"), "\\+1", cx);
-        check_reader!(intern(" x"), "\\ x", cx);
-        check_reader!(intern("\\x"), "\\\\x", cx);
-        check_reader!(intern("x.y"), "x.y", cx);
-        check_reader!(intern("(* 1 2)"), "\\(*\\ 1\\ 2\\)", cx);
-        check_reader!(intern("+-*/_~!@$%^&=:<>{}"), "+-*/_~!@$%^&=:<>{}", cx);
+        check_reader!(intern("--1", cx), "--1", cx);
+        check_reader!(intern("1", cx), "\\1", cx);
+        check_reader!(intern("3.0.0", cx), "3.0.0", cx);
+        check_reader!(intern("1+", cx), "1+", cx);
+        check_reader!(intern("+1", cx), "\\+1", cx);
+        check_reader!(intern(" x", cx), "\\ x", cx);
+        check_reader!(intern("\\x", cx), "\\\\x", cx);
+        check_reader!(intern("x.y", cx), "x.y", cx);
+        check_reader!(intern("(* 1 2)", cx), "\\(*\\ 1\\ 2\\)", cx);
+        check_reader!(intern("+-*/_~!@$%^&=:<>{}", cx), "+-*/_~!@$%^&=:<>{}", cx);
     }
 
     #[test]
@@ -584,8 +584,8 @@ baz""#,
         );
         check_reader!(list!(1, 1.5; cx), "(1 1.5)", cx);
         check_reader!(list!(1, 1.5, -7; cx), "(1 1.5 -7)", cx);
-        check_reader!(list!(1, 1.5, intern("."); cx), "(1 1.5 .)", cx);
-        check_reader!(list!(1, 1.5, intern("..."), 2; cx), "(1 1.5 ... 2)", cx);
+        check_reader!(list!(1, 1.5, intern(".", cx); cx), "(1 1.5 .)", cx);
+        check_reader!(list!(1, 1.5, intern("...", cx), 2; cx), "(1 1.5 ... 2)", cx);
     }
 
     #[test]
@@ -605,7 +605,7 @@ baz""#,
         let quote = sym::FUNCTION;
         check_reader!(list!(quote, sym::IF; cx), "#'if", cx);
         check_reader!(
-            list!(quote, list!(intern("lambda"), sym::IF, false, false; cx); cx),
+            list!(quote, list!(intern("lambda", cx), sym::IF, false, false; cx); cx),
             "#'(lambda if () nil)",
             cx
         );

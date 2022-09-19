@@ -86,8 +86,8 @@ fn purecopy(obj: GcObj) -> GcObj {
 }
 
 #[defun]
-fn make_symbol(name: &str) -> Symbol {
-    crate::core::env::intern(name)
+fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
+    crate::core::env::intern(name, cx)
 }
 
 define_symbols!(

@@ -13,13 +13,14 @@ use std::sync::Mutex;
 #[allow(dead_code)]
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
-    pub(crate) vars: HashMap<Symbol, GcObj<'static>>,
-    pub(crate) props: HashMap<Symbol, Vec<(Symbol, GcObj<'static>)>>,
+    pub(crate) vars: HashMap<Symbol<'static>, GcObj<'static>>,
+    pub(crate) props: HashMap<Symbol<'static>, Vec<(Symbol<'static>, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
-    pub(crate) special_variables: HashSet<Symbol>,
-    pub(crate) binding_stack: Vec<(Symbol, Option<GcObj<'static>>)>,
+    pub(crate) special_variables: HashSet<Symbol<'static>>,
+    pub(crate) binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
+    local_obarray: Vec<Symbol<'static>>,
 }
 
 impl Rt<Env> {
@@ -33,7 +34,7 @@ impl Rt<Env> {
     }
 
     pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
-        match self.props.get_mut(&symbol) {
+        match self.props.get_mut(symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
                 None => plist.push((propname, value)),
@@ -66,14 +67,14 @@ pub(crate) struct GlobalSymbol {
 /// `GlobalSymbol` is thread safe. This makes comparing
 /// Symbols cheap since it is just a pointer comparison.
 /// There are no uninterned symbols.
-pub(crate) type Symbol = &'static GlobalSymbol;
+pub(crate) type Symbol<'a> = &'a GlobalSymbol;
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> Symbol);
+pub(crate) struct ConstSymbol(fn() -> Symbol<'static>);
 
 impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> Symbol) -> Self {
+    pub(crate) const fn new(f: fn() -> Symbol<'static>) -> Self {
         Self(f)
     }
 }
@@ -296,7 +297,7 @@ impl SymbolMap {
         }
     }
 
-    fn intern(&mut self, name: &str) -> Symbol {
+    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> Symbol<'ob> {
         let sym = match self.map.get(name) {
             Some(x) => x.0,
             None => {
@@ -331,8 +332,8 @@ impl SymbolMap {
 }
 
 impl ObjectMap {
-    pub(crate) fn intern(&mut self, name: &str) -> Symbol {
-        self.map.intern(name)
+    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> Symbol<'ob> {
+        self.map.intern(name, cx)
     }
 
     pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> Result<()> {
@@ -371,7 +372,7 @@ macro_rules! create_symbolmap {
             use super::{Symbol, GlobalSymbol, ConstSymbol};
             // This GlobalSymbol is assinged to every runtime symbol created.
             static __RUNTIME_SYMBOL_GLOBAL: GlobalSymbol = GlobalSymbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
-            fn __RUNTIME_SYMBOL_FN () -> Symbol {&__RUNTIME_SYMBOL_GLOBAL}
+            fn __RUNTIME_SYMBOL_FN () -> Symbol<'static> {&__RUNTIME_SYMBOL_GLOBAL}
             pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
             // Re-export all symbols in this module
@@ -426,8 +427,8 @@ create_symbolmap!(
 );
 
 /// Intern a new symbol based on `name`
-pub(crate) fn intern(name: &str) -> Symbol {
-    INTERNED_SYMBOLS.lock().unwrap().intern(name)
+pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
+    INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
 }
 
 #[cfg(test)]
@@ -449,7 +450,9 @@ mod test {
 
     #[test]
     fn init() {
-        intern("foo");
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        intern("foo", cx);
     }
 
     #[test]
@@ -496,7 +499,7 @@ mod test {
             unreachable!();
         }
         assert_eq!(cons, list!(4, 2, 3; cx));
-        let sym = intern("cons-test");
+        let sym = intern("cons-test", cx);
         crate::data::fset(sym, cons).unwrap();
         // is not mutable
         if let Function::Cons(cons) = sym.func(cx).unwrap().get() {

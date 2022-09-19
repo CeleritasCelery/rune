@@ -104,7 +104,7 @@ define_unbox!(String, &'ob str);
 define_unbox!(Vec, &'ob RefCell<Vec<GcObj<'ob>>>);
 define_unbox!(ByteVec, &'ob RefCell<Vec<u8>>);
 define_unbox!(HashTable, &'ob RefCell<HashTable<'ob>>);
-define_unbox!(Symbol, Symbol);
+define_unbox!(Symbol, Symbol<'ob>);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>
 where

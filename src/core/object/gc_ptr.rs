@@ -281,8 +281,8 @@ impl<'ob> IntoObject<'ob> for LispFn<'ob> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for Symbol {
-    type Out = Symbol;
+impl<'ob> IntoObject<'ob> for Symbol<'_> {
+    type Out = Symbol<'ob>;
 
     fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
         Gc::from_ptr(self, Tag::Symbol)
@@ -294,7 +294,7 @@ impl<'ob> IntoObject<'ob> for Symbol {
 }
 
 impl<'ob> IntoObject<'ob> for ConstSymbol {
-    type Out = Symbol;
+    type Out = Symbol<'ob>;
 
     fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
         let ptr: *const u8 = std::ptr::addr_of!(*self).cast();
@@ -412,9 +412,9 @@ impl<'ob> TaggedPtr<'ob> for SubrFn {
     const TAG: Tag = Tag::SubrFn;
 }
 
-impl TaggedPtr<'_> for Symbol {
+impl<'ob> TaggedPtr<'ob> for Symbol<'ob> {
     type Ptr = GlobalSymbol;
-    type Output = Symbol;
+    type Output = Symbol<'ob>;
     const TAG: Tag = Tag::Symbol;
 }
 
@@ -562,7 +562,7 @@ pub(crate) enum Function<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
-    Symbol(Symbol),
+    Symbol(Symbol<'ob>),
 }
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
@@ -623,16 +623,23 @@ impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Function<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<Symbol>> for Gc<Function<'ob>> {
+impl<'ob> From<Gc<Symbol<'ob>>> for Gc<Function<'ob>> {
     fn from(x: Gc<Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Symbol> for Gc<Function<'ob>> {
+impl<'ob> From<Symbol<'ob>> for Gc<Function<'ob>> {
     fn from(x: Symbol) -> Self {
         let ptr = x as *const GlobalSymbol;
         unsafe { Symbol::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<Symbol<'ob>> for Gc<Symbol<'ob>> {
+    fn from(x: Symbol) -> Self {
+        let ptr = x as *const GlobalSymbol;
+        unsafe { Symbol::tag_ptr(ptr) }
     }
 }
 
@@ -661,7 +668,7 @@ impl<'ob> Gc<Function<'ob>> {
 pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob f64),
-    Symbol(Symbol),
+    Symbol(Symbol<'ob>),
     Cons(&'ob Cons),
     Vec(&'ob RefCell<ObjVec<'ob>>),
     ByteVec(&'ob RefCell<Vec<u8>>),
@@ -785,7 +792,7 @@ impl<'ob> From<&Cons> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<Symbol>> for Gc<Object<'ob>> {
+impl<'ob> From<Gc<Symbol<'ob>>> for Gc<Object<'ob>> {
     fn from(x: Gc<Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
@@ -925,7 +932,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Symbol> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Symbol<'ob>> {
     type Error = TypeError;
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.get() {
@@ -996,8 +1003,8 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
-impl Gc<Symbol> {
-    pub(crate) fn get(self) -> Symbol {
+impl<'ob> Gc<Symbol<'ob>> {
+    pub(crate) fn get(self) -> Symbol<'ob> {
         let (ptr, _) = self.untag();
         unsafe { Symbol::from_obj_ptr(ptr) }
     }
@@ -1029,8 +1036,16 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     }
 }
 
-impl<'new> WithLifetime<'new> for Gc<Symbol> {
-    type Out = Gc<Symbol>;
+impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
+    type Out = Symbol<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const GlobalSymbol)
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for Gc<Symbol<'old>> {
+    type Out = Gc<Symbol<'new>>;
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
@@ -1073,10 +1088,10 @@ impl<'ob> Gc<&'ob String> {
     }
 }
 
-impl std::ops::Deref for Gc<&Cons> {
+impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     type Target = Cons;
 
-    fn deref(&self) -> &Self::Target {
+    fn deref(&self) -> &'ob Self::Target {
         self.get()
     }
 }
@@ -1125,7 +1140,7 @@ impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<Symbol<'_>> for Gc<Object<'ob>> {
     fn eq(&self, other: &Symbol) -> bool {
         match self.get() {
             Object::Symbol(x) => x == *other,
@@ -1357,7 +1372,7 @@ impl<'ob> Gc<Object<'ob>> {
             ObjectAllocation::LispFn(x) => {
                 x.data.mark(stack);
                 x.mark();
-            },
+            }
             ObjectAllocation::NonAllocated => {}
         }
     }

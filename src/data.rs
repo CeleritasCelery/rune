@@ -5,7 +5,7 @@ use crate::core::{
     cons::Cons,
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
-    gc::{Context, Root},
+    gc::{Context, IntoRoot, Root},
     object::{nil, Gc, GcObj, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
@@ -14,13 +14,13 @@ use fn_macros::defun;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol>> = Mutex::new({
+    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol<'static>>> = Mutex::new({
         HashSet::with_capacity_and_hasher(0, std::hash::BuildHasherDefault::default())
     });
 }
 
 #[defun]
-pub(crate) fn fset(symbol: Symbol, definition: GcObj) -> Result<Symbol> {
+pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
     if definition == nil() {
         symbol.unbind_func();
     } else {
@@ -32,11 +32,11 @@ pub(crate) fn fset(symbol: Symbol, definition: GcObj) -> Result<Symbol> {
 }
 
 #[defun]
-pub(crate) fn defalias(
-    symbol: Symbol,
+pub(crate) fn defalias<'ob>(
+    symbol: Symbol<'ob>,
     definition: GcObj,
     _docstring: Option<&String>,
-) -> Result<Symbol> {
+) -> Result<Symbol<'ob>> {
     fset(symbol, definition)
 }
 
@@ -70,7 +70,7 @@ pub(crate) fn get<'ob>(
     env: &Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
-    match env.props.get(&symbol) {
+    match env.props.get(symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => cx.bind(element.1.bind(cx)),
             None => nil(),
@@ -93,7 +93,7 @@ pub(crate) fn symbol_value<'ob>(
     env: &Root<Env>,
     cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
-    env.vars.get(&symbol).map(|x| x.bind(cx))
+    env.vars.get(symbol).map(|x| x.bind(cx))
 }
 
 #[defun]
@@ -119,18 +119,22 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 
 #[defun]
 pub(crate) fn boundp(symbol: Symbol, env: &Root<Env>) -> bool {
-    env.vars.get(&symbol).is_some()
+    env.vars.get(symbol).is_some()
 }
 
 #[defun]
-pub(crate) fn makunbound(symbol: Symbol, env: &mut Root<Env>, cx: &Context) -> Symbol {
+pub(crate) fn makunbound<'ob>(
+    symbol: Symbol<'ob>,
+    env: &mut Root<Env>,
+    cx: &'ob Context,
+) -> Symbol<'ob> {
     env.as_mut(cx).vars.remove(symbol);
     symbol
 }
 
 #[defun]
 pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
-    env.vars.get(&symbol).is_some()
+    env.vars.get(symbol).is_some()
 }
 
 #[defun]
@@ -340,8 +344,11 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
 }
 
 #[defun]
-pub(crate) fn provide(feature: Symbol, _subfeatures: Option<&Cons>) -> Symbol {
-    FEATURES.lock().unwrap().insert(feature);
+pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
+    let mut features = FEATURES.lock().unwrap();
+    // TODO: SYMBOL - need to trace this
+    let feat = unsafe { feature.into_root() };
+    features.insert(feat);
     feature
 }
 

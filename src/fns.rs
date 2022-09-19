@@ -2,9 +2,9 @@ use std::cell::RefCell;
 
 use crate::core::{
     cons::Cons,
-    env::{Env, Symbol},
+    env::{sym, Env, Symbol},
     error::{Type, TypeError},
-    gc::{Context, Root, Rt},
+    gc::{Context, IntoRoot, Root, Rt},
     object::{nil, Function, Gc, GcObj, HashTable, List, Object},
 };
 use crate::{root, rooted_iter};
@@ -297,11 +297,11 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 }
 
 #[defun]
-pub(crate) fn defvaralias(
-    new_alias: Symbol,
+pub(crate) fn defvaralias<'ob>(
+    new_alias: Symbol<'ob>,
     _base_variable: Symbol,
     _docstring: Option<&str>,
-) -> Symbol {
+) -> Symbol<'ob> {
     // TODO: implement
     new_alias
 }
@@ -314,25 +314,27 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
 
 #[defun]
 fn require<'ob>(
-    feature: Symbol,
+    feature: &Rt<Gc<Symbol>>,
     filename: Option<&Rt<Gc<&String>>>,
     noerror: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
-    if crate::data::FEATURES.lock().unwrap().contains(feature) {
-        return Ok(feature.into());
+) -> Result<Gc<Symbol<'ob>>> {
+    // TODO: Fix this unsafe into_root
+    let feat = unsafe { feature.bind(cx).get().into_root() };
+    if crate::data::FEATURES.lock().unwrap().contains(feat) {
+        return Ok(feature.bind(cx));
     }
     let file = match filename {
         Some(file) => file.bind(cx).get(),
-        None => feature.name,
+        None => feature.bind(cx).get().name,
     };
     let file: Gc<&String> = cx.add(file);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
-        Ok(_) => Ok(feature.into()),
+        Ok(_) => Ok(feature.bind(cx)),
         Err(e) => match noerror {
-            Some(()) => Ok(nil()),
+            Some(()) => Ok((&*sym::NIL).into()),
             None => Err(e),
         },
     }
