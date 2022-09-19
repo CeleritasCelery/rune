@@ -13,87 +13,77 @@ use crate::core::env::ConstSymbol;
 use crate::core::object::{Function, Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
-pub(crate) trait IntoRoot {
-    type Out;
-    unsafe fn into_root(self) -> Self::Out;
+pub(crate) trait IntoRoot<T> {
+    unsafe fn into_root(self) -> T;
 }
 
-impl<T, U> IntoRoot for Gc<T>
+impl<T, U> IntoRoot<Gc<U>> for Gc<T>
 where
     Gc<T>: WithLifetime<'static, Out = Gc<U>>,
     U: 'static,
 {
-    type Out = Gc<U>;
-    unsafe fn into_root(self) -> Self::Out {
+    unsafe fn into_root(self) -> Gc<U> {
         self.with_lifetime()
     }
 }
 
-impl<T> IntoRoot for &Root<'_, '_, T>
+impl<T> IntoRoot<T> for &Root<'_, '_, T>
 where
     T: Copy,
 {
-    type Out = T;
-    unsafe fn into_root(self) -> Self::Out {
+    unsafe fn into_root(self) -> T {
         *self.data
     }
 }
 
-impl<T, U> IntoRoot for &Rt<Gc<T>>
+impl<T, U> IntoRoot<Gc<U>> for &Rt<Gc<T>>
 where
-    Gc<T>: IntoRoot<Out = Gc<U>> + Copy,
+    Gc<T>: IntoRoot<Gc<U>> + Copy,
 {
-    type Out = Gc<U>;
-    unsafe fn into_root(self) -> Self::Out {
+    unsafe fn into_root(self) -> Gc<U> {
         self.inner.into_root()
     }
 }
 
-impl IntoRoot for &Cons {
-    type Out = &'static Cons;
-    unsafe fn into_root(self) -> Self::Out {
+impl IntoRoot<&'static Cons> for &Cons {
+    unsafe fn into_root(self) -> &'static Cons {
         self.with_lifetime()
     }
 }
 
-impl IntoRoot for Symbol<'_> {
-    type Out = Symbol<'static>;
-    unsafe fn into_root(self) -> Self::Out {
+impl IntoRoot<Symbol<'static>> for Symbol<'_> {
+    unsafe fn into_root(self) -> Symbol<'static> {
         self.with_lifetime()
     }
 }
 
-impl IntoRoot for ConstSymbol {
-    type Out = Symbol<'static>;
-    unsafe fn into_root(self) -> Self::Out {
+impl IntoRoot<Symbol<'static>> for ConstSymbol {
+    unsafe fn into_root(self) -> Symbol<'static> {
         (&*self).with_lifetime()
     }
 }
 
-impl<T, Tx> IntoRoot for Option<T>
+impl<T, Tx> IntoRoot<Option<Tx>> for Option<T>
 where
-    T: IntoRoot<Out = Tx>,
+    T: IntoRoot<Tx>,
 {
-    type Out = Option<Tx>;
-    unsafe fn into_root(self) -> Self::Out {
+    unsafe fn into_root(self) -> Option<Tx> {
         self.map(|x| x.into_root())
     }
 }
 
-impl<T, U, Tx, Ux> IntoRoot for (T, U)
+impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
 where
-    T: IntoRoot<Out = Tx>,
-    U: IntoRoot<Out = Ux>,
+    T: IntoRoot<Tx>,
+    U: IntoRoot<Ux>,
 {
-    type Out = (Tx, Ux);
-    unsafe fn into_root(self) -> Self::Out {
+    unsafe fn into_root(self) -> (Tx, Ux) {
         (self.0.into_root(), self.1.into_root())
     }
 }
 
-impl<T: IntoRoot<Out = U>, U> IntoRoot for Vec<T> {
-    type Out = Vec<U>;
-    unsafe fn into_root(self) -> Self::Out {
+impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
+    unsafe fn into_root(self) -> Vec<U> {
         self.into_iter().map(|x| x.into_root()).collect()
     }
 }
@@ -369,7 +359,7 @@ impl<T> Rt<Gc<T>> {
 
     pub(crate) fn set<U>(&mut self, item: U)
     where
-        U: IntoRoot<Out = Gc<T>>,
+        U: IntoRoot<Gc<T>>,
     {
         unsafe {
             self.inner = item.into_root();
@@ -489,7 +479,7 @@ impl Rt<Option<GcObj<'static>>> {
 }
 
 impl<T> Rt<Vec<T>> {
-    pub(crate) fn push<U: IntoRoot<Out = T>>(&mut self, item: U) {
+    pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
     }
 }
@@ -513,20 +503,30 @@ impl<K, V> Rt<HashMap<K, V>>
 where
     K: Eq + Hash,
 {
-    pub(crate) fn insert<Kx: IntoRoot<Out = K>, Vx: IntoRoot<Out = V>>(&mut self, k: Kx, v: Vx) {
+    pub(crate) fn insert<Kx: IntoRoot<K>, Vx: IntoRoot<V>>(&mut self, k: Kx, v: Vx) {
         self.inner
             .insert(unsafe { k.into_root() }, unsafe { v.into_root() });
     }
 
-    pub(crate) fn get<Q: IntoRoot<Out = K>>(&self, k: Q) -> Option<&Rt<V>> {
+    pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {
         self.inner
             .get(unsafe { &k.into_root() })
             .map(|x| unsafe { &*(x as *const V).cast::<Rt<V>>() })
     }
+
+    pub(crate) fn get_mut<Q: IntoRoot<K>>(&mut self, k: Q) -> Option<&mut Rt<V>> {
+        self.inner
+            .get_mut(unsafe { &k.into_root() })
+            .map(|x| unsafe { &mut *(x as *mut V).cast::<Rt<V>>() })
+    }
+
+    pub(crate) fn remove<Q: IntoRoot<K>>(&mut self, k: Q) {
+        self.inner.remove(unsafe { &k.into_root() });
+    }
 }
 
 impl<K, V> Deref for Rt<HashMap<K, V>> {
-    type Target = HashMap<K, Rt<V>>;
+    type Target = HashMap<Rt<K>, Rt<V>>;
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
         unsafe { &*(self as *const Self).cast::<Self::Target>() }
@@ -540,16 +540,15 @@ impl<K, V> DerefMut for Rt<HashMap<K, V>> {
     }
 }
 
-#[allow(dead_code)]
 impl<T> Rt<HashSet<T>>
 where
     T: Eq + Hash,
 {
-    pub(crate) fn insert<Tx: IntoRoot<Out = T>>(&mut self, value: Tx) -> bool {
+    pub(crate) fn insert<Tx: IntoRoot<T>>(&mut self, value: Tx) -> bool {
         self.inner.insert(unsafe { value.into_root() })
     }
 
-    pub(crate) fn contains<Q: IntoRoot<Out = T>>(&self, value: Q) -> bool {
+    pub(crate) fn contains<Q: IntoRoot<T>>(&self, value: Q) -> bool {
         self.inner.contains(unsafe { &value.into_root() })
     }
 }
