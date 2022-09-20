@@ -39,7 +39,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cons {
             Some(cons) => {
-                (*self).cons = match cons.cdr().get() {
+                self.cons = match cons.cdr().get() {
                     Object::Cons(next) => Some(next),
                     Object::Symbol(s) if s.nil() => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
