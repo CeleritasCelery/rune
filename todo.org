@@ -15,3 +15,5 @@ Currently symbol-function of a special form will return nil
 - implement intoObject
 - implement tryfrom object
 - implement tracing
+- Add to ~OwnedObject~
+- Add to ~ObjectAllocation~

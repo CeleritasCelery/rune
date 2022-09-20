@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use sptr::Strict;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Mutex;
 
 #[allow(dead_code)]
@@ -59,6 +59,8 @@ impl Rt<Env> {
 pub(crate) struct GlobalSymbol {
     pub(crate) name: &'static str,
     pub(crate) sym: ConstSymbol,
+    pub(crate) marked: AtomicBool,
+    pub(crate) interned: bool,
     func: Option<AtomicPtr<u8>>,
 }
 
@@ -131,7 +133,13 @@ impl GlobalSymbol {
         } else {
             Some(AtomicPtr::new(Self::NULL))
         };
-        GlobalSymbol { name, sym, func }
+        GlobalSymbol {
+            name,
+            sym,
+            func,
+            marked: AtomicBool::new(true),
+            interned: true,
+        }
     }
 
     pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
@@ -139,6 +147,8 @@ impl GlobalSymbol {
             name,
             func: None,
             sym,
+            marked: AtomicBool::new(true),
+            interned: true,
         }
     }
 
@@ -153,6 +163,8 @@ impl GlobalSymbol {
                 (subr as *const SubrFn).cast::<u8>() as *mut u8
             )),
             sym: ConstSymbol::new(func),
+            marked: AtomicBool::new(true),
+            interned: true,
         }
     }
 
@@ -231,6 +243,14 @@ impl GlobalSymbol {
         if let Some(func) = &self.func {
             func.store(Self::NULL, Ordering::Release);
         }
+    }
+
+    pub(crate) fn unmark(&self) {
+        todo!("we should not be allocating local symbols yet");
+    }
+
+    pub(crate) fn is_marked(&self) -> bool {
+        self.marked.load(Ordering::Acquire)
     }
 }
 

@@ -1,4 +1,5 @@
 use super::cons::Cons;
+use super::env::Symbol;
 use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -54,6 +55,7 @@ enum OwnedObject<'ob> {
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
     HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
+    Symbol(Box<Symbol<'ob>>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
 }
 
@@ -104,6 +106,7 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::ByteVec(x) => x.unmark(),
             OwnedObject::HashTable(x) => x.unmark(),
             OwnedObject::String(x) => x.unmark(),
+            OwnedObject::Symbol(x) => x.unmark(),
             OwnedObject::LispFn(x) => x.unmark(),
         }
     }
@@ -116,6 +119,7 @@ impl<'ob> OwnedObject<'ob> {
             OwnedObject::ByteVec(x) => x.is_marked(),
             OwnedObject::HashTable(x) => x.is_marked(),
             OwnedObject::String(x) => x.is_marked(),
+            OwnedObject::Symbol(x) => x.is_marked(),
             OwnedObject::LispFn(x) => x.is_marked(),
         }
     }

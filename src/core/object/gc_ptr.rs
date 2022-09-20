@@ -1308,6 +1308,7 @@ enum ObjectAllocation<'ob> {
     HashTable(&'ob Allocation<RefCell<HashTable<'ob>>>),
     String(&'ob Allocation<String>),
     LispFn(&'ob Allocation<LispFn<'ob>>),
+    Symbol(Symbol<'ob>),
     NonAllocated,
 }
 
@@ -1326,7 +1327,8 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Vec => ObjectAllocation::Vec(unsafe { &*Vec::<GcObj>::cast_ptr(ptr) }),
             Tag::HashTable => ObjectAllocation::HashTable(unsafe { &*HashTable::cast_ptr(ptr) }),
             Tag::ByteVec => ObjectAllocation::ByteVec(unsafe { &*Vec::<u8>::cast_ptr(ptr) }),
-            Tag::Symbol | Tag::Int | Tag::SubrFn => ObjectAllocation::NonAllocated,
+            Tag::Symbol => ObjectAllocation::Symbol(unsafe { &*Symbol::cast_ptr(ptr) }),
+            Tag::Int | Tag::SubrFn => ObjectAllocation::NonAllocated,
         }
     }
 
@@ -1339,6 +1341,7 @@ impl<'ob> Gc<Object<'ob>> {
             ObjectAllocation::HashTable(x) => x.is_marked(),
             ObjectAllocation::String(x) => x.is_marked(),
             ObjectAllocation::LispFn(x) => x.is_marked(),
+            ObjectAllocation::Symbol(x) => x.is_marked(),
             ObjectAllocation::NonAllocated => true,
         }
     }
@@ -1369,6 +1372,7 @@ impl<'ob> Gc<Object<'ob>> {
             }
             ObjectAllocation::String(x) => x.mark(),
             ObjectAllocation::Cons(x) => x.mark(stack),
+            ObjectAllocation::Symbol(x) => x.mark(stack),
             ObjectAllocation::LispFn(x) => {
                 x.data.mark(stack);
                 x.mark();

@@ -102,7 +102,10 @@ impl Trace for &Cons {
 
 impl Trace for Symbol<'_> {
     fn mark(&self, _stack: &mut Vec<RawObj>) {
-        // TODO: implement when symbols are collected
+        if !self.interned {
+            // TODO: implement when symbols are collected
+            todo!("trace local symbols")
+        }
     }
 }
 
