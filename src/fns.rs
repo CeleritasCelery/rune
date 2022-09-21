@@ -51,6 +51,19 @@ fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
+fn plist_get<'ob>(plist: &'ob Cons, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    // TODO: this function should never fail. Need to implement safe iterator
+    let iter = plist.elements().zip(plist.elements().skip(1));
+
+    for (cur_prop, value) in iter {
+        if eq(cur_prop?, prop) {
+            return value;
+        }
+    }
+    Ok(nil())
+}
+
+#[defun]
 pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String {
     format!("{object}")
 }
@@ -596,6 +609,7 @@ define_symbols!(
         equal,
         eql,
         equal_including_properties,
+        plist_get,
         mapcar,
         mapc,
         reverse,
