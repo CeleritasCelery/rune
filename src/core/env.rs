@@ -323,7 +323,11 @@ impl AsRef<GlobalSymbol> for SymbolBox {
 // have a garbage collector
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        eprintln!("Error: Tried to drop Symbol: {:?}", unsafe { &*self.0 });
+        assert!(
+            !std::thread::panicking(),
+            "Error: Tried to drop Symbol: {:?}",
+            unsafe { &*self.0 }
+        );
     }
 }
 
