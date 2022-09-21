@@ -171,6 +171,8 @@
 ;; (load "faces")  ; after here, `defface' may be used.
 
 ;; (load "button")
+(load "gv")
+(load "inline")
 
 ;; ;; We don't want to store loaddefs.el in the repository because it is
 ;; ;; a generated file; but it is required in order to compile the lisp files.
@@ -194,7 +196,7 @@
 ;;   (setq definition-prefixes new))
 
 (load "emacs-lisp/nadvice")
-;; (load "emacs-lisp/cl-preloaded")
+(load "emacs-lisp/cl-preloaded")
 ;; (load "obarray")        ;abbrev.el is implemented in terms of obarrays.
 ;; (load "abbrev")         ;lisp-mode.el and simple.el use define-abbrev-table.
 ;; (load "simple")

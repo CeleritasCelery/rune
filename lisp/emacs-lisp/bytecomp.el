@@ -5286,28 +5286,28 @@ and corresponding effects."
 	          (insert (int-to-string n) "\n")))
 	    (setq i (1+ i))))))
 
-;; ;; To avoid "lisp nesting exceeds max-lisp-eval-depth" when bytecomp compiles
-;; ;; itself, compile some of its most used recursive functions (at load time).
-;; ;;
-;; (eval-when-compile
-;;   (or (byte-code-function-p (symbol-function 'byte-compile-form))
-;;       (assq 'byte-code (symbol-function 'byte-compile-form))
-;;       (let ((byte-optimize nil)		; do it fast
-;; 	        (byte-compile-warnings nil))
-;; 	    (mapc (lambda (x)
-;; 		        (or noninteractive (message "compiling %s..." x))
-;; 		        (byte-compile x)
-;; 		        (or noninteractive (message "compiling %s...done" x)))
-;; 	          '(byte-compile-normal-call
-;;                 byte-compile-form
-;;                 ;; byte-compile-body
-;;                 ;; ;; Inserted some more than necessary, to speed it up.
-;;                 ;; byte-compile-top-level
-;;                 ;; byte-compile-out-toplevel
-;;                 ;; byte-compile-constant
-;;                 ;; byte-compile-variable-ref
-;;                 ))))
-;;   nil)
+;; To avoid "lisp nesting exceeds max-lisp-eval-depth" when bytecomp compiles
+;; itself, compile some of its most used recursive functions (at load time).
+;;
+(eval-when-compile
+  (or (byte-code-function-p (symbol-function 'byte-compile-form))
+      (assq 'byte-code (symbol-function 'byte-compile-form))
+      (let ((byte-optimize nil)		; do it fast
+            (byte-compile-warnings nil))
+        (mapc (lambda (x)
+                (or noninteractive (message "compiling %s..." x))
+                (byte-compile x)
+                (or noninteractive (message "compiling %s...done" x)))
+              '(byte-compile-normal-call
+                byte-compile-form
+                ;; byte-compile-body
+                ;; ;; Inserted some more than necessary, to speed it up.
+                ;; byte-compile-top-level
+                ;; byte-compile-out-toplevel
+                ;; byte-compile-constant
+                ;; byte-compile-variable-ref
+                ))))
+  nil)
 
 (run-hooks 'bytecomp-load-hook)
 
