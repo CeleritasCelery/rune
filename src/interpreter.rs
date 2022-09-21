@@ -232,7 +232,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     // (defvar x)
                     None => nil(),
                 };
-                self.var_set(name.bind(cx), value, cx)?;
+                self.env.as_mut(cx).set_var(name.bind(cx), value)?;
                 self.env.as_mut(cx).special_variables.insert(&*name);
                 // If this variable was unbound previously in the binding stack,
                 // we will bind it to the new value
@@ -250,13 +250,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_call<'ob>(
         &mut self,
-        name: &Rt<Symbol>,
+        sym: &Rt<Symbol>,
         args: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let func = match name.bind(cx).follow_indirect(cx) {
+        let func = match sym.bind(cx).follow_indirect(cx) {
             Some(x) => x,
-            None => bail_err!("Invalid function: {name}"),
+            None => bail_err!("Invalid function: {sym}"),
         };
         root!(func, cx);
 
@@ -264,14 +264,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                 crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)?;
                 func.as_mut(cx)
-                    .set(name.bind(cx).follow_indirect(cx).unwrap());
+                    .set(sym.bind(cx).follow_indirect(cx).unwrap());
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
                 let macro_args = args.bind(cx).as_list()?.collect::<AnyResult<Vec<_>>>()?;
                 root!(args, move(macro_args), cx);
                 root!(mcro, cx);
-                let value = mcro.call(args, self.env, cx, Some(name.bind(cx).name))?;
+                let name = sym.bind(cx).name().to_owned();
+                let value = mcro.call(args, self.env, cx, Some(&name))?;
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
@@ -284,7 +285,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             let result = rebind!(self.eval_form(x, cx)?, cx);
             args.as_mut(cx).push(result);
         }
-        func.call(args, self.env, cx, Some(name.bind(cx).name))
+        let name = sym.bind(cx).name().to_owned();
+        func.call(args, self.env, cx, Some(&name))
     }
 
     fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, cx: &'ob Context) -> EvalResult<'ob> {
@@ -750,14 +752,16 @@ impl Rt<Gc<Function<'_>>> {
                             crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
                             if let Some(func) = sym.bind(cx).follow_indirect(cx) {
                                 root!(func, cx);
-                                func.call(args, env, cx, Some(sym.bind(cx).name))
+                                let name = sym.bind(cx).name().to_owned();
+                                func.call(args, env, cx, Some(&name))
                             } else {
                                 Err(error!("autoload for {sym} failed to define function"))
                             }
                         }
                         _ => {
                             root!(func, cx);
-                            func.call(args, env, cx, Some(sym.name))
+                            let name = sym.name().to_owned();
+                            func.call(args, env, cx, Some(&name))
                         }
                     }
                 } else {
@@ -966,6 +970,7 @@ mod test {
         check_interpreter("(progn (defvar foo 1) foo)", 1, cx);
         check_interpreter("(progn (defvar foo 1) (let ((foo 3)) foo))", 3, cx);
         check_interpreter("(progn (defvar foo 1) (let ((foo 3))) foo)", 1, cx);
+        check_interpreter("(let ((foo 7)) (defvar foo 3) foo)", 7, cx);
         check_interpreter(
             "(progn (defvar foo 1) (let (bar) (let ((foo 3)) (setq bar foo)) bar))",
             3,
@@ -982,6 +987,7 @@ mod test {
             7,
             cx,
         );
+        check_interpreter("(eq (make-symbol \"bar\") 'bar)", false, cx);
     }
 
     #[test]

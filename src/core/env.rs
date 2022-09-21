@@ -57,10 +57,9 @@ impl Rt<Env> {
 /// yet.
 #[derive(Debug)]
 pub(crate) struct GlobalSymbol {
-    pub(crate) name: &'static str,
+    name: SymbolName,
     pub(crate) sym: ConstSymbol,
-    pub(crate) marked: AtomicBool,
-    pub(crate) interned: bool,
+    marked: AtomicBool,
     func: Option<AtomicPtr<u8>>,
 }
 
@@ -70,6 +69,12 @@ pub(crate) struct GlobalSymbol {
 /// Symbols cheap since it is just a pointer comparison.
 /// There are no uninterned symbols.
 pub(crate) type Symbol<'a> = &'a GlobalSymbol;
+
+#[derive(Debug)]
+enum SymbolName {
+    Interned(&'static str),
+    Uninterned(Box<str>),
+}
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -129,26 +134,41 @@ impl GlobalSymbol {
     pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
         // We have to do this workaround because starts_with is not const
         let func = if name.as_bytes()[0] == b':' {
+            // If func is none then this cannot take a function
             None
         } else {
             Some(AtomicPtr::new(Self::NULL))
         };
         GlobalSymbol {
-            name,
+            name: SymbolName::Interned(name),
             sym,
             func,
             marked: AtomicBool::new(true),
-            interned: true,
+        }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        match &self.name {
+            SymbolName::Interned(x) => x,
+            SymbolName::Uninterned(x) => x,
+        }
+    }
+
+    pub(crate) fn new_uninterned(name: &str) -> Self {
+        GlobalSymbol {
+            name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
+            sym: sym::RUNTIME_SYMBOL,
+            func: Some(AtomicPtr::new(Self::NULL)),
+            marked: AtomicBool::new(false),
         }
     }
 
     pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
         GlobalSymbol {
-            name,
+            name: SymbolName::Interned(name),
             func: None,
             sym,
             marked: AtomicBool::new(true),
-            interned: true,
         }
     }
 
@@ -158,13 +178,12 @@ impl GlobalSymbol {
         func: fn() -> &'static Self,
     ) -> Self {
         GlobalSymbol {
-            name,
+            name: SymbolName::Interned(name),
             func: Some(AtomicPtr::new(
                 (subr as *const SubrFn).cast::<u8>() as *mut u8
             )),
             sym: ConstSymbol::new(func),
             marked: AtomicBool::new(true),
-            interned: true,
         }
     }
 
@@ -246,7 +265,7 @@ impl GlobalSymbol {
     }
 
     pub(crate) fn unmark(&self) {
-        todo!("we should not be allocating local symbols yet");
+        self.marked.store(false, Ordering::Release);
     }
 
     pub(crate) fn is_marked(&self) -> bool {
@@ -254,10 +273,21 @@ impl GlobalSymbol {
     }
 }
 
+impl super::gc::Trace for Symbol<'_> {
+    fn mark(&self, stack: &mut Vec<super::object::RawObj>) {
+        // interned symbols are not collected yet
+        if matches!(self.name, SymbolName::Uninterned(_)) {
+            self.marked.store(true, Ordering::Release);
+            if let Some(func) = self.get() {
+                func.as_obj().trace_mark(stack);
+            }
+        }
+    }
+}
+
 impl fmt::Display for GlobalSymbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
-        write!(f, "{name}")
+        write!(f, "{}", self.name())
     }
 }
 
@@ -342,10 +372,10 @@ impl SymbolMap {
     }
 
     fn pre_init(&mut self, sym: &'static GlobalSymbol) {
-        match self.map.get(sym.name) {
-            Some(_) => panic!("Attempt to intitalize {} twice", sym.name),
+        match self.map.get(sym.name()) {
+            Some(_) => panic!("Attempt to intitalize {} twice", sym.name()),
             None => {
-                self.map.insert(sym.name, SymbolBox::from_static(sym));
+                self.map.insert(sym.name(), SymbolBox::from_static(sym));
             }
         }
     }
@@ -481,7 +511,7 @@ mod test {
         let cx = &Context::new(roots);
         let inner = GlobalSymbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
-        assert_eq!("foo", sym.name);
+        assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());
         let func1 = cons!(1; cx);
         unsafe {

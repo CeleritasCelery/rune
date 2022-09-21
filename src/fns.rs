@@ -327,7 +327,7 @@ fn require<'ob>(
     }
     let file = match filename {
         Some(file) => file.bind(cx).get(),
-        None => feature.bind(cx).get().name,
+        None => feature.bind(cx).get().name(),
     };
     let file: Gc<&String> = cx.add(file);
     root!(file, cx);

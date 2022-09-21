@@ -97,8 +97,8 @@ pub(crate) fn symbol_value<'ob>(
 }
 
 #[defun]
-pub(crate) fn symbol_name(symbol: Symbol) -> &'static str {
-    symbol.name
+pub(crate) fn symbol_name(symbol: Symbol) -> &str {
+    symbol.name()
 }
 
 #[defun]
@@ -200,7 +200,7 @@ pub(crate) fn consp(object: GcObj) -> bool {
 #[defun]
 pub(crate) fn keywordp(object: GcObj) -> bool {
     match object.get() {
-        Object::Symbol(s) => s.name.starts_with(':'),
+        Object::Symbol(s) => s.name().starts_with(':'),
         _ => false,
     }
 }

@@ -281,6 +281,19 @@ impl<'ob> IntoObject<'ob> for LispFn<'ob> {
     }
 }
 
+impl<'ob> IntoObject<'ob> for GlobalSymbol {
+    type Out = Symbol<'ob>;
+
+    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+        let ptr = self.alloc_obj(block);
+        Gc::from_ptr(ptr, Tag::Symbol)
+    }
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+        &*Symbol::cast_ptr(ptr)
+    }
+}
+
 impl<'ob> IntoObject<'ob> for Symbol<'_> {
     type Out = Symbol<'ob>;
 

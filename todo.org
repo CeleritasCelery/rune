@@ -7,6 +7,9 @@ I hate to do this but it is requirement if we want to garbage collect them ever.
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
+* rename GlobalSymbol to just symbol
+Since we are using a lifetime it will be easier to just use a reference like we do for cons
+* Apply GAT's to all traits that it will help
 
 * Steps to add a new object
 - define in gc.rs

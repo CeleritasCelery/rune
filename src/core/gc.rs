@@ -1,5 +1,5 @@
 use super::cons::Cons;
-use super::env::Symbol;
+use super::env::GlobalSymbol;
 use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -39,9 +39,10 @@ pub(crate) struct Context<'rt> {
 impl<'rt> Drop for Context<'rt> {
     fn drop(&mut self) {
         self.garbage_collect(true);
-        if !self.block.objects.borrow().is_empty() {
-            eprintln!("Error: Context was dropped while still holding data");
-        }
+        assert!(
+            std::thread::panicking() || self.block.objects.borrow().is_empty(),
+            "Error: Context was dropped while still holding data"
+        );
     }
 }
 
@@ -55,7 +56,7 @@ enum OwnedObject<'ob> {
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
     HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
-    Symbol(Box<Symbol<'ob>>),
+    Symbol(Box<GlobalSymbol>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
 }
 
@@ -158,6 +159,19 @@ impl AllocObject for Cons {
         }
         Block::<CONST>::register(&mut objects, OwnedObject::Cons(Box::new(self)));
         if let Some(OwnedObject::Cons(x)) = objects.last() {
+            x.as_ref()
+        } else {
+            unreachable!("object was not the type we just inserted");
+        }
+    }
+}
+
+impl AllocObject for GlobalSymbol {
+    type Output = GlobalSymbol;
+    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
+        let mut objects = block.objects.borrow_mut();
+        Block::<CONST>::register(&mut objects, OwnedObject::Symbol(Box::new(self)));
+        if let Some(OwnedObject::Symbol(x)) = objects.last() {
             x.as_ref()
         } else {
             unreachable!("object was not the type we just inserted");

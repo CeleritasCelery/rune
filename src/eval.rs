@@ -154,20 +154,21 @@ pub(crate) fn macroexpand<'ob>(
     env: &mut Root<Env>,
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.get(cx) {
-        if let Object::Symbol(name) = form.car().get() {
+        if let Object::Symbol(sym) = form.car().get() {
             // shadow the macro based on ENVIRONMENT
             let func: Option<Gc<Function>> = match environment {
-                Some(env) => match assq(name.into(), env.bind(cx).try_into()?)?.get() {
+                Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.get() {
                     Object::Cons(cons) => Some(cons.cdr().try_into()?),
-                    _ => get_macro_func(name, cx),
+                    _ => get_macro_func(sym, cx),
                 },
-                _ => get_macro_func(name, cx),
+                _ => get_macro_func(sym, cx),
             };
             if let Some(macro_func) = func {
                 let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
                 root!(args, move(macro_args), cx);
                 root!(macro_func, cx);
-                let result = macro_func.call(args, env, cx, Some(name.name))?;
+                let name = sym.name().to_owned();
+                let result = macro_func.call(args, env, cx, Some(&name))?;
                 root!(result, cx);
                 // recursively expand the macro's
                 return macroexpand(result, environment, cx, env);

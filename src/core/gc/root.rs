@@ -100,15 +100,6 @@ impl Trace for &Cons {
     }
 }
 
-impl Trace for Symbol<'_> {
-    fn mark(&self, _stack: &mut Vec<RawObj>) {
-        if !self.interned {
-            // TODO: implement when symbols are collected
-            todo!("trace local symbols")
-        }
-    }
-}
-
 /// Represents a Rooted object T. The purpose of this type is we cannot have
 /// mutable references to the inner data, because the garbage collector will
 /// need to trace it. This type will only give us a mut [`Rt`] (rooted mutable
