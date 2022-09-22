@@ -309,7 +309,7 @@ impl<const CONST: bool> Block<CONST> {
     #[allow(clippy::useless_conversion)]
     pub(crate) fn add<'ob, T, U, V>(&'ob self, obj: T) -> Gc<V>
     where
-        T: IntoObject<'ob, Out = U>,
+        T: IntoObject<Out<'ob> = U>,
         Gc<U>: Into<Gc<V>>,
     {
         obj.into_obj(self).into()

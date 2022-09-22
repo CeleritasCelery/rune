@@ -157,28 +157,28 @@ impl<'ob> RawInto<&'ob Cons> for *const Cons {
     }
 }
 
-pub(crate) trait IntoObject<'ob> {
-    type Out;
+pub(crate) trait IntoObject {
+    type Out<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out>;
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>>;
 
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(_ptr: *const u8) -> Self::Out<'ob> {
         unimplemented!()
     }
 }
 
-impl<'ob, T> IntoObject<'ob> for Gc<T> {
-    type Out = Object<'ob>;
+impl<T> IntoObject for Gc<T> {
+    type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { Self::transmute(self) }
     }
 }
 
-impl<'ob, T> IntoObject<'ob> for Option<Gc<T>> {
-    type Out = Object<'ob>;
+impl<T> IntoObject for Option<Gc<T>> {
+    type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             Some(x) => unsafe { transmute(x) },
             None => nil(),
@@ -186,62 +186,62 @@ impl<'ob, T> IntoObject<'ob> for Option<Gc<T>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for f64 {
-    type Out = &'ob f64;
+impl IntoObject for f64 {
+    type Out<'ob> = &'ob f64;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         Gc::from_ptr(ptr, Tag::Float)
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &(*Self::cast_ptr(ptr)).data
     }
 }
 
-impl<'ob> IntoObject<'ob> for i64 {
-    type Out = i64;
+impl IntoObject for i64 {
+    type Out<'a> = i64;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: *const i64 = sptr::invalid(self as usize);
         unsafe { Self::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         Strict::addr(ptr) as i64
     }
 }
 
-impl<'ob> IntoObject<'ob> for i32 {
-    type Out = i64;
+impl IntoObject for i32 {
+    type Out<'a> = i64;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: *const i64 = sptr::invalid(self as usize);
         unsafe { i64::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         Strict::addr(ptr) as i64
     }
 }
 
-impl<'ob> IntoObject<'ob> for usize {
-    type Out = i64;
+impl IntoObject for usize {
+    type Out<'a> = i64;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: *const i64 = sptr::invalid(self);
         unsafe { i64::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         Strict::addr(ptr) as i64
     }
 }
 
-impl<'ob> IntoObject<'ob> for bool {
-    type Out = bool;
+impl IntoObject for bool {
+    type Out<'a> = bool;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             true => {
                 let sym: Symbol = &crate::core::env::sym::TRUE;
@@ -255,145 +255,145 @@ impl<'ob> IntoObject<'ob> for bool {
     }
 }
 
-impl<'ob> IntoObject<'ob> for Cons {
-    type Out = &'ob Cons;
+impl IntoObject for Cons {
+    type Out<'ob> = &'ob Cons;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         Gc::from_ptr(ptr, Tag::Cons)
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &*Self::cast_ptr(ptr)
     }
 }
 
-impl<'ob> IntoObject<'ob> for LispFn<'ob> {
-    type Out = &'ob LispFn<'ob>;
+impl<'a> IntoObject for LispFn<'a> {
+    type Out<'ob> = &'ob LispFn<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         unsafe { Self::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &(*Self::cast_ptr(ptr)).data
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
+        &(*<LispFn as TaggedPtr>::cast_ptr(ptr)).data
     }
 }
 
-impl<'ob> IntoObject<'ob> for GlobalSymbol {
-    type Out = Symbol<'ob>;
+impl IntoObject for GlobalSymbol {
+    type Out<'ob> = Symbol<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         Gc::from_ptr(ptr, Tag::Symbol)
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &*Symbol::cast_ptr(ptr)
     }
 }
 
-impl<'ob> IntoObject<'ob> for Symbol<'_> {
-    type Out = Symbol<'ob>;
+impl IntoObject for Symbol<'_> {
+    type Out<'ob> = Symbol<'ob>;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         Gc::from_ptr(self, Tag::Symbol)
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &*Self::cast_ptr(ptr)
     }
 }
 
-impl<'ob> IntoObject<'ob> for ConstSymbol {
-    type Out = Symbol<'ob>;
+impl IntoObject for ConstSymbol {
+    type Out<'ob> = Symbol<'ob>;
 
-    fn into_obj<const C: bool>(self, _: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: *const u8 = std::ptr::addr_of!(*self).cast();
         Gc::from_ptr(ptr, Tag::Symbol)
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &*Symbol::cast_ptr(ptr)
     }
 }
 
-impl<'ob> IntoObject<'ob> for String {
-    type Out = &'ob String;
+impl IntoObject for String {
+    type Out<'ob> = &'ob String;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         unsafe { Self::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &(*Self::cast_ptr(ptr)).data
     }
 }
 
-impl<'ob> IntoObject<'ob> for &str {
-    type Out = &'ob String;
+impl IntoObject for &str {
+    type Out<'ob> = &'ob String;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.to_owned().alloc_obj(block);
         unsafe { String::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &(*String::cast_ptr(ptr)).data
     }
 }
 
-impl<'ob> IntoObject<'ob> for ObjVec<'ob> {
-    type Out = &'ob RefCell<ObjVec<'ob>>;
+impl<'a> IntoObject for ObjVec<'a> {
+    type Out<'ob> = &'ob RefCell<ObjVec<'ob>>;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         unsafe { Self::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
+        &(*<ObjVec as TaggedPtr>::cast_ptr(ptr)).data
+    }
+}
+
+impl IntoObject for Vec<u8> {
+    type Out<'ob> = &'ob RefCell<Vec<u8>>;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        let ptr = self.alloc_obj(block);
+        unsafe { Self::tag_ptr(ptr) }
+    }
+
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
         &(*Self::cast_ptr(ptr)).data
     }
 }
 
-impl<'ob> IntoObject<'ob> for Vec<u8> {
-    type Out = &'ob RefCell<Vec<u8>>;
+impl<'a> IntoObject for HashTable<'a> {
+    type Out<'ob> = &'ob RefCell<HashTable<'ob>>;
 
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         unsafe { Self::tag_ptr(ptr) }
     }
 
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &(*Self::cast_ptr(ptr)).data
-    }
-}
-
-impl<'ob> IntoObject<'ob> for HashTable<'ob> {
-    type Out = &'ob RefCell<HashTable<'ob>>;
-
-    fn into_obj<const C: bool>(self, block: &'ob Block<C>) -> Gc<Self::Out> {
-        let ptr = self.alloc_obj(block);
-        unsafe { Self::tag_ptr(ptr) }
-    }
-
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self::Out {
-        &(*Self::cast_ptr(ptr)).data
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
+        &(*<HashTable as TaggedPtr>::cast_ptr(ptr)).data
     }
 }
 
 // work around for no GAT's
 #[allow(unused_lifetimes)]
-trait TaggedPtr<'ob>
+trait TaggedPtr
 where
     Self: Sized,
 {
     type Ptr;
-    type Output;
+    type Output<'ob>;
     const TAG: Tag;
-    unsafe fn tag_ptr(ptr: *const Self::Ptr) -> Gc<Self::Output> {
+    unsafe fn tag_ptr<'ob>(ptr: *const Self::Ptr) -> Gc<Self::Output<'ob>> {
         Gc::from_ptr(ptr, Self::TAG)
     }
     fn cast_ptr(ptr: *const u8) -> *const Self::Ptr {
@@ -401,63 +401,63 @@ where
     }
 }
 
-impl TaggedPtr<'_> for i64 {
+impl TaggedPtr for i64 {
     type Ptr = i64;
-    type Output = i64;
+    type Output<'a> = i64;
     const TAG: Tag = Tag::Int;
 }
 
-impl<'ob> TaggedPtr<'ob> for f64 {
+impl TaggedPtr for f64 {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob f64;
+    type Output<'ob> = &'ob f64;
     const TAG: Tag = Tag::Float;
 }
 
-impl<'ob> TaggedPtr<'ob> for Cons {
+impl TaggedPtr for Cons {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob Cons;
+    type Output<'ob> = &'ob Cons;
     const TAG: Tag = Tag::Cons;
 }
 
-impl<'ob> TaggedPtr<'ob> for SubrFn {
+impl TaggedPtr for SubrFn {
     type Ptr = Self;
-    type Output = &'ob SubrFn;
+    type Output<'ob> = &'ob SubrFn;
     const TAG: Tag = Tag::SubrFn;
 }
 
-impl<'ob> TaggedPtr<'ob> for Symbol<'ob> {
+impl<'a> TaggedPtr for Symbol<'a> {
     type Ptr = GlobalSymbol;
-    type Output = Symbol<'ob>;
+    type Output<'ob> = Symbol<'ob>;
     const TAG: Tag = Tag::Symbol;
 }
 
-impl<'ob> TaggedPtr<'ob> for LispFn<'ob> {
+impl<'a> TaggedPtr for LispFn<'a> {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob LispFn<'ob>;
+    type Output<'ob> = &'ob LispFn<'ob>;
     const TAG: Tag = Tag::LispFn;
 }
 
-impl<'ob> TaggedPtr<'ob> for String {
+impl TaggedPtr for String {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob String;
+    type Output<'ob> = &'ob String;
     const TAG: Tag = Tag::String;
 }
 
-impl<'ob> TaggedPtr<'ob> for ObjVec<'ob> {
+impl<'a> TaggedPtr for ObjVec<'a> {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob RefCell<ObjVec<'ob>>;
+    type Output<'ob> = &'ob RefCell<ObjVec<'ob>>;
     const TAG: Tag = Tag::Vec;
 }
 
-impl<'ob> TaggedPtr<'ob> for Vec<u8> {
+impl TaggedPtr for Vec<u8> {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob RefCell<Vec<u8>>;
+    type Output<'ob> = &'ob RefCell<Vec<u8>>;
     const TAG: Tag = Tag::ByteVec;
 }
 
-impl<'ob> TaggedPtr<'ob> for HashTable<'ob> {
+impl<'a> TaggedPtr for HashTable<'a> {
     type Ptr = <Self as AllocObject>::Output;
-    type Output = &'ob RefCell<HashTable<'ob>>;
+    type Output<'ob> = &'ob RefCell<HashTable<'ob>>;
     const TAG: Tag = Tag::HashTable;
 }
 

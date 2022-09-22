@@ -399,26 +399,26 @@ impl Rt<Gc<&Cons>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for &Rt<GcObj<'static>> {
-    type Out = Object<'ob>;
+impl IntoObject for &Rt<GcObj<'static>> {
+    type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
     }
 }
 
-impl<'ob> IntoObject<'ob> for &Root<'_, '_, GcObj<'static>> {
-    type Out = Object<'ob>;
+impl IntoObject for &Root<'_, '_, GcObj<'static>> {
+    type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
     }
 }
 
-impl<'ob> IntoObject<'ob> for &mut Root<'_, '_, GcObj<'static>> {
-    type Out = Object<'ob>;
+impl IntoObject for &mut Root<'_, '_, GcObj<'static>> {
+    type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &'ob Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
     }
 }

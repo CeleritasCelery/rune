@@ -914,7 +914,7 @@ mod test {
 
     fn check_interpreter<'ob, T>(test_str: &str, expect: T, cx: &'ob mut Context)
     where
-        T: IntoObject<'ob>,
+        T: IntoObject,
     {
         root!(env, Env::default(), cx);
         println!("Test String: {}", test_str);

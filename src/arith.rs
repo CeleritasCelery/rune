@@ -19,17 +19,17 @@ impl<'ob> Gc<Number<'ob>> {
     }
 }
 
-impl<'ob> IntoObject<'ob> for NumberValue {
-    type Out = Number<'ob>;
+impl IntoObject for NumberValue {
+    type Out<'ob> = Number<'ob>;
 
-    fn into_obj<const C: bool>(self, block: &'ob crate::core::gc::Block<C>) -> Gc<Self::Out> {
+    fn into_obj<const C: bool>(self, block: &crate::core::gc::Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => block.add(x),
         }
     }
 
-    unsafe fn from_obj_ptr(_ptr: *const u8) -> Self::Out {
+    unsafe fn from_obj_ptr<'ob>(_ptr: *const u8) -> Self::Out<'ob> {
         todo!()
     }
 }
