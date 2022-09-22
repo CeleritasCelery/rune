@@ -271,26 +271,26 @@ where
     }
 }
 
-impl<'new, T, U> WithLifetime<'new> for Option<T>
+impl<'new, T> WithLifetime<'new> for Option<T>
 where
-    T: WithLifetime<'new, Out = U>,
-    U: 'new,
+    T: WithLifetime<'new>,
 {
-    type Out = Option<U>;
+    type Out = Option<<T as WithLifetime<'new>>::Out>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         self.map(|x| x.with_lifetime())
     }
 }
 
-impl<'new, T, U, Tx, Ux> WithLifetime<'new> for (T, U)
+impl<'new, T, U> WithLifetime<'new> for (T, U)
 where
-    T: WithLifetime<'new, Out = Tx>,
-    U: WithLifetime<'new, Out = Ux>,
-    Tx: 'new,
-    Ux: 'new,
+    T: WithLifetime<'new>,
+    U: WithLifetime<'new>,
 {
-    type Out = (Tx, Ux);
+    type Out = (
+        <T as WithLifetime<'new>>::Out,
+        <U as WithLifetime<'new>>::Out,
+    );
 
     unsafe fn with_lifetime(self) -> Self::Out {
         (self.0.with_lifetime(), self.1.with_lifetime())
@@ -298,16 +298,16 @@ where
 }
 
 impl<T> Rt<T> {
-    pub(crate) fn bind<'ob, U>(&self, _: &'ob Context) -> U
+    pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob, Out = U> + Copy,
+        T: WithLifetime<'ob> + Copy,
     {
         unsafe { self.inner.with_lifetime() }
     }
 
-    pub(crate) unsafe fn bind_unchecked<'ob, U>(&'ob self) -> U
+    pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob, Out = U> + Copy,
+        T: WithLifetime<'ob> + Copy,
     {
         self.inner.with_lifetime()
     }

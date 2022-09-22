@@ -330,9 +330,9 @@ impl<'ob, 'rt> Context<'rt> {
     }
 
     #[allow(clippy::unused_self)]
-    pub(crate) fn bind<T, U>(&'ob self, obj: T) -> U
+    pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime>::Out
     where
-        T: WithLifetime<'ob, Out = U>,
+        T: WithLifetime<'ob>,
     {
         unsafe { obj.with_lifetime() }
     }
