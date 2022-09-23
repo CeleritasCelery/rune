@@ -1,5 +1,5 @@
 use super::cons::Cons;
-use super::env::GlobalSymbol;
+use super::env::Symbol;
 use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -56,7 +56,7 @@ enum OwnedObject<'ob> {
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
     HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
-    Symbol(Box<GlobalSymbol>),
+    Symbol(Box<Symbol>),
     LispFn(Box<Allocation<LispFn<'ob>>>),
 }
 
@@ -160,8 +160,8 @@ impl AllocObject for Cons {
     }
 }
 
-impl AllocObject for GlobalSymbol {
-    type Output = GlobalSymbol;
+impl AllocObject for Symbol {
+    type Output = Symbol;
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<CONST>::register(&mut objects, OwnedObject::Symbol(Box::new(self)));

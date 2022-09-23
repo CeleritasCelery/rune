@@ -68,11 +68,11 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
 
         #[doc(hidden)]
         #[allow(non_snake_case)]
-        pub(crate) static #symbol_name: crate::core::env::GlobalSymbol = unsafe {crate::core::env::GlobalSymbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
+        pub(crate) static #symbol_name: crate::core::env::Symbol = unsafe {crate::core::env::Symbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
 
         #[doc(hidden)]
         #[allow(non_snake_case)]
-        fn #matcher_name() -> &'static crate::core::env::GlobalSymbol { &#symbol_name }
+        fn #matcher_name() -> &'static crate::core::env::Symbol { &#symbol_name }
 
         #body
     }

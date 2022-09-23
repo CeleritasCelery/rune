@@ -13,18 +13,18 @@ use std::sync::Mutex;
 #[allow(dead_code)]
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
-    pub(crate) vars: HashMap<Symbol<'static>, GcObj<'static>>,
-    pub(crate) props: HashMap<Symbol<'static>, Vec<(Symbol<'static>, GcObj<'static>)>>,
+    pub(crate) vars: HashMap<&'static Symbol, GcObj<'static>>,
+    pub(crate) props: HashMap<&'static Symbol, Vec<(&'static Symbol, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
-    pub(crate) special_variables: HashSet<Symbol<'static>>,
-    pub(crate) binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
+    pub(crate) special_variables: HashSet<&'static Symbol>,
+    pub(crate) binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
-    local_obarray: Vec<Symbol<'static>>,
+    local_obarray: Vec<&'static Symbol>,
 }
 
 impl Rt<Env> {
-    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
+    pub(crate) fn set_var(&mut self, sym: &Symbol, value: GcObj) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))
         } else {
@@ -33,7 +33,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
+    pub(crate) fn set_prop(&mut self, symbol: &Symbol, propname: &Symbol, value: GcObj) {
         match self.props.get_mut(symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
@@ -56,19 +56,12 @@ impl Rt<Env> {
 /// halt all running threads. This has not been implemented
 /// yet.
 #[derive(Debug)]
-pub(crate) struct GlobalSymbol {
+pub(crate) struct Symbol {
     name: SymbolName,
     pub(crate) sym: ConstSymbol,
     marked: AtomicBool,
     func: Option<AtomicPtr<u8>>,
 }
-
-/// A static reference to a [`GlobalSymbol`]. These
-/// references are shared between threads because
-/// `GlobalSymbol` is thread safe. This makes comparing
-/// Symbols cheap since it is just a pointer comparison.
-/// There are no uninterned symbols.
-pub(crate) type Symbol<'a> = &'a GlobalSymbol;
 
 #[derive(Debug)]
 enum SymbolName {
@@ -78,58 +71,58 @@ enum SymbolName {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> Symbol<'static>);
+pub(crate) struct ConstSymbol(fn() -> &'static Symbol);
 
 impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> Symbol<'static>) -> Self {
+    pub(crate) const fn new(f: fn() -> &'static Symbol) -> Self {
         Self(f)
     }
 }
 
 impl std::ops::Deref for ConstSymbol {
-    type Target = GlobalSymbol;
+    type Target = Symbol;
 
     fn deref(&self) -> &Self::Target {
         self.0()
     }
 }
 
-impl AsRef<GlobalSymbol> for ConstSymbol {
-    fn as_ref(&self) -> &GlobalSymbol {
+impl AsRef<Symbol> for ConstSymbol {
+    fn as_ref(&self) -> &Symbol {
         self
     }
 }
 
 // Since global symbols are globally unique we can
 // compare them with a pointer equal test.
-impl PartialEq for GlobalSymbol {
+impl PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl PartialEq<ConstSymbol> for GlobalSymbol {
+impl PartialEq<ConstSymbol> for Symbol {
     fn eq(&self, other: &ConstSymbol) -> bool {
         self == other.0()
     }
 }
 
-impl PartialEq<GlobalSymbol> for ConstSymbol {
-    fn eq(&self, other: &GlobalSymbol) -> bool {
+impl PartialEq<Symbol> for ConstSymbol {
+    fn eq(&self, other: &Symbol) -> bool {
         self.0() == other
     }
 }
 
-impl Eq for GlobalSymbol {}
+impl Eq for Symbol {}
 
-impl Hash for GlobalSymbol {
+impl Hash for Symbol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let ptr: *const Self = self;
         ptr.hash(state);
     }
 }
 
-impl GlobalSymbol {
+impl Symbol {
     const NULL: *mut u8 = std::ptr::null_mut();
     pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
         // We have to do this workaround because starts_with is not const
@@ -139,7 +132,7 @@ impl GlobalSymbol {
         } else {
             Some(AtomicPtr::new(Self::NULL))
         };
-        GlobalSymbol {
+        Symbol {
             name: SymbolName::Interned(name),
             sym,
             func,
@@ -155,7 +148,7 @@ impl GlobalSymbol {
     }
 
     pub(crate) fn new_uninterned(name: &str) -> Self {
-        GlobalSymbol {
+        Symbol {
             name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
             sym: sym::RUNTIME_SYMBOL,
             func: Some(AtomicPtr::new(Self::NULL)),
@@ -164,7 +157,7 @@ impl GlobalSymbol {
     }
 
     pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
-        GlobalSymbol {
+        Symbol {
             name: SymbolName::Interned(name),
             func: None,
             sym,
@@ -177,7 +170,7 @@ impl GlobalSymbol {
         subr: &'static SubrFn,
         func: fn() -> &'static Self,
     ) -> Self {
-        GlobalSymbol {
+        Symbol {
             name: SymbolName::Interned(name),
             func: Some(AtomicPtr::new(
                 (subr as *const SubrFn).cast::<u8>() as *mut u8
@@ -273,7 +266,7 @@ impl GlobalSymbol {
     }
 }
 
-impl super::gc::Trace for Symbol<'_> {
+impl super::gc::Trace for &Symbol {
     fn mark(&self, stack: &mut Vec<super::object::RawObj>) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
@@ -285,7 +278,7 @@ impl super::gc::Trace for Symbol<'_> {
     }
 }
 
-impl fmt::Display for GlobalSymbol {
+impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
@@ -299,22 +292,22 @@ pub(crate) struct ObjectMap {
 /// Box is marked as unique. However we are freely sharing the pointer to this
 /// Symbol amoung threads. So instead of Box we need to use a custom wrapper
 /// type for this to be sound.
-struct SymbolBox(*const GlobalSymbol);
+struct SymbolBox(*const Symbol);
 unsafe impl Send for SymbolBox {}
 
 impl SymbolBox {
-    fn new(inner: GlobalSymbol) -> Self {
+    fn new(inner: Symbol) -> Self {
         let ptr = Box::into_raw(Box::new(inner));
         Self(ptr)
     }
 
-    fn from_static(inner: &'static GlobalSymbol) -> Self {
+    fn from_static(inner: &'static Symbol) -> Self {
         Self(inner)
     }
 }
 
-impl AsRef<GlobalSymbol> for SymbolBox {
-    fn as_ref(&self) -> &GlobalSymbol {
+impl AsRef<Symbol> for SymbolBox {
+    fn as_ref(&self) -> &Symbol {
         unsafe { &*self.0 }
     }
 }
@@ -342,16 +335,16 @@ impl SymbolMap {
         }
     }
 
-    fn get(&self, name: &str) -> Option<Symbol> {
+    fn get(&self, name: &str) -> Option<&Symbol> {
         unsafe {
             self.map.get(name).map(|x| {
-                let ptr: *const GlobalSymbol = x.as_ref();
+                let ptr: *const Symbol = x.as_ref();
                 &*ptr
             })
         }
     }
 
-    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> Symbol<'ob> {
+    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> &'ob Symbol {
         let sym = match self.map.get(name) {
             Some(x) => x.0,
             None => {
@@ -361,9 +354,9 @@ impl SymbolMap {
                     let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
                     &*name_ptr
                 };
-                let inner = GlobalSymbol::new(static_name, sym::RUNTIME_SYMBOL);
+                let inner = Symbol::new(static_name, sym::RUNTIME_SYMBOL);
                 let sym = SymbolBox::new(inner);
-                let ptr: *const GlobalSymbol = sym.as_ref();
+                let ptr: *const Symbol = sym.as_ref();
                 self.map.insert(static_name, sym);
                 ptr
             }
@@ -375,7 +368,7 @@ impl SymbolMap {
         unsafe { &*sym }
     }
 
-    fn pre_init(&mut self, sym: &'static GlobalSymbol) {
+    fn pre_init(&mut self, sym: &'static Symbol) {
         match self.map.get(sym.name()) {
             Some(_) => panic!("Attempt to intitalize {} twice", sym.name()),
             None => {
@@ -386,11 +379,11 @@ impl SymbolMap {
 }
 
 impl ObjectMap {
-    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> Symbol<'ob> {
+    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> &'ob Symbol {
         self.map.intern(name, cx)
     }
 
-    pub(crate) fn set_func(&self, symbol: &GlobalSymbol, func: Gc<Function>) -> Result<()> {
+    pub(crate) fn set_func(&self, symbol: &Symbol, func: Gc<Function>) -> Result<()> {
         // TODO: Remove once bytecode is implemented. Right now we are ignoring
         // bytecode functions since they can't execute
         if matches!(func.get(), Function::LispFn(_)) {
@@ -413,7 +406,7 @@ impl ObjectMap {
         }
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<Symbol> {
+    pub(crate) fn get(&self, name: &str) -> Option<&Symbol> {
         self.map.get(name)
     }
 }
@@ -423,10 +416,10 @@ macro_rules! create_symbolmap {
         #[allow(unused_imports)]
         #[allow(non_snake_case)]
         pub(crate) mod sym {
-            use super::{Symbol, GlobalSymbol, ConstSymbol};
+            use super::{Symbol, ConstSymbol};
             // This GlobalSymbol is assinged to every runtime symbol created.
-            static __RUNTIME_SYMBOL_GLOBAL: GlobalSymbol = GlobalSymbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
-            fn __RUNTIME_SYMBOL_FN () -> Symbol<'static> {&__RUNTIME_SYMBOL_GLOBAL}
+            static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
+            fn __RUNTIME_SYMBOL_FN () -> &'static Symbol {&__RUNTIME_SYMBOL_GLOBAL}
             pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
             // Re-export all symbols in this module
@@ -481,7 +474,7 @@ create_symbolmap!(
 );
 
 /// Intern a new symbol based on `name`
-pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
+pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> &'ob Symbol {
     INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
 }
 
@@ -494,12 +487,12 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(size_of::<isize>(), size_of::<Symbol>());
+        assert_eq!(size_of::<isize>(), size_of::<&Symbol>());
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
     }
 
-    unsafe fn fix_lifetime(inner: &GlobalSymbol) -> &'static GlobalSymbol {
-        std::mem::transmute::<&GlobalSymbol, &'static GlobalSymbol>(inner)
+    unsafe fn fix_lifetime(inner: &Symbol) -> &'static Symbol {
+        std::mem::transmute::<&Symbol, &'static Symbol>(inner)
     }
 
     #[test]
@@ -513,7 +506,7 @@ mod test {
     fn symbol_func() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let inner = GlobalSymbol::new("foo", super::sym::RUNTIME_SYMBOL);
+        let inner = Symbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());

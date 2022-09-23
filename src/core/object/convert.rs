@@ -4,10 +4,12 @@
 
 use std::cell::RefCell;
 
+use crate::core::env::Symbol;
+
 use super::{
     super::{
         cons::Cons,
-        env::{sym, Symbol},
+        env::sym,
         error::{ArgError, Type, TypeError},
     },
     nil, qtrue, HashTable,
@@ -104,7 +106,7 @@ define_unbox!(String, &'ob str);
 define_unbox!(Vec, &'ob RefCell<Vec<GcObj<'ob>>>);
 define_unbox!(ByteVec, &'ob RefCell<Vec<u8>>);
 define_unbox!(HashTable, &'ob RefCell<HashTable<'ob>>);
-define_unbox!(Symbol, Symbol<'ob>);
+define_unbox!(Symbol, &'ob Symbol);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>
 where

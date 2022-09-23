@@ -166,7 +166,7 @@ impl<'ob, 'brw> Routine<'brw, 'ob> {
 
     fn varset(&mut self, idx: usize, env: &mut Environment) -> Result<()> {
         let obj: Object = self.frame.get_const(idx);
-        let symbol: Symbol = obj.try_into()?;
+        let symbol: &GlobalSymbol = obj.try_into()?;
         let value = self.stack.pop().unwrap();
         crate::data::set(symbol, value, env);
         Ok(())

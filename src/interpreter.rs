@@ -224,7 +224,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         match forms.next() {
             // (defvar x ...)
             Some(x) => {
-                let name: Symbol = x.bind(cx).try_into()?;
+                let name: &Symbol = x.bind(cx).try_into()?;
                 root!(name, cx);
                 let value = match forms.next() {
                     // (defvar x y)
@@ -250,7 +250,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_call<'ob>(
         &mut self,
-        sym: &Rt<Symbol>,
+        sym: &Rt<&Symbol>,
         args: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
@@ -459,7 +459,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_ref<'ob>(&self, sym: Symbol, cx: &'ob Context) -> EvalResult<'ob> {
+    fn var_ref<'ob>(&self, sym: &Symbol, cx: &'ob Context) -> EvalResult<'ob> {
         if sym.is_const() {
             Ok(sym.into())
         } else {
@@ -474,7 +474,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    fn var_set(&mut self, name: Symbol, new_value: GcObj, cx: &Context) -> AnyResult<()> {
+    fn var_set(&mut self, name: &Symbol, new_value: GcObj, cx: &Context) -> AnyResult<()> {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.car(cx) == name)) {
             Some(value) => {
@@ -550,7 +550,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     let cons = binding.as_cons();
                     let val = self.let_bind_value(cons, cx)?;
                     let val = rebind!(val, cx);
-                    let var: Symbol = cons
+                    let var: &Symbol = cons
                         .get(cx)
                         .car()
                         .try_into()
@@ -578,7 +578,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     let cons = binding.as_cons();
                     let var = self.let_bind_value(cons, cx)?;
                     let var = rebind!(var, cx);
-                    let sym: Symbol = cons
+                    let sym: &Symbol = cons
                         .get(cx)
                         .car()
                         .try_into()
@@ -599,7 +599,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         Ok(())
     }
 
-    fn create_let_binding(&mut self, var: Symbol, val: GcObj, cx: &Context) {
+    fn create_let_binding(&mut self, var: &Symbol, val: GcObj, cx: &Context) {
         let env = &mut **self.env.as_mut(cx);
         // TODO: replace with entry API
         if env.special_variables.contains(var) {
@@ -877,14 +877,14 @@ fn bind_args<'a>(
     Ok(())
 }
 
-fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<&Symbol>, Vec<&Symbol>, Option<&Symbol>)> {
     let mut required = Vec::new();
     let mut optional = Vec::new();
     let mut rest = None;
     let mut arg_type = &mut required;
     let mut iter = bindings.as_list()?;
     while let Some(binding) = iter.next() {
-        let sym: Symbol = binding?.try_into()?;
+        let sym: &Symbol = binding?.try_into()?;
         match sym.sym {
             sym::AND_OPTIONAL => arg_type = &mut optional,
             sym::AND_REST => {

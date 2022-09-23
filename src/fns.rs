@@ -311,28 +311,28 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 
 #[defun]
 pub(crate) fn defvaralias<'ob>(
-    new_alias: Symbol<'ob>,
-    _base_variable: Symbol,
+    new_alias: &'ob Symbol,
+    _base_variable: &Symbol,
     _docstring: Option<&str>,
-) -> Symbol<'ob> {
+) -> &'ob Symbol {
     // TODO: implement
     new_alias
 }
 
 #[defun]
-pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
+pub(crate) fn featurep(_feature: &Symbol, _subfeature: Option<&Symbol>) -> bool {
     // TODO: implement
     false
 }
 
 #[defun]
 fn require<'ob>(
-    feature: &Rt<Gc<Symbol>>,
+    feature: &Rt<Gc<&Symbol>>,
     filename: Option<&Rt<Gc<&String>>>,
     noerror: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
-) -> Result<Gc<Symbol<'ob>>> {
+) -> Result<Gc<&'ob Symbol>> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.bind(cx).get().into_root() };
     if crate::data::FEATURES.lock().unwrap().contains(feat) {

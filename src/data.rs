@@ -14,13 +14,13 @@ use fn_macros::defun;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol<'static>>> = Mutex::new({
+    pub(crate) static ref FEATURES: Mutex<HashSet<&'static Symbol>> = Mutex::new({
         HashSet::with_capacity_and_hasher(0, std::hash::BuildHasherDefault::default())
     });
 }
 
 #[defun]
-pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
+pub(crate) fn fset<'ob>(symbol: &'ob Symbol, definition: GcObj) -> Result<&'ob Symbol> {
     if definition == nil() {
         symbol.unbind_func();
     } else {
@@ -33,16 +33,16 @@ pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol
 
 #[defun]
 pub(crate) fn defalias<'ob>(
-    symbol: Symbol<'ob>,
+    symbol: &'ob Symbol,
     definition: GcObj,
     _docstring: Option<&String>,
-) -> Result<Symbol<'ob>> {
+) -> Result<&'ob Symbol> {
     fset(symbol, definition)
 }
 
 #[defun]
 pub(crate) fn set<'ob>(
-    place: Symbol,
+    place: &Symbol,
     newlet: GcObj<'ob>,
     env: &mut Root<Env>,
     cx: &Context,
@@ -53,8 +53,8 @@ pub(crate) fn set<'ob>(
 
 #[defun]
 pub(crate) fn put<'ob>(
-    symbol: Symbol,
-    propname: Symbol,
+    symbol: &Symbol,
+    propname: &Symbol,
     value: GcObj<'ob>,
     env: &mut Root<Env>,
     cx: &Context,
@@ -65,8 +65,8 @@ pub(crate) fn put<'ob>(
 
 #[defun]
 pub(crate) fn get<'ob>(
-    symbol: Symbol,
-    propname: Symbol,
+    symbol: &Symbol,
+    propname: &Symbol,
     env: &Root<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
@@ -80,7 +80,7 @@ pub(crate) fn get<'ob>(
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
+pub(crate) fn symbol_function<'ob>(symbol: &Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
         None => nil(),
@@ -89,7 +89,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'o
 
 #[defun]
 pub(crate) fn symbol_value<'ob>(
-    symbol: Symbol,
+    symbol: &Symbol,
     env: &Root<Env>,
     cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
@@ -97,7 +97,7 @@ pub(crate) fn symbol_value<'ob>(
 }
 
 #[defun]
-pub(crate) fn symbol_name(symbol: Symbol) -> &str {
+pub(crate) fn symbol_name(symbol: &Symbol) -> &str {
     symbol.name()
 }
 
@@ -107,33 +107,33 @@ pub(crate) fn null(obj: GcObj) -> bool {
 }
 
 #[defun]
-pub(crate) fn fboundp(symbol: Symbol) -> bool {
+pub(crate) fn fboundp(symbol: &Symbol) -> bool {
     symbol.has_func()
 }
 
 #[defun]
-pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
+pub(crate) fn fmakunbound(symbol: &Symbol) -> &Symbol {
     symbol.unbind_func();
     symbol
 }
 
 #[defun]
-pub(crate) fn boundp(symbol: Symbol, env: &Root<Env>) -> bool {
+pub(crate) fn boundp(symbol: &Symbol, env: &Root<Env>) -> bool {
     env.vars.get(symbol).is_some()
 }
 
 #[defun]
 pub(crate) fn makunbound<'ob>(
-    symbol: Symbol<'ob>,
+    symbol: &'ob Symbol,
     env: &mut Root<Env>,
     cx: &'ob Context,
-) -> Symbol<'ob> {
+) -> &'ob Symbol {
     env.as_mut(cx).vars.remove(symbol);
     symbol
 }
 
 #[defun]
-pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
+pub(crate) fn default_boundp(symbol: &Symbol, env: &Root<Env>) -> bool {
     env.vars.get(symbol).is_some()
 }
 
@@ -248,7 +248,7 @@ fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> G
 
 #[defun]
 pub(crate) fn defvar<'ob>(
-    symbol: Symbol,
+    symbol: &Symbol,
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&String>,
     env: &mut Root<Env>,
@@ -259,7 +259,7 @@ pub(crate) fn defvar<'ob>(
 }
 
 #[defun]
-pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
+pub(crate) fn make_variable_buffer_local(variable: &Symbol) -> &Symbol {
     // TODO: Implement
     variable
 }
@@ -344,7 +344,7 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
 }
 
 #[defun]
-pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
+pub(crate) fn provide<'ob>(feature: &'ob Symbol, _subfeatures: Option<&Cons>) -> &'ob Symbol {
     let mut features = FEATURES.lock().unwrap();
     // TODO: SYMBOL - need to trace this
     let feat = unsafe { feature.into_root() };

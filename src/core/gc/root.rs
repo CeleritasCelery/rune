@@ -5,11 +5,10 @@ use std::ops::{Deref, DerefMut};
 
 use super::super::{
     cons::Cons,
-    env::Symbol,
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::env::ConstSymbol;
+use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{Function, Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
@@ -51,14 +50,14 @@ impl IntoRoot<&'static Cons> for &Cons {
     }
 }
 
-impl IntoRoot<Symbol<'static>> for Symbol<'_> {
-    unsafe fn into_root(self) -> Symbol<'static> {
+impl IntoRoot<&'static Symbol> for &Symbol {
+    unsafe fn into_root(self) -> &'static Symbol {
         self.with_lifetime()
     }
 }
 
-impl IntoRoot<Symbol<'static>> for ConstSymbol {
-    unsafe fn into_root(self) -> Symbol<'static> {
+impl IntoRoot<&'static Symbol> for ConstSymbol {
+    unsafe fn into_root(self) -> &'static Symbol {
         (&*self).with_lifetime()
     }
 }
@@ -234,13 +233,13 @@ impl PartialEq for Rt<GcObj<'_>> {
     }
 }
 
-impl PartialEq for Rt<Symbol<'_>> {
+impl PartialEq for Rt<&Symbol> {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl Eq for Rt<Symbol<'_>> {}
+impl Eq for Rt<&Symbol> {}
 
 impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
     fn eq(&self, other: &U) -> bool {

@@ -8,7 +8,7 @@ use crate::hashmap::HashMap;
 
 use super::super::{
     cons::Cons,
-    env::{GlobalSymbol, Symbol},
+    env::Symbol,
     error::{Type, TypeError},
     gc::{AllocObject, Allocation, Block},
 };
@@ -244,11 +244,11 @@ impl IntoObject for bool {
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             true => {
-                let sym: Symbol = &crate::core::env::sym::TRUE;
+                let sym: &Symbol = &crate::core::env::sym::TRUE;
                 Gc::from_ptr(sym, Tag::Symbol)
             }
             false => {
-                let sym: Symbol = &crate::core::env::sym::NIL;
+                let sym: &Symbol = &crate::core::env::sym::NIL;
                 Gc::from_ptr(sym, Tag::Symbol)
             }
         }
@@ -281,8 +281,8 @@ impl<'a> IntoObject for LispFn<'a> {
     }
 }
 
-impl IntoObject for GlobalSymbol {
-    type Out<'ob> = Symbol<'ob>;
+impl IntoObject for Symbol {
+    type Out<'ob> = &'ob Symbol;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
@@ -294,20 +294,20 @@ impl IntoObject for GlobalSymbol {
     }
 }
 
-impl IntoObject for Symbol<'_> {
-    type Out<'ob> = Symbol<'ob>;
+impl IntoObject for &Symbol {
+    type Out<'ob> = &'ob Symbol;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         Gc::from_ptr(self, Tag::Symbol)
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &*Self::cast_ptr(ptr)
+        &*Symbol::cast_ptr(ptr)
     }
 }
 
 impl IntoObject for ConstSymbol {
-    type Out<'ob> = Symbol<'ob>;
+    type Out<'ob> = &'ob Symbol;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: *const u8 = std::ptr::addr_of!(*self).cast();
@@ -425,9 +425,9 @@ impl TaggedPtr for SubrFn {
     const TAG: Tag = Tag::SubrFn;
 }
 
-impl<'a> TaggedPtr for Symbol<'a> {
-    type Ptr = GlobalSymbol;
-    type Output<'ob> = Symbol<'ob>;
+impl TaggedPtr for Symbol {
+    type Ptr = Symbol;
+    type Output<'ob> = &'ob Symbol;
     const TAG: Tag = Tag::Symbol;
 }
 
@@ -526,7 +526,7 @@ pub(crate) enum List<'ob> {
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let sym: Symbol = &crate::core::env::sym::NIL;
+        let sym: &Symbol = &crate::core::env::sym::NIL;
         Gc::from_ptr(sym, Tag::Symbol)
     }
 }
@@ -575,7 +575,7 @@ pub(crate) enum Function<'ob> {
     LispFn(&'ob LispFn<'ob>),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
-    Symbol(Symbol<'ob>),
+    Symbol(&'ob Symbol),
 }
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
@@ -636,22 +636,22 @@ impl<'ob> From<Gc<&'ob LispFn<'ob>>> for Gc<Function<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<Symbol<'ob>>> for Gc<Function<'ob>> {
-    fn from(x: Gc<Symbol>) -> Self {
+impl<'ob> From<Gc<&'ob Symbol>> for Gc<Function<'ob>> {
+    fn from(x: Gc<&Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
 
-impl<'ob> From<Symbol<'ob>> for Gc<Function<'ob>> {
-    fn from(x: Symbol) -> Self {
-        let ptr = x as *const GlobalSymbol;
+impl<'ob> From<&'ob Symbol> for Gc<Function<'ob>> {
+    fn from(x: &Symbol) -> Self {
+        let ptr = x as *const Symbol;
         unsafe { Symbol::tag_ptr(ptr).into() }
     }
 }
 
-impl<'ob> From<Symbol<'ob>> for Gc<Symbol<'ob>> {
-    fn from(x: Symbol) -> Self {
-        let ptr = x as *const GlobalSymbol;
+impl<'ob> From<&'ob Symbol> for Gc<&'ob Symbol> {
+    fn from(x: &Symbol) -> Self {
+        let ptr = x as *const Symbol;
         unsafe { Symbol::tag_ptr(ptr) }
     }
 }
@@ -681,7 +681,7 @@ impl<'ob> Gc<Function<'ob>> {
 pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob f64),
-    Symbol(Symbol<'ob>),
+    Symbol(&'ob Symbol),
     Cons(&'ob Cons),
     Vec(&'ob RefCell<ObjVec<'ob>>),
     ByteVec(&'ob RefCell<Vec<u8>>),
@@ -784,16 +784,16 @@ impl<'ob> From<Gc<&'ob f64>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<&GlobalSymbol> for Gc<Object<'ob>> {
-    fn from(x: &GlobalSymbol) -> Self {
-        let ptr = x as *const GlobalSymbol;
+impl<'ob> From<&Symbol> for Gc<Object<'ob>> {
+    fn from(x: &Symbol) -> Self {
+        let ptr = x as *const Symbol;
         unsafe { Symbol::tag_ptr(ptr).into() }
     }
 }
 
 impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     fn from(x: ConstSymbol) -> Self {
-        let sym: &GlobalSymbol = &x;
+        let sym: &Symbol = &x;
         sym.into()
     }
 }
@@ -805,8 +805,8 @@ impl<'ob> From<&Cons> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<Symbol<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<Symbol>) -> Self {
+impl<'ob> From<Gc<&'ob Symbol>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&Symbol>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -945,7 +945,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Symbol<'ob>> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<&'ob Symbol> {
     type Error = TypeError;
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.get() {
@@ -1016,8 +1016,8 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
-impl<'ob> Gc<Symbol<'ob>> {
-    pub(crate) fn get(self) -> Symbol<'ob> {
+impl<'ob> Gc<&'ob Symbol> {
+    pub(crate) fn get(self) -> &'ob Symbol {
         let (ptr, _) = self.untag();
         unsafe { Symbol::from_obj_ptr(ptr) }
     }
@@ -1049,16 +1049,16 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
-    type Out = Symbol<'new>;
+impl<'old, 'new> WithLifetime<'new> for &'old Symbol {
+    type Out = &'new Symbol;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const GlobalSymbol)
+        &*(self as *const Symbol)
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<Symbol<'old>> {
-    type Out = Gc<Symbol<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old Symbol> {
+    type Out = Gc<&'new Symbol>;
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
     }
@@ -1153,8 +1153,8 @@ impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<Symbol<'_>> for Gc<Object<'ob>> {
-    fn eq(&self, other: &Symbol) -> bool {
+impl<'ob> PartialEq<&Symbol> for Gc<Object<'ob>> {
+    fn eq(&self, other: &&Symbol) -> bool {
         match self.get() {
             Object::Symbol(x) => x == *other,
             _ => false,
@@ -1162,8 +1162,8 @@ impl<'ob> PartialEq<Symbol<'_>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<GlobalSymbol> for Gc<Object<'ob>> {
-    fn eq(&self, other: &GlobalSymbol) -> bool {
+impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
+    fn eq(&self, other: &Symbol) -> bool {
         match self.get() {
             Object::Symbol(x) => x == other,
             _ => false,
@@ -1321,7 +1321,7 @@ enum ObjectAllocation<'ob> {
     HashTable(&'ob Allocation<RefCell<HashTable<'ob>>>),
     String(&'ob Allocation<String>),
     LispFn(&'ob Allocation<LispFn<'ob>>),
-    Symbol(Symbol<'ob>),
+    Symbol(&'ob Symbol),
     NonAllocated,
 }
 

@@ -67,14 +67,14 @@ macro_rules! __defsym {
     (@internal $sym:ident, $name:expr) => {
         paste::paste! {
             #[allow(unused_qualifications)]
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
+            static $sym: crate::core::env::Symbol = crate::core::env::Symbol::new(
                 $name,
                 crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
             );
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::Symbol { &$sym }
         }
     };
     ($sym:ident) => (__defsym!(@internal $sym, fn_macros::varname!($sym)););
@@ -85,13 +85,15 @@ macro_rules! defvar {
     (@internal $sym:ident, $name:expr, $cx:ident, $value:expr) => (
         paste::paste!{
             #[allow(non_snake_case)]
-            static $sym: crate::core::env::GlobalSymbol = crate::core::env::GlobalSymbol::new(
+            #[allow(unused_qualifications)]
+            static $sym: crate::core::env::Symbol = crate::core::env::Symbol::new(
                 $name,
                 crate::core::env::ConstSymbol::new([<__FN_PTR_ $sym>])
             );
             #[allow(non_snake_case)]
             #[doc(hidden)]
-            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::GlobalSymbol { &$sym }
+            #[allow(unused_qualifications)]
+            fn [<__FN_PTR_ $sym>] () -> &'static crate::core::env::Symbol { &$sym }
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
             #[doc(hidden)]

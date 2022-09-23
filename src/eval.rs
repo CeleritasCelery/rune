@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{root, rooted_iter};
 
-use crate::core::env::{sym, ConstSymbol, Env, GlobalSymbol, Symbol};
+use crate::core::env::{sym, ConstSymbol, Env, Symbol};
 
 use anyhow::{anyhow, bail, ensure, Result};
 
@@ -90,7 +90,7 @@ fn run_hooks<'ob>(
 #[defun]
 pub(crate) fn autoload_do_load<'ob>(
     fundef: &Rt<GcObj>,
-    funname: Option<&Rt<Gc<Symbol>>>,
+    funname: Option<&Rt<Gc<&Symbol>>>,
     macro_only: Option<&Rt<GcObj>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
@@ -131,13 +131,13 @@ pub(crate) fn autoload_do_load<'ob>(
 
 #[defun]
 fn autoload<'ob>(
-    function: Symbol<'ob>,
+    function: &'ob Symbol,
     file: &str,
     docstring: Option<GcObj>,
     interactive: Option<GcObj>,
     load_type: Option<GcObj>,
     cx: &'ob Context,
-) -> Result<Symbol<'ob>> {
+) -> Result<&'ob Symbol> {
     if function.has_func() {
         Ok(&sym::NIL)
     } else {
@@ -178,7 +178,7 @@ pub(crate) fn macroexpand<'ob>(
     Ok(form.bind(cx))
 }
 
-fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
+fn get_macro_func<'ob>(name: &Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
     if let Some(callable) = name.follow_indirect(cx) {
         if let Function::Cons(cons) = callable.get() {
             return cons.try_as_macro().ok();
@@ -190,7 +190,7 @@ fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob
 #[defun]
 #[allow(non_snake_case)]
 fn internal__define_uninitialized_variable<'ob>(
-    _symbol: Symbol<'ob>,
+    _symbol: &'ob Symbol,
     _doc: Option<GcObj>,
 ) -> GcObj<'ob> {
     // TODO: implement doc strings
@@ -198,13 +198,13 @@ fn internal__define_uninitialized_variable<'ob>(
 }
 
 #[defun]
-fn special_variable_p(symbol: Symbol, env: &Root<Env>) -> bool {
+fn special_variable_p(symbol: &Symbol, env: &Root<Env>) -> bool {
     env.special_variables.contains(symbol)
 }
 
 #[defun]
 fn set_default_toplevel_value<'ob>(
-    symbol: Symbol,
+    symbol: &Symbol,
     value: GcObj,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
@@ -215,7 +215,7 @@ fn set_default_toplevel_value<'ob>(
 
 #[defun]
 fn set_default<'ob>(
-    symbol: Symbol,
+    symbol: &Symbol,
     value: GcObj<'ob>,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
@@ -228,19 +228,19 @@ fn set_default<'ob>(
 // This is special case where we want to declare `t' to be a constant variable.
 // Only keywords, nil, and t are constant. And keywords are handled by the
 // define_symbols code. This one needs to be manual.
-static TRUE: GlobalSymbol = GlobalSymbol::new_const("t", ConstSymbol::new(__FN_PTR_TRUE));
+static TRUE: Symbol = Symbol::new_const("t", ConstSymbol::new(__FN_PTR_TRUE));
 
 #[allow(non_snake_case)]
 #[doc(hidden)]
-fn __FN_PTR_TRUE() -> &'static GlobalSymbol {
+fn __FN_PTR_TRUE() -> &'static Symbol {
     &TRUE
 }
 
-static NIL: GlobalSymbol = GlobalSymbol::new_const("nil", ConstSymbol::new(__FN_PTR_NIL));
+static NIL: Symbol = Symbol::new_const("nil", ConstSymbol::new(__FN_PTR_NIL));
 
 #[allow(non_snake_case)]
 #[doc(hidden)]
-fn __FN_PTR_NIL() -> &'static GlobalSymbol {
+fn __FN_PTR_NIL() -> &'static Symbol {
     &NIL
 }
 

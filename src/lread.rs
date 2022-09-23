@@ -175,12 +175,12 @@ pub(crate) fn load<'ob>(
 }
 
 #[defun]
-pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> Symbol<'ob> {
+pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> &'ob Symbol {
     crate::core::env::intern(string, cx)
 }
 
 #[defun]
-pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> {
+pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<&Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.get() {
         // TODO: We should only return here if the symbol is interned

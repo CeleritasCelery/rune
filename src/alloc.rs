@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::core::env::{GlobalSymbol, Symbol};
+use crate::core::env::Symbol;
 use crate::core::gc::Context;
 use crate::core::object::{nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, ObjVec};
 use anyhow::{ensure, Result};
@@ -87,8 +87,8 @@ fn purecopy(obj: GcObj) -> GcObj {
 }
 
 #[defun]
-fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<Symbol<'ob>> {
-    let sym = GlobalSymbol::new_uninterned(name);
+fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<&'ob Symbol> {
+    let sym = Symbol::new_uninterned(name);
     cx.add(sym)
 }
 
