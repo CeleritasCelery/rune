@@ -142,11 +142,8 @@ impl AllocObject for f64 {
             &mut objects,
             OwnedObject::Float(Box::new(Allocation::new(self))),
         );
-        if let Some(OwnedObject::Float(x)) = objects.last() {
-            x.as_ref()
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::Float(x)) = objects.last() else {unreachable!()};
+        x.as_ref()
     }
 }
 
@@ -158,11 +155,8 @@ impl AllocObject for Cons {
             self.mark_const();
         }
         Block::<CONST>::register(&mut objects, OwnedObject::Cons(Box::new(self)));
-        if let Some(OwnedObject::Cons(x)) = objects.last() {
-            x.as_ref()
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::Cons(x)) = objects.last() else {unreachable!()};
+        x.as_ref()
     }
 }
 
@@ -171,11 +165,8 @@ impl AllocObject for GlobalSymbol {
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<CONST>::register(&mut objects, OwnedObject::Symbol(Box::new(self)));
-        if let Some(OwnedObject::Symbol(x)) = objects.last() {
-            x.as_ref()
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::Symbol(x)) = objects.last() else {unreachable!()};
+        x.as_ref()
     }
 }
 
@@ -188,11 +179,8 @@ impl AllocObject for String {
             &mut objects,
             OwnedObject::String(Box::new(Allocation::new(self))),
         );
-        if let Some(OwnedObject::String(x)) = objects.last_mut() {
-            x.as_ref()
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::String(x)) = objects.last_mut() else {unreachable!()};
+        x.as_ref()
     }
 }
 
@@ -202,11 +190,8 @@ impl<'ob> AllocObject for LispFn<'ob> {
         let mut objects = block.objects.borrow_mut();
         let boxed = Box::new(Allocation::new(self));
         Block::<C>::register(&mut objects, OwnedObject::LispFn(boxed));
-        if let Some(OwnedObject::LispFn(x)) = objects.last() {
-            unsafe { transmute::<&Allocation<LispFn>, &'ob Allocation<LispFn>>(x.as_ref()) }
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::LispFn(x)) = objects.last() else {unreachable!()};
+        unsafe { transmute::<&Allocation<LispFn>, &'ob Allocation<LispFn>>(x.as_ref()) }
     }
 }
 
@@ -224,11 +209,8 @@ impl<'ob> AllocObject for ObjVec<'ob> {
             &mut objects,
             OwnedObject::Vec(Box::new(Allocation::new(ref_cell))),
         );
-        if let Some(OwnedObject::Vec(x)) = objects.last() {
-            unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
+        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
     }
 }
 
@@ -246,11 +228,8 @@ impl<'ob> AllocObject for Vec<u8> {
             &mut objects,
             OwnedObject::ByteVec(Box::new(Allocation::new(ref_cell))),
         );
-        if let Some(OwnedObject::ByteVec(x)) = objects.last() {
-            unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::ByteVec(x)) = objects.last() else {unreachable!()};
+        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
     }
 }
 
@@ -268,11 +247,8 @@ impl<'ob> AllocObject for HashTable<'ob> {
             &mut objects,
             OwnedObject::HashTable(Box::new(Allocation::new(ref_cell))),
         );
-        if let Some(OwnedObject::HashTable(x)) = objects.last() {
-            unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
-        } else {
-            unreachable!("object was not the type we just inserted");
-        }
+        let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
+        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
     }
 }
 

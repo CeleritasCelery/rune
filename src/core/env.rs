@@ -522,20 +522,14 @@ mod test {
             sym.set_func(func1.try_into().unwrap());
         }
         let cell1 = sym.func(cx).unwrap();
-        let before = match cell1.get() {
-            Function::Cons(x) => x,
-            _ => unreachable!("Type should be a lisp function"),
-        };
+        let Function::Cons(before) = cell1.get() else {unreachable!("Type should be a lisp function")};
         assert_eq!(before.car(), 1);
         let func2 = cons!(2; cx);
         unsafe {
             sym.set_func(func2.try_into().unwrap());
         }
         let cell2 = sym.func(cx).unwrap();
-        let after = match cell2.get() {
-            Function::Cons(x) => x,
-            _ => unreachable!("Type should be a lisp function"),
-        };
+        let Function::Cons(after) = cell2.get() else {unreachable!("Type should be a lisp function")};
         assert_eq!(after.car(), 2);
         assert_eq!(before.car(), 1);
     }

@@ -237,13 +237,6 @@ mod test {
     use super::super::gc::RootSet;
     use super::*;
 
-    fn as_cons(obj: GcObj) -> Option<&Cons> {
-        match obj.get() {
-            Object::Cons(x) => Some(x),
-            _ => None,
-        }
-    }
-
     #[test]
     fn cons() {
         let roots = &RootSet::default();
@@ -252,10 +245,7 @@ mod test {
         // assert_eq!(16, size_of::<Cons>());
         let x = cons!("start", cons!(7, cons!(5, 9; cx); cx); cx);
         assert!(matches!(x.get(), Object::Cons(_)));
-        let cons1 = match x.get() {
-            Object::Cons(x) => x,
-            _ => unreachable!("Expected cons"),
-        };
+        let Object::Cons(cons1) = x.get() else {unreachable!("Expected cons")};
 
         let start_str = "start".to_owned();
         assert_eq!(cx.add(start_str), cons1.car());
@@ -263,12 +253,12 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(cx.add(start2_str), cons1.car());
 
-        let cons2 = as_cons(cons1.cdr()).expect("expected cons");
+        let Object::Cons(cons2) = cons1.cdr().get() else {unreachable!("Expected cons")};
 
         let cmp: GcObj = 7.into();
         assert_eq!(cmp, cons2.car());
 
-        let cons3 = as_cons(cons2.cdr()).expect("expected cons");
+        let Object::Cons(cons3) = cons2.cdr().get() else {unreachable!("Expected cons")};
         let cmp1: GcObj = 5.into();
         assert_eq!(cmp1, cons3.car());
         let cmp2: GcObj = 9.into();
