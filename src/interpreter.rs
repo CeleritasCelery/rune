@@ -451,12 +451,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         iter: &mut ElemStreamIter<'_, '_>,
         cx: &'ob Context,
     ) -> Option<(GcObj<'ob>, Option<GcObj<'ob>>)> {
-        #[allow(clippy::manual_map)]
-        if let Some(first) = iter.next() {
-            Some((first.bind(cx), iter.next().map(|x| x.bind(cx))))
-        } else {
-            None
-        }
+        let first = iter.next().map(|x| x.bind(cx));
+        let second = iter.next().map(|x| x.bind(cx));
+        first.map(|first| (first, second))
     }
 
     fn var_ref<'ob>(&self, sym: &Symbol, cx: &'ob Context) -> EvalResult<'ob> {
@@ -744,28 +741,22 @@ impl Rt<Gc<Function<'_>>> {
             Function::Cons(_) => call_closure(self.try_as().unwrap(), args, name, env, cx)
                 .map_err(|e| e.add_trace(name, args)),
             Function::Symbol(sym) => {
-                if let Some(func) = sym.follow_indirect(cx) {
-                    match func.get() {
-                        Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-                            // TODO: inifinite loop if autoload does not resolve
-                            root!(sym, cx);
-                            crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
-                            if let Some(func) = sym.bind(cx).follow_indirect(cx) {
-                                root!(func, cx);
-                                let name = sym.bind(cx).name().to_owned();
-                                func.call(args, env, cx, Some(&name))
-                            } else {
-                                Err(error!("autoload for {sym} failed to define function"))
-                            }
-                        }
-                        _ => {
-                            root!(func, cx);
-                            let name = sym.name().to_owned();
-                            func.call(args, env, cx, Some(&name))
-                        }
+                let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};
+                match func.get() {
+                    Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+                        // TODO: inifinite loop if autoload does not resolve
+                        root!(sym, cx);
+                        crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
+                        let Some(func) = sym.bind(cx).follow_indirect(cx) else {bail_err!("autoload for {sym} failed to define function")};
+                        root!(func, cx);
+                        let name = sym.bind(cx).name().to_owned();
+                        func.call(args, env, cx, Some(&name))
                     }
-                } else {
-                    Err(error!("Void Function: {}", sym))
+                    _ => {
+                        root!(func, cx);
+                        let name = sym.name().to_owned();
+                        func.call(args, env, cx, Some(&name))
+                    }
                 }
             }
         }

@@ -409,12 +409,11 @@ pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    use crate::core::env::sym;
-    if let Some(i) = keyword_args
+    let kw_test_pos = keyword_args
         .iter()
         .step_by(2)
-        .position(|&x| x == sym::KW_TEST)
-    {
+        .position(|&x| x == sym::KW_TEST);
+    if let Some(i) = kw_test_pos {
         let val = match keyword_args.get((i * 2) + 1) {
             Some(x) => *x,
             None => bail!("Missing keyword value for :test"),
