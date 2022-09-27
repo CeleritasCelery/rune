@@ -11,8 +11,8 @@
 
 mod convert;
 mod func;
-mod gc_ptr;
-pub(crate) use gc_ptr::*;
+mod tagged;
+pub(crate) use tagged::*;
 
 pub(crate) use convert::*;
 pub(crate) use func::*;
