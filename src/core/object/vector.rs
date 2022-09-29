@@ -14,11 +14,9 @@ impl<'ob> LispVec<'ob> {
         }
     }
 
-    pub(in crate::core) fn new_const(vec: Vec<GcObj<'ob>>) -> Self {
-        let vec = Self::new(vec);
+    pub(in crate::core) fn make_const(&self) {
         // Leak the borrow so that is cannot be borrowed mutabley
-        std::mem::forget(vec.inner.borrow());
-        vec
+        std::mem::forget(self.inner.borrow());
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -31,5 +29,23 @@ impl<'ob> std::ops::Deref for LispVec<'ob> {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub(crate) struct Record<'ob>(pub(in crate::core::object) LispVec<'ob>);
+
+impl<'ob> Record<'ob> {
+    pub(crate) fn new(vec: Vec<GcObj<'ob>>) -> Self {
+        Record(LispVec::new(vec))
+    }
+}
+
+impl<'ob> std::ops::Deref for Record<'ob> {
+    type Target = LispVec<'ob>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

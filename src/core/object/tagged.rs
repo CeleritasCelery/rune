@@ -13,7 +13,7 @@ use super::super::{
     gc::{AllocObject, Allocation, Block},
 };
 
-use super::{LispFn, LispVec, SubrFn};
+use super::{LispFn, LispVec, Record, SubrFn};
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
@@ -56,6 +56,7 @@ enum Tag {
     Cons,
     String,
     Vec,
+    Record,
     HashTable,
     SubrFn,
     LispFn,
@@ -348,12 +349,26 @@ impl<'a> IntoObject for Vec<GcObj<'a>> {
     type Out<'ob> = &'ob LispVec<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
+        let ptr = LispVec::new(self).alloc_obj(block);
+        unsafe { LispVec::tag_ptr(ptr) }
+    }
+
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
+        &(*<LispVec as TaggedPtr>::cast_ptr(ptr)).data
+    }
+}
+
+impl<'a> IntoObject for Record<'a> {
+    type Out<'ob> = &'ob Record<'ob>;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        let ptr = self.0.alloc_obj(block);
         unsafe { Self::tag_ptr(ptr) }
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*<Vec<GcObj> as TaggedPtr>::cast_ptr(ptr)).data
+        let vec = &(*<Record as TaggedPtr>::cast_ptr(ptr)).data;
+        &*(vec as *const LispVec).cast::<Record>()
     }
 }
 
@@ -442,10 +457,16 @@ impl TaggedPtr for String {
     const TAG: Tag = Tag::String;
 }
 
-impl<'a> TaggedPtr for Vec<GcObj<'a>> {
+impl<'a> TaggedPtr for LispVec<'a> {
     type Ptr = <Self as AllocObject>::Output;
     type Output<'ob> = &'ob LispVec<'ob>;
     const TAG: Tag = Tag::Vec;
+}
+
+impl<'a> TaggedPtr for Record<'a> {
+    type Ptr = <LispVec<'a> as AllocObject>::Output;
+    type Output<'ob> = &'ob Record<'ob>;
+    const TAG: Tag = Tag::Record;
 }
 
 impl TaggedPtr for Vec<u8> {
@@ -683,6 +704,7 @@ pub(crate) enum Object<'ob> {
     Symbol(&'ob Symbol),
     Cons(&'ob Cons),
     Vec(&'ob LispVec<'ob>),
+    Record(&'ob Record<'ob>),
     ByteVec(&'ob RefCell<Vec<u8>>),
     HashTable(&'ob RefCell<HashTable<'ob>>),
     String(&'ob String),
@@ -698,7 +720,7 @@ impl Object<'_> {
             Object::Float(_) => Type::Float,
             Object::Symbol(_) => Type::Symbol,
             Object::Cons(_) => Type::Cons,
-            Object::Vec(_) => Type::Vec,
+            Object::Vec(_) | Object::Record(_) => Type::Vec,
             Object::HashTable(_) => Type::HashTable,
             Object::ByteVec(_) | Object::String(_) => Type::String,
             Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
@@ -744,6 +766,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Float => Object::Float(unsafe { f64::from_obj_ptr(ptr) }),
             Tag::String => Object::String(unsafe { String::from_obj_ptr(ptr) }),
             Tag::Vec => Object::Vec(unsafe { Vec::<GcObj>::from_obj_ptr(ptr) }),
+            Tag::Record => Object::Record(unsafe { Record::from_obj_ptr(ptr) }),
             Tag::HashTable => Object::HashTable(unsafe { HashTable::from_obj_ptr(ptr) }),
             Tag::ByteVec => Object::ByteVec(unsafe { Vec::<u8>::from_obj_ptr(ptr) }),
         }
@@ -846,6 +869,12 @@ impl<'ob> From<Gc<&'ob RefCell<Vec<GcObj<'ob>>>>> for Gc<Object<'ob>> {
 
 impl<'ob> From<Gc<&'ob LispVec<'ob>>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob LispVec>) -> Self {
+        unsafe { Self::transmute(x) }
+    }
+}
+
+impl<'ob> From<Gc<&'ob Record<'ob>>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&'ob Record>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -1139,6 +1168,10 @@ impl<T> Gc<T> {
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
+            Object::Record(x) => {
+                let vec = vec_clone_in(&x.borrow(), bk);
+                Record::new(vec).into_obj(bk).into()
+            }
             Object::ByteVec(x) => x.borrow().clone().into_obj(bk).into(),
             Object::HashTable(_) => todo!("implement clone for hashtable"),
         };
@@ -1263,6 +1296,13 @@ impl fmt::Display for Object<'_> {
                 }
                 write!(f, "]")
             }
+            Object::Record(vec) => {
+                write!(f, "#s(")?;
+                for x in vec.borrow().iter() {
+                    write!(f, "{x} ")?;
+                }
+                write!(f, ")")
+            }
             Object::ByteVec(vec) => {
                 write!(f, "[")?;
                 for x in vec.borrow().iter() {
@@ -1292,6 +1332,7 @@ impl fmt::Debug for Object<'_> {
             Object::Int(x) => write!(f, "{x}"),
             Object::Cons(x) => write!(f, "{x:?}"),
             Object::Vec(x) => write!(f, "{x:?}"),
+            Object::Record(x) => write!(f, "{x:?}"),
             Object::ByteVec(x) => write!(f, "{x:?}"),
             Object::HashTable(x) => write!(f, "{x:?}"),
             Object::String(string) => {
@@ -1342,7 +1383,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Cons => ObjectAllocation::Cons(unsafe { &*Cons::cast_ptr(ptr) }),
             Tag::Float => ObjectAllocation::Float(unsafe { &*f64::cast_ptr(ptr) }),
             Tag::String => ObjectAllocation::String(unsafe { &*String::cast_ptr(ptr) }),
-            Tag::Vec => ObjectAllocation::Vec(unsafe { &*Vec::<GcObj>::cast_ptr(ptr) }),
+            Tag::Vec | Tag::Record => ObjectAllocation::Vec(unsafe { &*LispVec::cast_ptr(ptr) }),
             Tag::HashTable => ObjectAllocation::HashTable(unsafe { &*HashTable::cast_ptr(ptr) }),
             Tag::ByteVec => ObjectAllocation::ByteVec(unsafe { &*Vec::<u8>::cast_ptr(ptr) }),
             Tag::Symbol => ObjectAllocation::Symbol(unsafe { &*Symbol::cast_ptr(ptr) }),

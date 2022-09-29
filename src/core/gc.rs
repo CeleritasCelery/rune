@@ -195,20 +195,18 @@ impl<'ob> AllocObject for LispFn<'ob> {
     }
 }
 
-impl<'ob> AllocObject for Vec<GcObj<'ob>> {
+impl<'ob> AllocObject for LispVec<'ob> {
     type Output = Allocation<LispVec<'ob>>;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
 
-        let vec = if CONST {
-            LispVec::new_const(self)
-        } else {
-            LispVec::new(self)
-        };
+        if CONST {
+            self.make_const();
+        }
         Block::<CONST>::register(
             &mut objects,
-            OwnedObject::Vec(Box::new(Allocation::new(vec))),
+            OwnedObject::Vec(Box::new(Allocation::new(self))),
         );
         let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
         unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }

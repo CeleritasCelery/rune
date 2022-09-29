@@ -30,6 +30,17 @@ impl Cons {
     }
 }
 
+impl<'ob> TryFrom<GcObj<'ob>> for &LispVec<'ob> {
+    type Error = anyhow::Error;
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match obj.get() {
+            Object::Vec(x) => Ok(x),
+            Object::Record(x) => Ok(x),
+            x => Err(TypeError::new(Type::Vec, x).into()),
+        }
+    }
+}
+
 impl<'ob> TryFrom<GcObj<'ob>> for usize {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
@@ -103,7 +114,6 @@ define_unbox!(Int, i64);
 define_unbox!(Float, &'ob f64);
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
-define_unbox!(Vec, &'ob LispVec<'ob>);
 define_unbox!(ByteVec, &'ob RefCell<Vec<u8>>);
 define_unbox!(HashTable, &'ob RefCell<HashTable<'ob>>);
 define_unbox!(Symbol, &'ob Symbol);

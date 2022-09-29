@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
-use crate::core::object::{nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, LispVec};
+use crate::core::object::{nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, LispVec, Record};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -82,6 +82,13 @@ fn vector<'ob>(objects: &[GcObj<'ob>]) -> Vec<GcObj<'ob>> {
 }
 
 #[defun]
+fn record<'ob>(type_: GcObj<'ob>, slots: &[GcObj<'ob>]) -> Record<'ob> {
+    let mut record = vec![type_];
+    record.extend_from_slice(slots);
+    Record::new(record)
+}
+
+#[defun]
 fn purecopy(obj: GcObj) -> GcObj {
     obj
 }
@@ -99,6 +106,7 @@ define_symbols!(
         make_vector,
         make_byte_code,
         vector,
+        record,
         purecopy,
         make_symbol,
     }

@@ -192,6 +192,11 @@ pub(crate) fn vectorp(object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn recordp(object: GcObj) -> bool {
+    matches!(object.get(), Object::Record(_))
+}
+
+#[defun]
 pub(crate) fn consp(object: GcObj) -> bool {
     matches!(object.get(), Object::Cons(_))
 }
@@ -317,6 +322,13 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
+        Object::Record(vec) => match vec.borrow().get(idx) {
+            Some(x) => Ok(*x),
+            None => {
+                let len = vec.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+            }
+        },
         Object::String(string) => match string.chars().nth(idx) {
             Some(x) => Ok((x as i64).into()),
             None => {
@@ -391,6 +403,7 @@ define_symbols!(
         functionp,
         subrp,
         vectorp,
+        recordp,
         numberp,
         markerp,
         consp,
