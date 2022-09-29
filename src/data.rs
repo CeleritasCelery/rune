@@ -341,6 +341,22 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
 }
 
 #[defun]
+fn type_of(object: GcObj) -> GcObj {
+    match object.get() {
+        Object::Int(_) => sym::INTEGER.into(),
+        Object::Float(_) => sym::FLOAT.into(),
+        Object::Symbol(_) => sym::SYMBOL.into(),
+        Object::Cons(_) => sym::CONS.into(),
+        Object::Vec(_) => sym::VECTOR.into(),
+        Object::Record(x) => *x.borrow().get(0).expect("record should always have a type"),
+        Object::ByteVec(_) | Object::LispFn(_) => sym::COMPILED_FUNCTION.into(),
+        Object::HashTable(_) => sym::HASH_TABLE.into(),
+        Object::String(_) => sym::STRING.into(),
+        Object::SubrFn(_) => sym::SUBR.into(),
+    }
+}
+
+#[defun]
 pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
     match object.get() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
@@ -411,6 +427,7 @@ define_symbols!(
         integerp,
         floatp,
         atom,
+        type_of,
         byte_code_function_p,
         bufferp,
         string_to_number,
@@ -418,5 +435,11 @@ define_symbols!(
     }
     SYMS => {
         MANY,
+        INTEGER,
+        SYMBOL,
+        COMPILED_FUNCTION,
+        HASH_TABLE,
+        STRING,
+        SUBR,
     }
 );

@@ -51,7 +51,7 @@ fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
-fn plist_get<'ob>(plist: &'ob Cons, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
+fn plist_get<'ob>(plist: Gc<List<'ob>>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
     // TODO: this function should never fail. Need to implement safe iterator
     let iter = plist.elements().zip(plist.elements().skip(1));
 
