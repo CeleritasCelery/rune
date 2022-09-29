@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
-use crate::core::object::{nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, ObjVec};
+use crate::core::object::{nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, LispVec};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -47,7 +47,7 @@ pub(crate) fn make_closure<'ob>(
 fn make_byte_code<'ob>(
     arglist: i64,
     byte_code: &RefCell<Vec<u8>>,
-    constants: &RefCell<ObjVec<'ob>>,
+    constants: &LispVec<'ob>,
     _depth: usize,
     _docstring: Option<GcObj>,
     _interactive_spec: Option<GcObj>,

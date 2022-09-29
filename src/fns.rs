@@ -369,7 +369,7 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
 pub(crate) fn length(sequence: GcObj) -> Result<i64> {
     let size = match sequence.get() {
         Object::Cons(x) => x.elements().len(),
-        Object::Vec(x) => x.borrow().len(),
+        Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         Object::Symbol(s) if s.nil() => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
@@ -383,7 +383,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
 pub(crate) fn safe_length(sequence: GcObj) -> i64 {
     let size = match sequence.get() {
         Object::Cons(x) => x.elements().len(),
-        Object::Vec(x) => x.borrow().len(),
+        Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         _ => 0,
     };

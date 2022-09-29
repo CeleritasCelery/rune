@@ -1,6 +1,6 @@
 use super::cons::Cons;
 use super::env::Symbol;
-use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, ObjVec, RawInto, WithLifetime};
+use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, LispVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -52,7 +52,7 @@ impl<'rt> Drop for Context<'rt> {
 enum OwnedObject<'ob> {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons>),
-    Vec(Box<Allocation<RefCell<Vec<GcObj<'ob>>>>>),
+    Vec(Box<Allocation<LispVec<'ob>>>),
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
     HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
     String(Box<Allocation<String>>),
@@ -195,19 +195,20 @@ impl<'ob> AllocObject for LispFn<'ob> {
     }
 }
 
-impl<'ob> AllocObject for ObjVec<'ob> {
-    type Output = Allocation<RefCell<Self>>;
+impl<'ob> AllocObject for Vec<GcObj<'ob>> {
+    type Output = Allocation<LispVec<'ob>>;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let ref_cell = RefCell::new(self);
-        if CONST {
-            // Leak a borrow so that the vector cannot be borrowed mutably
-            std::mem::forget(ref_cell.borrow());
-        }
+
+        let vec = if CONST {
+            LispVec::new_const(self)
+        } else {
+            LispVec::new(self)
+        };
         Block::<CONST>::register(
             &mut objects,
-            OwnedObject::Vec(Box::new(Allocation::new(ref_cell))),
+            OwnedObject::Vec(Box::new(Allocation::new(vec))),
         );
         let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
         unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }

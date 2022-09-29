@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::sync::Mutex;
 
 use crate::core::{
@@ -6,7 +5,7 @@ use crate::core::{
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root},
-    object::{nil, Gc, GcObj, Number, Object, SubrFn},
+    object::{nil, Gc, GcObj, LispVec, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -294,7 +293,7 @@ fn ash(value: i64, count: i64) -> i64 {
 
 #[defun]
 pub(crate) fn aset<'ob>(
-    array: &RefCell<Vec<GcObj<'ob>>>,
+    array: &LispVec<'ob>,
     idx: usize,
     newlet: GcObj<'ob>,
 ) -> Result<GcObj<'ob>> {
@@ -311,16 +310,13 @@ pub(crate) fn aset<'ob>(
 #[defun]
 pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
     match array.get() {
-        Object::Vec(vec) => {
-            let vec = vec.borrow();
-            match vec.get(idx) {
-                Some(x) => Ok(*x),
-                None => {
-                    let len = vec.len();
-                    Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
-                }
+        Object::Vec(vec) => match vec.borrow().get(idx) {
+            Some(x) => Ok(*x),
+            None => {
+                let len = vec.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
-        }
+        },
         Object::String(string) => match string.chars().nth(idx) {
             Some(x) => Ok((x as i64).into()),
             None => {

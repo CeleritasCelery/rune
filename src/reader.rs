@@ -481,7 +481,7 @@ pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Context) -> Result<(GcObj<'
 
 #[cfg(test)]
 mod test {
-    use crate::core::{gc::RootSet, object::ObjVec};
+    use crate::core::gc::RootSet;
 
     use super::*;
 
@@ -619,11 +619,11 @@ baz""#,
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         check_reader!(Vec::<GcObj>::new(), "[]", cx);
-        let vec: ObjVec = vec![1.into()];
+        let vec: Vec<GcObj> = vec![1.into()];
         check_reader!(vec, "[1]", cx);
-        let vec: ObjVec = vec![1.into(), 2.into()];
+        let vec: Vec<GcObj> = vec![1.into(), 2.into()];
         check_reader!(vec, "[1 2]", cx);
-        let vec: ObjVec = vec![1.into(), 2.into(), 3.into()];
+        let vec: Vec<GcObj> = vec![1.into(), 2.into(), 3.into()];
         check_reader!(vec, "[1 2 3]", cx);
     }
 
