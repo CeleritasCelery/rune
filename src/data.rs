@@ -225,9 +225,9 @@ pub(crate) fn atom(object: GcObj) -> bool {
 }
 
 #[defun]
-fn byte_code_function_p(_object: GcObj) -> bool {
+fn byte_code_function_p(object: GcObj) -> bool {
     // TODO: implement once byte compiling is added
-    false
+    matches!(object.get(), Object::ByteVec(_))
 }
 
 #[defun]

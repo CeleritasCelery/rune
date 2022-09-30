@@ -17,14 +17,20 @@ use streaming_iterator::StreamingIterator;
 #[derive(Debug)]
 pub(crate) struct EvalError {
     backtrace: Vec<String>,
-    error: Option<anyhow::Error>,
+    error: ErrorType,
+}
+
+#[derive(Debug)]
+enum ErrorType {
+    Throw,
+    Err(anyhow::Error),
 }
 
 impl std::error::Error for EvalError {}
 
 impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(e) = &self.error {
+        if let ErrorType::Err(e) = &self.error {
             writeln!(f, "{e}")?;
         }
         for x in &self.backtrace {
@@ -38,7 +44,7 @@ impl EvalError {
     fn new_error(error: anyhow::Error) -> Self {
         Self {
             backtrace: Vec::new(),
-            error: Some(error),
+            error: ErrorType::Err(error),
         }
     }
 
@@ -49,7 +55,7 @@ impl EvalError {
     fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
         Self {
             backtrace: vec![format!("{name} {args:?}")],
-            error: Some(error),
+            error: ErrorType::Err(error),
         }
     }
 
@@ -183,8 +189,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 let tag = self.env.catch_stack.last().unwrap();
-                if e.error.is_none() && *tag == self.env.thrown.0 {
-                    Ok(self.env.thrown.1.bind(cx))
+                if matches!(e.error, ErrorType::Throw) && *tag == self.env.exception.0 {
+                    Ok(self.env.exception.1.bind(cx))
                 } else {
                     // Either this was not a throw or the tag does not match
                     // this catch block
@@ -207,11 +213,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let value = forms.next().unwrap()?;
         let env = self.env.as_mut(cx);
         if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
-            env.thrown.0.set(tag);
-            env.thrown.1.set(value);
-            // a None error means this a throw
+            env.exception.0.set(tag);
+            env.exception.1.set(value);
             Err(EvalError {
-                error: None,
+                error: ErrorType::Throw,
                 backtrace: Vec::new(),
             })
         } else {
@@ -676,8 +681,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 const CONDITION_ERROR: &str = "Invalid condition handler:";
-                if e.error.is_none() {
-                    // This is a throw
+                if let ErrorType::Throw = e.error {
                     return Err(e);
                 }
                 while let Some(handler) = forms.next() {

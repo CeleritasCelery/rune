@@ -16,11 +16,10 @@ pub(crate) struct Env {
     pub(crate) vars: HashMap<&'static Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<&'static Symbol, Vec<(&'static Symbol, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
-    pub(crate) thrown: (GcObj<'static>, GcObj<'static>),
+    pub(crate) exception: (GcObj<'static>, GcObj<'static>),
     pub(crate) special_variables: HashSet<&'static Symbol>,
     pub(crate) binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
-    local_obarray: Vec<&'static Symbol>,
 }
 
 impl Rt<Env> {
