@@ -244,6 +244,8 @@ fn __FN_PTR_NIL() -> &'static Symbol {
     &NIL
 }
 
+defvar!(DEBUG_ON_ERROR, false);
+
 define_symbols!(
     FUNCS => {
         apply,
@@ -258,6 +260,9 @@ define_symbols!(
         special_variable_p,
         TRUE,
         NIL,
+    }
+    VARS => {
+        DEBUG_ON_ERROR,
     }
     SYMS => {
         FUNCTION,
