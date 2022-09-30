@@ -27,16 +27,16 @@ pub(crate) struct FnArgs {
 /// Represents the body of a function that has been byte compiled. Note that
 /// this can represent any top level expression, not just functions.
 #[derive(Debug, PartialEq)]
-pub(crate) struct Expression<'ob> {
+pub(crate) struct Expression {
     pub(crate) op_codes: CodeVec,
-    pub(crate) constants: Vec<GcObj<'ob>>,
+    // pub(crate) constants: Vec<GcObj<'ob>>,
 }
 
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(Debug, PartialEq)]
-pub(crate) struct LispFn<'ob> {
-    pub(crate) body: Expression<'ob>,
+pub(crate) struct LispFn {
+    pub(crate) body: Expression,
     pub(crate) args: FnArgs,
 }
 
@@ -60,23 +60,23 @@ impl FnArgs {
     }
 }
 
-define_unbox!(LispFn, Func, &'ob LispFn<'ob>);
+define_unbox!(LispFn, Func, &'ob LispFn);
 
-impl<'old, 'new> LispFn<'old> {
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn<'new> {
+impl<'new> LispFn {
+    pub(crate) fn clone_in<const C: bool>(&self, _bk: &'new Block<C>) -> LispFn {
         LispFn {
             body: Expression {
                 op_codes: self.body.op_codes.clone(),
-                constants: self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
+                // constants: self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
             },
             args: self.args,
         }
     }
 }
 
-impl Trace for LispFn<'_> {
-    fn mark(&self, stack: &mut Vec<super::RawObj>) {
-        self.body.constants.mark(stack);
+impl Trace for LispFn {
+    fn mark(&self, _stack: &mut Vec<super::RawObj>) {
+        // self.body.constants.mark(stack);
     }
 }
 

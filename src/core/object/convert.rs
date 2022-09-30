@@ -12,7 +12,7 @@ use super::{
         env::sym,
         error::{ArgError, Type, TypeError},
     },
-    nil, qtrue, HashTable, LispVec,
+    nil, qtrue, LispHashTable, LispVec,
 };
 use super::{Function, GcObj};
 use anyhow::Context;
@@ -30,7 +30,7 @@ impl Cons {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for &LispVec<'ob> {
+impl<'ob> TryFrom<GcObj<'ob>> for &'ob LispVec {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.get() {
@@ -115,7 +115,7 @@ define_unbox!(Float, &'ob f64);
 define_unbox!(String, &'ob String);
 define_unbox!(String, &'ob str);
 define_unbox!(ByteVec, &'ob RefCell<Vec<u8>>);
-define_unbox!(HashTable, &'ob RefCell<HashTable<'ob>>);
+define_unbox!(HashTable, &'ob LispHashTable);
 define_unbox!(Symbol, &'ob Symbol);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>

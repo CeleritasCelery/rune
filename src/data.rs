@@ -297,11 +297,7 @@ fn ash(value: i64, count: i64) -> i64 {
 }
 
 #[defun]
-pub(crate) fn aset<'ob>(
-    array: &LispVec<'ob>,
-    idx: usize,
-    newlet: GcObj<'ob>,
-) -> Result<GcObj<'ob>> {
+pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
     let mut vec = array.try_borrow_mut()?;
     if idx < vec.len() {
         vec[idx] = newlet;

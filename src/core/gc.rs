@@ -1,6 +1,6 @@
 use super::cons::Cons;
 use super::env::Symbol;
-use super::object::{Gc, GcObj, HashTable, IntoObject, LispFn, LispVec, RawInto, WithLifetime};
+use super::object::{Gc, GcObj, IntoObject, LispFn, LispHashTable, LispVec, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -23,7 +23,7 @@ pub(crate) struct RootSet {
 /// directly.
 #[derive(Debug)]
 pub(crate) struct Block<const CONST: bool> {
-    objects: RefCell<Vec<OwnedObject<'static>>>,
+    objects: RefCell<Vec<OwnedObject>>,
 }
 
 /// Owns all allocations and creates objects. All objects have
@@ -49,15 +49,15 @@ impl<'rt> Drop for Context<'rt> {
 /// The owner of an object allocation. No references to
 /// the object can outlive this.
 #[derive(Debug)]
-enum OwnedObject<'ob> {
+enum OwnedObject {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons>),
-    Vec(Box<Allocation<LispVec<'ob>>>),
+    Vec(Box<Allocation<LispVec>>),
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
-    HashTable(Box<Allocation<RefCell<HashTable<'ob>>>>),
+    HashTable(Box<Allocation<LispHashTable>>),
     String(Box<Allocation<String>>),
     Symbol(Box<Symbol>),
-    LispFn(Box<Allocation<LispFn<'ob>>>),
+    LispFn(Box<Allocation<LispFn>>),
 }
 
 /// A container type that has a mark bit for garbage collection.
@@ -94,11 +94,7 @@ impl<T: PartialEq> PartialEq for Allocation<T> {
     }
 }
 
-impl<'ob> OwnedObject<'ob> {
-    unsafe fn coerce_lifetime(self) -> OwnedObject<'static> {
-        transmute::<OwnedObject<'ob>, OwnedObject<'static>>(self)
-    }
-
+impl OwnedObject {
     fn unmark(&self) {
         match self {
             OwnedObject::Float(x) => x.unmark(),
@@ -184,8 +180,8 @@ impl AllocObject for String {
     }
 }
 
-impl<'ob> AllocObject for LispFn<'ob> {
-    type Output = Allocation<LispFn<'ob>>;
+impl<'ob> AllocObject for LispFn {
+    type Output = Allocation<LispFn>;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         let boxed = Box::new(Allocation::new(self));
@@ -195,8 +191,8 @@ impl<'ob> AllocObject for LispFn<'ob> {
     }
 }
 
-impl<'ob> AllocObject for LispVec<'ob> {
-    type Output = Allocation<LispVec<'ob>>;
+impl<'ob> AllocObject for LispVec {
+    type Output = Allocation<LispVec>;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
@@ -232,19 +228,17 @@ impl<'ob> AllocObject for Vec<u8> {
     }
 }
 
-impl<'ob> AllocObject for HashTable<'ob> {
-    type Output = Allocation<RefCell<Self>>;
+impl<'ob> AllocObject for LispHashTable {
+    type Output = Allocation<Self>;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let ref_cell = RefCell::new(self);
         if CONST {
-            // Leak a borrow so that the hash table cannot be borrowed mutably
-            std::mem::forget(ref_cell.borrow());
+            self.make_const();
         }
         Block::<CONST>::register(
             &mut objects,
-            OwnedObject::HashTable(Box::new(Allocation::new(ref_cell))),
+            OwnedObject::HashTable(Box::new(Allocation::new(self))),
         );
         let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
         unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
@@ -290,8 +284,8 @@ impl<const CONST: bool> Block<CONST> {
         obj.into_obj(self).into()
     }
 
-    fn register(objects: &mut Vec<OwnedObject<'static>>, obj: OwnedObject) {
-        objects.push(unsafe { obj.coerce_lifetime() });
+    fn register(objects: &mut Vec<OwnedObject>, obj: OwnedObject) {
+        objects.push(obj);
     }
 }
 

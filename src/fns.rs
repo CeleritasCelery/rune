@@ -1,11 +1,9 @@
-use std::cell::RefCell;
-
 use crate::core::{
     cons::Cons,
     env::{sym, Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root, Rt},
-    object::{nil, Function, Gc, GcObj, HashTable, List, Object},
+    object::{nil, Function, Gc, GcObj, HashTable, LispHashTable, List, Object},
 };
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
@@ -424,7 +422,7 @@ pub(crate) fn make_hash_table<'ob>(
         }
     }
     // TODO, the rest of the keywords need to be supported here
-    let map: HashTable = HashTable::with_hasher(std::hash::BuildHasherDefault::default());
+    let map = HashTable::with_hasher(std::hash::BuildHasherDefault::default());
     Ok(cx.add(map))
 }
 
@@ -437,16 +435,16 @@ pub(crate) fn hash_table_p(obj: GcObj) -> bool {
 pub(crate) fn puthash<'ob>(
     key: GcObj<'ob>,
     value: GcObj<'ob>,
-    table: &RefCell<HashTable<'ob>>,
-) -> GcObj<'ob> {
-    table.borrow_mut().insert(key, value);
-    value
+    table: &'ob LispHashTable,
+) -> Result<GcObj<'ob>> {
+    table.try_borrow_mut()?.insert(key, value);
+    Ok(value)
 }
 
 #[defun]
 pub(crate) fn gethash<'ob>(
     key: GcObj<'ob>,
-    table: &RefCell<HashTable<'ob>>,
+    table: &'ob LispHashTable,
     dflt: Option<GcObj<'ob>>,
 ) -> Option<GcObj<'ob>> {
     match table.borrow().get(&key) {
