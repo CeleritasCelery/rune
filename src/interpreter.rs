@@ -30,8 +30,9 @@ impl std::error::Error for EvalError {}
 
 impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let ErrorType::Err(e) = &self.error {
-            writeln!(f, "{e}")?;
+        match &self.error {
+            ErrorType::Err(e) => writeln!(f, "{e}")?,
+            ErrorType::Throw => writeln!(f, "No catch for throw")?,
         }
         for x in &self.backtrace {
             writeln!(f, "{x}")?;
@@ -189,13 +190,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 let tag = self.env.catch_stack.last().unwrap();
-                if matches!(e.error, ErrorType::Throw) && *tag == self.env.exception.0 {
-                    Ok(self.env.exception.1.bind(cx))
-                } else {
-                    // Either this was not a throw or the tag does not match
-                    // this catch block
-                    Err(e)
+                if let ErrorType::Throw = e.error {
+                    if let Some(data) = self.env.get_exception(Some(tag.bind(cx))) {
+                        return Ok(data.bind(cx));
+                    }
                 }
+                Err(e)
             }
         };
         // pop this tag from the catch stack
@@ -213,8 +213,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let value = forms.next().unwrap()?;
         let env = self.env.as_mut(cx);
         if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
-            env.exception.0.set(tag);
-            env.exception.1.set(value);
+            env.set_exception(tag, value);
             Err(EvalError {
                 error: ErrorType::Throw,
                 backtrace: Vec::new(),

@@ -16,7 +16,7 @@ pub(crate) struct Env {
     pub(crate) vars: HashMap<&'static Symbol, GcObj<'static>>,
     pub(crate) props: HashMap<&'static Symbol, Vec<(&'static Symbol, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
-    pub(crate) exception: (GcObj<'static>, GcObj<'static>),
+    exception: (GcObj<'static>, GcObj<'static>),
     pub(crate) special_variables: HashSet<&'static Symbol>,
     pub(crate) binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
@@ -41,6 +41,19 @@ impl Rt<Env> {
             None => {
                 self.props.insert(symbol, vec![(propname, value)]);
             }
+        }
+    }
+
+    pub(crate) fn set_exception(&mut self, tag: GcObj, data: GcObj) {
+        self.exception.0.set(tag);
+        self.exception.1.set(data);
+    }
+
+    pub(crate) fn get_exception(&self, tag: Option<GcObj>) -> Option<&Rt<GcObj<'static>>> {
+        match tag {
+            Some(t) if self.exception.0 == t => Some(&self.exception.1),
+            Some(_) => Some(&self.exception.1),
+            None => None,
         }
     }
 }
