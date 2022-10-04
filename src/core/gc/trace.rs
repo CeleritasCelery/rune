@@ -48,6 +48,14 @@ impl<T: Trace> Trace for Option<T> {
     }
 }
 
+impl Trace for u32 {
+    fn mark(&self, _stack: &mut Vec<RawObj>) {}
+}
+
+impl Trace for usize {
+    fn mark(&self, _stack: &mut Vec<RawObj>) {}
+}
+
 #[cfg(test)]
 mod test {
     use super::super::super::gc::{Context, RootSet};

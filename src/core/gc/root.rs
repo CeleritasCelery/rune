@@ -398,6 +398,12 @@ impl Rt<Gc<&Cons>> {
     }
 }
 
+impl Rt<u32> {
+    pub(crate) fn get(&self) -> u32 {
+        self.inner
+    }
+}
+
 impl IntoObject for &Rt<GcObj<'static>> {
     type Out<'ob> = Object<'ob>;
 
@@ -460,6 +466,12 @@ impl<T> Deref for Rt<Option<T>> {
 impl<T> DerefMut for Rt<Option<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
+    }
+}
+
+impl<T: std::ops::AddAssign> std::ops::AddAssign<T> for Rt<T> {
+    fn add_assign(&mut self, rhs: T) {
+        self.inner.add_assign(rhs);
     }
 }
 

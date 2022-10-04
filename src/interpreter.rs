@@ -22,7 +22,7 @@ pub(crate) struct EvalError {
 
 #[derive(Debug)]
 enum ErrorType {
-    Throw,
+    Throw(u32),
     Err(anyhow::Error),
 }
 
@@ -32,7 +32,7 @@ impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.error {
             ErrorType::Err(e) => writeln!(f, "{e}")?,
-            ErrorType::Throw => writeln!(f, "No catch for throw")?,
+            ErrorType::Throw(_) => writeln!(f, "No catch for throw")?,
         }
         for x in &self.backtrace {
             writeln!(f, "{x}")?;
@@ -189,10 +189,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let result = match self.implicit_progn(forms, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
-                let tag = self.env.catch_stack.last().unwrap();
-                if let ErrorType::Throw = e.error {
-                    if let Some(data) = self.env.get_exception(Some(tag.bind(cx))) {
-                        return Ok(data.bind(cx));
+                if let ErrorType::Throw(id) = e.error {
+                    if let Some((throw_tag, data)) = self.env.get_exception(id) {
+                        let catch_tag = self.env.catch_stack.last().unwrap();
+                        if catch_tag == throw_tag {
+                            return Ok(data.bind(cx));
+                        }
                     }
                 }
                 Err(e)
@@ -212,10 +214,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let tag = forms.next().unwrap()?;
         let value = forms.next().unwrap()?;
         let env = self.env.as_mut(cx);
+        // Need to check now that there is a catch, because we may have a
+        // condition-case along the unwind path
         if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
-            env.set_exception(tag, value);
+            let id = env.set_exception(tag, value);
             Err(EvalError {
-                error: ErrorType::Throw,
+                error: ErrorType::Throw(id),
                 backtrace: Vec::new(),
             })
         } else {
@@ -680,7 +684,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 const CONDITION_ERROR: &str = "Invalid condition handler:";
-                if let ErrorType::Throw = e.error {
+                if let ErrorType::Throw(_) = e.error {
                     return Err(e);
                 }
                 while let Some(handler) = forms.next() {
