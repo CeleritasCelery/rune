@@ -73,6 +73,7 @@ mod core;
 mod debug;
 mod alloc;
 mod arith;
+mod bytecode;
 mod buffer;
 mod character;
 mod data;
