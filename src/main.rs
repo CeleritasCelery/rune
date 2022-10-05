@@ -86,6 +86,7 @@ mod hashmap;
 mod interpreter;
 mod keymap;
 mod lread;
+mod print;
 mod reader;
 mod search;
 

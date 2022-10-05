@@ -475,6 +475,7 @@ create_symbolmap!(
     crate::lread,
     crate::fileio,
     crate::data,
+    crate::print,
     crate::fns,
     crate::search,
     crate::eval,
