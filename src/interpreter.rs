@@ -23,6 +23,7 @@ pub(crate) struct EvalError {
 #[derive(Debug)]
 enum ErrorType {
     Throw(u32),
+    Signal(u32),
     Err(anyhow::Error),
 }
 
@@ -33,6 +34,7 @@ impl Display for EvalError {
         match &self.error {
             ErrorType::Err(e) => writeln!(f, "{e}")?,
             ErrorType::Throw(_) => writeln!(f, "No catch for throw")?,
+            ErrorType::Signal(_) => writeln!(f, "Signal")?,
         }
         for x in &self.backtrace {
             writeln!(f, "{x}")?;
@@ -46,6 +48,13 @@ impl EvalError {
         Self {
             backtrace: Vec::new(),
             error: ErrorType::Err(error),
+        }
+    }
+
+    pub(crate) fn signal(error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
+        Self {
+            backtrace: Vec::new(),
+            error: ErrorType::Signal(env.set_exception(error_symbol, data)),
         }
     }
 
@@ -684,7 +693,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
                 const CONDITION_ERROR: &str = "Invalid condition handler:";
-                if let ErrorType::Throw(_) = e.error {
+                if matches!(e.error, ErrorType::Throw(_)) {
                     return Err(e);
                 }
                 while let Some(handler) = forms.next() {
@@ -697,6 +706,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                                 Object::Cons(cons) => {
                                     for x in cons.elements() {
                                         let x = x?;
+                                        // TODO: Handle different error symbols
                                         if x != sym::DEBUG && x != sym::ERROR {
                                             bail_err!("non-error conditions {x} not yet supported")
                                         }
@@ -705,7 +715,15 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                                 _ => bail_err!("{CONDITION_ERROR} {condition}"),
                             }
                             // Call handlers with error
-                            let binding = list!(var, sym::ERROR, format!("{e}"); cx).as_cons();
+                            let error = if let ErrorType::Signal(id) = e.error {
+                                let Some((sym, data)) = self.env.get_exception(id) else {unreachable!("Exception not found")};
+                                cons!(sym, data; cx)
+                            } else {
+                                // TODO: Need to remove the anyhow branch once
+                                // full errors are implemented
+                                cons!(sym::ERROR, format!("{e}"); cx)
+                            };
+                            let binding = list!(var, error; cx).as_cons();
                             self.vars.as_mut(cx).push(binding);
                             let list: Gc<List> = match cons.cdr().try_into() {
                                 Ok(x) => x,

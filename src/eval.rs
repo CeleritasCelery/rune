@@ -9,6 +9,7 @@ use crate::core::{
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
+use crate::interpreter::EvalError;
 use crate::{root, rooted_iter};
 
 use crate::core::env::{sym, ConstSymbol, Env, Symbol};
@@ -198,6 +199,14 @@ fn internal__define_uninitialized_variable<'ob>(
 }
 
 #[defun]
+fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Root<Env>, cx: &Context) -> Result<bool> {
+    if error_symbol.nil() && data.nil() {
+        error_symbol = sym::ERROR.into();
+    }
+    Err(EvalError::signal(error_symbol, data, env.as_mut(cx)).into())
+}
+
+#[defun]
 fn special_variable_p(symbol: &Symbol, env: &Root<Env>) -> bool {
     env.special_variables.contains(symbol)
 }
@@ -255,6 +264,7 @@ define_symbols!(
         autoload_do_load,
         macroexpand,
         internal__define_uninitialized_variable,
+        signal,
         set_default_toplevel_value,
         set_default,
         special_variable_p,
