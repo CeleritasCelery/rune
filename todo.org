@@ -1,11 +1,8 @@
 #+title: Next steps for Rune
-* Objects
-** implement vec without lifetime parameter
-This would let the Object lifetime be covariant instead of invariant. But the problem is that we need to reimplement everything for our vec type. I actually don't think invariance will be such a problem once we update the gc borrowing.
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
-* Steps to add a new object
+* Steps to add a new object type
 - define in gc.rs
 - add boxing function
 - define in object

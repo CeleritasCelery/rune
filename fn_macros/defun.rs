@@ -68,6 +68,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
 
         #[doc(hidden)]
         #[allow(non_snake_case)]
+        #[allow(non_upper_case_globals)]
         pub(crate) static #symbol_name: crate::core::env::Symbol = unsafe {crate::core::env::Symbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
 
         #[doc(hidden)]

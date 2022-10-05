@@ -10,7 +10,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Mutex;
 
-#[allow(dead_code)]
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
     pub(crate) vars: HashMap<&'static Symbol, GcObj<'static>>,

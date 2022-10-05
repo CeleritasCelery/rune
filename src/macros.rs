@@ -53,6 +53,7 @@ macro_rules! __bind_symbols {
             #[allow(dead_code)]
             #[doc(hidden)]
             #[allow(non_snake_case)]
+            #[allow(non_upper_case_globals)]
             pub(crate) const [<$head:upper>]: crate::core::env::ConstSymbol = super::__SYMBOLS[$idx];
         }
         __bind_symbols!(@step $idx + 1_usize, $($tail,)*);
