@@ -29,7 +29,20 @@ pub(crate) struct FnArgs {
 #[derive(Debug, PartialEq)]
 pub(crate) struct Expression {
     pub(crate) op_codes: CodeVec,
-    // pub(crate) constants: Vec<GcObj<'ob>>,
+    constants: Vec<GcObj<'static>>,
+}
+
+impl Expression {
+    pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>) -> Expression {
+        let constants = std::mem::transmute::<Vec<GcObj>, Vec<GcObj<'static>>>(consts);
+        Expression {
+            op_codes,
+            constants,
+        }
+    }
+    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a [GcObj<'ob>] {
+        unsafe { std::mem::transmute::<&'a [GcObj<'static>], &'a [GcObj<'ob>]>(&self.constants) }
+    }
 }
 
 /// A function implemented in lisp. Note that all functions are byte compiled,
@@ -63,11 +76,13 @@ impl FnArgs {
 define_unbox!(LispFn, Func, &'ob LispFn);
 
 impl<'new> LispFn {
-    pub(crate) fn clone_in<const C: bool>(&self, _bk: &'new Block<C>) -> LispFn {
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn {
         LispFn {
-            body: Expression {
-                op_codes: self.body.op_codes.clone(),
-                // constants: self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
+            body: unsafe {
+                Expression::new(
+                    self.body.op_codes.clone(),
+                    self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
+                )
             },
             args: self.args,
         }
