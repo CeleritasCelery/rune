@@ -9,7 +9,7 @@ use super::super::{
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
-use crate::core::object::{Function, Gc, IntoObject, Object, WithLifetime};
+use crate::core::object::{CodeVec, Function, Gc, IntoObject, Object, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
 pub(crate) trait IntoRoot<T> {
@@ -384,6 +384,10 @@ impl Rt<GcObj<'_>> {
     pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
         self.bind(cx).get()
     }
+
+    pub(crate) fn nil(&self) -> bool {
+        self.inner.nil()
+    }
 }
 
 impl Rt<Gc<Function<'_>>> {
@@ -425,6 +429,14 @@ impl IntoObject for &mut Root<'_, '_, GcObj<'static>> {
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
+    }
+}
+
+impl Deref for Rt<CodeVec> {
+    type Target = CodeVec;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 

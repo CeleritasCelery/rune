@@ -1,5 +1,6 @@
+use num_enum::TryFromPrimitive;
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, TryFromPrimitive)]
 #[repr(u8)]
 pub(crate) enum OpCode {
     StackRef0 = 0,
@@ -139,7 +140,7 @@ pub(crate) enum OpCode {
     GotoIfNonNilElsePop = 134,
     Return = 135,
     Discard = 136,
-    Dup = 137,
+    Duplicate = 137,
     SaveExcursion = 138,
     ObsoleteSaveWindowExcursion = 139,
     SaveRestriction = 140,
@@ -180,8 +181,8 @@ pub(crate) enum OpCode {
     ListN = 175,
     ConcatN = 176,
     InsertN = 177,
-    StackSet = 178,
-    StackSet2 = 179,
+    StackSetN = 178,
+    StackSetN2 = 179,
     Unused180,
     Unused181,
     DiscardN = 182,

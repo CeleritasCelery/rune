@@ -1145,6 +1145,14 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old String> {
     }
 }
 
+impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Vec<T> {
+    type Out = Vec<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute::<Vec<T>, Self::Out>(self)
+    }
+}
+
 impl<'ob> Gc<&'ob String> {
     pub(crate) fn get(self) -> &'ob String {
         let (ptr, _) = self.untag();

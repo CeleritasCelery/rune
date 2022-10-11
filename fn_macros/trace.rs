@@ -20,13 +20,16 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                         new_fields.extend(quote! {#vis #ident: #rt<#ty>,});
                         mark_fields.extend(quote! {self.#ident.mark(stack);});
                     }
+                    new_fields = quote!{{#new_fields}};
                 }
                 syn::Fields::Unnamed(fields) => {
                     for (i, x) in fields.unnamed.iter().enumerate() {
                         let syn::Field { vis, ty, .. } = &x;
                         new_fields.extend(quote! {#vis #rt<#ty>,});
-                        mark_fields.extend(quote! {self.#i.mark(stack);});
+                        let idx = syn::Index::from(i);
+                        mark_fields.extend(quote! {self.#idx.mark(stack);});
                     }
+                    new_fields = quote!{(#new_fields);};
                 }
                 syn::Fields::Unit => panic!("fieldless structs don't need tracing"),
             }
@@ -39,9 +42,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
 
                 #[allow(non_camel_case_types)]
                 #[doc(hidden)]
-                #vis struct #rooted_name {
-                    #new_fields
-                }
+                #vis struct #rooted_name #new_fields
             }
         }
         _ => todo!(),
@@ -62,5 +63,23 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
             }
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_expand () {
+        let stream = quote!(
+            struct LispStack(Vec<GcObj<'static>>);
+        );
+        let input: syn::DeriveInput = syn::parse2(stream).unwrap();
+        let result = expand(&input);
+        println!("{result}");
+        panic!();
     }
 }

@@ -1,4 +1,3 @@
-use super::GcObj;
 use super::{
     super::{
         error::ArgError,
@@ -6,10 +5,12 @@ use super::{
     },
     nil,
 };
+use super::{GcObj, WithLifetime};
 use crate::core::gc::{Rt, Trace};
 use std::fmt;
 
 use anyhow::{bail, Result};
+use fn_macros::Trace;
 
 /// Argument requirments to a function.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -26,7 +27,7 @@ pub(crate) struct FnArgs {
 
 /// Represents the body of a function that has been byte compiled. Note that
 /// this can represent any top level expression, not just functions.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Trace)]
 pub(crate) struct Expression {
     pub(crate) op_codes: CodeVec,
     constants: Vec<GcObj<'static>>,
@@ -45,6 +46,20 @@ impl Expression {
     }
 }
 
+impl Rt<&Expression> {
+    pub(crate) fn constants<'ob, 'a>(&'a self, cx: &'ob Context) -> &'a [GcObj<'ob>] {
+        self.bind(cx).constants(cx)
+    }
+}
+
+impl<'new> WithLifetime<'new> for &Expression {
+    type Out = &'new Expression;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const Expression)
+    }
+}
+
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(Debug, PartialEq)]
@@ -53,8 +68,29 @@ pub(crate) struct LispFn {
     pub(crate) args: FnArgs,
 }
 
+impl<'new> WithLifetime<'new> for &LispFn {
+    type Out = &'new LispFn;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const LispFn)
+    }
+}
+
+impl Rt<&'static LispFn> {
+    pub(crate) fn body(&self) -> &Rt<&'static Expression> {
+        unsafe {
+            let x: &&Expression = &&self.bind_unchecked().body;
+            &*(x as *const &Expression).cast::<Rt<&Expression>>()
+        }
+    }
+}
+
 #[derive(PartialEq, Clone, Default, Debug)]
 pub(crate) struct CodeVec(pub(crate) Vec<u8>);
+
+impl Trace for CodeVec {
+    fn mark(&self, _: &mut Vec<super::RawObj>) {}
+}
 
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.

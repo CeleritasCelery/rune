@@ -52,6 +52,10 @@ impl Trace for u32 {
     fn mark(&self, _stack: &mut Vec<RawObj>) {}
 }
 
+impl Trace for u8 {
+    fn mark(&self, _stack: &mut Vec<RawObj>) {}
+}
+
 impl Trace for usize {
     fn mark(&self, _stack: &mut Vec<RawObj>) {}
 }
