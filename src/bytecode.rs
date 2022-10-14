@@ -63,11 +63,8 @@ struct CallFrame<'brw> {
 
 impl<'brw> CallFrame<'brw> {
     fn new(func: &'brw Rt<&'static Expression>, frame_start: usize) -> CallFrame<'brw> {
-        let exp: &&Expression =
-            unsafe { &**(func as *const Rt<&Expression>).cast::<*const &Expression>() };
-        let slice = &exp.op_codes.0;
         CallFrame {
-            ip: Ip::new(slice),
+            ip: Ip::new(func.op_codes()),
             code: func,
             start: frame_start,
         }

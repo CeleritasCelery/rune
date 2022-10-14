@@ -66,11 +66,11 @@ impl Cons {
         }
     }
 
-    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> GcObj<'new> {
+    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> &'new Cons {
         unsafe {
             Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk))
                 .into_obj(bk)
-                .into()
+                .get()
         }
     }
 

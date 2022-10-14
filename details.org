@@ -349,25 +349,6 @@ These will not implement copy and also implement drop. This will make working in
 These will implement copy but not drop. This means that we can build any structure we want, and control allocation. These will need to be GC'ed.
 **** interop
 When you are constructing an object to return to the lisp vm you will use the owned objects almost all the time. When we get objects from the VM they will be reference objects. I am still not sure if it would be better to make these a different object type, or just return a reference to the object. Probably should just start with a reference and then update as needed. So we may not even need a reference type defined, because a true reference already meets the bill. Only reason we would need something else would be for performance.
-*** should we add lifetimes to the objects?
-Since the lifetime of the actual data is tied to the arena, does it make sense to add lifetimes to all our objects? This would make "sure" that objects can't outlive their arena, and that objects returned from rust call aren't using the same arena. This would happen in two cases
-- objects are put in a struct that lives globally
-- the rust function creates a new arena and returns that.
-
-Both of these seem like they could be avoided pretty easily. The other concern is when doing unit testing we want the arena to clean up after the test. But so long as the arena is declared at the top of the test and the test does not put objects in global structs.
-
-The reason we may not want lifetimes is because they can be a real pain, and their is no good way to put lifetimed objects in struct (since this is a self-referencial struct, which rust hates). Which means we need to cheat everytime we have to put something in a stack or struct. Because at the end of the day we are not using lifetimes for memory managment, we are using garbage collection. The only thing we really need to avoid is objects getting collected that are still in use.
-
-There is a third option, where we declare =lispobj= as =object<'static>=, which means that it will behave the extact same, but give us the option to limit the lifetimes if we wanted to.
-*** tagged objects or enums
-**** objects
-- convert arrays in place
-- have a function object for symbols
-**** enum
-- much cleaner code
-- no need for .val function
-
-only need to create into and tryinto traits to work with this.
 *** Emacs symbol definition
 [[https://debbugs.gnu.org/cgi/bugreport.cgi?bug=43601][uninterned symbols confusion]]
 [[file:~/emacs-git/src/lisp.h::struct Lisp_Symbol][emacs source]]
@@ -431,6 +412,10 @@ struct Lisp_Symbol
 ***
 *** Heap only types
 It would be useful to have some types that will only ever live on the heap. This would let us store meta-data (like constness or mark bits) at an alignment offset. And since every reference we get is on the heap, we can access the meta-data with pointer Arithmetic. The other nice part of this is that we could remove inner lifetimes (such as ~&'a Cons<'a>~) because we know that the data it points to is garbage collected and will live at least as long as the reference, due to being traceable.
+
+To do this we could create a ~GcManaged~ type that allows us to hold references that would normally have some lifetime but we can treat them as static because they are a traced type. This would be similar to the root type that allows us access to inner types, but with ~GcManaged~ we could get a reference out by tying it to the borrow.
+*** Thread shared types
+Objects that are part of a function can be shared between threads. This is safe because they are marked as immutable, so they will not be edited. But we need some way to convince rust of this. Maybe we could make a ~Shared~ type that would let us mark things as immutable. Every object has some way to mark it immutable. This type would ensure that anything it holds has been marked immutable, and is therefore safe to share.
 ** Garbage collection
 I have been heavily inspired by other rust gc projects. I want to use the afine types to make a safe and ergonomic API.
 
@@ -443,6 +428,8 @@ Could we do something with closures? Like have a method that takes a type and le
 So we will have a trait the defines some methods that take a ~Gc<T>~ and then provides a special token that let you call methods to create and ~AsRef~ the ~GcRoot~. We will unsafe rebind the lifetimes to only the scope of that method so that nothing can leak or escape.
 
 Or maybe it doesn't even have to be a method? Maybe it is just a function that takes a closure. Make sure to take the arena too so that Gc will not be called. A function would keep me from have to implement a trait everywhere for every new type.
+*** moving collector
+In order to implement a proper moving collector.
 
 * features
 ** reader macros

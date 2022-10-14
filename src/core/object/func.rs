@@ -6,6 +6,7 @@ use super::{
     nil,
 };
 use super::{GcObj, WithLifetime};
+use crate::core::cons::Cons;
 use crate::core::gc::{Rt, Trace};
 use std::fmt;
 
@@ -41,6 +42,7 @@ impl Expression {
             constants,
         }
     }
+
     pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a [GcObj<'ob>] {
         unsafe { std::mem::transmute::<&'a [GcObj<'static>], &'a [GcObj<'ob>]>(&self.constants) }
     }
@@ -49,6 +51,10 @@ impl Expression {
 impl Rt<&Expression> {
     pub(crate) fn constants<'ob, 'a>(&'a self, cx: &'ob Context) -> &'a [GcObj<'ob>] {
         self.bind(cx).constants(cx)
+    }
+
+    pub(crate) fn op_codes(&self) -> &[u8] {
+        unsafe { &self.bind_unchecked().op_codes.0 }
     }
 }
 
