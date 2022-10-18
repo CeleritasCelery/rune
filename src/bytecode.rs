@@ -55,27 +55,27 @@ impl Ip {
 #[derive(Clone)]
 struct CallFrame<'brw> {
     ip: Ip,
-    code: &'brw Rt<&'static Expression>,
+    code: &'brw Rt<Expression>,
     /// The index where this call frame starts on the stack. The interpreter
     /// should not access elements beyond this index.
     start: usize,
 }
 
 impl<'brw> CallFrame<'brw> {
-    fn new(func: &'brw Rt<&'static Expression>, frame_start: usize) -> CallFrame<'brw> {
+    fn new(func: &'brw Rt<Expression>, frame_start: usize) -> CallFrame<'brw> {
         CallFrame {
-            ip: Ip::new(func.op_codes()),
+            ip: Ip::new(func.op_codes.get()),
             code: func,
             start: frame_start,
         }
     }
 
     fn get_const<'ob>(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
-        *self
-            .code
-            .constants(cx)
+        self.code
+            .constants
             .get(i)
             .expect("constant had invalid index")
+            .bind(cx)
     }
 }
 
@@ -394,7 +394,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     }
                 }
                 op::GotoIfNonNilElsePop => {
-                    let cond = self.stack.as_mut(cx).last().unwrap();
+                    let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.next2();
                     if cond.nil() {
                         self.stack.as_mut(cx).pop();
@@ -404,7 +404,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::Return => {
                     if self.call_frames.is_empty() {
-                        debug_assert_eq!(self.stack.as_mut(cx).len(), init_stack_size + 1);
+                        debug_assert_eq!(self.stack.len(), init_stack_size + 1);
                         return Ok(self.stack.as_mut(cx).pop().unwrap().bind(cx));
                     }
                     let var = self.stack.as_mut(cx).pop().unwrap();
@@ -421,7 +421,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
 
     /// Execute the given expression.
     pub(crate) fn execute(
-        exp: &Rt<&'static Expression>,
+        exp: &Rt<Expression>,
         env: &mut Root<Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {

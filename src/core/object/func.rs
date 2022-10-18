@@ -6,7 +6,6 @@ use super::{
     nil,
 };
 use super::{GcObj, WithLifetime};
-use crate::core::cons::Cons;
 use crate::core::gc::{Rt, Trace};
 use std::fmt;
 
@@ -31,7 +30,7 @@ pub(crate) struct FnArgs {
 #[derive(Debug, PartialEq, Trace)]
 pub(crate) struct Expression {
     pub(crate) op_codes: CodeVec,
-    constants: Vec<GcObj<'static>>,
+    pub(crate) constants: Vec<GcObj<'static>>,
 }
 
 impl Expression {
@@ -48,24 +47,6 @@ impl Expression {
     }
 }
 
-impl Rt<&Expression> {
-    pub(crate) fn constants<'ob, 'a>(&'a self, cx: &'ob Context) -> &'a [GcObj<'ob>] {
-        self.bind(cx).constants(cx)
-    }
-
-    pub(crate) fn op_codes(&self) -> &[u8] {
-        unsafe { &self.bind_unchecked().op_codes.0 }
-    }
-}
-
-impl<'new> WithLifetime<'new> for &Expression {
-    type Out = &'new Expression;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const Expression)
-    }
-}
-
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(Debug, PartialEq)]
@@ -79,15 +60,6 @@ impl<'new> WithLifetime<'new> for &LispFn {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         &*(self as *const LispFn)
-    }
-}
-
-impl Rt<&'static LispFn> {
-    pub(crate) fn body(&self) -> &Rt<&'static Expression> {
-        unsafe {
-            let x: &&Expression = &&self.bind_unchecked().body;
-            &*(x as *const &Expression).cast::<Rt<&Expression>>()
-        }
     }
 }
 
@@ -132,8 +104,14 @@ impl<'new> LispFn {
 }
 
 impl Trace for LispFn {
-    fn mark(&self, _stack: &mut Vec<super::RawObj>) {
-        // self.body.constants.mark(stack);
+    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+        self.body.constants.mark(stack);
+    }
+}
+
+impl Trace for &LispFn {
+    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+        self.body.constants.mark(stack);
     }
 }
 

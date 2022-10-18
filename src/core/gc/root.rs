@@ -9,7 +9,9 @@ use super::super::{
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
-use crate::core::object::{CodeVec, Function, Gc, IntoObject, Object, WithLifetime};
+use crate::core::object::{
+    CodeVec, Expression, Function, Gc, IntoObject, LispFn, Object, WithLifetime,
+};
 use crate::hashmap::{HashMap, HashSet};
 
 pub(crate) trait IntoRoot<T> {
@@ -46,6 +48,12 @@ where
 
 impl IntoRoot<&'static Cons> for &Cons {
     unsafe fn into_root(self) -> &'static Cons {
+        self.with_lifetime()
+    }
+}
+
+impl IntoRoot<&'static LispFn> for &LispFn {
+    unsafe fn into_root(self) -> &'static LispFn {
         self.with_lifetime()
     }
 }
@@ -451,6 +459,20 @@ impl Rt<&Cons> {
 
     pub(crate) fn cdr<'ob>(&self, _cx: &'ob Context) -> GcObj<'ob> {
         unsafe { (*self.inner.addr_cdr()).with_lifetime() }
+    }
+}
+
+impl Rt<&'static LispFn> {
+    pub(crate) fn body(&self) -> &Rt<Expression> {
+        let expression: &Expression = &self.inner.body;
+        unsafe { &*(expression as *const Expression).cast::<Rt<Expression>>() }
+    }
+}
+
+impl Rt<CodeVec> {
+    pub(crate) fn get(&self) -> &[u8] {
+        // TODO: need to decide how to handle this with a moving collector
+        self.inner.0.as_ref()
     }
 }
 

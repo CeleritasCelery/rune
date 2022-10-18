@@ -44,7 +44,7 @@ pub(crate) fn make_closure<'ob>(
 }
 
 #[defun]
-fn make_byte_code<'ob>(
+pub(crate) fn make_byte_code<'ob>(
     arglist: i64,
     byte_code: &RefCell<Vec<u8>>,
     constants: &'ob LispVec,

@@ -1067,6 +1067,13 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
+impl<'ob> Gc<&'ob LispFn> {
+    pub(crate) fn get(self) -> &'ob LispFn {
+        let (ptr, _) = self.untag();
+        unsafe { LispFn::from_obj_ptr(ptr) }
+    }
+}
+
 impl<'ob> Gc<&'ob Symbol> {
     pub(crate) fn get(self) -> &'ob Symbol {
         let (ptr, _) = self.untag();
