@@ -55,7 +55,10 @@ pub(crate) fn make_byte_code<'ob>(
 ) -> LispFn {
     let arglist = arglist as u16;
     let required = arglist & 0x7F;
-    let optional = arglist >> 8 & 0x7F;
+    let optional = {
+        let max = (arglist >> 8) & 0x7F;
+        max - required
+    };
     let rest = arglist & 0x80 != 0;
     LispFn {
         body: unsafe {
