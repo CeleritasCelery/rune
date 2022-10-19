@@ -1,11 +1,15 @@
 #![allow(dead_code)]
 //! The main bytecode interpeter.
 
+use std::ops::DerefMut;
+
 use anyhow::{anyhow, Result};
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
-use crate::core::object::{nil, Expression, GcObj, LispFn, Object, SubrFn, WithLifetime};
+use crate::core::object::{
+    nil, Expression, GcObj, IntoObject, LispFn, Object, SubrFn, WithLifetime,
+};
 use crate::root;
 
 mod opcode;
@@ -90,7 +94,7 @@ impl std::ops::Deref for Rt<LispStack> {
     }
 }
 
-impl std::ops::DerefMut for Rt<LispStack> {
+impl DerefMut for Rt<LispStack> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
@@ -105,6 +109,12 @@ impl LispStack {
 impl Trace for LispStack {
     fn mark(&self, stack: &mut Vec<crate::core::object::RawObj>) {
         self.0.mark(stack);
+    }
+}
+
+impl Root<'_, '_, LispStack> {
+    fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
+        self.as_mut(cx).deref_mut().pop(cx).unwrap()
     }
 }
 
@@ -169,8 +179,8 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     fn varset(&mut self, idx: usize, env: &mut Root<Env>, cx: &Context) -> Result<()> {
         let obj = self.frame.get_const(idx, cx);
         let symbol: &Symbol = obj.try_into()?;
-        let value = self.stack.as_mut(cx).pop().unwrap();
-        crate::data::set(symbol, value.bind(cx), env, cx)?;
+        let value = self.stack.pop(cx);
+        crate::data::set(symbol, value, env, cx)?;
         Ok(())
     }
 
@@ -354,8 +364,17 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     let idx = self.frame.ip.next2();
                     self.call(idx, env, cx)?;
                 }
+                op::Plus => {
+                    let args = {
+                        let arg1 = self.stack.pop(cx);
+                        let arg2 = self.stack.last().unwrap();
+                        &[arg1.try_into()?, arg2.bind(cx).try_into()?]
+                    };
+                    let result: GcObj = crate::arith::add(args).into_obj(cx).into();
+                    self.stack.as_mut(cx).last_mut().unwrap().set(result);
+                }
                 op::Discard => {
-                    self.stack.as_mut(cx).pop();
+                    self.stack.pop(cx);
                 }
                 op::DiscardN => {
                     let num: usize = self.frame.ip.next().into();
@@ -371,14 +390,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.frame.ip.goto(offset as i16);
                 }
                 op::GotoIfNil => {
-                    let cond = self.stack.as_mut(cx).pop().unwrap();
+                    let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
                     if cond.nil() {
                         self.frame.ip.goto(offset as i16);
                     }
                 }
                 op::GotoIfNonNil => {
-                    let cond = self.stack.as_mut(cx).pop().unwrap();
+                    let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
                     if !cond.nil() {
                         self.frame.ip.goto(offset as i16);
@@ -390,14 +409,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     if cond.nil() {
                         self.frame.ip.goto(offset as i16);
                     } else {
-                        self.stack.as_mut(cx).pop();
+                        self.stack.pop(cx);
                     }
                 }
                 op::GotoIfNonNilElsePop => {
                     let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.next2();
                     if cond.nil() {
-                        self.stack.as_mut(cx).pop();
+                        self.stack.pop(cx);
                     } else {
                         self.frame.ip.goto(offset as i16);
                     }
@@ -405,10 +424,10 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 op::Return => {
                     if self.call_frames.is_empty() {
                         debug_assert_eq!(self.stack.len(), init_stack_size + 1);
-                        return Ok(self.stack.as_mut(cx).pop().unwrap().bind(cx));
+                        return Ok(self.stack.pop(cx));
                     }
-                    let var = self.stack.as_mut(cx).pop().unwrap();
-                    self.stack.as_mut(cx)[self.frame.start] = var;
+                    let var = self.stack.pop(cx);
+                    self.stack.as_mut(cx)[self.frame.start].set(var);
                     self.stack.as_mut(cx).truncate(self.frame.start + 1);
                     self.frame = self.call_frames.pop().unwrap();
                 }
@@ -450,4 +469,67 @@ pub(crate) fn call<'ob>(
     };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
     rout.run(env, cx)
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+
+    use crate::core::{
+        gc::RootSet,
+        object::{IntoObject, LispVec},
+    };
+
+    use super::{opcode::OpCode, *};
+
+    fn check_bytecode<'ob, T>(
+        arglist: i64,
+        args: Vec<GcObj<'ob>>,
+        opcodes: Vec<OpCode>,
+        constants: Vec<GcObj<'ob>>,
+        expect: T,
+        cx: &'ob mut Context,
+    ) where
+        T: IntoObject,
+    {
+        root!(env, Env::default(), cx);
+        println!("Test seq: {:?}", opcodes);
+
+        let constants = cx.add(constants);
+        let constants: &LispVec = constants.try_into().unwrap();
+        let codes = RefCell::new(opcodes.into_iter().map(|x| x as u8).collect());
+        let bytecode = crate::alloc::make_byte_code(arglist, &codes, constants, 0, None, None, &[]);
+        let bytecode: &LispFn = bytecode.into_obj(cx).get();
+        root!(bytecode, cx);
+        let val = rebind!(call(bytecode, args, env, cx).unwrap(), cx);
+        let expect: GcObj = expect.into_obj(cx).copy_as_obj();
+        assert_eq!(val, expect);
+    }
+
+    #[test]
+    fn test_basic() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        check_bytecode(
+            257,
+            vec![7.into()],
+            vec![OpCode::Constant0, OpCode::Return],
+            vec![5.into()],
+            5,
+            cx,
+        );
+        check_bytecode(
+            257,
+            vec![7.into()],
+            vec![
+                OpCode::Duplicate,
+                OpCode::Constant0,
+                OpCode::Plus,
+                OpCode::Return,
+            ],
+            vec![5.into()],
+            12,
+            cx,
+        );
+    }
 }

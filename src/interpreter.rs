@@ -210,7 +210,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
         };
         // pop this tag from the catch stack
-        self.env.as_mut(cx).catch_stack.pop();
+        self.env.as_mut(cx).catch_stack.pop(cx);
         result
     }
 

@@ -1067,6 +1067,7 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
+#[cfg(test)]
 impl<'ob> Gc<&'ob LispFn> {
     pub(crate) fn get(self) -> &'ob LispFn {
         let (ptr, _) = self.untag();

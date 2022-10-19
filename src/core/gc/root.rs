@@ -523,6 +523,12 @@ impl<T> Rt<Vec<T>> {
     }
 }
 
+impl Rt<Vec<GcObj<'static>>> {
+    pub(crate) fn pop<'ob>(&mut self, _cx: &'ob Context) -> Option<GcObj<'ob>> {
+        self.inner.pop().map(|x| unsafe { x.with_lifetime() })
+    }
+}
+
 impl<T> Deref for Rt<Vec<T>> {
     type Target = Vec<Rt<T>>;
     fn deref(&self) -> &Self::Target {
