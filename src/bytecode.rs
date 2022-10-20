@@ -31,9 +31,9 @@ impl Ip {
         }
     }
 
-    fn goto(&mut self, offset: i16) {
+    fn goto(&mut self, offset: u16) {
         unsafe {
-            self.ip = self.ip.offset(offset as isize);
+            self.ip = self.range.start.add(offset as usize);
             debug_assert!(self.range.contains(&self.ip));
         }
     }
@@ -387,27 +387,28 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::Goto => {
                     let offset = self.frame.ip.next2();
-                    self.frame.ip.goto(offset as i16);
+                    self.frame.ip.goto(offset);
                 }
                 op::GotoIfNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
+                    println!("offset = {offset}");
                     if cond.nil() {
-                        self.frame.ip.goto(offset as i16);
+                        self.frame.ip.goto(offset);
                     }
                 }
                 op::GotoIfNonNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
                     if !cond.nil() {
-                        self.frame.ip.goto(offset as i16);
+                        self.frame.ip.goto(offset);
                     }
                 }
                 op::GotoIfNilElsePop => {
                     let cond = self.stack.as_mut(cx).last().unwrap();
                     let offset = self.frame.ip.next2();
                     if cond.nil() {
-                        self.frame.ip.goto(offset as i16);
+                        self.frame.ip.goto(offset);
                     } else {
                         self.stack.pop(cx);
                     }
@@ -418,7 +419,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     if cond.nil() {
                         self.stack.pop(cx);
                     } else {
-                        self.frame.ip.goto(offset as i16);
+                        self.frame.ip.goto(offset);
                     }
                 }
                 op::Return => {
@@ -482,22 +483,40 @@ mod test {
 
     use super::{opcode::OpCode, *};
 
-    fn check_bytecode<'ob, T>(
+    macro_rules! check_bytecode { (
+        $arglist:expr,
+        [$($args:expr),* $(,)?],
+        [$($opcodes:expr),* $(,)?],
+        [$($constants:expr),* $(,)?],
+        $expect:expr,
+        $cx:expr $(,)?
+    ) => {
+        #[allow(trivial_numeric_casts)]
+        check_bytecode_internal(
+            $arglist,
+            vec![$($args.into_obj($cx).into()),*],
+            vec![$($opcodes as u8),*],
+            vec![$($constants.into_obj($cx).into()),*],
+            $expect.into_obj($cx).into(),
+            $cx
+        );
+    };
+    }
+
+    fn check_bytecode_internal<'ob>(
         arglist: i64,
         args: Vec<GcObj<'ob>>,
-        opcodes: Vec<OpCode>,
+        opcodes: Vec<u8>,
         constants: Vec<GcObj<'ob>>,
-        expect: T,
+        expect: GcObj,
         cx: &'ob mut Context,
-    ) where
-        T: IntoObject,
-    {
+    ) {
         root!(env, Env::default(), cx);
         println!("Test seq: {:?}", opcodes);
 
         let constants = cx.add(constants);
         let constants: &LispVec = constants.try_into().unwrap();
-        let codes = RefCell::new(opcodes.into_iter().map(|x| x as u8).collect());
+        let codes = RefCell::new(opcodes);
         let bytecode = crate::alloc::make_byte_code(arglist, &codes, constants, 0, None, None, &[]);
         let bytecode: &LispFn = bytecode.into_obj(cx).get();
         root!(bytecode, cx);
@@ -510,26 +529,39 @@ mod test {
     fn test_basic() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        check_bytecode(
+        // (lambda (x) 5)
+        check_bytecode!(257, [7], [OpCode::Constant0, OpCode::Return], [5], 5, cx);
+        // (lambda (x) (+ x 5))
+        check_bytecode!(
             257,
-            vec![7.into()],
-            vec![OpCode::Constant0, OpCode::Return],
-            vec![5.into()],
-            5,
-            cx,
-        );
-        check_bytecode(
-            257,
-            vec![7.into()],
-            vec![
+            [7],
+            [
                 OpCode::Duplicate,
                 OpCode::Constant0,
                 OpCode::Plus,
                 OpCode::Return,
             ],
-            vec![5.into()],
+            [5],
             12,
             cx,
+        );
+        // (lambda (x) (if x 2 3))
+        check_bytecode!(
+            257,
+            [false],
+            [
+                OpCode::Duplicate,
+                OpCode::GotoIfNil,
+                0x06,
+                0x00,
+                OpCode::Constant0,
+                OpCode::Return,
+                OpCode::Constant1,
+                OpCode::Return
+            ],
+            [2, 3],
+            3,
+            cx
         );
     }
 }
