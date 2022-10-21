@@ -10,7 +10,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    CodeVec, Expression, Function, Gc, IntoObject, LispFn, Object, WithLifetime,
+    CodeVec, Expression, Function, Gc, IntoObject, LispFn, LispVec, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -48,6 +48,12 @@ where
 
 impl IntoRoot<&'static Cons> for &Cons {
     unsafe fn into_root(self) -> &'static Cons {
+        self.with_lifetime()
+    }
+}
+
+impl IntoRoot<&'static LispVec> for &LispVec {
+    unsafe fn into_root(self) -> &'static LispVec {
         self.with_lifetime()
     }
 }

@@ -1442,13 +1442,9 @@ impl<'ob> Gc<Object<'ob>> {
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.get_alloc() {
             ObjectAllocation::Float(x) => x.mark(),
-            ObjectAllocation::Vec(vec_alloc) => {
-                let vec = vec_alloc.data.borrow();
-                let unmarked = vec
-                    .iter()
-                    .filter_map(|x| x.is_markable().then(|| x.into_raw()));
-                stack.extend(unmarked);
-                vec_alloc.mark();
+            ObjectAllocation::Vec(vec) => {
+                vec.data.mark(stack);
+                vec.mark();
             }
             ObjectAllocation::ByteVec(vec) => vec.mark(),
             ObjectAllocation::HashTable(table_alloc) => {

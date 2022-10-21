@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
 use crate::core::object::{
-    nil, Expression, GcObj, IntoObject, LispFn, Object, SubrFn, WithLifetime,
+    nil, Expression, GcObj, IntoObject, LispFn, LispVec, Object, SubrFn, WithLifetime,
 };
 use crate::root;
 
@@ -101,8 +101,10 @@ impl DerefMut for Rt<LispStack> {
 }
 
 impl LispStack {
-    unsafe fn from(value: Vec<GcObj>) -> Self {
-        LispStack(value.with_lifetime())
+    unsafe fn from(value: &Rt<&LispVec>, cx: &Context) -> Self {
+        // TODO: remove this extra copy
+        let vec = value.bind(cx).borrow().clone();
+        LispStack(vec.with_lifetime())
     }
 }
 
@@ -457,12 +459,12 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
 
 pub(crate) fn call<'ob>(
     func: &Rt<&'static LispFn>,
-    args: Vec<GcObj<'ob>>,
+    args: &Rt<&'static LispVec>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let arg_cnt = args.len() as u16;
-    root!(stack, unsafe { LispStack::from(args) }, cx);
+    let arg_cnt = args.bind(cx).len() as u16;
+    root!(stack, unsafe { LispStack::from(args, cx) }, cx);
     let mut rout = Routine {
         stack,
         call_frames: vec![],
@@ -491,37 +493,52 @@ mod test {
         $expect:expr,
         $cx:expr $(,)?
     ) => {
-        #[allow(trivial_numeric_casts)]
+        let cx: &mut Context = $cx;
+
+        let bytecode = {
+            let constants: &LispVec = {
+                let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
+                let obj = cx.add(vec);
+                obj.try_into().unwrap()
+            };
+            let opcodes = {
+                #[allow(trivial_numeric_casts)]
+                let opcodes = vec![$($opcodes as u8),*];
+                println!("Test seq: {:?}", opcodes);
+                RefCell::new(opcodes)
+            };
+            let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]);
+            bytecode.into_obj(cx).get()
+        };
+        let args: &LispVec = {
+            let vec: Vec<GcObj> = vec![$($args.into_obj(cx).into()),*];
+            let obj = cx.add(vec);
+            obj.try_into().unwrap()
+        };
+        let expect: GcObj = $expect.into_obj(cx).into();
+
+        root!(args, cx);
+        root!(bytecode, cx);
+        root!(expect, cx);
+
         check_bytecode_internal(
-            $arglist,
-            vec![$($args.into_obj($cx).into()),*],
-            vec![$($opcodes as u8),*],
-            vec![$($constants.into_obj($cx).into()),*],
-            $expect.into_obj($cx).into(),
-            $cx
+            args,
+            bytecode,
+            expect,
+            cx
         );
-    };
+    }
     }
 
     fn check_bytecode_internal<'ob>(
-        arglist: i64,
-        args: Vec<GcObj<'ob>>,
-        opcodes: Vec<u8>,
-        constants: Vec<GcObj<'ob>>,
-        expect: GcObj,
+        args: &Rt<&'static LispVec>,
+        bytecode: &Rt<&'static LispFn>,
+        expect: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) {
         root!(env, Env::default(), cx);
-        println!("Test seq: {:?}", opcodes);
-
-        let constants = cx.add(constants);
-        let constants: &LispVec = constants.try_into().unwrap();
-        let codes = RefCell::new(opcodes);
-        let bytecode = crate::alloc::make_byte_code(arglist, &codes, constants, 0, None, None, &[]);
-        let bytecode: &LispFn = bytecode.into_obj(cx).get();
-        root!(bytecode, cx);
         let val = rebind!(call(bytecode, args, env, cx).unwrap(), cx);
-        let expect: GcObj = expect.into_obj(cx).copy_as_obj();
+        let expect = expect.bind(cx);
         assert_eq!(val, expect);
     }
 
@@ -529,8 +546,8 @@ mod test {
     fn test_basic() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        // (lambda (x) 5)
-        check_bytecode!(257, [7], [OpCode::Constant0, OpCode::Return], [5], 5, cx);
+        // (lambda () 5)
+        check_bytecode!(0, [], [OpCode::Constant0, OpCode::Return], [5], 5, cx);
         // (lambda (x) (+ x 5))
         check_bytecode!(
             257,
@@ -543,6 +560,20 @@ mod test {
             ],
             [5],
             12,
+            cx,
+        );
+        // (lambda (x &optional y) (+ x y))
+        check_bytecode!(
+            513,
+            [3, 4],
+            [
+                OpCode::StackRef1,
+                OpCode::StackRef1,
+                OpCode::Plus,
+                OpCode::Return,
+            ],
+            [],
+            7,
             cx,
         );
         // (lambda (x) (if x 2 3))

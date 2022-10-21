@@ -1,8 +1,8 @@
 use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
 
-use crate::hashmap::HashMap;
+use crate::{core::gc::Trace, hashmap::HashMap};
 
-use super::GcObj;
+use super::{GcObj, WithLifetime};
 
 #[derive(Debug)]
 pub(crate) struct LispVec {
@@ -42,6 +42,24 @@ impl LispVec {
                 )
             })
         }
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for &'old LispVec {
+    type Out = &'new LispVec;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const LispVec)
+    }
+}
+
+impl Trace for LispVec {
+    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+        let vec = self.borrow();
+        let unmarked = vec
+            .iter()
+            .filter_map(|x| x.is_markable().then(|| x.into_raw()));
+        stack.extend(unmarked);
     }
 }
 

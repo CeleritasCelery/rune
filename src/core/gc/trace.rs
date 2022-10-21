@@ -6,6 +6,12 @@ pub(crate) trait Trace {
     fn mark(&self, stack: &mut Vec<RawObj>);
 }
 
+impl<T: Trace> Trace for &T {
+    fn mark(&self, stack: &mut Vec<RawObj>) {
+        (*self).mark(stack);
+    }
+}
+
 impl<T: Trace, U: Trace> Trace for (T, U) {
     fn mark(&self, stack: &mut Vec<RawObj>) {
         self.0.mark(stack);

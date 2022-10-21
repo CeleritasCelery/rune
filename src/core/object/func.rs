@@ -109,12 +109,6 @@ impl Trace for LispFn {
     }
 }
 
-impl Trace for &LispFn {
-    fn mark(&self, stack: &mut Vec<super::RawObj>) {
-        self.body.constants.mark(stack);
-    }
-}
-
 pub(crate) type BuiltInFn = for<'ob> fn(
     &[Rt<GcObj<'static>>],
     &mut Root<crate::core::env::Env>,
