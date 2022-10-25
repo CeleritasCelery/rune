@@ -755,7 +755,10 @@ impl Rt<Gc<Function<'_>>> {
         let name = name.unwrap_or("lambda");
         debug!("calling {self:?}");
         match self.bind(cx).get() {
-            Function::LispFn(_) => todo!("call lisp functions"),
+            Function::LispFn(f) => {
+                root!(f, cx);
+                crate::bytecode::call(f, args, env, cx).map_err(EvalError::new_error)
+            }
             Function::SubrFn(f) => {
                 (*f).call(args, env, cx)
                     .map_err(|e| match e.downcast::<EvalError>() {

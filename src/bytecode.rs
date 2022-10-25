@@ -84,6 +84,7 @@ impl<'brw> CallFrame<'brw> {
 }
 
 #[derive(Default)]
+#[repr(transparent)]
 struct LispStack(Vec<GcObj<'static>>);
 
 impl std::ops::Deref for Rt<LispStack> {
@@ -101,6 +102,14 @@ impl DerefMut for Rt<LispStack> {
 }
 
 impl LispStack {
+    fn from_root<'brw, 'a, 'b>(
+        value: &'brw mut Root<'a, 'b, Vec<GcObj>>,
+    ) -> &'brw mut Root<'a, 'b, LispStack> {
+        unsafe {
+            &mut *((value as *mut Root<'_, '_, Vec<GcObj>>).cast::<Root<'_, '_, LispStack>>())
+        }
+    }
+
     unsafe fn from(value: &Rt<&LispVec>, cx: &Context) -> Self {
         // TODO: remove this extra copy
         let vec = value.bind(cx).borrow().clone();
@@ -216,7 +225,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
         }
     }
 
-    fn call(&mut self, arg_cnt: u16, _env: &mut Root<Env>, cx: &'ob Context) -> Result<()> {
+    fn call(&mut self, arg_cnt: u16, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<()> {
         let fn_idx = arg_cnt as usize;
         let sym = match self.stack.ref_at(fn_idx).get(cx) {
             Object::Symbol(x) => x,
@@ -226,13 +235,20 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             print!("calling: ({sym} ");
         }
 
-        todo!("bytecode call")
-        // match sym.follow_indirect(cx) {
-        //     Some(func) => {
-        //         func.call()
-        //     },
-        //     None => Err(anyhow!("Void Function: {sym}")),
-        // }
+        match sym.follow_indirect(cx) {
+            Some(func) => {
+                let offset = self.stack.offset_end(arg_cnt as usize);
+                let slice = &self.stack[offset..];
+                let args = Rt::bind_slice(slice, cx).to_vec();
+                let name = sym.name().to_owned();
+                root!(args, cx);
+                root!(func, cx);
+                let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
+                self.stack.as_mut(cx)[offset].set(result);
+                Ok(())
+            }
+            None => Err(anyhow!("Void Function: {sym}")),
+        }
     }
 
     fn call_lisp(
@@ -459,12 +475,12 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
 
 pub(crate) fn call<'ob>(
     func: &Rt<&'static LispFn>,
-    args: &Rt<&'static LispVec>,
+    args: &mut Root<'_, '_, Vec<GcObj<'static>>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let arg_cnt = args.bind(cx).len() as u16;
-    root!(stack, unsafe { LispStack::from(args, cx) }, cx);
+    let arg_cnt = args.len() as u16;
+    let stack = LispStack::from_root(args);
     let mut rout = Routine {
         stack,
         call_frames: vec![],
@@ -510,11 +526,7 @@ mod test {
             let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]);
             bytecode.into_obj(cx).get()
         };
-        let args: &LispVec = {
-            let vec: Vec<GcObj> = vec![$($args.into_obj(cx).into()),*];
-            let obj = cx.add(vec);
-            obj.try_into().unwrap()
-        };
+        let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };
         let expect: GcObj = $expect.into_obj(cx).into();
 
         root!(args, cx);
@@ -531,7 +543,7 @@ mod test {
     }
 
     fn check_bytecode_internal<'ob>(
-        args: &Rt<&'static LispVec>,
+        args: &mut Root<Vec<GcObj<'static>>>,
         bytecode: &Rt<&'static LispFn>,
         expect: &Rt<GcObj>,
         cx: &'ob mut Context,
