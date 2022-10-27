@@ -4,7 +4,6 @@ use crate::hashmap::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
 use lazy_static::lazy_static;
-use sptr::Strict;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -212,7 +211,7 @@ impl Symbol {
     unsafe fn tag_subr(&self) {
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
-            if Strict::addr(ptr) != 0 {
+            if !ptr.is_null() {
                 let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
                 self.set_func(func.into());
             }
@@ -221,7 +220,7 @@ impl Symbol {
 
     pub(crate) fn has_func(&self) -> bool {
         match &self.func {
-            Some(func) => Strict::addr(func.load(Ordering::Acquire)) != 0,
+            Some(func) => !func.load(Ordering::Acquire).is_null(),
             None => false,
         }
     }
@@ -229,7 +228,7 @@ impl Symbol {
     fn get(&self) -> Option<Gc<Function>> {
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
-            if Strict::addr(ptr) != 0 {
+            if !ptr.is_null() {
                 // SAFETY: we ensure that 0 is not representable in the enum
                 // Function (by making a reference the first element, which will
                 // never be null). So it is safe to use 0 as niche value for
