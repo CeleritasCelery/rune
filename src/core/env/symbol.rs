@@ -210,7 +210,7 @@ impl Symbol {
     pub(super) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
         match self.func.as_ref() {
             Some(fn_cell) => {
-                let val = std::mem::transmute::<Gc<Function>, *mut u8>(func);
+                let val = func.into_ptr().cast_mut();
                 fn_cell.store(val, Ordering::Release);
                 Ok(())
             }

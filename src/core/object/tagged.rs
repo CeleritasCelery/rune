@@ -93,6 +93,10 @@ impl<T> Gc<T> {
         RawObj { ptr: self.ptr }
     }
 
+    pub(in crate::core) fn into_ptr(self) -> *const u8 {
+        self.ptr
+    }
+
     pub(crate) unsafe fn from_raw(raw: RawObj) -> Self {
         Self::new(raw.ptr)
     }
