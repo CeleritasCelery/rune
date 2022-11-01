@@ -170,15 +170,31 @@ impl ObjectMap {
         // SAFETY: The object is marked read-only, we have cloned in the
         // map's context, and it is not const, so calling this function
         // is safe.
-        unsafe {
-            symbol.set_func(new_func)
-        }
+        unsafe { symbol.set_func(new_func) }
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&Symbol> {
         self.map.get(name)
     }
 }
+
+// This is a workaround due to the limitations of consts in Rust. Our tagging
+// scheme relies on shifting the bits in a pointer, but there is no way to do
+// that in a const context. Therefore we can't tag values in const functions.
+// However this presents a problem when we initalize a new symbol with #[defun].
+// That macro will create a static symbol and initialize it's function cell with
+// a SubrFn. However we can't tag that value due to limitations on const. So for
+// now we use the function `new_with_subr` to intitalize the symbol with an
+// UNTAGGED value. However it would be unsafe to dereference this value, so we
+// need to make sure that `INTERNED_SYMBOLS` get's initialized before we deref
+// any values from symbols. This will call `tag_subr`, which tags the value at
+// runtime. The only place where this is a problem is in tests, where you could
+// forget to initialize before trying to read a symbol function value. This
+// sanity check makes sure we don't have any tests that Access values before
+// `lazy_static::initialize` is called. If there is a better way to handle this,
+// I would love to know.
+#[cfg(test)]
+static SYMBOLS_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 macro_rules! create_symbolmap {
     ($($($mod:ident)::*),*) => (
@@ -207,6 +223,8 @@ macro_rules! create_symbolmap {
             pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
                 let size: usize = 0_usize $(+ $($mod::)*__SYMBOLS.len())*;
                 let mut map = SymbolMap::with_capacity(size);
+                #[cfg(test)]
+                SYMBOLS_INIT.store(true, std::sync::atomic::Ordering::Release);
                 $(for sym in $($mod::)*__SYMBOLS.iter() {
                     // SAFETY: We know that the function values are un-tagged,
                     // and that only subr's have been defined in the symbols, so
@@ -276,6 +294,7 @@ mod test {
     fn symbol_func() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
+        lazy_static::initialize(&INTERNED_SYMBOLS);
         let inner = Symbol::new("foo", super::sym::RUNTIME_SYMBOL);
         let sym = unsafe { fix_lifetime(&inner) };
         assert_eq!("foo", sym.name());

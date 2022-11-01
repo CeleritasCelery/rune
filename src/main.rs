@@ -175,6 +175,9 @@ fn main() {
         arg_load = true;
     }
 
+    // Ensure this is always initalized before anything else
+    lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+
     if arg_load {
         load(env, cx);
     }
