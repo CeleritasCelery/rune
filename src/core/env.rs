@@ -1,13 +1,13 @@
 use super::gc::{Block, Context, Rt};
-use super::object::{Function, Gc, GcObj, SubrFn, WithLifetime};
+use super::object::{Function, Gc, GcObj};
 use crate::hashmap::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
 use lazy_static::lazy_static;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Mutex;
+
+mod symbol;
+pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
@@ -55,244 +55,6 @@ impl Rt<Env> {
         id: u32,
     ) -> Option<(&Rt<GcObj<'static>>, &Rt<GcObj<'static>>)> {
         (id == self.exception_id.get()).then_some((&self.exception.0, &self.exception.1))
-    }
-}
-
-/// The allocation of a global symbol. This is shared
-/// between threads, so the interned value of a symbol
-/// will be the same location no matter which thread
-/// interned it. Functions are safe to share between
-/// threads because they are marked immutable by
-/// [`ObjectMap::set_func`] and they can only be replaced atomically.
-/// In order to garbage collect the function we need to
-/// halt all running threads. This has not been implemented
-/// yet.
-#[derive(Debug)]
-pub(crate) struct Symbol {
-    name: SymbolName,
-    pub(crate) sym: ConstSymbol,
-    marked: AtomicBool,
-    func: Option<AtomicPtr<u8>>,
-}
-
-#[derive(Debug)]
-enum SymbolName {
-    Interned(&'static str),
-    Uninterned(Box<str>),
-}
-
-#[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> &'static Symbol);
-
-impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> &'static Symbol) -> Self {
-        Self(f)
-    }
-}
-
-impl std::ops::Deref for ConstSymbol {
-    type Target = Symbol;
-
-    fn deref(&self) -> &Self::Target {
-        self.0()
-    }
-}
-
-impl AsRef<Symbol> for ConstSymbol {
-    fn as_ref(&self) -> &Symbol {
-        self
-    }
-}
-
-// Since global symbols are globally unique we can
-// compare them with a pointer equal test.
-impl PartialEq for Symbol {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
-    }
-}
-
-impl PartialEq<ConstSymbol> for Symbol {
-    fn eq(&self, other: &ConstSymbol) -> bool {
-        self == other.0()
-    }
-}
-
-impl PartialEq<Symbol> for ConstSymbol {
-    fn eq(&self, other: &Symbol) -> bool {
-        self.0() == other
-    }
-}
-
-impl Eq for Symbol {}
-
-impl Hash for Symbol {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let ptr: *const Self = self;
-        ptr.hash(state);
-    }
-}
-
-impl Symbol {
-    const NULL: *mut u8 = std::ptr::null_mut();
-    pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
-        // We have to do this workaround because starts_with is not const
-        let func = if name.as_bytes()[0] == b':' {
-            // If func is none then this cannot take a function
-            None
-        } else {
-            Some(AtomicPtr::new(Self::NULL))
-        };
-        Symbol {
-            name: SymbolName::Interned(name),
-            sym,
-            func,
-            marked: AtomicBool::new(true),
-        }
-    }
-
-    pub(crate) fn name(&self) -> &str {
-        match &self.name {
-            SymbolName::Interned(x) => x,
-            SymbolName::Uninterned(x) => x,
-        }
-    }
-
-    pub(crate) fn new_uninterned(name: &str) -> Self {
-        Symbol {
-            name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
-            sym: sym::RUNTIME_SYMBOL,
-            func: Some(AtomicPtr::new(Self::NULL)),
-            marked: AtomicBool::new(false),
-        }
-    }
-
-    pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
-        Symbol {
-            name: SymbolName::Interned(name),
-            func: None,
-            sym,
-            marked: AtomicBool::new(true),
-        }
-    }
-
-    pub(crate) const unsafe fn new_with_subr(
-        name: &'static str,
-        subr: &'static SubrFn,
-        func: fn() -> &'static Self,
-    ) -> Self {
-        Symbol {
-            name: SymbolName::Interned(name),
-            func: Some(AtomicPtr::new(
-                (subr as *const SubrFn).cast::<u8>() as *mut u8
-            )),
-            sym: ConstSymbol::new(func),
-            marked: AtomicBool::new(true),
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) const fn is_const(&self) -> bool {
-        self.func.is_none()
-    }
-
-    #[inline(always)]
-    pub(crate) fn nil(&self) -> bool {
-        self == &sym::NIL
-    }
-
-    // This is workaround due to the limitations of const functions in rust. We
-    // need to bind the function to the symbol when it is declared with
-    // #[defun], but tagging the value is not const, so we can't initialize it
-    // with a tagged value. Instead we put the untagged value in the function
-    // cell and then use this function to ensure it get's tagged before first
-    // use.
-    unsafe fn tag_subr(&self) {
-        if let Some(func) = &self.func {
-            let ptr = func.load(Ordering::Acquire);
-            if !ptr.is_null() {
-                let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
-                self.set_func(func.into());
-            }
-        }
-    }
-
-    pub(crate) fn has_func(&self) -> bool {
-        match &self.func {
-            Some(func) => !func.load(Ordering::Acquire).is_null(),
-            None => false,
-        }
-    }
-
-    fn get(&self) -> Option<Gc<Function>> {
-        if let Some(func) = &self.func {
-            let ptr = func.load(Ordering::Acquire);
-            if !ptr.is_null() {
-                // SAFETY: we ensure that 0 is not representable in the enum
-                // Function (by making a reference the first element, which will
-                // never be null). So it is safe to use 0 as niche value for
-                // `None`. We can't use AtomicCell due to this issue:
-                // https://github.com/crossbeam-rs/crossbeam/issues/748
-                return Some(unsafe { Gc::from_raw_ptr(ptr) });
-            }
-        }
-        None
-    }
-
-    pub(crate) fn func<'a>(&self, _cx: &'a Context) -> Option<Gc<Function<'a>>> {
-        self.get().map(|x| unsafe { x.with_lifetime() })
-    }
-
-    /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
-        let func = self.func(cx)?;
-        match func.get() {
-            Function::Symbol(sym) => sym.follow_indirect(cx),
-            _ => Some(func),
-        }
-    }
-
-    /// Set the function for this symbol. This function is unsafe to call and
-    /// requires that the caller:
-    /// 1. Has marked the entire function as read only
-    /// 2. Has cloned the function into the `SymbolMap` block
-    /// 3. Ensured the symbol is not constant
-    unsafe fn set_func(&self, func: Gc<Function>) {
-        let val = std::mem::transmute(func);
-        self.func.as_ref().unwrap().store(val, Ordering::Release);
-    }
-
-    pub(crate) fn unbind_func(&self) {
-        if let Some(func) = &self.func {
-            func.store(Self::NULL, Ordering::Release);
-        }
-    }
-
-    pub(crate) fn unmark(&self) {
-        self.marked.store(false, Ordering::Release);
-    }
-
-    pub(crate) fn is_marked(&self) -> bool {
-        self.marked.load(Ordering::Acquire)
-    }
-}
-
-impl super::gc::Trace for &Symbol {
-    fn mark(&self, stack: &mut Vec<super::object::RawObj>) {
-        // interned symbols are not collected yet
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.marked.store(true, Ordering::Release);
-            if let Some(func) = self.get() {
-                func.as_obj().trace_mark(stack);
-            }
-        }
-    }
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name())
     }
 }
 
@@ -401,20 +163,15 @@ impl ObjectMap {
         if matches!(func.get(), Function::LispFn(_)) {
             return Ok(());
         }
-        match symbol.func {
-            Some(_) => {
-                let new_func = func.clone_in(&self.block);
-                #[cfg(miri)]
-                new_func.get().set_as_miri_root();
-                // SAFETY: The object is marked read-only, we have cloned in the
-                // map's context, and it is not const, so calling this function
-                // is safe.
-                unsafe {
-                    symbol.set_func(new_func);
-                }
-                Ok(())
-            }
-            None => Err(anyhow!("Attempt to set a constant symbol: {symbol}")),
+
+        let new_func = func.clone_in(&self.block);
+        #[cfg(miri)]
+        new_func.get().set_as_miri_root();
+        // SAFETY: The object is marked read-only, we have cloned in the
+        // map's context, and it is not const, so calling this function
+        // is safe.
+        unsafe {
+            symbol.set_func(new_func)
         }
     }
 
@@ -525,14 +282,14 @@ mod test {
         assert!(sym.func(cx).is_none());
         let func1 = cons!(1; cx);
         unsafe {
-            sym.set_func(func1.try_into().unwrap());
+            sym.set_func(func1.try_into().unwrap()).unwrap();
         }
         let cell1 = sym.func(cx).unwrap();
         let Function::Cons(before) = cell1.get() else {unreachable!("Type should be a lisp function")};
         assert_eq!(before.car(), 1);
         let func2 = cons!(2; cx);
         unsafe {
-            sym.set_func(func2.try_into().unwrap());
+            sym.set_func(func2.try_into().unwrap()).unwrap();
         }
         let cell2 = sym.func(cx).unwrap();
         let Function::Cons(after) = cell2.get() else {unreachable!("Type should be a lisp function")};

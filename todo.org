@@ -2,6 +2,9 @@
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
+* Remove ~DerefMut~ from some Rt types
+It is not sound to remove an Rt from it's collection
+* implement symbols with an offset
 * Steps to add a new object type
 - define in gc.rs
 - add boxing function
