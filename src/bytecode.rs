@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! The main bytecode interpeter.
 
 use std::ops::DerefMut;
@@ -7,9 +6,7 @@ use anyhow::{anyhow, Result};
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
-use crate::core::object::{
-    nil, Expression, GcObj, IntoObject, LispFn, LispVec, Object, SubrFn, WithLifetime,
-};
+use crate::core::object::{nil, Expression, GcObj, IntoObject, LispFn, Object};
 use crate::root;
 
 mod opcode;
@@ -108,12 +105,6 @@ impl LispStack {
         unsafe {
             &mut *((value as *mut Root<'_, '_, Vec<GcObj>>).cast::<Root<'_, '_, LispStack>>())
         }
-    }
-
-    unsafe fn from(value: &Rt<&LispVec>, cx: &Context) -> Self {
-        // TODO: remove this extra copy
-        let vec = value.bind(cx).borrow().clone();
-        LispStack(vec.with_lifetime())
     }
 }
 
@@ -248,49 +239,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             }
             None => Err(anyhow!("Void Function: {sym}")),
         }
-    }
-
-    fn call_lisp(
-        &mut self,
-        func: &'brw Rt<&'static LispFn>,
-        arg_cnt: u16,
-        cx: &'ob Context,
-    ) -> Result<()> {
-        let total_args = self.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
-        self.call_frames.push(self.frame.clone());
-        let tmp = self.stack.offset_end(total_args as usize);
-        if crate::debug::debug_enabled() {
-            for i in tmp..=self.stack.len() {
-                print!("{} ", i);
-            }
-            println!(")");
-        }
-        self.frame = CallFrame::new(func.body(), tmp);
-        Ok(())
-    }
-
-    fn call_subr(
-        &mut self,
-        func: SubrFn,
-        arg_cnt: u16,
-        env: &mut Root<Env>,
-        cx: &'ob mut Context,
-    ) -> Result<()> {
-        let fill_args = func.args.num_of_fill_args(arg_cnt, func.name)?;
-        self.stack.as_mut(cx).fill_extra_args(fill_args);
-        let total_args = (arg_cnt + fill_args) as usize;
-        let frame_start_idx = self.stack.offset_end(total_args);
-        let slice = self.stack.take_slice(total_args);
-        if crate::debug::debug_enabled() {
-            for i in slice {
-                print!("{} ", i);
-            }
-            println!(")");
-        }
-        let result = rebind!((func.subr)(slice, env, cx)?, cx);
-        self.stack.as_mut(cx)[frame_start_idx].set(result);
-        self.stack.as_mut(cx).truncate(frame_start_idx + 1);
-        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -454,21 +402,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
             }
         }
-    }
-
-    /// Execute the given expression.
-    pub(crate) fn execute(
-        exp: &Rt<Expression>,
-        env: &mut Root<Env>,
-        cx: &'ob mut Context,
-    ) -> Result<GcObj<'ob>> {
-        root!(stack, LispStack::default(), cx);
-        let mut rout = Routine {
-            stack,
-            call_frames: vec![],
-            frame: CallFrame::new(exp, 0),
-        };
-        rout.run(env, cx)
     }
 }
 
