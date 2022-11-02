@@ -581,5 +581,53 @@ mod test {
             "symbol-name",
             cx
         );
+
+        // (lambda (x y z) (+ x y z))
+        check_bytecode!(
+            771,
+            [1, 2, 3],
+            [
+                OpCode::Constant0,
+                OpCode::StackRef3,
+                OpCode::StackRef3,
+                OpCode::StackRef3,
+                OpCode::Call3,
+                OpCode::Return
+            ],
+            [sym::ADD],
+            6,
+            cx
+        );
+
+        // (lambda (&rest x) (apply '+ x))
+        check_bytecode!(
+            128,
+            [1, 2, 3],
+            [
+                OpCode::Constant0,
+                OpCode::Constant1,
+                OpCode::StackRef2,
+                OpCode::Call2,
+                OpCode::Return
+            ],
+            [sym::APPLY, sym::ADD],
+            6,
+            cx
+        );
+
+        // (lambda (x &optional y) (+ x y))
+        check_bytecode!(
+            513,
+            [1, 2],
+            [
+                OpCode::StackRef1,
+                OpCode::StackRef1,
+                OpCode::Plus,
+                OpCode::Return
+            ],
+            [],
+            3,
+            cx
+        );
     }
 }
