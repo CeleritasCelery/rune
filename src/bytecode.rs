@@ -1,6 +1,6 @@
 //! The main bytecode interpeter.
 
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 use anyhow::{anyhow, Result};
 
@@ -98,6 +98,37 @@ impl DerefMut for Rt<LispStack> {
     }
 }
 
+// To make this simpler we implement indexing from the top of the stack (end of
+// the vec) instead of the bottom. This is the convention that all the bytecode
+// functions use.
+impl Index<u16> for Rt<LispStack> {
+    type Output = Rt<GcObj<'static>>;
+
+    fn index(&self, index: u16) -> &Self::Output {
+        let index = self.offset_end(index.into());
+        let vec: &Vec<Rt<GcObj>> = self;
+        Index::index(vec, index)
+    }
+}
+
+impl IndexMut<u16> for Rt<LispStack> {
+    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
+        let index = self.offset_end(index.into());
+        let vec: &mut Vec<Rt<GcObj>> = self;
+        IndexMut::index_mut(vec, index)
+    }
+}
+
+impl Index<RangeTo<u16>> for Rt<LispStack> {
+    type Output = [Rt<GcObj<'static>>];
+
+    fn index(&self, index: RangeTo<u16>) -> &Self::Output {
+        let end = self.offset_end(index.end as usize - 1);
+        let vec: &Vec<Rt<GcObj>> = self;
+        &vec[end..]
+    }
+}
+
 impl LispStack {
     fn from_root<'brw, 'a, 'b>(
         value: &'brw mut Root<'a, 'b, Vec<GcObj>>,
@@ -126,34 +157,26 @@ impl Rt<LispStack> {
         self.len() - (i + 1)
     }
 
-    fn push_ref(&mut self, i: usize, cx: &Context) {
-        #[cfg(feature = "debug_bytecode")]
-        println!("arg = {}", i);
-        let obj = self.ref_at(i).bind(cx);
+    fn push_ref(&mut self, i: impl Into<i32>, cx: &Context) {
+        let i: u16 = i.into() as u16;
+        let obj = self[i].bind(cx);
         self.push(obj);
     }
 
-    fn set_ref(&mut self, i: usize) {
-        #[cfg(feature = "debug_bytecode")]
-        println!("arg = {}", i);
-        let obj = self.offset_end(i);
-        self.swap_remove(obj);
-    }
-
-    fn ref_at(&self, i: usize) -> &Rt<GcObj<'static>> {
-        #[cfg(feature = "debug_bytecode")]
-        println!("arg = {}", i);
-        &self[self.offset_end(i)]
-    }
-
-    fn take_slice(&self, i: usize) -> &[Rt<GcObj<'static>>] {
-        &self[self.offset_end(i - 1)..]
+    fn set_ref(&mut self, i: impl Into<usize>) {
+        let index = self.offset_end(i.into());
+        self.swap_remove(index);
     }
 
     fn fill_extra_args(&mut self, fill_args: u16) {
         for _ in 0..fill_args {
             self.push(nil());
         }
+    }
+
+    fn remove_top(&mut self, i: impl Into<usize>) {
+        let offset = self.offset_end(i.into());
+        self.truncate(offset + 1);
     }
 }
 
@@ -167,8 +190,8 @@ pub(crate) struct Routine<'brw, '_1, '_2> {
 }
 
 impl<'brw, 'ob> Routine<'brw, '_, '_> {
-    fn varref(&mut self, idx: usize, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
-        let symbol = self.frame.get_const(idx, cx);
+    fn varref(&mut self, idx: u16, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
+        let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.get() {
             let var = env.vars.get(sym).ok_or(anyhow!("Void Variable: {sym}"))?;
             self.stack.as_mut(cx).push(var.bind(cx));
@@ -201,12 +224,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
         let total_args = arg_cnt + fill_args;
         let rest_size = total_args - (func.args.required + func.args.optional);
         if rest_size > 0 {
-            let slice = self.stack.take_slice(rest_size as usize);
+            let slice = &self.stack[..rest_size];
             let list = crate::fns::slice_into_list(Rt::bind_slice(slice, cx), None, cx);
-            let i = self.stack.offset_end(rest_size as usize - 1);
             let stack = self.stack.as_mut(cx);
-            stack[i].set(list);
-            stack.truncate(i + 1);
+            stack.remove_top(rest_size - 1);
+            stack[0].set(list);
             Ok(total_args - rest_size + 1)
         } else if func.args.rest {
             self.stack.as_mut(cx).push(nil());
@@ -217,24 +239,23 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     }
 
     fn call(&mut self, arg_cnt: u16, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<()> {
-        let fn_idx = arg_cnt as usize;
-        let sym = match self.stack.ref_at(fn_idx).get(cx) {
+        let sym = match self.stack[arg_cnt].get(cx) {
             Object::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
 
         match sym.follow_indirect(cx) {
             Some(func) => {
-                let offset = self.stack.offset_end(arg_cnt as usize);
-                let slice = self.stack.take_slice(arg_cnt.into());
+                let slice = &self.stack[..arg_cnt];
                 let args = Rt::bind_slice(slice, cx).to_vec();
                 let name = sym.name().to_owned();
                 root!(args, cx);
                 root!(func, cx);
                 let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
                 let stack = self.stack.as_mut(cx);
-                stack[offset].set(result);
-                stack.truncate(offset + 1);
+                stack.remove_top(arg_cnt);
+                stack[0].set(result);
+                println!("stack {:?}", stack);
                 Ok(())
             }
             None => Err(anyhow!("Void Function: {sym}")),
@@ -267,19 +288,19 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 op::StackRef5 => self.stack.as_mut(cx).push_ref(5, cx),
                 op::StackRefN => {
                     let idx = self.frame.ip.next();
-                    self.stack.as_mut(cx).push_ref(idx.into(), cx);
+                    self.stack.as_mut(cx).push_ref(idx, cx);
                 }
                 op::StackRefN2 => {
                     let idx = self.frame.ip.next2();
-                    self.stack.as_mut(cx).push_ref(idx.into(), cx);
+                    self.stack.as_mut(cx).push_ref(idx, cx);
                 }
                 op::StackSetN => {
                     let idx = self.frame.ip.next();
-                    self.stack.as_mut(cx).set_ref(idx.into());
+                    self.stack.as_mut(cx).set_ref(idx);
                 }
                 op::StackSetN2 => {
                     let idx = self.frame.ip.next2();
-                    self.stack.as_mut(cx).set_ref(idx.into());
+                    self.stack.as_mut(cx).set_ref(idx);
                 }
                 op::Constant0 => self.stack.as_mut(cx).push(self.frame.get_const(0, cx)),
                 op::Constant1 => self.stack.as_mut(cx).push(self.frame.get_const(1, cx)),
@@ -299,7 +320,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::VarRefN2 => {
                     let idx = self.frame.ip.next2();
-                    self.varref(idx.into(), env, cx)?;
+                    self.varref(idx, env, cx)?;
                 }
                 op::VarSet0 => self.varset(0, env, cx)?,
                 op::VarSet1 => self.varset(1, env, cx)?,
@@ -393,7 +414,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                         return Ok(self.stack.pop(cx));
                     }
                     let var = self.stack.pop(cx);
-                    self.stack.as_mut(cx)[self.frame.start].set(var);
+                    self.stack.as_mut(cx)[self.frame.start as u16].set(var);
                     self.stack.as_mut(cx).truncate(self.frame.start + 1);
                     self.frame = self.call_frames.pop().unwrap();
                 }
