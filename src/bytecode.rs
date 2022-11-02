@@ -83,7 +83,7 @@ impl<'brw> CallFrame<'brw> {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 #[repr(transparent)]
 struct LispStack(Vec<GcObj<'static>>);
 
@@ -231,20 +231,19 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             Object::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
-        if crate::debug::debug_enabled() {
-            print!("calling: ({sym} ");
-        }
 
         match sym.follow_indirect(cx) {
             Some(func) => {
                 let offset = self.stack.offset_end(arg_cnt as usize);
-                let slice = &self.stack[offset..];
+                let slice = self.stack.take_slice(arg_cnt.into());
                 let args = Rt::bind_slice(slice, cx).to_vec();
                 let name = sym.name().to_owned();
                 root!(args, cx);
                 root!(func, cx);
                 let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
-                self.stack.as_mut(cx)[offset].set(result);
+                let stack = self.stack.as_mut(cx);
+                stack[offset].set(result);
+                stack.truncate(offset + 1);
                 Ok(())
             }
             None => Err(anyhow!("Void Function: {sym}")),
@@ -495,6 +494,7 @@ mod test {
     use std::cell::RefCell;
 
     use crate::core::{
+        env::sym,
         gc::RootSet,
         object::{IntoObject, LispVec},
     };
@@ -604,6 +604,27 @@ mod test {
             ],
             [2, 3],
             3,
+            cx
+        );
+    }
+
+    #[test]
+    fn test_call() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+        // (lambda (x) (symbol-name x))
+        check_bytecode!(
+            257,
+            [sym::SYMBOL_NAME],
+            [
+                OpCode::Constant0,
+                OpCode::StackRef1,
+                OpCode::Call1,
+                OpCode::Return
+            ],
+            [sym::SYMBOL_NAME],
+            "symbol-name",
             cx
         );
     }
