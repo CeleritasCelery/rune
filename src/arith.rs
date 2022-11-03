@@ -168,12 +168,12 @@ pub(crate) fn div(number: Gc<Number>, divisors: &[Gc<Number>]) -> NumberValue {
 }
 
 #[defun(name = "1+")]
-pub(crate) fn plus_one(number: Gc<Number>) -> NumberValue {
+pub(crate) fn add_one(number: Gc<Number>) -> NumberValue {
     number.val() + NumberValue::Int(1)
 }
 
 #[defun(name = "1-")]
-pub(crate) fn minus_one(number: Gc<Number>) -> NumberValue {
+pub(crate) fn sub_one(number: Gc<Number>) -> NumberValue {
     number.val() - NumberValue::Int(1)
 }
 
@@ -276,8 +276,8 @@ define_symbols!(
         sub,
         mul,
         div,
-        plus_one,
-        minus_one,
+        add_one,
+        sub_one,
         num_eq,
         num_ne,
         less_than,

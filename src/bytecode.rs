@@ -149,6 +149,10 @@ impl Root<'_, '_, LispStack> {
     fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
         self.as_mut(cx).deref_mut().pop(cx).unwrap()
     }
+
+    fn top<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
+        self.last().unwrap().bind(cx)
+    }
 }
 
 impl Rt<LispStack> {
@@ -353,11 +357,35 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 op::Plus => {
                     let args = {
                         let arg1 = self.stack.pop(cx);
-                        let arg2 = self.stack.last().unwrap();
-                        &[arg1.try_into()?, arg2.bind(cx).try_into()?]
+                        let arg2 = self.stack.top(cx);
+                        &[arg1.try_into()?, arg2.try_into()?]
                     };
                     let result: GcObj = crate::arith::add(args).into_obj(cx).into();
-                    self.stack.as_mut(cx).last_mut().unwrap().set(result);
+                    self.stack.as_mut(cx)[0].set(result);
+                }
+                op::LessThan => {
+                    let v2 = self.stack.pop(cx);
+                    let v1 = self.stack.top(cx);
+                    let result: GcObj =
+                        crate::arith::less_than(v1.try_into()?, &[v2.try_into()?]).into();
+                    self.stack.as_mut(cx)[0].set(result);
+                }
+                op::GreaterThan => {
+                    let v2 = self.stack.pop(cx);
+                    let v1 = self.stack.top(cx);
+                    let result: GcObj =
+                        crate::arith::greater_than(v1.try_into()?, &[v2.try_into()?]).into();
+                    self.stack.as_mut(cx)[0].set(result);
+                }
+                op::Sub1 => {
+                    let arg = self.stack.top(cx);
+                    let result: GcObj = cx.add(crate::arith::sub_one(arg.try_into()?));
+                    self.stack.as_mut(cx)[0].set(result);
+                }
+                op::Add1 => {
+                    let arg = self.stack.top(cx);
+                    let result: GcObj = cx.add(crate::arith::add_one(arg.try_into()?));
+                    self.stack.as_mut(cx)[0].set(result);
                 }
                 op::Discard => {
                     self.stack.pop(cx);
@@ -368,7 +396,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.stack.as_mut(cx).truncate(cur_len - num);
                 }
                 op::Duplicate => {
-                    let value = self.stack.last().unwrap().bind(cx);
+                    let value = self.stack.top(cx);
                     self.stack.as_mut(cx).push(value);
                 }
                 op::Goto => {
@@ -391,18 +419,16 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     }
                 }
                 op::GotoIfNilElsePop => {
-                    let cond = self.stack.as_mut(cx).last().unwrap();
                     let offset = self.frame.ip.next2();
-                    if cond.nil() {
+                    if self.stack.top(cx).nil() {
                         self.frame.ip.goto(offset);
                     } else {
                         self.stack.pop(cx);
                     }
                 }
                 op::GotoIfNonNilElsePop => {
-                    let cond = self.stack.last().unwrap();
                     let offset = self.frame.ip.next2();
-                    if cond.nil() {
+                    if self.stack.top(cx).nil() {
                         self.stack.pop(cx);
                     } else {
                         self.frame.ip.goto(offset);
@@ -414,8 +440,9 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                         return Ok(self.stack.pop(cx));
                     }
                     let var = self.stack.pop(cx);
-                    self.stack.as_mut(cx)[self.frame.start as u16].set(var);
-                    self.stack.as_mut(cx).truncate(self.frame.start + 1);
+                    let start = self.frame.start;
+                    self.stack.as_mut(cx).truncate(start + 1);
+                    self.stack.as_mut(cx)[0].set(var);
                     self.frame = self.call_frames.pop().unwrap();
                 }
                 op => {
@@ -560,10 +587,44 @@ mod test {
             3,
             cx
         );
+
+        // (lambda (x) (let ((y 0))
+        //          (while (< 0 x)
+        //            (setq x (1- x))
+        //            (setq y (1+ y)))
+        //          y))
+        check_bytecode!(
+            257,
+            [5],
+            [
+                OpCode::Constant0,
+                OpCode::Constant0,
+                OpCode::StackRef2,
+                OpCode::LessThan,
+                OpCode::GotoIfNil,
+                OpCode::VarSet2,
+                0x00,
+                OpCode::StackRef1,
+                OpCode::Sub1,
+                OpCode::StackSetN,
+                0x02,
+                OpCode::Duplicate,
+                OpCode::Add1,
+                OpCode::StackSetN,
+                0x01,
+                OpCode::Goto,
+                0x01,
+                0x00,
+                OpCode::Return
+            ],
+            [0],
+            5,
+            cx
+        );
     }
 
     #[test]
-    fn test_call() {
+    fn test_bytecode_call() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);

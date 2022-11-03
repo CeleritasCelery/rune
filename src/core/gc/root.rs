@@ -398,10 +398,6 @@ impl Rt<GcObj<'_>> {
     pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
         self.bind(cx).get()
     }
-
-    pub(crate) fn nil(&self) -> bool {
-        self.inner.nil()
-    }
 }
 
 impl Rt<Gc<Function<'_>>> {
