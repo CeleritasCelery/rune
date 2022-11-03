@@ -470,6 +470,7 @@ pub(crate) fn call<'ob>(
     rout.run(env, cx)
 }
 
+#[allow(clippy::enum_glob_use)]
 #[cfg(test)]
 mod test {
     use std::cell::RefCell;
@@ -537,52 +538,20 @@ mod test {
 
     #[test]
     fn test_basic() {
+        use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         // (lambda () 5)
-        check_bytecode!(0, [], [OpCode::Constant0, OpCode::Return], [5], 5, cx);
+        check_bytecode!(0, [], [Constant0, Return], [5], 5, cx);
         // (lambda (x) (+ x 5))
-        check_bytecode!(
-            257,
-            [7],
-            [
-                OpCode::Duplicate,
-                OpCode::Constant0,
-                OpCode::Plus,
-                OpCode::Return,
-            ],
-            [5],
-            12,
-            cx,
-        );
+        check_bytecode!(257, [7], [Duplicate, Constant0, Plus, Return,], [5], 12, cx,);
         // (lambda (x &optional y) (+ x y))
-        check_bytecode!(
-            513,
-            [3, 4],
-            [
-                OpCode::StackRef1,
-                OpCode::StackRef1,
-                OpCode::Plus,
-                OpCode::Return,
-            ],
-            [],
-            7,
-            cx,
-        );
+        check_bytecode!(513, [3, 4], [StackRef1, StackRef1, Plus, Return], [], 7, cx,);
         // (lambda (x) (if x 2 3))
         check_bytecode!(
             257,
             [false],
-            [
-                OpCode::Duplicate,
-                OpCode::GotoIfNil,
-                0x06,
-                0x00,
-                OpCode::Constant0,
-                OpCode::Return,
-                OpCode::Constant1,
-                OpCode::Return
-            ],
+            [Duplicate, GotoIfNil, 0x06, 0x00, Constant0, Return, Constant1, Return],
             [2, 3],
             3,
             cx
@@ -597,25 +566,8 @@ mod test {
             257,
             [5],
             [
-                OpCode::Constant0,
-                OpCode::Constant0,
-                OpCode::StackRef2,
-                OpCode::LessThan,
-                OpCode::GotoIfNil,
-                OpCode::VarSet2,
-                0x00,
-                OpCode::StackRef1,
-                OpCode::Sub1,
-                OpCode::StackSetN,
-                0x02,
-                OpCode::Duplicate,
-                OpCode::Add1,
-                OpCode::StackSetN,
-                0x01,
-                OpCode::Goto,
-                0x01,
-                0x00,
-                OpCode::Return
+                Constant0, Constant0, StackRef2, LessThan, GotoIfNil, VarSet2, 0x00, StackRef1,
+                Sub1, StackSetN, 0x02, Duplicate, Add1, StackSetN, 0x01, Goto, 0x01, 0x00, Return
             ],
             [0],
             5,
@@ -625,6 +577,7 @@ mod test {
 
     #[test]
     fn test_bytecode_call() {
+        use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
@@ -632,12 +585,7 @@ mod test {
         check_bytecode!(
             257,
             [sym::SYMBOL_NAME],
-            [
-                OpCode::Constant0,
-                OpCode::StackRef1,
-                OpCode::Call1,
-                OpCode::Return
-            ],
+            [Constant0, StackRef1, Call1, Return],
             [sym::SYMBOL_NAME],
             "symbol-name",
             cx
@@ -647,14 +595,7 @@ mod test {
         check_bytecode!(
             771,
             [1, 2, 3],
-            [
-                OpCode::Constant0,
-                OpCode::StackRef3,
-                OpCode::StackRef3,
-                OpCode::StackRef3,
-                OpCode::Call3,
-                OpCode::Return
-            ],
+            [Constant0, StackRef3, StackRef3, StackRef3, Call3, Return],
             [sym::ADD],
             6,
             cx
@@ -664,31 +605,13 @@ mod test {
         check_bytecode!(
             128,
             [1, 2, 3],
-            [
-                OpCode::Constant0,
-                OpCode::Constant1,
-                OpCode::StackRef2,
-                OpCode::Call2,
-                OpCode::Return
-            ],
+            [Constant0, Constant1, StackRef2, Call2, Return],
             [sym::APPLY, sym::ADD],
             6,
             cx
         );
 
         // (lambda (x &optional y) (+ x y))
-        check_bytecode!(
-            513,
-            [1, 2],
-            [
-                OpCode::StackRef1,
-                OpCode::StackRef1,
-                OpCode::Plus,
-                OpCode::Return
-            ],
-            [],
-            3,
-            cx
-        );
+        check_bytecode!(513, [1, 2], [StackRef1, StackRef1, Plus, Return], [], 3, cx);
     }
 }
