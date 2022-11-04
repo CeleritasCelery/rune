@@ -936,7 +936,7 @@ mod test {
         T: IntoObject,
     {
         root!(env, Env::default(), cx);
-        println!("Test String: {}", test_str);
+        println!("Test String: {test_str}");
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
         let compare = rebind!(eval(obj, None, env, cx).unwrap(), cx);
@@ -946,7 +946,7 @@ mod test {
 
     fn check_error<'ob>(test_str: &str, cx: &'ob mut Context) {
         root!(env, Env::default(), cx);
-        println!("Test String: {}", test_str);
+        println!("Test String: {test_str}");
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
         assert!(eval(obj, None, env, cx).is_err());

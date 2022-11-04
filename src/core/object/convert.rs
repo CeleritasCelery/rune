@@ -47,7 +47,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for usize {
         match obj.get() {
             Object::Int(x) => x
                 .try_into()
-                .with_context(|| format!("Integer must be positive, but was {}", x)),
+                .with_context(|| format!("Integer must be positive, but was {x}")),
             x => Err(TypeError::new(Type::Int, x).into()),
         }
     }
@@ -59,9 +59,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
         match obj.get() {
             Object::Int(x) => match x.try_into() {
                 Ok(x) => Ok(Some(x)),
-                Err(e) => {
-                    Err(e).with_context(|| format!("Integer must be positive, but was {}", x))
-                }
+                Err(e) => Err(e).with_context(|| format!("Integer must be positive, but was {x}")),
             },
             Object::Symbol(s) if s.nil() => Ok(None),
             _ => Err(TypeError::new(Type::Int, obj).into()),

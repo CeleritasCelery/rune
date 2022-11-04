@@ -259,7 +259,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 let stack = self.stack.as_mut(cx);
                 stack.remove_top(arg_cnt);
                 stack[0].set(result);
-                println!("stack {:?}", stack);
                 Ok(())
             }
             None => Err(anyhow!("Void Function: {sym}")),
@@ -277,11 +276,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             {
                 println!("[");
                 for (idx, x) in self.stack.iter().enumerate() {
-                    println!("    {}: {:?},", idx, x);
+                    println!("    {idx}: {x:?},");
                 }
                 println!("]");
                 let byte_offset = self.frame.ip.ip as i64 - self.frame.ip.range.start as i64 - 1;
-                println!("op :{}: {:?}", byte_offset, op);
+                println!("op :{byte_offset}: {op:?}");
             }
             match op {
                 op::StackRef0 => self.stack.as_mut(cx).push_ref(0, cx),
@@ -446,7 +445,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.frame = self.call_frames.pop().unwrap();
                 }
                 op => {
-                    panic!("Unimplemented opcode: {:?}", op);
+                    panic!("Unimplemented opcode: {op:?}");
                 }
             }
         }

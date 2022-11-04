@@ -24,6 +24,7 @@
     clippy::unimplemented,
     clippy::blanket_clippy_restriction_lints,
     clippy::print_stdout,
+    clippy::print_stderr,
     clippy::as_conversions,
     clippy::similar_names,
     clippy::self_named_module_files,
@@ -62,6 +63,7 @@
     clippy::expect_used,
     clippy::assertions_on_result_states,
     clippy::single_match_else,
+    clippy::missing_trait_methods,
     clippy::panic
 )]
 

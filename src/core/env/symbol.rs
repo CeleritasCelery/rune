@@ -176,7 +176,10 @@ impl Symbol {
 
     fn get(&self) -> Option<Gc<Function>> {
         #[cfg(test)]
-        assert!(super::SYMBOLS_INIT.load(Ordering::Acquire), "Symbols were not initalized");
+        assert!(
+            super::SYMBOLS_INIT.load(Ordering::Acquire),
+            "Symbols were not initalized"
+        );
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
             if !ptr.is_null() {
