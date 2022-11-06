@@ -62,10 +62,7 @@ pub(crate) fn make_byte_code<'ob>(
     let rest = arglist & 0x80 != 0;
     LispFn {
         body: unsafe {
-            Expression::new(
-                CodeVec(byte_code.borrow().clone()),
-                constants.borrow().clone(),
-            )
+            Expression::new(CodeVec(byte_code.borrow().clone()), constants.clone_vec())
         },
         args: FnArgs {
             rest,

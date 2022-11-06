@@ -298,9 +298,9 @@ fn ash(value: i64, count: i64) -> i64 {
 
 #[defun]
 pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    let mut vec = array.try_borrow_mut()?;
+    let vec = array.try_mut()?;
     if idx < vec.len() {
-        vec[idx] = newlet;
+        vec[idx].set(newlet);
         Ok(newlet)
     } else {
         let len = vec.len();
@@ -311,15 +311,15 @@ pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> 
 #[defun]
 pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
     match array.get() {
-        Object::Vec(vec) => match vec.borrow().get(idx) {
-            Some(x) => Ok(*x),
+        Object::Vec(vec) => match vec.get(idx) {
+            Some(x) => Ok(x.get()),
             None => {
                 let len = vec.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::Record(vec) => match vec.borrow().get(idx) {
-            Some(x) => Ok(*x),
+        Object::Record(vec) => match vec.get(idx) {
+            Some(x) => Ok(x.get()),
             None => {
                 let len = vec.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
@@ -344,7 +344,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::Symbol(_) => sym::SYMBOL.into(),
         Object::Cons(_) => sym::CONS.into(),
         Object::Vec(_) => sym::VECTOR.into(),
-        Object::Record(x) => *x.borrow().get(0).expect("record should always have a type"),
+        Object::Record(x) => x.get(0).expect("record was missing type").get(),
         Object::ByteVec(_) | Object::LispFn(_) => sym::COMPILED_FUNCTION.into(),
         Object::HashTable(_) => sym::HASH_TABLE.into(),
         Object::String(_) => sym::STRING.into(),

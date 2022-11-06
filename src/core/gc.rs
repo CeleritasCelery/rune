@@ -194,9 +194,8 @@ impl<'ob> AllocObject for LispFn {
 impl<'ob> AllocObject for LispVec {
     type Output = Allocation<LispVec>;
 
-    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
+    fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-
         if CONST {
             self.make_const();
         }

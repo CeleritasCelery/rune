@@ -748,7 +748,7 @@ impl PartialEq for Object<'_> {
             (Object::Float(l0), Object::Float(r0)) => l0 == r0,
             (Object::Symbol(l0), Object::Symbol(r0)) => l0 == r0,
             (Object::Cons(l0), Object::Cons(r0)) => l0 == r0,
-            (Object::Vec(l0), Object::Vec(r0)) => *l0.borrow() == *r0.borrow(),
+            (Object::Vec(l0), Object::Vec(r0)) => l0 == r0,
             (Object::String(l0), Object::String(r0)) => l0 == r0,
             (Object::LispFn(_), Object::LispFn(_)) => todo!(),
             (Object::SubrFn(l0), Object::SubrFn(r0)) => l0 == r0,
@@ -1181,13 +1181,6 @@ impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     }
 }
 
-fn vec_clone_in<'old, 'new, const C: bool>(
-    vec: &[GcObj<'old>],
-    bk: &'new Block<C>,
-) -> Vec<GcObj<'new>> {
-    vec.iter().map(|x| x.clone_in(bk)).collect()
-}
-
 impl<T> Gc<T> {
     pub(crate) fn clone_in<'old, 'new, const C: bool, U, E>(self, bk: &'new Block<C>) -> Gc<U>
     where
@@ -1205,9 +1198,9 @@ impl<T> Gc<T> {
             Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),
-            Object::Vec(x) => vec_clone_in(&x.borrow(), bk).into_obj(bk).into(),
+            Object::Vec(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::Record(x) => {
-                let vec = vec_clone_in(&x.borrow(), bk);
+                let vec = x.clone_in(bk);
                 RecordBuilder(vec).into_obj(bk).into()
             }
             Object::ByteVec(x) => x.borrow().clone().into_obj(bk).into(),
@@ -1329,14 +1322,14 @@ impl fmt::Display for Object<'_> {
             Object::Cons(x) => write!(f, "{x}"),
             Object::Vec(vec) => {
                 write!(f, "[")?;
-                for x in vec.borrow().iter() {
+                for x in vec.iter() {
                     write!(f, "{x} ")?;
                 }
                 write!(f, "]")
             }
             Object::Record(vec) => {
                 write!(f, "#s(")?;
-                for x in vec.borrow().iter() {
+                for x in vec.iter() {
                     write!(f, "{x} ")?;
                 }
                 write!(f, ")")
