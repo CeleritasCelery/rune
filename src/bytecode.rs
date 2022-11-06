@@ -433,6 +433,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                         self.frame.ip.goto(offset);
                     }
                 }
+                op::Switch => {
+                    let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
+                    let cond = self.stack.pop(cx);
+                    if let Some(offset) = table.borrow().get(&cond) {
+                        let Object::Int(offset) = offset.get() else {unreachable!("switch value was not a int")};
+                        self.frame.ip.goto(offset as u16);
+                    }
+                }
                 op::Return => {
                     if self.call_frames.is_empty() {
                         debug_assert_eq!(self.stack.len(), init_stack_size + 1);
@@ -477,7 +485,7 @@ mod test {
     use crate::core::{
         env::sym,
         gc::RootSet,
-        object::{IntoObject, LispVec},
+        object::{HashTable, IntoObject, LispVec},
     };
 
     use super::{opcode::OpCode, *};
@@ -612,5 +620,33 @@ mod test {
 
         // (lambda (x &optional y) (+ x y))
         check_bytecode!(513, [1, 2], [StackRef1, StackRef1, Plus, Return], [], 3, cx);
+    }
+
+    #[test]
+    fn test_bytecode_advanced() {
+        use OpCode::*;
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+
+        let mut table = HashTable::default();
+        table.insert(1.into(), 6.into());
+        table.insert(2.into(), 8.into());
+        table.insert(3.into(), 10.into());
+
+        // (lambda (n)
+        //   (cond ((equal n 1) 1)
+        //         ((equal n 2) 2)
+        //         ((equal n 3) 3)))
+        check_bytecode!(
+            257,
+            [2],
+            [
+                Duplicate, Constant0, Switch, Goto, 0x0C, 0x00, Constant1, Return, Constant2,
+                Return, Constant3, Return, Constant4, Return
+            ],
+            [table, 1, 2, 3, false],
+            2,
+            cx
+        );
     }
 }
