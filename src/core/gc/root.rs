@@ -122,7 +122,9 @@ pub(crate) struct Root<'rt, 'a, T> {
     data: *mut T,
     root_set: &'rt RootSet,
     // This lifetime parameter ensures that functions like mem::swap cannot be
-    // called in a way that would lead to memory unsafety
+    // called in a way that would lead to memory unsafety. Since the drop guard
+    // of Root is critical to ensure that T gets unrooted the same time it is
+    // dropped, calling mem swap would invalidate that.
     safety: PhantomData<&'a ()>,
 }
 
