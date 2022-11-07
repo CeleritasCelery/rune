@@ -238,31 +238,26 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn defvar<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        match forms.next() {
-            // (defvar x ...)
-            Some(x) => {
-                let name: &Symbol = x.bind(cx).try_into()?;
-                root!(name, cx);
-                let value = match forms.next() {
-                    // (defvar x y)
-                    Some(value) => rebind!(self.eval_form(value, cx)?, cx),
-                    // (defvar x)
-                    None => nil(),
-                };
-                self.env.as_mut(cx).set_var(name.bind(cx), value)?;
-                self.env.as_mut(cx).special_variables.insert(&*name);
-                // If this variable was unbound previously in the binding stack,
-                // we will bind it to the new value
-                for binding in self.env.as_mut(cx).binding_stack.iter_mut() {
-                    if **name == binding.0 && binding.1.is_none() {
-                        binding.1.set(value);
-                    }
-                }
-                Ok(value)
+        // (defvar x ...)                 // (defvar)
+        let Some(sym) = forms.next() else {bail_err!(ArgError::new(1, 0, "defvar"))};
+        let name: &Symbol = sym.bind(cx).try_into()?;
+        root!(name, cx);
+        let value = match forms.next() {
+            // (defvar x y)
+            Some(value) => rebind!(self.eval_form(value, cx)?, cx),
+            // (defvar x)
+            None => nil(),
+        };
+        self.env.as_mut(cx).set_var(name.bind(cx), value)?;
+        self.env.as_mut(cx).special_variables.insert(&*name);
+        // If this variable was unbound previously in the binding stack,
+        // we will bind it to the new value
+        for binding in self.env.as_mut(cx).binding_stack.iter_mut() {
+            if **name == binding.0 && binding.1.is_none() {
+                binding.1.set(value);
             }
-            // (defvar)
-            None => Err(ArgError::new(1, 0, "defvar").into()),
         }
+        Ok(value)
     }
 
     fn eval_call<'ob>(
@@ -271,10 +266,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         args: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let func = match sym.bind(cx).follow_indirect(cx) {
-            Some(x) => x,
-            None => bail_err!("Invalid function: {sym}"),
-        };
+        let Some(func) = sym.bind(cx).follow_indirect(cx) else {bail_err!("Invalid function: {sym}")};
         root!(func, cx);
 
         match func.get(cx) {
@@ -427,9 +419,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn eval_if<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let condition = forms.next().ok_or_else(|| ArgError::new(2, 0, "if"))?;
+        let Some(condition) = forms.next() else {bail_err!(ArgError::new(2, 0, "if"))};
         root!(condition, cx);
-        let true_branch = forms.next().ok_or_else(|| ArgError::new(2, 1, "if"))?;
+        let Some(true_branch) = forms.next() else {bail_err!(ArgError::new(2, 1, "if"))};
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
         if self.eval_form(condition, cx)? != nil() {
@@ -520,18 +512,12 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
         let binding_stack_len = self.env.binding_stack.len();
-        match iter.next() {
-            // (let x ...)
-            Some(x) => {
-                let obj = x;
-                if parallel {
-                    self.let_bind_parallel(obj, cx)?;
-                } else {
-                    self.let_bind_serial(obj, cx)?;
-                }
-            }
-            // (let)
-            None => bail_err!(ArgError::new(1, 0, "let")),
+        // (let x ...)                   // (let)
+        let Some(obj) = iter.next() else {bail_err!(ArgError::new(1, 0, "let"))};
+        if parallel {
+            self.let_bind_parallel(obj, cx)?;
+        } else {
+            self.let_bind_serial(obj, cx)?;
         }
         let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
@@ -680,15 +666,9 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, form, cx);
-        let var = match forms.next() {
-            Some(x) => x.bind(cx),
-            None => bail_err!(ArgError::new(2, 0, "condition-case")),
-        };
+        let Some(var) = forms.next() else {bail_err!(ArgError::new(2, 0, "condition-case"))};
         root!(var, cx);
-        let bodyform = match forms.next() {
-            Some(x) => x,
-            None => bail_err!(ArgError::new(2, 1, "condition-case")),
-        };
+        let Some(bodyform) = forms.next() else {bail_err!(ArgError::new(2, 1, "condition-case"))};
         match self.eval_form(bodyform, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
