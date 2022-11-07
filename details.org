@@ -342,13 +342,7 @@ Another thing to consider is mutability. Are there ways to make interior mutabil
 *** arena's
 All objects need to be allocated in some arena, so we are going to change it so that the arena own the data and lispobjects are just aliases to it. We could change lisp objects to use actual reference semantics (I.e. No copy) But I feel like that will just make things messier. Also I have learned that using references are just translated to pointers. So if we use references, we have another level of indirection that we don't want.
 *** Two different models
-The fundamental problem is that the lisp object model and the rust object model. The model expects every allocation to have an 1 owner and that the allocation will be dropped when the object goes out of scope. The lisp model expects data to have many owners, and an allocation will be dropped when GC proves there are no more references to it. So my idea is to have two different object types. The underlying representation will be identical, but the way they are used will be different.
-**** owned objects
-These will not implement copy and also implement drop. This will make working in rust easier because we follow it's ownership semantics. But it also means we can't have multiple heads on a cons list and we can't control where a object is allocated.
-**** referenced objects
-These will implement copy but not drop. This means that we can build any structure we want, and control allocation. These will need to be GC'ed.
-**** interop
-When you are constructing an object to return to the lisp vm you will use the owned objects almost all the time. When we get objects from the VM they will be reference objects. I am still not sure if it would be better to make these a different object type, or just return a reference to the object. Probably should just start with a reference and then update as needed. So we may not even need a reference type defined, because a true reference already meets the bill. Only reason we would need something else would be for performance.
+The fundamental problem is that the lisp object model and the rust object model. The model expects every allocation to have an 1 owner and that the allocation will be dropped when the object goes out of scope. The lisp model expects data to have many owners, and an allocation will be dropped when GC proves there are no more references to it. This means we can never operate on owned values from the lisp world, instead needing to use references.
 *** Emacs symbol definition
 [[https://debbugs.gnu.org/cgi/bugreport.cgi?bug=43601][uninterned symbols confusion]]
 [[file:~/emacs-git/src/lisp.h::struct Lisp_Symbol][emacs source]]
@@ -415,7 +409,7 @@ It would be useful to have some types that will only ever live on the heap. This
 
 To do this we could create a ~GcManaged~ type that allows us to hold references that would normally have some lifetime but we can treat them as static because they are a traced type. This would be similar to the root type that allows us access to inner types, but with ~GcManaged~ we could get a reference out by tying it to the borrow.
 *** Thread shared types
-Objects that are part of a function can be shared between threads. This is safe because they are marked as immutable, so they will not be edited. But we need some way to convince rust of this. Maybe we could make a ~Shared~ type that would let us mark things as immutable. Every object has some way to mark it immutable. This type would ensure that anything it holds has been marked immutable, and is therefore safe to share.
+Objects that are part of a function can be shared between threads. This is safe because they are marked as immutable, so they will not be edited. However we need to make sure to maintain this invariant. Every type has to have a field that marks it as immutable. This adds slight overhead to mutation, but should not be that big of a deal.
 ** Garbage collection
 I have been heavily inspired by other rust gc projects. I want to use the afine types to make a safe and ergonomic API.
 
