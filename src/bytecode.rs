@@ -2,7 +2,7 @@
 
 use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
@@ -197,7 +197,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     fn varref(&mut self, idx: u16, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.get() {
-            let var = env.vars.get(sym).ok_or(anyhow!("Void Variable: {sym}"))?;
+            let Some(var) = env.vars.get(sym) else {bail!("Void Variable: {sym}")};
             self.stack.as_mut(cx).push(var.bind(cx));
             Ok(())
         } else {
@@ -248,21 +248,17 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
 
-        match sym.follow_indirect(cx) {
-            Some(func) => {
-                let slice = &self.stack[..arg_cnt];
-                let args = Rt::bind_slice(slice, cx).to_vec();
-                let name = sym.name().to_owned();
-                root!(args, cx);
-                root!(func, cx);
-                let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
-                let stack = self.stack.as_mut(cx);
-                stack.remove_top(arg_cnt);
-                stack[0].set(result);
-                Ok(())
-            }
-            None => Err(anyhow!("Void Function: {sym}")),
-        }
+        let Some(func) = sym.follow_indirect(cx) else {bail!("Void Function: {sym}")};
+        let slice = &self.stack[..arg_cnt];
+        let args = Rt::bind_slice(slice, cx).to_vec();
+        let name = sym.name().to_owned();
+        root!(args, cx);
+        root!(func, cx);
+        let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
+        let stack = self.stack.as_mut(cx);
+        stack.remove_top(arg_cnt);
+        stack[0].set(result);
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]

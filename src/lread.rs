@@ -8,7 +8,7 @@ use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
 
-use anyhow::Context as _;
+use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
 
 use std::fs;
@@ -115,10 +115,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
             }
         }
     }
-    match final_file {
-        Some(x) => Ok(x),
-        None => bail!("Unable to find file `{file}' in load-path"),
-    }
+    final_file.ok_or(anyhow!("Unable to find file `{file}' in load-path"))
 }
 
 #[defun]

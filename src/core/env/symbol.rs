@@ -1,5 +1,5 @@
 use crate::core::{gc::Context, object::RawObj};
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use super::super::object::{Function, Gc, SubrFn, WithLifetime};
@@ -213,14 +213,10 @@ impl Symbol {
     /// 2. Has cloned the function into the `SymbolMap` block
     /// 3. Ensured the symbol is not constant
     pub(super) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
-        match self.func.as_ref() {
-            Some(fn_cell) => {
-                let val = func.into_ptr().cast_mut();
-                fn_cell.store(val, Ordering::Release);
-                Ok(())
-            }
-            None => Err(anyhow!("Attempt to set a constant symbol: {self}")),
-        }
+        let Some(fn_cell) = self.func.as_ref() else {bail!("Attempt to set a constant symbol: {self}")};
+        let val = func.into_ptr().cast_mut();
+        fn_cell.store(val, Ordering::Release);
+        Ok(())
     }
 
     pub(crate) fn unbind_func(&self) {

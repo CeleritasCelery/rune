@@ -36,12 +36,10 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     for (start, _) in string.match_indices(is_format_char) {
         result.push_str(&string[last_end..start]);
         // TODO: currently handles all format types the same. Need to check the modifier characters.
-        match iter.next() {
-            Some(val) => match val.get() {
-                Object::String(s) => result.push_str(s),
-                obj => write!(result, "{obj}")?,
-            },
-            None => bail!("Not enough objects for format string"),
+        let Some(val) = iter.next() else {bail!("Not enough objects for format string")};
+        match val.get() {
+            Object::String(s) => result.push_str(s),
+            obj => write!(result, "{obj}")?,
         }
         last_end = start + 2;
     }

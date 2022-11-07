@@ -192,7 +192,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn catch<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let tag = forms.next().ok_or_else(|| ArgError::new(1, 0, "catch"))?;
+        let Some(tag) = forms.next() else {bail_err!(ArgError::new(1, 0, "catch"))};
         // push this tag on the catch stack
         self.env.as_mut(cx).catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
@@ -653,9 +653,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn unwind_protect<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let body = forms
-            .next()
-            .ok_or_else(|| ArgError::new(1, 0, "unwind-protect"))?;
+        let Some(body) = forms.next() else {bail_err!(ArgError::new(1, 0, "unwind-protect"))};
         let result = match self.eval_form(body, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => Err(e),
@@ -802,17 +800,13 @@ fn bind_variables<'a>(
     // Add closure environment to variables
     // (closure ((x . 1) (y . 2) t) ...)
     //          ^^^^^^^^^^^^^^^^^^^
-    let env = forms
-        .next()
-        .ok_or_else(|| anyhow!("Closure missing environment"))?;
+    let Some(env) = forms.next() else {bail!("Closure missing environment")};
     let mut vars = parse_closure_env(env.bind(cx))?;
 
     // Add function arguments to variables
     // (closure (t) (x y &rest z) ...)
     //              ^^^^^^^^^^^^^
-    let arg_list = forms
-        .next()
-        .ok_or_else(|| anyhow!("Closure missing argument list"))?;
+    let Some(arg_list) = forms.next() else {bail!("Closure missing argument list")};
     bind_args(arg_list.bind(cx), args, &mut vars, name, cx)?;
     Ok(vars)
 }
