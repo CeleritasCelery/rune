@@ -71,12 +71,11 @@ impl<'brw> CallFrame<'brw> {
         }
     }
 
-    fn get_const<'ob>(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
+    fn get_const(&self, i: usize) -> &Rt<GcObj> {
         self.code
             .constants
             .get(i)
             .expect("constant had invalid index")
-            .bind(cx)
     }
 }
 
@@ -195,8 +194,8 @@ pub(crate) struct Routine<'brw, '_1, '_2> {
 
 impl<'brw, 'ob> Routine<'brw, '_, '_> {
     fn varref(&mut self, idx: u16, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
-        let symbol = self.frame.get_const(idx as usize, cx);
-        if let Object::Symbol(sym) = symbol.get() {
+        let symbol = self.frame.get_const(idx as usize);
+        if let Object::Symbol(sym) = symbol.get(cx) {
             let Some(var) = env.vars.get(sym) else {bail!("Void Variable: {sym}")};
             self.stack.as_mut(cx).push(var.bind(cx));
             Ok(())
@@ -206,8 +205,8 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     }
 
     fn varset(&mut self, idx: usize, env: &mut Root<Env>, cx: &Context) -> Result<()> {
-        let obj = self.frame.get_const(idx, cx);
-        let symbol: &Symbol = obj.try_into()?;
+        let obj = self.frame.get_const(idx);
+        let symbol: &Symbol = obj.bind(cx).try_into()?;
         let value = self.stack.pop(cx);
         crate::data::set(symbol, value, env, cx)?;
         Ok(())
@@ -301,12 +300,12 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     let idx = self.frame.ip.next2();
                     self.stack.as_mut(cx).set_ref(idx);
                 }
-                op::Constant0 => self.stack.as_mut(cx).push(self.frame.get_const(0, cx)),
-                op::Constant1 => self.stack.as_mut(cx).push(self.frame.get_const(1, cx)),
-                op::Constant2 => self.stack.as_mut(cx).push(self.frame.get_const(2, cx)),
-                op::Constant3 => self.stack.as_mut(cx).push(self.frame.get_const(3, cx)),
-                op::Constant4 => self.stack.as_mut(cx).push(self.frame.get_const(4, cx)),
-                op::Constant5 => self.stack.as_mut(cx).push(self.frame.get_const(5, cx)),
+                op::Constant0 => self.stack.as_mut(cx).push(self.frame.get_const(0)),
+                op::Constant1 => self.stack.as_mut(cx).push(self.frame.get_const(1)),
+                op::Constant2 => self.stack.as_mut(cx).push(self.frame.get_const(2)),
+                op::Constant3 => self.stack.as_mut(cx).push(self.frame.get_const(3)),
+                op::Constant4 => self.stack.as_mut(cx).push(self.frame.get_const(4)),
+                op::Constant5 => self.stack.as_mut(cx).push(self.frame.get_const(5)),
                 op::VarRef0 => self.varref(0, env, cx)?,
                 op::VarRef1 => self.varref(1, env, cx)?,
                 op::VarRef2 => self.varref(2, env, cx)?,
