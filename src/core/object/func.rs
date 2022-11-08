@@ -29,6 +29,7 @@ pub(crate) struct FnArgs {
 /// this can represent any top level expression, not just functions.
 #[derive(Debug, PartialEq, Trace)]
 pub(crate) struct Expression {
+    #[no_trace]
     pub(crate) op_codes: CodeVec,
     pub(crate) constants: Vec<GcObj<'static>>,
 }
@@ -65,10 +66,6 @@ impl<'new> WithLifetime<'new> for &LispFn {
 
 #[derive(PartialEq, Clone, Default, Debug)]
 pub(crate) struct CodeVec(pub(crate) Vec<u8>);
-
-impl Trace for CodeVec {
-    fn mark(&self, _: &mut Vec<super::RawObj>) {}
-}
 
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.

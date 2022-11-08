@@ -65,7 +65,7 @@ struct CallFrame<'brw> {
 impl<'brw> CallFrame<'brw> {
     fn new(func: &'brw Rt<Expression>, frame_start: usize) -> CallFrame<'brw> {
         CallFrame {
-            ip: Ip::new(func.op_codes.get()),
+            ip: Ip::new(&func.op_codes.0),
             code: func,
             start: frame_start,
         }

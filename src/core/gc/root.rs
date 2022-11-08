@@ -414,12 +414,6 @@ impl Rt<Gc<&Cons>> {
     }
 }
 
-impl Rt<u32> {
-    pub(crate) fn get(&self) -> u32 {
-        self.inner
-    }
-}
-
 impl IntoObject for &Rt<GcObj<'static>> {
     type Out<'ob> = Object<'ob>;
 
@@ -470,13 +464,6 @@ impl Rt<&'static LispFn> {
     pub(crate) fn body(&self) -> &Rt<Expression> {
         let expression: &Expression = &self.inner.body;
         unsafe { &*(expression as *const Expression).cast::<Rt<Expression>>() }
-    }
-}
-
-impl Rt<CodeVec> {
-    pub(crate) fn get(&self) -> &[u8] {
-        // TODO: need to decide how to handle this with a moving collector
-        self.inner.0.as_ref()
     }
 }
 

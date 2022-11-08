@@ -13,23 +13,36 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
             match &strct.fields {
                 syn::Fields::Named(fields) => {
                     for x in &fields.named {
-                        let syn::Field { vis, ident, ty, .. } = &x;
+                        #[rustfmt::skip]
+                        let syn::Field { vis, ident, ty, attrs, .. } = &x;
                         let ident = ident
                             .as_ref()
                             .expect("named fields should have an identifer");
-                        new_fields.extend(quote! {#vis #ident: #rt<#ty>,});
-                        mark_fields.extend(quote! {self.#ident.mark(stack);});
+                        if no_trace(attrs) {
+                            new_fields.extend(quote! {#vis #ident: #ty,});
+                            // Remove dead_code warnings
+                            mark_fields.extend(quote! {let _ = &self.#ident;});
+                        } else {
+                            new_fields.extend(quote! {#vis #ident: #rt<#ty>,});
+                            mark_fields.extend(quote! {self.#ident.mark(stack);});
+                        }
                     }
-                    new_fields = quote!{{#new_fields}};
+                    new_fields = quote! {{#new_fields}};
                 }
                 syn::Fields::Unnamed(fields) => {
                     for (i, x) in fields.unnamed.iter().enumerate() {
-                        let syn::Field { vis, ty, .. } = &x;
-                        new_fields.extend(quote! {#vis #rt<#ty>,});
+                        let syn::Field { vis, ty, attrs, .. } = &x;
                         let idx = syn::Index::from(i);
-                        mark_fields.extend(quote! {self.#idx.mark(stack);});
+                        if no_trace(attrs) {
+                            new_fields.extend(quote! {#vis #ty,});
+                            // Remove dead_code warnings
+                            mark_fields.extend(quote! {let _ = &self.#idx;});
+                        } else {
+                            new_fields.extend(quote! {#vis #rt<#ty>,});
+                            mark_fields.extend(quote! {self.#idx.mark(stack);});
+                        }
                     }
-                    new_fields = quote!{(#new_fields);};
+                    new_fields = quote! {(#new_fields);};
                 }
                 syn::Fields::Unit => panic!("fieldless structs don't need tracing"),
             }
@@ -66,20 +79,28 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     }
 }
 
-
+fn no_trace(attrs: &[syn::Attribute]) -> bool {
+    for attr in attrs {
+        if let Ok(syn::Meta::Path(meta)) = attr.parse_meta() {
+            if meta.is_ident("no_trace") {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_expand () {
+    fn test_expand() {
         let stream = quote!(
             struct LispStack(Vec<GcObj<'static>>);
         );
         let input: syn::DeriveInput = syn::parse2(stream).unwrap();
         let result = expand(&input);
         println!("{result}");
-        panic!();
     }
 }

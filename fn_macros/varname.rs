@@ -3,12 +3,12 @@ use quote::quote;
 
 pub(crate) fn expand(ident: syn::Ident) -> TokenStream {
     let lisp_name = expand_string(&ident.to_string());
-    quote! {#lisp_name}.into()
+    quote! {#lisp_name}
 }
 
 fn expand_string(ident: &str) -> String {
-    if ident.starts_with("KW_") {
-        convert(':', &ident[3..])
+    if let Some(stripped) = ident.strip_prefix("KW_") {
+        convert(':', stripped)
     } else {
         convert("", ident)
     }

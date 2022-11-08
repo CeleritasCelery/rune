@@ -23,7 +23,7 @@ pub fn varname(stream: TokenStream) -> TokenStream {
     varname::expand(ident).into()
 }
 
-#[proc_macro_derive(Trace)]
+#[proc_macro_derive(Trace, attributes(no_trace))]
 pub fn trace_derive(stream: TokenStream) -> TokenStream {
     let derived = parse_macro_input!(stream as syn::DeriveInput);
     trace::expand(&derived).into()
