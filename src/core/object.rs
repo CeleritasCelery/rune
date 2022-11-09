@@ -11,10 +11,12 @@
 
 mod convert;
 mod func;
+mod other;
 mod tagged;
 mod vector;
 pub(crate) use tagged::*;
 
 pub(crate) use convert::*;
 pub(crate) use func::*;
+pub(crate) use other::*;
 pub(crate) use vector::*;

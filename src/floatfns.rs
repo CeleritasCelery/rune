@@ -1,6 +1,9 @@
 use crate::{
     arith::NumberValue,
-    core::object::{Gc, Number},
+    core::{
+        gc::Context,
+        object::{Gc, Number},
+    },
 };
 use fn_macros::defun;
 
@@ -17,10 +20,10 @@ fn floor(arg: Gc<Number>, divisor: Option<Gc<Number>>) -> i64 {
 }
 
 #[defun]
-fn float(arg: Gc<Number>) -> f64 {
+fn float<'ob>(arg: Gc<Number<'ob>>, cx: &'ob Context) -> Gc<Number<'ob>> {
     match arg.get() {
-        Number::Int(i) => i as f64,
-        Number::Float(f) => *f,
+        Number::Int(i) => cx.add(i as f64),
+        Number::Float(_) => arg,
     }
 }
 

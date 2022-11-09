@@ -1,6 +1,8 @@
 use super::cons::Cons;
 use super::env::Symbol;
-use super::object::{Gc, GcObj, IntoObject, LispFn, LispHashTable, LispVec, RawInto, WithLifetime};
+use super::object::{
+    Gc, GcObj, IntoObject, LispFloat, LispFn, LispHashTable, LispVec, RawInto, WithLifetime,
+};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::mem::transmute;
@@ -77,7 +79,7 @@ impl PartialEq for GcMark {
 /// the object can outlive this.
 #[derive(Debug)]
 enum OwnedObject {
-    Float(Box<Allocation<f64>>),
+    Float(Box<LispFloat>),
     Cons(Box<Cons>),
     Vec(Box<LispVec>),
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
@@ -158,12 +160,12 @@ where
 }
 
 impl AllocObject for f64 {
-    type Output = Allocation<f64>;
+    type Output = LispFloat;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<C>::register(
             &mut objects,
-            OwnedObject::Float(Box::new(Allocation::new(self))),
+            OwnedObject::Float(Box::new(LispFloat::new(self))),
         );
         let Some(OwnedObject::Float(x)) = objects.last() else {unreachable!()};
         x.as_ref()

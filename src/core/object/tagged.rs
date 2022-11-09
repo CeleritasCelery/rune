@@ -13,7 +13,7 @@ use super::super::{
     gc::{AllocObject, Allocation, Block},
 };
 
-use super::{HashTable, LispFn, LispHashTable, LispVec, Record, RecordBuilder, SubrFn};
+use super::{HashTable, LispFloat, LispFn, LispHashTable, LispVec, Record, RecordBuilder, SubrFn};
 
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
 
@@ -190,7 +190,7 @@ impl<T> IntoObject for Option<Gc<T>> {
 }
 
 impl IntoObject for f64 {
-    type Out<'ob> = &'ob f64;
+    type Out<'ob> = &'ob LispFloat;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
@@ -198,7 +198,7 @@ impl IntoObject for f64 {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*Self::cast_ptr(ptr)).data
+        &(*Self::cast_ptr(ptr))
     }
 }
 
@@ -432,7 +432,7 @@ impl TaggedPtr for i64 {
 
 impl TaggedPtr for f64 {
     type Ptr = <Self as AllocObject>::Output;
-    type Output<'ob> = &'ob f64;
+    type Output<'ob> = &'ob LispFloat;
     const TAG: Tag = Tag::Float;
 }
 
@@ -505,7 +505,7 @@ impl SubrFn {
 #[derive(Copy, Clone)]
 pub(crate) enum Number<'ob> {
     Int(i64),
-    Float(&'ob f64),
+    Float(&'ob LispFloat),
 }
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Number<'old>> {
@@ -522,8 +522,8 @@ impl<'ob> From<Gc<i64>> for Gc<Number<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob f64>> for Gc<Number<'ob>> {
-    fn from(x: Gc<&'ob f64>) -> Self {
+impl<'ob> From<Gc<&'ob LispFloat>> for Gc<Number<'ob>> {
+    fn from(x: Gc<&'ob LispFloat>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -713,7 +713,7 @@ impl<'ob> Gc<Function<'ob>> {
 /// tagged pointer type to take advantage of ergonomics of enums in Rust.
 pub(crate) enum Object<'ob> {
     Int(i64),
-    Float(&'ob f64),
+    Float(&'ob LispFloat),
     Symbol(&'ob Symbol),
     Cons(&'ob Cons),
     Vec(&'ob LispVec),
@@ -816,8 +816,8 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob f64>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob f64>) -> Self {
+impl<'ob> From<Gc<&'ob LispFloat>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&'ob LispFloat>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -1347,10 +1347,11 @@ impl fmt::Display for Object<'_> {
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
             Object::Float(x) => {
-                if x.fract() == 0.0_f64 {
-                    write!(f, "{x:.1}")
+                let float = ***x;
+                if float.fract() == 0.0_f64 {
+                    write!(f, "{float:.1}")
                 } else {
-                    write!(f, "{x}")
+                    write!(f, "{float}")
                 }
             }
         }
@@ -1380,10 +1381,11 @@ impl fmt::Debug for Object<'_> {
             Object::LispFn(x) => write!(f, "(lambda {x:?})"),
             Object::SubrFn(x) => write!(f, "{x:?}"),
             Object::Float(x) => {
-                if x.fract() == 0.0_f64 {
-                    write!(f, "{x:.1}")
+                let float = ***x;
+                if float.fract() == 0.0_f64 {
+                    write!(f, "{float:.1}")
                 } else {
-                    write!(f, "{x}")
+                    write!(f, "{float}")
                 }
             }
         }
@@ -1391,7 +1393,7 @@ impl fmt::Debug for Object<'_> {
 }
 
 enum ObjectAllocation<'ob> {
-    Float(&'ob Allocation<f64>),
+    Float(&'ob LispFloat),
     Cons(&'ob Cons),
     Vec(&'ob LispVec),
     ByteVec(&'ob Allocation<RefCell<Vec<u8>>>),

@@ -14,7 +14,7 @@ impl<'ob> Gc<Number<'ob>> {
     pub(crate) fn val(self) -> NumberValue {
         match self.get() {
             Number::Int(x) => NumberValue::Int(x),
-            Number::Float(x) => NumberValue::Float(*x),
+            Number::Float(x) => NumberValue::Float(**x),
         }
     }
 }
