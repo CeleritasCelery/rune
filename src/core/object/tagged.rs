@@ -715,7 +715,7 @@ impl<'ob> Gc<Function<'ob>> {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// The Object defintion that contains all other possible lisp objects. This
 /// type must remain covariant over 'ob. This is just an expanded form of our
 /// tagged pointer type to take advantage of ergonomics of enums in Rust.
@@ -1318,60 +1318,18 @@ impl<T> Hash for Gc<T> {
 
 impl fmt::Display for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use fmt::Display as D;
         match self {
-            Object::Int(x) => write!(f, "{x}"),
-            Object::Cons(x) => write!(f, "{x}"),
-            Object::Vec(vec) => {
-                write!(f, "[")?;
-                for x in vec.iter() {
-                    write!(f, "{x} ")?;
-                }
-                write!(f, "]")
-            }
-            Object::Record(vec) => {
-                write!(f, "#s(")?;
-                for x in vec.iter() {
-                    write!(f, "{x} ")?;
-                }
-                write!(f, ")")
-            }
-            Object::HashTable(x) => write!(f, "{x:?}"),
-            Object::String(x) => write!(f, "{x}"),
-            Object::Symbol(x) => write!(f, "{x}"),
-            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
-            Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::Float(x) => {
-                let float = ***x;
-                if float.fract() == 0.0_f64 {
-                    write!(f, "{float:.1}")
-                } else {
-                    write!(f, "{float}")
-                }
-            }
-        }
-    }
-}
-
-impl fmt::Debug for Object<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Object::Int(x) => write!(f, "{x}"),
-            Object::Cons(x) => write!(f, "{x:?}"),
-            Object::Vec(x) => write!(f, "{x:?}"),
-            Object::Record(x) => write!(f, "{x:?}"),
-            Object::HashTable(x) => write!(f, "{x:?}"),
-            Object::String(x) => write!(f, "{x:?}"),
-            Object::Symbol(x) => write!(f, "{x}"),
-            Object::LispFn(x) => write!(f, "(lambda {x:?})"),
-            Object::SubrFn(x) => write!(f, "{x:?}"),
-            Object::Float(x) => {
-                let float = ***x;
-                if float.fract() == 0.0_f64 {
-                    write!(f, "{float:.1}")
-                } else {
-                    write!(f, "{float}")
-                }
-            }
+            Object::Int(x) => D::fmt(x, f),
+            Object::Cons(x) => D::fmt(x, f),
+            Object::Vec(x) => D::fmt(x, f),
+            Object::Record(x) => D::fmt(x, f),
+            Object::HashTable(x) => D::fmt(x, f),
+            Object::String(x) => D::fmt(x, f),
+            Object::Symbol(x) => D::fmt(x, f),
+            Object::LispFn(x) => D::fmt(x, f),
+            Object::SubrFn(x) => D::fmt(x, f),
+            Object::Float(x) => D::fmt(x, f),
         }
     }
 }
@@ -1397,15 +1355,15 @@ impl<'ob> Gc<Object<'ob>> {
 
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.get() {
+            Object::Int(_) | Object::SubrFn(_) => {}
             Object::Float(x) => x.mark(),
+            Object::String(x) => x.mark(),
             Object::Vec(vec) => vec.trace(stack),
             Object::Record(x) => x.trace(stack),
             Object::HashTable(x) => x.trace(stack),
-            Object::String(x) => x.mark(),
             Object::Cons(x) => x.trace(stack),
             Object::Symbol(x) => x.trace(stack),
             Object::LispFn(x) => x.trace(stack),
-            Object::Int(_) | Object::SubrFn(_) => {}
         }
     }
 }

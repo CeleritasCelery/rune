@@ -71,6 +71,7 @@ pub(in crate::core) trait GcManaged {
 }
 
 impl PartialEq for GcMark {
+    #[inline(always)]
     fn eq(&self, _: &Self) -> bool {
         true
     }

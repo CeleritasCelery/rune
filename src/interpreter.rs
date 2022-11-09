@@ -5,7 +5,7 @@ use crate::core::{
     env::{sym, Env, Symbol},
     error::{ArgError, Type, TypeError},
     gc::{Context, Root, Rt},
-    object::{nil, qtrue, Function, Gc, GcObj, List, Object},
+    object::{display_slice, nil, qtrue, Function, Gc, GcObj, List, Object},
 };
 use crate::{root, rooted_iter};
 use anyhow::Context as _;
@@ -63,14 +63,16 @@ impl EvalError {
     }
 
     fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
+        let display = display_slice(args);
         Self {
-            backtrace: vec![format!("{name} {args:?}")],
+            backtrace: vec![format!("{name} {display}")],
             error: ErrorType::Err(error),
         }
     }
 
     fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
-        self.backtrace.push(format!("{name} {args:?}"));
+        let display = display_slice(args);
+        self.backtrace.push(format!("{name} {display}"));
         self
     }
 }

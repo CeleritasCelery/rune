@@ -80,10 +80,7 @@ impl Display for LispString {
 
 impl Debug for LispString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.string {
-            StrType::String(s) => write!(f, "\"{s}\""),
-            StrType::BString(s) => write!(f, "\"{s}\""),
-        }
+        write!(f, "{self}")
     }
 }
 

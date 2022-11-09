@@ -18,7 +18,6 @@ use std::hash::{Hash, Hasher};
 /// In order to garbage collect the function we need to
 /// halt all running threads. This has not been implemented
 /// yet.
-#[derive(Debug)]
 pub(crate) struct Symbol {
     name: SymbolName,
     pub(crate) sym: ConstSymbol,
@@ -266,6 +265,12 @@ impl Trace for Symbol {
 }
 
 impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }

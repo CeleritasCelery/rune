@@ -1,15 +1,14 @@
 use anyhow::{anyhow, Result};
-use std::{cell::Cell, fmt::Display, ops::Deref};
+use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
 
 use crate::core::gc::{GcManaged, GcMark, Trace};
 
-use super::{GcObj, WithLifetime};
+use super::{display_slice, GcObj, WithLifetime};
 
 /// A lisp vector. Unlike vectors in other languages this is not resizeable.
 /// This type is represented as slice of [`ObjCell`] which is immutable by
 /// default. However with the [`try_mut`] method, you can obtain a mutable view
 /// into this slice.
-#[derive(Debug)]
 pub(crate) struct LispVec {
     gc: GcMark,
     is_const: bool,
@@ -29,7 +28,7 @@ impl PartialEq for LispVec {
 /// unless it is inside an `Unsafe` Cell. However because this struct could also
 /// be used in an immutable data structure (function constants), we need to
 /// ensure that this cell cannot be mutated by default.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 #[repr(transparent)]
 pub(crate) struct ObjCell(Cell<GcObj<'static>>);
 
@@ -41,7 +40,13 @@ impl ObjCell {
 
 impl Display for ObjCell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.get().fmt(f)
+        Display::fmt(&self.0.get(), f)
+    }
+}
+
+impl Debug for ObjCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -143,6 +148,18 @@ impl Trace for LispVec {
     }
 }
 
+impl Display for LispVec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&display_slice(self))
+    }
+}
+
+impl Debug for LispVec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 #[repr(transparent)]
 pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<GcObj<'ob>>);
 
@@ -155,5 +172,12 @@ impl Deref for Record {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Display for Record {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#s")?;
+        f.write_str(&display_slice(self))
     }
 }

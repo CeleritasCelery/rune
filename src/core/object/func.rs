@@ -3,11 +3,11 @@ use super::{
         error::ArgError,
         gc::{Block, Context, Root},
     },
-    nil,
+    display_slice, nil,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
-use std::fmt;
+use std::fmt::{self, Debug, Display};
 
 use anyhow::{bail, Result};
 use fn_macros::Trace;
@@ -50,7 +50,7 @@ impl Expression {
 
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub(crate) struct LispFn {
     gc: GcMark,
     pub(crate) body: Expression,
@@ -100,6 +100,24 @@ impl Trace for LispFn {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
         self.body.constants.trace(stack);
+    }
+}
+
+impl Display for LispFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let args = &self.args;
+        let code = display_slice(&self.body.op_codes.0);
+        let consts = display_slice(&self.body.constants);
+        write!(f, "#[{args:?} {code:?} [{consts:?}]]")
+    }
+}
+
+impl Debug for LispFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LispFn")
+            .field("args", &self.args)
+            .field("body", &self.body)
+            .finish()
     }
 }
 
@@ -155,9 +173,15 @@ impl SubrFn {
     }
 }
 
-impl std::fmt::Debug for SubrFn {
+impl Display for SubrFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} -> {:?})", &self.name, self.args)
+        write!(f, "(Builtin: {} -> {:?})", &self.name, self.args)
+    }
+}
+
+impl Debug for SubrFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
     }
 }
 

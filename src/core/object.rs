@@ -15,6 +15,8 @@ mod other;
 mod string;
 mod tagged;
 mod vector;
+use std::fmt::Write as _;
+
 pub(crate) use tagged::*;
 
 pub(crate) use convert::*;
@@ -22,3 +24,13 @@ pub(crate) use func::*;
 pub(crate) use other::*;
 pub(crate) use string::*;
 pub(crate) use vector::*;
+
+pub(crate) fn display_slice<T: std::fmt::Display>(slice: &[T]) -> String {
+    let mut buffer = String::new();
+    buffer.push('[');
+    for x in slice {
+        write!(&mut buffer, "{x} ").expect("failed to display slice");
+    }
+    buffer.push(']');
+    buffer
+}
