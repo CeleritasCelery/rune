@@ -96,14 +96,8 @@ impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
 }
 
 impl<T> Trace for Gc<T> {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         self.as_obj().trace_mark(stack);
-    }
-}
-
-impl Trace for &Cons {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        Cons::mark(self, stack);
     }
 }
 

@@ -235,7 +235,7 @@ impl Symbol {
 }
 
 impl super::super::gc::Trace for &Symbol {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
             self.marked.store(true, Ordering::Release);

@@ -3,53 +3,53 @@ use crate::hashmap::{HashMap, HashSet};
 use super::super::object::RawObj;
 
 pub(crate) trait Trace {
-    fn mark(&self, stack: &mut Vec<RawObj>);
+    fn trace(&self, stack: &mut Vec<RawObj>);
 }
 
 impl<T: Trace> Trace for &T {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        (*self).mark(stack);
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        (*self).trace(stack);
     }
 }
 
 impl<T: Trace, U: Trace> Trace for (T, U) {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
-        self.0.mark(stack);
-        self.1.mark(stack);
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        self.0.trace(stack);
+        self.1.trace(stack);
     }
 }
 
 impl<T: Trace> Trace for Vec<T> {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         for x in self {
-            x.mark(stack);
+            x.trace(stack);
         }
     }
 }
 
 impl<K: Trace, V: Trace> Trace for HashMap<K, V> {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         for key in self.keys() {
-            key.mark(stack);
+            key.trace(stack);
         }
         for value in self.values() {
-            value.mark(stack);
+            value.trace(stack);
         }
     }
 }
 
 impl<T: Trace> Trace for HashSet<T> {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         for x in self {
-            x.mark(stack);
+            x.trace(stack);
         }
     }
 }
 
 impl<T: Trace> Trace for Option<T> {
-    fn mark(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
         if let Some(x) = self.as_ref() {
-            x.mark(stack);
+            x.trace(stack);
         }
     }
 }
@@ -62,7 +62,7 @@ mod test {
 
     struct Foo(u64);
     impl Trace for Foo {
-        fn mark(&self, _stack: &mut Vec<RawObj>) {
+        fn trace(&self, _stack: &mut Vec<RawObj>) {
             assert!(self.0 == 7);
         }
     }

@@ -359,7 +359,7 @@ impl<'a> IntoObject for Vec<GcObj<'a>> {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*<LispVec as TaggedPtr>::cast_ptr(ptr)).data
+        &(*<LispVec as TaggedPtr>::cast_ptr(ptr))
     }
 }
 
@@ -374,7 +374,7 @@ impl<'a> IntoObject for RecordBuilder<'a> {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        let vec = &(*<Self as TaggedPtr>::cast_ptr(ptr)).data;
+        let vec = &(*<Self as TaggedPtr>::cast_ptr(ptr));
         &*(vec as *const LispVec).cast::<Record>()
     }
 }
@@ -403,7 +403,7 @@ impl<'a> IntoObject for HashTable<'a> {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*<LispHashTable as TaggedPtr>::cast_ptr(ptr)).data
+        &(*<LispHashTable as TaggedPtr>::cast_ptr(ptr))
     }
 }
 
@@ -1393,9 +1393,9 @@ impl fmt::Debug for Object<'_> {
 enum ObjectAllocation<'ob> {
     Float(&'ob Allocation<f64>),
     Cons(&'ob Cons),
-    Vec(&'ob Allocation<LispVec>),
+    Vec(&'ob LispVec),
     ByteVec(&'ob Allocation<RefCell<Vec<u8>>>),
-    HashTable(&'ob Allocation<LispHashTable>),
+    HashTable(&'ob LispHashTable),
     String(&'ob Allocation<String>),
     LispFn(&'ob LispFn),
     Symbol(&'ob Symbol),
@@ -1440,27 +1440,13 @@ impl<'ob> Gc<Object<'ob>> {
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.get_alloc() {
             ObjectAllocation::Float(x) => x.mark(),
-            ObjectAllocation::Vec(vec) => {
-                vec.data.mark(stack);
-                vec.mark();
-            }
+            ObjectAllocation::Vec(vec) => vec.trace(stack),
             ObjectAllocation::ByteVec(vec) => vec.mark(),
-            ObjectAllocation::HashTable(table_alloc) => {
-                let table = table_alloc.data.borrow();
-                for (k, v) in &*table {
-                    if k.is_markable() {
-                        stack.push(k.into_raw());
-                    }
-                    if v.is_markable() {
-                        stack.push(v.into_raw());
-                    }
-                }
-                table_alloc.mark();
-            }
+            ObjectAllocation::HashTable(x) => x.trace(stack),
             ObjectAllocation::String(x) => x.mark(),
-            ObjectAllocation::Cons(x) => x.mark(stack),
-            ObjectAllocation::Symbol(x) => x.mark(stack),
-            ObjectAllocation::LispFn(x) => x.mark(stack),
+            ObjectAllocation::Cons(x) => x.trace(stack),
+            ObjectAllocation::Symbol(x) => x.trace(stack),
+            ObjectAllocation::LispFn(x) => x.trace(stack),
             ObjectAllocation::NonAllocated => {}
         }
     }

@@ -1,4 +1,4 @@
-use super::gc::{Block, Context, GcManaged, GcMark};
+use super::gc::{Block, Context, GcManaged, GcMark, Trace};
 use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
@@ -74,18 +74,6 @@ impl Cons {
         }
     }
 
-    pub(crate) fn mark(&self, stack: &mut Vec<RawObj>) {
-        let cdr = self.cdr();
-        if cdr.is_markable() {
-            stack.push(cdr.into_raw());
-        }
-        let car = self.car();
-        if car.is_markable() {
-            stack.push(car.into_raw());
-        }
-        self.mark_self();
-    }
-
     pub(crate) fn addr_car(&self) -> *const GcObj {
         addr_of!(self.car).cast::<GcObj>()
     }
@@ -98,6 +86,20 @@ impl Cons {
 impl GcManaged for Cons {
     fn get_mark(&self) -> &GcMark {
         &self.marked
+    }
+}
+
+impl Trace for Cons {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        let cdr = self.cdr();
+        if cdr.is_markable() {
+            stack.push(cdr.into_raw());
+        }
+        let car = self.car();
+        if car.is_markable() {
+            stack.push(car.into_raw());
+        }
+        self.mark();
     }
 }
 

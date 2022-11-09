@@ -5,7 +5,10 @@ use std::{
     ops::Deref,
 };
 
-use crate::{core::gc::Trace, hashmap::HashMap};
+use crate::{
+    core::gc::{GcManaged, GcMark, Trace},
+    hashmap::HashMap,
+};
 
 use super::{GcObj, WithLifetime};
 
@@ -15,6 +18,7 @@ use super::{GcObj, WithLifetime};
 /// into this slice.
 #[derive(Debug)]
 pub(crate) struct LispVec {
+    gc: GcMark,
     is_const: bool,
     inner: Box<[ObjCell]>,
 }
@@ -78,6 +82,7 @@ impl LispVec {
     pub(in crate::core) unsafe fn new(vec: Vec<GcObj>) -> Self {
         let cell = std::mem::transmute::<Vec<GcObj>, Vec<ObjCell>>(vec);
         Self {
+            gc: GcMark::default(),
             is_const: false,
             inner: cell.into_boxed_slice(),
         }
@@ -129,8 +134,15 @@ impl<'old, 'new> WithLifetime<'new> for &'old LispVec {
     }
 }
 
+impl GcManaged for LispVec {
+    fn get_mark(&self) -> &GcMark {
+        &self.gc
+    }
+}
+
 impl Trace for LispVec {
-    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+    fn trace(&self, stack: &mut Vec<super::RawObj>) {
+        self.mark();
         let unmarked = self
             .iter()
             .filter_map(|x| x.get().is_markable().then(|| x.get().into_raw()));
@@ -156,6 +168,7 @@ impl Deref for Record {
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 #[derive(Debug)]
 pub(crate) struct LispHashTable {
+    gc: GcMark,
     inner: RefCell<HashTable<'static>>,
 }
 
@@ -165,6 +178,7 @@ impl LispHashTable {
     pub(in crate::core) unsafe fn new(vec: HashTable) -> Self {
         let cell = std::mem::transmute::<HashTable<'_>, HashTable<'static>>(vec);
         Self {
+            gc: GcMark::default(),
             inner: RefCell::new(cell),
         }
     }
@@ -188,5 +202,26 @@ impl LispHashTable {
                 std::mem::transmute::<RefMut<'_, HashTable<'static>>, RefMut<'_, HashTable<'_>>>(x)
             })
         }
+    }
+}
+
+impl Trace for LispHashTable {
+    fn trace(&self, stack: &mut Vec<super::RawObj>) {
+        let table = self.borrow();
+        for (k, v) in &*table {
+            if k.is_markable() {
+                stack.push(k.into_raw());
+            }
+            if v.is_markable() {
+                stack.push(v.into_raw());
+            }
+        }
+        self.mark();
+    }
+}
+
+impl GcManaged for LispHashTable {
+    fn get_mark(&self) -> &GcMark {
+        &self.gc
     }
 }

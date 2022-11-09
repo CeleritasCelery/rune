@@ -24,7 +24,9 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                             mark_fields.extend(quote! {let _ = &self.#ident;});
                         } else {
                             new_fields.extend(quote! {#vis #ident: #rt<#ty>,});
-                            mark_fields.extend(quote! {self.#ident.mark(stack);});
+                            mark_fields.extend(
+                                quote! {crate::core::gc::Trace::trace(&self.#ident, stack);},
+                            );
                         }
                     }
                     new_fields = quote! {{#new_fields}};
@@ -39,7 +41,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                             mark_fields.extend(quote! {let _ = &self.#idx;});
                         } else {
                             new_fields.extend(quote! {#vis #rt<#ty>,});
-                            mark_fields.extend(quote! {self.#idx.mark(stack);});
+                            mark_fields
+                                .extend(quote! {crate::core::gc::Trace::trace(&self.#idx, stack);});
                         }
                     }
                     new_fields = quote! {(#new_fields);};
@@ -48,7 +51,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
             }
             quote! {
                 impl crate::core::gc::Trace for #orig_name {
-                    fn mark(&self, stack: &mut Vec<crate::core::object::RawObj>) {
+                    fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
                         #mark_fields
                     }
                 }

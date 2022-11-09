@@ -139,8 +139,8 @@ impl LispStack {
 }
 
 impl Trace for LispStack {
-    fn mark(&self, stack: &mut Vec<crate::core::object::RawObj>) {
-        self.0.mark(stack);
+    fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
+        self.0.trace(stack);
     }
 }
 

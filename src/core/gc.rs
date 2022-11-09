@@ -54,7 +54,7 @@ pub(in crate::core) struct GcMark(Cell<bool>);
 pub(in crate::core) trait GcManaged {
     fn get_mark(&self) -> &GcMark;
 
-    fn mark_self(&self) {
+    fn mark(&self) {
         self.get_mark().0.set(true);
     }
 
@@ -79,9 +79,9 @@ impl PartialEq for GcMark {
 enum OwnedObject {
     Float(Box<Allocation<f64>>),
     Cons(Box<Cons>),
-    Vec(Box<Allocation<LispVec>>),
+    Vec(Box<LispVec>),
     ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
-    HashTable(Box<Allocation<LispHashTable>>),
+    HashTable(Box<LispHashTable>),
     String(Box<Allocation<String>>),
     Symbol(Box<Symbol>),
     LispFn(Box<LispFn>),
@@ -219,19 +219,16 @@ impl<'ob> AllocObject for LispFn {
 }
 
 impl<'ob> AllocObject for LispVec {
-    type Output = Allocation<LispVec>;
+    type Output = LispVec;
 
     fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(
-            &mut objects,
-            OwnedObject::Vec(Box::new(Allocation::new(self))),
-        );
+        Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(self)));
         let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
+        unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
     }
 }
 
@@ -255,19 +252,16 @@ impl<'ob> AllocObject for Vec<u8> {
 }
 
 impl<'ob> AllocObject for LispHashTable {
-    type Output = Allocation<Self>;
+    type Output = Self;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(
-            &mut objects,
-            OwnedObject::HashTable(Box::new(Allocation::new(self))),
-        );
+        Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(self)));
         let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
+        unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
     }
 }
 
@@ -357,7 +351,7 @@ impl<'ob, 'rt> Context<'rt> {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (**x).mark(gray_stack);
+                (**x).trace(gray_stack);
             }
         }
         while !gray_stack.is_empty() {

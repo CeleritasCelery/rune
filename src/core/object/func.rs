@@ -97,9 +97,9 @@ impl GcManaged for LispFn {
 }
 
 impl Trace for LispFn {
-    fn mark(&self, stack: &mut Vec<super::RawObj>) {
-        self.mark_self();
-        self.body.constants.mark(stack);
+    fn trace(&self, stack: &mut Vec<super::RawObj>) {
+        self.mark();
+        self.body.constants.trace(stack);
     }
 }
 
