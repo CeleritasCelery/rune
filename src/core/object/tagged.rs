@@ -4,7 +4,7 @@ use std::fmt;
 use std::{cell::RefCell, marker::PhantomData};
 
 use crate::core::env::ConstSymbol;
-use crate::core::gc::Trace;
+use crate::core::gc::{GcManaged, Trace};
 
 use super::super::{
     cons::Cons,

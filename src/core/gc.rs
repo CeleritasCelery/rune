@@ -49,23 +49,27 @@ impl<'rt> Drop for Context<'rt> {
 #[derive(Debug, Default)]
 pub(in crate::core) struct GcMark(Cell<bool>);
 
-impl PartialEq for GcMark {
-    fn eq(&self, _: &Self) -> bool {
-        true
+/// This trait represents a type that is managed by the Garbage collector and
+/// therefore has a markbit to preserve it.
+pub(in crate::core) trait GcManaged {
+    fn get_mark(&self) -> &GcMark;
+
+    fn mark_self(&self) {
+        self.get_mark().0.set(true);
+    }
+
+    fn unmark(&self) {
+        self.get_mark().0.set(false);
+    }
+
+    fn is_marked(&self) -> bool {
+        self.get_mark().0.get()
     }
 }
 
-impl GcMark {
-    pub(in crate::core) fn mark(&self) {
-        self.0.set(true);
-    }
-
-    pub(in crate::core) fn unmark(&self) {
-        self.0.set(false);
-    }
-
-    pub(in crate::core) fn is_marked(&self) -> bool {
-        self.0.get()
+impl PartialEq for GcMark {
+    fn eq(&self, _: &Self) -> bool {
+        true
     }
 }
 

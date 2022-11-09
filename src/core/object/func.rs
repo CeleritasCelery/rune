@@ -6,7 +6,7 @@ use super::{
     nil,
 };
 use super::{GcObj, WithLifetime};
-use crate::core::gc::{GcMark, Rt, Trace};
+use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -88,19 +88,17 @@ impl<'new> LispFn {
             args: self.args,
         }
     }
+}
 
-    pub(crate) fn unmark(&self) {
-        self.gc.unmark();
-    }
-
-    pub(crate) fn is_marked(&self) -> bool {
-        self.gc.is_marked()
+impl GcManaged for LispFn {
+    fn get_mark(&self) -> &GcMark {
+        &self.gc
     }
 }
 
 impl Trace for LispFn {
     fn mark(&self, stack: &mut Vec<super::RawObj>) {
-        self.gc.mark();
+        self.mark_self();
         self.body.constants.mark(stack);
     }
 }

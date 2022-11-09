@@ -1,4 +1,4 @@
-use super::gc::{Block, Context};
+use super::gc::{Block, Context, GcManaged, GcMark};
 use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
@@ -11,7 +11,7 @@ mod iter;
 pub(crate) use iter::*;
 
 pub(crate) struct Cons {
-    marked: Cell<bool>,
+    marked: GcMark,
     mutable: bool,
     car: Cell<RawObj>,
     cdr: Cell<RawObj>,
@@ -29,7 +29,7 @@ impl Cons {
     // lifetimes.
     pub(crate) unsafe fn new(car: GcObj, cdr: GcObj) -> Self {
         Self {
-            marked: Cell::new(false),
+            marked: GcMark::default(),
             mutable: true,
             car: Cell::new(car.into_raw()),
             cdr: Cell::new(cdr.into_raw()),
@@ -83,15 +83,7 @@ impl Cons {
         if car.is_markable() {
             stack.push(car.into_raw());
         }
-        self.marked.set(true);
-    }
-
-    pub(crate) fn unmark(&self) {
-        self.marked.set(false);
-    }
-
-    pub(crate) fn is_marked(&self) -> bool {
-        self.marked.get()
+        self.mark_self();
     }
 
     pub(crate) fn addr_car(&self) -> *const GcObj {
@@ -100,6 +92,12 @@ impl Cons {
 
     pub(crate) fn addr_cdr(&self) -> *const GcObj {
         addr_of!(self.cdr).cast::<GcObj>()
+    }
+}
+
+impl GcManaged for Cons {
+    fn get_mark(&self) -> &GcMark {
+        &self.marked
     }
 }
 
