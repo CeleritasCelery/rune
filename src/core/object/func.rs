@@ -6,7 +6,7 @@ use super::{
     nil,
 };
 use super::{GcObj, WithLifetime};
-use crate::core::gc::{Rt, Trace};
+use crate::core::gc::{GcMark, Rt, Trace};
 use std::fmt;
 
 use anyhow::{bail, Result};
@@ -52,6 +52,7 @@ impl Expression {
 /// so this contains the byte-code representation of the function.
 #[derive(Debug, PartialEq)]
 pub(crate) struct LispFn {
+    gc: GcMark,
     pub(crate) body: Expression,
     pub(crate) args: FnArgs,
 }
@@ -61,6 +62,46 @@ impl<'new> WithLifetime<'new> for &LispFn {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         &*(self as *const LispFn)
+    }
+}
+
+define_unbox!(LispFn, Func, &'ob LispFn);
+
+impl<'new> LispFn {
+    pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>, args: FnArgs) -> Self {
+        Self {
+            gc: GcMark::default(),
+            body: unsafe { Expression::new(op_codes, consts) },
+            args,
+        }
+    }
+
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn {
+        LispFn {
+            gc: GcMark::default(),
+            body: unsafe {
+                Expression::new(
+                    self.body.op_codes.clone(),
+                    self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
+                )
+            },
+            args: self.args,
+        }
+    }
+
+    pub(crate) fn unmark(&self) {
+        self.gc.unmark();
+    }
+
+    pub(crate) fn is_marked(&self) -> bool {
+        self.gc.is_marked()
+    }
+}
+
+impl Trace for LispFn {
+    fn mark(&self, stack: &mut Vec<super::RawObj>) {
+        self.gc.mark();
+        self.body.constants.mark(stack);
     }
 }
 
@@ -81,28 +122,6 @@ impl FnArgs {
             bail!(ArgError::new(total, args, name));
         }
         Ok(total.saturating_sub(args))
-    }
-}
-
-define_unbox!(LispFn, Func, &'ob LispFn);
-
-impl<'new> LispFn {
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn {
-        LispFn {
-            body: unsafe {
-                Expression::new(
-                    self.body.op_codes.clone(),
-                    self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
-                )
-            },
-            args: self.args,
-        }
-    }
-}
-
-impl Trace for LispFn {
-    fn mark(&self, stack: &mut Vec<super::RawObj>) {
-        self.body.constants.mark(stack);
     }
 }
 

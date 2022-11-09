@@ -2,9 +2,7 @@ use std::cell::RefCell;
 
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
-use crate::core::object::{
-    nil, CodeVec, Expression, FnArgs, Gc, GcObj, LispFn, LispVec, RecordBuilder,
-};
+use crate::core::object::{nil, CodeVec, FnArgs, Gc, GcObj, LispFn, LispVec, RecordBuilder};
 use anyhow::{ensure, Result};
 use fn_macros::defun;
 
@@ -37,10 +35,8 @@ pub(crate) fn make_closure<'ob>(
         *cnst = *var;
     }
 
-    Ok(LispFn {
-        body: unsafe { Expression::new(prototype.body.op_codes.clone(), constants) },
-        args: prototype.args,
-    })
+    // TODO: returning an owned type is not safe here
+    Ok(unsafe { LispFn::new(prototype.body.op_codes.clone(), constants, prototype.args) })
 }
 
 #[defun]
@@ -60,16 +56,17 @@ pub(crate) fn make_byte_code<'ob>(
         max - required
     };
     let rest = arglist & 0x80 != 0;
-    LispFn {
-        body: unsafe {
-            Expression::new(CodeVec(byte_code.borrow().clone()), constants.clone_vec())
-        },
-        args: FnArgs {
-            rest,
-            required,
-            optional,
-            advice: false,
-        },
+    unsafe {
+        LispFn::new(
+            CodeVec(byte_code.borrow().clone()),
+            constants.clone_vec(),
+            FnArgs {
+                rest,
+                required,
+                optional,
+                advice: false,
+            },
+        )
     }
 }
 

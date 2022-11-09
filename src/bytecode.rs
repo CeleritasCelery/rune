@@ -257,6 +257,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
         let stack = self.stack.as_mut(cx);
         stack.remove_top(arg_cnt);
         stack[0].set(result);
+        cx.garbage_collect(false);
         Ok(())
     }
 

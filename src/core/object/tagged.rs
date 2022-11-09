@@ -280,7 +280,7 @@ impl IntoObject for LispFn {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*<LispFn as TaggedPtr>::cast_ptr(ptr)).data
+        &(*<LispFn as TaggedPtr>::cast_ptr(ptr))
     }
 }
 
@@ -1397,7 +1397,7 @@ enum ObjectAllocation<'ob> {
     ByteVec(&'ob Allocation<RefCell<Vec<u8>>>),
     HashTable(&'ob Allocation<LispHashTable>),
     String(&'ob Allocation<String>),
-    LispFn(&'ob Allocation<LispFn>),
+    LispFn(&'ob LispFn),
     Symbol(&'ob Symbol),
     NonAllocated,
 }
@@ -1460,10 +1460,7 @@ impl<'ob> Gc<Object<'ob>> {
             ObjectAllocation::String(x) => x.mark(),
             ObjectAllocation::Cons(x) => x.mark(stack),
             ObjectAllocation::Symbol(x) => x.mark(stack),
-            ObjectAllocation::LispFn(x) => {
-                x.data.mark(stack);
-                x.mark();
-            }
+            ObjectAllocation::LispFn(x) => x.mark(stack),
             ObjectAllocation::NonAllocated => {}
         }
     }

@@ -46,6 +46,29 @@ impl<'rt> Drop for Context<'rt> {
     }
 }
 
+#[derive(Debug, Default)]
+pub(in crate::core) struct GcMark(Cell<bool>);
+
+impl PartialEq for GcMark {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl GcMark {
+    pub(in crate::core) fn mark(&self) {
+        self.0.set(true);
+    }
+
+    pub(in crate::core) fn unmark(&self) {
+        self.0.set(false);
+    }
+
+    pub(in crate::core) fn is_marked(&self) -> bool {
+        self.0.get()
+    }
+}
+
 /// The owner of an object allocation. No references to
 /// the object can outlive this.
 #[derive(Debug)]
@@ -57,7 +80,7 @@ enum OwnedObject {
     HashTable(Box<Allocation<LispHashTable>>),
     String(Box<Allocation<String>>),
     Symbol(Box<Symbol>),
-    LispFn(Box<Allocation<LispFn>>),
+    LispFn(Box<LispFn>),
 }
 
 /// A container type that has a mark bit for garbage collection.
@@ -181,13 +204,13 @@ impl AllocObject for String {
 }
 
 impl<'ob> AllocObject for LispFn {
-    type Output = Allocation<LispFn>;
+    type Output = LispFn;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let boxed = Box::new(Allocation::new(self));
+        let boxed = Box::new(self);
         Block::<C>::register(&mut objects, OwnedObject::LispFn(boxed));
         let Some(OwnedObject::LispFn(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Allocation<LispFn>, &'ob Allocation<LispFn>>(x.as_ref()) }
+        unsafe { transmute::<&LispFn, &'ob LispFn>(x.as_ref()) }
     }
 }
 
