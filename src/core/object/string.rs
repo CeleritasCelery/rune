@@ -28,8 +28,8 @@ impl LispString {
 
     pub(crate) fn len(&self) -> usize {
         match &self.string {
-            StrType::String(s) => s.len(),
-            StrType::BString(s) => s.len(),
+            StrType::String(s) => s.chars().count(),
+            StrType::BString(s) => s.chars().count(),
         }
     }
 }
