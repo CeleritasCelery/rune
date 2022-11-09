@@ -1,7 +1,9 @@
+use crate::core::gc::GcManaged;
 use crate::core::{gc::Context, object::RawObj};
 use anyhow::{bail, Result};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+use super::super::gc::Trace;
 use super::super::object::{Function, Gc, SubrFn, WithLifetime};
 use super::sym;
 use std::fmt;
@@ -224,21 +226,38 @@ impl Symbol {
             func.store(Self::NULL, Ordering::Release);
         }
     }
+}
 
-    pub(crate) fn unmark(&self) {
-        self.marked.store(false, Ordering::Release);
+impl GcManaged for Symbol {
+    fn get_mark(&self) -> &crate::core::gc::GcMark {
+        panic!("Symbol does not use GcMark")
     }
 
-    pub(crate) fn is_marked(&self) -> bool {
-        self.marked.load(Ordering::Acquire)
+    fn mark(&self) {
+        if matches!(self.name, SymbolName::Uninterned(_)) {
+            self.marked.store(true, Ordering::Release);
+        }
+    }
+
+    fn unmark(&self) {
+        if matches!(self.name, SymbolName::Uninterned(_)) {
+            self.marked.store(false, Ordering::Release);
+        }
+    }
+
+    fn is_marked(&self) -> bool {
+        match self.name {
+            SymbolName::Uninterned(_) => self.marked.load(Ordering::Acquire),
+            SymbolName::Interned(_) => true,
+        }
     }
 }
 
-impl super::super::gc::Trace for &Symbol {
+impl Trace for Symbol {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.marked.store(true, Ordering::Release);
+            self.mark();
             if let Some(func) = self.get() {
                 func.as_obj().trace_mark(stack);
             }
