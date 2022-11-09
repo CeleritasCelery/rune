@@ -158,7 +158,7 @@ pub(crate) fn symbolp(object: GcObj) -> bool {
 #[defun]
 pub(crate) fn functionp(object: GcObj) -> bool {
     match object.get() {
-        Object::LispFn(_) | Object::SubrFn(_) => true,
+        Object::ByteFn(_) | Object::SubrFn(_) => true,
         Object::Cons(cons) => cons.car() == sym::CLOSURE,
         Object::Symbol(sym) => sym.has_func(),
         _ => false,
@@ -226,7 +226,7 @@ pub(crate) fn atom(object: GcObj) -> bool {
 
 #[defun]
 fn byte_code_function_p(object: GcObj) -> bool {
-    matches!(object.get(), Object::LispFn(_))
+    matches!(object.get(), Object::ByteFn(_))
 }
 
 #[defun]
@@ -308,7 +308,7 @@ pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> 
 }
 
 #[defun]
-pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
+pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match array.get() {
         Object::Vec(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
@@ -331,7 +331,14 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        x => Err(TypeError::new(Type::Vec, x).into()),
+        // TODO: Need to return references, not copies
+        Object::ByteFn(func) => match idx {
+            0 => todo!("implement bytecode argument spec"),
+            1 => Ok(cx.add(func.body.op_codes.0.clone())),
+            2 => Ok(cx.add(func.body.constants.clone())),
+            _ => todo!("implement bytecode max stack size"),
+        },
+        x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
 
@@ -344,7 +351,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::Cons(_) => sym::CONS.into(),
         Object::Vec(_) => sym::VECTOR.into(),
         Object::Record(x) => x.get(0).expect("record was missing type").get(),
-        Object::LispFn(_) => sym::COMPILED_FUNCTION.into(),
+        Object::ByteFn(_) => sym::COMPILED_FUNCTION.into(),
         Object::HashTable(_) => sym::HASH_TABLE.into(),
         Object::String(_) => sym::STRING.into(),
         Object::SubrFn(_) => sym::SUBR.into(),

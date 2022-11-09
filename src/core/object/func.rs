@@ -51,23 +51,23 @@ impl Expression {
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq)]
-pub(crate) struct LispFn {
+pub(crate) struct ByteFn {
     gc: GcMark,
     pub(crate) body: Expression,
     pub(crate) args: FnArgs,
 }
 
-impl<'new> WithLifetime<'new> for &LispFn {
-    type Out = &'new LispFn;
+impl<'new> WithLifetime<'new> for &ByteFn {
+    type Out = &'new ByteFn;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const LispFn)
+        &*(self as *const ByteFn)
     }
 }
 
-define_unbox!(LispFn, Func, &'ob LispFn);
+define_unbox!(ByteFn, Func, &'ob ByteFn);
 
-impl<'new> LispFn {
+impl<'new> ByteFn {
     pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>, args: FnArgs) -> Self {
         Self {
             gc: GcMark::default(),
@@ -76,8 +76,8 @@ impl<'new> LispFn {
         }
     }
 
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> LispFn {
-        LispFn {
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> ByteFn {
+        ByteFn {
             gc: GcMark::default(),
             body: unsafe {
                 Expression::new(
@@ -90,20 +90,20 @@ impl<'new> LispFn {
     }
 }
 
-impl GcManaged for LispFn {
+impl GcManaged for ByteFn {
     fn get_mark(&self) -> &GcMark {
         &self.gc
     }
 }
 
-impl Trace for LispFn {
+impl Trace for ByteFn {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
         self.body.constants.trace(stack);
     }
 }
 
-impl Display for LispFn {
+impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let args = &self.args;
         let code = display_slice(&self.body.op_codes.0);
@@ -112,9 +112,9 @@ impl Display for LispFn {
     }
 }
 
-impl Debug for LispFn {
+impl Debug for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("LispFn")
+        f.debug_struct("ByteFn")
             .field("args", &self.args)
             .field("body", &self.body)
             .finish()

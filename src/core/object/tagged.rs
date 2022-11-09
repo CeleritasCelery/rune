@@ -14,7 +14,7 @@ use super::super::{
 };
 
 use super::{
-    HashTable, LispFloat, LispFn, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
+    ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
 
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
@@ -47,6 +47,7 @@ pub(crate) struct Gc<T> {
     _data: PhantomData<T>,
 }
 
+// TODO need to find a better way to handle this
 unsafe impl<T> Send for Gc<T> {}
 
 #[repr(u8)]
@@ -60,7 +61,7 @@ enum Tag {
     Record,
     HashTable,
     SubrFn,
-    LispFn,
+    ByteFn,
 }
 
 impl<T> Gc<T> {
@@ -272,8 +273,8 @@ impl IntoObject for Cons {
     }
 }
 
-impl IntoObject for LispFn {
-    type Out<'ob> = &'ob LispFn;
+impl IntoObject for ByteFn {
+    type Out<'ob> = &'ob ByteFn;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
@@ -281,7 +282,7 @@ impl IntoObject for LispFn {
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
-        &(*<LispFn as TaggedPtr>::cast_ptr(ptr))
+        &(*<ByteFn as TaggedPtr>::cast_ptr(ptr))
     }
 }
 
@@ -468,10 +469,10 @@ impl TaggedPtr for Symbol {
     const TAG: Tag = Tag::Symbol;
 }
 
-impl TaggedPtr for LispFn {
+impl TaggedPtr for ByteFn {
     type Ptr = <Self as AllocObject>::Output;
-    type Output<'ob> = &'ob LispFn;
-    const TAG: Tag = Tag::LispFn;
+    type Output<'ob> = &'ob ByteFn;
+    const TAG: Tag = Tag::ByteFn;
 }
 
 impl TaggedPtr for LispString {
@@ -609,7 +610,7 @@ impl<'ob> From<&'ob Cons> for Gc<List<'ob>> {
 // Function
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Function<'ob> {
-    LispFn(&'ob LispFn),
+    ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
     Symbol(&'ob Symbol),
@@ -632,7 +633,7 @@ extern "Rust" {
 impl<'ob> Function<'ob> {
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            Function::LispFn(x) => {
+            Function::ByteFn(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
@@ -667,8 +668,8 @@ impl<'ob> From<Gc<&'static SubrFn>> for Gc<Function<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob LispFn>> for Gc<Function<'ob>> {
-    fn from(x: Gc<&'ob LispFn>) -> Self {
+impl<'ob> From<Gc<&'ob ByteFn>> for Gc<Function<'ob>> {
+    fn from(x: Gc<&'ob ByteFn>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -707,7 +708,7 @@ impl<'ob> Gc<Function<'ob>> {
             Tag::Cons => Function::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
             // SubrFn does not have IntoObject implementation, so we cast it directly
             Tag::SubrFn => Function::SubrFn(unsafe { &*ptr.cast::<SubrFn>() }),
-            Tag::LispFn => Function::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
+            Tag::ByteFn => Function::ByteFn(unsafe { ByteFn::from_obj_ptr(ptr) }),
             Tag::Symbol => Function::Symbol(unsafe { Symbol::from_obj_ptr(ptr) }),
             _ => unreachable!(),
         }
@@ -728,7 +729,7 @@ pub(crate) enum Object<'ob> {
     Record(&'ob Record),
     HashTable(&'ob LispHashTable),
     String(&'ob LispString),
-    LispFn(&'ob LispFn),
+    ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
 }
 
@@ -743,7 +744,7 @@ impl Object<'_> {
             Object::Vec(_) | Object::Record(_) => Type::Vec,
             Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
-            Object::LispFn(_) | Object::SubrFn(_) => Type::Func,
+            Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
         }
     }
 }
@@ -757,7 +758,7 @@ impl PartialEq for Object<'_> {
             (Object::Cons(l0), Object::Cons(r0)) => l0 == r0,
             (Object::Vec(l0), Object::Vec(r0)) => l0 == r0,
             (Object::String(l0), Object::String(r0)) => l0 == r0,
-            (Object::LispFn(_), Object::LispFn(_)) => todo!(),
+            (Object::ByteFn(_), Object::ByteFn(_)) => todo!(),
             (Object::SubrFn(l0), Object::SubrFn(r0)) => l0 == r0,
             (Object::Record(_), Object::Record(_)) => todo!(),
             (Object::HashTable(_), Object::HashTable(_)) => todo!(),
@@ -783,7 +784,7 @@ impl<'ob> Gc<Object<'ob>> {
             Tag::Symbol => Object::Symbol(unsafe { Symbol::from_obj_ptr(ptr) }),
             Tag::Cons => Object::Cons(unsafe { Cons::from_obj_ptr(ptr) }),
             Tag::SubrFn => Object::SubrFn(unsafe { &*ptr.cast() }),
-            Tag::LispFn => Object::LispFn(unsafe { LispFn::from_obj_ptr(ptr) }),
+            Tag::ByteFn => Object::ByteFn(unsafe { ByteFn::from_obj_ptr(ptr) }),
             Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
             Tag::Float => Object::Float(unsafe { f64::from_obj_ptr(ptr) }),
             Tag::String => Object::String(unsafe { String::from_obj_ptr(ptr) }),
@@ -918,8 +919,8 @@ impl<'ob> From<Gc<&'ob RefCell<HashTable<'ob>>>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob LispFn>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob LispFn>) -> Self {
+impl<'ob> From<Gc<&'ob ByteFn>> for Gc<Object<'ob>> {
+    fn from(x: Gc<&'ob ByteFn>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -1021,7 +1022,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::LispFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
+            Tag::ByteFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
                 Ok(Self::transmute(value))
             },
             _ => Err(TypeError::new(Type::Func, value)),
@@ -1078,10 +1079,10 @@ impl<'ob> Gc<&'ob Cons> {
 }
 
 #[cfg(test)]
-impl<'ob> Gc<&'ob LispFn> {
-    pub(crate) fn get(self) -> &'ob LispFn {
+impl<'ob> Gc<&'ob ByteFn> {
+    pub(crate) fn get(self) -> &'ob ByteFn {
         let (ptr, _) = self.untag();
-        unsafe { LispFn::from_obj_ptr(ptr) }
+        unsafe { ByteFn::from_obj_ptr(ptr) }
     }
 }
 
@@ -1200,7 +1201,7 @@ impl<T> Gc<T> {
             Object::Cons(x) => x.clone_in(bk).into(),
             Object::String(x) => x.clone().into_obj(bk).into(),
             Object::Symbol(x) => x.into(),
-            Object::LispFn(x) => x.clone_in(bk).into_obj(bk).into(),
+            Object::ByteFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => x.clone_in(bk).into_obj(bk).into(),
@@ -1327,7 +1328,7 @@ impl fmt::Display for Object<'_> {
             Object::HashTable(x) => D::fmt(x, f),
             Object::String(x) => D::fmt(x, f),
             Object::Symbol(x) => D::fmt(x, f),
-            Object::LispFn(x) => D::fmt(x, f),
+            Object::ByteFn(x) => D::fmt(x, f),
             Object::SubrFn(x) => D::fmt(x, f),
             Object::Float(x) => D::fmt(x, f),
         }
@@ -1348,7 +1349,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Record(x) => x.is_marked(),
             Object::HashTable(x) => x.is_marked(),
             Object::String(x) => x.is_marked(),
-            Object::LispFn(x) => x.is_marked(),
+            Object::ByteFn(x) => x.is_marked(),
             Object::Symbol(x) => x.is_marked(),
         }
     }
@@ -1363,7 +1364,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::HashTable(x) => x.trace(stack),
             Object::Cons(x) => x.trace(stack),
             Object::Symbol(x) => x.trace(stack),
-            Object::LispFn(x) => x.trace(stack),
+            Object::ByteFn(x) => x.trace(stack),
         }
     }
 }

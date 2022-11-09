@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
-use crate::core::object::{nil, Expression, GcObj, IntoObject, LispFn, Object};
+use crate::core::object::{nil, ByteFn, Expression, GcObj, IntoObject, Object};
 use crate::root;
 
 mod opcode;
@@ -217,7 +217,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     /// a list.
     fn prepare_lisp_args(
         &mut self,
-        func: &LispFn,
+        func: &ByteFn,
         arg_cnt: u16,
         name: &str,
         cx: &'ob Context,
@@ -457,7 +457,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
 }
 
 pub(crate) fn call<'ob>(
-    func: &Rt<&'static LispFn>,
+    func: &Rt<&'static ByteFn>,
     args: &mut Root<'_, '_, Vec<GcObj<'static>>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
@@ -529,7 +529,7 @@ mod test {
 
     fn check_bytecode_internal<'ob>(
         args: &mut Root<Vec<GcObj<'static>>>,
-        bytecode: &Rt<&'static LispFn>,
+        bytecode: &Rt<&'static ByteFn>,
         expect: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) {

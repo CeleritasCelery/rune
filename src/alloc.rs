@@ -1,7 +1,7 @@
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
 use crate::core::object::{
-    nil, CodeVec, FnArgs, Gc, GcObj, LispFn, LispString, LispVec, RecordBuilder,
+    nil, ByteFn, CodeVec, FnArgs, Gc, GcObj, LispString, LispVec, RecordBuilder,
 };
 use anyhow::{ensure, Result};
 use bstr::BStr;
@@ -20,10 +20,10 @@ pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> 
 /// closure values.
 #[defun]
 pub(crate) fn make_closure<'ob>(
-    prototype: &LispFn,
+    prototype: &ByteFn,
     closure_vars: &[GcObj<'ob>],
     cx: &'ob Context,
-) -> Result<LispFn> {
+) -> Result<ByteFn> {
     let const_len = prototype.body.constants(cx).len();
     let vars = closure_vars.len();
     ensure!(
@@ -37,7 +37,7 @@ pub(crate) fn make_closure<'ob>(
     }
 
     // TODO: returning an owned type is not safe here
-    Ok(unsafe { LispFn::new(prototype.body.op_codes.clone(), constants, prototype.args) })
+    Ok(unsafe { ByteFn::new(prototype.body.op_codes.clone(), constants, prototype.args) })
 }
 
 #[defun]
@@ -49,7 +49,7 @@ pub(crate) fn make_byte_code<'ob>(
     _docstring: Option<GcObj>,
     _interactive_spec: Option<GcObj>,
     _elements: &[GcObj],
-) -> LispFn {
+) -> ByteFn {
     let arglist = arglist as u16;
     let required = arglist & 0x7F;
     let optional = {
@@ -59,7 +59,7 @@ pub(crate) fn make_byte_code<'ob>(
     let rest = arglist & 0x80 != 0;
     let bstr: &BStr = byte_code;
     unsafe {
-        LispFn::new(
+        ByteFn::new(
             CodeVec(bstr.to_vec()),
             constants.clone_vec(),
             FnArgs {

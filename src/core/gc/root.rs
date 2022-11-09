@@ -10,7 +10,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    CodeVec, Expression, Function, Gc, IntoObject, LispFn, LispString, Object, WithLifetime,
+    ByteFn, CodeVec, Expression, Function, Gc, IntoObject, LispString, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -52,8 +52,8 @@ impl IntoRoot<&'static Cons> for &Cons {
     }
 }
 
-impl IntoRoot<&'static LispFn> for &LispFn {
-    unsafe fn into_root(self) -> &'static LispFn {
+impl IntoRoot<&'static ByteFn> for &ByteFn {
+    unsafe fn into_root(self) -> &'static ByteFn {
         self.with_lifetime()
     }
 }
@@ -442,7 +442,7 @@ impl Rt<&Cons> {
     }
 }
 
-impl Rt<&'static LispFn> {
+impl Rt<&'static ByteFn> {
     pub(crate) fn body(&self) -> &Rt<Expression> {
         let expression: &Expression = &self.inner.body;
         unsafe { &*(expression as *const Expression).cast::<Rt<Expression>>() }

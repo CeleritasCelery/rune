@@ -1,7 +1,7 @@
 use super::cons::Cons;
 use super::env::Symbol;
 use super::object::{
-    Gc, GcObj, IntoObject, LispFloat, LispFn, LispHashTable, LispString, LispVec, RawInto,
+    ByteFn, Gc, GcObj, IntoObject, LispFloat, LispHashTable, LispString, LispVec, RawInto,
     WithLifetime,
 };
 use std::cell::{Cell, RefCell};
@@ -87,7 +87,7 @@ enum OwnedObject {
     HashTable(Box<LispHashTable>),
     String(Box<LispString>),
     Symbol(Box<Symbol>),
-    LispFn(Box<LispFn>),
+    ByteFn(Box<ByteFn>),
 }
 
 impl OwnedObject {
@@ -99,7 +99,7 @@ impl OwnedObject {
             OwnedObject::HashTable(x) => x.unmark(),
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::Symbol(x) => x.unmark(),
-            OwnedObject::LispFn(x) => x.unmark(),
+            OwnedObject::ByteFn(x) => x.unmark(),
         }
     }
 
@@ -111,7 +111,7 @@ impl OwnedObject {
             OwnedObject::HashTable(x) => x.is_marked(),
             OwnedObject::String(x) => x.is_marked(),
             OwnedObject::Symbol(x) => x.is_marked(),
-            OwnedObject::LispFn(x) => x.is_marked(),
+            OwnedObject::ByteFn(x) => x.is_marked(),
         }
     }
 }
@@ -171,14 +171,14 @@ impl AllocObject for LispString {
     }
 }
 
-impl<'ob> AllocObject for LispFn {
-    type Output = LispFn;
+impl<'ob> AllocObject for ByteFn {
+    type Output = ByteFn;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         let boxed = Box::new(self);
-        Block::<C>::register(&mut objects, OwnedObject::LispFn(boxed));
-        let Some(OwnedObject::LispFn(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&LispFn, &'ob LispFn>(x.as_ref()) }
+        Block::<C>::register(&mut objects, OwnedObject::ByteFn(boxed));
+        let Some(OwnedObject::ByteFn(x)) = objects.last() else {unreachable!()};
+        unsafe { transmute::<&ByteFn, &'ob ByteFn>(x.as_ref()) }
     }
 }
 
