@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::path::Path;
 
 use fn_macros::defun;
@@ -14,20 +15,21 @@ pub(crate) fn expand_file_name(
     default_directory: Option<&str>,
     env: &Root<Env>,
     cx: &Context,
-) -> String {
+) -> Result<String> {
     // TODO: this needs to be tested to ensure it has the same behavior as GNU
     // Emacs. It doesn't do any normalization for one thing.
     if Path::new(name).is_absolute() {
-        name.to_owned()
+        Ok(name.to_owned())
     } else if let Some(dir) = default_directory {
         let path = Path::new(dir);
-        path.join(name).to_string_lossy().to_string()
+        Ok(path.join(name).to_string_lossy().to_string())
     } else {
         let dir = env.vars.get(&*sym::DEFAULT_DIRECTORY).unwrap();
         match dir.get(cx) {
             Object::String(s) => {
-                let path = Path::new(s);
-                path.join(name).to_string_lossy().to_string()
+                let name: &str = s.try_into()?;
+                let path = Path::new(name);
+                Ok(path.join(name).to_string_lossy().to_string())
             }
             _ => unreachable!("`default-directory' should be a string"),
         }

@@ -3,13 +3,13 @@ use fn_macros::defun;
 use crate::core::object::{nil, GcObj};
 
 #[defun]
-pub(crate) fn make_keymap(_string: Option<&String>) -> GcObj {
+pub(crate) fn make_keymap(_string: Option<&str>) -> GcObj {
     // TODO: implement
     nil()
 }
 
 #[defun]
-pub(crate) fn make_sparse_keymap(_string: Option<&String>) -> GcObj {
+pub(crate) fn make_sparse_keymap(_string: Option<&str>) -> GcObj {
     // TODO: implement
     nil()
 }

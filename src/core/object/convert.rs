@@ -2,8 +2,6 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
-use std::cell::RefCell;
-
 use crate::core::env::Symbol;
 
 use super::{
@@ -12,7 +10,7 @@ use super::{
         env::sym,
         error::{ArgError, Type, TypeError},
     },
-    nil, qtrue, LispHashTable, LispVec,
+    nil, qtrue, LispHashTable, LispString, LispVec,
 };
 use super::{Function, GcObj};
 use anyhow::Context;
@@ -37,6 +35,37 @@ impl<'ob> TryFrom<GcObj<'ob>> for &'ob LispVec {
             Object::Vec(x) => Ok(x),
             Object::Record(x) => Ok(x),
             x => Err(TypeError::new(Type::Vec, x).into()),
+        }
+    }
+}
+
+impl<'ob> TryFrom<GcObj<'ob>> for &'ob LispString {
+    type Error = anyhow::Error;
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match obj.get() {
+            Object::String(x) => Ok(x),
+            x => Err(TypeError::new(Type::String, x).into()),
+        }
+    }
+}
+
+impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
+    type Error = anyhow::Error;
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match obj.get() {
+            Object::String(x) => x.try_into(),
+            x => Err(TypeError::new(Type::String, x).into()),
+        }
+    }
+}
+
+impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
+    type Error = anyhow::Error;
+    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match obj.get() {
+            Object::Symbol(x) if x.nil() => Ok(None),
+            Object::String(x) => Ok(Some(x.try_into()?)),
+            x => Err(TypeError::new(Type::String, x).into()),
         }
     }
 }
@@ -110,9 +139,6 @@ impl<'ob> From<bool> for GcObj<'ob> {
 
 define_unbox!(Int, i64);
 define_unbox!(Float, &'ob f64);
-define_unbox!(String, &'ob String);
-define_unbox!(String, &'ob str);
-define_unbox!(ByteVec, &'ob RefCell<Vec<u8>>);
 define_unbox!(HashTable, &'ob LispHashTable);
 define_unbox!(Symbol, &'ob Symbol);
 

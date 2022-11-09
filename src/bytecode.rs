@@ -476,7 +476,7 @@ pub(crate) fn call<'ob>(
 #[allow(clippy::enum_glob_use)]
 #[cfg(test)]
 mod test {
-    use std::cell::RefCell;
+    use crate::core::object::LispString;
 
     use crate::core::{
         env::sym,
@@ -506,7 +506,7 @@ mod test {
                 #[allow(trivial_numeric_casts)]
                 let opcodes = vec![$($opcodes as u8),*];
                 println!("Test seq: {:?}", opcodes);
-                RefCell::new(opcodes)
+                LispString::from(opcodes)
             };
             let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]);
             bytecode.into_obj(cx).get()

@@ -1,9 +1,10 @@
-use std::cell::RefCell;
-
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
-use crate::core::object::{nil, CodeVec, FnArgs, Gc, GcObj, LispFn, LispVec, RecordBuilder};
+use crate::core::object::{
+    nil, CodeVec, FnArgs, Gc, GcObj, LispFn, LispString, LispVec, RecordBuilder,
+};
 use anyhow::{ensure, Result};
+use bstr::BStr;
 use fn_macros::defun;
 
 #[defun]
@@ -42,7 +43,7 @@ pub(crate) fn make_closure<'ob>(
 #[defun]
 pub(crate) fn make_byte_code<'ob>(
     arglist: i64,
-    byte_code: &RefCell<Vec<u8>>,
+    byte_code: &LispString,
     constants: &'ob LispVec,
     _depth: usize,
     _docstring: Option<GcObj>,
@@ -56,9 +57,10 @@ pub(crate) fn make_byte_code<'ob>(
         max - required
     };
     let rest = arglist & 0x80 != 0;
+    let bstr: &BStr = byte_code;
     unsafe {
         LispFn::new(
-            CodeVec(byte_code.borrow().clone()),
+            CodeVec(bstr.to_vec()),
             constants.clone_vec(),
             FnArgs {
                 rest,

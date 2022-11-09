@@ -12,6 +12,7 @@
 mod convert;
 mod func;
 mod other;
+mod string;
 mod tagged;
 mod vector;
 pub(crate) use tagged::*;
@@ -19,4 +20,5 @@ pub(crate) use tagged::*;
 pub(crate) use convert::*;
 pub(crate) use func::*;
 pub(crate) use other::*;
+pub(crate) use string::*;
 pub(crate) use vector::*;

@@ -3,7 +3,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::gc::{Context, Root};
-use crate::core::object::{nil, Gc, GcObj, Object, WithLifetime};
+use crate::core::object::{nil, Gc, GcObj, LispString, Object, WithLifetime};
 use crate::reader;
 use crate::{interpreter, root};
 use fn_macros::defun;
@@ -104,7 +104,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
     for path in paths {
         match path?.get() {
             Object::String(path) => {
-                if let Some(x) = file_in_path(file, path) {
+                if let Some(x) = file_in_path(file, path.try_into()?) {
                     final_file = Some(x);
                     break;
                 }
@@ -120,7 +120,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
 
 #[defun]
 pub(crate) fn load<'ob>(
-    file: &Rt<Gc<&String>>,
+    file: &Rt<Gc<&LispString>>,
     noerror: Option<()>,
     nomessage: Option<()>,
     cx: &'ob mut Context,
@@ -128,7 +128,7 @@ pub(crate) fn load<'ob>(
 ) -> Result<bool> {
     let noerror = noerror.is_some();
     let nomessage = nomessage.is_some();
-    let file: &String = file;
+    let file: &str = file.bind(cx).get().try_into()?;
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {
@@ -184,7 +184,7 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<&Symbol>
         Object::Symbol(sym) => Ok(sym),
         Object::String(string) => {
             let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
-            match map.get(string) {
+            match map.get(string.try_into()?) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),
                 None => Ok(&sym::NIL),
             }

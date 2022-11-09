@@ -3,7 +3,7 @@ use crate::core::{
     env::{sym, Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root, Rt},
-    object::{nil, Function, Gc, GcObj, HashTable, LispHashTable, List, Object},
+    object::{nil, Function, Gc, GcObj, HashTable, LispHashTable, LispString, List, Object},
 };
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
@@ -326,7 +326,7 @@ pub(crate) fn featurep(_feature: &Symbol, _subfeature: Option<&Symbol>) -> bool 
 #[defun]
 fn require<'ob>(
     feature: &Rt<Gc<&Symbol>>,
-    filename: Option<&Rt<Gc<&String>>>,
+    filename: Option<&Rt<Gc<&LispString>>>,
     noerror: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
@@ -337,10 +337,10 @@ fn require<'ob>(
         return Ok(feature.bind(cx));
     }
     let file = match filename {
-        Some(file) => file.bind(cx).get(),
+        Some(file) => file.bind(cx).get().try_into()?,
         None => feature.bind(cx).get().name(),
     };
-    let file: Gc<&String> = cx.add(file);
+    let file: Gc<&LispString> = cx.add(file);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.bind(cx)),
@@ -356,7 +356,7 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
     let mut concat = String::new();
     for elt in sequences {
         match elt.get() {
-            Object::String(string) => concat.push_str(string),
+            Object::String(string) => concat.push_str(string.try_into()?),
             _ => bail!("Currently only concatenating strings are supported"),
         }
     }

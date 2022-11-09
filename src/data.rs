@@ -34,7 +34,7 @@ pub(crate) fn fset<'ob>(symbol: &'ob Symbol, definition: GcObj) -> Result<&'ob S
 pub(crate) fn defalias<'ob>(
     symbol: &'ob Symbol,
     definition: GcObj,
-    _docstring: Option<&String>,
+    _docstring: Option<&str>,
 ) -> Result<&'ob Symbol> {
     fset(symbol, definition)
 }
@@ -226,8 +226,7 @@ pub(crate) fn atom(object: GcObj) -> bool {
 
 #[defun]
 fn byte_code_function_p(object: GcObj) -> bool {
-    // TODO: implement once byte compiling is added
-    matches!(object.get(), Object::ByteVec(_))
+    matches!(object.get(), Object::LispFn(_))
 }
 
 #[defun]
@@ -254,7 +253,7 @@ fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> G
 pub(crate) fn defvar<'ob>(
     symbol: &Symbol,
     initvalue: Option<GcObj<'ob>>,
-    _docstring: Option<&String>,
+    _docstring: Option<&str>,
     env: &mut Root<Env>,
     cx: &Context,
 ) -> Result<GcObj<'ob>> {
@@ -325,7 +324,7 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::String(string) => match string.chars().nth(idx) {
+        Object::String(string) => match string.get_char_at(idx) {
             Some(x) => Ok((x as i64).into()),
             None => {
                 let len = string.len();
@@ -345,7 +344,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::Cons(_) => sym::CONS.into(),
         Object::Vec(_) => sym::VECTOR.into(),
         Object::Record(x) => x.get(0).expect("record was missing type").get(),
-        Object::ByteVec(_) | Object::LispFn(_) => sym::COMPILED_FUNCTION.into(),
+        Object::LispFn(_) => sym::COMPILED_FUNCTION.into(),
         Object::HashTable(_) => sym::HASH_TABLE.into(),
         Object::String(_) => sym::STRING.into(),
         Object::SubrFn(_) => sym::SUBR.into(),

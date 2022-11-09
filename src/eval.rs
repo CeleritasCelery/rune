@@ -3,7 +3,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::{nil, Object};
+use crate::core::object::{nil, LispString, Object};
 use crate::core::{
     gc::{Context, IntoRoot, Root},
     object::{Function, Gc, GcObj},
@@ -105,7 +105,7 @@ pub(crate) fn autoload_do_load<'ob>(
             );
             let mut elem = cons.elements();
             elem.next(); // autoload
-            let file: Gc<&String> = elem
+            let file: Gc<&LispString> = elem
                 .next()
                 .ok_or_else(|| anyhow!("Malformed autoload"))??
                 .try_into()?;

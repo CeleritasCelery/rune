@@ -1,7 +1,8 @@
 use super::cons::Cons;
 use super::env::Symbol;
 use super::object::{
-    Gc, GcObj, IntoObject, LispFloat, LispFn, LispHashTable, LispVec, RawInto, WithLifetime,
+    Gc, GcObj, IntoObject, LispFloat, LispFn, LispHashTable, LispString, LispVec, RawInto,
+    WithLifetime,
 };
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -82,45 +83,10 @@ enum OwnedObject {
     Float(Box<LispFloat>),
     Cons(Box<Cons>),
     Vec(Box<LispVec>),
-    ByteVec(Box<Allocation<RefCell<Vec<u8>>>>),
     HashTable(Box<LispHashTable>),
-    String(Box<Allocation<String>>),
+    String(Box<LispString>),
     Symbol(Box<Symbol>),
     LispFn(Box<LispFn>),
-}
-
-/// A container type that has a mark bit for garbage collection.
-#[derive(Debug)]
-pub(in crate::core) struct Allocation<T> {
-    marked: Cell<bool>,
-    pub(in crate::core) data: T,
-}
-
-impl<T> Allocation<T> {
-    fn new(data: T) -> Self {
-        Allocation {
-            marked: Cell::from(false),
-            data,
-        }
-    }
-
-    pub(in crate::core) fn mark(&self) {
-        self.marked.set(true);
-    }
-
-    fn unmark(&self) {
-        self.marked.set(false);
-    }
-
-    pub(in crate::core) fn is_marked(&self) -> bool {
-        self.marked.get()
-    }
-}
-
-impl<T: PartialEq> PartialEq for Allocation<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
-    }
 }
 
 impl OwnedObject {
@@ -129,7 +95,6 @@ impl OwnedObject {
             OwnedObject::Float(x) => x.unmark(),
             OwnedObject::Cons(x) => x.unmark(),
             OwnedObject::Vec(x) => x.unmark(),
-            OwnedObject::ByteVec(x) => x.unmark(),
             OwnedObject::HashTable(x) => x.unmark(),
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::Symbol(x) => x.unmark(),
@@ -142,7 +107,6 @@ impl OwnedObject {
             OwnedObject::Float(x) => x.is_marked(),
             OwnedObject::Cons(x) => x.is_marked(),
             OwnedObject::Vec(x) => x.is_marked(),
-            OwnedObject::ByteVec(x) => x.is_marked(),
             OwnedObject::HashTable(x) => x.is_marked(),
             OwnedObject::String(x) => x.is_marked(),
             OwnedObject::Symbol(x) => x.is_marked(),
@@ -195,15 +159,12 @@ impl AllocObject for Symbol {
     }
 }
 
-impl AllocObject for String {
-    type Output = Allocation<String>;
+impl AllocObject for LispString {
+    type Output = Self;
 
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(
-            &mut objects,
-            OwnedObject::String(Box::new(Allocation::new(self))),
-        );
+        Block::<C>::register(&mut objects, OwnedObject::String(Box::new(self)));
         let Some(OwnedObject::String(x)) = objects.last_mut() else {unreachable!()};
         x.as_ref()
     }
@@ -231,25 +192,6 @@ impl<'ob> AllocObject for LispVec {
         Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(self)));
         let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
         unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
-    }
-}
-
-impl<'ob> AllocObject for Vec<u8> {
-    type Output = Allocation<RefCell<Self>>;
-
-    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
-        let mut objects = block.objects.borrow_mut();
-        let ref_cell = RefCell::new(self);
-        if CONST {
-            // Leak a borrow so that the vector cannot be borrowed mutably
-            std::mem::forget(ref_cell.borrow());
-        }
-        Block::<CONST>::register(
-            &mut objects,
-            OwnedObject::ByteVec(Box::new(Allocation::new(ref_cell))),
-        );
-        let Some(OwnedObject::ByteVec(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Allocation<_>, &'ob Allocation<_>>(x.as_ref()) }
     }
 }
 

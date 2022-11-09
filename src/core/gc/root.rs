@@ -10,7 +10,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    CodeVec, Expression, Function, Gc, IntoObject, LispFn, Object, WithLifetime,
+    CodeVec, Expression, Function, Gc, IntoObject, LispFn, LispString, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -251,17 +251,11 @@ impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
     }
 }
 
-impl Deref for Rt<Gc<&String>> {
-    type Target = String;
+impl Deref for Rt<Gc<&LispString>> {
+    type Target = LispString;
 
     fn deref(&self) -> &Self::Target {
         self.inner.get()
-    }
-}
-
-impl AsRef<String> for Rt<Gc<&String>> {
-    fn as_ref(&self) -> &String {
-        self
     }
 }
 
