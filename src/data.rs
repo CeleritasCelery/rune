@@ -308,7 +308,7 @@ pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> 
 }
 
 #[defun]
-pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
+pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
     match array.get() {
         Object::Vec(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
@@ -331,13 +331,7 @@ pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Resu
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        // TODO: Need to return references, not copies
-        Object::ByteFn(func) => match idx {
-            0 => todo!("implement bytecode argument spec"),
-            1 => Ok(cx.add(func.op_codes.0.clone())),
-            2 => Ok(cx.add(func.constants.clone())),
-            _ => todo!("implement bytecode max stack size"),
-        },
+        Object::ByteFn(_) => todo!("implement index for ByteFn"),
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }

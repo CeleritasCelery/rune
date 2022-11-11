@@ -1086,6 +1086,13 @@ impl<'ob> Gc<&'ob ByteFn> {
     }
 }
 
+impl<'ob> Gc<&'ob LispVec> {
+    pub(crate) fn get(self) -> &'ob LispVec {
+        let (ptr, _) = self.untag();
+        unsafe { Vec::<GcObj>::from_obj_ptr(ptr) }
+    }
+}
+
 impl<'ob> Gc<&'ob Symbol> {
     pub(crate) fn get(self) -> &'ob Symbol {
         let (ptr, _) = self.untag();

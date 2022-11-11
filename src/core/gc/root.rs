@@ -11,7 +11,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    ByteFn, CodeVec, Function, Gc, IntoObject, LispString, Object, WithLifetime,
+    ByteFn, CodeVec, Function, Gc, IntoObject, LispString, LispVec, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -448,8 +448,8 @@ impl Rt<&ByteFn> {
         unsafe { &*addr_of!(self.inner.op_codes).cast::<Rt<CodeVec>>() }
     }
 
-    pub(crate) fn consts(&self) -> &Rt<Vec<GcObj<'static>>> {
-        unsafe { &*addr_of!(self.inner.constants).cast::<Rt<Vec<_>>>() }
+    pub(crate) fn consts(&self) -> &Rt<&'static LispVec> {
+        unsafe { &*addr_of!(self.inner.constants).cast() }
     }
 }
 

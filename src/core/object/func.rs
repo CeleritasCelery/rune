@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context, Root},
     },
-    display_slice, nil,
+    display_slice, nil, IntoObject, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
@@ -17,7 +17,7 @@ pub(crate) struct ByteFn {
     gc: GcMark,
     pub(crate) args: FnArgs,
     pub(crate) op_codes: CodeVec,
-    pub(crate) constants: Vec<GcObj<'static>>,
+    pub(in crate::core) constants: &'static LispVec,
 }
 
 impl<'new> WithLifetime<'new> for &ByteFn {
@@ -31,7 +31,7 @@ impl<'new> WithLifetime<'new> for &ByteFn {
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
-    pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>, args: FnArgs) -> Self {
+    pub(crate) unsafe fn new(op_codes: CodeVec, consts: &LispVec, args: FnArgs) -> Self {
         Self {
             gc: GcMark::default(),
             constants: unsafe { consts.with_lifetime() },
@@ -40,17 +40,17 @@ impl ByteFn {
         }
     }
 
-    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a [GcObj<'ob>] {
-        unsafe { std::mem::transmute::<&'a [GcObj<'static>], &'a [GcObj<'ob>]>(&self.constants) }
+    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a LispVec {
+        unsafe { std::mem::transmute::<&'static LispVec, &'a LispVec>(self.constants) }
     }
 
-    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> ByteFn {
-        let vec = self.constants.iter().map(|x| x.clone_in(bk)).collect();
-        ByteFn {
-            gc: GcMark::default(),
-            op_codes: self.op_codes.clone(),
-            constants: unsafe { std::mem::transmute::<Vec<GcObj<'new>>, Vec<GcObj<'static>>>(vec) },
-            args: self.args,
+    pub(crate) fn clone_in<const C: bool>(&self, bk: &Block<C>) -> ByteFn {
+        unsafe {
+            Self::new(
+                self.op_codes.clone(),
+                self.constants.clone_in(bk).into_obj(bk).get(),
+                self.args,
+            )
         }
     }
 }
@@ -72,7 +72,7 @@ impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let args = &self.args;
         let code = display_slice(&self.op_codes.0);
-        let consts = display_slice(&self.constants);
+        let consts = display_slice(self.constants);
         write!(f, "#[{args:?} {code:?} [{consts:?}]]")
     }
 }
@@ -134,6 +134,7 @@ impl FnArgs {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn into_arg_spec(self) -> u64 {
         let mut spec = self.required;
         let max = self.required + self.optional;

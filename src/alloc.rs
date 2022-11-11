@@ -26,18 +26,22 @@ pub(crate) fn make_closure<'ob>(
 ) -> Result<ByteFn> {
     let const_len = prototype.constants(cx).len();
     let vars = closure_vars.len();
-    ensure!(
-        vars <= 5 && vars <= const_len,
-        "Closure vars do not fit in const vec"
-    );
-    let mut constants = prototype.constants(cx).to_vec();
+    ensure!(vars <= const_len, "Closure vars do not fit in const vec");
+    let mut constants = prototype.constants(cx).clone_vec();
     let zipped = constants.iter_mut().zip(closure_vars.iter());
     for (cnst, var) in zipped {
         *cnst = *var;
     }
+    let new_constants: Gc<&LispVec> = cx.add(constants);
 
     // TODO: returning an owned type is not safe here
-    Ok(unsafe { ByteFn::new(prototype.op_codes.clone(), constants, prototype.args) })
+    Ok(unsafe {
+        ByteFn::new(
+            prototype.op_codes.clone(),
+            new_constants.get(),
+            prototype.args,
+        )
+    })
 }
 
 #[defun]
@@ -54,7 +58,7 @@ pub(crate) fn make_byte_code<'ob>(
     unsafe {
         Ok(ByteFn::new(
             CodeVec(bstr.to_vec()),
-            constants.clone_vec(),
+            constants,
             FnArgs::from_arg_spec(arglist)?,
         ))
     }

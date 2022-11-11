@@ -159,12 +159,6 @@ impl ObjectMap {
     }
 
     pub(crate) fn set_func(&self, symbol: &Symbol, func: Gc<Function>) -> Result<()> {
-        // TODO: Remove once bytecode is implemented. Right now we are ignoring
-        // bytecode functions since they can't execute
-        if matches!(func.get(), Function::ByteFn(_)) {
-            return Ok(());
-        }
-
         let new_func = func.clone_in(&self.block);
         #[cfg(miri)]
         new_func.get().set_as_miri_root();

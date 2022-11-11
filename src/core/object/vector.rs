@@ -15,6 +15,8 @@ pub(crate) struct LispVec {
     inner: Box<[ObjCell]>,
 }
 
+unsafe impl Sync for LispVec {}
+
 impl PartialEq for LispVec {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
