@@ -505,7 +505,7 @@ mod test {
                 println!("Test seq: {:?}", opcodes);
                 LispString::from(opcodes)
             };
-            let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]);
+            let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]).unwrap();
             bytecode.into_obj(cx).get()
         };
         let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };

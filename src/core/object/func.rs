@@ -9,21 +9,7 @@ use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
 use std::fmt::{self, Debug, Display};
 
-use anyhow::{bail, Result};
-
-/// Argument requirments to a function.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub(crate) struct FnArgs {
-    /// a &rest argument.
-    pub(crate) rest: bool,
-    /// minimum required arguments.
-    pub(crate) required: u16,
-    /// &optional arguments.
-    pub(crate) optional: u16,
-    /// If this function is advised.
-    pub(crate) advice: bool,
-}
-
+use anyhow::{bail, ensure, Result};
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq)]
@@ -109,7 +95,53 @@ impl Rt<CodeVec> {
     }
 }
 
+/// Argument requirments to a function.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct FnArgs {
+    /// a &rest argument.
+    pub(crate) rest: bool,
+    /// minimum required arguments.
+    pub(crate) required: u16,
+    /// &optional arguments.
+    pub(crate) optional: u16,
+    /// If this function is advised.
+    pub(crate) advice: bool,
+}
+
 impl FnArgs {
+    pub(crate) fn from_arg_spec(spec: u64) -> Result<Self> {
+        // The spec is an integer of the form NNNNNNNRMMMMMMM where the 7bit
+        // MMMMMMM specifies the minimum number of arguments, the 7-bit NNNNNNN
+        // specifies the maximum number of arguments (ignoring &rest) and the R
+        // bit specifies whether there is a &rest argument to catch the
+        // left-over arguments.
+        ensure!(
+            spec <= 0x7FFF,
+            "Invalid bytecode argument spec: bits out of range"
+        );
+        let spec = spec as u16;
+        let required = spec & 0x7F;
+        let max = (spec >> 8) & 0x7F;
+        let Some(optional) = max.checked_sub(required) else {
+            bail!("Invalid bytecode argument spec: max of {max} was smaller then min {required}")
+        };
+        let rest = spec & 0x80 != 0;
+        Ok(FnArgs {
+            required,
+            optional,
+            rest,
+            advice: false,
+        })
+    }
+
+    pub(crate) fn into_arg_spec(self) -> u64 {
+        let mut spec = self.required;
+        let max = self.required + self.optional;
+        spec |= max << 8;
+        spec |= u16::from(self.rest) << 7;
+        u64::from(spec)
+    }
+
     /// Number of arguments needed to fill out the remaining slots on the stack.
     /// If a function has 3 required args and 2 optional, and it is called with
     /// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
@@ -176,5 +208,27 @@ impl PartialEq for SubrFn {
         let lhs = self.subr as *const BuiltInFn;
         let rhs = other.subr as *const BuiltInFn;
         lhs == rhs
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn check_arg_spec(spec: u64) {
+        assert_eq!(spec, FnArgs::from_arg_spec(spec).unwrap().into_arg_spec());
+    }
+
+    #[test]
+    fn test_arg_spec() {
+        check_arg_spec(0);
+        check_arg_spec(257);
+        check_arg_spec(513);
+        check_arg_spec(128);
+        check_arg_spec(771);
+
+        assert!(FnArgs::from_arg_spec(12345).is_err());
+        assert!(FnArgs::from_arg_spec(1).is_err());
+        assert!(FnArgs::from_arg_spec(0xFFFF).is_err());
     }
 }

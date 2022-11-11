@@ -42,33 +42,21 @@ pub(crate) fn make_closure<'ob>(
 
 #[defun]
 pub(crate) fn make_byte_code<'ob>(
-    arglist: i64,
+    arglist: u64,
     byte_code: &LispString,
     constants: &'ob LispVec,
     _depth: usize,
     _docstring: Option<GcObj>,
     _interactive_spec: Option<GcObj>,
     _elements: &[GcObj],
-) -> ByteFn {
-    let arglist = arglist as u16;
-    let required = arglist & 0x7F;
-    let optional = {
-        let max = (arglist >> 8) & 0x7F;
-        max - required
-    };
-    let rest = arglist & 0x80 != 0;
+) -> Result<ByteFn> {
     let bstr: &BStr = byte_code;
     unsafe {
-        ByteFn::new(
+        Ok(ByteFn::new(
             CodeVec(bstr.to_vec()),
             constants.clone_vec(),
-            FnArgs {
-                rest,
-                required,
-                optional,
-                advice: false,
-            },
-        )
+            FnArgs::from_arg_spec(arglist)?,
+        ))
     }
 }
 
