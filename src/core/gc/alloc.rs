@@ -2,7 +2,6 @@ use crate::core::cons::Cons;
 use crate::core::env::Symbol;
 use crate::core::object::{ByteFn, LispFloat, LispHashTable, LispString, LispVec};
 use std::fmt::Debug;
-use std::mem::transmute;
 
 use super::Block;
 
@@ -74,18 +73,18 @@ impl AllocObject for LispString {
     }
 }
 
-impl<'ob> AllocObject for ByteFn {
+impl AllocObject for ByteFn {
     type Output = ByteFn;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         let boxed = Box::new(self);
         Block::<C>::register(&mut objects, OwnedObject::ByteFn(boxed));
         let Some(OwnedObject::ByteFn(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
+        x.as_ref()
     }
 }
 
-impl<'ob> AllocObject for LispVec {
+impl AllocObject for LispVec {
     type Output = LispVec;
 
     fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
@@ -95,11 +94,11 @@ impl<'ob> AllocObject for LispVec {
         }
         Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(self)));
         let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
+        x.as_ref()
     }
 }
 
-impl<'ob> AllocObject for LispHashTable {
+impl AllocObject for LispHashTable {
     type Output = Self;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
@@ -109,6 +108,6 @@ impl<'ob> AllocObject for LispHashTable {
         }
         Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(self)));
         let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
-        unsafe { transmute::<&Self, &'ob Self>(x.as_ref()) }
+        x.as_ref()
     }
 }

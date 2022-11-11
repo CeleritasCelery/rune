@@ -66,7 +66,7 @@ impl IntoRoot<&'static Symbol> for &Symbol {
 
 impl IntoRoot<&'static Symbol> for ConstSymbol {
     unsafe fn into_root(self) -> &'static Symbol {
-        (&*self).with_lifetime()
+        self.with_lifetime()
     }
 }
 
