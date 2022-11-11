@@ -334,8 +334,8 @@ pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Resu
         // TODO: Need to return references, not copies
         Object::ByteFn(func) => match idx {
             0 => todo!("implement bytecode argument spec"),
-            1 => Ok(cx.add(func.body.op_codes.0.clone())),
-            2 => Ok(cx.add(func.body.constants.clone())),
+            1 => Ok(cx.add(func.op_codes.0.clone())),
+            2 => Ok(cx.add(func.constants.clone())),
             _ => todo!("implement bytecode max stack size"),
         },
         x => Err(TypeError::new(Type::Sequence, x).into()),

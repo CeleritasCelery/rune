@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
-use crate::core::object::{nil, ByteFn, Expression, GcObj, IntoObject, Object};
+use crate::core::object::{nil, ByteFn, GcObj, IntoObject, Object};
 use crate::root;
 
 mod opcode;
@@ -56,26 +56,23 @@ impl Ip {
 #[derive(Clone)]
 struct CallFrame<'brw> {
     ip: Ip,
-    code: &'brw Rt<Expression>,
+    consts: &'brw Rt<Vec<GcObj<'static>>>,
     /// The index where this call frame starts on the stack. The interpreter
     /// should not access elements beyond this index.
     start: usize,
 }
 
 impl<'brw> CallFrame<'brw> {
-    fn new(func: &'brw Rt<Expression>, frame_start: usize) -> CallFrame<'brw> {
+    fn new(func: &'brw Rt<&'static ByteFn>, frame_start: usize) -> CallFrame<'brw> {
         CallFrame {
-            ip: Ip::new(&func.op_codes.0),
-            code: func,
+            ip: Ip::new(func.code().as_bytes()),
+            consts: func.consts(),
             start: frame_start,
         }
     }
 
     fn get_const(&self, i: usize) -> &Rt<GcObj> {
-        self.code
-            .constants
-            .get(i)
-            .expect("constant had invalid index")
+        self.consts.get(i).expect("constant had invalid index")
     }
 }
 
@@ -467,7 +464,7 @@ pub(crate) fn call<'ob>(
     let mut rout = Routine {
         stack,
         call_frames: vec![],
-        frame: CallFrame::new(func.body(), 0),
+        frame: CallFrame::new(func, 0),
     };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
     rout.run(env, cx)

@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::ptr::addr_of;
 
 use super::super::{
     cons::Cons,
@@ -10,7 +11,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    ByteFn, CodeVec, Expression, Function, Gc, IntoObject, LispString, Object, WithLifetime,
+    ByteFn, CodeVec, Function, Gc, IntoObject, LispString, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -442,10 +443,13 @@ impl Rt<&Cons> {
     }
 }
 
-impl Rt<&'static ByteFn> {
-    pub(crate) fn body(&self) -> &Rt<Expression> {
-        let expression: &Expression = &self.inner.body;
-        unsafe { &*(expression as *const Expression).cast::<Rt<Expression>>() }
+impl Rt<&ByteFn> {
+    pub(crate) fn code(&self) -> &Rt<CodeVec> {
+        unsafe { &*addr_of!(self.inner.op_codes).cast::<Rt<CodeVec>>() }
+    }
+
+    pub(crate) fn consts(&self) -> &Rt<Vec<GcObj<'static>>> {
+        unsafe { &*addr_of!(self.inner.constants).cast::<Rt<Vec<_>>>() }
     }
 }
 

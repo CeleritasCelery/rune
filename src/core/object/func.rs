@@ -10,7 +10,6 @@ use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
 use std::fmt::{self, Debug, Display};
 
 use anyhow::{bail, Result};
-use fn_macros::Trace;
 
 /// Argument requirments to a function.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -25,36 +24,14 @@ pub(crate) struct FnArgs {
     pub(crate) advice: bool,
 }
 
-/// Represents the body of a function that has been byte compiled. Note that
-/// this can represent any top level expression, not just functions.
-#[derive(Debug, PartialEq, Trace)]
-pub(crate) struct Expression {
-    #[no_trace]
-    pub(crate) op_codes: CodeVec,
-    pub(crate) constants: Vec<GcObj<'static>>,
-}
-
-impl Expression {
-    pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>) -> Expression {
-        let constants = std::mem::transmute::<Vec<GcObj>, Vec<GcObj<'static>>>(consts);
-        Expression {
-            op_codes,
-            constants,
-        }
-    }
-
-    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a [GcObj<'ob>] {
-        unsafe { std::mem::transmute::<&'a [GcObj<'static>], &'a [GcObj<'ob>]>(&self.constants) }
-    }
-}
-
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq)]
 pub(crate) struct ByteFn {
     gc: GcMark,
-    pub(crate) body: Expression,
     pub(crate) args: FnArgs,
+    pub(crate) op_codes: CodeVec,
+    pub(crate) constants: Vec<GcObj<'static>>,
 }
 
 impl<'new> WithLifetime<'new> for &ByteFn {
@@ -67,24 +44,26 @@ impl<'new> WithLifetime<'new> for &ByteFn {
 
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
-impl<'new> ByteFn {
+impl ByteFn {
     pub(crate) unsafe fn new(op_codes: CodeVec, consts: Vec<GcObj>, args: FnArgs) -> Self {
         Self {
             gc: GcMark::default(),
-            body: unsafe { Expression::new(op_codes, consts) },
+            constants: unsafe { consts.with_lifetime() },
+            op_codes,
             args,
         }
     }
 
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> ByteFn {
+    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a [GcObj<'ob>] {
+        unsafe { std::mem::transmute::<&'a [GcObj<'static>], &'a [GcObj<'ob>]>(&self.constants) }
+    }
+
+    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> ByteFn {
+        let vec = self.constants.iter().map(|x| x.clone_in(bk)).collect();
         ByteFn {
             gc: GcMark::default(),
-            body: unsafe {
-                Expression::new(
-                    self.body.op_codes.clone(),
-                    self.body.constants.iter().map(|x| x.clone_in(bk)).collect(),
-                )
-            },
+            op_codes: self.op_codes.clone(),
+            constants: unsafe { std::mem::transmute::<Vec<GcObj<'new>>, Vec<GcObj<'static>>>(vec) },
             args: self.args,
         }
     }
@@ -99,15 +78,15 @@ impl GcManaged for ByteFn {
 impl Trace for ByteFn {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
-        self.body.constants.trace(stack);
+        self.constants.trace(stack);
     }
 }
 
 impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let args = &self.args;
-        let code = display_slice(&self.body.op_codes.0);
-        let consts = display_slice(&self.body.constants);
+        let code = display_slice(&self.op_codes.0);
+        let consts = display_slice(&self.constants);
         write!(f, "#[{args:?} {code:?} [{consts:?}]]")
     }
 }
@@ -116,13 +95,19 @@ impl Debug for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ByteFn")
             .field("args", &self.args)
-            .field("body", &self.body)
+            .field("body", &self)
             .finish()
     }
 }
 
 #[derive(PartialEq, Clone, Default, Debug)]
 pub(crate) struct CodeVec(pub(crate) Vec<u8>);
+
+impl Rt<CodeVec> {
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 impl FnArgs {
     /// Number of arguments needed to fill out the remaining slots on the stack.
