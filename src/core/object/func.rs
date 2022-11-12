@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context, Root},
     },
-    display_slice, nil, IntoObject, LispVec,
+    display_slice, nil, LispString, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
@@ -16,7 +16,7 @@ use anyhow::{bail, ensure, Result};
 pub(crate) struct ByteFn {
     gc: GcMark,
     pub(crate) args: FnArgs,
-    pub(crate) op_codes: CodeVec,
+    pub(in crate::core) op_codes: &'static LispString,
     pub(in crate::core) constants: &'static LispVec,
 }
 
@@ -31,24 +31,28 @@ impl<'new> WithLifetime<'new> for &ByteFn {
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
-    pub(crate) unsafe fn new(op_codes: CodeVec, consts: &LispVec, args: FnArgs) -> Self {
+    pub(crate) unsafe fn new(op_codes: &LispString, consts: &LispVec, args: FnArgs) -> Self {
         Self {
             gc: GcMark::default(),
             constants: unsafe { consts.with_lifetime() },
-            op_codes,
+            op_codes: unsafe { op_codes.with_lifetime() },
             args,
         }
     }
 
-    pub(crate) fn constants<'ob, 'a>(&'a self, _cx: &'ob Context) -> &'a LispVec {
+    pub(crate) fn codes<'a>(&'a self) -> &'a LispString {
+        unsafe { std::mem::transmute::<&'static LispString, &'a LispString>(self.op_codes) }
+    }
+
+    pub(crate) fn constants<'a>(&'a self) -> &'a LispVec {
         unsafe { std::mem::transmute::<&'static LispVec, &'a LispVec>(self.constants) }
     }
 
     pub(crate) fn clone_in<const C: bool>(&self, bk: &Block<C>) -> ByteFn {
         unsafe {
             Self::new(
-                self.op_codes.clone(),
-                self.constants.clone_in(bk).into_obj(bk).get(),
+                self.op_codes.clone_in(bk),
+                self.constants.clone_in(bk),
                 self.args,
             )
         }
@@ -65,15 +69,16 @@ impl Trace for ByteFn {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
         self.constants.trace(stack);
+        self.op_codes.mark();
     }
 }
 
 impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let args = &self.args;
-        let code = display_slice(&self.op_codes.0);
+        let code = display_slice(self.op_codes);
         let consts = display_slice(self.constants);
-        write!(f, "#[{args:?} {code:?} [{consts:?}]]")
+        write!(f, "#[{args:?} {code} [{consts}]]")
     }
 }
 
@@ -83,15 +88,6 @@ impl Debug for ByteFn {
             .field("args", &self.args)
             .field("body", &self)
             .finish()
-    }
-}
-
-#[derive(PartialEq, Clone, Default, Debug)]
-pub(crate) struct CodeVec(pub(crate) Vec<u8>);
-
-impl Rt<CodeVec> {
-    pub(crate) fn as_bytes(&self) -> &[u8] {
-        &self.0
     }
 }
 

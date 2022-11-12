@@ -286,6 +286,18 @@ impl IntoObject for ByteFn {
     }
 }
 
+impl IntoObject for &ByteFn {
+    type Out<'ob> = &'ob ByteFn;
+
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
+        unsafe { ByteFn::tag_ptr(self as *const _) }
+    }
+
+    unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
+        &(*<ByteFn as TaggedPtr>::cast_ptr(ptr))
+    }
+}
+
 impl IntoObject for Symbol {
     type Out<'ob> = &'ob Symbol;
 
@@ -341,8 +353,10 @@ impl IntoObject for String {
     type Out<'ob> = &'ob LispString;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = LispString::from(self).alloc_obj(block);
-        unsafe { LispString::tag_ptr(ptr) }
+        unsafe {
+            let ptr = LispString::from_string(self).alloc_obj(block);
+            LispString::tag_ptr(ptr)
+        }
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
@@ -354,8 +368,10 @@ impl IntoObject for &str {
     type Out<'ob> = <String as IntoObject>::Out<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = LispString::from(self.to_owned()).alloc_obj(block);
-        unsafe { LispString::tag_ptr(ptr) }
+        unsafe {
+            let ptr = LispString::from_string(self.to_owned()).alloc_obj(block);
+            LispString::tag_ptr(ptr)
+        }
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
@@ -367,8 +383,10 @@ impl IntoObject for Vec<u8> {
     type Out<'ob> = <String as IntoObject>::Out<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = LispString::from(self).alloc_obj(block);
-        unsafe { LispString::tag_ptr(ptr) }
+        unsafe {
+            let ptr = LispString::from_bstring(self).alloc_obj(block);
+            LispString::tag_ptr(ptr)
+        }
     }
 
     unsafe fn from_obj_ptr<'ob>(ptr: *const u8) -> Self::Out<'ob> {
@@ -671,6 +689,34 @@ impl<'ob> From<Gc<&'static SubrFn>> for Gc<Function<'ob>> {
 impl<'ob> From<Gc<&'ob ByteFn>> for Gc<Function<'ob>> {
     fn from(x: Gc<&'ob ByteFn>) -> Self {
         unsafe { Self::transmute(x) }
+    }
+}
+
+impl<'ob> From<&'ob ByteFn> for GcObj<'ob> {
+    fn from(x: &'ob ByteFn) -> Self {
+        let ptr = x as *const _;
+        unsafe { ByteFn::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<&'ob LispString> for GcObj<'ob> {
+    fn from(x: &'ob LispString) -> Self {
+        let ptr = x as *const LispString;
+        unsafe { LispString::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<&'ob LispVec> for GcObj<'ob> {
+    fn from(x: &'ob LispVec) -> Self {
+        let ptr = x as *const LispVec;
+        unsafe { LispVec::tag_ptr(ptr).into() }
+    }
+}
+
+impl<'ob> From<&'ob Record> for GcObj<'ob> {
+    fn from(x: &'ob Record) -> Self {
+        let ptr = (x as *const Record).cast::<LispVec>();
+        unsafe { RecordBuilder::tag_ptr(ptr).into() }
     }
 }
 
@@ -1078,7 +1124,6 @@ impl<'ob> Gc<&'ob Cons> {
     }
 }
 
-#[cfg(test)]
 impl<'ob> Gc<&'ob ByteFn> {
     pub(crate) fn get(self) -> &'ob ByteFn {
         let (ptr, _) = self.untag();
@@ -1090,6 +1135,13 @@ impl<'ob> Gc<&'ob LispVec> {
     pub(crate) fn get(self) -> &'ob LispVec {
         let (ptr, _) = self.untag();
         unsafe { Vec::<GcObj>::from_obj_ptr(ptr) }
+    }
+}
+
+impl<'ob> Gc<&'ob Record> {
+    pub(crate) fn get(self) -> &'ob Record {
+        let (ptr, _) = self.untag();
+        unsafe { RecordBuilder::from_obj_ptr(ptr) }
     }
 }
 
@@ -1206,13 +1258,13 @@ impl<T> Gc<T> {
         let obj = match self.into().get() {
             Object::Int(x) => x.into(),
             Object::Cons(x) => x.clone_in(bk).into(),
-            Object::String(x) => x.clone().into_obj(bk).into(),
+            Object::String(x) => x.clone_in(bk).into(),
             Object::Symbol(x) => x.into(),
             Object::ByteFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),
-            Object::Vec(x) => x.clone_in(bk).into_obj(bk).into(),
-            Object::Record(x) => RecordBuilder(x.clone_in(bk)).into_obj(bk).into(),
+            Object::Vec(x) => x.clone_in(bk).into(),
+            Object::Record(x) => x.clone_in(bk).into(),
             Object::HashTable(_) => todo!("implement clone for hashtable"),
         };
         match Gc::<U>::try_from(obj) {

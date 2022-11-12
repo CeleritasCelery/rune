@@ -3,6 +3,7 @@
 use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 use anyhow::{bail, Result};
+use bstr::ByteSlice;
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
@@ -63,9 +64,9 @@ struct CallFrame<'brw> {
 }
 
 impl<'brw> CallFrame<'brw> {
-    fn new(func: &'brw Rt<&'static ByteFn>, frame_start: usize) -> CallFrame<'brw> {
+    fn new(func: &'brw Rt<&'static ByteFn>, frame_start: usize, cx: &Context) -> CallFrame<'brw> {
         CallFrame {
-            ip: Ip::new(func.code().as_bytes()),
+            ip: Ip::new(func.code().bind(cx).as_bytes()),
             consts: func.consts(),
             start: frame_start,
         }
@@ -468,7 +469,7 @@ pub(crate) fn call<'ob>(
     let mut rout = Routine {
         stack,
         call_frames: vec![],
-        frame: CallFrame::new(func, 0),
+        frame: CallFrame::new(func, 0, cx),
     };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
     rout.run(env, cx)
@@ -477,8 +478,6 @@ pub(crate) fn call<'ob>(
 #[allow(clippy::enum_glob_use)]
 #[cfg(test)]
 mod test {
-    use crate::core::object::LispString;
-
     use crate::core::{
         env::sym,
         gc::RootSet,
@@ -500,17 +499,15 @@ mod test {
         let bytecode = {
             let constants: &LispVec = {
                 let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
-                let obj = cx.add(vec);
-                obj.try_into().unwrap()
+                vec.into_obj(cx).get()
             };
             let opcodes = {
                 #[allow(trivial_numeric_casts)]
                 let opcodes = vec![$($opcodes as u8),*];
-                println!("Test seq: {:?}", opcodes);
-                LispString::from(opcodes)
+                println!("Test seq: {opcodes:?}");
+                opcodes.into_obj(cx).get()
             };
-            let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[]).unwrap();
-            bytecode.into_obj(cx).get()
+            crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx).unwrap()
         };
         let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };
         let expect: GcObj = $expect.into_obj(cx).into();

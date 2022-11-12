@@ -11,7 +11,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    ByteFn, CodeVec, Function, Gc, IntoObject, LispString, LispVec, Object, WithLifetime,
+    ByteFn, Function, Gc, IntoObject, LispString, LispVec, Object, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -421,14 +421,6 @@ impl IntoObject for &mut Root<'_, '_, GcObj<'static>> {
     }
 }
 
-impl Deref for Rt<CodeVec> {
-    type Target = CodeVec;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
 impl Rt<&Cons> {
     pub(crate) fn set(&mut self, item: &Cons) {
         self.inner = unsafe { std::mem::transmute(item) }
@@ -444,8 +436,8 @@ impl Rt<&Cons> {
 }
 
 impl Rt<&ByteFn> {
-    pub(crate) fn code(&self) -> &Rt<CodeVec> {
-        unsafe { &*addr_of!(self.inner.op_codes).cast::<Rt<CodeVec>>() }
+    pub(crate) fn code(&self) -> &Rt<&'static LispString> {
+        unsafe { &*addr_of!(self.inner.op_codes).cast() }
     }
 
     pub(crate) fn consts(&self) -> &Rt<&'static LispVec> {

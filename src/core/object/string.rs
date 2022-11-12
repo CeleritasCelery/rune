@@ -1,4 +1,4 @@
-use crate::core::gc::{GcManaged, GcMark};
+use crate::core::gc::{Block, GcManaged, GcMark};
 use anyhow::Result;
 use bstr::{BStr, BString, ByteSlice};
 use std::{
@@ -6,11 +6,15 @@ use std::{
     ops::Deref,
 };
 
+use super::{IntoObject, WithLifetime};
+
 #[derive(PartialEq)]
 pub(crate) struct LispString {
     gc: GcMark,
     string: StrType,
 }
+
+unsafe impl Sync for LispString {}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum StrType {
@@ -32,23 +36,34 @@ impl LispString {
             StrType::BString(s) => s.chars().count(),
         }
     }
-}
 
-impl From<String> for LispString {
-    fn from(value: String) -> Self {
+    pub(crate) unsafe fn from_string(value: String) -> Self {
         Self {
             gc: GcMark::default(),
             string: StrType::String(value),
         }
     }
-}
 
-impl From<Vec<u8>> for LispString {
-    fn from(value: Vec<u8>) -> Self {
+    pub(crate) unsafe fn from_bstring(value: Vec<u8>) -> Self {
         Self {
             gc: GcMark::default(),
             string: StrType::BString(BString::from(value)),
         }
+    }
+
+    pub(in crate::core) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> &'new Self {
+        match &self.string {
+            StrType::String(s) => s.clone().into_obj(bk).get(),
+            StrType::BString(s) => s.as_bytes().to_vec().into_obj(bk).get(),
+        }
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for &'old LispString {
+    type Out = &'new LispString;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const _)
     }
 }
 
@@ -91,15 +106,6 @@ impl<'a> TryFrom<&'a LispString> for &'a str {
         match &value.string {
             StrType::String(s) => Ok(s),
             StrType::BString(s) => Ok(s.try_into()?),
-        }
-    }
-}
-
-impl Clone for LispString {
-    fn clone(&self) -> Self {
-        match &self.string {
-            StrType::String(s) => Self::from(s.clone()),
-            StrType::BString(s) => Self::from(s.as_bytes().to_vec()),
         }
     }
 }

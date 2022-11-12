@@ -1,10 +1,9 @@
 use crate::core::env::Symbol;
 use crate::core::gc::Context;
 use crate::core::object::{
-    nil, ByteFn, CodeVec, FnArgs, Gc, GcObj, LispString, LispVec, RecordBuilder,
+    nil, ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder,
 };
 use anyhow::{ensure, Result};
-use bstr::BStr;
 use fn_macros::defun;
 
 #[defun]
@@ -24,10 +23,10 @@ pub(crate) fn make_closure<'ob>(
     closure_vars: &[GcObj<'ob>],
     cx: &'ob Context,
 ) -> Result<ByteFn> {
-    let const_len = prototype.constants(cx).len();
+    let const_len = prototype.constants().len();
     let vars = closure_vars.len();
     ensure!(vars <= const_len, "Closure vars do not fit in const vec");
-    let mut constants = prototype.constants(cx).clone_vec();
+    let mut constants = prototype.constants().clone_vec();
     let zipped = constants.iter_mut().zip(closure_vars.iter());
     for (cnst, var) in zipped {
         *cnst = *var;
@@ -35,32 +34,24 @@ pub(crate) fn make_closure<'ob>(
     let new_constants: Gc<&LispVec> = cx.add(constants);
 
     // TODO: returning an owned type is not safe here
-    Ok(unsafe {
-        ByteFn::new(
-            prototype.op_codes.clone(),
-            new_constants.get(),
-            prototype.args,
-        )
-    })
+    Ok(unsafe { ByteFn::new(prototype.codes(), new_constants.get(), prototype.args) })
 }
 
 #[defun]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn make_byte_code<'ob>(
     arglist: u64,
-    byte_code: &LispString,
+    byte_code: &'ob LispString,
     constants: &'ob LispVec,
     _depth: usize,
     _docstring: Option<GcObj>,
     _interactive_spec: Option<GcObj>,
     _elements: &[GcObj],
-) -> Result<ByteFn> {
-    let bstr: &BStr = byte_code;
+    cx: &'ob Context,
+) -> Result<&'ob ByteFn> {
     unsafe {
-        Ok(ByteFn::new(
-            CodeVec(bstr.to_vec()),
-            constants,
-            FnArgs::from_arg_spec(arglist)?,
-        ))
+        let bytefn = ByteFn::new(byte_code, constants, FnArgs::from_arg_spec(arglist)?);
+        Ok(bytefn.into_obj(cx).get())
     }
 }
 
