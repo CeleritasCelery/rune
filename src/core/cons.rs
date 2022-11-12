@@ -159,7 +159,7 @@ impl Debug for Cons {
 define_unbox!(Cons, &'ob Cons);
 
 #[defun]
-fn car(list: Gc<List>) -> GcObj {
+pub(crate) fn car(list: Gc<List>) -> GcObj {
     match list.get() {
         List::Cons(cons) => cons.car(),
         List::Nil => nil(),
@@ -167,7 +167,7 @@ fn car(list: Gc<List>) -> GcObj {
 }
 
 #[defun]
-fn cdr(list: Gc<List>) -> GcObj {
+pub(crate) fn cdr(list: Gc<List>) -> GcObj {
     match list.get() {
         List::Cons(cons) => cons.cdr(),
         List::Nil => nil(),

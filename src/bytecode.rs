@@ -5,6 +5,9 @@ use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 
+use crate::core;
+use crate::data;
+
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, GcObj, IntoObject, LispVec, Object};
@@ -403,7 +406,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 op::GotoIfNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
-                    println!("offset = {offset}");
                     if cond.nil() {
                         self.frame.ip.goto(offset);
                     }
@@ -438,6 +440,30 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                         let Object::Int(offset) = offset.get() else {unreachable!("switch value was not a int")};
                         self.frame.ip.goto(offset as u16);
                     }
+                }
+                op::Symbolp => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(data::symbolp(top.bind(cx)));
+                }
+                op::Consp => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(data::consp(top.bind(cx)));
+                }
+                op::Stringp => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(data::stringp(top.bind(cx)));
+                }
+                op::Listp => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(data::listp(top.bind(cx)));
+                }
+                op::Car => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(core::cons::car(top.bind(cx).try_into()?));
+                }
+                op::Cdr => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(core::cons::cdr(top.bind(cx).try_into()?));
                 }
                 op::Return => {
                     if self.call_frames.is_empty() {
