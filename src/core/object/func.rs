@@ -57,6 +57,16 @@ impl ByteFn {
             )
         }
     }
+
+    pub(crate) fn index(&self, index: usize) -> Option<GcObj> {
+        match index {
+            0 => Some((self.args.into_arg_spec() as i64).into()),
+            1 => Some(self.codes().into()),
+            2 => Some(self.constants().into()),
+            3 => todo!("implement bytecode depth parameter"),
+            _ => unimplemented!("remaining bytecode parameters"),
+        }
+    }
 }
 
 impl GcManaged for ByteFn {

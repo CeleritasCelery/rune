@@ -331,7 +331,12 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::ByteFn(_) => todo!("implement index for ByteFn"),
+        Object::ByteFn(fun) => match fun.index(idx) {
+            Some(x) => Ok(x),
+            None => {
+                Err(anyhow!("index {idx} is out of bounds"))
+            }
+        },
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
