@@ -277,7 +277,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
             {
                 println!("[");
                 for (idx, x) in self.stack.iter().enumerate() {
-                    println!("    {idx}: {x:?},");
+                    println!("    {idx}: {x},");
                 }
                 println!("]");
                 let byte_offset = self.frame.ip.ip as i64 - self.frame.ip.range.start as i64 - 1;
@@ -492,6 +492,7 @@ pub(crate) fn call<'ob>(
 ) -> Result<GcObj<'ob>> {
     let arg_cnt = args.len() as u16;
     let stack = LispStack::from_root(args);
+    println!("calling: {func}");
     let mut rout = Routine {
         stack,
         call_frames: vec![],
@@ -512,43 +513,53 @@ mod test {
 
     use super::{opcode::OpCode, *};
 
-    macro_rules! check_bytecode { (
+    macro_rules! make_bytecode { (
+        $name:ident,
         $arglist:expr,
-        [$($args:expr),* $(,)?],
         [$($opcodes:expr),* $(,)?],
         [$($constants:expr),* $(,)?],
+        $cx:expr $(,)?
+    ) => (
+        let cx: &Context = $cx;
+        let constants: &LispVec = {
+            let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
+            vec.into_obj(cx).get()
+        };
+        let opcodes = {
+            #[allow(trivial_numeric_casts)]
+            let opcodes = vec![$($opcodes as u8),*];
+            println!("Test seq: {opcodes:?}");
+            opcodes.into_obj(cx).get()
+        };
+        let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx).unwrap();
+        root!(bytecode, cx);
+        let $name = bytecode;
+
+        )
+    }
+
+    macro_rules! check_bytecode { (
+        $bytecode:expr,
+        [$($args:expr),* $(,)?],
         $expect:expr,
         $cx:expr $(,)?
-    ) => {
-        let cx: &mut Context = $cx;
+    ) => ({
+            let bytecode: &Rt<&ByteFn> = $bytecode;
+            let cx: &mut Context = $cx;
 
-        let bytecode = {
-            let constants: &LispVec = {
-                let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
-                vec.into_obj(cx).get()
-            };
-            let opcodes = {
-                #[allow(trivial_numeric_casts)]
-                let opcodes = vec![$($opcodes as u8),*];
-                println!("Test seq: {opcodes:?}");
-                opcodes.into_obj(cx).get()
-            };
-            crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx).unwrap()
-        };
-        let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };
-        let expect: GcObj = $expect.into_obj(cx).into();
+            let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };
+            let expect: GcObj = $expect.into_obj(cx).into();
 
-        root!(args, cx);
-        root!(bytecode, cx);
-        root!(expect, cx);
+            root!(args, cx);
+            root!(expect, cx);
 
-        check_bytecode_internal(
-            args,
-            bytecode,
-            expect,
-            cx
-        );
-    }
+            check_bytecode_internal(
+                args,
+                bytecode,
+                expect,
+                cx
+            );
+        })
     }
 
     fn check_bytecode_internal<'ob>(
@@ -569,37 +580,42 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         // (lambda () 5)
-        check_bytecode!(0, [], [Constant0, Return], [5], 5, cx);
+        make_bytecode!(bytecode, 0, [Constant0, Return], [5], cx);
+        check_bytecode!(bytecode, [], 5, cx);
         // (lambda (x) (+ x 5))
-        check_bytecode!(257, [7], [Duplicate, Constant0, Plus, Return,], [5], 12, cx,);
+        make_bytecode!(bytecode, 257, [Duplicate, Constant0, Plus, Return], [5], cx);
+        check_bytecode!(bytecode, [7], 12, cx);
         // (lambda (x &optional y) (+ x y))
-        check_bytecode!(513, [3, 4], [StackRef1, StackRef1, Plus, Return], [], 7, cx,);
+        make_bytecode!(bytecode, 513, [StackRef1, StackRef1, Plus, Return], [], cx);
+        check_bytecode!(bytecode, [3, 4], 7, cx);
         // (lambda (x) (if x 2 3))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             257,
-            [false],
             [Duplicate, GotoIfNil, 0x06, 0x00, Constant0, Return, Constant1, Return],
             [2, 3],
-            3,
             cx
         );
+        check_bytecode!(bytecode, [false], 3, cx);
+        check_bytecode!(bytecode, [true], 2, cx);
 
         // (lambda (x) (let ((y 0))
         //          (while (< 0 x)
         //            (setq x (1- x))
         //            (setq y (1+ y)))
         //          y))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             257,
-            [5],
             [
                 Constant0, Constant0, StackRef2, LessThan, GotoIfNil, VarSet2, 0x00, StackRef1,
                 Sub1, StackSetN, 0x02, Duplicate, Add1, StackSetN, 0x01, Goto, 0x01, 0x00, Return
             ],
             [0],
-            5,
             cx
         );
+        check_bytecode!(bytecode, [5], 5, cx);
+        check_bytecode!(bytecode, [0], 0, cx);
     }
 
     #[test]
@@ -609,37 +625,40 @@ mod test {
         let cx = &mut Context::new(roots);
         lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
         // (lambda (x) (symbol-name x))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             257,
-            [sym::SYMBOL_NAME],
             [Constant0, StackRef1, Call1, Return],
             [sym::SYMBOL_NAME],
-            "symbol-name",
             cx
         );
+        check_bytecode!(bytecode, [sym::SYMBOL_NAME], "symbol-name", cx);
+        check_bytecode!(bytecode, [sym::AREF], "aref", cx);
+        check_bytecode!(bytecode, [sym::ADD], "+", cx);
 
         // (lambda (x y z) (+ x y z))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             771,
-            [1, 2, 3],
             [Constant0, StackRef3, StackRef3, StackRef3, Call3, Return],
             [sym::ADD],
-            6,
             cx
         );
+        check_bytecode!(bytecode, [1, 2, 3], 6, cx);
 
         // (lambda (&rest x) (apply '+ x))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             128,
-            [1, 2, 3],
             [Constant0, Constant1, StackRef2, Call2, Return],
             [sym::APPLY, sym::ADD],
-            6,
             cx
         );
+        check_bytecode!(bytecode, [1, 2, 3], 6, cx);
 
         // (lambda (x &optional y) (+ x y))
-        check_bytecode!(513, [1, 2], [StackRef1, StackRef1, Plus, Return], [], 3, cx);
+        make_bytecode!(bytecode, 513, [StackRef1, StackRef1, Plus, Return], [], cx);
+        check_bytecode!(bytecode, [1, 2], 3, cx);
     }
 
     #[test]
@@ -657,16 +676,19 @@ mod test {
         //   (cond ((equal n 1) 1)
         //         ((equal n 2) 2)
         //         ((equal n 3) 3)))
-        check_bytecode!(
+        make_bytecode!(
+            bytecode,
             257,
-            [2],
             [
                 Duplicate, Constant0, Switch, Goto, 0x0C, 0x00, Constant1, Return, Constant2,
                 Return, Constant3, Return, Constant4, Return
             ],
-            [table, 1, 2, 3, false],
-            2,
+            [table, 4, 5, 6, false],
             cx
         );
+        check_bytecode!(bytecode, [1], 4, cx);
+        check_bytecode!(bytecode, [2], 5, cx);
+        check_bytecode!(bytecode, [3], 6, cx);
+        check_bytecode!(bytecode, [4], false, cx);
     }
 }

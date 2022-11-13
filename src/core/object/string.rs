@@ -88,7 +88,10 @@ impl Display for LispString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.string {
             StrType::String(s) => write!(f, "\"{s}\""),
-            StrType::BString(s) => write!(f, "\"{s}\""),
+            StrType::BString(s) => {
+                let bytes: &[u8] = s.as_ref();
+                write!(f, "\"{bytes:?}\"")
+            }
         }
     }
 }
