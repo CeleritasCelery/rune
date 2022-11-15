@@ -103,7 +103,7 @@ enum Token<'a> {
     Unquote(usize),
     Splice(usize),
     Sharp(usize),
-    QuestionMark(usize),
+    QuestionMark(usize, char),
     Ident(&'a str),
     String(&'a str),
     Error(Error),
@@ -121,7 +121,7 @@ impl<'a> Display for Token<'a> {
             Token::Unquote(_) => write!(f, ","),
             Token::Splice(_) => write!(f, ",@"),
             Token::Sharp(_) => write!(f, "#"),
-            Token::QuestionMark(_) => write!(f, "?"),
+            Token::QuestionMark(_, chr) => write!(f, "?{chr}"),
             Token::Ident(x) => write!(f, "{x}"),
             Token::String(x) => write!(f, "\"{x}\""),
             Token::Error(_) => write!(f, "error"),
@@ -155,7 +155,7 @@ impl<'a> Tokenizer<'a> {
             | Token::Unquote(x)
             | Token::Splice(x)
             | Token::Sharp(x)
-            | Token::QuestionMark(x) => x,
+            | Token::QuestionMark(x, _) => x,
             Token::Ident(slice) | Token::String(slice) => {
                 let beg = self.slice.as_ptr() as usize;
                 let end = slice.as_ptr() as usize;
@@ -229,6 +229,28 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    fn read_quoted_char(&mut self, idx: usize) -> Token<'a> {
+        match self.iter.next() {
+            Some((start, item)) => {
+                if item == '\\' {
+                    // TODO implement keycode parsing
+                    self.get_symbol(start, item);
+                    Token::QuestionMark(start, '\0')
+                } else {
+                    match self.iter.peek() {
+                        // ?aa
+                        Some((i, chr)) if symbol_char(*chr) && *chr != '?' => {
+                            Token::Error(Error::UnexpectedChar(*chr, *i))
+                        }
+                        // ?a
+                        _ => Token::QuestionMark(idx, item),
+                    }
+                }
+            }
+            None => Token::Error(Error::MissingQuotedItem(idx)),
+        }
+    }
+
     fn read_char(&mut self) -> Option<char> {
         self.iter.next().map(|x| x.1)
     }
@@ -249,7 +271,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             ',' => self.get_macro_char(idx),
             '`' => Token::Backquote(idx),
             '#' => Token::Sharp(idx),
-            '?' => Token::QuestionMark(idx),
+            '?' => self.read_quoted_char(idx),
             '"' => self.get_string(idx),
             other if symbol_char(other) => self.get_symbol(idx, other),
             unknown => Token::Error(Error::UnexpectedChar(unknown, idx)),
@@ -403,16 +425,6 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Ok(list!(symbol, obj; self.cx))
     }
 
-    /// read a quoted character (e.g. `?a`)
-    fn read_char_quote(&mut self, pos: usize) -> Result<GcObj<'ob>> {
-        match self.tokens.next() {
-            // TODO: Implement actual parsing
-            Some(Token::Ident(_)) => Ok(0.into()),
-            Some(tok) => Err(Error::MissingQuotedItem(self.tokens.relative_pos(tok))),
-            None => Err(Error::MissingQuotedItem(pos)),
-        }
-    }
-
     /// Read number with specificed radix
     fn read_radix(&mut self, pos: usize, radix: u8) -> Result<GcObj<'ob>> {
         match self.tokens.next() {
@@ -458,7 +470,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Splice(i) => self.quote_item(i, &sym::SPLICE),
             Token::Backquote(i) => self.quote_item(i, &sym::BACKQUOTE),
             Token::Sharp(i) => self.read_sharp(i),
-            Token::QuestionMark(i) => self.read_char_quote(i),
+            Token::QuestionMark(_, c) => Ok((c as i64).into()),
             Token::Ident(x) => Ok(parse_symbol(x, self.cx)),
             Token::String(x) => Ok(self.cx.add(unescape_string(x))),
             Token::Error(e) => Err(e),
@@ -525,6 +537,20 @@ mod test {
         check_reader!(0x1, "#x001", cx);
         check_reader!(0x10, "#x10", cx);
         check_reader!(0xdead_beef_i64, "#xDeAdBeEf", cx);
+    }
+
+    #[test]
+    #[allow(clippy::non_ascii_literal)]
+    fn test_read_char() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        check_reader!(97, "?a", cx);
+        check_reader!(21, "?", cx);
+        check_reader!(225, "?á", cx);
+        check_reader!(97, "?a?a", cx);
+        check_reader!(97, "?a#'foo ?a", cx);
+        assert_error("?aa", Error::UnexpectedChar('a', 2), cx);
+        assert_error("?", Error::MissingQuotedItem(0), cx);
     }
 
     #[test]
