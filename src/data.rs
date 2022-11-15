@@ -386,6 +386,7 @@ mod test {
         assert_eq!(ash(4, 1), 8);
         assert_eq!(ash(4, -1), 2);
         assert_eq!(ash(-8, -1), -4);
+        assert_eq!(ash(256, -8), 1);
         assert_eq!(ash(-8, 1), -16);
     }
 }

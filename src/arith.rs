@@ -234,7 +234,7 @@ pub(crate) fn logior(ints_or_markers: &[Gc<i64>]) -> i64 {
 
 #[defun]
 fn logand(int_or_markers: &[Gc<i64>]) -> i64 {
-    int_or_markers.iter().fold(0, |accum, x| accum & x.get())
+    int_or_markers.iter().fold(-1, |accum, x| accum & x.get())
 }
 
 #[defun(name = "mod")]
@@ -370,5 +370,12 @@ mod test {
             min(cx.add(1.1), &[cx.add(1.0), cx.add(2.1), cx.add(1.0)]),
             cx.add(1.0).val()
         );
+    }
+
+    #[test]
+    fn test_other() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        assert_eq!(logand(&[cx.add(258), cx.add(255)]), 2);
     }
 }
