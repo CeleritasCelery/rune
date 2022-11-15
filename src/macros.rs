@@ -32,6 +32,7 @@ macro_rules! define_symbols {
                 _env: &mut crate::core::gc::Rt<crate::core::env::Env>
             ) {
                 $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_cx));)+)?
+                $($(_env.special_variables.insert(&$var_sym);)+)?
             }
         }
 
