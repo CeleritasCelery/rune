@@ -306,12 +306,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     let idx = self.frame.ip.next2();
                     self.stack.as_mut(cx).set_ref(idx);
                 }
-                op::Constant0 => self.stack.as_mut(cx).push(self.frame.get_const(0, cx)),
-                op::Constant1 => self.stack.as_mut(cx).push(self.frame.get_const(1, cx)),
-                op::Constant2 => self.stack.as_mut(cx).push(self.frame.get_const(2, cx)),
-                op::Constant3 => self.stack.as_mut(cx).push(self.frame.get_const(3, cx)),
-                op::Constant4 => self.stack.as_mut(cx).push(self.frame.get_const(4, cx)),
-                op::Constant5 => self.stack.as_mut(cx).push(self.frame.get_const(5, cx)),
                 op::VarRef0 => self.varref(0, env, cx)?,
                 op::VarRef1 => self.varref(1, env, cx)?,
                 op::VarRef2 => self.varref(2, env, cx)?,
@@ -475,6 +469,75 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.stack.as_mut(cx).truncate(start + 1);
                     self.stack.as_mut(cx)[0].set(var);
                     self.frame = self.call_frames.pop().unwrap();
+                }
+                op::Constant0
+                | op::Constant1
+                | op::Constant2
+                | op::Constant3
+                | op::Constant4
+                | op::Constant5
+                | op::Constant6
+                | op::Constant7
+                | op::Constant8
+                | op::Constant9
+                | op::Constant10
+                | op::Constant11
+                | op::Constant12
+                | op::Constant13
+                | op::Constant14
+                | op::Constant15
+                | op::Constant16
+                | op::Constant17
+                | op::Constant18
+                | op::Constant19
+                | op::Constant20
+                | op::Constant21
+                | op::Constant22
+                | op::Constant23
+                | op::Constant24
+                | op::Constant25
+                | op::Constant26
+                | op::Constant27
+                | op::Constant28
+                | op::Constant29
+                | op::Constant30
+                | op::Constant31
+                | op::Constant32
+                | op::Constant33
+                | op::Constant34
+                | op::Constant35
+                | op::Constant36
+                | op::Constant37
+                | op::Constant38
+                | op::Constant39
+                | op::Constant40
+                | op::Constant41
+                | op::Constant42
+                | op::Constant43
+                | op::Constant44
+                | op::Constant45
+                | op::Constant46
+                | op::Constant47
+                | op::Constant48
+                | op::Constant49
+                | op::Constant50
+                | op::Constant51
+                | op::Constant52
+                | op::Constant53
+                | op::Constant54
+                | op::Constant55
+                | op::Constant56
+                | op::Constant57
+                | op::Constant58
+                | op::Constant59
+                | op::Constant60
+                | op::Constant61
+                | op::Constant62
+                | op::Constant63 => {
+                    let idx = (op as u8) - (op::Constant0 as u8);
+                    self.stack
+                        .as_mut(cx)
+                        .push(self.frame.get_const(idx as usize, cx));
                 }
                 op => {
                     panic!("Unimplemented opcode: {op:?}");
