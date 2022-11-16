@@ -5,9 +5,6 @@ use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 
-use crate::core;
-use crate::data;
-
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, GcObj, IntoObject, LispVec, Object};
@@ -269,6 +266,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
     pub(crate) fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+        use crate::{core, data, fns};
         use opcode::OpCode as op;
         let init_stack_size = self.stack.len();
         loop {
@@ -451,6 +449,20 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     let top = &mut self.stack.as_mut(cx)[0];
                     top.set(data::listp(top.bind(cx)));
                 }
+                op::Eq => {
+                    let v1 = self.stack.pop(cx);
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(fns::eq(top.bind(cx), v1));
+                }
+                op::Memq => {
+                    let list = self.stack.pop(cx);
+                    let elt = &mut self.stack.as_mut(cx)[0];
+                    elt.set(fns::memq(elt.bind(cx), list.try_into()?)?);
+                }
+                op::Not => {
+                    let top = &mut self.stack.as_mut(cx)[0];
+                    top.set(data::null(top.bind(cx)));
+                }
                 op::Car => {
                     let top = &mut self.stack.as_mut(cx)[0];
                     top.set(core::cons::car(top.bind(cx).try_into()?));
@@ -458,6 +470,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 op::Cdr => {
                     let top = &mut self.stack.as_mut(cx)[0];
                     top.set(core::cons::cdr(top.bind(cx).try_into()?));
+                }
+                op::Cons => {
+                    let cdr = self.stack.pop(cx);
+                    let car = &mut self.stack.as_mut(cx)[0];
+                    car.set(core::cons::cons(car.bind(cx), cdr, cx));
                 }
                 op::Return => {
                     if self.call_frames.is_empty() {
