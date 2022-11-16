@@ -7,7 +7,7 @@ use bstr::ByteSlice;
 
 use crate::core::env::{Env, Symbol};
 use crate::core::gc::{Context, Root, Rt, Trace};
-use crate::core::object::{nil, ByteFn, GcObj, IntoObject, LispVec, Object};
+use crate::core::object::{nil, ByteFn, GcObj, LispVec, Object};
 use crate::root;
 
 mod opcode;
@@ -151,8 +151,8 @@ impl Root<'_, '_, LispStack> {
         self.as_mut(cx).deref_mut().pop(cx).unwrap()
     }
 
-    fn top<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
-        self.last().unwrap().bind(cx)
+    fn top<'ob>(&'ob mut self, cx: &'ob Context) -> &'ob mut Rt<GcObj<'static>> {
+        self.as_mut(cx).last_mut().unwrap()
     }
 }
 
@@ -266,7 +266,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
     pub(crate) fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
-        use crate::{core, data, fns};
+        use crate::{arith, core, data, fns};
         use opcode::OpCode as op;
         let init_stack_size = self.stack.len();
         loop {
@@ -347,37 +347,29 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.call(idx, env, cx)?;
                 }
                 op::Plus => {
-                    let args = {
-                        let arg1 = self.stack.pop(cx);
-                        let arg2 = self.stack.top(cx);
-                        &[arg1.try_into()?, arg2.try_into()?]
-                    };
-                    let result: GcObj = crate::arith::add(args).into_obj(cx).into();
-                    self.stack.as_mut(cx)[0].set(result);
+                    let arg1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    let args = &[arg1.try_into()?, top.bind_into(cx)?];
+                    let result: GcObj = cx.add(arith::add(args));
+                    top.set(result);
                 }
                 op::LessThan => {
-                    let v2 = self.stack.pop(cx);
-                    let v1 = self.stack.top(cx);
-                    let result: GcObj =
-                        crate::arith::less_than(v1.try_into()?, &[v2.try_into()?]).into();
-                    self.stack.as_mut(cx)[0].set(result);
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::less_than(top.bind_into(cx)?, &[v1.try_into()?]));
                 }
                 op::GreaterThan => {
-                    let v2 = self.stack.pop(cx);
-                    let v1 = self.stack.top(cx);
-                    let result: GcObj =
-                        crate::arith::greater_than(v1.try_into()?, &[v2.try_into()?]).into();
-                    self.stack.as_mut(cx)[0].set(result);
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::greater_than(top.bind_into(cx)?, &[v1.try_into()?]));
                 }
                 op::Sub1 => {
-                    let arg = self.stack.top(cx);
-                    let result: GcObj = cx.add(crate::arith::sub_one(arg.try_into()?));
-                    self.stack.as_mut(cx)[0].set(result);
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_into(cx)?)));
                 }
                 op::Add1 => {
-                    let arg = self.stack.top(cx);
-                    let result: GcObj = cx.add(crate::arith::add_one(arg.try_into()?));
-                    self.stack.as_mut(cx)[0].set(result);
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_into(cx)?)));
                 }
                 op::Discard => {
                     self.stack.pop(cx);
@@ -388,8 +380,8 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.stack.as_mut(cx).truncate(cur_len - num);
                 }
                 op::Duplicate => {
-                    let value = self.stack.top(cx);
-                    self.stack.as_mut(cx).push(value);
+                    let top = self.stack[0].bind(cx);
+                    self.stack.as_mut(cx).push(top);
                 }
                 op::Goto => {
                     let offset = self.frame.ip.next2();
@@ -411,7 +403,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::GotoIfNilElsePop => {
                     let offset = self.frame.ip.next2();
-                    if self.stack.top(cx).nil() {
+                    if self.stack[0].bind(cx).nil() {
                         self.frame.ip.goto(offset);
                     } else {
                         self.stack.pop(cx);
@@ -419,7 +411,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::GotoIfNonNilElsePop => {
                     let offset = self.frame.ip.next2();
-                    if self.stack.top(cx).nil() {
+                    if self.stack[0].bind(cx).nil() {
                         self.stack.pop(cx);
                     } else {
                         self.frame.ip.goto(offset);
@@ -434,46 +426,46 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     }
                 }
                 op::Symbolp => {
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(data::symbolp(top.bind(cx)));
                 }
                 op::Consp => {
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(data::consp(top.bind(cx)));
                 }
                 op::Stringp => {
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(data::stringp(top.bind(cx)));
                 }
                 op::Listp => {
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(data::listp(top.bind(cx)));
                 }
                 op::Eq => {
                     let v1 = self.stack.pop(cx);
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(fns::eq(top.bind(cx), v1));
                 }
                 op::Memq => {
                     let list = self.stack.pop(cx);
-                    let elt = &mut self.stack.as_mut(cx)[0];
+                    let elt = self.stack.top(cx);
                     elt.set(fns::memq(elt.bind(cx), list.try_into()?)?);
                 }
                 op::Not => {
-                    let top = &mut self.stack.as_mut(cx)[0];
+                    let top = self.stack.top(cx);
                     top.set(data::null(top.bind(cx)));
                 }
                 op::Car => {
-                    let top = &mut self.stack.as_mut(cx)[0];
-                    top.set(core::cons::car(top.bind(cx).try_into()?));
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::car(top.bind_into(cx)?));
                 }
                 op::Cdr => {
-                    let top = &mut self.stack.as_mut(cx)[0];
-                    top.set(core::cons::cdr(top.bind(cx).try_into()?));
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::cdr(top.bind_into(cx)?));
                 }
                 op::Cons => {
                     let cdr = self.stack.pop(cx);
-                    let car = &mut self.stack.as_mut(cx)[0];
+                    let car = self.stack.top(cx);
                     car.set(core::cons::cons(car.bind(cx), cdr, cx));
                 }
                 op::Return => {
@@ -486,6 +478,10 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                     self.stack.as_mut(cx).truncate(start + 1);
                     self.stack.as_mut(cx)[0].set(var);
                     self.frame = self.call_frames.pop().unwrap();
+                }
+                op::Nreverse => {
+                    let elt = self.stack.top(cx);
+                    elt.set(fns::nreverse(elt.bind_into(cx)?)?);
                 }
                 op::Constant0
                 | op::Constant1
