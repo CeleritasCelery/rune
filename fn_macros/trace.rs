@@ -1,11 +1,28 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::{punctuated::Punctuated, Token};
 
 pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     let rt = quote!(crate::core::gc::Rt);
     let vis = &orig.vis;
     let orig_name = &orig.ident;
     let rooted_name = format_ident!("__Rooted_{orig_name}");
+    let orig_generics = &orig.generics;
+    let static_generics = {
+        let mut params: Punctuated<_, Token![,]> = Punctuated::new();
+        for generic in &orig.generics.params {
+            match generic {
+                syn::GenericParam::Lifetime(_) => {
+                    let lt = syn::Lifetime::new("'static", proc_macro2::Span::call_site());
+                    params.push(syn::GenericParam::Lifetime(syn::LifetimeDef::new(lt)))
+                }
+                x => params.push(x.clone()),
+            }
+        }
+        let mut generics = syn::Generics::default();
+        generics.params = params;
+        generics
+    };
     let derive = match &orig.data {
         syn::Data::Struct(strct) => {
             let mut new_fields = TokenStream::new();
@@ -50,7 +67,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 syn::Fields::Unit => panic!("fieldless structs don't need tracing"),
             }
             quote! {
-                impl crate::core::gc::Trace for #orig_name {
+                impl crate::core::gc::Trace for #orig_name #static_generics {
                     fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
                         #mark_fields
                     }
@@ -58,7 +75,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
 
                 #[allow(non_camel_case_types)]
                 #[doc(hidden)]
-                #vis struct #rooted_name #new_fields
+                #vis struct #rooted_name #orig_generics #new_fields
             }
         }
         _ => todo!(),
@@ -67,14 +84,14 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     quote! {
         #derive
 
-        impl std::ops::Deref for #rt<#orig_name> {
-            type Target = #rooted_name;
+        impl std::ops::Deref for #rt<#orig_name #static_generics> {
+            type Target = #rooted_name #static_generics;
             fn deref(&self) -> &Self::Target {
                 unsafe { &*(self as *const Self).cast::<Self::Target>() }
             }
         }
 
-        impl std::ops::DerefMut for #rt<#orig_name> {
+        impl std::ops::DerefMut for #rt<#orig_name #static_generics> {
             fn deref_mut(&mut self) -> &mut Self::Target {
                 unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
             }

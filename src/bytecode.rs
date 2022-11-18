@@ -4,10 +4,12 @@ use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
+use fn_macros::Trace;
 
-use crate::core::env::{Env, Symbol};
-use crate::core::gc::{Context, Root, Rt, Trace};
+use crate::core::env::{sym, Env, Symbol};
+use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, GcObj, LispVec, Object};
+use crate::interpreter::{ErrorType, EvalError};
 use crate::root;
 
 mod opcode;
@@ -124,7 +126,8 @@ impl Index<RangeTo<u16>> for Rt<LispStack> {
     type Output = [Rt<GcObj<'static>>];
 
     fn index(&self, index: RangeTo<u16>) -> &Self::Output {
-        let end = self.offset_end(index.end as usize - 1);
+        debug_assert!((index.end as usize) <= self.len());
+        let end = self.len() - (index.end as usize);
         let vec: &Vec<Rt<GcObj>> = self;
         &vec[end..]
     }
@@ -185,6 +188,25 @@ impl Rt<LispStack> {
     }
 }
 
+#[derive(Debug, Trace)]
+struct Handler<'ob> {
+    #[no_trace]
+    jump_code: u16,
+    #[no_trace]
+    stack_size: usize,
+    condition: GcObj<'ob>,
+}
+
+impl<'ob> IntoRoot<Handler<'static>> for Handler<'ob> {
+    unsafe fn into_root(self) -> Handler<'static> {
+        Handler {
+            jump_code: self.jump_code,
+            stack_size: self.stack_size,
+            condition: self.condition.into_root(),
+        }
+    }
+}
+
 /// An execution routine. This holds all the state of the current interpreter,
 /// and could be used to support coroutines.
 struct Routine<'brw, '_1, '_2, '_3, '_4> {
@@ -193,7 +215,7 @@ struct Routine<'brw, '_1, '_2, '_3, '_4> {
     call_frames: Vec<CallFrame<'brw>>,
     /// The current call frame.
     frame: CallFrame<'brw>,
-    handlers: &'brw mut Root<'_3, '_4, Vec<(GcObj<'static>, u16)>>,
+    handlers: &'brw mut Root<'_3, '_4, Vec<Handler<'static>>>,
 }
 
 impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
@@ -265,13 +287,66 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
         Ok(())
     }
 
+    fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+        'main: loop {
+            let err = match self.execute_bytecode(env, cx) {
+                Ok(x) => return Ok(rebind!(x, cx)),
+                Err(e) => e,
+            };
+
+            // we will fix this once we can handle different error types
+            #[allow(clippy::never_loop)]
+            for handler in self.handlers.as_mut(cx).drain(..) {
+                let condition = &handler.condition;
+                match condition.get(cx) {
+                    Object::Symbol(s) if s == &sym::ERROR => {}
+                    Object::Cons(cons) => {
+                        for x in cons.elements() {
+                            let x = x?;
+                            // TODO: Handle different error symbols
+                            if x != sym::DEBUG && x != sym::ERROR {
+                                bail!("non-error conditions {x} not yet supported")
+                            }
+                        }
+                    }
+                    _ => bail!("Invalid condition handler: {condition}"),
+                }
+
+                let error = if let Some(EvalError {
+                    error: ErrorType::Signal(id),
+                    ..
+                }) = err.downcast_ref::<EvalError>()
+                {
+                    let Some((sym, data)) = env.get_exception(*id) else {unreachable!("Exception not found")};
+                    cons!(sym, data; cx)
+                } else {
+                    // TODO: Need to remove the anyhow branch once
+                    // full errors are implemented
+                    cons!(sym::ERROR, format!("{err}"); cx)
+                };
+                self.stack.as_mut(cx).truncate(handler.stack_size);
+                self.stack.as_mut(cx).push(error);
+                self.frame.ip.goto(handler.jump_code);
+                continue 'main;
+            }
+            return Err(err);
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
-    fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+    fn execute_bytecode(
+        &mut self,
+        env: &mut Root<Env>,
+        cx: &'ob mut Context,
+    ) -> Result<GcObj<'ob>> {
         use crate::{arith, core, data, fns};
         use opcode::OpCode as op;
         loop {
-            let op = self.frame.ip.next().try_into()?;
+            let op = match self.frame.ip.next().try_into() {
+                Ok(x) => x,
+                Err(e) => panic!("Invalid Bytecode: {e}"),
+            };
             #[cfg(feature = "debug_bytecode")]
             {
                 println!("[");
@@ -430,9 +505,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     self.handlers.as_mut(cx).pop();
                 }
                 op::PushCondtionCase => {
-                    let top = self.stack.pop(cx);
-                    let offset = self.frame.ip.next2();
-                    self.handlers.as_mut(cx).push((top, offset));
+                    // pop before getting stack size
+                    let condition = self.stack.pop(cx);
+                    let handler = Handler {
+                        jump_code: self.frame.ip.next2(),
+                        stack_size: self.stack.len(),
+                        condition,
+                    };
+                    self.handlers.as_mut(cx).push(handler);
                 }
                 op::Symbolp => {
                     let top = self.stack.top(cx);
@@ -775,5 +855,43 @@ mod test {
         check_bytecode!(bytecode, [2], 5, cx);
         check_bytecode!(bytecode, [3], 6, cx);
         check_bytecode!(bytecode, [4], false, cx);
+    }
+
+    #[test]
+    fn test_handlers() {
+        use OpCode::*;
+        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let err = cons!(sym::ERROR; cx);
+
+        // (lambda (y) (condition-case nil
+        //            (floor)
+        //              (error (+ y 4))))
+        make_bytecode!(
+            bytecode,
+            257,
+            [
+                Constant0,
+                PushCondtionCase,
+                0x09,
+                0x0,
+                Constant1,
+                StackRef1,
+                Call1,
+                PopHandler,
+                Return,
+                Discard,
+                Duplicate,
+                Constant2,
+                Plus,
+                Return
+            ],
+            [err, sym::SYMBOL_NAME, 4],
+            cx
+        );
+        check_bytecode!(bytecode, [3], 7, cx);
+        check_bytecode!(bytecode, [sym::FLOOR], "floor", cx);
     }
 }

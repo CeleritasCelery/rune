@@ -86,13 +86,6 @@ where
     }
 }
 
-impl IntoRoot<u16> for u16
-{
-    unsafe fn into_root(self) -> u16 {
-        self
-    }
-}
-
 impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
 where
     T: IntoRoot<Tx>,
@@ -346,7 +339,7 @@ impl<T> Rt<Gc<T>> {
     pub(crate) fn bind_into<'ob, U, E>(&self, _cx: &'ob Context) -> Result<Gc<U>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
-    Gc<U>: 'ob
+        Gc<U>: 'ob,
     {
         self.inner.try_into()
     }

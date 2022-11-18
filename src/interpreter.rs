@@ -17,11 +17,11 @@ use streaming_iterator::StreamingIterator;
 #[derive(Debug)]
 pub(crate) struct EvalError {
     backtrace: Vec<String>,
-    error: ErrorType,
+    pub(crate) error: ErrorType,
 }
 
 #[derive(Debug)]
-enum ErrorType {
+pub(crate) enum ErrorType {
     Throw(u32),
     Signal(u32),
     Err(anyhow::Error),
