@@ -86,6 +86,13 @@ where
     }
 }
 
+impl IntoRoot<u16> for u16
+{
+    unsafe fn into_root(self) -> u16 {
+        self
+    }
+}
+
 impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
 where
     T: IntoRoot<Tx>,

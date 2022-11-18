@@ -187,14 +187,16 @@ impl Rt<LispStack> {
 
 /// An execution routine. This holds all the state of the current interpreter,
 /// and could be used to support coroutines.
-pub(crate) struct Routine<'brw, '_1, '_2> {
+struct Routine<'brw, '_1, '_2, '_3, '_4> {
     stack: &'brw mut Root<'_1, '_2, LispStack>,
+    /// Previous call frames
     call_frames: Vec<CallFrame<'brw>>,
     /// The current call frame.
     frame: CallFrame<'brw>,
+    handlers: &'brw mut Root<'_3, '_4, Vec<(GcObj<'static>, u16)>>,
 }
 
-impl<'brw, 'ob> Routine<'brw, '_, '_> {
+impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     fn varref(&mut self, idx: u16, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.get() {
@@ -265,10 +267,9 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
 
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
-    pub(crate) fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+    fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
         use crate::{arith, core, data, fns};
         use opcode::OpCode as op;
-        let init_stack_size = self.stack.len();
         loop {
             let op = self.frame.ip.next().try_into()?;
             #[cfg(feature = "debug_bytecode")]
@@ -425,6 +426,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                         self.frame.ip.goto(offset as u16);
                     }
                 }
+                op::PopHandler => {
+                    self.handlers.as_mut(cx).pop();
+                }
+                op::PushCondtionCase => {
+                    let top = self.stack.pop(cx);
+                    let offset = self.frame.ip.next2();
+                    self.handlers.as_mut(cx).push((top, offset));
+                }
                 op::Symbolp => {
                     let top = self.stack.top(cx);
                     top.set(data::symbolp(top.bind(cx)));
@@ -470,13 +479,12 @@ impl<'brw, 'ob> Routine<'brw, '_, '_> {
                 }
                 op::Return => {
                     if self.call_frames.is_empty() {
-                        debug_assert_eq!(self.stack.len(), init_stack_size + 1);
                         return Ok(self.stack.pop(cx));
                     }
                     let var = self.stack.pop(cx);
                     let start = self.frame.start;
                     self.stack.as_mut(cx).truncate(start + 1);
-                    self.stack.as_mut(cx)[0].set(var);
+                    self.stack.top(cx).set(var);
                     self.frame = self.call_frames.pop().unwrap();
                 }
                 op::Nreverse => {
@@ -568,11 +576,12 @@ pub(crate) fn call<'ob>(
 ) -> Result<GcObj<'ob>> {
     let arg_cnt = args.len() as u16;
     let stack = LispStack::from_root(args);
-    println!("calling: {func}");
+    root!(handlers, Vec::new(), cx);
     let mut rout = Routine {
         stack,
         call_frames: vec![],
         frame: CallFrame::new(func, 0, cx),
+        handlers,
     };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
     rout.run(env, cx)

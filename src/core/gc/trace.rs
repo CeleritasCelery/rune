@@ -62,6 +62,11 @@ impl<T: Trace> Trace for Option<T> {
     }
 }
 
+impl Trace for u16 {
+    #[inline(always)]
+    fn trace(&self, _stack: &mut Vec<RawObj>) { }
+}
+
 #[cfg(test)]
 mod test {
     use super::super::super::gc::{Context, RootSet};
