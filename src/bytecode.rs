@@ -340,7 +340,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
         env: &mut Root<Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
-        use crate::{arith, core, data, fns};
+        use crate::{alloc, arith, core, data, fns};
         use opcode::OpCode as op;
         loop {
             let op = match self.frame.ip.next().try_into() {
@@ -556,6 +556,25 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let cdr = self.stack.pop(cx);
                     let car = self.stack.top(cx);
                     car.set(core::cons::cons(car.bind(cx), cdr, cx));
+                }
+                op::List1 => {
+                    let top = self.stack.top(cx);
+                    top.set(alloc::list(&[top.bind(cx)], cx));
+                }
+                op::List2 => {
+                    let a2 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(alloc::list(&[top.bind(cx), a2], cx));
+                }
+                op::List3 => {
+                    let a3 = self.stack.pop(cx);
+                    let a2 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(alloc::list(&[top.bind(cx), a2, a3], cx));
+                }
+                op::Length => {
+                    let top = self.stack.top(cx);
+                    top.set(fns::length(top.bind(cx))?);
                 }
                 op::Return => {
                     if self.call_frames.is_empty() {

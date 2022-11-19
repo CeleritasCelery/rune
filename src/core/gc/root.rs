@@ -53,6 +53,12 @@ impl IntoRoot<GcObj<'static>> for bool {
     }
 }
 
+impl IntoRoot<GcObj<'static>> for i64 {
+    unsafe fn into_root(self) -> GcObj<'static> {
+        self.into()
+    }
+}
+
 impl IntoRoot<&'static Cons> for &Cons {
     unsafe fn into_root(self) -> &'static Cons {
         self.with_lifetime()
