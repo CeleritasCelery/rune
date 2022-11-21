@@ -69,28 +69,46 @@ pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String
 #[defun]
 pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
-    sequence: &Rt<Gc<List>>,
+    sequence: &Rt<GcObj>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    match sequence.bind(cx).get() {
-        List::Nil => Ok(nil()),
-        List::Cons(cons) => {
-            root!(outputs, Vec::new(), cx);
-            root!(call_arg, Vec::new(), cx);
+    let sequence = sequence.bind(cx);
+    match sequence.get() {
+        Object::Symbol(s) if s.nil() => Ok(nil()),
+        Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
-            while let Some(x) = iter.next() {
-                let obj = x.bind(cx);
-                call_arg.as_mut(cx).push(obj);
-                let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
-                outputs.as_mut(cx).push(output);
-                call_arg.as_mut(cx).clear();
-            }
-            // TODO: remove this intermediate vector
-            let slice = Rt::bind_slice(outputs, cx);
-            Ok(slice_into_list(slice, None, cx))
+            mapcar_internal(iter, function, env, cx)
         }
+        Object::ByteFn(fun) => {
+            root!(fun, cx);
+            mapcar_internal(fun.iter(), function, env, cx)
+        }
+        _ => Err(TypeError::new(Type::Sequence, sequence).into()),
     }
+}
+
+fn mapcar_internal<'ob, T>(
+    mut iter: T,
+    function: &Rt<Gc<Function>>,
+    env: &mut Root<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>>
+where
+    T: StreamingIterator<Item = Rt<GcObj<'static>>>,
+{
+    root!(outputs, Vec::new(), cx);
+    root!(call_arg, Vec::new(), cx);
+    while let Some(x) = iter.next() {
+        let obj = x.bind(cx);
+        call_arg.as_mut(cx).push(obj);
+        let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
+        outputs.as_mut(cx).push(output);
+        call_arg.as_mut(cx).clear();
+    }
+    // TODO: remove this intermediate vector
+    let slice = Rt::bind_slice(outputs, cx);
+    Ok(slice_into_list(slice, None, cx))
 }
 
 #[defun]

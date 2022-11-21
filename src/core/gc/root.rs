@@ -125,7 +125,7 @@ pub(crate) struct Root<'rt, 'a, T> {
     // This lifetime parameter ensures that functions like mem::swap cannot be
     // called in a way that would lead to memory unsafety. Since the drop guard
     // of Root is critical to ensure that T gets unrooted the same time it is
-    // dropped, calling mem swap would invalidate that.
+    // dropped, calling swap would invalidate this invariant.
     safety: PhantomData<&'a ()>,
 }
 
@@ -179,13 +179,16 @@ impl<T: Display> Display for Root<'_, '_, T> {
 }
 
 impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
-    pub(crate) unsafe fn init<'a>(root: &'a mut Self, data: &'a mut T) -> &'a mut Root<'rt, 'a, T> {
+    pub(crate) unsafe fn init<'brw>(
+        root: &'brw mut Self,
+        data: &'brw mut T,
+    ) -> &'brw mut Root<'rt, 'brw, T> {
         assert!(root.data.is_null(), "Attempt to reinit Root");
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
         root.data = dyn_ptr.cast::<T>();
         root.root_set.roots.borrow_mut().push(dyn_ptr);
         // We need the safety lifetime to match the borrow
-        std::mem::transmute::<&mut Root<'rt, '_, T>, &mut Root<'rt, 'a, T>>(root)
+        std::mem::transmute::<&mut Root<'rt, '_, T>, &mut Root<'rt, 'brw, T>>(root)
     }
 }
 
@@ -327,6 +330,13 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob, Out = U>,
     {
         unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
+    }
+
+    /// This functions is very unsafe to call directly. The caller must ensure
+    /// that resulting Rt is only exposed through references and that it is
+    /// properly rooted.
+    pub(crate) unsafe fn new_unchecked(item: T) -> Rt<T> {
+        Rt { inner: item }
     }
 }
 

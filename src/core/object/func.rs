@@ -10,6 +10,7 @@ use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
 use std::fmt::{self, Debug, Display};
 
 use anyhow::{bail, ensure, Result};
+use streaming_iterator::StreamingIterator;
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq)]
@@ -72,7 +73,7 @@ impl ByteFn {
             1 => Some(self.codes().into()),
             2 => Some(self.constants().into()),
             3 => Some(self.depth.into()),
-            _ => unimplemented!("remaining bytecode parameters"),
+            _ => None,
         }
     }
 }
@@ -106,6 +107,39 @@ impl Debug for ByteFn {
             .field("args", &self.args)
             .field("body", &self)
             .finish()
+    }
+}
+
+pub(crate) struct ByteFnStreamIter<'rt, 'rs> {
+    vector: &'rt mut Root<'rs, 'rt, &'static ByteFn>,
+    elem: Option<Rt<GcObj<'static>>>,
+    idx: usize,
+}
+
+impl<'rt, 'rs> Root<'rs, 'rt, &'static ByteFn> {
+    #[allow(clippy::iter_not_returning_iterator)]
+    pub(crate) fn iter(&'rt mut self) -> ByteFnStreamIter<'rt, 'rs> {
+        ByteFnStreamIter {
+            vector: self,
+            elem: None,
+            idx: 0,
+        }
+    }
+}
+
+impl<'rt, 'id> StreamingIterator for ByteFnStreamIter<'rt, 'id> {
+    type Item = Rt<GcObj<'static>>;
+
+    fn advance(&mut self) {
+        unsafe {
+            let obj = self.vector.bind_unchecked().index(self.idx);
+            self.elem = obj.map(|x| Rt::new_unchecked(x.with_lifetime()));
+            self.idx += 1;
+        }
+    }
+
+    fn get(&self) -> Option<&Self::Item> {
+        self.elem.as_ref()
     }
 }
 
