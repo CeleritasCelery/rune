@@ -34,7 +34,14 @@ pub(crate) fn make_closure<'ob>(
     let new_constants: Gc<&LispVec> = cx.add(constants);
 
     // TODO: returning an owned type is not safe here
-    Ok(unsafe { ByteFn::new(prototype.codes(), new_constants.get(), prototype.args) })
+    Ok(unsafe {
+        ByteFn::new(
+            prototype.codes(),
+            new_constants.get(),
+            prototype.args,
+            prototype.depth,
+        )
+    })
 }
 
 #[defun]
@@ -43,14 +50,14 @@ pub(crate) fn make_byte_code<'ob>(
     arglist: u64,
     byte_code: &'ob LispString,
     constants: &'ob LispVec,
-    _depth: usize,
+    depth: usize,
     _docstring: Option<GcObj>,
     _interactive_spec: Option<GcObj>,
     _elements: &[GcObj],
     cx: &'ob Context,
 ) -> Result<&'ob ByteFn> {
     unsafe {
-        let bytefn = ByteFn::new(byte_code, constants, FnArgs::from_arg_spec(arglist)?);
+        let bytefn = ByteFn::new(byte_code, constants, FnArgs::from_arg_spec(arglist)?, depth);
         Ok(bytefn.into_obj(cx).get())
     }
 }

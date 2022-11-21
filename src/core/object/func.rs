@@ -16,6 +16,7 @@ use anyhow::{bail, ensure, Result};
 pub(crate) struct ByteFn {
     gc: GcMark,
     pub(crate) args: FnArgs,
+    pub(crate) depth: usize,
     pub(in crate::core) op_codes: &'static LispString,
     pub(in crate::core) constants: &'static LispVec,
 }
@@ -31,12 +32,18 @@ impl<'new> WithLifetime<'new> for &ByteFn {
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
-    pub(crate) unsafe fn new(op_codes: &LispString, consts: &LispVec, args: FnArgs) -> Self {
+    pub(crate) unsafe fn new(
+        op_codes: &LispString,
+        consts: &LispVec,
+        args: FnArgs,
+        depth: usize,
+    ) -> Self {
         Self {
             gc: GcMark::default(),
             constants: unsafe { consts.with_lifetime() },
             op_codes: unsafe { op_codes.with_lifetime() },
             args,
+            depth,
         }
     }
 
@@ -54,6 +61,7 @@ impl ByteFn {
                 self.op_codes.clone_in(bk),
                 self.constants.clone_in(bk),
                 self.args,
+                self.depth,
             )
         }
     }
@@ -63,7 +71,7 @@ impl ByteFn {
             0 => Some((self.args.into_arg_spec() as i64).into()),
             1 => Some(self.codes().into()),
             2 => Some(self.constants().into()),
-            3 => todo!("implement bytecode depth parameter"),
+            3 => Some(self.depth.into()),
             _ => unimplemented!("remaining bytecode parameters"),
         }
     }
