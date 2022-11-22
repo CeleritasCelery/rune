@@ -36,8 +36,10 @@ impl Display for EvalError {
             ErrorType::Throw(_) => writeln!(f, "No catch for throw")?,
             ErrorType::Signal(_) => writeln!(f, "Signal")?,
         }
-        for x in &self.backtrace {
-            writeln!(f, "{x}")?;
+        if crate::debug::debug_enabled() {
+            for x in &self.backtrace {
+                writeln!(f, "{x}")?;
+            }
         }
         Ok(())
     }
