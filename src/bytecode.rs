@@ -514,6 +514,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     };
                     self.handlers.as_mut(cx).push(handler);
                 }
+                op::Nth => {
+                    let list = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::nth(top.bind(cx).try_into()?, list.try_into()?)?);
+                }
                 op::Symbolp => {
                     let top = self.stack.top(cx);
                     top.set(data::symbolp(top.bind(cx)));
@@ -586,9 +591,32 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     self.stack.top(cx).set(var);
                     self.frame = self.call_frames.pop().unwrap();
                 }
+                op::Nthcdr => {
+                    let list = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::nthcdr(top.bind(cx).try_into()?, list.try_into()?)?.copy_as_obj());
+                }
                 op::Nreverse => {
                     let elt = self.stack.top(cx);
                     elt.set(fns::nreverse(elt.bind_as(cx)?)?);
+                }
+                op::Setcar => {
+                    let newcar = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::setcar(top.bind(cx).try_into()?, newcar)?);
+                }
+                op::Setcdr => {
+                    let newcdr = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::setcdr(top.bind(cx).try_into()?, newcdr)?);
+                }
+                op::CarSafe => {
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::car_safe(top.bind(cx)));
+                }
+                op::CdrSafe => {
+                    let top = self.stack.top(cx);
+                    top.set(core::cons::cdr_safe(top.bind(cx)));
                 }
                 op::Constant0
                 | op::Constant1

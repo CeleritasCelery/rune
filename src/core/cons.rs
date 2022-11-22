@@ -175,7 +175,7 @@ pub(crate) fn cdr(list: Gc<List>) -> GcObj {
 }
 
 #[defun]
-fn car_safe(object: GcObj) -> GcObj {
+pub(crate) fn car_safe(object: GcObj) -> GcObj {
     match object.get() {
         Object::Cons(cons) => cons.car(),
         _ => nil(),
@@ -183,7 +183,7 @@ fn car_safe(object: GcObj) -> GcObj {
 }
 
 #[defun]
-fn cdr_safe(object: GcObj) -> GcObj {
+pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
     match object.get() {
         Object::Cons(cons) => cons.cdr(),
         _ => nil(),
@@ -191,13 +191,13 @@ fn cdr_safe(object: GcObj) -> GcObj {
 }
 
 #[defun]
-fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
+pub(crate) fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
     cell.set_car(newcar)?;
     Ok(newcar)
 }
 
 #[defun]
-fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
+pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
     cell.set_cdr(newcdr)?;
     Ok(newcdr)
 }
