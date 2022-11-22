@@ -147,7 +147,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         match rt.get(cx) {
             Object::Symbol(sym) => self.var_ref(sym, cx),
             Object::Cons(_) => {
-                let x = rt.try_as().unwrap();
+                let x = rt.try_into().unwrap();
                 self.eval_sexp(x, cx)
             }
             _ => Ok(rt.bind(cx)),
@@ -744,7 +744,7 @@ impl Rt<Gc<Function<'_>>> {
                         Err(e) => EvalError::with_trace(e, name, args),
                     })
             }
-            Function::Cons(_) => call_closure(self.try_as().unwrap(), args, name, env, cx)
+            Function::Cons(_) => call_closure(self.try_into().unwrap(), args, name, env, cx)
                 .map_err(|e| e.add_trace(name, args)),
             Function::Symbol(sym) => {
                 let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};

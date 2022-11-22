@@ -134,6 +134,26 @@ pub(crate) fn mapc<'ob>(
 }
 
 #[defun]
+fn maphash(
+    function: &Rt<Gc<Function>>,
+    table: &Rt<Gc<&'static LispHashTable>>,
+    env: &mut Root<Env>,
+    cx: &mut Context,
+) -> Result<bool> {
+    root!(cell, (nil(), nil()), cx);
+    let mut iter = LispHashTable::iter(table, cell, cx);
+
+    root!(call_arg, Vec::new(), cx);
+    while let Some((key, val)) = iter.next() {
+        call_arg.as_mut(cx).push(key);
+        call_arg.as_mut(cx).push(val);
+        function.call(call_arg, env, cx, None)?;
+        call_arg.as_mut(cx).clear();
+    }
+    Ok(false)
+}
+
+#[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = nil();
     for tail in seq.conses() {
@@ -593,7 +613,7 @@ mod test {
     }
 
     #[test]
-    fn test_mapcar() {
+    fn test_assq() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let element = cons!(5, 6; cx);
@@ -601,6 +621,24 @@ mod test {
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list).unwrap();
         assert_eq!(result, element);
+    }
+
+    #[test]
+    fn test_maphash() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let mut table = HashTable::default();
+        table.insert(1.into(), 6.into());
+        table.insert(2.into(), 8.into());
+        table.insert(3.into(), 10.into());
+        let table: Gc<&LispHashTable> = cx.add(table);
+        let func = sym::EQ.func(cx).unwrap();
+        root!(env, Env::default(), cx);
+        root!(table, cx);
+        root!(func, cx);
+        // This test does not assert anything, but allows this to be checked by
+        // miri
+        maphash(func, table, env, cx).unwrap();
     }
 
     #[test]
@@ -624,6 +662,7 @@ define_symbols!(
         plist_get,
         mapcar,
         mapc,
+        maphash,
         reverse,
         nreverse,
         nconc,

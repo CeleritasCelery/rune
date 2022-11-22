@@ -89,7 +89,7 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<TokenStream> {
             // Rt<Gc<..>>
             ArgType::Rt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx]},
-                Gc::Other => quote! {crate::core::gc::Rt::try_as(&args[#idx])?},
+                Gc::Other => quote! {crate::core::gc::Rt::try_into(&args[#idx])?},
             },
             // Gc<..>
             ArgType::Gc(gc) => {

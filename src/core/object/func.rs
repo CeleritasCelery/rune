@@ -111,7 +111,7 @@ impl Debug for ByteFn {
 }
 
 pub(crate) struct ByteFnStreamIter<'rt, 'rs> {
-    vector: &'rt mut Root<'rs, 'rt, &'static ByteFn>,
+    vector: &'rt Root<'rs, 'rt, &'static ByteFn>,
     elem: Option<Rt<GcObj<'static>>>,
     idx: usize,
 }

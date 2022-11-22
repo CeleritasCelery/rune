@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use sptr::Strict;
 use std::fmt;
-use std::{cell::RefCell, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::core::env::ConstSymbol;
 use crate::core::gc::{GcManaged, Trace};
@@ -929,12 +929,6 @@ impl<'ob> From<Gc<&'ob LispString>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob RefCell<Vec<GcObj<'ob>>>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob RefCell<Vec<GcObj<'ob>>>>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
 impl<'ob> From<Gc<&'ob LispVec>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob LispVec>) -> Self {
         unsafe { Self::transmute(x) }
@@ -949,18 +943,6 @@ impl<'ob> From<Gc<&'ob LispHashTable>> for Gc<Object<'ob>> {
 
 impl<'ob> From<Gc<&'ob Record>> for Gc<Object<'ob>> {
     fn from(x: Gc<&'ob Record>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob RefCell<Vec<u8>>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob RefCell<Vec<u8>>>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob RefCell<HashTable<'ob>>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob RefCell<HashTable<'ob>>>) -> Self {
         unsafe { Self::transmute(x) }
     }
 }
@@ -1178,6 +1160,14 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispHashTable> {
+    type Out = Gc<&'new LispHashTable>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
 impl<'old, 'new> WithLifetime<'new> for &'old Symbol {
     type Out = &'new Symbol;
 
@@ -1204,7 +1194,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob RefCell<HashTable<'ob>>> {
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
     type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
@@ -1235,6 +1225,13 @@ impl<'ob> Gc<&'ob LispString> {
     pub(crate) fn get(self) -> &'ob LispString {
         let (ptr, _) = self.untag();
         unsafe { String::from_obj_ptr(ptr) }
+    }
+}
+
+impl<'ob> Gc<&'ob LispHashTable> {
+    pub(crate) fn get(self) -> &'ob LispHashTable {
+        let (ptr, _) = self.untag();
+        unsafe { HashTable::from_obj_ptr(ptr) }
     }
 }
 

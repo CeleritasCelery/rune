@@ -67,7 +67,7 @@ fn run_hooks<'ob>(
                         Object::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next() {
-                                let func: &Rt<Gc<Function>> = hook.try_as()?;
+                                let func: &Rt<Gc<Function>> = hook.try_into()?;
                                 root!(args, Vec::new(), cx);
                                 func.call(args, env, cx, None)?;
                             }

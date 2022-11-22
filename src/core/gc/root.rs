@@ -348,7 +348,7 @@ impl<T> Rt<T> {
 
 impl<T> Rt<Gc<T>> {
     /// Like `try_into`, but needed to due no specialization
-    pub(crate) fn try_as<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
+    pub(crate) fn try_into<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
     {
