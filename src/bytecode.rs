@@ -4,11 +4,11 @@ use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
-use fn_macros::Trace;
+use fn_macros::{defun, Trace};
 
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
-use crate::core::object::{nil, ByteFn, GcObj, LispVec, Object};
+use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object};
 use crate::interpreter::{ErrorType, EvalError};
 use crate::root;
 
@@ -667,6 +667,29 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     }
 }
 
+#[defun]
+fn byte_code<'ob>(
+    bytestr: &Rt<Gc<&LispString>>,
+    vector: &Rt<Gc<&LispVec>>,
+    maxdepth: usize,
+    env: &mut Root<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>> {
+    let fun = crate::alloc::make_byte_code(
+        0,
+        bytestr.bind(cx).get(),
+        vector.bind(cx).get(),
+        maxdepth,
+        None,
+        None,
+        &[],
+        cx,
+    )?;
+    root!(fun, cx);
+    root!(args, Vec::new(), cx);
+    call(fun, args, env, cx)
+}
+
 pub(crate) fn call<'ob>(
     func: &Rt<&'static ByteFn>,
     args: &mut Root<'_, '_, Vec<GcObj<'static>>>,
@@ -914,3 +937,9 @@ mod test {
         check_bytecode!(bytecode, [sym::FLOOR], "floor", cx);
     }
 }
+
+define_symbols!(
+    FUNCS => {
+        byte_code,
+    }
+);

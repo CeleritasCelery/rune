@@ -346,6 +346,14 @@ impl<T> Rt<T> {
     }
 }
 
+impl TryFrom<&Rt<GcObj<'_>>> for usize {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
+        value.inner.try_into()
+    }
+}
+
 impl<T> Rt<Gc<T>> {
     /// Like `try_into`, but needed to due no specialization
     pub(crate) fn try_into<U, E>(&self) -> Result<&Rt<Gc<U>>, E>

@@ -1168,6 +1168,14 @@ impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispHashTable> {
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispVec> {
+    type Out = Gc<&'new LispVec>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
 impl<'old, 'new> WithLifetime<'new> for &'old Symbol {
     type Out = &'new Symbol;
 
@@ -1201,6 +1209,17 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
         match value.tag() {
             Tag::HashTable => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::HashTable, value)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
+    type Error = TypeError;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.tag() {
+            Tag::Vec => unsafe { Ok(Self::transmute(value)) },
+            _ => Err(TypeError::new(Type::Vec, value)),
         }
     }
 }
