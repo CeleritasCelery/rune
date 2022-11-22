@@ -146,6 +146,14 @@ pub(crate) trait WithLifetime<'new> {
     unsafe fn with_lifetime(self) -> Self::Out;
 }
 
+impl<'new, T> WithLifetime<'new> for Gc<T>  where T: WithLifetime<'new> {
+    type Out = Gc<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        transmute(self)
+    }
+}
+
 pub(crate) trait RawInto<T> {
     unsafe fn raw_into(self) -> T;
 }
@@ -1152,42 +1160,11 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old Cons> {
-    type Out = Gc<&'new Cons>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispHashTable> {
-    type Out = Gc<&'new LispHashTable>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispVec> {
-    type Out = Gc<&'new LispVec>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
 impl<'old, 'new> WithLifetime<'new> for &'old Symbol {
     type Out = &'new Symbol;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         &*(self as *const Symbol)
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old Symbol> {
-    type Out = Gc<&'new Symbol>;
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
     }
 }
 
@@ -1221,14 +1198,6 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
             Tag::Vec => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
         }
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for Gc<&'old LispString> {
-    type Out = Gc<&'new LispString>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
     }
 }
 
