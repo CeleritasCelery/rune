@@ -425,27 +425,27 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Plus => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    let args = &[arg1.try_into()?, top.bind_into(cx)?];
+                    let args = &[arg1.try_into()?, top.bind_as(cx)?];
                     let result: GcObj = cx.add(arith::add(args));
                     top.set(result);
                 }
                 op::LessThan => {
                     let v1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(arith::less_than(top.bind_into(cx)?, &[v1.try_into()?]));
+                    top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
                 }
                 op::GreaterThan => {
                     let v1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(arith::greater_than(top.bind_into(cx)?, &[v1.try_into()?]));
+                    top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
                 }
                 op::Sub1 => {
                     let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_into(cx)?)));
+                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_as(cx)?)));
                 }
                 op::Add1 => {
                     let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_into(cx)?)));
+                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_as(cx)?)));
                 }
                 op::Discard => {
                     self.stack.pop(cx);
@@ -546,11 +546,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 }
                 op::Car => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::car(top.bind_into(cx)?));
+                    top.set(core::cons::car(top.bind_as(cx)?));
                 }
                 op::Cdr => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::cdr(top.bind_into(cx)?));
+                    top.set(core::cons::cdr(top.bind_as(cx)?));
                 }
                 op::Cons => {
                     let cdr = self.stack.pop(cx);
@@ -588,7 +588,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 }
                 op::Nreverse => {
                     let elt = self.stack.top(cx);
-                    elt.set(fns::nreverse(elt.bind_into(cx)?)?);
+                    elt.set(fns::nreverse(elt.bind_as(cx)?)?);
                 }
                 op::Constant0
                 | op::Constant1

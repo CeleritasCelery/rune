@@ -139,6 +139,7 @@ impl<'rt, T> Root<'rt, '_, T> {
     }
 
     pub(crate) fn as_mut<'a>(&'a mut self, _cx: &'a Context) -> &'a mut Rt<T> {
+        // SAFETY: We have a reference to the Context
         unsafe { self.deref_mut_unchecked() }
     }
 
@@ -195,7 +196,11 @@ impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
 impl<T> Drop for Root<'_, '_, T> {
     fn drop(&mut self) {
         if self.data.is_null() {
-            eprintln!("Error: Root was dropped while still not set");
+            if std::thread::panicking() {
+                eprintln!("Error: Root was dropped while still not set");
+            } else {
+                panic!("Error: Root was dropped while still not set");
+            }
         } else {
             self.root_set.roots.borrow_mut().pop();
         }
@@ -227,7 +232,7 @@ macro_rules! root {
 }
 
 /// A Rooted type. If a type is wrapped in Rt, it is known to be rooted and hold
-/// items passed garbage collection. This type is never used as an owned type,
+/// items past garbage collection. This type is never used as an owned type,
 /// only a reference. This ensures that underlying data does not move. In order
 /// to access the inner data, the [`Rt::bind`] method must be used.
 #[repr(transparent)]
@@ -315,6 +320,7 @@ impl<T> Rt<T> {
     where
         T: WithLifetime<'ob> + Copy,
     {
+        // SAFETY: We are holding a reference to the context
         unsafe { self.inner.with_lifetime() }
     }
 
@@ -341,7 +347,7 @@ impl<T> Rt<T> {
 }
 
 impl<T> Rt<Gc<T>> {
-    /// Like `TryFrom`, but needed to due no specialization
+    /// Like `try_into`, but needed to due no specialization
     pub(crate) fn try_as<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
@@ -351,8 +357,8 @@ impl<T> Rt<Gc<T>> {
         unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
     }
 
-    /// Like `bind(cx).try_into()`, but needed to due no specialization
-    pub(crate) fn bind_into<'ob, U, E>(&self, _cx: &'ob Context) -> Result<Gc<U>, E>
+    /// Like `try_as().bind(cx)`, but needed to due no specialization
+    pub(crate) fn bind_as<'ob, U, E>(&self, _cx: &'ob Context) -> Result<Gc<U>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
         Gc<U>: 'ob,
