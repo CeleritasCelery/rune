@@ -178,7 +178,7 @@ fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
     let mut tail: Option<&Cons> = None;
     for list in lists {
         if let Some(cons) = tail {
-            cons.set_cdr(list.into())?;
+            cons.set_cdr((*list).into())?;
         }
         if let Some(x) = list.conses().last() {
             tail = Some(x?);
@@ -186,7 +186,7 @@ fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
     }
 
     Ok(match lists.iter().find(|&&x| x != List::empty()) {
-        Some(x) => x.into(),
+        Some(x) => (*x).into(),
         None => nil(),
     })
 }

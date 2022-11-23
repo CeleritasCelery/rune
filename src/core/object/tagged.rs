@@ -132,9 +132,9 @@ unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
     Gc::new(e.ptr)
 }
 
-impl<'a, T: 'a> From<Gc<T>> for Object<'a> {
+impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
     fn from(x: Gc<T>) -> Self {
-        Gc::<Object>::new(x.ptr).get()
+        x.copy_as_obj().get()
     }
 }
 
@@ -593,6 +593,18 @@ impl SubrFn {
     }
 }
 
+macro_rules! cast_gc {
+    ($supertype:ty => $($subtype:ty),+ $(,)?) => {
+        $(
+            impl<'ob> From<Gc<$subtype>> for Gc<$supertype> {
+                fn from(x: Gc<$subtype>) -> Self {
+                    unsafe { Self::transmute(x) }
+                }
+            }
+        )+
+    };
+}
+
 ////////////////////////
 // Proc macro section //
 ////////////////////////
@@ -603,24 +615,13 @@ pub(crate) enum Number<'ob> {
     Int(i64),
     Float(&'ob LispFloat),
 }
+cast_gc!(Number<'ob> => i64, &'ob LispFloat);
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Number<'old>> {
     type Out = Gc<Number<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
-    }
-}
-
-impl<'ob> From<Gc<i64>> for Gc<Number<'ob>> {
-    fn from(x: Gc<i64>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispFloat>> for Gc<Number<'ob>> {
-    fn from(x: Gc<&'ob LispFloat>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
@@ -637,6 +638,7 @@ pub(crate) enum List<'ob> {
     Nil,
     Cons(&'ob Cons),
 }
+cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
@@ -650,18 +652,6 @@ impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
-    }
-}
-
-impl<'ob> From<Gc<&'ob Cons>> for Gc<List<'ob>> {
-    fn from(x: Gc<&'ob Cons>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<()>> for Gc<List<'ob>> {
-    fn from(x: Gc<()>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
@@ -680,6 +670,7 @@ pub(crate) enum Function<'ob> {
     Cons(&'ob Cons),
     Symbol(&'ob Symbol),
 }
+cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, &'ob Symbol);
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
     type Out = Gc<Function<'new>>;
@@ -721,24 +712,6 @@ impl<'ob> Function<'ob> {
     }
 }
 
-impl<'ob> From<Gc<&'ob Cons>> for Gc<Function<'ob>> {
-    fn from(x: Gc<&'ob Cons>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'static SubrFn>> for Gc<Function<'ob>> {
-    fn from(x: Gc<&'static SubrFn>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob ByteFn>> for Gc<Function<'ob>> {
-    fn from(x: Gc<&'ob ByteFn>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
 impl<'ob> From<&'ob ByteFn> for GcObj<'ob> {
     fn from(x: &'ob ByteFn) -> Self {
         let ptr = x as *const _;
@@ -764,12 +737,6 @@ impl<'ob> From<&'ob Record> for GcObj<'ob> {
     fn from(x: &'ob Record) -> Self {
         let ptr = (x as *const Record).cast::<LispVec>();
         unsafe { <&Record>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<Gc<&'ob Symbol>> for Gc<Function<'ob>> {
-    fn from(x: Gc<&Symbol>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
@@ -811,6 +778,7 @@ pub(crate) enum Object<'ob> {
     ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
 }
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &'ob LispFloat, &'ob Symbol, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
     /// Return the type of an object
@@ -856,12 +824,6 @@ impl<'old, 'new> WithLifetime<'new> for Gc<Object<'old>> {
     }
 }
 
-impl<'ob> From<Gc<i64>> for Gc<Object<'ob>> {
-    fn from(x: Gc<i64>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
 impl<'ob> From<i64> for Gc<Object<'ob>> {
     fn from(x: i64) -> Self {
         let ptr = sptr::invalid(x as usize);
@@ -880,12 +842,6 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
     fn from(x: i32) -> Self {
         let ptr = sptr::invalid(x as usize);
         unsafe { i64::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispFloat>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob LispFloat>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
@@ -910,79 +866,13 @@ impl<'ob> From<&Cons> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<Gc<&'ob Symbol>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&Symbol>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<()>> for Gc<Object<'ob>> {
-    fn from(x: Gc<()>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
 impl From<Gc<Object<'_>>> for () {
     fn from(_: Gc<Object>) {}
-}
-
-impl<'ob> From<Gc<bool>> for Gc<Object<'ob>> {
-    fn from(x: Gc<bool>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob Cons>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob Cons>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispString>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob LispString>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispVec>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob LispVec>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob LispHashTable>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob LispHashTable>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob Record>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob Record>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<&'ob ByteFn>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob ByteFn>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
 }
 
 impl<'ob> From<&'ob SubrFn> for Gc<Object<'ob>> {
     fn from(x: &'ob SubrFn) -> Self {
         unsafe { <&SubrFn>::tag_ptr(x as *const _).into() }
-    }
-}
-
-impl<'ob> From<Gc<&'ob SubrFn>> for Gc<Object<'ob>> {
-    fn from(x: Gc<&'ob SubrFn>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<Gc<Number<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<Number<'ob>>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
@@ -1009,18 +899,6 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
     }
 }
 
-impl<'ob> From<Gc<List<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<List<'ob>>) -> Self {
-        unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> From<&Gc<List<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: &Gc<List<'ob>>) -> Self {
-        unsafe { Self::transmute(*x) }
-    }
-}
-
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
     type Error = TypeError;
 
@@ -1030,12 +908,6 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
             Object::Cons(_) => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
-    }
-}
-
-impl<'ob> From<Gc<Function<'ob>>> for Gc<Object<'ob>> {
-    fn from(x: Gc<Function<'ob>>) -> Self {
-        unsafe { Self::transmute(x) }
     }
 }
 
