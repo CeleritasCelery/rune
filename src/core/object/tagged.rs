@@ -95,10 +95,6 @@ impl<T> Gc<T> {
         Self::new(raw)
     }
 
-    unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
-        Gc::new(e.ptr)
-    }
-
     pub(crate) fn ptr_eq<U>(self, other: Gc<U>) -> bool {
         self.ptr == other.ptr
     }
@@ -128,7 +124,7 @@ impl<T: TaggedPtr> Untag<T> for Gc<T> {
     }
 }
 
-unsafe fn transmute<U, V>(e: Gc<U>) -> Gc<V> {
+unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
     Gc::new(e.ptr)
 }
 
@@ -154,7 +150,7 @@ where
     type Out = Gc<<T as WithLifetime<'new>>::Out>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
+        cast_gc(self)
     }
 }
 
@@ -184,7 +180,7 @@ impl<T> IntoObject for Gc<T> {
     type Out<'ob> = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { Self::transmute(self) }
+        unsafe { cast_gc(self) }
     }
 }
 
@@ -193,7 +189,7 @@ impl<T> IntoObject for Option<Gc<T>> {
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
-            Some(x) => unsafe { transmute(x) },
+            Some(x) => unsafe { cast_gc(x) },
             None => nil(),
         }
     }
@@ -411,6 +407,10 @@ mod private {
             unsafe { Self::from_obj_ptr(ptr) }
         }
 
+        fn get_ptr(self) -> *const Self::Ptr {
+            unimplemented!()
+        }
+
         unsafe fn from_obj_ptr(_: *const u8) -> Self {
             unimplemented!()
         }
@@ -511,6 +511,10 @@ impl TaggedPtr for i64 {
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         ptr.addr() as i64
     }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        sptr::invalid(self as usize)
+    }
 }
 
 impl TaggedPtr for &LispFloat {
@@ -518,6 +522,10 @@ impl TaggedPtr for &LispFloat {
     const TAG: Tag = Tag::Float;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
     }
 }
 
@@ -527,6 +535,10 @@ impl TaggedPtr for &Cons {
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
     }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
 }
 
 impl TaggedPtr for &SubrFn {
@@ -534,6 +546,10 @@ impl TaggedPtr for &SubrFn {
     const TAG: Tag = Tag::SubrFn;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
     }
 }
 
@@ -543,6 +559,10 @@ impl TaggedPtr for &Symbol {
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
     }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
 }
 
 impl TaggedPtr for &ByteFn {
@@ -550,6 +570,10 @@ impl TaggedPtr for &ByteFn {
     const TAG: Tag = Tag::ByteFn;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
     }
 }
 
@@ -559,6 +583,10 @@ impl TaggedPtr for &LispString {
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
     }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
 }
 
 impl TaggedPtr for &LispVec {
@@ -567,14 +595,21 @@ impl TaggedPtr for &LispVec {
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
     }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
 }
 
 impl TaggedPtr for &Record {
     type Ptr = LispVec;
     const TAG: Tag = Tag::Record;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-        let vec = &*ptr.cast::<Self::Ptr>();
-        &*(vec as *const LispVec).cast::<Record>()
+        &*ptr.cast::<Record>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        (self as *const Record).cast::<Self::Ptr>()
     }
 }
 
@@ -583,6 +618,10 @@ impl TaggedPtr for &LispHashTable {
     const TAG: Tag = Tag::HashTable;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
     }
 }
 
@@ -598,7 +637,13 @@ macro_rules! cast_gc {
         $(
             impl<'ob> From<Gc<$subtype>> for Gc<$supertype> {
                 fn from(x: Gc<$subtype>) -> Self {
-                    unsafe { Self::transmute(x) }
+                    unsafe { cast_gc(x) }
+                }
+            }
+
+            impl<'ob> From<$subtype> for Gc<$supertype> {
+                fn from(x: $subtype) -> Self {
+                    unsafe { <$subtype>::tag_ptr(x.get_ptr()).into() }
                 }
             }
         )+
@@ -621,14 +666,7 @@ impl<'old, 'new> WithLifetime<'new> for Gc<Number<'old>> {
     type Out = Gc<Number<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-impl<'ob> From<i64> for Gc<Number<'ob>> {
-    fn from(x: i64) -> Self {
-        let ptr = sptr::invalid(x as usize);
-        unsafe { i64::tag_ptr(ptr).into() }
+        cast_gc(self)
     }
 }
 
@@ -651,14 +689,7 @@ impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
     type Out = Gc<List<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-// This is safe because cons is a gc heap only type
-impl<'ob> From<&'ob Cons> for Gc<List<'ob>> {
-    fn from(x: &'ob Cons) -> Self {
-        unsafe { <&Cons>::tag_ptr(x as *const _).into() }
+        cast_gc(self)
     }
 }
 
@@ -676,7 +707,7 @@ impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
     type Out = Gc<Function<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
+        cast_gc(self)
     }
 }
 
@@ -712,55 +743,6 @@ impl<'ob> Function<'ob> {
     }
 }
 
-impl<'ob> From<&'ob ByteFn> for GcObj<'ob> {
-    fn from(x: &'ob ByteFn) -> Self {
-        let ptr = x as *const _;
-        unsafe { <&ByteFn>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<&'ob LispString> for GcObj<'ob> {
-    fn from(x: &'ob LispString) -> Self {
-        let ptr = x as *const LispString;
-        unsafe { <&LispString>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<&'ob LispVec> for GcObj<'ob> {
-    fn from(x: &'ob LispVec) -> Self {
-        let ptr = x as *const LispVec;
-        unsafe { <&LispVec>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<&'ob Record> for GcObj<'ob> {
-    fn from(x: &'ob Record) -> Self {
-        let ptr = (x as *const Record).cast::<LispVec>();
-        unsafe { <&Record>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<&'ob Symbol> for Gc<Function<'ob>> {
-    fn from(x: &Symbol) -> Self {
-        let ptr = x as *const Symbol;
-        unsafe { <&Symbol>::tag_ptr(ptr).into() }
-    }
-}
-
-impl<'ob> From<&'ob Symbol> for Gc<&'ob Symbol> {
-    fn from(x: &Symbol) -> Self {
-        let ptr = x as *const Symbol;
-        unsafe { <&Symbol>::tag_ptr(ptr) }
-    }
-}
-
-impl From<&'static SubrFn> for Gc<Function<'_>> {
-    fn from(x: &'static SubrFn) -> Self {
-        let ptr = x as *const SubrFn;
-        unsafe { <&SubrFn>::tag_ptr(ptr).into() }
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 /// The Object defintion that contains all other possible lisp objects. This
@@ -778,7 +760,7 @@ pub(crate) enum Object<'ob> {
     ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &'ob LispFloat, &'ob Symbol, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &Symbol, &'ob LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
     /// Return the type of an object
@@ -814,20 +796,13 @@ impl PartialEq for Object<'_> {
     }
 }
 
-// auto-generated
+// Object Impl's
 
 impl<'old, 'new> WithLifetime<'new> for Gc<Object<'old>> {
     type Out = Gc<Object<'new>>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        transmute(self)
-    }
-}
-
-impl<'ob> From<i64> for Gc<Object<'ob>> {
-    fn from(x: i64) -> Self {
-        let ptr = sptr::invalid(x as usize);
-        unsafe { i64::tag_ptr(ptr).into() }
+        cast_gc(self)
     }
 }
 
@@ -845,13 +820,6 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<&Symbol> for Gc<Object<'ob>> {
-    fn from(x: &Symbol) -> Self {
-        let ptr = x as *const Symbol;
-        unsafe { <&Symbol>::tag_ptr(ptr).into() }
-    }
-}
-
 impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     fn from(x: ConstSymbol) -> Self {
         let sym: &Symbol = &x;
@@ -859,21 +827,8 @@ impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<&Cons> for Gc<Object<'ob>> {
-    fn from(x: &Cons) -> Self {
-        let ptr = x as *const Cons;
-        unsafe { <&Cons>::tag_ptr(ptr).into() }
-    }
-}
-
 impl From<Gc<Object<'_>>> for () {
     fn from(_: Gc<Object>) {}
-}
-
-impl<'ob> From<&'ob SubrFn> for Gc<Object<'ob>> {
-    fn from(x: &'ob SubrFn) -> Self {
-        unsafe { <&SubrFn>::tag_ptr(x as *const _).into() }
-    }
 }
 
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
@@ -881,7 +836,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::Int | Tag::Float => unsafe { Ok(Self::transmute(value)) },
+            Tag::Int | Tag::Float => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Number, value)),
         }
     }
@@ -904,8 +859,8 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.get() {
-            Object::Symbol(s) if s.nil() => unsafe { Ok(Self::transmute(value)) },
-            Object::Cons(_) => unsafe { Ok(Self::transmute(value)) },
+            Object::Symbol(s) if s.nil() => unsafe { Ok(cast_gc(value)) },
+            Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
     }
@@ -916,7 +871,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
 
     fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
         match value.get() {
-            Function::Cons(_) => unsafe { Ok(Self::transmute(value)) },
+            Function::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
     }
@@ -926,7 +881,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<&'ob Symbol> {
     type Error = TypeError;
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.get() {
-            Object::Symbol(_) => unsafe { Ok(Self::transmute(value)) },
+            Object::Symbol(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Symbol, value)),
         }
     }
@@ -937,9 +892,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::ByteFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe {
-                Ok(Self::transmute(value))
-            },
+            Tag::ByteFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Func, value)),
         }
     }
@@ -954,7 +907,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::Int => unsafe { Ok(Self::transmute(value)) },
+            Tag::Int => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Int, value)),
         }
     }
@@ -991,7 +944,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::Cons => unsafe { Ok(Self::transmute(value)) },
+            Tag::Cons => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
     }
@@ -1010,7 +963,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::String => unsafe { Ok(Self::transmute(value)) },
+            Tag::String => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::String, value)),
         }
     }
@@ -1021,7 +974,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::HashTable => unsafe { Ok(Self::transmute(value)) },
+            Tag::HashTable => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::HashTable, value)),
         }
     }
@@ -1032,7 +985,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
         match value.tag() {
-            Tag::Vec => unsafe { Ok(Self::transmute(value)) },
+            Tag::Vec => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
         }
     }
@@ -1059,7 +1012,7 @@ impl<T> Gc<T> {
             Object::Int(x) => x.into(),
             Object::Cons(x) => x.clone_in(bk).into(),
             Object::String(x) => x.clone_in(bk).into(),
-            Object::Symbol(x) => x.into(),
+            Object::Symbol(x) => x.clone_in(bk).into(),
             Object::ByteFn(x) => x.clone_in(bk).into_obj(bk).into(),
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),

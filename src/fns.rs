@@ -368,11 +368,11 @@ fn require<'ob>(
     noerror: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
-) -> Result<Gc<&'ob Symbol>> {
+) -> Result<&'ob Symbol> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.bind(cx).get().into_root() };
     if crate::data::FEATURES.lock().unwrap().contains(feat) {
-        return Ok(feature.bind(cx));
+        return Ok(feature.get(cx));
     }
     let file = match filename {
         Some(file) => file.bind(cx).get().try_into()?,
@@ -381,9 +381,9 @@ fn require<'ob>(
     let file: Gc<&LispString> = cx.add(file);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
-        Ok(_) => Ok(feature.bind(cx)),
+        Ok(_) => Ok(feature.get(cx)),
         Err(e) => match noerror {
-            Some(()) => Ok((&*sym::NIL).into()),
+            Some(()) => Ok(&*sym::NIL),
             None => Err(e),
         },
     }
