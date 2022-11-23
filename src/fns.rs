@@ -118,7 +118,7 @@ pub(crate) fn mapc<'ob>(
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    match sequence.bind(cx).get() {
+    match sequence.get(cx) {
         List::Nil => Ok(nil()),
         List::Cons(cons) => {
             root!(call_arg, Vec::new(), cx);
@@ -370,13 +370,13 @@ fn require<'ob>(
     cx: &'ob mut Context,
 ) -> Result<&'ob Symbol> {
     // TODO: Fix this unsafe into_root
-    let feat = unsafe { feature.bind(cx).get().into_root() };
+    let feat = unsafe { feature.get(cx).into_root() };
     if crate::data::FEATURES.lock().unwrap().contains(feat) {
         return Ok(feature.get(cx));
     }
     let file = match filename {
-        Some(file) => file.bind(cx).get().try_into()?,
-        None => feature.bind(cx).get().name(),
+        Some(file) => file.get(cx).try_into()?,
+        None => feature.get(cx).name(),
     };
     let file: Gc<&LispString> = cx.add(file);
     root!(file, cx);

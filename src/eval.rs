@@ -97,7 +97,7 @@ pub(crate) fn autoload_do_load<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     // TODO: want to handle the case where the file is already loaded.
-    match fundef.bind(cx).get() {
+    match fundef.get(cx) {
         Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
             ensure!(
                 macro_only.is_none(),
@@ -119,7 +119,7 @@ pub(crate) fn autoload_do_load<'ob>(
             root!(file, cx);
             crate::lread::load(file, None, None, cx, env)?;
             match funname {
-                Some(func) => match func.bind(cx).get().func(cx) {
+                Some(func) => match func.get(cx).func(cx) {
                     Some(x) => Ok(x.into()),
                     None => Err(anyhow!("autoload of {func} did not provide a definition")),
                 },
@@ -182,7 +182,9 @@ pub(crate) fn macroexpand<'ob>(
 fn get_macro_func<'ob>(name: &Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
     if let Some(callable) = name.follow_indirect(cx) {
         if let Function::Cons(cons) = callable.get() {
-            return cons.try_as_macro().ok();
+            if cons.car() == sym::MACRO {
+                return cons.cdr().try_into().ok();
+            }
         }
     }
     None

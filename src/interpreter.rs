@@ -734,7 +734,7 @@ impl Rt<Gc<Function<'_>>> {
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
         debug!("calling {self:?}");
-        match self.bind(cx).get() {
+        match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
                 crate::bytecode::call(f, args, env, cx).map_err(EvalError::new_error)

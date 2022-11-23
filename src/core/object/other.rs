@@ -61,7 +61,7 @@ impl LispHashTable {
         // SAFETY: Since we know table is rooted, it is safe to change the inner
         // lifetime to static and the outer one to match 'rt
         let ref_cell = unsafe {
-            let cell = table.bind(cx).get().borrow();
+            let cell = table.get(cx).borrow();
             std::mem::transmute::<Ref<'a, HashTable<'a>>, Ref<'rt, HashTable<'static>>>(cell)
         };
         // SAFETY: We are creating two references to the hashtable. One is

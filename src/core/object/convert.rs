@@ -5,49 +5,13 @@
 use crate::core::env::Symbol;
 
 use super::{
-    super::{
-        cons::Cons,
-        env::sym,
-        error::{ArgError, Type, TypeError},
-    },
+    super::error::{ArgError, Type, TypeError},
     nil, qtrue, LispHashTable, LispString, LispVec,
 };
-use super::{Function, GcObj};
+use super::{GcObj, LispFloat};
 use anyhow::Context;
 
 use super::{Gc, Object};
-
-#[allow(clippy::multiple_inherent_impl)]
-impl Cons {
-    pub(crate) fn try_as_macro(&self) -> Result<Gc<Function>, TypeError> {
-        if self.car() == sym::MACRO {
-            self.cdr().try_into()
-        } else {
-            Err(TypeError::new(Type::Symbol, self.car()))
-        }
-    }
-}
-
-impl<'ob> TryFrom<GcObj<'ob>> for &'ob LispVec {
-    type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
-            Object::Vec(x) => Ok(x),
-            Object::Record(x) => Ok(x),
-            x => Err(TypeError::new(Type::Vec, x).into()),
-        }
-    }
-}
-
-impl<'ob> TryFrom<GcObj<'ob>> for &'ob LispString {
-    type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
-            Object::String(x) => Ok(x),
-            x => Err(TypeError::new(Type::String, x).into()),
-        }
-    }
-}
 
 impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
     type Error = anyhow::Error;
@@ -150,8 +114,10 @@ impl<'ob> From<bool> for GcObj<'ob> {
 }
 
 define_unbox!(Int, i64);
-define_unbox!(Float, &'ob f64);
+define_unbox!(Float, &'ob LispFloat);
 define_unbox!(HashTable, &'ob LispHashTable);
+define_unbox!(String, &'ob LispString);
+define_unbox!(Vec, &'ob LispVec);
 define_unbox!(Symbol, &'ob Symbol);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>
@@ -168,6 +134,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::core::cons::Cons;
+
     use super::super::super::gc::{Context, RootSet};
 
     use super::*;
