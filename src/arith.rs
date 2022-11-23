@@ -1,4 +1,4 @@
-use crate::core::object::{Gc, IntoObject, Number};
+use crate::core::object::{Gc, IntoObject, Number, Object};
 use float_cmp::ApproxEq;
 use fn_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
@@ -20,17 +20,13 @@ impl<'ob> Gc<Number<'ob>> {
 }
 
 impl IntoObject for NumberValue {
-    type Out<'ob> = Number<'ob>;
+    type Out<'ob> = Object<'ob>;
 
     fn into_obj<const C: bool>(self, block: &crate::core::gc::Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             NumberValue::Int(x) => x.into(),
             NumberValue::Float(x) => block.add(x),
         }
-    }
-
-    unsafe fn from_obj_ptr<'ob>(_ptr: *const u8) -> Self::Out<'ob> {
-        todo!()
     }
 }
 
