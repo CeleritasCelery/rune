@@ -318,7 +318,7 @@ where
 impl<T> Rt<T> {
     pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob> + Copy,
+        T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
         unsafe { self.inner.with_lifetime() }
@@ -326,7 +326,7 @@ impl<T> Rt<T> {
 
     pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob> + Copy,
+        T: WithLifetime<'ob>,
     {
         self.inner.with_lifetime()
     }
@@ -396,7 +396,7 @@ impl<T> Rt<Gc<T>> {
 
     pub(crate) fn get<'ob, U>(&self, cx: &'ob Context) -> U
     where
-        Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
         Gc<U>: Untag<U>,
     {
         let gc: Gc<U> = self.bind(cx);

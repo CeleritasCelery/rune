@@ -13,7 +13,7 @@ use super::super::{
     gc::{AllocObject, Block},
 };
 
-use sealed::{Tag, TaggedPtr};
+use private::{Tag, TaggedPtr};
 
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
@@ -142,7 +142,7 @@ impl<'a, T: 'a> From<Gc<T>> for Object<'a> {
 // Traits for Objects //
 ////////////////////////
 
-pub(crate) trait WithLifetime<'new> {
+pub(crate) trait WithLifetime<'new>: Copy {
     type Out: 'new;
     unsafe fn with_lifetime(self) -> Self::Out;
 }
@@ -379,9 +379,8 @@ impl<'a> IntoObject for HashTable<'a> {
     }
 }
 
-mod sealed {
-    #[allow(clippy::wildcard_imports)]
-    use super::*;
+mod private {
+    use super::Gc;
 
     #[repr(u8)]
     pub(crate) enum Tag {
@@ -397,7 +396,7 @@ mod sealed {
         ByteFn,
     }
 
-    pub(crate) trait TaggedPtr
+    pub(crate) trait TaggedPtr: Copy
     where
         Self: Sized,
     {
@@ -416,168 +415,174 @@ mod sealed {
             unimplemented!()
         }
     }
+}
 
-    impl<'a> TaggedPtr for Object<'a> {
-        type Ptr = Object<'a>;
-        const TAG: Tag = Tag::Int;
+impl<'a> TaggedPtr for Object<'a> {
+    type Ptr = Object<'a>;
+    const TAG: Tag = Tag::Int;
 
-        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
-            unimplemented!()
-        }
-        fn untag(val: Gc<Self>) -> Self {
-            let (ptr, tag) = val.untag_ptr();
+    unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+        unimplemented!()
+    }
+    fn untag(val: Gc<Self>) -> Self {
+        let (ptr, tag) = val.untag_ptr();
+        unsafe {
             match tag {
-                Tag::Symbol => Object::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
-                Tag::Cons => Object::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
-                Tag::SubrFn => Object::SubrFn(unsafe { &*ptr.cast() }),
-                Tag::ByteFn => Object::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
-                Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
-                Tag::Float => Object::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
-                Tag::String => Object::String(unsafe { <&LispString>::from_obj_ptr(ptr) }),
-                Tag::Vec => Object::Vec(unsafe { <&LispVec>::from_obj_ptr(ptr) }),
-                Tag::Record => Object::Record(unsafe { <&Record>::from_obj_ptr(ptr) }),
-                Tag::HashTable => Object::HashTable(unsafe { <&LispHashTable>::from_obj_ptr(ptr) }),
+                Tag::Symbol => Object::Symbol(<&Symbol>::from_obj_ptr(ptr)),
+                Tag::Cons => Object::Cons(<&Cons>::from_obj_ptr(ptr)),
+                Tag::SubrFn => Object::SubrFn(&*ptr.cast()),
+                Tag::ByteFn => Object::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
+                Tag::Int => Object::Int(i64::from_obj_ptr(ptr)),
+                Tag::Float => Object::Float(<&LispFloat>::from_obj_ptr(ptr)),
+                Tag::String => Object::String(<&LispString>::from_obj_ptr(ptr)),
+                Tag::Vec => Object::Vec(<&LispVec>::from_obj_ptr(ptr)),
+                Tag::Record => Object::Record(<&Record>::from_obj_ptr(ptr)),
+                Tag::HashTable => Object::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
             }
         }
     }
+}
 
-    impl<'a> TaggedPtr for List<'a> {
-        type Ptr = List<'a>;
-        const TAG: Tag = Tag::Int;
+impl<'a> TaggedPtr for List<'a> {
+    type Ptr = List<'a>;
+    const TAG: Tag = Tag::Int;
 
-        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
-            unimplemented!()
-        }
-
-        fn untag(val: Gc<Self>) -> Self {
-            let (ptr, tag) = val.untag_ptr();
-            match tag {
-                Tag::Symbol => List::Nil,
-                Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
-                _ => unreachable!(),
-            }
-        }
+    unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+        unimplemented!()
     }
 
-    impl<'a> TaggedPtr for Function<'a> {
-        type Ptr = Function<'a>;
-        const TAG: Tag = Tag::Int;
-
-        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
-            unimplemented!()
+    fn untag(val: Gc<Self>) -> Self {
+        let (ptr, tag) = val.untag_ptr();
+        match tag {
+            Tag::Symbol => List::Nil,
+            Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+            _ => unreachable!(),
         }
+    }
+}
 
-        fn untag(val: Gc<Self>) -> Self {
-            let (ptr, tag) = val.untag_ptr();
+impl<'a> TaggedPtr for Function<'a> {
+    type Ptr = Function<'a>;
+    const TAG: Tag = Tag::Int;
+
+    unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+        unimplemented!()
+    }
+
+    fn untag(val: Gc<Self>) -> Self {
+        let (ptr, tag) = val.untag_ptr();
+        unsafe {
             match tag {
-                Tag::Cons => Function::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+                Tag::Cons => Function::Cons(<&Cons>::from_obj_ptr(ptr)),
                 // SubrFn does not have IntoObject implementation, so we cast it directly
-                Tag::SubrFn => Function::SubrFn(unsafe { &*ptr.cast::<SubrFn>() }),
-                Tag::ByteFn => Function::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
-                Tag::Symbol => Function::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
+                Tag::SubrFn => Function::SubrFn(&*ptr.cast::<SubrFn>()),
+                Tag::ByteFn => Function::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
+                Tag::Symbol => Function::Symbol(<&Symbol>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
         }
     }
+}
 
-    impl<'a> TaggedPtr for Number<'a> {
-        type Ptr = Number<'a>;
-        const TAG: Tag = Tag::Int;
+impl<'a> TaggedPtr for Number<'a> {
+    type Ptr = Number<'a>;
+    const TAG: Tag = Tag::Int;
 
-        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
-            unimplemented!()
-        }
+    unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+        unimplemented!()
+    }
 
-        fn untag(val: Gc<Self>) -> Self {
-            let (ptr, tag) = val.untag_ptr();
+    fn untag(val: Gc<Self>) -> Self {
+        let (ptr, tag) = val.untag_ptr();
+        unsafe {
             match tag {
-                Tag::Int => Number::Int(unsafe { i64::from_obj_ptr(ptr) }),
-                Tag::Float => Number::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
+                Tag::Int => Number::Int(i64::from_obj_ptr(ptr)),
+                Tag::Float => Number::Float(<&LispFloat>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
         }
     }
+}
 
-    impl TaggedPtr for i64 {
-        type Ptr = i64;
-        const TAG: Tag = Tag::Int;
+impl TaggedPtr for i64 {
+    type Ptr = i64;
+    const TAG: Tag = Tag::Int;
 
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            ptr.addr() as i64
-        }
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        ptr.addr() as i64
     }
+}
 
-    impl TaggedPtr for &LispFloat {
-        type Ptr = LispFloat;
-        const TAG: Tag = Tag::Float;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &LispFloat {
+    type Ptr = LispFloat;
+    const TAG: Tag = Tag::Float;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &Cons {
-        type Ptr = Cons;
-        const TAG: Tag = Tag::Cons;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &Cons {
+    type Ptr = Cons;
+    const TAG: Tag = Tag::Cons;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &SubrFn {
-        type Ptr = SubrFn;
-        const TAG: Tag = Tag::SubrFn;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &SubrFn {
+    type Ptr = SubrFn;
+    const TAG: Tag = Tag::SubrFn;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &Symbol {
-        type Ptr = Symbol;
-        const TAG: Tag = Tag::Symbol;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &Symbol {
+    type Ptr = Symbol;
+    const TAG: Tag = Tag::Symbol;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &ByteFn {
-        type Ptr = ByteFn;
-        const TAG: Tag = Tag::ByteFn;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &ByteFn {
+    type Ptr = ByteFn;
+    const TAG: Tag = Tag::ByteFn;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &LispString {
-        type Ptr = LispString;
-        const TAG: Tag = Tag::String;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &LispString {
+    type Ptr = LispString;
+    const TAG: Tag = Tag::String;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &LispVec {
-        type Ptr = LispVec;
-        const TAG: Tag = Tag::Vec;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &LispVec {
+    type Ptr = LispVec;
+    const TAG: Tag = Tag::Vec;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
+}
 
-    impl TaggedPtr for &Record {
-        type Ptr = LispVec;
-        const TAG: Tag = Tag::Record;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            let vec = &*ptr.cast::<Self::Ptr>();
-            &*(vec as *const LispVec).cast::<Record>()
-        }
+impl TaggedPtr for &Record {
+    type Ptr = LispVec;
+    const TAG: Tag = Tag::Record;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        let vec = &*ptr.cast::<Self::Ptr>();
+        &*(vec as *const LispVec).cast::<Record>()
     }
+}
 
-    impl TaggedPtr for &LispHashTable {
-        type Ptr = LispHashTable;
-        const TAG: Tag = Tag::HashTable;
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-            &*ptr.cast::<Self::Ptr>()
-        }
+impl TaggedPtr for &LispHashTable {
+    type Ptr = LispHashTable;
+    const TAG: Tag = Tag::HashTable;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
     }
 }
 
@@ -1158,14 +1163,6 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
             Tag::Vec => unsafe { Ok(Self::transmute(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
         }
-    }
-}
-
-impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Vec<T> {
-    type Out = Vec<<T as WithLifetime<'new>>::Out>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<Vec<T>, Self::Out>(self)
     }
 }
 
