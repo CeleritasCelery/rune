@@ -69,7 +69,7 @@ impl<T> Gc<T> {
         Self::new(ptr)
     }
 
-    fn untag(self) -> (*const u8, Tag) {
+    fn untag_ptr(self) -> (*const u8, Tag) {
         let ptr = self.ptr.map_addr(|x| ((x as isize) >> 8) as usize);
         let tag = self.tag();
         (ptr, tag)
@@ -109,6 +109,22 @@ impl<T> Gc<T> {
 
     pub(crate) fn as_obj(&self) -> Gc<Object<'_>> {
         Gc::new(self.ptr)
+    }
+}
+
+impl<T: TaggedPtr> Gc<T> {
+    pub(crate) fn get(self) -> T {
+        T::untag(self)
+    }
+}
+
+pub(crate) trait Untag<T> {
+    fn untag(self) -> T;
+}
+
+impl<T: TaggedPtr> Untag<T> for Gc<T> {
+    fn untag(self) -> T {
+        T::untag(self)
     }
 }
 
@@ -390,7 +406,15 @@ mod sealed {
         unsafe fn tag_ptr(ptr: *const Self::Ptr) -> Gc<Self> {
             Gc::from_ptr(ptr, Self::TAG)
         }
-        unsafe fn from_obj_ptr(ptr: *const u8) -> Self;
+
+        fn untag(val: Gc<Self>) -> Self {
+            let (ptr, _) = val.untag_ptr();
+            unsafe { Self::from_obj_ptr(ptr) }
+        }
+
+        unsafe fn from_obj_ptr(_: *const u8) -> Self {
+            unimplemented!()
+        }
     }
 
     impl<'a> TaggedPtr for Object<'a> {
@@ -400,8 +424,77 @@ mod sealed {
         unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
             unimplemented!()
         }
-        unsafe fn from_obj_ptr(_: *const u8) -> Self {
+        fn untag(val: Gc<Self>) -> Self {
+            let (ptr, tag) = val.untag_ptr();
+            match tag {
+                Tag::Symbol => Object::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
+                Tag::Cons => Object::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+                Tag::SubrFn => Object::SubrFn(unsafe { &*ptr.cast() }),
+                Tag::ByteFn => Object::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
+                Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
+                Tag::Float => Object::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
+                Tag::String => Object::String(unsafe { <&LispString>::from_obj_ptr(ptr) }),
+                Tag::Vec => Object::Vec(unsafe { <&LispVec>::from_obj_ptr(ptr) }),
+                Tag::Record => Object::Record(unsafe { <&Record>::from_obj_ptr(ptr) }),
+                Tag::HashTable => Object::HashTable(unsafe { <&LispHashTable>::from_obj_ptr(ptr) }),
+            }
+        }
+    }
+
+    impl<'a> TaggedPtr for List<'a> {
+        type Ptr = List<'a>;
+        const TAG: Tag = Tag::Int;
+
+        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
             unimplemented!()
+        }
+
+        fn untag(val: Gc<Self>) -> Self {
+            let (ptr, tag) = val.untag_ptr();
+            match tag {
+                Tag::Symbol => List::Nil,
+                Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    impl<'a> TaggedPtr for Function<'a> {
+        type Ptr = Function<'a>;
+        const TAG: Tag = Tag::Int;
+
+        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+            unimplemented!()
+        }
+
+        fn untag(val: Gc<Self>) -> Self {
+            let (ptr, tag) = val.untag_ptr();
+            match tag {
+                Tag::Cons => Function::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+                // SubrFn does not have IntoObject implementation, so we cast it directly
+                Tag::SubrFn => Function::SubrFn(unsafe { &*ptr.cast::<SubrFn>() }),
+                Tag::ByteFn => Function::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
+                Tag::Symbol => Function::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    impl<'a> TaggedPtr for Number<'a> {
+        type Ptr = Number<'a>;
+        const TAG: Tag = Tag::Int;
+
+        unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
+            unimplemented!()
+        }
+
+        fn untag(val: Gc<Self>) -> Self {
+            let (ptr, tag) = val.untag_ptr();
+            match tag {
+                Tag::Int => Number::Int(unsafe { i64::from_obj_ptr(ptr) }),
+                Tag::Float => Number::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -526,17 +619,6 @@ impl<'ob> From<Gc<&'ob LispFloat>> for Gc<Number<'ob>> {
     }
 }
 
-impl<'ob> Gc<Number<'ob>> {
-    pub(crate) fn get(self) -> Number<'ob> {
-        let (ptr, tag) = self.untag();
-        match tag {
-            Tag::Int => Number::Int(unsafe { i64::from_obj_ptr(ptr) }),
-            Tag::Float => Number::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
-            _ => unreachable!(),
-        }
-    }
-}
-
 impl<'ob> From<i64> for Gc<Number<'ob>> {
     fn from(x: i64) -> Self {
         let ptr = sptr::invalid(x as usize);
@@ -575,17 +657,6 @@ impl<'ob> From<Gc<&'ob Cons>> for Gc<List<'ob>> {
 impl<'ob> From<Gc<()>> for Gc<List<'ob>> {
     fn from(x: Gc<()>) -> Self {
         unsafe { Self::transmute(x) }
-    }
-}
-
-impl<'ob> Gc<List<'ob>> {
-    pub(crate) fn get(self) -> List<'ob> {
-        let (ptr, tag) = self.untag();
-        match tag {
-            Tag::Symbol => List::Nil,
-            Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -718,20 +789,6 @@ impl From<&'static SubrFn> for Gc<Function<'_>> {
     }
 }
 
-impl<'ob> Gc<Function<'ob>> {
-    pub(crate) fn get(self) -> Function<'ob> {
-        let (ptr, tag) = self.untag();
-        match tag {
-            Tag::Cons => Function::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
-            // SubrFn does not have IntoObject implementation, so we cast it directly
-            Tag::SubrFn => Function::SubrFn(unsafe { &*ptr.cast::<SubrFn>() }),
-            Tag::ByteFn => Function::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
-            Tag::Symbol => Function::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
-            _ => unreachable!(),
-        }
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 /// The Object defintion that contains all other possible lisp objects. This
@@ -791,24 +848,6 @@ impl<'old, 'new> WithLifetime<'new> for Gc<Object<'old>> {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         transmute(self)
-    }
-}
-
-impl<'ob> Gc<Object<'ob>> {
-    pub(crate) fn get(self) -> Object<'ob> {
-        let (ptr, tag) = self.untag();
-        match tag {
-            Tag::Symbol => Object::Symbol(unsafe { <&Symbol>::from_obj_ptr(ptr) }),
-            Tag::Cons => Object::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
-            Tag::SubrFn => Object::SubrFn(unsafe { &*ptr.cast() }),
-            Tag::ByteFn => Object::ByteFn(unsafe { <&ByteFn>::from_obj_ptr(ptr) }),
-            Tag::Int => Object::Int(unsafe { i64::from_obj_ptr(ptr) }),
-            Tag::Float => Object::Float(unsafe { <&LispFloat>::from_obj_ptr(ptr) }),
-            Tag::String => Object::String(unsafe { <&LispString>::from_obj_ptr(ptr) }),
-            Tag::Vec => Object::Vec(unsafe { <&LispVec>::from_obj_ptr(ptr) }),
-            Tag::Record => Object::Record(unsafe { <&Record>::from_obj_ptr(ptr) }),
-            Tag::HashTable => Object::HashTable(unsafe { <&LispHashTable>::from_obj_ptr(ptr) }),
-        }
     }
 }
 
@@ -1063,48 +1102,6 @@ impl<'ob> GcObj<'ob> {
     }
 }
 
-impl Gc<i64> {
-    pub(crate) fn get(self) -> i64 {
-        let (ptr, _) = self.untag();
-        unsafe { i64::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob Cons> {
-    pub(crate) fn get(self) -> &'ob Cons {
-        let (ptr, _) = self.untag();
-        unsafe { <&Cons>::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob ByteFn> {
-    pub(crate) fn get(self) -> &'ob ByteFn {
-        let (ptr, _) = self.untag();
-        unsafe { <&ByteFn>::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob LispVec> {
-    pub(crate) fn get(self) -> &'ob LispVec {
-        let (ptr, _) = self.untag();
-        unsafe { <&LispVec>::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob Record> {
-    pub(crate) fn get(self) -> &'ob Record {
-        let (ptr, _) = self.untag();
-        unsafe { <&Record>::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob Symbol> {
-    pub(crate) fn get(self) -> &'ob Symbol {
-        let (ptr, _) = self.untag();
-        unsafe { <&Symbol>::from_obj_ptr(ptr) }
-    }
-}
-
 impl From<&Cons> for Gc<&Cons> {
     fn from(x: &Cons) -> Self {
         let ptr = x as *const Cons;
@@ -1169,20 +1166,6 @@ impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Vec<T> {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute::<Vec<T>, Self::Out>(self)
-    }
-}
-
-impl<'ob> Gc<&'ob LispString> {
-    pub(crate) fn get(self) -> &'ob LispString {
-        let (ptr, _) = self.untag();
-        unsafe { <&LispString>::from_obj_ptr(ptr) }
-    }
-}
-
-impl<'ob> Gc<&'ob LispHashTable> {
-    pub(crate) fn get(self) -> &'ob LispHashTable {
-        let (ptr, _) = self.untag();
-        unsafe { <&LispHashTable>::from_obj_ptr(ptr) }
     }
 }
 

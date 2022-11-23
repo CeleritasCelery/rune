@@ -11,7 +11,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
 use crate::core::object::{
-    ByteFn, Function, Gc, IntoObject, LispString, LispVec, Object, WithLifetime,
+    ByteFn, Gc, IntoObject, LispString, LispVec, Object, Untag, WithLifetime,
 };
 use crate::hashmap::{HashMap, HashSet};
 
@@ -394,6 +394,15 @@ impl<T> Rt<Gc<T>> {
         }
     }
 
+    pub(crate) fn get<'ob, U>(&self, cx: &'ob Context) -> U
+    where
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
+        Gc<U>: Untag<U>,
+    {
+        let gc: Gc<U> = self.bind(cx);
+        gc.untag()
+    }
+
     pub(crate) fn set<U>(&mut self, item: U)
     where
         U: IntoRoot<Gc<T>>,
@@ -421,24 +430,6 @@ impl Rt<GcObj<'static>> {
             let _: Gc<T> = self.inner.try_into()?;
             unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
         }
-    }
-}
-
-impl Rt<GcObj<'_>> {
-    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
-        self.bind(cx).get()
-    }
-}
-
-impl Rt<Gc<Function<'_>>> {
-    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> Function<'ob> {
-        self.bind(cx).get()
-    }
-}
-
-impl Rt<Gc<&Cons>> {
-    pub(crate) fn get<'ob>(&self, cx: &'ob Context) -> &'ob Cons {
-        self.bind(cx).get()
     }
 }
 
