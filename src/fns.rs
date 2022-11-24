@@ -472,7 +472,16 @@ pub(crate) fn puthash<'ob>(
     value: GcObj<'ob>,
     table: &'ob LispHashTable,
 ) -> Result<GcObj<'ob>> {
-    table.try_borrow_mut()?.insert(key, value);
+    // Don't attempt to take the mutable borrow flag if we can avoid it
+    let hashtable = table.try_borrow_shared_mut()?;
+    if let Some(val) = hashtable.get(&key) {
+        val.set(value);
+    } else {
+        // If the key is not already inserted, we will have to attempt a mutable
+        // borrow
+        drop(hashtable);
+        table.try_borrow_mut()?.insert(key, value);
+    }
     Ok(value)
 }
 
@@ -481,9 +490,10 @@ pub(crate) fn gethash<'ob>(
     key: GcObj<'ob>,
     table: &'ob LispHashTable,
     dflt: Option<GcObj<'ob>>,
+    cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
     match table.borrow().get(&key) {
-        Some(x) => Some(*x),
+        Some(x) => Some(cx.bind(x.get())),
         None => dflt,
     }
 }

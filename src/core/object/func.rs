@@ -21,8 +21,8 @@ pub(crate) struct ByteFn {
     pub(crate) args: FnArgs,
     #[no_trace]
     pub(crate) depth: usize,
-    pub(in crate::core) op_codes: &'static LispString,
-    pub(in crate::core) constants: &'static LispVec,
+    op_codes: &'static LispString,
+    constants: &'static LispVec,
 }
 
 impl<'new> WithLifetime<'new> for &ByteFn {
@@ -78,6 +78,16 @@ impl ByteFn {
             3 => Some(self.depth.into()),
             _ => None,
         }
+    }
+}
+
+impl Rt<&'static ByteFn> {
+    pub(crate) fn code(&self) -> &Rt<&'static LispString> {
+        unsafe { &*std::ptr::addr_of!(self.bind_unchecked().op_codes).cast() }
+    }
+
+    pub(crate) fn consts(&self) -> &Rt<&'static LispVec> {
+        unsafe { &*std::ptr::addr_of!(self.bind_unchecked().constants).cast() }
     }
 }
 
@@ -177,7 +187,6 @@ impl FnArgs {
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn into_arg_spec(self) -> u64 {
         let mut spec = self.required;
         let max = self.required + self.optional;

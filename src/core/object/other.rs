@@ -12,43 +12,71 @@ use crate::{
     hashmap::HashMap,
 };
 
-use super::{Gc, GcObj, WithLifetime};
+use super::{Gc, GcObj, MutObjCell, ObjCell, WithLifetime};
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
+pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;
 #[derive(Debug)]
 pub(crate) struct LispHashTable {
     gc: GcMark,
-    inner: RefCell<HashTable<'static>>,
+    is_const: bool,
+    inner: RefCell<HashTableView<'static, ObjCell>>,
 }
 
 impl LispHashTable {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to create an owned version in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: HashTable) -> Self {
-        let cell = std::mem::transmute::<HashTable<'_>, HashTable<'static>>(vec);
+        let cell = std::mem::transmute::<HashTable<'_>, HashTableView<'static, ObjCell>>(vec);
         Self {
             gc: GcMark::default(),
+            is_const: false,
             inner: RefCell::new(cell),
         }
     }
 
-    pub(in crate::core) fn make_const(&self) {
+    pub(in crate::core) fn make_const(&mut self) {
+        self.is_const = true;
         // Leak the borrow so that is cannot be borrowed mutabley
         std::mem::forget(self.inner.borrow());
     }
 
-    pub(crate) fn borrow<'a>(&'a self) -> Ref<'a, HashTable<'a>> {
+    pub(crate) fn borrow<'a>(&'a self) -> Ref<'a, HashTableView<'a, ObjCell>> {
         unsafe {
-            std::mem::transmute::<Ref<'a, HashTable<'static>>, Ref<'a, HashTable<'a>>>(
-                self.inner.borrow(),
-            )
+            std::mem::transmute::<
+                Ref<'a, HashTableView<'static, _>>,
+                Ref<'a, HashTableView<'a, ObjCell>>,
+            >(self.inner.borrow())
+        }
+    }
+
+    // This is a stop gap solution until we have a better model for the hashmap.
+    // Right now when we are iterating over the map, we will be holding a
+    // reference to it. But that means we can't mutate the values. So we have
+    // this shared_mut method that will give us a MutObjCell. This lets us
+    // modify existing keys, but not insert new ones.
+    pub(crate) fn try_borrow_shared_mut(
+        &self,
+    ) -> Result<Ref<'_, HashTableView<'_, MutObjCell>>, anyhow::Error> {
+        if self.is_const {
+            Err(anyhow::anyhow!("Attempt to borrow immutable hashtable"))
+        } else {
+            unsafe {
+                Ok(std::mem::transmute::<
+                    Ref<'_, HashTableView<'static, ObjCell>>,
+                    Ref<'_, HashTableView<'_, MutObjCell>>,
+                >(self.inner.borrow()))
+            }
         }
     }
 
     pub(crate) fn try_borrow_mut(&self) -> Result<RefMut<'_, HashTable<'_>>, BorrowMutError> {
         unsafe {
             self.inner.try_borrow_mut().map(|x| {
-                std::mem::transmute::<RefMut<'_, HashTable<'static>>, RefMut<'_, HashTable<'_>>>(x)
+                std::mem::transmute::<
+                    RefMut<'_, HashTableView<'static, ObjCell>>,
+                    RefMut<'_, HashTableView<'_, GcObj<'_>>>,
+                >(x)
             })
         }
     }
@@ -62,7 +90,10 @@ impl LispHashTable {
         // lifetime to static and the outer one to match 'rt
         let ref_cell = unsafe {
             let cell = table.get(cx).borrow();
-            std::mem::transmute::<Ref<'a, HashTable<'a>>, Ref<'rt, HashTable<'static>>>(cell)
+            std::mem::transmute::<
+                Ref<'a, HashTableView<'a, ObjCell>>,
+                Ref<'rt, HashTableView<'static, ObjCell>>,
+            >(cell)
         };
         // SAFETY: We are creating two references to the hashtable. One is
         // cell::Ref that will make sure the borrow flag forbids mutable borrows
@@ -71,8 +102,8 @@ impl LispHashTable {
         // iterator), but we are hacking it here. I am not even sure if this is
         // sound, and HashTables need a better abtraction.
         let iter = unsafe {
-            let hashtable: &HashTable<'static> = &ref_cell;
-            let hashtable: &'rt HashTable<'static> = &*(hashtable as *const _);
+            let hashtable: &HashTableView<'static, ObjCell> = &ref_cell;
+            let hashtable: &'rt HashTableView<'static, ObjCell> = &*(hashtable as *const _);
             hashtable.iter()
         };
         HashTableStreamIter {
@@ -90,8 +121,8 @@ impl Trace for LispHashTable {
             if k.is_markable() {
                 stack.push(k.into_raw());
             }
-            if v.is_markable() {
-                stack.push(v.into_raw());
+            if v.get().is_markable() {
+                stack.push(v.get().into_raw());
             }
         }
         self.mark();
@@ -113,8 +144,8 @@ impl<'old, 'new> WithLifetime<'new> for &'old LispHashTable {
 }
 
 pub(crate) struct HashTableStreamIter<'rt, 'rs> {
-    _rf: Ref<'rt, HashTable<'static>>,
-    iter: HashIter<'rt, GcObj<'static>, GcObj<'static>>,
+    _rf: Ref<'rt, HashTableView<'static, ObjCell>>,
+    iter: HashIter<'rt, GcObj<'static>, ObjCell>,
     item: Option<&'rt mut Root<'rs, 'rt, (GcObj<'static>, GcObj<'static>)>>,
 }
 
@@ -130,7 +161,7 @@ impl<'rt, 'rs> StreamingIterator for HashTableStreamIter<'rt, 'rs> {
             unsafe {
                 let tuple: &mut (Rt<GcObj>, Rt<GcObj>) = item.deref_mut_unchecked();
                 tuple.0.set(*k);
-                tuple.1.set(*v);
+                tuple.1.set(v.get());
             }
         } else {
             self.item = None;

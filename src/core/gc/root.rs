@@ -2,7 +2,6 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::ptr::addr_of;
 
 use super::super::{
     cons::Cons,
@@ -10,9 +9,7 @@ use super::super::{
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::{ConstSymbol, Symbol};
-use crate::core::object::{
-    ByteFn, Gc, IntoObject, LispString, LispVec, Object, Untag, WithLifetime,
-};
+use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
 pub(crate) trait IntoRoot<T> {
@@ -468,16 +465,6 @@ impl Rt<&Cons> {
 
     pub(crate) fn cdr<'ob>(&self, _cx: &'ob Context) -> GcObj<'ob> {
         unsafe { (*self.inner.addr_cdr()).with_lifetime() }
-    }
-}
-
-impl Rt<&ByteFn> {
-    pub(crate) fn code(&self) -> &Rt<&'static LispString> {
-        unsafe { &*addr_of!(self.inner.op_codes).cast() }
-    }
-
-    pub(crate) fn consts(&self) -> &Rt<&'static LispVec> {
-        unsafe { &*addr_of!(self.inner.constants).cast() }
     }
 }
 

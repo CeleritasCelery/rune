@@ -497,7 +497,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
                     let cond = self.stack.pop(cx);
                     if let Some(offset) = table.borrow().get(&cond) {
-                        let Object::Int(offset) = offset.get() else {unreachable!("switch value was not a int")};
+                        let Object::Int(offset) = offset.get().get() else {unreachable!("switch value was not a int")};
                         self.frame.ip.goto(offset as u16);
                     }
                 }
