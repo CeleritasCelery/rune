@@ -5,7 +5,7 @@ use crate::core::{
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root},
-    object::{nil, Gc, GcObj, LispVec, Number, Object, SubrFn},
+    object::{nil, Gc, GcObj, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -296,14 +296,29 @@ fn ash(value: i64, count: i64) -> i64 {
 }
 
 #[defun]
-pub(crate) fn aset<'ob>(array: &'ob LispVec, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    let vec = array.try_mut()?;
-    if idx < vec.len() {
-        vec[idx].set(newlet);
-        Ok(newlet)
-    } else {
-        let len = vec.len();
-        Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    match array.get() {
+        Object::Vec(vec) => {
+            let vec = vec.try_mut()?;
+            if idx < vec.len() {
+                vec[idx].set(newlet);
+                Ok(newlet)
+            } else {
+                let len = vec.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+            }
+        }
+        Object::Record(vec) => {
+            let vec = vec.try_mut()?;
+            if idx < vec.len() {
+                vec[idx].set(newlet);
+                Ok(newlet)
+            } else {
+                let len = vec.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+            }
+        }
+        x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
 

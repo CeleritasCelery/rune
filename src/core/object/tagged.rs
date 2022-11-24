@@ -770,7 +770,8 @@ impl Object<'_> {
             Object::Float(_) => Type::Float,
             Object::Symbol(_) => Type::Symbol,
             Object::Cons(_) => Type::Cons,
-            Object::Vec(_) | Object::Record(_) => Type::Vec,
+            Object::Vec(_) => Type::Vec,
+            Object::Record(_) => Type::Record,
             Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
             Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
@@ -1018,7 +1019,7 @@ impl<T> Gc<T> {
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => x.clone_in(bk).into(),
             Object::Record(x) => x.clone_in(bk).into(),
-            Object::HashTable(_) => todo!("implement clone for hashtable"),
+            Object::HashTable(x) => x.clone_in(bk).into(),
         };
         match Gc::<U>::try_from(obj) {
             Ok(x) => x,
