@@ -1,6 +1,7 @@
 use crate::core::gc::{Block, GcManaged, GcMark};
 use anyhow::Result;
 use bstr::{BStr, BString, ByteSlice};
+use fn_macros::Trace;
 use std::{
     fmt::{Debug, Display},
     ops::Deref,
@@ -8,9 +9,10 @@ use std::{
 
 use super::{IntoObject, WithLifetime};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Trace)]
 pub(crate) struct LispString {
     gc: GcMark,
+    #[no_trace]
     string: StrType,
 }
 

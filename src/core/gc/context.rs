@@ -44,6 +44,12 @@ impl<'rt> Drop for Context<'rt> {
 #[derive(Debug, Default)]
 pub(in crate::core) struct GcMark(Cell<bool>);
 
+impl Trace for GcMark {
+    fn trace(&self, _: &mut Vec<crate::core::object::RawObj>) {
+        self.0.set(true);
+    }
+}
+
 /// This trait represents a type that is managed by the Garbage collector and
 /// therefore has a markbit to preserve it.
 pub(in crate::core) trait GcManaged {

@@ -6,17 +6,20 @@ use super::{
     display_slice, nil, LispString, LispVec,
 };
 use super::{GcObj, WithLifetime};
-use crate::core::gc::{GcManaged, GcMark, Rt, Trace};
+use crate::core::gc::{GcManaged, GcMark, Rt};
 use std::fmt::{self, Debug, Display};
 
 use anyhow::{bail, ensure, Result};
+use fn_macros::Trace;
 use streaming_iterator::StreamingIterator;
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
-#[derive(PartialEq)]
+#[derive(PartialEq, Trace)]
 pub(crate) struct ByteFn {
     gc: GcMark,
+    #[no_trace]
     pub(crate) args: FnArgs,
+    #[no_trace]
     pub(crate) depth: usize,
     pub(in crate::core) op_codes: &'static LispString,
     pub(in crate::core) constants: &'static LispVec,
@@ -81,14 +84,6 @@ impl ByteFn {
 impl GcManaged for ByteFn {
     fn get_mark(&self) -> &GcMark {
         &self.gc
-    }
-}
-
-impl Trace for ByteFn {
-    fn trace(&self, stack: &mut Vec<super::RawObj>) {
-        self.mark();
-        self.constants.trace(stack);
-        self.op_codes.mark();
     }
 }
 
