@@ -25,14 +25,6 @@ pub(crate) struct ByteFn {
     constants: &'static LispVec,
 }
 
-impl<'new> WithLifetime<'new> for &ByteFn {
-    type Out = &'new ByteFn;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const ByteFn)
-    }
-}
-
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
@@ -240,6 +232,14 @@ impl SubrFn {
             }
         }
         (self.subr)(args, env, cx)
+    }
+}
+
+impl<'new> WithLifetime<'new> for &SubrFn {
+    type Out = &'new SubrFn;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const SubrFn)
     }
 }
 

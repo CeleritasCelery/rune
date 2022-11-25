@@ -7,7 +7,7 @@ use std::{
     ops::Deref,
 };
 
-use super::{IntoObject, WithLifetime};
+use super::IntoObject;
 
 #[derive(PartialEq, Trace)]
 pub(crate) struct LispString {
@@ -58,14 +58,6 @@ impl LispString {
             StrType::String(s) => s.clone().into_obj(bk).get(),
             StrType::BString(s) => s.as_bytes().to_vec().into_obj(bk).get(),
         }
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for &'old LispString {
-    type Out = &'new LispString;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const _)
     }
 }
 

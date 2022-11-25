@@ -1,5 +1,5 @@
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
-use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj, WithLifetime};
+use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
@@ -100,14 +100,6 @@ impl Trace for Cons {
             stack.push(car.into_raw());
         }
         self.mark();
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for &'old Cons {
-    type Out = &'new Cons;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const Cons)
     }
 }
 

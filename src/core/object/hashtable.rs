@@ -11,7 +11,7 @@ use crate::{
     hashmap::HashMap,
 };
 
-use super::{Gc, GcObj, IntoObject, MutObjCell, ObjCell, WithLifetime};
+use super::{Gc, GcObj, IntoObject, MutObjCell, ObjCell};
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;
@@ -145,14 +145,6 @@ impl Trace for LispHashTable {
 impl GcManaged for LispHashTable {
     fn get_mark(&self) -> &GcMark {
         &self.gc
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for &'old LispHashTable {
-    type Out = &'new LispHashTable;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const LispHashTable)
     }
 }
 

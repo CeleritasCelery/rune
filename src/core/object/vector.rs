@@ -127,14 +127,6 @@ impl Deref for LispVec {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for &'old LispVec {
-    type Out = &'new LispVec;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const LispVec)
-    }
-}
-
 impl GcManaged for LispVec {
     fn get_mark(&self) -> &GcMark {
         &self.gc
@@ -185,6 +177,12 @@ impl Record {
     ) -> &'new Self {
         let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
         RecordBuilder(vec).into_obj(bk).get()
+    }
+}
+
+impl GcManaged for Record {
+    fn get_mark(&self) -> &GcMark {
+        &self.gc
     }
 }
 

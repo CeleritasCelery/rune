@@ -143,14 +143,19 @@ pub(crate) trait WithLifetime<'new>: Copy {
     unsafe fn with_lifetime(self) -> Self::Out;
 }
 
-impl<'new, T> WithLifetime<'new> for Gc<T>
-where
-    T: WithLifetime<'new>,
-{
+impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Gc<T> {
     type Out = Gc<<T as WithLifetime<'new>>::Out>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         cast_gc(self)
+    }
+}
+
+impl<'new, 'old, T: GcManaged + 'new> WithLifetime<'new> for &'old T {
+    type Out = &'new T;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        &*(self as *const T)
     }
 }
 
@@ -376,7 +381,7 @@ impl<'a> IntoObject for HashTable<'a> {
 }
 
 mod private {
-    use super::Gc;
+    use super::{Gc, WithLifetime};
 
     #[repr(u8)]
     pub(crate) enum Tag {
@@ -392,10 +397,7 @@ mod private {
         ByteFn,
     }
 
-    pub(crate) trait TaggedPtr: Copy
-    where
-        Self: Sized,
-    {
+    pub(crate) trait TaggedPtr: Copy + for<'a> WithLifetime<'a> {
         type Ptr;
         const TAG: Tag;
         unsafe fn tag_ptr(ptr: *const Self::Ptr) -> Gc<Self> {
@@ -662,11 +664,11 @@ pub(crate) enum Number<'ob> {
 }
 cast_gc!(Number<'ob> => i64, &'ob LispFloat);
 
-impl<'old, 'new> WithLifetime<'new> for Gc<Number<'old>> {
-    type Out = Gc<Number<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Number<'old> {
+    type Out = Number<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        cast_gc(self)
+        std::mem::transmute::<Number<'old>, Number<'new>>(self)
     }
 }
 
@@ -685,11 +687,11 @@ impl List<'_> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Gc<List<'old>> {
-    type Out = Gc<List<'new>>;
+impl<'old, 'new> WithLifetime<'new> for List<'old> {
+    type Out = List<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        cast_gc(self)
+        std::mem::transmute::<List<'old>, List<'new>>(self)
     }
 }
 
@@ -703,11 +705,11 @@ pub(crate) enum Function<'ob> {
 }
 cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, &'ob Symbol);
 
-impl<'old, 'new> WithLifetime<'new> for Gc<Function<'old>> {
-    type Out = Gc<Function<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Function<'old> {
+    type Out = Function<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        cast_gc(self)
+        std::mem::transmute::<Function<'old>, Function<'new>>(self)
     }
 }
 
@@ -799,11 +801,19 @@ impl PartialEq for Object<'_> {
 
 // Object Impl's
 
-impl<'old, 'new> WithLifetime<'new> for Gc<Object<'old>> {
-    type Out = Gc<Object<'new>>;
+impl<'old, 'new> WithLifetime<'new> for Object<'old> {
+    type Out = Object<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        cast_gc(self)
+        std::mem::transmute::<Object<'old>, Object<'new>>(self)
+    }
+}
+
+impl<'new> WithLifetime<'new> for i64 {
+    type Out = i64;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        self
     }
 }
 
@@ -948,14 +958,6 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
             Tag::Cons => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for &'old Symbol {
-    type Out = &'new Symbol;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const Symbol)
     }
 }
 
