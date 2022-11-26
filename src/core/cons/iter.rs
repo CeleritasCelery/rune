@@ -18,6 +18,10 @@ impl Cons {
     pub(crate) fn elements(&self) -> ElemIter {
         ElemIter { cons: Some(self) }
     }
+
+    pub(crate) fn conses(&self) -> ConsIter {
+        ConsIter { list: List::Cons(self)  }
+    }
 }
 
 impl<'ob> Gc<List<'ob>> {

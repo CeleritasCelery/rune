@@ -19,7 +19,7 @@ pub(crate) struct LispString {
 unsafe impl Sync for LispString {}
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum StrType {
+enum StrType {
     String(String),
     BString(BString),
 }

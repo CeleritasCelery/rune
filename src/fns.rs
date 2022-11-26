@@ -3,7 +3,9 @@ use crate::core::{
     env::{sym, Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root, Rt},
-    object::{nil, Function, Gc, GcObj, HashTable, LispHashTable, LispString, List, Object},
+    object::{
+        nil, Function, Gc, GcObj, HashTable, LispHashTable, LispString, List, ObjCell, Object,
+    },
 };
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
@@ -501,8 +503,33 @@ pub(crate) fn gethash<'ob>(
 #[defun]
 fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match arg.get() {
-        Object::Symbol(s) if s.nil() => Ok(arg.clone_in(cx)),
-        Object::String(_) | Object::Vec(_) | Object::Cons(_) => Ok(arg.clone_in(cx)),
+        Object::Vec(x) => {
+            let copy: Vec<_> = x.iter().map(ObjCell::get).collect();
+            Ok(cx.add(copy))
+        }
+        Object::Cons(x) => {
+            // TODO: remove this temp vector
+            let mut elements = Vec::new();
+            let mut tail = None;
+            for cons in x.conses() {
+                let cons = cons?;
+                elements.push(cons.car());
+                if !matches!(cons.cdr().get(), Object::Cons(_)) {
+                    tail = Some(cons.cdr());
+                }
+            }
+            Ok(slice_into_list(&elements, tail, cx))
+        }
+        Object::String(x) => {
+            let string: Result<&str, _> = x.try_into();
+            match string {
+                Ok(s) => Ok(cx.add(s)),
+                Err(_) => Ok(cx.add(x.to_vec())),
+            }
+        }
+        Object::Symbol(s) if s.nil() => {
+            Ok(nil())
+        }
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }
