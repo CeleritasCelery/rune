@@ -1,4 +1,5 @@
 use super::OwnedObject;
+use crate::core::env::UninternedSymbolMap;
 use crate::core::object::{Gc, GcObj, IntoObject, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -16,15 +17,15 @@ pub(crate) struct RootSet {
 
 /// A block of allocations. This type should be owned by [Context] and not used
 /// directly.
-#[derive(Debug)]
+#[derive(Default)]
 pub(crate) struct Block<const CONST: bool> {
     pub(super) objects: RefCell<Vec<OwnedObject>>,
+    pub(in crate::core) uninterned_symbol_map: UninternedSymbolMap,
 }
 
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Context`. When the
 /// `Context` goes out of scope, no objects should be accessible.
-#[derive(Debug)]
 pub(crate) struct Context<'rt> {
     pub(crate) block: Block<false>,
     root_set: &'rt RootSet,
@@ -85,9 +86,7 @@ impl Block<true> {
     pub(crate) fn new_global() -> Self {
         use std::sync::atomic::Ordering::SeqCst as Rel;
         assert!(GLOBAL_CHECK.compare_exchange(false, true, Rel, Rel).is_ok());
-        Self {
-            objects: RefCell::new(Vec::new()),
-        }
+        Self::default()
     }
 }
 
@@ -100,9 +99,7 @@ impl<const CONST: bool> Block<CONST> {
             );
             x.set(true);
         });
-        Self {
-            objects: RefCell::new(Vec::new()),
-        }
+        Self::default()
     }
 
     #[allow(clippy::useless_conversion)]

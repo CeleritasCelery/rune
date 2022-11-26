@@ -231,16 +231,24 @@ impl Symbol {
 impl<'new> CloneIn<'new, &'new Self> for Symbol {
     fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
         if let SymbolName::Uninterned(name) = &self.name {
-            let sym = Self::new_uninterned(name);
-            if let Some(old_func) = self.get() {
-                let new_func = old_func.clone_in(bk);
-                unsafe {
-                    sym.set_func(new_func).unwrap();
+            match bk.uninterned_symbol_map.get(self) {
+                Some(new) => new.into(),
+                None => {
+                    let sym = Self::new_uninterned(name);
+                    if let Some(old_func) = self.get() {
+                        let new_func = old_func.clone_in(bk);
+                        unsafe {
+                            sym.set_func(new_func).unwrap();
+                        }
+                    }
+                    let new = sym.into_obj(bk);
+                    bk.uninterned_symbol_map.insert(self, new.get());
+                    new
                 }
             }
-            return sym.into_obj(bk);
+        } else {
+            unsafe { self.with_lifetime().into() }
         }
-        unsafe { self.with_lifetime().into() }
     }
 }
 
@@ -290,5 +298,33 @@ impl fmt::Display for Symbol {
 impl fmt::Debug for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
+    }
+}
+
+#[derive(Default)]
+/// When copying uninterned symbols, we need to ensure that all instances share
+/// the same address if they did originally. This keeps a mapping from old
+/// symbols to new.
+pub(in crate::core) struct UninternedSymbolMap {
+    map: std::cell::RefCell<Vec<(&'static Symbol, &'static Symbol)>>,
+}
+
+impl UninternedSymbolMap {
+    fn get<'a>(&'a self, symbol: &Symbol) -> Option<&'a Symbol> {
+        self.map
+            .borrow()
+            .iter()
+            .find(|x| x.0 == symbol)
+            .map(|x| x.1)
+    }
+
+    fn insert<'a>(&'a self, old: &Symbol, new: &Symbol) {
+        self.map
+            .borrow_mut()
+            .push(unsafe { (old.with_lifetime(), new.with_lifetime()) });
+    }
+
+    pub(in crate::core::env) fn clear(&self) {
+        self.map.borrow_mut().clear();
     }
 }
