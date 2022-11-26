@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context, Root},
     },
-    display_slice, nil, LispString, LispVec,
+    display_slice, nil, CloneIn, IntoObject, LispString, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt};
@@ -51,17 +51,6 @@ impl ByteFn {
         unsafe { std::mem::transmute::<&'static LispVec, &'a LispVec>(self.constants) }
     }
 
-    pub(crate) fn clone_in<const C: bool>(&self, bk: &Block<C>) -> ByteFn {
-        unsafe {
-            Self::new(
-                self.op_codes.clone_in(bk),
-                self.constants.clone_in(bk),
-                self.args,
-                self.depth,
-            )
-        }
-    }
-
     pub(crate) fn index(&self, index: usize) -> Option<GcObj> {
         match index {
             0 => Some((self.args.into_arg_spec() as i64).into()),
@@ -70,6 +59,20 @@ impl ByteFn {
             3 => Some(self.depth.into()),
             _ => None,
         }
+    }
+}
+
+impl<'new> CloneIn<'new, &'new Self> for ByteFn {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+        let byte_fn = unsafe {
+            Self::new(
+                self.op_codes.clone_in(bk).get(),
+                self.constants.clone_in(bk).get(),
+                self.args,
+                self.depth,
+            )
+        };
+        byte_fn.into_obj(bk)
     }
 }
 

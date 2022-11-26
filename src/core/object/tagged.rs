@@ -838,6 +838,13 @@ impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     }
 }
 
+impl From<&Symbol> for Gc<&Symbol> {
+    fn from(x: &Symbol) -> Self {
+        let ptr = x as *const Symbol;
+        unsafe { <&Symbol>::tag_ptr(ptr) }
+    }
+}
+
 impl From<Gc<Object<'_>>> for () {
     fn from(_: Gc<Object>) {}
 }
@@ -1002,21 +1009,26 @@ impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     }
 }
 
-impl<T> Gc<T> {
-    pub(crate) fn clone_in<'old, 'new, const C: bool, U, E>(self, bk: &'new Block<C>) -> Gc<U>
-    where
-        Self: 'old,
-        E: fmt::Debug,
-        Gc<U>: TryFrom<Gc<Object<'new>>, Error = E>,
-        // The WithLifetime bound ensures that T is the same type as U
-        Gc<T>: Into<Gc<Object<'old>>> + WithLifetime<'new, Out = Gc<U>>,
-    {
-        let obj = match self.into().get() {
+pub(in crate::core) trait CloneIn<'new, T>
+where
+    T: 'new,
+{
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<T>;
+}
+
+impl<'new, T, U, E> CloneIn<'new, U> for Gc<T>
+where
+    // The WithLifetime bound ensures that T is the same type as U
+    T: WithLifetime<'new, Out = U>,
+    Gc<U>: TryFrom<Gc<Object<'new>>, Error = E> + 'new,
+{
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<U> {
+        let obj = match self.as_obj().get() {
             Object::Int(x) => x.into(),
             Object::Cons(x) => x.clone_in(bk).into(),
             Object::String(x) => x.clone_in(bk).into(),
             Object::Symbol(x) => x.clone_in(bk).into(),
-            Object::ByteFn(x) => x.clone_in(bk).into_obj(bk).into(),
+            Object::ByteFn(x) => x.clone_in(bk).into(),
             Object::SubrFn(x) => x.into(),
             Object::Float(x) => x.into_obj(bk).into(),
             Object::Vec(x) => x.clone_in(bk).into(),

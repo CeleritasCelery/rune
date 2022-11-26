@@ -7,7 +7,7 @@ use std::{
     ops::Deref,
 };
 
-use super::IntoObject;
+use super::{CloneIn, IntoObject};
 
 #[derive(PartialEq, Trace)]
 pub(crate) struct LispString {
@@ -52,11 +52,13 @@ impl LispString {
             string: StrType::BString(BString::from(value)),
         }
     }
+}
 
-    pub(in crate::core) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> &'new Self {
+impl<'new> CloneIn<'new, &'new Self> for LispString {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
         match &self.string {
-            StrType::String(s) => s.clone().into_obj(bk).get(),
-            StrType::BString(s) => s.as_bytes().to_vec().into_obj(bk).get(),
+            StrType::String(s) => s.clone().into_obj(bk),
+            StrType::BString(s) => s.as_bytes().to_vec().into_obj(bk),
         }
     }
 }

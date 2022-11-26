@@ -3,7 +3,7 @@ use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
 
 use crate::core::gc::{GcManaged, GcMark, Trace};
 
-use super::{display_slice, GcObj, IntoObject, WithLifetime};
+use super::{display_slice, CloneIn, GcObj, IntoObject, WithLifetime};
 
 /// A lisp vector. Unlike vectors in other languages this is not resizeable.
 /// This type is represented as slice of [`ObjCell`] which is immutable by
@@ -109,14 +109,6 @@ impl LispVec {
         let obj_slice: &[GcObj] = unsafe { &*(cell_slice as *const [ObjCell] as *const [GcObj]) };
         obj_slice.to_vec()
     }
-
-    pub(in crate::core) fn clone_in<'new, const C: bool>(
-        &self,
-        bk: &'new crate::core::gc::Block<C>,
-    ) -> &'new Self {
-        let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
-        vec.into_obj(bk).get()
-    }
 }
 
 impl Deref for LispVec {
@@ -124,6 +116,16 @@ impl Deref for LispVec {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<'new> CloneIn<'new, &'new Self> for LispVec {
+    fn clone_in<const C: bool>(
+        &self,
+        bk: &'new crate::core::gc::Block<C>,
+    ) -> super::Gc<&'new Self> {
+        let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
+        vec.into_obj(bk)
     }
 }
 
@@ -170,13 +172,13 @@ impl Deref for Record {
     }
 }
 
-impl Record {
-    pub(in crate::core) fn clone_in<'new, const C: bool>(
+impl<'new> CloneIn<'new, &'new Self> for Record {
+    fn clone_in<const C: bool>(
         &self,
         bk: &'new crate::core::gc::Block<C>,
-    ) -> &'new Self {
+    ) -> super::Gc<&'new Self> {
         let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
-        RecordBuilder(vec).into_obj(bk).get()
+        RecordBuilder(vec).into_obj(bk)
     }
 }
 

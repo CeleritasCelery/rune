@@ -527,9 +527,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
                 Err(_) => Ok(cx.add(x.to_vec())),
             }
         }
-        Object::Symbol(s) if s.nil() => {
-            Ok(nil())
-        }
+        Object::Symbol(s) if s.nil() => Ok(nil()),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }

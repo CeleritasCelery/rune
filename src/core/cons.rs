@@ -1,10 +1,9 @@
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
-use super::object::{nil, Gc, GcObj, IntoObject, List, Object, RawObj};
+use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, List, Object, RawObj};
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
-use std::ptr::addr_of;
 
 mod iter;
 
@@ -65,21 +64,11 @@ impl Cons {
             Err(anyhow!("Attempt to call set-cdr on immutable cons cell"))
         }
     }
+}
 
-    pub(crate) fn clone_in<'new, const C: bool>(&self, bk: &'new Block<C>) -> &'new Cons {
-        unsafe {
-            Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk))
-                .into_obj(bk)
-                .get()
-        }
-    }
-
-    pub(crate) fn addr_car(&self) -> *const GcObj {
-        addr_of!(self.car).cast::<GcObj>()
-    }
-
-    pub(crate) fn addr_cdr(&self) -> *const GcObj {
-        addr_of!(self.cdr).cast::<GcObj>()
+impl<'new> CloneIn<'new, &'new Cons> for Cons {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Cons> {
+        unsafe { Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk)).into_obj(bk) }
     }
 }
 

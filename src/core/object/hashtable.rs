@@ -11,7 +11,7 @@ use crate::{
     hashmap::HashMap,
 };
 
-use super::{Gc, GcObj, IntoObject, MutObjCell, ObjCell};
+use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;
@@ -111,11 +111,10 @@ impl LispHashTable {
             item: Some(root),
         }
     }
+}
 
-    pub(in crate::core) fn clone_in<'new, const C: bool>(
-        &self,
-        bk: &'new crate::core::gc::Block<C>,
-    ) -> &'new Self {
+impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
+    fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
         let mut table = HashTable::default();
         let borrow = self.borrow();
         for (key, value) in borrow.iter() {
@@ -123,7 +122,7 @@ impl LispHashTable {
             let new_value = value.get().clone_in(bk);
             table.insert(new_key, new_value);
         }
-        table.into_obj(bk).get()
+        table.into_obj(bk)
     }
 }
 

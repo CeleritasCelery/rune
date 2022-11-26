@@ -1,5 +1,5 @@
 use super::gc::{Block, Context, Rt};
-use super::object::{Function, Gc, GcObj};
+use super::object::{CloneIn, Function, Gc, GcObj};
 use crate::hashmap::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;

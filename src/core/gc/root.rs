@@ -459,12 +459,12 @@ impl Rt<&Cons> {
         self.inner = unsafe { std::mem::transmute(item) }
     }
 
-    pub(crate) fn car<'ob>(&self, _cx: &'ob Context) -> GcObj<'ob> {
-        unsafe { (*self.inner.addr_car()).with_lifetime() }
+    pub(crate) fn car<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
+        self.bind(cx).car()
     }
 
-    pub(crate) fn cdr<'ob>(&self, _cx: &'ob Context) -> GcObj<'ob> {
-        unsafe { (*self.inner.addr_cdr()).with_lifetime() }
+    pub(crate) fn cdr<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
+        self.bind(cx).cdr()
     }
 }
 
