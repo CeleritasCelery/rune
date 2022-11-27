@@ -459,6 +459,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack[0].bind(cx);
                     self.stack.as_mut(cx).push(top);
                 }
+                op::ConstantN2 => {
+                    let idx = self.frame.ip.next2();
+                    let stack = self.stack.as_mut(cx);
+                    stack.push(self.frame.get_const(idx.into(), cx));
+                }
                 op::Goto => {
                     let offset = self.frame.ip.next2();
                     self.frame.ip.goto(offset);
@@ -492,6 +497,16 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     } else {
                         self.frame.ip.goto(offset);
                     }
+                }
+                op::Return => {
+                    if self.call_frames.is_empty() {
+                        return Ok(self.stack.pop(cx));
+                    }
+                    let var = self.stack.pop(cx);
+                    let start = self.frame.start;
+                    self.stack.as_mut(cx).truncate(start + 1);
+                    self.stack.top(cx).set(var);
+                    self.frame = self.call_frames.pop().unwrap();
                 }
                 op::Switch => {
                     let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
@@ -615,16 +630,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(data::get(top.bind_as(cx)?, prop.try_into()?, env, cx));
                 }
-                op::Return => {
-                    if self.call_frames.is_empty() {
-                        return Ok(self.stack.pop(cx));
-                    }
-                    let var = self.stack.pop(cx);
-                    let start = self.frame.start;
-                    self.stack.as_mut(cx).truncate(start + 1);
-                    self.stack.top(cx).set(var);
-                    self.frame = self.call_frames.pop().unwrap();
-                }
                 op::Nthcdr => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
@@ -717,9 +722,8 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 | op::Constant62
                 | op::Constant63 => {
                     let idx = (op as u8) - (op::Constant0 as u8);
-                    self.stack
-                        .as_mut(cx)
-                        .push(self.frame.get_const(idx as usize, cx));
+                    let stack = self.stack.as_mut(cx);
+                    stack.push(self.frame.get_const(idx as usize, cx));
                 }
                 op => {
                     panic!("Unimplemented opcode: {op:?}");
