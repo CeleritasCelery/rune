@@ -200,6 +200,17 @@ impl<T> IntoObject for Option<Gc<T>> {
     }
 }
 
+impl<T> IntoObject for T
+where
+    T: Into<Gc<T>>,
+{
+    type Out<'ob> = T;
+
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
+        self.into()
+    }
+}
+
 impl IntoObject for f64 {
     type Out<'ob> = &'ob LispFloat;
 
@@ -271,28 +282,12 @@ impl IntoObject for ByteFn {
     }
 }
 
-impl IntoObject for &ByteFn {
-    type Out<'ob> = &'ob ByteFn;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { <&ByteFn>::tag_ptr(self as *const _) }
-    }
-}
-
 impl IntoObject for Symbol {
     type Out<'ob> = &'ob Symbol;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         Gc::from_ptr(ptr, Tag::Symbol)
-    }
-}
-
-impl IntoObject for &Symbol {
-    type Out<'ob> = &'ob Symbol;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        Gc::from_ptr(self, Tag::Symbol)
     }
 }
 
@@ -845,6 +840,13 @@ impl From<&Symbol> for Gc<&Symbol> {
     }
 }
 
+impl From<&ByteFn> for Gc<&ByteFn> {
+    fn from(x: &ByteFn) -> Self {
+        let ptr = x as *const ByteFn;
+        unsafe { <&ByteFn>::tag_ptr(ptr) }
+    }
+}
+
 impl From<Gc<Object<'_>>> for () {
     fn from(_: Gc<Object>) {}
 }
@@ -1035,10 +1037,8 @@ where
             Object::Record(x) => x.clone_in(bk).into(),
             Object::HashTable(x) => x.clone_in(bk).into(),
         };
-        match Gc::<U>::try_from(obj) {
-            Ok(x) => x,
-            Err(_) => unreachable!(),
-        }
+        let Ok(x) = Gc::<U>::try_from(obj) else {unreachable!()};
+        x
     }
 }
 

@@ -517,7 +517,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Nth => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(fns::nth(top.bind(cx).try_into()?, list.try_into()?)?);
+                    top.set(fns::nth(top.bind_as(cx)?, list.try_into()?)?);
                 }
                 op::Symbolp => {
                     let top = self.stack.top(cx);
@@ -628,7 +628,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Nthcdr => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(fns::nthcdr(top.bind(cx).try_into()?, list.try_into()?)?.copy_as_obj());
+                    top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj());
                 }
                 op::Nreverse => {
                     let elt = self.stack.top(cx);
@@ -637,12 +637,12 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Setcar => {
                     let newcar = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(core::cons::setcar(top.bind(cx).try_into()?, newcar)?);
+                    top.set(core::cons::setcar(top.bind_as(cx)?, newcar)?);
                 }
                 op::Setcdr => {
                     let newcdr = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(core::cons::setcdr(top.bind(cx).try_into()?, newcdr)?);
+                    top.set(core::cons::setcdr(top.bind_as(cx)?, newcdr)?);
                 }
                 op::CarSafe => {
                     let top = self.stack.top(cx);
