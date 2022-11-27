@@ -4,11 +4,13 @@ use crate::core::{
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root, Rt},
     object::{
-        nil, Function, Gc, GcObj, HashTable, LispHashTable, LispString, List, ObjCell, Object,
+        nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec, List,
+        ObjCell, Object,
     },
 };
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
+use bstr::ByteSlice;
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -404,6 +406,34 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
 }
 
 #[defun]
+pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&'ob LispVec>> {
+    let mut concated: Vec<GcObj> = Vec::new();
+    for elt in sequences {
+        match elt.get() {
+            // TODO: need to correctly handle unibyte strings (no unicode codepoints)
+            Object::String(string) => {
+                for chr in string.chars() {
+                    concated.push((chr as i64).into());
+                }
+            }
+            Object::Cons(cons) => {
+                for x in cons.elements() {
+                    concated.push(x?);
+                }
+            }
+            Object::Vec(vec) => {
+                for x in vec.iter() {
+                    concated.push(x.get());
+                }
+            }
+            Object::Symbol(s) if s.nil() => {}
+            obj => bail!(TypeError::new(Type::Sequence, obj)),
+        }
+    }
+    Ok(concated.into_obj(cx))
+}
+
+#[defun]
 pub(crate) fn length(sequence: GcObj) -> Result<i64> {
     let size = match sequence.get() {
         Object::Cons(x) => x.elements().len(),
@@ -714,6 +744,7 @@ define_symbols!(
         nth,
         nthcdr,
         concat,
+        vconcat,
         append,
         delq,
         delete,

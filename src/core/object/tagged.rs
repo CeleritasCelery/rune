@@ -840,6 +840,13 @@ impl From<&Symbol> for Gc<&Symbol> {
     }
 }
 
+impl From<&LispVec> for Gc<&LispVec> {
+    fn from(x: &LispVec) -> Self {
+        let ptr = x as *const LispVec;
+        unsafe { <&LispVec>::tag_ptr(ptr) }
+    }
+}
+
 impl From<&ByteFn> for Gc<&ByteFn> {
     fn from(x: &ByteFn) -> Self {
         let ptr = x as *const ByteFn;
