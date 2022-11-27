@@ -20,7 +20,7 @@ lazy_static! {
 
 #[defun]
 pub(crate) fn fset<'ob>(symbol: &'ob Symbol, definition: GcObj) -> Result<&'ob Symbol> {
-    if definition == nil() {
+    if definition.nil() {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;

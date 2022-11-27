@@ -581,6 +581,40 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(fns::length(top.bind(cx))?);
                 }
+                op::Aref => {
+                    let idx = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(data::aref(top.bind(cx), idx.try_into()?)?);
+                }
+                op::Aset => {
+                    let newlet = self.stack.pop(cx);
+                    let idx = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(data::aset(top.bind(cx), idx.try_into()?, newlet)?);
+                }
+                op::SymbolValue => {
+                    let top = self.stack.top(cx);
+                    top.set(data::symbol_value(top.bind_as(cx)?, env, cx).unwrap_or_default());
+                }
+                op::SymbolFunction => {
+                    let top = self.stack.top(cx);
+                    top.set(data::symbol_function(top.bind_as(cx)?, cx));
+                }
+                op::Set => {
+                    let newlet = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(data::set(top.bind_as(cx)?, newlet, env, cx)?);
+                }
+                op::Fset => {
+                    let def = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(data::fset(top.bind_as(cx)?, def)?.into());
+                }
+                op::Get => {
+                    let prop = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(data::get(top.bind_as(cx)?, prop.try_into()?, env, cx));
+                }
                 op::Return => {
                     if self.call_frames.is_empty() {
                         return Ok(self.stack.pop(cx));

@@ -362,11 +362,11 @@ impl<T> Rt<Gc<T>> {
         unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
     }
 
-    /// Like `try_as().bind(cx)`, but needed to due no specialization
-    pub(crate) fn bind_as<'ob, U, E>(&self, _cx: &'ob Context) -> Result<Gc<U>, E>
+    /// Like `try_into().bind(cx)`, but needed to due no specialization
+    pub(crate) fn bind_as<'ob, U, E>(&self, _cx: &'ob Context) -> Result<U, E>
     where
-        Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
-        Gc<U>: 'ob,
+        Gc<T>: TryInto<U, Error = E> + Copy,
+        U: 'ob,
     {
         self.inner.try_into()
     }
