@@ -1467,26 +1467,28 @@ Applies if head of FORM is a symbol with non-nil property
 Then check the number of format fields matches the number of
 extra args."
   (when (and (symbolp (car form))
-	     (stringp (nth 1 form))
-	     (get (car form) 'byte-compile-format-like))
-    (let ((nfields (with-temp-buffer
-		     (insert (nth 1 form))
-		     (goto-char (point-min))
-		     (let ((i 0) (n 0))
-		       (while (re-search-forward "%." nil t)
-                         (backward-char)
-			 (unless (eq ?% (char-after))
-                           (setq i (if (looking-at "\\([0-9]+\\)\\$")
-                                       (string-to-number (match-string 1) 10)
-                                     (1+ i))
-                                 n (max n i)))
-                         (forward-char))
-		       n)))
-	  (nargs (- (length form) 2)))
-      (unless (= nargs nfields)
-	(byte-compile-warn
-	 "`%s' called with %d args to fill %d format field(s)" (car form)
-	 nargs nfields)))))
+	         (stringp (nth 1 form))
+             (get (car form) 'byte-compile-format-like))
+    ;; RUNE BOOTSTRAP: BUFFER
+    ;; (let ((nfields (with-temp-buffer
+    ;; 	             (insert (nth 1 form))
+    ;; 	             (goto-char (point-min))
+    ;; 	             (let ((i 0) (n 0))
+    ;; 	               (while (re-search-forward "%." nil t)
+    ;;                      (backward-char)
+    ;; 		             (unless (eq ?% (char-after))
+    ;;                        (setq i (if (looking-at "\\([0-9]+\\)\\$")
+    ;;                                    (string-to-number (match-string 1) 10)
+    ;;                                  (1+ i))
+    ;;                              n (max n i)))
+    ;;                      (forward-char))
+    ;; 	               n)))
+    ;;       (nargs (- (length form) 2)))
+    ;;   (unless (= nargs nfields)
+    ;;     (byte-compile-warn
+    ;;      "`%s' called with %d args to fill %d format field(s)" (car form)
+    ;;      nargs nfields)))
+    ))
 
 (dolist (elt '(format message error))
   (put elt 'byte-compile-format-like t))
