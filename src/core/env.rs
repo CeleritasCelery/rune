@@ -44,7 +44,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn set_exception(&mut self, tag: GcObj, data: GcObj) -> u32 {
+    pub(in crate::core) fn set_exception(&mut self, tag: GcObj, data: GcObj) -> u32 {
         self.exception.0.set(tag);
         self.exception.1.set(data);
         self.exception_id += 1;

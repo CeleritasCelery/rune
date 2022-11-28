@@ -7,9 +7,9 @@ use bstr::ByteSlice;
 use fn_macros::{defun, Trace};
 
 use crate::core::env::{sym, Env, Symbol};
+use crate::core::error::{ErrorType, EvalError};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object};
-use crate::interpreter::{ErrorType, EvalError};
 use crate::root;
 
 mod opcode;

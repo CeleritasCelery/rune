@@ -1,11 +1,9 @@
-use std::fmt::Display;
-
 use crate::core::{
     cons::{Cons, ElemStreamIter},
     env::{sym, Env, Symbol},
-    error::{ArgError, Type, TypeError},
+    error::{ArgError, ErrorType, EvalError, EvalResult, Type, TypeError},
     gc::{Context, Root, Rt},
-    object::{display_slice, nil, qtrue, Function, Gc, GcObj, List, Object},
+    object::{nil, qtrue, Function, Gc, GcObj, List, Object},
 };
 use crate::{root, rooted_iter};
 use anyhow::Context as _;
@@ -13,118 +11,6 @@ use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
-
-#[derive(Debug)]
-pub(crate) struct EvalError {
-    backtrace: Vec<String>,
-    pub(crate) error: ErrorType,
-}
-
-#[derive(Debug)]
-pub(crate) enum ErrorType {
-    Throw(u32),
-    Signal(u32),
-    Err(anyhow::Error),
-}
-
-impl std::error::Error for EvalError {}
-
-impl Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.error {
-            ErrorType::Err(e) => writeln!(f, "{e}")?,
-            ErrorType::Throw(_) => writeln!(f, "No catch for throw")?,
-            ErrorType::Signal(_) => writeln!(f, "Signal")?,
-        }
-        if crate::debug::debug_enabled() {
-            for x in &self.backtrace {
-                writeln!(f, "{x}")?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl EvalError {
-    fn new_error(error: anyhow::Error) -> Self {
-        Self {
-            backtrace: Vec::new(),
-            error: ErrorType::Err(error),
-        }
-    }
-
-    pub(crate) fn signal(error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
-        Self {
-            backtrace: Vec::new(),
-            error: ErrorType::Signal(env.set_exception(error_symbol, data)),
-        }
-    }
-
-    fn new(error: impl Into<Self>) -> Self {
-        error.into()
-    }
-
-    fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
-        let display = display_slice(args);
-        Self {
-            backtrace: vec![format!("{name} {display}")],
-            error: ErrorType::Err(error),
-        }
-    }
-
-    fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
-        let display = display_slice(args);
-        self.backtrace.push(format!("{name} {display}"));
-        self
-    }
-}
-
-impl From<anyhow::Error> for EvalError {
-    fn from(e: anyhow::Error) -> Self {
-        Self::new_error(e)
-    }
-}
-
-impl From<String> for EvalError {
-    fn from(e: String) -> Self {
-        Self::new_error(anyhow!(e))
-    }
-}
-
-impl From<&'static str> for EvalError {
-    fn from(e: &'static str) -> Self {
-        Self::new_error(anyhow!(e))
-    }
-}
-
-impl From<TypeError> for EvalError {
-    fn from(e: TypeError) -> Self {
-        Self::new_error(e.into())
-    }
-}
-
-impl From<ArgError> for EvalError {
-    fn from(e: ArgError) -> Self {
-        Self::new_error(e.into())
-    }
-}
-
-impl From<std::convert::Infallible> for EvalError {
-    fn from(e: std::convert::Infallible) -> Self {
-        Self::new_error(e.into())
-    }
-}
-
-macro_rules! error {
-    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (EvalError::new_error(anyhow!($msg, $($args),*)));
-    ($err:expr) => (EvalError::new($err));
-}
-
-macro_rules! bail_err {
-    ($($args:expr),* $(,)?) => (return Err(error!($($args),*)));
-}
-
-type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
 
 struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
     vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
@@ -230,11 +116,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         // Need to check now that there is a catch, because we may have a
         // condition-case along the unwind path
         if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
-            let id = env.set_exception(tag, value);
-            Err(EvalError {
-                error: ErrorType::Throw(id),
-                backtrace: Vec::new(),
-            })
+            Err(EvalError::throw(tag, value, env))
         } else {
             Err(error!("No catch for {tag}"))
         }

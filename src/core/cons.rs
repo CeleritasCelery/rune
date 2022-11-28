@@ -106,7 +106,7 @@ impl Display for Cons {
                 }
                 Object::Symbol(s) if s.nil() => break,
                 x => {
-                    write!(f, ". {x}")?;
+                    write!(f, " . {x}")?;
                     break;
                 }
             }

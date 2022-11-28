@@ -1,7 +1,7 @@
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
-use crate::core::error::{Type, TypeError};
+use crate::core::error::{EvalError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{nil, LispString, Object};
 use crate::core::{
@@ -9,7 +9,6 @@ use crate::core::{
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
-use crate::interpreter::EvalError;
 use crate::{root, rooted_iter};
 
 use crate::core::env::{sym, ConstSymbol, Env, Symbol};
