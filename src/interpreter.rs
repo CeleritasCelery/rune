@@ -619,7 +619,7 @@ impl Rt<Gc<Function<'_>>> {
         match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                crate::bytecode::call(f, args, env, cx).map_err(EvalError::new_error)
+                crate::bytecode::call(f, args, env, cx).map_err(|e| e.add_trace(name, args))
             }
             Function::SubrFn(f) => {
                 (*f).call(args, env, cx)

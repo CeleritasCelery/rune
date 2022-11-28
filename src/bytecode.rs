@@ -7,7 +7,7 @@ use bstr::ByteSlice;
 use fn_macros::{defun, Trace};
 
 use crate::core::env::{sym, Env, Symbol};
-use crate::core::error::{ErrorType, EvalError};
+use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object};
 use crate::root;
@@ -267,13 +267,18 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
         }
     }
 
-    fn call(&mut self, arg_cnt: u16, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<()> {
+    fn call(
+        &mut self,
+        arg_cnt: u16,
+        env: &mut Root<Env>,
+        cx: &'ob mut Context,
+    ) -> Result<(), EvalError> {
         let sym = match self.stack[arg_cnt].get(cx) {
             Object::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
 
-        let Some(func) = sym.follow_indirect(cx) else {bail!("Void Function: {sym}")};
+        let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};
         let slice = &self.stack[..arg_cnt];
         let args = Rt::bind_slice(slice, cx).to_vec();
         let name = sym.name().to_owned();
@@ -287,7 +292,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
         Ok(())
     }
 
-    fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+    fn run(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> EvalResult<'ob> {
         'main: loop {
             let err = match self.execute_bytecode(env, cx) {
                 Ok(x) => return Ok(rebind!(x, cx)),
@@ -305,19 +310,19 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                             let x = x?;
                             // TODO: Handle different error symbols
                             if x != sym::DEBUG && x != sym::ERROR {
-                                bail!("non-error conditions {x} not yet supported")
+                                bail_err!("non-error conditions {x} not yet supported")
                             }
                         }
                     }
-                    _ => bail!("Invalid condition handler: {condition}"),
+                    _ => bail_err!("Invalid condition handler: {condition}"),
                 }
 
-                let error = if let Some(EvalError {
+                let error = if let EvalError {
                     error: ErrorType::Signal(id),
                     ..
-                }) = err.downcast_ref::<EvalError>()
+                } = err
                 {
-                    let Some((sym, data)) = env.get_exception(*id) else {unreachable!("Exception not found")};
+                    let Some((sym, data)) = env.get_exception(id) else {unreachable!("Exception not found")};
                     cons!(sym, data; cx)
                 } else {
                     // TODO: Need to remove the anyhow branch once
@@ -335,11 +340,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
 
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
-    fn execute_bytecode(
-        &mut self,
-        env: &mut Root<Env>,
-        cx: &'ob mut Context,
-    ) -> Result<GcObj<'ob>> {
+    fn execute_bytecode(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> EvalResult<'ob> {
         use crate::{alloc, arith, core, data, fns};
         use opcode::OpCode as op;
         loop {
@@ -753,7 +754,7 @@ fn byte_code<'ob>(
     )?;
     root!(fun, cx);
     root!(args, Vec::new(), cx);
-    call(fun, args, env, cx)
+    Ok(call(fun, args, env, cx)?)
 }
 
 pub(crate) fn call<'ob>(
@@ -761,7 +762,7 @@ pub(crate) fn call<'ob>(
     args: &mut Root<'_, '_, Vec<GcObj<'static>>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> EvalResult<'ob> {
     let arg_cnt = args.len() as u16;
     let stack = LispStack::from_root(args);
     root!(handlers, Vec::new(), cx);
