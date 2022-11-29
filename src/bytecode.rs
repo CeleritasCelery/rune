@@ -453,16 +453,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let result: GcObj = cx.add(arith::add(args));
                     top.set(result);
                 }
-                op::LessThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
-                }
-                op::GreaterThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
-                }
                 op::Sub1 => {
                     let top = self.stack.top(cx);
                     top.set::<GcObj>(cx.add(arith::sub_one(top.bind_as(cx)?)));
@@ -470,6 +460,31 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Add1 => {
                     let top = self.stack.top(cx);
                     top.set::<GcObj>(cx.add(arith::add_one(top.bind_as(cx)?)));
+                }
+                op::EqlSign => {
+                    let rhs = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
+                }
+                op::GreaterThan => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::LessThan => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::LessThanOrEqual => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::less_than_or_eq(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::GreaterThanOrEqual => {
+                    let v1 = &[self.stack.pop(cx).try_into()?];
+                    let top = self.stack.top(cx);
+                    top.set(arith::greater_than_or_eq(top.bind_as(cx)?, v1));
                 }
                 op::Discard => {
                     self.stack.pop(cx);
