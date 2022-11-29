@@ -615,17 +615,19 @@ impl Rt<Gc<Function<'_>>> {
         name: Option<&str>,
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
+        let arg_cnt = args.len();
         debug!("calling {self:?}");
         match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                crate::bytecode::call(f, args, env, cx).map_err(|e| e.add_trace(name, args))
+                crate::bytecode::call(f, args, name, env, cx)
+                    .map_err(|e| e.add_trace(name, &args[..arg_cnt]))
             }
             Function::SubrFn(f) => {
                 (*f).call(args, env, cx)
                     .map_err(|e| match e.downcast::<EvalError>() {
-                        Ok(err) => err.add_trace(name, args),
-                        Err(e) => EvalError::with_trace(e, name, args),
+                        Ok(err) => err.add_trace(name, &args[..arg_cnt]),
+                        Err(e) => EvalError::with_trace(e, name, &args[..arg_cnt]),
                     })
             }
             Function::Cons(_) => call_closure(self.try_into().unwrap(), args, name, env, cx)

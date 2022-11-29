@@ -754,15 +754,17 @@ fn byte_code<'ob>(
     )?;
     root!(fun, cx);
     root!(args, Vec::new(), cx);
-    Ok(call(fun, args, env, cx)?)
+    Ok(call(fun, args, "unnamed", env, cx)?)
 }
 
 pub(crate) fn call<'ob>(
     func: &Rt<&'static ByteFn>,
     args: &mut Root<'_, '_, Vec<GcObj<'static>>>,
+    name: &str,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
+
     let arg_cnt = args.len() as u16;
     let stack = LispStack::from_root(args);
     root!(handlers, Vec::new(), cx);
@@ -772,7 +774,7 @@ pub(crate) fn call<'ob>(
         frame: CallFrame::new(func, 0, cx),
         handlers,
     };
-    rout.prepare_lisp_args(func.bind(cx), arg_cnt, "unnamed", cx)?;
+    rout.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     rout.run(env, cx)
 }
 
@@ -843,7 +845,7 @@ mod test {
         cx: &'ob mut Context,
     ) {
         root!(env, Env::default(), cx);
-        let val = rebind!(call(bytecode, args, env, cx).unwrap(), cx);
+        let val = rebind!(call(bytecode, args, "test", env, cx).unwrap(), cx);
         let expect = expect.bind(cx);
         assert_eq!(val, expect);
     }

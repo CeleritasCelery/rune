@@ -31,6 +31,7 @@ impl Display for EvalError {
         for x in &self.backtrace {
             writeln!(f, "{x}")?;
         }
+        writeln!(f, "END_BACKTRACE")?;
         Ok(())
     }
 }

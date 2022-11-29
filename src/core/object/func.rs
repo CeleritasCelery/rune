@@ -105,7 +105,8 @@ impl Debug for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ByteFn")
             .field("args", &self.args)
-            .field("body", &self)
+            .field("op_code", &self.op_codes)
+            .field("constants", &self.constants)
             .finish()
     }
 }
