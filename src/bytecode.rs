@@ -674,6 +674,21 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj());
                 }
+                op::Elt => {
+                    let n = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::elt(top.bind(cx), n.try_into()?)?);
+                }
+                op::Member => {
+                    let list = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::member(top.bind(cx), list.try_into()?)?);
+                }
+                op::Assq => {
+                    let alist = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::assq(top.bind(cx), alist.try_into()?)?);
+                }
                 op::Nreverse => {
                     let elt = self.stack.top(cx);
                     elt.set(fns::nreverse(elt.bind_as(cx)?)?);
