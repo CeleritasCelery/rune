@@ -143,6 +143,10 @@ impl Symbol {
         }
     }
 
+    pub(crate) const fn interned(&self) -> bool {
+        matches!(self.name, SymbolName::Interned(_))
+    }
+
     #[inline(always)]
     pub(crate) const fn is_const(&self) -> bool {
         self.func.is_none()

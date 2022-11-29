@@ -180,8 +180,13 @@ pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> &'ob Symbol {
 pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<&Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.get() {
-        // TODO: We should only return here if the symbol is interned
-        Object::Symbol(sym) => Ok(sym),
+        Object::Symbol(sym) => {
+            if sym.interned() {
+                Ok(sym)
+            } else {
+                Ok(&sym::NIL)
+            }
+        }
         Object::String(string) => {
             let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
             match map.get(string.try_into()?) {
