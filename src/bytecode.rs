@@ -430,6 +430,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     byte_debug!("  arg: {idx}");
                     self.varset(idx.into(), env, cx)?;
                 }
+                op::VarBind0 => todo!("VarBind0 bytecode"),
+                op::VarBind1 => todo!("VarBind1 bytecode"),
+                op::VarBind2 => todo!("VarBind2 bytecode"),
+                op::VarBind3 => todo!("VarBind3 bytecode"),
+                op::VarBind4 => todo!("VarBind4 bytecode"),
+                op::VarBind5 => todo!("VarBind5 bytecode"),
+                op::VarBindN => todo!("VarBindN bytecode"),
+                op::VarBindN2 => todo!("VarBindN2 bytecode"),
                 op::Call0 => self.call(0, env, cx)?,
                 op::Call1 => self.call(1, env, cx)?,
                 op::Call2 => self.call(2, env, cx)?,
@@ -446,130 +454,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     byte_debug!("  arg: {idx}");
                     self.call(idx, env, cx)?;
                 }
-                op::Plus => {
-                    let arg1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    let args = &[arg1.try_into()?, top.bind_as(cx)?];
-                    let result: GcObj = cx.add(arith::add(args));
-                    top.set(result);
-                }
-                op::Sub1 => {
-                    let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_as(cx)?)));
-                }
-                op::Add1 => {
-                    let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_as(cx)?)));
-                }
-                op::EqlSign => {
-                    let rhs = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set::<GcObj>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
-                }
-                op::GreaterThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
-                }
-                op::LessThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
-                }
-                op::LessThanOrEqual => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top(cx);
-                    top.set(arith::less_than_or_eq(top.bind_as(cx)?, &[v1.try_into()?]));
-                }
-                op::GreaterThanOrEqual => {
-                    let v1 = &[self.stack.pop(cx).try_into()?];
-                    let top = self.stack.top(cx);
-                    top.set(arith::greater_than_or_eq(top.bind_as(cx)?, v1));
-                }
-                op::Discard => {
-                    self.stack.pop(cx);
-                }
-                op::DiscardN => {
-                    let arg = self.frame.ip.next();
-                    let cur_len = self.stack.as_mut(cx).len();
-                    let keep_tos = (arg & 0x80) != 0;
-                    let count = (arg & 0x7F) as usize;
-                    byte_debug!("  keep_tos: {keep_tos}\n  count: {count}");
-                    if keep_tos {
-                        let top = self.stack.top(cx).bind(cx);
-                        self.stack.as_mut(cx).truncate(cur_len - count);
-                        self.stack.top(cx).set(top);
-                    } else {
-                        self.stack.as_mut(cx).truncate(cur_len - count);
-                    }
-                }
-                op::Duplicate => {
-                    let top = self.stack[0].bind(cx);
-                    self.stack.as_mut(cx).push(top);
-                }
-                op::ConstantN2 => {
-                    let idx = self.frame.ip.next2();
-                    byte_debug!("  arg: {idx}");
-                    let stack = self.stack.as_mut(cx);
-                    stack.push(self.frame.get_const(idx.into(), cx));
-                }
-                op::Goto => {
-                    let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
-                    self.frame.ip.goto(offset);
-                }
-                op::GotoIfNil => {
-                    let cond = self.stack.pop(cx);
-                    let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
-                    if cond.nil() {
-                        self.frame.ip.goto(offset);
-                    }
-                }
-                op::GotoIfNonNil => {
-                    let cond = self.stack.pop(cx);
-                    let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
-                    if !cond.nil() {
-                        self.frame.ip.goto(offset);
-                    }
-                }
-                op::GotoIfNilElsePop => {
-                    let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
-                    if self.stack[0].bind(cx).nil() {
-                        self.frame.ip.goto(offset);
-                    } else {
-                        self.stack.pop(cx);
-                    }
-                }
-                op::GotoIfNonNilElsePop => {
-                    let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
-                    if self.stack[0].bind(cx).nil() {
-                        self.stack.pop(cx);
-                    } else {
-                        self.frame.ip.goto(offset);
-                    }
-                }
-                op::Return => {
-                    if self.call_frames.is_empty() {
-                        return Ok(self.stack.pop(cx));
-                    }
-                    let var = self.stack.pop(cx);
-                    let start = self.frame.start;
-                    self.stack.as_mut(cx).truncate(start + 1);
-                    self.stack.top(cx).set(var);
-                    self.frame = self.call_frames.pop().unwrap();
-                }
-                op::Switch => {
-                    let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
-                    let cond = self.stack.pop(cx);
-                    if let Some(offset) = table.borrow().get(&cond) {
-                        let Object::Int(offset) = offset.get().get() else {unreachable!("switch value was not a int")};
-                        self.frame.ip.goto(offset as u16);
-                    }
-                }
+                op::Unbind0 => todo!("Unbind0 bytecode"),
+                op::Unbind1 => todo!("Unbind1 bytecode"),
+                op::Unbind2 => todo!("Unbind2 bytecode"),
+                op::Unbind3 => todo!("Unbind3 bytecode"),
+                op::Unbind4 => todo!("Unbind4 bytecode"),
+                op::Unbind5 => todo!("Unbind5 bytecode"),
+                op::UnbindN => todo!("UnbindN bytecode"),
+                op::UnbindN2 => todo!("UnbindN2 bytecode"),
                 op::PopHandler => {
                     self.handlers.as_mut(cx).pop();
                 }
@@ -583,6 +475,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     };
                     self.handlers.as_mut(cx).push(handler);
                 }
+                op::PushCatch => todo!("PushCatch bytecode"),
                 op::Nth => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
@@ -646,6 +539,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(alloc::list(&[top.bind(cx), a2, a3], cx));
                 }
+                op::List4 => todo!("List4 bytecode"),
                 op::Length => {
                     let top = self.stack.top(cx);
                     top.set(fns::length(top.bind(cx))?);
@@ -684,6 +578,170 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(data::get(top.bind_as(cx)?, prop.try_into()?, env, cx));
                 }
+                op::Substring => todo!("Substring bytecode"),
+                op::Concat2 => todo!("Concat2 bytecode"),
+                op::Concat3 => todo!("Concat3 bytecode"),
+                op::Concat4 => todo!("Concat4 bytecode"),
+                op::Sub1 => {
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_as(cx)?)));
+                }
+                op::Add1 => {
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_as(cx)?)));
+                }
+                op::EqlSign => {
+                    let rhs = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set::<GcObj>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
+                }
+                op::GreaterThan => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::LessThan => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::LessThanOrEqual => {
+                    let v1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(arith::less_than_or_eq(top.bind_as(cx)?, &[v1.try_into()?]));
+                }
+                op::GreaterThanOrEqual => {
+                    let v1 = &[self.stack.pop(cx).try_into()?];
+                    let top = self.stack.top(cx);
+                    top.set(arith::greater_than_or_eq(top.bind_as(cx)?, v1));
+                }
+                op::Diff => todo!("Diff bytecode"),
+                op::Negate => todo!("Negate bytecode"),
+                op::Plus => {
+                    let arg1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    let args = &[arg1.try_into()?, top.bind_as(cx)?];
+                    let result: GcObj = cx.add(arith::add(args));
+                    top.set(result);
+                }
+                op::Max => todo!("Max bytecode"),
+                op::Min => todo!("Min bytecode"),
+                op::Multiply => todo!("Multiply bytecode"),
+                op::Point => todo!("Point bytecode"),
+                op::GotoChar => todo!("GotoChar bytecode"),
+                op::Insert => todo!("Insert bytecode"),
+                op::PointMax => todo!("PointMax bytecode"),
+                op::PointMin => todo!("PointMin bytecode"),
+                op::CharAfter => todo!("CharAfter bytecode"),
+                op::FollowingChar => todo!("FollowingChar bytecode"),
+                op::PrecedingChar => todo!("PrecedingChar bytecode"),
+                op::CurrentColumn => todo!("CurrentColumn bytecode"),
+                op::IndentTo => todo!("IndentTo bytecode"),
+                op::EndOfLineP => todo!("EndOfLineP bytecode"),
+                op::EndOfBufferP => todo!("EndOfBufferP bytecode"),
+                op::BeginningOfLineP => todo!("BeginningOfLineP bytecode"),
+                op::BeginningOfBufferP => todo!("BeginningOfBufferP bytecode"),
+                op::CurrentBuffer => todo!("CurrentBuffer bytecode"),
+                op::SetBuffer => todo!("SetBuffer bytecode"),
+                op::SaveCurrentBuffer1 => todo!("SaveCurrentBuffer1 bytecode"),
+                op::ForwardChar => todo!("ForwardChar bytecode"),
+                op::ForwardWord => todo!("ForwardWord bytecode"),
+                op::SkipCharsForward => todo!("SkipCharsForward bytecode"),
+                op::SkipCharsBackward => todo!("SkipCharsBackward bytecode"),
+                op::ForwardLine => todo!("ForwardLine bytecode"),
+                op::CharSyntax => todo!("CharSyntax bytecode"),
+                op::BufferSubstring => todo!("BufferSubstring bytecode"),
+                op::DeleteRegion => todo!("DeleteRegion bytecode"),
+                op::NarrowToRegion => todo!("NarrowToRegion bytecode"),
+                op::Widen => todo!("Widen bytecode"),
+                op::EndOfLine => todo!("EndOfLine bytecode"),
+                op::ConstantN2 => {
+                    let idx = self.frame.ip.next2();
+                    byte_debug!("  arg: {idx}");
+                    let stack = self.stack.as_mut(cx);
+                    stack.push(self.frame.get_const(idx.into(), cx));
+                }
+                op::Goto => {
+                    let offset = self.frame.ip.next2();
+                    byte_debug!("  operand: {offset}");
+                    self.frame.ip.goto(offset);
+                }
+                op::GotoIfNil => {
+                    let cond = self.stack.pop(cx);
+                    let offset = self.frame.ip.next2();
+                    byte_debug!("  operand: {offset}");
+                    if cond.nil() {
+                        self.frame.ip.goto(offset);
+                    }
+                }
+                op::GotoIfNonNil => {
+                    let cond = self.stack.pop(cx);
+                    let offset = self.frame.ip.next2();
+                    byte_debug!("  operand: {offset}");
+                    if !cond.nil() {
+                        self.frame.ip.goto(offset);
+                    }
+                }
+                op::GotoIfNilElsePop => {
+                    let offset = self.frame.ip.next2();
+                    byte_debug!("  operand: {offset}");
+                    if self.stack[0].bind(cx).nil() {
+                        self.frame.ip.goto(offset);
+                    } else {
+                        self.stack.pop(cx);
+                    }
+                }
+                op::GotoIfNonNilElsePop => {
+                    let offset = self.frame.ip.next2();
+                    byte_debug!("  operand: {offset}");
+                    if self.stack[0].bind(cx).nil() {
+                        self.stack.pop(cx);
+                    } else {
+                        self.frame.ip.goto(offset);
+                    }
+                }
+                op::Return => {
+                    if self.call_frames.is_empty() {
+                        return Ok(self.stack.pop(cx));
+                    }
+                    let var = self.stack.pop(cx);
+                    let start = self.frame.start;
+                    self.stack.as_mut(cx).truncate(start + 1);
+                    self.stack.top(cx).set(var);
+                    self.frame = self.call_frames.pop().unwrap();
+                }
+                op::Discard => {
+                    self.stack.pop(cx);
+                }
+                op::DiscardN => {
+                    let arg = self.frame.ip.next();
+                    let cur_len = self.stack.as_mut(cx).len();
+                    let keep_tos = (arg & 0x80) != 0;
+                    let count = (arg & 0x7F) as usize;
+                    byte_debug!("  keep_tos: {keep_tos}\n  count: {count}");
+                    if keep_tos {
+                        let top = self.stack.top(cx).bind(cx);
+                        self.stack.as_mut(cx).truncate(cur_len - count);
+                        self.stack.top(cx).set(top);
+                    } else {
+                        self.stack.as_mut(cx).truncate(cur_len - count);
+                    }
+                }
+                op::Duplicate => {
+                    let top = self.stack[0].bind(cx);
+                    self.stack.as_mut(cx).push(top);
+                }
+                op::SaveExcursion => todo!("SaveExcursion bytecode"),
+                op::SaveRestriction => todo!("SaveRestriction bytecode"),
+                op::UnwindProtect => todo!("UnwindProtect bytecode"),
+                op::SetMarker => todo!("SetMarker bytecode"),
+                op::MatchBeginning => todo!("MatchBeginning bytecode"),
+                op::MatchEnd => todo!("MatchEnd bytecode"),
+                op::Upcase => todo!("Upcase bytecode"),
+                op::Downcase => todo!("Downcase bytecode"),
+                op::StringEqlSign => todo!("StringEqlSign bytecode"),
+                op::StringLessThan => todo!("StringLessThan bytecode"),
+                op::Equal => todo!("Equal bytecode"),
                 op::Nthcdr => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
@@ -725,6 +783,22 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::CdrSafe => {
                     let top = self.stack.top(cx);
                     top.set(core::cons::cdr_safe(top.bind(cx)));
+                }
+                op::Nconc => todo!("Nconc bytecode"),
+                op::Quo => todo!("Quo bytecode"),
+                op::Rem => todo!("Rem bytecode"),
+                op::Numberp => todo!("Numberp bytecode"),
+                op::Integerp => todo!("Integerp bytecode"),
+                op::ListN => todo!("ListN bytecode"),
+                op::ConcatN => todo!("ConcatN bytecode"),
+                op::InsertN => todo!("InsertN bytecode"),
+                op::Switch => {
+                    let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
+                    let cond = self.stack.pop(cx);
+                    if let Some(offset) = table.borrow().get(&cond) {
+                        let Object::Int(offset) = offset.get().get() else {unreachable!("switch value was not a int")};
+                        self.frame.ip.goto(offset as u16);
+                    }
                 }
                 op::Constant0
                 | op::Constant1
@@ -793,9 +867,6 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let idx = (op as u8) - (op::Constant0 as u8);
                     let stack = self.stack.as_mut(cx);
                     stack.push(self.frame.get_const(idx as usize, cx));
-                }
-                op => {
-                    panic!("Unimplemented opcode: {op:?}");
                 }
             }
         }
