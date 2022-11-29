@@ -580,6 +580,11 @@ fn enable_debug() -> bool {
 }
 
 #[defun]
+fn debug_enabled() -> bool {
+    crate::debug::debug_enabled()
+}
+
+#[defun]
 fn disable_debug() -> bool {
     crate::debug::disable_debug();
     false
@@ -759,6 +764,7 @@ define_symbols!(
         copy_sequence,
         enable_debug,
         disable_debug,
+        debug_enabled,
     }
     SYMS => {
         KW_TEST,
