@@ -5302,13 +5302,12 @@ and corresponding effects."
                 (or noninteractive (message "compiling %s...done" x)))
               '(byte-compile-normal-call
                 byte-compile-form
-                ;; byte-compile-body
-                ;; ;; Inserted some more than necessary, to speed it up.
-                ;; byte-compile-top-level
-                ;; byte-compile-out-toplevel
-                ;; byte-compile-constant
-                ;; byte-compile-variable-ref
-                ))))
+                byte-compile-body
+                ;; Inserted some more than necessary, to speed it up.
+                byte-compile-top-level
+                byte-compile-out-toplevel
+                byte-compile-constant
+                byte-compile-variable-ref))))
   nil)
 
 (run-hooks 'bytecomp-load-hook)
