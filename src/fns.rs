@@ -181,7 +181,7 @@ pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>
 }
 
 #[defun]
-fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
+pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
     let mut tail: Option<&Cons> = None;
     for list in lists {
         if let Some(cons) = tail {

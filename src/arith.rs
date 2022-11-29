@@ -253,14 +253,14 @@ fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
 }
 
 #[defun]
-fn max(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn max(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
     number_or_markers
         .iter()
         .fold(number_or_marker.val(), max_val)
 }
 
 #[defun]
-fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
     number_or_markers
         .iter()
         .fold(number_or_marker.val(), min_val)

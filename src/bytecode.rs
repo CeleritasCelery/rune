@@ -539,7 +539,13 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(alloc::list(&[top.bind(cx), a2, a3], cx));
                 }
-                op::List4 => todo!("List4 bytecode"),
+                op::List4 => {
+                    let a4 = self.stack.pop(cx);
+                    let a3 = self.stack.pop(cx);
+                    let a2 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(alloc::list(&[top.bind(cx), a2, a3, a4], cx));
+                }
                 op::Length => {
                     let top = self.stack.top(cx);
                     top.set(fns::length(top.bind(cx))?);
@@ -616,17 +622,39 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     top.set(arith::greater_than_or_eq(top.bind_as(cx)?, v1));
                 }
                 op::Diff => todo!("Diff bytecode"),
-                op::Negate => todo!("Negate bytecode"),
+                op::Negate => {
+                    let top = self.stack.top(cx);
+                    let result: GcObj = cx.add(arith::sub(top.bind_as(cx)?, &[]));
+                    top.set(result);
+                }
                 op::Plus => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    let args = &[arg1.try_into()?, top.bind_as(cx)?];
+                    let args = &[top.bind_as(cx)?, arg1.try_into()?];
                     let result: GcObj = cx.add(arith::add(args));
                     top.set(result);
                 }
-                op::Max => todo!("Max bytecode"),
-                op::Min => todo!("Min bytecode"),
-                op::Multiply => todo!("Multiply bytecode"),
+                op::Max => {
+                    let arg1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    let args = &[arg1.try_into()?];
+                    let result: GcObj = cx.add(arith::max(top.bind_as(cx)?, args));
+                    top.set(result);
+                }
+                op::Min => {
+                    let arg1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    let args = &[arg1.try_into()?];
+                    let result: GcObj = cx.add(arith::min(top.bind_as(cx)?, args));
+                    top.set(result);
+                }
+                op::Multiply => {
+                    let arg1 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    let args = &[top.bind_as(cx)?, arg1.try_into()?];
+                    let result: GcObj = cx.add(arith::mul(args));
+                    top.set(result);
+                }
                 op::Point => todo!("Point bytecode"),
                 op::GotoChar => todo!("GotoChar bytecode"),
                 op::Insert => todo!("Insert bytecode"),
@@ -741,7 +769,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Downcase => todo!("Downcase bytecode"),
                 op::StringEqlSign => todo!("StringEqlSign bytecode"),
                 op::StringLessThan => todo!("StringLessThan bytecode"),
-                op::Equal => todo!("Equal bytecode"),
+                op::Equal => {
+                    let rhs = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::equal(top.bind(cx), rhs));
+                }
                 op::Nthcdr => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top(cx);
@@ -784,12 +816,29 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     let top = self.stack.top(cx);
                     top.set(core::cons::cdr_safe(top.bind(cx)));
                 }
-                op::Nconc => todo!("Nconc bytecode"),
+                op::Nconc => {
+                    let list2 = self.stack.pop(cx);
+                    let top = self.stack.top(cx);
+                    top.set(fns::nconc(&[top.bind_as(cx)?, list2.try_into()?])?);
+                }
                 op::Quo => todo!("Quo bytecode"),
                 op::Rem => todo!("Rem bytecode"),
-                op::Numberp => todo!("Numberp bytecode"),
-                op::Integerp => todo!("Integerp bytecode"),
-                op::ListN => todo!("ListN bytecode"),
+                op::Numberp => {
+                    let top = self.stack.top(cx);
+                    top.set(data::numberp(top.bind(cx)));
+                }
+                op::Integerp => {
+                    let top = self.stack.top(cx);
+                    top.set(data::integerp(top.bind(cx)));
+                }
+                op::ListN => {
+                    let size = u16::from(self.frame.ip.next());
+                    let slice = Rt::bind_slice(&self.stack[..size], cx);
+                    let list = alloc::list(slice, cx);
+                    let len = self.stack.len();
+                    self.stack.as_mut(cx).truncate(len - (size as usize - 1));
+                    self.stack.top(cx).set(list);
+                }
                 op::ConcatN => todo!("ConcatN bytecode"),
                 op::InsertN => todo!("InsertN bytecode"),
                 op::Switch => {
@@ -1109,11 +1158,37 @@ mod test {
         make_bytecode!(
             bytecode,
             0,
-            [Constant0, Constant1, Duplicate, StackRef2, DiscardN, 131, Add1, Return],
+            [Constant0, Constant1, Duplicate, StackRef2, DiscardN, 0x83, Add1, Return],
             [1, false],
             cx
         );
         check_bytecode!(bytecode, [], 2, cx);
+
+        // (lambda () (list 1 2 3 4 5 6))
+        make_bytecode!(
+            bytecode,
+            0,
+            [Constant0, Constant1, Constant2, Constant3, Constant4, Constant5, ListN, 6, Return],
+            [1, 2, 3, 4, 5, 6],
+            cx
+        );
+        let list = list![1, 2, 3, 4, 5, 6; cx];
+        root!(list, cx);
+        check_bytecode!(bytecode, [], list, cx);
+
+        // hand rolled bytecode
+        // (lambda () (list 1 2 3 4 5 6) 7)
+        make_bytecode!(
+            bytecode,
+            0,
+            [
+                Constant6, Constant0, Constant1, Constant2, Constant3, Constant4, Constant5, ListN,
+                6, DiscardN, 1, Return
+            ],
+            [1, 2, 3, 4, 5, 6, 7],
+            cx
+        );
+        check_bytecode!(bytecode, [], 7, cx);
     }
 
     #[test]
