@@ -1,12 +1,15 @@
-use crate::core::{
-    cons::Cons,
-    env::{sym, Env, Symbol},
-    error::{Type, TypeError},
-    gc::{Context, IntoRoot, Root, Rt},
-    object::{
-        nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec, List,
-        ObjCell, Object,
+use crate::{
+    core::{
+        cons::Cons,
+        env::{sym, Env, Symbol},
+        error::{Type, TypeError},
+        gc::{Context, IntoRoot, Root, Rt},
+        object::{
+            nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec,
+            List, ObjCell, Object,
+        },
     },
+    data::aref,
 };
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
@@ -473,6 +476,19 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 }
 
 #[defun]
+pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
+    match sequence.get() {
+        Object::Cons(x) => nth(n, x.into()),
+        Object::Symbol(s) if s.nil() => Ok(nil()),
+        Object::Vec(x) => aref(x.into(), n),
+        Object::Record(x) => aref(x.into(), n),
+        Object::String(x) => aref(x.into(), n),
+        Object::ByteFn(x) => aref(x.into(), n),
+        other => Err(TypeError::new(Type::Sequence, other).into()),
+    }
+}
+
+#[defun]
 pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
     cx: &'ob Context,
@@ -748,6 +764,7 @@ define_symbols!(
         safe_length,
         nth,
         nthcdr,
+        elt,
         concat,
         vconcat,
         append,
