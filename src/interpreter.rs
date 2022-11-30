@@ -412,16 +412,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         // splitting borrows
         let env = &mut **self.env.as_mut(cx);
         for binding in env.binding_stack.drain(binding_stack_len..) {
-            let var = binding.bind(cx).0;
+            let var = &binding.0;
             let val = &*binding.1;
-            if let Some(val) = val {
-                if let Some(current_val) = env.vars.get_mut(var) {
-                    current_val.set(val);
-                } else {
-                    env.vars.insert(var, val);
-                }
-            } else {
-                env.vars.remove(var);
+            match val {
+                Some(val) => env.vars.insert(var, val),
+                None => env.vars.remove(var),
             }
         }
         Ok(obj)

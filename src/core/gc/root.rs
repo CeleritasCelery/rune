@@ -35,12 +35,12 @@ where
     }
 }
 
-impl<T, U> IntoRoot<Gc<U>> for &Rt<Gc<T>>
+impl<T, U> IntoRoot<U> for &Rt<T>
 where
-    Gc<T>: IntoRoot<Gc<U>> + Copy,
+    T: WithLifetime<'static, Out = U>,
 {
-    unsafe fn into_root(self) -> Gc<U> {
-        self.inner.into_root()
+    unsafe fn into_root(self) -> U {
+        self.inner.with_lifetime()
     }
 }
 
@@ -495,17 +495,18 @@ impl<T> DerefMut for Rt<Option<T>> {
     }
 }
 
-impl<T: std::ops::AddAssign> std::ops::AddAssign<T> for Rt<T> {
-    fn add_assign(&mut self, rhs: T) {
-        self.inner.add_assign(rhs);
-    }
-}
-
-impl Rt<Option<GcObj<'static>>> {
-    pub(crate) fn set(&mut self, obj: GcObj) {
+impl<T> Rt<Option<T>> {
+    pub(crate) fn set<U: IntoRoot<T>>(&mut self, obj: U) {
         unsafe {
-            self.inner = Some(obj.with_lifetime());
+            self.inner = Some(obj.into_root());
         }
+    }
+
+    // This is not really dead code, but the static analysis fails to find it
+    #[allow(dead_code)]
+    pub(crate) fn as_ref(&self) -> Option<&Rt<T>> {
+        let option = self.inner.as_ref();
+        option.map(|x| unsafe { &*(x as *const T).cast::<Rt<T>>() })
     }
 }
 

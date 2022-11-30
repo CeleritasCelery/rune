@@ -246,12 +246,39 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
         Ok(())
     }
 
+    fn varbind(&mut self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
+        let value = self.stack.pop(cx);
+        let symbol = self.frame.get_const(idx as usize, cx);
+        if let Object::Symbol(sym) = symbol.get() {
+            let prev_value = env.vars.get(sym).map(|x| x.bind(cx));
+            env.as_mut(cx).binding_stack.push((sym, prev_value));
+            env.as_mut(cx).vars.insert(sym, value);
+        } else {
+            unreachable!("Varbind was not a symbol: {:?}", symbol);
+        }
+    }
+
+    fn unbind(&mut self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
+        let symbol = self.frame.get_const(idx as usize, cx);
+        if let Object::Symbol(sym) = symbol.get() {
+            match env.as_mut(cx).binding_stack.pop() {
+                Some(val) => match val.1.as_ref() {
+                    Some(val) => env.as_mut(cx).vars.insert(sym, val),
+                    None => env.as_mut(cx).vars.remove(&val.0),
+                },
+                None => unreachable!("Binding stack was empty"),
+            }
+        } else {
+            unreachable!("Varbind was not a symbol: {:?}", symbol);
+        }
+    }
+
     #[inline(always)]
     fn debug_enabled() -> bool {
         cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled()
     }
 
-    /// Prepare the arguments for lisp function call. This means filling all
+    /// Prepare ethe arguments for lisp function call. This means filling all
     /// needed stack slots with `nil` and moving all the `&rest` arguments into
     /// a list.
     fn prepare_lisp_args(
@@ -430,14 +457,22 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     byte_debug!("  arg: {idx}");
                     self.varset(idx.into(), env, cx)?;
                 }
-                op::VarBind0 => todo!("VarBind0 bytecode"),
-                op::VarBind1 => todo!("VarBind1 bytecode"),
-                op::VarBind2 => todo!("VarBind2 bytecode"),
-                op::VarBind3 => todo!("VarBind3 bytecode"),
-                op::VarBind4 => todo!("VarBind4 bytecode"),
-                op::VarBind5 => todo!("VarBind5 bytecode"),
-                op::VarBindN => todo!("VarBindN bytecode"),
-                op::VarBindN2 => todo!("VarBindN2 bytecode"),
+                op::VarBind0 => self.varbind(0, env, cx),
+                op::VarBind1 => self.varbind(1, env, cx),
+                op::VarBind2 => self.varbind(2, env, cx),
+                op::VarBind3 => self.varbind(3, env, cx),
+                op::VarBind4 => self.varbind(4, env, cx),
+                op::VarBind5 => self.varbind(5, env, cx),
+                op::VarBindN => {
+                    let idx = self.frame.ip.next();
+                    byte_debug!("  arg: {idx}");
+                    self.varbind(idx.into(), env, cx);
+                }
+                op::VarBindN2 => {
+                    let idx = self.frame.ip.next2();
+                    byte_debug!("  arg: {idx}");
+                    self.varbind(idx, env, cx);
+                }
                 op::Call0 => self.call(0, env, cx)?,
                 op::Call1 => self.call(1, env, cx)?,
                 op::Call2 => self.call(2, env, cx)?,
@@ -454,14 +489,22 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     byte_debug!("  arg: {idx}");
                     self.call(idx, env, cx)?;
                 }
-                op::Unbind0 => todo!("Unbind0 bytecode"),
-                op::Unbind1 => todo!("Unbind1 bytecode"),
-                op::Unbind2 => todo!("Unbind2 bytecode"),
-                op::Unbind3 => todo!("Unbind3 bytecode"),
-                op::Unbind4 => todo!("Unbind4 bytecode"),
-                op::Unbind5 => todo!("Unbind5 bytecode"),
-                op::UnbindN => todo!("UnbindN bytecode"),
-                op::UnbindN2 => todo!("UnbindN2 bytecode"),
+                op::Unbind0 => self.unbind(0, env, cx),
+                op::Unbind1 => self.unbind(1, env, cx),
+                op::Unbind2 => self.unbind(2, env, cx),
+                op::Unbind3 => self.unbind(3, env, cx),
+                op::Unbind4 => self.unbind(4, env, cx),
+                op::Unbind5 => self.unbind(5, env, cx),
+                op::UnbindN => {
+                    let idx = self.frame.ip.next();
+                    byte_debug!("  arg: {idx}");
+                    self.unbind(idx.into(), env, cx);
+                }
+                op::UnbindN2 => {
+                    let idx = self.frame.ip.next2();
+                    byte_debug!("  arg: {idx}");
+                    self.unbind(idx, env, cx);
+                }
                 op::PopHandler => {
                     self.handlers.as_mut(cx).pop();
                 }
@@ -691,13 +734,13 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 }
                 op::Goto => {
                     let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
+                    byte_debug!("  pc: {offset}");
                     self.frame.ip.goto(offset);
                 }
                 op::GotoIfNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
+                    byte_debug!("  pc: {offset}");
                     if cond.nil() {
                         self.frame.ip.goto(offset);
                     }
@@ -705,14 +748,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::GotoIfNonNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
+                    byte_debug!("  pc: {offset}");
                     if !cond.nil() {
                         self.frame.ip.goto(offset);
                     }
                 }
                 op::GotoIfNilElsePop => {
                     let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
+                    byte_debug!("  pc: {offset}");
                     if self.stack[0].bind(cx).nil() {
                         self.frame.ip.goto(offset);
                     } else {
@@ -721,7 +764,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 }
                 op::GotoIfNonNilElsePop => {
                     let offset = self.frame.ip.next2();
-                    byte_debug!("  operand: {offset}");
+                    byte_debug!("  pc: {offset}");
                     if self.stack[0].bind(cx).nil() {
                         self.stack.pop(cx);
                     } else {
