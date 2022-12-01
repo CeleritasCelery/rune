@@ -619,13 +619,6 @@ impl<K, V> Deref for Rt<HashMap<K, V>> {
     }
 }
 
-impl<K, V> DerefMut for Rt<HashMap<K, V>> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
-    }
-}
-
 impl<T> Rt<HashSet<T>>
 where
     T: Eq + Hash,
@@ -644,13 +637,6 @@ impl<T> Deref for Rt<HashSet<T>> {
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
         unsafe { &*(self as *const Self).cast::<Self::Target>() }
-    }
-}
-
-impl<T> DerefMut for Rt<HashSet<T>> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
