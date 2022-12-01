@@ -1,7 +1,8 @@
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::slice::SliceIndex;
 
 use super::super::{
     cons::Cons,
@@ -511,29 +512,76 @@ impl<T> Rt<Option<T>> {
 }
 
 impl<T> Rt<Vec<T>> {
+    // This is not safe to expose pub(crate)
+    fn as_mut_ref(&mut self) -> &mut Vec<Rt<T>> {
+        // SAFETY: `Rt<T>` has the same memory layout as `T`.
+        unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<T>>>() }
+    }
+
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
         self.inner.push(unsafe { item.into_root() });
     }
-}
 
-impl Rt<Vec<GcObj<'static>>> {
-    pub(crate) fn pop<'ob>(&mut self, _cx: &'ob Context) -> Option<GcObj<'ob>> {
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.as_mut_ref().truncate(len);
+    }
+
+    pub(crate) fn pop(&mut self) {
+        self.as_mut_ref().pop();
+    }
+
+    pub(crate) fn drain<R>(&mut self, range: R) -> std::vec::Drain<'_, Rt<T>>
+    where
+        R: std::ops::RangeBounds<usize>,
+    {
+        self.as_mut_ref().drain(range)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.as_mut_ref().clear();
+    }
+
+    pub(crate) fn swap_remove(&mut self, index: usize) {
+        self.as_mut_ref().swap_remove(index);
+    }
+
+    pub(crate) fn pop_obj<'ob, U>(&mut self, _cx: &'ob Context) -> Option<U>
+    where
+        T: WithLifetime<'ob, Out = U>,
+    {
         self.inner.pop().map(|x| unsafe { x.with_lifetime() })
     }
 }
 
 impl<T> Deref for Rt<Vec<T>> {
-    type Target = Vec<Rt<T>>;
+    type Target = [Rt<T>];
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+        let vec = unsafe { &*(self as *const Self).cast::<Vec<Rt<T>>>() };
+        vec
     }
 }
 
 impl<T> DerefMut for Rt<Vec<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
+        let vec = unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<T>>>() };
+        vec
+    }
+}
+
+impl<T, I: SliceIndex<[Rt<T>]>> Index<I> for Rt<Vec<T>> {
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        let slice: &[Rt<T>] = self;
+        Index::index(slice, index)
+    }
+}
+
+impl<T, I: SliceIndex<[Rt<T>]>> IndexMut<I> for Rt<Vec<T>> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(self.as_mut_ref(), index)
     }
 }
 
