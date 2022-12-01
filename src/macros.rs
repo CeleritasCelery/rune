@@ -31,8 +31,7 @@ macro_rules! define_symbols {
                 _cx: &'ob crate::core::gc::Context,
                 _env: &mut crate::core::gc::Rt<crate::core::env::Env>
             ) {
-                $($(_env.vars.insert(&$var_sym, [<__INIT_ $var_sym>](_cx));)+)?
-                $($(_env.special_variables.insert(&$var_sym);)+)?
+                $($([<__INIT_ $var_sym>](_env, _cx);)+)?
             }
         }
 
@@ -84,6 +83,10 @@ macro_rules! __defsym {
 }
 
 macro_rules! defvar {
+    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::nil()););
+    ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
+    ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
+    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
     (@internal $sym:ident, $name:expr, $cx:ident, $value:expr) => (
         paste::paste!{
             #[allow(non_snake_case)]
@@ -99,15 +102,12 @@ macro_rules! defvar {
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            fn [<__INIT_ $sym>]<'ob> ($cx: &'ob crate::core::gc::Context) -> crate::core::object::GcObj<'ob> {
-                $value
+            fn [<__INIT_ $sym>](env: &mut crate::core::gc::Rt<crate::core::env::Env>, $cx: &crate::core::gc::Context) {
+                env.vars.insert::<_, crate::core::object::GcObj>(&$sym, $value);
+                env.special_variables.insert(&$sym);
             }
         }
     );
-    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::nil()););
-    ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
-    ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
-    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
 }
 
 macro_rules! define_unbox {
