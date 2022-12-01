@@ -202,7 +202,8 @@ defvar!(LEXICAL_BINDING, true);
 defvar!(CURRENT_LOAD_LIST);
 defvar!(LOAD_HISTORY);
 defvar!(LOAD_PATH, list!("lisp"));
-defvar!(LOAD_FILE_NAME, false);
+defvar!(LOAD_FILE_NAME);
+defvar!(BYTE_BOOLEAN_VARS);
 
 define_symbols!(
     FUNCS => {
@@ -216,7 +217,8 @@ define_symbols!(
         CURRENT_LOAD_LIST,
         LOAD_HISTORY,
         LOAD_PATH,
-        LOAD_FILE_NAME
+        LOAD_FILE_NAME,
+        BYTE_BOOLEAN_VARS,
     }
 );
 

@@ -10,7 +10,7 @@ fn error_message_string(obj: GcObj) -> String {
 
 defvar!(PRINT_LENGTH);
 defvar!(PRINT_LEVEL);
-defvar!(PRINT_ESCAPE_NEWLINES);
+defvar_bool!(PRINT_ESCAPE_NEWLINES, false);
 
 define_symbols!(
     FUNCS => {error_message_string}

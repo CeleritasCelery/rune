@@ -10,7 +10,7 @@ defvar!(SYSTEM_TYPE, "darwin");
 defvar!(DUMP_MODE);
 defvar!(COMMAND_LINE_ARGS, list!(""));
 defvar!(DEFAULT_DIRECTORY, "");
-defvar!(NONINTERACTIVE, true);
+defvar_bool!(NONINTERACTIVE, true);
 defvar!(AFTER_INIT_TIME);
 
 define_symbols!(

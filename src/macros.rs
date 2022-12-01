@@ -82,12 +82,25 @@ macro_rules! __defsym {
     ($sym:ident, $name:literal) => (__defsym!(@internal $sym, $name););
 }
 
+macro_rules! defvar_bool {
+    ($sym:ident, $value:literal) => (defvar_bool!(@internal $sym, fn_macros::varname!($sym), $value.into()););
+    ($sym:ident, $name:literal, $value:literal) => (defvar_bool!(@internal $sym, $name, $value.into()););
+    (@internal $sym:ident, $name:expr, $value:expr) => (
+        defvar!(@internal $sym, $name, env, cx, $value, {
+            let var = env.vars.get_mut(crate::core::env::sym::BYTE_BOOLEAN_VARS).unwrap();
+            var.set(crate::cons!(&$sym, var.bind(cx); cx));
+        });
+    );
+}
+
 macro_rules! defvar {
-    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), _a, crate::core::object::nil()););
-    ($sym:ident, list!($($values:expr),+ $(,)?)) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, crate::list!($($values),+; cx)););
-    ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), cx, cx.add($value)););
-    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, cx, cx.add($value)););
-    (@internal $sym:ident, $name:expr, $cx:ident, $value:expr) => (
+    ($sym:ident) => (defvar!(@internal $sym, fn_macros::varname!($sym), env, _a, crate::core::object::nil(), {}););
+    ($sym:ident, list!($($values:expr),+ $(,)?)) => (
+        defvar!(@internal $sym, fn_macros::varname!($sym), env, cx, crate::list!($($values),+; cx), {});
+    );
+    ($sym:ident, $value:expr) => (defvar!(@internal $sym, fn_macros::varname!($sym), env, cx, cx.add($value), {}););
+    ($sym:ident, $name:literal, $value:expr) => (defvar!(@internal $sym, $name, env, cx, cx.add($value), {}););
+    (@internal $sym:ident, $name:expr, $env:ident, $cx:ident, $value:expr, $exec:expr) => (
         paste::paste!{
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
@@ -102,9 +115,10 @@ macro_rules! defvar {
             #[allow(non_snake_case)]
             #[allow(unused_qualifications)]
             #[doc(hidden)]
-            fn [<__INIT_ $sym>](env: &mut crate::core::gc::Rt<crate::core::env::Env>, $cx: &crate::core::gc::Context) {
-                env.vars.insert::<_, crate::core::object::GcObj>(&$sym, $value);
-                env.special_variables.insert(&$sym);
+            fn [<__INIT_ $sym>]($env: &mut crate::core::gc::Rt<crate::core::env::Env>, $cx: &crate::core::gc::Context) {
+                $env.vars.insert::<_, crate::core::object::GcObj>(&$sym, $value);
+                $env.special_variables.insert(&$sym);
+                $exec;
             }
         }
     );

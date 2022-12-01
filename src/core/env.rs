@@ -238,11 +238,12 @@ macro_rules! create_symbolmap {
 }
 
 create_symbolmap!(
+    // This module needs to be first because it defines byte-boolean-vars
+    crate::lread,
     crate::arith,
     crate::bytecode,
     crate::interpreter,
     crate::core::cons,
-    crate::lread,
     crate::fileio,
     crate::data,
     crate::print,
