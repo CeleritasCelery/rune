@@ -9,7 +9,7 @@ use fn_macros::{defun, Trace};
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
-use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object};
+use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
 use crate::root;
 
 mod opcode;
@@ -206,6 +206,14 @@ impl<'ob> IntoRoot<Handler<'static>> for Handler<'ob> {
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
+    type Out = Handler<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute::<Handler<'old>, Handler<'new>>(self)
+    }
+}
+
 macro_rules! byte_debug {
     ($msg:literal $(,)?  $($args:expr),* $(,)?) => (
         if cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled() {
@@ -255,7 +263,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     }
 
     fn unbind(&self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
-        env.as_mut(cx).unbind(idx.into(), cx);
+        env.as_mut(cx).unbind(idx, cx);
     }
 
     #[inline(always)]
@@ -326,9 +334,8 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
 
             // we will fix this once we can handle different error types
             #[allow(clippy::never_loop)]
-            for handler in self.handlers.as_mut(cx).drain(..) {
-                let condition = &handler.condition;
-                match condition.get(cx) {
+            while let Some(handler) = self.handlers.as_mut(cx).pop_obj(cx) {
+                match handler.condition.get() {
                     Object::Symbol(s) if s == &sym::ERROR => {}
                     Object::Cons(cons) => {
                         for x in cons.elements() {
@@ -339,7 +346,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                             }
                         }
                     }
-                    _ => bail_err!("Invalid condition handler: {condition}"),
+                    x => bail_err!("Invalid condition handler: {x}"),
                 }
 
                 let error = if let EvalError {

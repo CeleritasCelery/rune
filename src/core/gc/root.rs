@@ -38,7 +38,7 @@ where
 
 impl<T, U> IntoRoot<U> for &Rt<T>
 where
-    T: WithLifetime<'static, Out = U>,
+    T: WithLifetime<'static, Out = U> + Copy,
 {
     unsafe fn into_root(self) -> U {
         self.inner.with_lifetime()
@@ -316,7 +316,7 @@ where
 impl<T> Rt<T> {
     pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob>,
+        T: WithLifetime<'ob> + Copy,
     {
         // SAFETY: We are holding a reference to the context
         unsafe { self.inner.with_lifetime() }
@@ -324,7 +324,7 @@ impl<T> Rt<T> {
 
     pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
     where
-        T: WithLifetime<'ob>,
+        T: WithLifetime<'ob> + Copy,
     {
         self.inner.with_lifetime()
     }
@@ -394,7 +394,7 @@ impl<T> Rt<Gc<T>> {
 
     pub(crate) fn get<'ob, U>(&self, cx: &'ob Context) -> U
     where
-        Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
         Gc<U>: Untag<U>,
     {
         let gc: Gc<U> = self.bind(cx);
@@ -528,13 +528,6 @@ impl<T> Rt<Vec<T>> {
 
     pub(crate) fn pop(&mut self) {
         self.as_mut_ref().pop();
-    }
-
-    pub(crate) fn drain<R>(&mut self, range: R) -> std::vec::Drain<'_, Rt<T>>
-    where
-        R: std::ops::RangeBounds<usize>,
-    {
-        self.as_mut_ref().drain(range)
     }
 
     pub(crate) fn clear(&mut self) {

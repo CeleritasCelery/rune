@@ -138,7 +138,7 @@ impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
 // Traits for Objects //
 ////////////////////////
 
-pub(crate) trait WithLifetime<'new>: Copy {
+pub(crate) trait WithLifetime<'new> {
     type Out: 'new;
     unsafe fn with_lifetime(self) -> Self::Out;
 }

@@ -18,7 +18,7 @@ pub(crate) struct Env {
     #[no_trace]
     exception_id: u32,
     pub(crate) special_variables: HashSet<&'static Symbol>,
-    pub(crate) binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
+    binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
 }
 
@@ -64,16 +64,29 @@ impl Rt<Env> {
         self.vars.insert(var, value);
     }
 
-    pub(crate) fn unbind(&mut self, count: u32, cx: &Context) {
+    pub(crate) fn unbind(&mut self, count: u16, cx: &Context) {
         for _ in 0..count {
             match self.binding_stack.pop_obj(cx) {
                 Some((sym, val)) => match val {
                     Some(val) => self.vars.insert(sym, val),
                     None => self.vars.remove(sym),
                 },
-                None => unreachable!("Binding stack was empty"),
+                None => panic!("Binding stack was empty"),
             }
         }
+    }
+
+    pub(crate) fn defvar(&mut self, var: &Symbol, value: GcObj) -> Result<()> {
+        self.set_var(var, value)?;
+        self.special_variables.insert(var);
+        // If this variable was unbound previously in the binding stack,
+        // we will bind it to the new value
+        for binding in self.binding_stack.iter_mut() {
+            if binding.0 == var && binding.1.is_none() {
+                binding.1.set(value);
+            }
+        }
+        Ok(())
     }
 }
 

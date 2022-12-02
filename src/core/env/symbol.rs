@@ -148,6 +148,7 @@ impl Symbol {
     }
 
     #[inline(always)]
+    /// Check if the symbol is constant like nil, t, or :keyword
     pub(crate) const fn is_const(&self) -> bool {
         self.func.is_none()
     }

@@ -134,15 +134,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // (defvar x)
             None => nil(),
         };
-        self.env.as_mut(cx).set_var(name.bind(cx), value)?;
-        self.env.as_mut(cx).special_variables.insert(&*name);
-        // If this variable was unbound previously in the binding stack,
-        // we will bind it to the new value
-        for binding in self.env.as_mut(cx).binding_stack.iter_mut() {
-            if **name == binding.0 && binding.1.is_none() {
-                binding.1.set(value);
-            }
-        }
+        self.env.as_mut(cx).defvar(name.bind(cx), value)?;
         Ok(value)
     }
 
@@ -396,32 +388,22 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     ) -> EvalResult<'ob> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
-        let binding_stack_len = self.env.binding_stack.len();
         // (let x ...)                   // (let)
         let Some(obj) = iter.next() else {bail_err!(ArgError::new(1, 0, "let"))};
-        if parallel {
-            self.let_bind_parallel(obj, cx)?;
+        let varbind_count = if parallel {
+            self.let_bind_parallel(obj, cx)
         } else {
-            self.let_bind_serial(obj, cx)?;
-        }
+            self.let_bind_serial(obj, cx)
+        }?;
         let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
         self.vars.as_mut(cx).truncate(prev_len);
-
-        // splitting borrows
-        let env = &mut **self.env.as_mut(cx);
-        for binding in env.binding_stack.drain(binding_stack_len..) {
-            let var = &binding.0;
-            let val = &*binding.1;
-            match val {
-                Some(val) => env.vars.insert(var, val),
-                None => env.vars.remove(var),
-            }
-        }
+        self.env.as_mut(cx).unbind(varbind_count, cx);
         Ok(obj)
     }
 
-    fn let_bind_serial(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<(), EvalError> {
+    fn let_bind_serial(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<u16, EvalError> {
+        let mut varbind_count = 0;
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
             match binding.get(cx) {
@@ -435,20 +417,20 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                         .car()
                         .try_into()
                         .context("let variable must be a symbol")?;
-                    self.create_let_binding(var, val, cx);
+                    varbind_count += self.create_let_binding(var, val, cx);
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    self.create_let_binding(sym, nil(), cx);
+                    varbind_count += self.create_let_binding(sym, nil(), cx);
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             }
         }
-        Ok(())
+        Ok(varbind_count)
     }
 
-    fn let_bind_parallel(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<(), EvalError> {
+    fn let_bind_parallel(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<u16, EvalError> {
         root!(let_bindings, Vec::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next() {
@@ -473,29 +455,23 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 x => bail_err!(TypeError::new(Type::Cons, x)),
             }
         }
+        let mut sum = 0;
         for (var, val) in Rt::bind_slice(let_bindings, cx) {
-            self.create_let_binding(var, *val, cx);
+            sum += self.create_let_binding(var, *val, cx);
         }
-        Ok(())
+        Ok(sum)
     }
 
-    fn create_let_binding(&mut self, var: &Symbol, val: GcObj, cx: &Context) {
-        let env = &mut **self.env.as_mut(cx);
-        // TODO: replace with entry API
+    fn create_let_binding(&mut self, var: &Symbol, val: GcObj, cx: &Context) -> u16 {
+        let env = self.env.as_mut(cx);
         if env.special_variables.contains(var) {
-            // special && bound
-            if let Some(current_val) = env.vars.get_mut(var) {
-                env.binding_stack.push((var, Some(&*current_val)));
-                current_val.set(val);
-            // special && unbound
-            } else {
-                env.vars.insert(var, val);
-                env.binding_stack.push((var, None::<GcObj>));
-            }
+            env.varbind(var, val, cx);
+            // return 1 if the variable is bound
+            1
         } else {
-            // not special
             let cons = cons!(var, val; cx).as_cons();
             self.vars.as_mut(cx).push(cons);
+            0
         }
     }
 
