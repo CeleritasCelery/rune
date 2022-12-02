@@ -14,43 +14,62 @@ use crate::root;
 
 mod opcode;
 
-/// An instruction pointer. This is implemented as a bound checked range pointer.
+/// An program counter. This is implemented as a bound checked range pointer.
 #[derive(Clone)]
 struct ProgramCounter {
     /// Valid range for this instruction pointer.
     range: std::ops::Range<*const u8>,
     /// Points to the next instruction.
-    ip: *const u8,
+    pc: *const u8,
 }
 
 impl ProgramCounter {
     fn new(vec: &[u8]) -> Self {
         ProgramCounter {
             range: vec.as_ptr_range(),
-            ip: vec.as_ptr(),
+            pc: vec.as_ptr(),
         }
     }
 
     fn goto(&mut self, offset: u16) {
         unsafe {
-            self.ip = self.range.start.add(offset as usize);
-            debug_assert!(self.range.contains(&self.ip));
+            self.pc = self.range.start.add(offset as usize);
+            debug_assert!(self.range.contains(&self.pc));
         }
     }
 
     /// Take the next byte in the stream
     fn next(&mut self) -> u8 {
         unsafe {
-            debug_assert!(self.range.contains(&self.ip));
-            let value = *self.ip;
-            self.ip = self.ip.add(1);
+            debug_assert!(self.range.contains(&self.pc));
+            let value = *self.pc;
+            self.pc = self.pc.add(1);
             value
         }
     }
 
-    /// Take the next two bytes in the stream as u16.
-    fn next2(&mut self) -> u16 {
-        u16::from_le_bytes([self.next(), self.next()])
+    fn arg1(&mut self) -> u16 {
+        unsafe {
+            debug_assert!(self.range.contains(&self.pc));
+            let value = *self.pc;
+            self.pc = self.pc.add(1);
+            if cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled() {
+                println!("  arg: {value}");
+            }
+            value.into()
+        }
+    }
+
+    fn arg2(&mut self) -> u16 {
+        unsafe {
+            debug_assert!(self.range.contains(&self.pc.add(1)));
+            let value = u16::from_le(self.pc.cast::<u16>().read_unaligned());
+            self.pc = self.pc.add(2);
+            if cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled() {
+                println!("  arg: {value}");
+            }
+            value
+        }
     }
 }
 
@@ -212,14 +231,6 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute::<Handler<'old>, Handler<'new>>(self)
     }
-}
-
-macro_rules! byte_debug {
-    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (
-        if cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled() {
-            println!($msg, $($args),*);
-        }
-    );
 }
 
 /// An execution routine. This holds all the state of the current interpreter,
@@ -387,7 +398,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     println!("    {idx}: {x},");
                 }
                 println!("]");
-                let byte_offset = self.frame.pc.ip as i64 - self.frame.pc.range.start as i64 - 1;
+                let byte_offset = self.frame.pc.pc as i64 - self.frame.pc.range.start as i64 - 1;
                 println!("op :{byte_offset}: {op:?}");
             }
             match op {
@@ -398,23 +409,19 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::StackRef4 => self.stack.as_mut(cx).push_ref(4, cx),
                 op::StackRef5 => self.stack.as_mut(cx).push_ref(5, cx),
                 op::StackRefN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg1();
                     self.stack.as_mut(cx).push_ref(idx, cx);
                 }
                 op::StackRefN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.stack.as_mut(cx).push_ref(idx, cx);
                 }
                 op::StackSetN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg1();
                     self.stack.as_mut(cx).set_ref(idx);
                 }
                 op::StackSetN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.stack.as_mut(cx).set_ref(idx);
                 }
                 op::VarRef0 => self.varref(0, env, cx)?,
@@ -424,13 +431,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::VarRef4 => self.varref(4, env, cx)?,
                 op::VarRef5 => self.varref(5, env, cx)?,
                 op::VarRefN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
-                    self.varref(idx.into(), env, cx)?;
+                    let idx = self.frame.pc.arg1();
+                    self.varref(idx, env, cx)?;
                 }
                 op::VarRefN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.varref(idx, env, cx)?;
                 }
                 op::VarSet0 => self.varset(0, env, cx)?,
@@ -440,13 +445,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::VarSet4 => self.varset(4, env, cx)?,
                 op::VarSet5 => self.varset(5, env, cx)?,
                 op::VarSetN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg1();
                     self.varset(idx.into(), env, cx)?;
                 }
                 op::VarSetN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.varset(idx.into(), env, cx)?;
                 }
                 op::VarBind0 => self.varbind(0, env, cx),
@@ -456,13 +459,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::VarBind4 => self.varbind(4, env, cx),
                 op::VarBind5 => self.varbind(5, env, cx),
                 op::VarBindN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
-                    self.varbind(idx.into(), env, cx);
+                    let idx = self.frame.pc.arg1();
+                    self.varbind(idx, env, cx);
                 }
                 op::VarBindN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.varbind(idx, env, cx);
                 }
                 op::Call0 => self.call(0, env, cx)?,
@@ -472,13 +473,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Call4 => self.call(4, env, cx)?,
                 op::Call5 => self.call(5, env, cx)?,
                 op::CallN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
-                    self.call(idx.into(), env, cx)?;
+                    let idx = self.frame.pc.arg1();
+                    self.call(idx, env, cx)?;
                 }
                 op::CallN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.call(idx, env, cx)?;
                 }
                 op::Unbind0 => self.unbind(0, env, cx),
@@ -488,13 +487,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Unbind4 => self.unbind(4, env, cx),
                 op::Unbind5 => self.unbind(5, env, cx),
                 op::UnbindN => {
-                    let idx = self.frame.pc.next();
-                    byte_debug!("  arg: {idx}");
-                    self.unbind(idx.into(), env, cx);
+                    let idx = self.frame.pc.arg1();
+                    self.unbind(idx, env, cx);
                 }
                 op::UnbindN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     self.unbind(idx, env, cx);
                 }
                 op::PopHandler => {
@@ -504,7 +501,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     // pop before getting stack size
                     let condition = self.stack.pop(cx);
                     let handler = Handler {
-                        jump_code: self.frame.pc.next2(),
+                        jump_code: self.frame.pc.arg2(),
                         stack_size: self.stack.len(),
                         condition,
                     };
@@ -719,35 +716,30 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Widen => todo!("Widen bytecode"),
                 op::EndOfLine => todo!("EndOfLine bytecode"),
                 op::ConstantN2 => {
-                    let idx = self.frame.pc.next2();
-                    byte_debug!("  arg: {idx}");
+                    let idx = self.frame.pc.arg2();
                     let stack = self.stack.as_mut(cx);
                     stack.push(self.frame.get_const(idx.into(), cx));
                 }
                 op::Goto => {
-                    let offset = self.frame.pc.next2();
-                    byte_debug!("  pc: {offset}");
+                    let offset = self.frame.pc.arg2();
                     self.frame.pc.goto(offset);
                 }
                 op::GotoIfNil => {
                     let cond = self.stack.pop(cx);
-                    let offset = self.frame.pc.next2();
-                    byte_debug!("  pc: {offset}");
+                    let offset = self.frame.pc.arg2();
                     if cond.nil() {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::GotoIfNonNil => {
                     let cond = self.stack.pop(cx);
-                    let offset = self.frame.pc.next2();
-                    byte_debug!("  pc: {offset}");
+                    let offset = self.frame.pc.arg2();
                     if !cond.nil() {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::GotoIfNilElsePop => {
-                    let offset = self.frame.pc.next2();
-                    byte_debug!("  pc: {offset}");
+                    let offset = self.frame.pc.arg2();
                     if self.stack[0].bind(cx).nil() {
                         self.frame.pc.goto(offset);
                     } else {
@@ -755,8 +747,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     }
                 }
                 op::GotoIfNonNilElsePop => {
-                    let offset = self.frame.pc.next2();
-                    byte_debug!("  pc: {offset}");
+                    let offset = self.frame.pc.arg2();
                     if self.stack[0].bind(cx).nil() {
                         self.stack.pop(cx);
                     } else {
@@ -777,11 +768,10 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     self.stack.pop(cx);
                 }
                 op::DiscardN => {
-                    let arg = self.frame.pc.next();
+                    let arg = self.frame.pc.arg1();
                     let cur_len = self.stack.as_mut(cx).len();
                     let keep_tos = (arg & 0x80) != 0;
                     let count = (arg & 0x7F) as usize;
-                    byte_debug!("  keep_tos: {keep_tos}\n  count: {count}");
                     if keep_tos {
                         let top = self.stack.top(cx).bind(cx);
                         self.stack.as_mut(cx).truncate(cur_len - count);
@@ -867,7 +857,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                     top.set(data::integerp(top.bind(cx)));
                 }
                 op::ListN => {
-                    let size = u16::from(self.frame.pc.next());
+                    let size = self.frame.pc.arg1();
                     let slice = Rt::bind_slice(&self.stack[..size], cx);
                     let list = alloc::list(slice, cx);
                     let len = self.stack.len();
