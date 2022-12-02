@@ -28,14 +28,14 @@ impl Cons {
 
 impl<'ob> Gc<List<'ob>> {
     pub(crate) fn elements(self) -> ElemIter<'ob> {
-        match self.get() {
+        match self.untag() {
             List::Nil => ElemIter { cons: None },
             List::Cons(cons) => ElemIter { cons: Some(cons) },
         }
     }
 
     pub(crate) fn conses(self) -> ConsIter<'ob> {
-        ConsIter { list: self.get() }
+        ConsIter { list: self.untag() }
     }
 }
 
@@ -45,7 +45,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.cons {
             Some(cons) => {
-                self.cons = match cons.cdr().get() {
+                self.cons = match cons.cdr().untag() {
                     Object::Cons(next) => Some(next),
                     Object::Symbol(s) if s.nil() => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
@@ -60,7 +60,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
 impl<'ob> GcObj<'ob> {
     pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
         let list: Gc<List> = self.try_into()?;
-        match list.get() {
+        match list.untag() {
             List::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
             List::Nil => Ok(ElemIter { cons: None }),
         }
@@ -85,7 +85,7 @@ impl<'ob> Iterator for ConsIter<'ob> {
         match self.list {
             List::Nil => None,
             List::Cons(cons) => {
-                self.list = match cons.cdr().get() {
+                self.list = match cons.cdr().untag() {
                     Object::Cons(next) => List::Cons(next),
                     Object::Symbol(s) if s.nil() => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
@@ -123,7 +123,7 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
             let elem = unsafe { elem.deref_mut_unchecked() };
             let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
-            match unsafe { cons.bind_unchecked().cdr().get() } {
+            match unsafe { cons.bind_unchecked().cdr().untag() } {
                 Object::Cons(next) => {
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
@@ -163,7 +163,7 @@ macro_rules! rooted_iter {
         let obj = unsafe { $crate::core::gc::IntoRoot::into_root($value) };
         let list: $crate::core::object::Gc<$crate::core::object::List> = obj.try_into()?;
         #[allow(unused_mut)]
-        let mut $ident = if let $crate::core::object::List::Cons(cons) = list.get() {
+        let mut $ident = if let $crate::core::object::List::Cons(cons) = list.untag() {
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {

@@ -208,7 +208,7 @@ impl Symbol {
     /// Follow the chain of symbols to find the function at the end, if any.
     pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
         let func = self.func(cx)?;
-        match func.get() {
+        match func.untag() {
             Function::Symbol(sym) => sym.follow_indirect(cx),
             _ => Some(func),
         }
@@ -247,7 +247,7 @@ impl<'new> CloneIn<'new, &'new Self> for Symbol {
                         }
                     }
                     let new = sym.into_obj(bk);
-                    bk.uninterned_symbol_map.insert(self, new.get());
+                    bk.uninterned_symbol_map.insert(self, new.untag());
                     new
                 }
             }

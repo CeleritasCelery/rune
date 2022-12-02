@@ -109,17 +109,17 @@ impl<T> Gc<T> {
 }
 
 impl<T: TaggedPtr> Gc<T> {
-    pub(crate) fn get(self) -> T {
+    pub(crate) fn untag(self) -> T {
         T::untag(self)
     }
 }
 
 pub(crate) trait Untag<T> {
-    fn untag(self) -> T;
+    fn untag_erased(self) -> T;
 }
 
 impl<T: TaggedPtr> Untag<T> for Gc<T> {
-    fn untag(self) -> T {
+    fn untag_erased(self) -> T {
         T::untag(self)
     }
 }
@@ -130,7 +130,7 @@ unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
 
 impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
     fn from(x: Gc<T>) -> Self {
-        x.copy_as_obj().get()
+        x.copy_as_obj().untag()
     }
 }
 
@@ -885,7 +885,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.get() {
+        match value.untag() {
             Object::Symbol(s) if s.nil() => unsafe { Ok(cast_gc(value)) },
             Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::List, value)),
@@ -897,7 +897,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
-        match value.get() {
+        match value.untag() {
             Function::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
@@ -907,7 +907,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
 impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<&'ob Symbol> {
     type Error = TypeError;
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.get() {
+        match value.untag() {
             Object::Symbol(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Symbol, value)),
         }
@@ -1014,7 +1014,7 @@ impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     type Target = Cons;
 
     fn deref(&self) -> &'ob Self::Target {
-        self.get()
+        self.untag()
     }
 }
 
@@ -1032,7 +1032,7 @@ where
     Gc<U>: TryFrom<Gc<Object<'new>>, Error = E> + 'new,
 {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<U> {
-        let obj = match self.as_obj().get() {
+        let obj = match self.as_obj().untag() {
             Object::Int(x) => x.into(),
             Object::Cons(x) => x.clone_in(bk).into(),
             Object::String(x) => x.clone_in(bk).into(),
@@ -1051,7 +1051,7 @@ where
 
 impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     fn eq(&self, other: &&str) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::String(x) => **x == other.as_bytes(),
             _ => false,
         }
@@ -1060,7 +1060,7 @@ impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
 
 impl<'ob> PartialEq<&Symbol> for Gc<Object<'ob>> {
     fn eq(&self, other: &&Symbol) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::Symbol(x) => x == *other,
             _ => false,
         }
@@ -1069,7 +1069,7 @@ impl<'ob> PartialEq<&Symbol> for Gc<Object<'ob>> {
 
 impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
     fn eq(&self, other: &Symbol) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::Symbol(x) => x == other,
             _ => false,
         }
@@ -1078,7 +1078,7 @@ impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
 
 impl<'ob> PartialEq<ConstSymbol> for Gc<Object<'ob>> {
     fn eq(&self, other: &ConstSymbol) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::Symbol(x) => x == other,
             _ => false,
         }
@@ -1088,7 +1088,7 @@ impl<'ob> PartialEq<ConstSymbol> for Gc<Object<'ob>> {
 impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;
-        match self.get() {
+        match self.untag() {
             Object::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
             _ => false,
         }
@@ -1097,7 +1097,7 @@ impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
 
 impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
     fn eq(&self, other: &i64) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::Int(x) => x == *other,
             _ => false,
         }
@@ -1124,21 +1124,21 @@ impl Default for Gc<List<'_>> {
 
 impl<T: fmt::Display> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let obj = self.as_obj().get();
+        let obj = self.as_obj().untag();
         write!(f, "{obj}")
     }
 }
 
 impl<T: fmt::Debug> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let obj = self.as_obj().get();
+        let obj = self.as_obj().untag();
         write!(f, "{obj:?}")
     }
 }
 
 impl<T> PartialEq for Gc<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.as_obj().get() == other.as_obj().get()
+        self.as_obj().untag() == other.as_obj().untag()
     }
 }
 
@@ -1171,11 +1171,11 @@ impl fmt::Display for Object<'_> {
 
 impl<'ob> Gc<Object<'ob>> {
     pub(crate) fn is_markable(self) -> bool {
-        !matches!(self.get(), Object::Int(_) | Object::SubrFn(_))
+        !matches!(self.untag(), Object::Int(_) | Object::SubrFn(_))
     }
 
     pub(crate) fn is_marked(self) -> bool {
-        match self.get() {
+        match self.untag() {
             Object::Int(_) | Object::SubrFn(_) => true,
             Object::Float(x) => x.is_marked(),
             Object::Cons(x) => x.is_marked(),
@@ -1189,7 +1189,7 @@ impl<'ob> Gc<Object<'ob>> {
     }
 
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
-        match self.get() {
+        match self.untag() {
             Object::Int(_) | Object::SubrFn(_) => {}
             Object::Float(x) => x.mark(),
             Object::String(x) => x.mark(),

@@ -37,7 +37,7 @@ pub(crate) fn make_closure<'ob>(
     Ok(unsafe {
         ByteFn::new(
             prototype.codes(),
-            new_constants.get(),
+            new_constants.untag(),
             prototype.args,
             prototype.depth,
         )
@@ -58,7 +58,7 @@ pub(crate) fn make_byte_code<'ob>(
 ) -> Result<&'ob ByteFn> {
     unsafe {
         let bytefn = ByteFn::new(byte_code, constants, FnArgs::from_arg_spec(arglist)?, depth);
-        Ok(bytefn.into_obj(cx).get())
+        Ok(bytefn.into_obj(cx).untag())
     }
 }
 

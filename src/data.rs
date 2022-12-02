@@ -138,7 +138,7 @@ pub(crate) fn default_boundp(symbol: &Symbol, env: &Root<Env>) -> bool {
 
 #[defun]
 pub(crate) fn listp(object: GcObj) -> bool {
-    match object.get() {
+    match object.untag() {
         Object::Symbol(s) if s.nil() => true,
         Object::Cons(_) => true,
         _ => false,
@@ -152,12 +152,12 @@ pub(crate) fn nlistp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn symbolp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Symbol(_))
+    matches!(object.untag(), Object::Symbol(_))
 }
 
 #[defun]
 pub(crate) fn functionp(object: GcObj) -> bool {
-    match object.get() {
+    match object.untag() {
         Object::ByteFn(_) | Object::SubrFn(_) => true,
         Object::Cons(cons) => cons.car() == sym::CLOSURE,
         Object::Symbol(sym) => sym.has_func(),
@@ -167,17 +167,17 @@ pub(crate) fn functionp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn subrp(object: GcObj) -> bool {
-    matches!(object.get(), Object::SubrFn(_))
+    matches!(object.untag(), Object::SubrFn(_))
 }
 
 #[defun]
 pub(crate) fn stringp(object: GcObj) -> bool {
-    matches!(object.get(), Object::String(_))
+    matches!(object.untag(), Object::String(_))
 }
 
 #[defun]
 pub(crate) fn numberp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Int(_) | Object::Float(_))
+    matches!(object.untag(), Object::Int(_) | Object::Float(_))
 }
 
 #[defun]
@@ -188,22 +188,22 @@ pub(crate) fn markerp(_: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn vectorp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Vec(_))
+    matches!(object.untag(), Object::Vec(_))
 }
 
 #[defun]
 pub(crate) fn recordp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Record(_))
+    matches!(object.untag(), Object::Record(_))
 }
 
 #[defun]
 pub(crate) fn consp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Cons(_))
+    matches!(object.untag(), Object::Cons(_))
 }
 
 #[defun]
 pub(crate) fn keywordp(object: GcObj) -> bool {
-    match object.get() {
+    match object.untag() {
         Object::Symbol(s) => s.name().starts_with(':'),
         _ => false,
     }
@@ -211,12 +211,12 @@ pub(crate) fn keywordp(object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn integerp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Int(_))
+    matches!(object.untag(), Object::Int(_))
 }
 
 #[defun]
 pub(crate) fn floatp(object: GcObj) -> bool {
-    matches!(object.get(), Object::Float(_))
+    matches!(object.untag(), Object::Float(_))
 }
 
 #[defun]
@@ -226,7 +226,7 @@ pub(crate) fn atom(object: GcObj) -> bool {
 
 #[defun]
 fn byte_code_function_p(object: GcObj) -> bool {
-    matches!(object.get(), Object::ByteFn(_))
+    matches!(object.untag(), Object::ByteFn(_))
 }
 
 #[defun]
@@ -297,7 +297,7 @@ fn ash(value: i64, count: i64) -> i64 {
 
 #[defun]
 pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    match array.get() {
+    match array.untag() {
         Object::Vec(vec) => {
             let vec = vec.try_mut()?;
             if idx < vec.len() {
@@ -324,7 +324,7 @@ pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Re
 
 #[defun]
 pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
-    match array.get() {
+    match array.untag() {
         Object::Vec(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
             None => {
@@ -356,7 +356,7 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
 
 #[defun]
 fn type_of(object: GcObj) -> GcObj {
-    match object.get() {
+    match object.untag() {
         Object::Int(_) => sym::INTEGER.into(),
         Object::Float(_) => sym::FLOAT.into(),
         Object::Symbol(_) => sym::SYMBOL.into(),
@@ -372,7 +372,7 @@ fn type_of(object: GcObj) -> GcObj {
 
 #[defun]
 pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
-    match object.get() {
+    match object.untag() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),
             None => nil(),

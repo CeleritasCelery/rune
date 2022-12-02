@@ -274,7 +274,7 @@ impl Deref for Rt<Gc<&LispString>> {
     type Target = LispString;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.get()
+        self.inner.untag()
     }
 }
 
@@ -384,7 +384,7 @@ impl<T> Rt<Gc<T>> {
     // TODO: Find a way to remove this method. We should never need to guess
     // if something is cons
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
-        match self.inner.as_obj().get() {
+        match self.inner.as_obj().untag() {
             crate::core::object::Object::Cons(_) => unsafe {
                 &*(self as *const Self).cast::<Rt<Gc<&Cons>>>()
             },
@@ -398,7 +398,7 @@ impl<T> Rt<Gc<T>> {
         Gc<U>: Untag<U>,
     {
         let gc: Gc<U> = self.bind(cx);
-        gc.untag()
+        gc.untag_erased()
     }
 
     pub(crate) fn set<U>(&mut self, item: U)

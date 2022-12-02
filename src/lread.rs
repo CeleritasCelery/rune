@@ -102,7 +102,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
         .context("`load-path' was not a list")?;
     let mut final_file = None;
     for path in paths {
-        match path?.get() {
+        match path?.untag() {
             Object::String(path) => {
                 if let Some(x) = file_in_path(file, path.try_into()?) {
                     final_file = Some(x);
@@ -179,7 +179,7 @@ pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> &'ob Symbol {
 #[defun]
 pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<&Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
-    match string.get() {
+    match string.untag() {
         Object::Symbol(sym) => {
             if sym.interned() {
                 Ok(sym)

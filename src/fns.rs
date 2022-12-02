@@ -43,7 +43,7 @@ pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
 
 #[defun]
 pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
-    match (obj1.get(), obj2.get()) {
+    match (obj1.untag(), obj2.untag()) {
         (Object::Float(f1), Object::Float(f2)) => f1.to_bits() == f2.to_bits(),
         _ => obj1.ptr_eq(obj2),
     }
@@ -81,7 +81,7 @@ pub(crate) fn mapcar<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let sequence = sequence.bind(cx);
-    match sequence.get() {
+    match sequence.untag() {
         Object::Symbol(s) if s.nil() => Ok(nil()),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
@@ -199,7 +199,7 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
 }
 
 fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
-    if let List::Cons(cons) = seq.get() {
+    if let List::Cons(cons) = seq.untag() {
         for elt in cons.elements() {
             list.push(elt?);
         }
@@ -224,7 +224,7 @@ pub(crate) fn append<'ob>(
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() {
+        if let Object::Cons(cons) = elem?.untag() {
             if eq(key, cons.car()) {
                 return Ok(cons.into());
             }
@@ -236,7 +236,7 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'
 #[defun]
 fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() {
+        if let Object::Cons(cons) = elem?.untag() {
             if eq(key, cons.cdr()) {
                 return Ok(cons.into());
             }
@@ -256,7 +256,7 @@ pub(crate) fn assoc<'ob>(
         "test functions for assoc not yet supported"
     );
     for elem in alist.elements() {
-        if let Object::Cons(cons) = elem?.get() {
+        if let Object::Cons(cons) = elem?.untag() {
             if equal(key, cons.car()) {
                 return Ok(cons.into());
             }
@@ -269,7 +269,7 @@ type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
 
 #[defun]
 fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    match alist.get() {
+    match alist.untag() {
         List::Nil => Ok(nil()),
         List::Cons(cons) => {
             let first = copy_alist_elem(cons.car(), cx);
@@ -287,7 +287,7 @@ fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>>
 }
 
 fn copy_alist_elem<'ob>(elem: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
-    match elem.get() {
+    match elem.untag() {
         Object::Cons(cons) => cons!(cons.car(), cons.cdr(); cx),
         _ => elem,
     }
@@ -400,7 +400,7 @@ fn require<'ob>(
 pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
     let mut concat = String::new();
     for elt in sequences {
-        match elt.get() {
+        match elt.untag() {
             Object::String(string) => concat.push_str(string.try_into()?),
             _ => bail!("Currently only concatenating strings are supported"),
         }
@@ -412,7 +412,7 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
 pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&'ob LispVec>> {
     let mut concated: Vec<GcObj> = Vec::new();
     for elt in sequences {
-        match elt.get() {
+        match elt.untag() {
             // TODO: need to correctly handle unibyte strings (no unicode codepoints)
             Object::String(string) => {
                 for chr in string.chars() {
@@ -438,7 +438,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
 
 #[defun]
 pub(crate) fn length(sequence: GcObj) -> Result<i64> {
-    let size = match sequence.get() {
+    let size = match sequence.untag() {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
@@ -452,7 +452,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
 
 #[defun]
 pub(crate) fn safe_length(sequence: GcObj) -> i64 {
-    let size = match sequence.get() {
+    let size = match sequence.untag() {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
@@ -477,7 +477,7 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 
 #[defun]
 pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
-    match sequence.get() {
+    match sequence.untag() {
         Object::Cons(x) => nth(n, x.into()),
         Object::Symbol(s) if s.nil() => Ok(nil()),
         Object::Vec(x) => aref(x.into(), n),
@@ -511,7 +511,7 @@ pub(crate) fn make_hash_table<'ob>(
 
 #[defun]
 pub(crate) fn hash_table_p(obj: GcObj) -> bool {
-    matches!(obj.get(), Object::HashTable(_))
+    matches!(obj.untag(), Object::HashTable(_))
 }
 
 #[defun]
@@ -548,7 +548,7 @@ pub(crate) fn gethash<'ob>(
 
 #[defun]
 fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    match arg.get() {
+    match arg.untag() {
         Object::Vec(x) => {
             let copy: Vec<_> = x.iter().map(ObjCell::get).collect();
             Ok(cx.add(copy))
@@ -560,7 +560,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
             for cons in x.conses() {
                 let cons = cons?;
                 elements.push(cons.car());
-                if !matches!(cons.cdr().get(), Object::Cons(_)) {
+                if !matches!(cons.cdr().untag(), Object::Cons(_)) {
                     tail = Some(cons.cdr());
                 }
             }
@@ -634,7 +634,7 @@ mod test {
         let cx = &Context::new(roots);
         let list = list![1, 2, 3; cx];
         let res = nthcdr(1, list.try_into().unwrap()).unwrap();
-        assert_eq!(res.get().car(), 2);
+        assert_eq!(res.untag().car(), 2);
     }
 
     #[test]

@@ -247,7 +247,7 @@ struct Routine<'brw, '_1, '_2, '_3, '_4> {
 impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     fn varref(&mut self, idx: u16, env: &Root<Env>, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
-        if let Object::Symbol(sym) = symbol.get() {
+        if let Object::Symbol(sym) = symbol.untag() {
             let Some(var) = env.vars.get(sym) else {bail!("Void Variable: {sym}")};
             self.stack.as_mut(cx).push(var.bind(cx));
             Ok(())
@@ -267,7 +267,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     fn varbind(&mut self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
         let value = self.stack.pop(cx);
         let symbol = self.frame.get_const(idx as usize, cx);
-        let Object::Symbol(sym) = symbol.get() else {
+        let Object::Symbol(sym) = symbol.untag() else {
             unreachable!("Varbind was not a symbol: {:?}", symbol)
         };
         env.as_mut(cx).varbind(sym, value, cx);
@@ -346,7 +346,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
             // we will fix this once we can handle different error types
             #[allow(clippy::never_loop)]
             while let Some(handler) = self.handlers.as_mut(cx).pop_obj(cx) {
-                match handler.condition.get() {
+                match handler.condition.untag() {
                     Object::Symbol(s) if s == &sym::ERROR => {}
                     Object::Cons(cons) => {
                         for x in cons.elements() {
@@ -867,10 +867,10 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::ConcatN => todo!("ConcatN bytecode"),
                 op::InsertN => todo!("InsertN bytecode"),
                 op::Switch => {
-                    let Object::HashTable(table) = self.stack.pop(cx).get() else {unreachable!("switch table was not a hash table")};
+                    let Object::HashTable(table) = self.stack.pop(cx).untag() else {unreachable!("switch table was not a hash table")};
                     let cond = self.stack.pop(cx);
                     if let Some(offset) = table.borrow().get(&cond) {
-                        let Object::Int(offset) = offset.get().get() else {unreachable!("switch value was not a int")};
+                        let Object::Int(offset) = offset.get().untag() else {unreachable!("switch value was not a int")};
                         self.frame.pc.goto(offset as u16);
                     }
                 }
@@ -1011,13 +1011,13 @@ mod test {
         let cx: &Context = $cx;
         let constants: &LispVec = {
             let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
-            vec.into_obj(cx).get()
+            vec.into_obj(cx).untag()
         };
         let opcodes = {
             #[allow(trivial_numeric_casts)]
             let opcodes = vec![$($opcodes as u8),*];
             println!("Test seq: {opcodes:?}");
-            opcodes.into_obj(cx).get()
+            opcodes.into_obj(cx).untag()
         };
         let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx).unwrap();
         root!(bytecode, cx);

@@ -16,7 +16,7 @@ use super::{Gc, Object};
 impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
+        match obj.untag() {
             Object::String(x) => x.try_into(),
             x => Err(TypeError::new(Type::String, x).into()),
         }
@@ -26,7 +26,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
 impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
+        match obj.untag() {
             Object::Symbol(x) if x.nil() => Ok(None),
             Object::String(x) => Ok(Some(x.try_into()?)),
             x => Err(TypeError::new(Type::String, x).into()),
@@ -37,7 +37,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
 impl<'ob> TryFrom<GcObj<'ob>> for usize {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
+        match obj.untag() {
             Object::Int(x) => x
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {x}")),
@@ -49,7 +49,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for usize {
 impl<'ob> TryFrom<GcObj<'ob>> for u64 {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
+        match obj.untag() {
             Object::Int(x) => x
                 .try_into()
                 .with_context(|| format!("Integer must be positive, but was {x}")),
@@ -61,7 +61,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for u64 {
 impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match obj.get() {
+        match obj.untag() {
             Object::Int(x) => match x.try_into() {
                 Ok(x) => Ok(Some(x)),
                 Err(e) => Err(e).with_context(|| format!("Integer must be positive, but was {x}")),

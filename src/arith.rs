@@ -12,7 +12,7 @@ pub(crate) enum NumberValue {
 
 impl<'ob> Gc<Number<'ob>> {
     pub(crate) fn val(self) -> NumberValue {
-        match self.get() {
+        match self.untag() {
             Number::Int(x) => NumberValue::Int(x),
             Number::Float(x) => NumberValue::Float(**x),
         }
@@ -225,12 +225,12 @@ pub(crate) fn greater_than_or_eq(number: Gc<Number>, numbers: &[Gc<Number>]) -> 
 
 #[defun]
 pub(crate) fn logior(ints_or_markers: &[Gc<i64>]) -> i64 {
-    ints_or_markers.iter().fold(0, |acc, x| acc | x.get())
+    ints_or_markers.iter().fold(0, |acc, x| acc | x.untag())
 }
 
 #[defun]
 fn logand(int_or_markers: &[Gc<i64>]) -> i64 {
-    int_or_markers.iter().fold(-1, |accum, x| accum & x.get())
+    int_or_markers.iter().fold(-1, |accum, x| accum & x.untag())
 }
 
 #[defun(name = "mod")]

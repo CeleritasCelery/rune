@@ -50,7 +50,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let cons = cons.bind(cx);
         let forms = cons.cdr();
         root!(forms, cx);
-        match cons.car().get() {
+        match cons.car().untag() {
             Object::Symbol(sym) => match sym.sym {
                 sym::QUOTE => self.quote(forms.bind(cx)),
                 sym::LET => self.eval_let(forms, true, cx),
@@ -184,7 +184,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
 
         let form = forms.next().unwrap()?;
-        match form.get() {
+        match form.untag() {
             Object::Cons(cons) => {
                 if cons.car() == sym::LAMBDA {
                     let env = {
@@ -239,7 +239,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     fn eval_while<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let (condition, body) = {
             let list: Gc<List> = obj.bind(cx).try_into()?;
-            match list.get() {
+            match list.untag() {
                 List::Nil => bail_err!(ArgError::new(1, 0, "while")),
                 List::Cons(cons) => (cons.car(), cons.cdr()),
             }
@@ -314,7 +314,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let mut arg_cnt = 0;
         root!(last_value, nil(), cx);
         while let Some((var, val)) = Self::pairs(&mut forms, cx) {
-            match (var.get(), val) {
+            match (var.untag(), val) {
                 (Object::Symbol(var), Some(val)) => {
                     root!(var, cx);
                     root!(val, cx);
@@ -535,7 +535,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                 Object::Cons(cons) => {
                     // Check that conditions match
                     let condition = cons.car();
-                    match condition.get() {
+                    match condition.untag() {
                         Object::Symbol(s) if s == &sym::ERROR => {}
                         Object::Cons(cons) => {
                             for x in cons.elements() {
@@ -604,7 +604,7 @@ impl Rt<Gc<Function<'_>>> {
                 .map_err(|e| e.add_trace(name, args)),
             Function::Symbol(sym) => {
                 let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};
-                match func.get() {
+                match func.untag() {
                     Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
@@ -634,7 +634,7 @@ fn call_closure<'ob>(
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
     let closure: &Cons = closure.get(cx);
-    match closure.car().get() {
+    match closure.car().untag() {
         Object::Symbol(s) if s == &sym::CLOSURE => {
             rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector
@@ -671,7 +671,7 @@ fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
     let forms = obj.as_list()?;
     let mut env = Vec::new();
     for form in forms {
-        match form?.get() {
+        match form?.untag() {
             Object::Cons(pair) => {
                 env.push(pair);
             }

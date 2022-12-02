@@ -99,7 +99,7 @@ impl Display for Cons {
 
         loop {
             write!(f, "{}", cons.car())?;
-            match cons.cdr().get() {
+            match cons.cdr().untag() {
                 Object::Cons(tail) => {
                     cons = tail;
                     f.write_char(' ')?;
@@ -121,7 +121,7 @@ impl Debug for Cons {
         let mut cons = self;
         loop {
             write!(f, "{:?}", cons.car())?;
-            match cons.cdr().get() {
+            match cons.cdr().untag() {
                 Object::Cons(tail) => {
                     cons = tail;
                     f.write_char(' ')?;
@@ -141,7 +141,7 @@ define_unbox!(Cons, &'ob Cons);
 
 #[defun]
 pub(crate) fn car(list: Gc<List>) -> GcObj {
-    match list.get() {
+    match list.untag() {
         List::Cons(cons) => cons.car(),
         List::Nil => nil(),
     }
@@ -149,7 +149,7 @@ pub(crate) fn car(list: Gc<List>) -> GcObj {
 
 #[defun]
 pub(crate) fn cdr(list: Gc<List>) -> GcObj {
-    match list.get() {
+    match list.untag() {
         List::Cons(cons) => cons.cdr(),
         List::Nil => nil(),
     }
@@ -157,7 +157,7 @@ pub(crate) fn cdr(list: Gc<List>) -> GcObj {
 
 #[defun]
 pub(crate) fn car_safe(object: GcObj) -> GcObj {
-    match object.get() {
+    match object.untag() {
         Object::Cons(cons) => cons.car(),
         _ => nil(),
     }
@@ -165,7 +165,7 @@ pub(crate) fn car_safe(object: GcObj) -> GcObj {
 
 #[defun]
 pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
-    match object.get() {
+    match object.untag() {
         Object::Cons(cons) => cons.cdr(),
         _ => nil(),
     }
@@ -225,8 +225,8 @@ mod test {
         // TODO: Need to find a way to solve this
         // assert_eq!(16, size_of::<Cons>());
         let x = cons!("start", cons!(7, cons!(5, 9; cx); cx); cx);
-        assert!(matches!(x.get(), Object::Cons(_)));
-        let Object::Cons(cons1) = x.get() else {unreachable!("Expected cons")};
+        assert!(matches!(x.untag(), Object::Cons(_)));
+        let Object::Cons(cons1) = x.untag() else {unreachable!("Expected cons")};
 
         let start_str = "start".to_owned();
         assert_eq!(cx.add(start_str), cons1.car());
@@ -234,12 +234,12 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(cx.add(start2_str), cons1.car());
 
-        let Object::Cons(cons2) = cons1.cdr().get() else {unreachable!("Expected cons")};
+        let Object::Cons(cons2) = cons1.cdr().untag() else {unreachable!("Expected cons")};
 
         let cmp: GcObj = 7.into();
         assert_eq!(cmp, cons2.car());
 
-        let Object::Cons(cons3) = cons2.cdr().get() else {unreachable!("Expected cons")};
+        let Object::Cons(cons3) = cons2.cdr().untag() else {unreachable!("Expected cons")};
         let cmp1: GcObj = 5.into();
         assert_eq!(cmp1, cons3.car());
         let cmp2: GcObj = 9.into();

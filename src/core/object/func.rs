@@ -66,8 +66,8 @@ impl<'new> CloneIn<'new, &'new Self> for ByteFn {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
         let byte_fn = unsafe {
             Self::new(
-                self.op_codes.clone_in(bk).get(),
-                self.constants.clone_in(bk).get(),
+                self.op_codes.clone_in(bk).untag(),
+                self.constants.clone_in(bk).untag(),
                 self.args,
                 self.depth,
             )

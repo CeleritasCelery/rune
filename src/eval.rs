@@ -62,7 +62,7 @@ fn run_hooks<'ob>(
             Object::Symbol(sym) => {
                 if let Some(val) = env.vars.get(sym) {
                     let val = val.bind(cx);
-                    match val.get() {
+                    match val.untag() {
                         Object::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next() {
@@ -154,10 +154,10 @@ pub(crate) fn macroexpand<'ob>(
     env: &mut Root<Env>,
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.get(cx) {
-        if let Object::Symbol(sym) = form.car().get() {
+        if let Object::Symbol(sym) = form.car().untag() {
             // shadow the macro based on ENVIRONMENT
             let func: Option<Gc<Function>> = match environment {
-                Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.get() {
+                Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.untag() {
                     Object::Cons(cons) => Some(cons.cdr().try_into()?),
                     _ => get_macro_func(sym, cx),
                 },
@@ -180,7 +180,7 @@ pub(crate) fn macroexpand<'ob>(
 
 fn get_macro_func<'ob>(name: &Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
     if let Some(callable) = name.follow_indirect(cx) {
-        if let Function::Cons(cons) = callable.get() {
+        if let Function::Cons(cons) = callable.untag() {
             if cons.car() == sym::MACRO {
                 return cons.cdr().try_into().ok();
             }

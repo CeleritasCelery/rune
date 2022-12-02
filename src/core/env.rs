@@ -333,14 +333,14 @@ mod test {
             sym.set_func(func1.try_into().unwrap()).unwrap();
         }
         let cell1 = sym.func(cx).unwrap();
-        let Function::Cons(before) = cell1.get() else {unreachable!("Type should be a lisp function")};
+        let Function::Cons(before) = cell1.untag() else {unreachable!("Type should be a lisp function")};
         assert_eq!(before.car(), 1);
         let func2 = cons!(2; cx);
         unsafe {
             sym.set_func(func2.try_into().unwrap()).unwrap();
         }
         let cell2 = sym.func(cx).unwrap();
-        let Function::Cons(after) = cell2.get() else {unreachable!("Type should be a lisp function")};
+        let Function::Cons(after) = cell2.untag() else {unreachable!("Type should be a lisp function")};
         assert_eq!(after.car(), 2);
         assert_eq!(before.car(), 1);
     }
@@ -352,7 +352,7 @@ mod test {
         let cons = list!(1, 2, 3; cx);
         assert_eq!(cons, list!(1, 2, 3; cx));
         // is mutable
-        if let crate::core::object::Object::Cons(cons) = cons.get() {
+        if let crate::core::object::Object::Cons(cons) = cons.untag() {
             cons.set_car(4.into()).unwrap();
         } else {
             unreachable!();
@@ -361,7 +361,7 @@ mod test {
         let sym = intern("cons-test", cx);
         crate::data::fset(sym, cons).unwrap();
         // is not mutable
-        if let Function::Cons(cons) = sym.func(cx).unwrap().get() {
+        if let Function::Cons(cons) = sym.func(cx).unwrap().untag() {
             assert!(cons.set_car(5.into()).is_err());
             let obj: GcObj = cons.into();
             assert_eq!(obj, list!(4, 2, 3; cx));

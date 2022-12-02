@@ -133,7 +133,7 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::core::object::GcObj<'ob>> for $self {
             type Error = crate::core::error::TypeError;
             fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
-                match obj.get() {
+                match obj.untag() {
                     crate::core::object::Object::$ident(x) => Ok(x),
                     _ => Err(crate::core::error::TypeError::new(
                         crate::core::error::Type::$ty,
@@ -146,7 +146,7 @@ macro_rules! define_unbox {
         impl<'ob> std::convert::TryFrom<crate::core::object::GcObj<'ob>> for Option<$self> {
             type Error = crate::core::error::TypeError;
             fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
-                match obj.get() {
+                match obj.untag() {
                     crate::core::object::Object::Symbol(s) if s.nil() => Ok(None),
                     crate::core::object::Object::$ident(x) => Ok(Some(x)),
                     _ => Err(crate::core::error::TypeError::new(
