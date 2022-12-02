@@ -248,31 +248,14 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     fn varbind(&mut self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
         let value = self.stack.pop(cx);
         let symbol = self.frame.get_const(idx as usize, cx);
-        if let Object::Symbol(sym) = symbol.get() {
-            let prev_value = env.vars.get(sym).map(|x| x.bind(cx));
-            env.as_mut(cx).binding_stack.push((sym, prev_value));
-            env.as_mut(cx).vars.insert(sym, value);
-        } else {
-            unreachable!("Varbind was not a symbol: {:?}", symbol);
-        }
+        let Object::Symbol(sym) = symbol.get() else {
+            unreachable!("Varbind was not a symbol: {:?}", symbol)
+        };
+        env.as_mut(cx).varbind(sym, value, cx);
     }
 
-    fn unbind(&mut self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
-        let symbol = self.frame.get_const(idx as usize, cx);
-        if let Object::Symbol(orig_sym) = symbol.get() {
-            match env.as_mut(cx).binding_stack.pop_obj(cx) {
-                Some((sym, val)) => {
-                    debug_assert_eq!(orig_sym, sym);
-                    match val {
-                        Some(val) => env.as_mut(cx).vars.insert(sym, val),
-                        None => env.as_mut(cx).vars.remove(sym),
-                    }
-                }
-                None => unreachable!("Binding stack was empty"),
-            }
-        } else {
-            unreachable!("Varbind was not a symbol: {:?}", symbol);
-        }
+    fn unbind(&self, idx: u16, env: &mut Root<Env>, cx: &'ob Context) {
+        env.as_mut(cx).unbind(idx.into(), cx);
     }
 
     #[inline(always)]
@@ -1167,6 +1150,24 @@ mod test {
         // (lambda (x &optional y) (+ x y))
         make_bytecode!(bytecode, 513, [StackRef1, StackRef1, Plus, Return], [], cx);
         check_bytecode!(bytecode, [1, 2], 3, cx);
+    }
+
+    #[test]
+    fn test_bytecode_variables() {
+        use OpCode::*;
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+
+        // (lambda () (let ((load-path 5)) load-path))
+        make_bytecode!(
+            bytecode,
+            0,
+            [Constant1, VarBind0, VarRef0, Unbind1, Return],
+            [sym::LOAD_PATH, 5],
+            cx
+        );
+        check_bytecode!(bytecode, [], 5, cx);
     }
 
     #[test]

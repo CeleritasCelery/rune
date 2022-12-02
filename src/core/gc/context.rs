@@ -125,7 +125,6 @@ impl<'ob, 'rt> Context<'rt> {
         }
     }
 
-    #[allow(clippy::unused_self)]
     pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime>::Out
     where
         T: WithLifetime<'ob>,
@@ -133,7 +132,6 @@ impl<'ob, 'rt> Context<'rt> {
         unsafe { obj.with_lifetime() }
     }
 
-    #[allow(clippy::unused_self)]
     pub(crate) unsafe fn rebind_raw_ptr<T, U>(&'ob self, raw: T) -> U
     where
         T: RawInto<U>,

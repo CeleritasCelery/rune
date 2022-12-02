@@ -18,6 +18,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::restriction)]
 #![allow(
     clippy::undocumented_unsafe_blocks, // Will enable this later
+    clippy::unused_self,
     clippy::todo,
     clippy::std_instead_of_core,
     clippy::std_instead_of_alloc,

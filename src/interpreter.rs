@@ -380,7 +380,6 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
     }
 
-    #[allow(clippy::unused_self)]
     fn quote<'ob>(&self, value: GcObj<'ob>) -> EvalResult<'ob> {
         let mut forms = value.as_list()?;
         match forms.len() {

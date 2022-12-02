@@ -57,6 +57,24 @@ impl Rt<Env> {
     ) -> Option<(&Rt<GcObj<'static>>, &Rt<GcObj<'static>>)> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
+
+    pub(crate) fn varbind(&mut self, var: &Symbol, value: GcObj, cx: &Context) {
+        let prev_value = self.vars.get(var).map(|x| x.bind(cx));
+        self.binding_stack.push((var, prev_value));
+        self.vars.insert(var, value);
+    }
+
+    pub(crate) fn unbind(&mut self, count: u32, cx: &Context) {
+        for _ in 0..count {
+            match self.binding_stack.pop_obj(cx) {
+                Some((sym, val)) => match val {
+                    Some(val) => self.vars.insert(sym, val),
+                    None => self.vars.remove(sym),
+                },
+                None => unreachable!("Binding stack was empty"),
+            }
+        }
+    }
 }
 
 pub(crate) struct ObjectMap {
