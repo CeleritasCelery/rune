@@ -124,6 +124,21 @@ impl<T: TaggedPtr> Untag<T> for Gc<T> {
     }
 }
 
+pub(crate) trait TagType
+where
+    Self: Sized,
+{
+    type Out;
+    fn tag(self) -> Gc<Self::Out>;
+}
+
+impl<T: TaggedPtr> TagType for T {
+    type Out = Self;
+    fn tag(self) -> Gc<Self> {
+        self.tag()
+    }
+}
+
 unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
     Gc::new(e.ptr)
 }
@@ -202,12 +217,12 @@ impl<T> IntoObject for Option<Gc<T>> {
 
 impl<T> IntoObject for T
 where
-    T: Into<Gc<T>>,
+    T: TagType,
 {
-    type Out<'ob> = T;
+    type Out<'ob> = <T as TagType>::Out;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        self.into()
+        self.tag()
     }
 }
 
@@ -217,33 +232,6 @@ impl IntoObject for f64 {
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
         Gc::from_ptr(ptr, Tag::Float)
-    }
-}
-
-impl IntoObject for i64 {
-    type Out<'a> = i64;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: *const i64 = sptr::invalid(self as usize);
-        unsafe { Self::tag_ptr(ptr) }
-    }
-}
-
-impl IntoObject for i32 {
-    type Out<'a> = i64;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: *const i64 = sptr::invalid(self as usize);
-        unsafe { i64::tag_ptr(ptr) }
-    }
-}
-
-impl IntoObject for usize {
-    type Out<'a> = i64;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: *const i64 = sptr::invalid(self);
-        unsafe { i64::tag_ptr(ptr) }
     }
 }
 
@@ -402,6 +390,10 @@ mod private {
         fn untag(val: Gc<Self>) -> Self {
             let (ptr, _) = val.untag_ptr();
             unsafe { Self::from_obj_ptr(ptr) }
+        }
+
+        fn tag(self) -> Gc<Self> {
+            unsafe { Self::tag_ptr(self.get_ptr()) }
         }
 
         fn get_ptr(self) -> *const Self::Ptr {
@@ -657,7 +649,7 @@ pub(crate) enum Number<'ob> {
     Int(i64),
     Float(&'ob LispFloat),
 }
-cast_gc!(Number<'ob> => i64, &'ob LispFloat);
+cast_gc!(Number<'ob> => i64, &LispFloat);
 
 impl<'old, 'new> WithLifetime<'new> for Number<'old> {
     type Out = Number<'new>;
@@ -757,7 +749,7 @@ pub(crate) enum Object<'ob> {
     ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &Symbol, &'ob LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &Symbol, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
     /// Return the type of an object
@@ -819,6 +811,20 @@ impl<'ob> From<usize> for Gc<Object<'ob>> {
     }
 }
 
+impl TagType for usize {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(self as i64)
+    }
+}
+
+impl TagType for i32 {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(i64::from(self))
+    }
+}
+
 impl<'ob> From<i32> for Gc<Object<'ob>> {
     fn from(x: i32) -> Self {
         let ptr = sptr::invalid(x as usize);
@@ -830,27 +836,6 @@ impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     fn from(x: ConstSymbol) -> Self {
         let sym: &Symbol = &x;
         sym.into()
-    }
-}
-
-impl From<&Symbol> for Gc<&Symbol> {
-    fn from(x: &Symbol) -> Self {
-        let ptr = x as *const Symbol;
-        unsafe { <&Symbol>::tag_ptr(ptr) }
-    }
-}
-
-impl From<&LispVec> for Gc<&LispVec> {
-    fn from(x: &LispVec) -> Self {
-        let ptr = x as *const LispVec;
-        unsafe { <&LispVec>::tag_ptr(ptr) }
-    }
-}
-
-impl From<&ByteFn> for Gc<&ByteFn> {
-    fn from(x: &ByteFn) -> Self {
-        let ptr = x as *const ByteFn;
-        unsafe { <&ByteFn>::tag_ptr(ptr) }
     }
 }
 
@@ -956,13 +941,6 @@ impl<'ob> GcObj<'ob> {
 
     pub(crate) fn nil(self) -> bool {
         self == crate::core::env::sym::NIL
-    }
-}
-
-impl From<&Cons> for Gc<&Cons> {
-    fn from(x: &Cons) -> Self {
-        let ptr = x as *const Cons;
-        unsafe { <&Cons>::tag_ptr(ptr) }
     }
 }
 

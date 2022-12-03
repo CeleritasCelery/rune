@@ -1,5 +1,5 @@
 use crate::core::gc::GcManaged;
-use crate::core::object::{CloneIn, IntoObject};
+use crate::core::object::{CloneIn, IntoObject, TagType};
 use crate::core::{gc::Context, object::RawObj};
 use anyhow::{bail, Result};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -237,7 +237,7 @@ impl<'new> CloneIn<'new, &'new Self> for Symbol {
     fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
         if let SymbolName::Uninterned(name) = &self.name {
             match bk.uninterned_symbol_map.get(self) {
-                Some(new) => new.into(),
+                Some(new) => new.tag(),
                 None => {
                     let sym = Self::new_uninterned(name);
                     if let Some(old_func) = self.get() {
@@ -252,7 +252,7 @@ impl<'new> CloneIn<'new, &'new Self> for Symbol {
                 }
             }
         } else {
-            unsafe { self.with_lifetime().into() }
+            unsafe { self.with_lifetime().tag() }
         }
     }
 }
