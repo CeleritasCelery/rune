@@ -61,21 +61,19 @@ impl<T> Gc<T> {
     }
 
     fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {
-        assert_eq!(
-            std::mem::size_of::<*const U>(),
-            std::mem::size_of::<*const ()>()
-        );
+        use std::mem::size_of;
+        assert_eq!(size_of::<*const U>(), size_of::<*const ()>());
         let ptr = ptr.cast::<u8>().map_addr(|x| (x << 8) | tag as usize);
         Self::new(ptr)
     }
 
     fn untag_ptr(self) -> (*const u8, Tag) {
         let ptr = self.ptr.map_addr(|x| ((x as isize) >> 8) as usize);
-        let tag = self.tag();
+        let tag = self.get_tag();
         (ptr, tag)
     }
 
-    fn tag(self) -> Tag {
+    fn get_tag(self) -> Tag {
         unsafe { std::mem::transmute(self.ptr.addr() as u8) }
     }
 
@@ -231,7 +229,7 @@ impl IntoObject for f64 {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        Gc::from_ptr(ptr, Tag::Float)
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -239,16 +237,12 @@ impl IntoObject for bool {
     type Out<'a> = &'a Symbol;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        match self {
-            true => {
-                let sym: &Symbol = &crate::core::env::sym::TRUE;
-                Gc::from_ptr(sym, Tag::Symbol)
-            }
-            false => {
-                let sym: &Symbol = &crate::core::env::sym::NIL;
-                Gc::from_ptr(sym, Tag::Symbol)
-            }
-        }
+        let sym: &Symbol = if self {
+            &crate::core::env::sym::TRUE
+        } else {
+            &crate::core::env::sym::NIL
+        };
+        unsafe { Self::Out::tag_ptr(sym) }
     }
 }
 
@@ -257,7 +251,7 @@ impl IntoObject for Cons {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        Gc::from_ptr(ptr, Tag::Cons)
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -266,7 +260,7 @@ impl IntoObject for ByteFn {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        unsafe { <&Self>::tag_ptr(ptr) }
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -275,7 +269,7 @@ impl IntoObject for Symbol {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        Gc::from_ptr(ptr, Tag::Symbol)
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -283,8 +277,8 @@ impl IntoObject for ConstSymbol {
     type Out<'ob> = &'ob Symbol;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: *const u8 = std::ptr::addr_of!(*self).cast();
-        Gc::from_ptr(ptr, Tag::Symbol)
+        let ptr: &Symbol = &self;
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -293,7 +287,7 @@ impl IntoObject for LispString {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        unsafe { <&LispString>::tag_ptr(ptr) }
+        unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
 
@@ -303,7 +297,7 @@ impl IntoObject for String {
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
             let ptr = LispString::from_string(self).alloc_obj(block);
-            <&LispString>::tag_ptr(ptr)
+            Self::Out::tag_ptr(ptr)
         }
     }
 }
@@ -670,7 +664,7 @@ cast_gc!(List<'ob> => &'ob Cons);
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
         let sym: &Symbol = &crate::core::env::sym::NIL;
-        Gc::from_ptr(sym, Tag::Symbol)
+        unsafe { cast_gc(<&Symbol>::tag_ptr(sym)) }
     }
 }
 
@@ -847,7 +841,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::Int | Tag::Float => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Number, value)),
         }
@@ -903,7 +897,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::ByteFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Func, value)),
         }
@@ -918,7 +912,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::Int => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Int, value)),
         }
@@ -948,7 +942,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
     type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::Cons => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
@@ -959,7 +953,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
     type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::String => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::String, value)),
         }
@@ -970,7 +964,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
     type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::HashTable => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::HashTable, value)),
         }
@@ -981,7 +975,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
     type Error = TypeError;
 
     fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
-        match value.tag() {
+        match value.get_tag() {
             Tag::Vec => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
         }
