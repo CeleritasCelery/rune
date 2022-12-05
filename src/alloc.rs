@@ -1,4 +1,4 @@
-use crate::core::env::Symbol;
+use crate::core::env::{Symbol, SymbolX};
 use crate::core::gc::Context;
 use crate::core::object::{
     nil, ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder,
@@ -85,7 +85,7 @@ fn purecopy(obj: GcObj) -> GcObj {
 }
 
 #[defun]
-fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<&'ob Symbol> {
+fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<SymbolX<'ob>> {
     let sym = Symbol::new_uninterned(name);
     cx.add(sym)
 }

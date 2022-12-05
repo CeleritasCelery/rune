@@ -8,7 +8,7 @@ use crate::core::gc::{GcManaged, Trace};
 
 use super::super::{
     cons::Cons,
-    env::Symbol,
+    env::{Symbol, SymbolX},
     error::{Type, TypeError},
     gc::{AllocObject, Block},
 };
@@ -234,10 +234,10 @@ impl IntoObject for f64 {
 }
 
 impl IntoObject for bool {
-    type Out<'a> = &'a Symbol;
+    type Out<'a> = SymbolX<'a>;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let sym: &Symbol = if self {
+        let sym: SymbolX = if self {
             &crate::core::env::sym::TRUE
         } else {
             &crate::core::env::sym::NIL
@@ -265,7 +265,7 @@ impl IntoObject for ByteFn {
 }
 
 impl IntoObject for Symbol {
-    type Out<'ob> = &'ob Symbol;
+    type Out<'ob> = SymbolX<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
@@ -274,10 +274,10 @@ impl IntoObject for Symbol {
 }
 
 impl IntoObject for ConstSymbol {
-    type Out<'ob> = &'ob Symbol;
+    type Out<'ob> = SymbolX<'ob>;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: &Symbol = &self;
+        let ptr: SymbolX = &self;
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -411,7 +411,7 @@ impl<'a> TaggedPtr for Object<'a> {
         let (ptr, tag) = val.untag_ptr();
         unsafe {
             match tag {
-                Tag::Symbol => Object::Symbol(<&Symbol>::from_obj_ptr(ptr)),
+                Tag::Symbol => Object::Symbol(<SymbolX>::from_obj_ptr(ptr)),
                 Tag::Cons => Object::Cons(<&Cons>::from_obj_ptr(ptr)),
                 Tag::SubrFn => Object::SubrFn(&*ptr.cast()),
                 Tag::ByteFn => Object::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
@@ -460,7 +460,7 @@ impl<'a> TaggedPtr for Function<'a> {
                 // SubrFn does not have IntoObject implementation, so we cast it directly
                 Tag::SubrFn => Function::SubrFn(&*ptr.cast::<SubrFn>()),
                 Tag::ByteFn => Function::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
-                Tag::Symbol => Function::Symbol(<&Symbol>::from_obj_ptr(ptr)),
+                Tag::Symbol => Function::Symbol(<SymbolX>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
         }
@@ -536,7 +536,7 @@ impl TaggedPtr for &SubrFn {
     }
 }
 
-impl TaggedPtr for &Symbol {
+impl TaggedPtr for SymbolX<'_> {
     type Ptr = Symbol;
     const TAG: Tag = Tag::Symbol;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
@@ -663,8 +663,8 @@ cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let sym: &Symbol = &crate::core::env::sym::NIL;
-        unsafe { cast_gc(<&Symbol>::tag_ptr(sym)) }
+        let sym: SymbolX = &crate::core::env::sym::NIL;
+        unsafe { cast_gc(<SymbolX>::tag_ptr(sym)) }
     }
 }
 
@@ -682,9 +682,9 @@ pub(crate) enum Function<'ob> {
     ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
     Cons(&'ob Cons),
-    Symbol(&'ob Symbol),
+    Symbol(SymbolX<'ob>),
 }
-cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, &'ob Symbol);
+cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, SymbolX<'ob>);
 
 impl<'old, 'new> WithLifetime<'new> for Function<'old> {
     type Out = Function<'new>;
@@ -734,7 +734,7 @@ impl<'ob> Function<'ob> {
 pub(crate) enum Object<'ob> {
     Int(i64),
     Float(&'ob LispFloat),
-    Symbol(&'ob Symbol),
+    Symbol(SymbolX<'ob>),
     Cons(&'ob Cons),
     Vec(&'ob LispVec),
     Record(&'ob Record),
@@ -743,7 +743,7 @@ pub(crate) enum Object<'ob> {
     ByteFn(&'ob ByteFn),
     SubrFn(&'static SubrFn),
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, &Symbol, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, SymbolX<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
     /// Return the type of an object
@@ -828,7 +828,7 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
 
 impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     fn from(x: ConstSymbol) -> Self {
-        let sym: &Symbol = &x;
+        let sym: SymbolX = &x;
         sym.into()
     }
 }
@@ -883,7 +883,7 @@ impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<&'ob Symbol> {
+impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<SymbolX<'ob>> {
     type Error = TypeError;
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.untag() {
@@ -1030,8 +1030,8 @@ impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<&Symbol> for Gc<Object<'ob>> {
-    fn eq(&self, other: &&Symbol) -> bool {
+impl<'ob> PartialEq<SymbolX<'_>> for Gc<Object<'ob>> {
+    fn eq(&self, other: &SymbolX) -> bool {
         match self.untag() {
             Object::Symbol(x) => x == *other,
             _ => false,
@@ -1040,7 +1040,7 @@ impl<'ob> PartialEq<&Symbol> for Gc<Object<'ob>> {
 }
 
 impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
-    fn eq(&self, other: &Symbol) -> bool {
+    fn eq(&self, other: SymbolX) -> bool {
         match self.untag() {
             Object::Symbol(x) => x == other,
             _ => false,

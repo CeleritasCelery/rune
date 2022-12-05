@@ -2,7 +2,7 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
-use crate::core::env::Symbol;
+use crate::core::env::SymbolX;
 
 use super::{
     super::error::{ArgError, Type, TypeError},
@@ -118,7 +118,7 @@ define_unbox!(Float, &'ob LispFloat);
 define_unbox!(HashTable, &'ob LispHashTable);
 define_unbox!(String, &'ob LispString);
 define_unbox!(Vec, &'ob LispVec);
-define_unbox!(Symbol, &'ob Symbol);
+define_unbox!(Symbol, SymbolX<'ob>);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>
 where

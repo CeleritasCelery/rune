@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{root, rooted_iter};
 
-use crate::core::env::{sym, ConstSymbol, Env, Symbol};
+use crate::core::env::{sym, ConstSymbol, Env, Symbol, SymbolX};
 
 use anyhow::{anyhow, bail, ensure, Result};
 
@@ -90,7 +90,7 @@ fn run_hooks<'ob>(
 #[defun]
 pub(crate) fn autoload_do_load<'ob>(
     fundef: &Rt<GcObj>,
-    funname: Option<&Rt<Gc<&Symbol>>>,
+    funname: Option<&Rt<Gc<SymbolX>>>,
     macro_only: Option<&Rt<GcObj>>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
@@ -131,13 +131,13 @@ pub(crate) fn autoload_do_load<'ob>(
 
 #[defun]
 fn autoload<'ob>(
-    function: &'ob Symbol,
+    function: SymbolX<'ob>,
     file: &str,
     docstring: Option<GcObj>,
     interactive: Option<GcObj>,
     load_type: Option<GcObj>,
     cx: &'ob Context,
-) -> Result<&'ob Symbol> {
+) -> Result<SymbolX<'ob>> {
     if function.has_func() {
         Ok(&sym::NIL)
     } else {
@@ -178,7 +178,7 @@ pub(crate) fn macroexpand<'ob>(
     Ok(form.bind(cx))
 }
 
-fn get_macro_func<'ob>(name: &Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
+fn get_macro_func<'ob>(name: SymbolX, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
     if let Some(callable) = name.follow_indirect(cx) {
         if let Function::Cons(cons) = callable.untag() {
             if cons.car() == sym::MACRO {
@@ -192,7 +192,7 @@ fn get_macro_func<'ob>(name: &Symbol, cx: &'ob Context) -> Option<Gc<Function<'o
 #[defun]
 #[allow(non_snake_case)]
 fn internal__define_uninitialized_variable<'ob>(
-    _symbol: &'ob Symbol,
+    _symbol: SymbolX<'ob>,
     _doc: Option<GcObj>,
 ) -> GcObj<'ob> {
     // TODO: implement doc strings
@@ -208,13 +208,13 @@ fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Root<Env>, cx: &Contex
 }
 
 #[defun]
-fn special_variable_p(symbol: &Symbol, env: &Root<Env>) -> bool {
+fn special_variable_p(symbol: SymbolX, env: &Root<Env>) -> bool {
     env.special_variables.contains(symbol)
 }
 
 #[defun]
 fn set_default_toplevel_value<'ob>(
-    symbol: &Symbol,
+    symbol: SymbolX,
     value: GcObj,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
@@ -225,7 +225,7 @@ fn set_default_toplevel_value<'ob>(
 
 #[defun]
 fn set_default<'ob>(
-    symbol: &Symbol,
+    symbol: SymbolX,
     value: GcObj<'ob>,
     env: &'ob mut Root<Env>,
     cx: &'ob Context,
@@ -242,7 +242,7 @@ static TRUE: Symbol = Symbol::new_const("t", ConstSymbol::new(__FN_PTR_TRUE));
 
 #[allow(non_snake_case)]
 #[doc(hidden)]
-fn __FN_PTR_TRUE() -> &'static Symbol {
+fn __FN_PTR_TRUE() -> SymbolX<'static> {
     &TRUE
 }
 
@@ -250,7 +250,7 @@ static NIL: Symbol = Symbol::new_const("nil", ConstSymbol::new(__FN_PTR_NIL));
 
 #[allow(non_snake_case)]
 #[doc(hidden)]
-fn __FN_PTR_NIL() -> &'static Symbol {
+fn __FN_PTR_NIL() -> SymbolX<'static> {
     &NIL
 }
 

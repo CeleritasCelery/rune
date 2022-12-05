@@ -11,19 +11,19 @@ pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
-    pub(crate) vars: HashMap<&'static Symbol, GcObj<'static>>,
-    pub(crate) props: HashMap<&'static Symbol, Vec<(&'static Symbol, GcObj<'static>)>>,
+    pub(crate) vars: HashMap<SymbolX<'static>, GcObj<'static>>,
+    pub(crate) props: HashMap<SymbolX<'static>, Vec<(SymbolX<'static>, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     exception: (GcObj<'static>, GcObj<'static>),
     #[no_trace]
     exception_id: u32,
-    pub(crate) special_variables: HashSet<&'static Symbol>,
-    binding_stack: Vec<(&'static Symbol, Option<GcObj<'static>>)>,
+    pub(crate) special_variables: HashSet<SymbolX<'static>>,
+    binding_stack: Vec<(SymbolX<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
 }
 
 impl Rt<Env> {
-    pub(crate) fn set_var(&mut self, sym: &Symbol, value: GcObj) -> Result<()> {
+    pub(crate) fn set_var(&mut self, sym: SymbolX, value: GcObj) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))
         } else {
@@ -32,7 +32,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn set_prop(&mut self, symbol: &Symbol, propname: &Symbol, value: GcObj) {
+    pub(crate) fn set_prop(&mut self, symbol: SymbolX, propname: SymbolX, value: GcObj) {
         match self.props.get_mut(symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
@@ -58,7 +58,7 @@ impl Rt<Env> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 
-    pub(crate) fn varbind(&mut self, var: &Symbol, value: GcObj, cx: &Context) {
+    pub(crate) fn varbind(&mut self, var: SymbolX, value: GcObj, cx: &Context) {
         let prev_value = self.vars.get(var).map(|x| x.bind(cx));
         self.binding_stack.push((var, prev_value));
         self.vars.insert(var, value);
@@ -76,7 +76,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn defvar(&mut self, var: &Symbol, value: GcObj) -> Result<()> {
+    pub(crate) fn defvar(&mut self, var: SymbolX, value: GcObj) -> Result<()> {
         self.set_var(var, value)?;
         self.special_variables.insert(var);
         // If this variable was unbound previously in the binding stack,
@@ -107,13 +107,13 @@ impl SymbolBox {
         Self(ptr)
     }
 
-    fn from_static(inner: &'static Symbol) -> Self {
+    fn from_static(inner: SymbolX<'static>) -> Self {
         Self(inner)
     }
 }
 
 impl AsRef<Symbol> for SymbolBox {
-    fn as_ref(&self) -> &Symbol {
+    fn as_ref(&self) -> SymbolX {
         unsafe { &*self.0 }
     }
 }
@@ -141,7 +141,7 @@ impl SymbolMap {
         }
     }
 
-    fn get(&self, name: &str) -> Option<&Symbol> {
+    fn get(&self, name: &str) -> Option<SymbolX> {
         unsafe {
             self.map.get(name).map(|x| {
                 let ptr: *const Symbol = x.as_ref();
@@ -150,7 +150,7 @@ impl SymbolMap {
         }
     }
 
-    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> &'ob Symbol {
+    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> SymbolX<'ob> {
         let sym = match self.map.get(name) {
             Some(x) => x.0,
             None => {
@@ -174,7 +174,7 @@ impl SymbolMap {
         unsafe { &*sym }
     }
 
-    fn pre_init(&mut self, sym: &'static Symbol) {
+    fn pre_init(&mut self, sym: SymbolX<'static>) {
         match self.map.get(sym.name()) {
             Some(_) => panic!("Attempt to intitalize {} twice", sym.name()),
             None => {
@@ -185,11 +185,11 @@ impl SymbolMap {
 }
 
 impl ObjectMap {
-    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> &'ob Symbol {
+    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> SymbolX<'ob> {
         self.map.intern(name, cx)
     }
 
-    pub(crate) fn set_func(&self, symbol: &Symbol, func: Gc<Function>) -> Result<()> {
+    pub(crate) fn set_func(&self, symbol: SymbolX, func: Gc<Function>) -> Result<()> {
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]
@@ -200,7 +200,7 @@ impl ObjectMap {
         unsafe { symbol.set_func(new_func) }
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<&Symbol> {
+    pub(crate) fn get(&self, name: &str) -> Option<SymbolX> {
         self.map.get(name)
     }
 }
@@ -231,7 +231,7 @@ macro_rules! create_symbolmap {
             use super::{Symbol, ConstSymbol};
             // This GlobalSymbol is assinged to every runtime symbol created.
             static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
-            fn __RUNTIME_SYMBOL_FN () -> &'static Symbol {&__RUNTIME_SYMBOL_GLOBAL}
+            fn __RUNTIME_SYMBOL_FN () -> crate::core::env::SymbolX<'static> {&__RUNTIME_SYMBOL_GLOBAL}
             pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
             // Re-export all symbols in this module
@@ -291,7 +291,7 @@ create_symbolmap!(
 );
 
 /// Intern a new symbol based on `name`
-pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> &'ob Symbol {
+pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> SymbolX<'ob> {
     INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
 }
 
@@ -304,12 +304,12 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(size_of::<isize>(), size_of::<&Symbol>());
+        assert_eq!(size_of::<isize>(), size_of::<SymbolX>());
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
     }
 
-    unsafe fn fix_lifetime(inner: &Symbol) -> &'static Symbol {
-        std::mem::transmute::<&Symbol, &'static Symbol>(inner)
+    unsafe fn fix_lifetime(inner: SymbolX) -> SymbolX<'static> {
+        std::mem::transmute::<SymbolX, SymbolX<'static>>(inner)
     }
 
     #[test]

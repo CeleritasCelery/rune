@@ -1,4 +1,4 @@
-use crate::core::env::Symbol;
+use crate::core::env::SymbolX;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Rt;
@@ -168,12 +168,12 @@ pub(crate) fn load(
 }
 
 #[defun]
-pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> &'ob Symbol {
+pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> SymbolX<'ob> {
     crate::core::env::intern(string, cx)
 }
 
 #[defun]
-pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<&Symbol> {
+pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<SymbolX> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.untag() {
         Object::Symbol(sym) => {

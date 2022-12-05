@@ -160,12 +160,7 @@ fn get_path_ident_name(type_path: &syn::TypePath) -> &syn::Ident {
 }
 
 fn map_function_name(name: String) -> String {
-    name.chars()
-        .map(|c| match c {
-            '_' => '-',
-            c => c,
-        })
-        .collect()
+    name.replace("_", "-")
 }
 
 const MUT: bool = true;
