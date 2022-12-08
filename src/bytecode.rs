@@ -384,7 +384,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
     #[allow(clippy::too_many_lines)]
     /// The main bytecode execution loop.
     fn execute_bytecode(&mut self, env: &mut Root<Env>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        use crate::{alloc, arith, core, data, fns};
+        use crate::{alloc, arith, data, fns};
         use opcode::OpCode as op;
         loop {
             let op = match self.frame.pc.next().try_into() {
@@ -545,16 +545,16 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 }
                 op::Car => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::car(top.bind_as(cx)?));
+                    top.set(data::car(top.bind_as(cx)?));
                 }
                 op::Cdr => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::cdr(top.bind_as(cx)?));
+                    top.set(data::cdr(top.bind_as(cx)?));
                 }
                 op::Cons => {
                     let cdr = self.stack.pop(cx);
                     let car = self.stack.top(cx);
-                    car.set(core::cons::cons(car.bind(cx), cdr, cx));
+                    car.set(data::cons(car.bind(cx), cdr, cx));
                 }
                 op::List1 => {
                     let top = self.stack.top(cx);
@@ -826,20 +826,20 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Setcar => {
                     let newcar = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(core::cons::setcar(top.bind_as(cx)?, newcar)?);
+                    top.set(data::setcar(top.bind_as(cx)?, newcar)?);
                 }
                 op::Setcdr => {
                     let newcdr = self.stack.pop(cx);
                     let top = self.stack.top(cx);
-                    top.set(core::cons::setcdr(top.bind_as(cx)?, newcdr)?);
+                    top.set(data::setcdr(top.bind_as(cx)?, newcdr)?);
                 }
                 op::CarSafe => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::car_safe(top.bind(cx)));
+                    top.set(data::car_safe(top.bind(cx)));
                 }
                 op::CdrSafe => {
                     let top = self.stack.top(cx);
-                    top.set(core::cons::cdr_safe(top.bind(cx)));
+                    top.set(data::cdr_safe(top.bind(cx)));
                 }
                 op::Nconc => {
                     let list2 = self.stack.pop(cx);

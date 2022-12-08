@@ -274,7 +274,6 @@ create_symbolmap!(
     crate::arith,
     crate::bytecode,
     crate::interpreter,
-    crate::core::cons,
     crate::fileio,
     crate::data,
     crate::print,

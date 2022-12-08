@@ -1,7 +1,6 @@
-use super::gc::{Block, Context, GcManaged, GcMark, Trace};
-use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, List, Object, RawObj};
+use super::gc::{Block, GcManaged, GcMark, Trace};
+use super::object::{CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
 use anyhow::{anyhow, Result};
-use fn_macros::defun;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
 
@@ -139,57 +138,6 @@ impl Debug for Cons {
 
 define_unbox!(Cons, &'ob Cons);
 
-#[defun]
-pub(crate) fn car(list: Gc<List>) -> GcObj {
-    match list.untag() {
-        List::Cons(cons) => cons.car(),
-        List::Nil => nil(),
-    }
-}
-
-#[defun]
-pub(crate) fn cdr(list: Gc<List>) -> GcObj {
-    match list.untag() {
-        List::Cons(cons) => cons.cdr(),
-        List::Nil => nil(),
-    }
-}
-
-#[defun]
-pub(crate) fn car_safe(object: GcObj) -> GcObj {
-    match object.untag() {
-        Object::Cons(cons) => cons.car(),
-        _ => nil(),
-    }
-}
-
-#[defun]
-pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
-    match object.untag() {
-        Object::Cons(cons) => cons.cdr(),
-        _ => nil(),
-    }
-}
-
-#[defun]
-pub(crate) fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    cell.set_car(newcar)?;
-    Ok(newcar)
-}
-
-#[defun]
-pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    cell.set_cdr(newcdr)?;
-    Ok(newcdr)
-}
-
-#[defun]
-pub(crate) fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
-    crate::cons!(car, cdr; cx)
-}
-
-define_symbols!(FUNCS => {car, cdr, cons, setcar, setcdr, car_safe, cdr_safe});
-
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $cx:expr) => {
@@ -215,6 +163,8 @@ macro_rules! list {
 
 #[cfg(test)]
 mod test {
+    use crate::core::gc::Context;
+
     use super::super::gc::RootSet;
     use super::*;
 

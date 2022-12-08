@@ -5,7 +5,7 @@ use crate::core::{
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Root},
-    object::{nil, Gc, GcObj, Number, Object, SubrFn},
+    object::{nil, Gc, GcObj, List, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
@@ -390,6 +390,55 @@ pub(crate) fn provide<'ob>(feature: &'ob Symbol, _subfeatures: Option<&Cons>) ->
     feature
 }
 
+#[defun]
+pub(crate) fn car(list: Gc<List>) -> GcObj {
+    match list.untag() {
+        List::Cons(cons) => cons.car(),
+        List::Nil => nil(),
+    }
+}
+
+#[defun]
+pub(crate) fn cdr(list: Gc<List>) -> GcObj {
+    match list.untag() {
+        List::Cons(cons) => cons.cdr(),
+        List::Nil => nil(),
+    }
+}
+
+#[defun]
+pub(crate) fn car_safe(object: GcObj) -> GcObj {
+    match object.untag() {
+        Object::Cons(cons) => cons.car(),
+        _ => nil(),
+    }
+}
+
+#[defun]
+pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
+    match object.untag() {
+        Object::Cons(cons) => cons.cdr(),
+        _ => nil(),
+    }
+}
+
+#[defun]
+pub(crate) fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    cell.set_car(newcar)?;
+    Ok(newcar)
+}
+
+#[defun]
+pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    cell.set_cdr(newcdr)?;
+    Ok(newcdr)
+}
+
+#[defun]
+pub(crate) fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
+    crate::cons!(car, cdr; cx)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -447,6 +496,13 @@ define_symbols!(
         bufferp,
         string_to_number,
         indirect_function,
+        car,
+        cdr,
+        cons,
+        setcar,
+        setcdr,
+        car_safe,
+        cdr_safe,
     }
     SYMS => {
         MANY,
