@@ -57,11 +57,7 @@ pub(crate) fn read_from_string<'ob>(
     Ok(cons!(obj, new_pos as i64; cx))
 }
 
-pub(crate) fn load_internal<'ob>(
-    contents: &str,
-    cx: &'ob mut Context,
-    env: &mut Root<Env>,
-) -> Result<bool> {
+pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Root<Env>) -> Result<bool> {
     let mut pos = 0;
     loop {
         let (obj, new_pos) = match reader::read(&contents[pos..], cx) {
@@ -119,11 +115,11 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<P
 }
 
 #[defun]
-pub(crate) fn load<'ob>(
+pub(crate) fn load(
     file: &Rt<Gc<&LispString>>,
     noerror: Option<()>,
     nomessage: Option<()>,
-    cx: &'ob mut Context,
+    cx: &mut Context,
     env: &mut Root<Env>,
 ) -> Result<bool> {
     let noerror = noerror.is_some();

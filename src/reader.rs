@@ -480,7 +480,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
-pub(crate) fn read<'a, 'ob>(slice: &'a str, cx: &'ob Context) -> Result<(GcObj<'ob>, usize)> {
+pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(GcObj<'ob>, usize)> {
     let mut reader = Reader {
         tokens: Tokenizer::new(slice),
         cx,

@@ -1050,11 +1050,11 @@ mod test {
         })
     }
 
-    fn check_bytecode_internal<'ob>(
+    fn check_bytecode_internal(
         args: &mut Root<Vec<GcObj<'static>>>,
         bytecode: &Rt<&'static ByteFn>,
         expect: &Rt<GcObj>,
-        cx: &'ob mut Context,
+        cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
         let val = rebind!(call(bytecode, args, "test", env, cx).unwrap(), cx);

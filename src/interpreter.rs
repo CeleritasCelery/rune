@@ -761,7 +761,7 @@ mod test {
 
     use super::*;
 
-    fn check_interpreter<'ob, T>(test_str: &str, expect: T, cx: &'ob mut Context)
+    fn check_interpreter<T>(test_str: &str, expect: T, cx: &mut Context)
     where
         T: IntoObject,
     {
@@ -774,7 +774,7 @@ mod test {
         assert_eq!(compare, expect);
     }
 
-    fn check_error<'ob>(test_str: &str, cx: &'ob mut Context) {
+    fn check_error(test_str: &str, cx: &mut Context) {
         root!(env, Env::default(), cx);
         println!("Test String: {test_str}");
         let obj = crate::reader::read(test_str, cx).unwrap().0;

@@ -253,6 +253,7 @@ macro_rules! create_symbolmap {
                 #[cfg(test)]
                 SYMBOLS_INIT.store(true, std::sync::atomic::Ordering::Release);
                 $(for sym in $($mod::)*__SYMBOLS.iter() {
+                    #[allow(clippy::unnecessary_safety_comment)]
                     // SAFETY: We know that the function values are un-tagged,
                     // and that only subr's have been defined in the symbols, so
                     // it is safe to tag all function cell's as subr's

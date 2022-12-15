@@ -10,6 +10,8 @@ use super::sym;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+pub(crate) type SymbolX<'a> = &'a Symbol;
+
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
 /// will be the same location no matter which thread
@@ -34,10 +36,10 @@ enum SymbolName {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> &'static Symbol);
+pub(crate) struct ConstSymbol(fn() -> SymbolX<'static>);
 
 impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> &'static Symbol) -> Self {
+    pub(crate) const fn new(f: fn() -> SymbolX<'static>) -> Self {
         Self(f)
     }
 }
@@ -51,7 +53,7 @@ impl std::ops::Deref for ConstSymbol {
 }
 
 impl AsRef<Symbol> for ConstSymbol {
-    fn as_ref(&self) -> &Symbol {
+    fn as_ref(&self) -> SymbolX {
         self
     }
 }
@@ -71,7 +73,7 @@ impl PartialEq<ConstSymbol> for Symbol {
 }
 
 impl PartialEq<Symbol> for ConstSymbol {
-    fn eq(&self, other: &Symbol) -> bool {
+    fn eq(&self, other: SymbolX) -> bool {
         self.0() == other
     }
 }
@@ -311,11 +313,11 @@ impl fmt::Debug for Symbol {
 /// the same address if they did originally. This keeps a mapping from old
 /// symbols to new.
 pub(in crate::core) struct UninternedSymbolMap {
-    map: std::cell::RefCell<Vec<(&'static Symbol, &'static Symbol)>>,
+    map: std::cell::RefCell<Vec<(SymbolX<'static>, SymbolX<'static>)>>,
 }
 
 impl UninternedSymbolMap {
-    fn get<'a>(&'a self, symbol: &Symbol) -> Option<&'a Symbol> {
+    fn get<'a>(&'a self, symbol: SymbolX) -> Option<SymbolX<'a>> {
         self.map
             .borrow()
             .iter()
@@ -323,7 +325,7 @@ impl UninternedSymbolMap {
             .map(|x| x.1)
     }
 
-    fn insert<'a>(&'a self, old: &Symbol, new: &Symbol) {
+    fn insert(&self, old: SymbolX, new: SymbolX) {
         self.map
             .borrow_mut()
             .push(unsafe { (old.with_lifetime(), new.with_lifetime()) });
