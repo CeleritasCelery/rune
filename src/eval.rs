@@ -11,7 +11,7 @@ use crate::core::{
 use crate::fns::assq;
 use crate::{root, rooted_iter};
 
-use crate::core::env::{sym, ConstSymbol, Env, Symbol, SymbolX};
+use crate::core::env::{sym, Env, SymbolX};
 
 use anyhow::{anyhow, bail, ensure, Result};
 
@@ -235,76 +235,35 @@ fn set_default<'ob>(
     Ok(value)
 }
 
-// This is special case where we want to declare `t' to be a constant variable.
-// Only keywords, nil, and t are constant. And keywords are handled by the
-// define_symbols code. This one needs to be manual.
-static TRUE: Symbol = Symbol::new_const("t", ConstSymbol::new(__FN_PTR_TRUE));
-
-#[allow(non_snake_case)]
-#[doc(hidden)]
-fn __FN_PTR_TRUE() -> SymbolX<'static> {
-    &TRUE
-}
-
-static NIL: Symbol = Symbol::new_const("nil", ConstSymbol::new(__FN_PTR_NIL));
-
-#[allow(non_snake_case)]
-#[doc(hidden)]
-fn __FN_PTR_NIL() -> SymbolX<'static> {
-    &NIL
-}
+defsym!(FUNCTION);
+defsym!(QUOTE);
+defsym!(MACRO);
+defsym!(UNQUOTE, ",");
+defsym!(SPLICE, ",@");
+defsym!(BACKQUOTE, "`");
+defsym!(AND_OPTIONAL, "&optional");
+defsym!(AND_REST, "&rest");
+defsym!(LAMBDA);
+defsym!(CLOSURE);
+defsym!(CONDITION_CASE);
+defsym!(UNWIND_PROTECT);
+defsym!(WHILE);
+defsym!(INLINE);
+defsym!(PROGN);
+defsym!(PROG1);
+defsym!(PROG2);
+defsym!(SETQ);
+defsym!(DEFCONST);
+defsym!(COND);
+defsym!(LET);
+defsym!(LET_STAR, "let*");
+defsym!(IF);
+defsym!(AND);
+defsym!(OR);
+defsym!(INTERACTIVE);
+defsym!(CATCH);
+defsym!(THROW);
+defsym!(ERROR);
+defsym!(DEBUG);
 
 defvar!(DEBUG_ON_ERROR, false);
-
-define_symbols!(
-    FUNCS => {
-        apply,
-        funcall,
-        run_hooks,
-        autoload,
-        autoload_do_load,
-        macroexpand,
-        internal__define_uninitialized_variable,
-        signal,
-        set_default_toplevel_value,
-        set_default,
-        special_variable_p,
-        TRUE,
-        NIL,
-    }
-    VARS => {
-        DEBUG_ON_ERROR,
-    }
-    SYMS => {
-        FUNCTION,
-        QUOTE,
-        MACRO,
-        UNQUOTE = ",",
-        SPLICE = ",@",
-        BACKQUOTE = "`",
-        AND_OPTIONAL = "&optional",
-        AND_REST = "&rest",
-        LAMBDA,
-        CLOSURE,
-        CONDITION_CASE,
-        UNWIND_PROTECT,
-        WHILE,
-        INLINE,
-        PROGN,
-        PROG1,
-        PROG2,
-        SETQ,
-        DEFCONST,
-        COND,
-        LET,
-        LET_STAR = "let*",
-        IF,
-        AND,
-        OR,
-        INTERACTIVE,
-        CATCH,
-        THROW,
-        ERROR,
-        DEBUG,
-    }
-);

@@ -45,7 +45,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     quote! {
         #[doc(hidden)]
         #[allow(non_upper_case_globals)]
-        const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
+        pub(crate) const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
             subr: #func_name,
             args: crate::core::object::FnArgs {

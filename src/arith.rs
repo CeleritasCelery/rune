@@ -266,28 +266,6 @@ pub(crate) fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]
         .fold(number_or_marker.val(), min_val)
 }
 
-define_symbols!(
-    FUNCS => {
-        add,
-        sub,
-        mul,
-        div,
-        add_one,
-        sub_one,
-        num_eq,
-        num_ne,
-        less_than,
-        less_than_or_eq,
-        greater_than,
-        greater_than_or_eq,
-        logior,
-        logand,
-        modulo,
-        min,
-        max,
-    }
-);
-
 #[cfg(test)]
 mod test {
     use super::*;

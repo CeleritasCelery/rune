@@ -175,12 +175,14 @@ impl SymbolMap {
     }
 
     fn pre_init(&mut self, sym: SymbolX<'static>) {
-        match self.map.get(sym.name()) {
-            Some(_) => panic!("Attempt to intitalize {} twice", sym.name()),
-            None => {
-                self.map.insert(sym.name(), SymbolBox::from_static(sym));
-            }
-        }
+        use std::collections::hash_map::Entry;
+        let name = sym.name();
+        let entry = self.map.entry(name);
+        assert!(
+            matches!(entry, Entry::Vacant(_)),
+            "Attempt to intitalize {name} twice"
+        );
+        entry.or_insert(SymbolBox::from_static(sym));
     }
 }
 
@@ -193,7 +195,7 @@ impl ObjectMap {
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]
-        new_func.get().set_as_miri_root();
+        new_func.untag().set_as_miri_root();
         // SAFETY: The object is marked read-only, we have cloned in the
         // map's context, and it is not const, so calling this function
         // is safe.
@@ -223,72 +225,8 @@ impl ObjectMap {
 #[cfg(test)]
 static SYMBOLS_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-macro_rules! create_symbolmap {
-    ($($($mod:ident)::*),*) => (
-        #[allow(unused_imports)]
-        #[allow(non_snake_case)]
-        pub(crate) mod sym {
-            use super::{Symbol, ConstSymbol};
-            // This GlobalSymbol is assinged to every runtime symbol created.
-            static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new("_dummy_runtime_symbol", RUNTIME_SYMBOL);
-            fn __RUNTIME_SYMBOL_FN () -> crate::core::env::SymbolX<'static> {&__RUNTIME_SYMBOL_GLOBAL}
-            pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
-
-            // Re-export all symbols in this module
-            $(pub(crate) use $($mod::)*__symbol_bindings::*;)*
-        }
-
-        #[allow(unused_qualifications)]
-        pub(crate) fn init_variables<'ob>(
-            cx: &'ob crate::core::gc::Context,
-            env: &mut crate::core::gc::Rt<crate::core::env::Env>,
-        ) {
-            $($($mod::)*__init_vars(cx, env);)*
-        }
-
-        lazy_static! {
-            pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({
-                let size: usize = 0_usize $(+ $($mod::)*__SYMBOLS.len())*;
-                let mut map = SymbolMap::with_capacity(size);
-                #[cfg(test)]
-                SYMBOLS_INIT.store(true, std::sync::atomic::Ordering::Release);
-                $(for sym in $($mod::)*__SYMBOLS.iter() {
-                    #[allow(clippy::unnecessary_safety_comment)]
-                    // SAFETY: We know that the function values are un-tagged,
-                    // and that only subr's have been defined in the symbols, so
-                    // it is safe to tag all function cell's as subr's
-                    unsafe { sym.tag_subr(); }
-                    map.pre_init(sym);
-                })*;
-                ObjectMap {
-                    map,
-                    block: Block::new_global(),
-                }
-            });
-        }
-    )
-}
-
-create_symbolmap!(
-    // This module needs to be first because it defines byte-boolean-vars
-    crate::lread,
-    crate::arith,
-    crate::bytecode,
-    crate::interpreter,
-    crate::fileio,
-    crate::data,
-    crate::print,
-    crate::fns,
-    crate::search,
-    crate::eval,
-    crate::alloc,
-    crate::editfns,
-    crate::character,
-    crate::floatfns,
-    crate::keymap,
-    crate::emacs,
-    crate::buffer
-);
+// import the sym.rs file from OUT_DIR
+include!(concat!(env!("OUT_DIR"), "/sym.rs"));
 
 /// Intern a new symbol based on `name`
 pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> SymbolX<'ob> {

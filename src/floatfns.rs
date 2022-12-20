@@ -26,5 +26,3 @@ fn float<'ob>(arg: Gc<Number<'ob>>, cx: &'ob Context) -> Gc<Number<'ob>> {
         Number::Float(_) => arg,
     }
 }
-
-define_symbols!(FUNCS => {floor, float});

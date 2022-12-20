@@ -32,3 +32,8 @@ debug = true
 [features]
 default = []
 debug_bytecode = []
+
+[build-dependencies]
+syn = { version = "1.0.99" }
+quote = "1.0.21"
+proc-macro2 = "1.0.43"

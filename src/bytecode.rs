@@ -1272,9 +1272,3 @@ mod test {
         check_bytecode!(bytecode, [sym::FLOOR], "floor", cx);
     }
 }
-
-define_symbols!(
-    FUNCS => {
-        byte_code,
-    }
-);

@@ -118,5 +118,3 @@ mod test {
         assert_eq!(lisp_regex_to_rust("(foo)"), "\\(foo\\)");
     }
 }
-
-define_symbols!(FUNCS => {string_match, match_data, set_match_data, match_beginning, match_end, string_equal});

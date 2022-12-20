@@ -453,64 +453,10 @@ mod test {
     }
 }
 
-define_symbols!(
-    FUNCS => {
-        set,
-        put,
-        get,
-        defvar,
-        make_variable_buffer_local,
-        subr_arity,
-        ash,
-        fset,
-        aset,
-        aref,
-        defalias,
-        provide,
-        symbol_function,
-        symbol_value,
-        symbol_name,
-        null,
-        fmakunbound,
-        fboundp,
-        boundp,
-        makunbound,
-        default_boundp,
-        listp,
-        nlistp,
-        stringp,
-        symbolp,
-        functionp,
-        subrp,
-        vectorp,
-        recordp,
-        numberp,
-        markerp,
-        consp,
-        keywordp,
-        integerp,
-        floatp,
-        atom,
-        type_of,
-        byte_code_function_p,
-        bufferp,
-        string_to_number,
-        indirect_function,
-        car,
-        cdr,
-        cons,
-        setcar,
-        setcdr,
-        car_safe,
-        cdr_safe,
-    }
-    SYMS => {
-        MANY,
-        INTEGER,
-        SYMBOL,
-        COMPILED_FUNCTION,
-        HASH_TABLE,
-        STRING,
-        SUBR,
-    }
-);
+defsym!(MANY);
+defsym!(INTEGER);
+defsym!(SYMBOL);
+defsym!(COMPILED_FUNCTION);
+defsym!(HASH_TABLE);
+defsym!(STRING);
+defsym!(SUBR);

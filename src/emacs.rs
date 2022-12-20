@@ -8,22 +8,7 @@ fn kill_emacs() -> bool {
 defvar!(EMACS_VERSION, "27.1");
 defvar!(SYSTEM_TYPE, "darwin");
 defvar!(DUMP_MODE);
-defvar!(COMMAND_LINE_ARGS, list!(""));
+defvar!(COMMAND_LINE_ARGS, list![""]);
 defvar!(DEFAULT_DIRECTORY, "");
 defvar_bool!(NONINTERACTIVE, true);
 defvar!(AFTER_INIT_TIME);
-
-define_symbols!(
-    FUNCS => {
-        kill_emacs,
-    }
-    VARS => {
-        EMACS_VERSION,
-        SYSTEM_TYPE,
-        DUMP_MODE,
-        COMMAND_LINE_ARGS,
-        DEFAULT_DIRECTORY,
-        NONINTERACTIVE,
-        AFTER_INIT_TIME,
-    }
-);

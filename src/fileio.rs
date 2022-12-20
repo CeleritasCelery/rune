@@ -44,5 +44,3 @@ fn file_directory_p(filename: &str) -> bool {
         Path::new(filename).is_dir()
     }
 }
-
-define_symbols!(FUNCS => {expand_file_name, file_directory_p});

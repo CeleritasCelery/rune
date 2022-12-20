@@ -753,8 +753,6 @@ fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<SymbolX>, Vec<SymbolX>, Opt
     Ok((required, optional, rest))
 }
 
-define_symbols!(FUNCS => {eval});
-
 #[cfg(test)]
 mod test {
     use crate::core::{env::intern, gc::RootSet, object::IntoObject};

@@ -37,16 +37,3 @@ pub(crate) fn define_key<'ob>(
 }
 
 defvar!(MINIBUFFER_LOCAL_MAP);
-
-define_symbols!(
-    FUNCS => {
-        make_keymap,
-        make_sparse_keymap,
-        use_global_map,
-        set_keymap_parent,
-        define_key,
-    }
-    VARS => {
-        MINIBUFFER_LOCAL_MAP
-    }
-);

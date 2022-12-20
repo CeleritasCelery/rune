@@ -197,26 +197,9 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<SymbolX>
 defvar!(LEXICAL_BINDING, true);
 defvar!(CURRENT_LOAD_LIST);
 defvar!(LOAD_HISTORY);
-defvar!(LOAD_PATH, list!("lisp"));
+defvar!(LOAD_PATH, list!["lisp"]);
 defvar!(LOAD_FILE_NAME);
 defvar!(BYTE_BOOLEAN_VARS);
-
-define_symbols!(
-    FUNCS => {
-        load,
-        read_from_string,
-        intern,
-        intern_soft,
-    }
-    VARS => {
-        LEXICAL_BINDING,
-        CURRENT_LOAD_LIST,
-        LOAD_HISTORY,
-        LOAD_PATH,
-        LOAD_FILE_NAME,
-        BYTE_BOOLEAN_VARS,
-    }
-);
 
 #[cfg(test)]
 mod test {

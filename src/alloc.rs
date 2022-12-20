@@ -89,16 +89,3 @@ fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<SymbolX<'ob>> {
     let sym = Symbol::new_uninterned(name);
     cx.add(sym)
 }
-
-define_symbols!(
-    FUNCS => {
-        list,
-        make_closure,
-        make_vector,
-        make_byte_code,
-        vector,
-        record,
-        purecopy,
-        make_symbol,
-    }
-);

@@ -61,8 +61,6 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
         .collect())
 }
 
-define_symbols!(FUNCS => {message, format, format_message} VARS => {MESSAGE_NAME, MESSAGE_TYPE});
-
 #[cfg(test)]
 mod test {
     use super::*;
