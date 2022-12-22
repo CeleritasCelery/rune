@@ -3,7 +3,6 @@ use super::object::{CloneIn, Function, Gc, GcObj};
 use crate::hashmap::{HashMap, HashSet};
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
-use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 mod symbol;

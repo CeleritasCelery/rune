@@ -160,9 +160,9 @@ static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new(\"_dummy_runtime_symbol\", 
 fn __RUNTIME_SYMBOL_FN () -> crate::core::env::SymbolX<'static> {{&__RUNTIME_SYMBOL_GLOBAL}}
 pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
-pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
-Symbol::new_const(\"nil\", ConstSymbol::new(__FN_PTR_TRUE)),
-Symbol::new_const(\"t\", ConstSymbol::new(__FN_PTR_TRUE)),",
+static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
+    Symbol::new_const(\"nil\", NIL),
+    Symbol::new_const(\"t\", TRUE),",
     )
     .unwrap();
 
@@ -172,24 +172,19 @@ Symbol::new_const(\"t\", ConstSymbol::new(__FN_PTR_TRUE)),",
             Some(name) => name.trim_matches('"').to_string(),
             None => map_varname(sym),
         };
-        writeln!(
-            f,
-            "Symbol::new(\"{sym_name}\", ConstSymbol::new(__FN_PTR_{sym})),"
-        )
-        .unwrap();
+        writeln!(f, "    Symbol::new(\"{sym_name}\", {sym}),").unwrap();
     }
 
     for (ident, name, _, _) in &all_defvar {
-        let const_name = format!("__FN_PTR_{ident}");
         #[rustfmt::skip]
-        writeln!(f, "Symbol::new(\"{name}\", ConstSymbol::new({const_name})),").unwrap();
+        writeln!(f, "    Symbol::new(\"{name}\", {ident}),").unwrap();
     }
 
     // write the list of all defun to a file in out_dir
-    for (_, defun, lisp_name) in &all_defun {
-        let matcher_name = format!("__FN_PTR_{}", defun.to_ascii_uppercase());
+    for (_, name, lisp_name) in &all_defun {
+        let const_name = name.to_ascii_uppercase();
         #[rustfmt::skip]
-        writeln!(f, "Symbol::new(\"{lisp_name}\", ConstSymbol::new({matcher_name})),").unwrap();
+        writeln!(f, "    Symbol::new(\"{lisp_name}\", {const_name}),").unwrap();
     }
 
     // End BUILTIN_SYMBOLS
@@ -215,33 +210,38 @@ Symbol::new_const(\"t\", ConstSymbol::new(__FN_PTR_TRUE)),",
     let subr_len = all_defun.len();
     writeln!(
         f,
-        "pub(super) static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",
+        "static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",
     )
     .unwrap();
     for (subr_name, _, _) in &all_defun {
-        writeln!(f, "&{subr_name},",).unwrap();
+        writeln!(f, "    &{subr_name},",).unwrap();
     }
     // End SUBR_DEFS
     writeln!(f, "];\n").unwrap();
 
+    let defun_start = symbol_len - subr_len;
+    writeln!(f, "
+pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
+    for sym in BUILTIN_SYMBOLS[..{defun_start}].iter() {{
+        map.pre_init(sym);
+    }}
+    for (sym, func) in BUILTIN_SYMBOLS[{defun_start}..].iter().zip(SUBR_DEFS.iter()) {{
+        unsafe {{ sym.set_func((*func).into()).unwrap(); }}
+        map.pre_init(sym);
+    }}
+}}
+").unwrap();
     // End mod sym
     writeln!(f, "}}").unwrap();
 
-    let defun_start = symbol_len - subr_len;
     writeln!(
         f,
         "
-lazy_static! {{
+lazy_static::lazy_static! {{
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
-        for sym in sym::BUILTIN_SYMBOLS[..{defun_start}].iter() {{
-            map.pre_init(sym);
-        }}
-        for (sym, func) in sym::BUILTIN_SYMBOLS[{defun_start}..].iter().zip(sym::SUBR_DEFS.iter()) {{
-            unsafe {{ sym.set_func((*func).into()).unwrap(); }}
-            map.pre_init(sym);
-        }}
+        sym::init_symbols(&mut map);
         ObjectMap {{
             map,
             block: Block::new_global(),
@@ -287,8 +287,8 @@ pub(crate) fn init_variables(
                 writeln!(
                     f,
                     "{{
-let bool_vars = env.vars.get_mut(sym::BYTE_BOOLEAN_VARS).unwrap();
-bool_vars.set(crate::cons!(sym::{ident}, bool_vars.bind(cx); cx));
+    let bool_vars = env.vars.get_mut(sym::BYTE_BOOLEAN_VARS).unwrap();
+    bool_vars.set(crate::cons!(sym::{ident}, bool_vars.bind(cx); cx));
 }}"
                 )
                 .unwrap();
