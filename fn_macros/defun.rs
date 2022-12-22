@@ -20,8 +20,6 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
-    let matcher_name = format_ident!("__FN_PTR_{}", &subr_name);
-    let symbol_name = format_ident!("{}", subr_name.to_ascii_uppercase());
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
     let (required, optional, rest) = get_call_signature(&function.args, spec.required);
     let arg_conversion = get_arg_conversion(function.args);
@@ -44,6 +42,16 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
 
     quote! {
         #[doc(hidden)]
+        #[allow(non_snake_case)]
+        fn #func_name<'ob, 'id>(
+            args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
+            env: &mut crate::core::gc::Root<crate::core::env::Env>,
+            cx: &'ob mut crate::core::gc::Context,
+        ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
+            #subr_call
+        }
+
+        #[doc(hidden)]
         #[allow(non_upper_case_globals)]
         pub(crate) const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
@@ -55,25 +63,6 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
                 advice: false,
             }
         };
-
-        #[doc(hidden)]
-        #[allow(non_snake_case)]
-        fn #func_name<'ob, 'id>(
-            args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
-            env: &mut crate::core::gc::Root<crate::core::env::Env>,
-            cx: &'ob mut crate::core::gc::Context,
-        ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
-            #subr_call
-        }
-
-        #[doc(hidden)]
-        #[allow(non_snake_case)]
-        #[allow(non_upper_case_globals)]
-        pub(crate) static #symbol_name: crate::core::env::Symbol = unsafe {crate::core::env::Symbol::new_with_subr(#lisp_name, &#struct_name, #matcher_name)};
-
-        #[doc(hidden)]
-        #[allow(non_snake_case)]
-        fn #matcher_name() -> &'static crate::core::env::Symbol { &#symbol_name }
 
         #body
     }

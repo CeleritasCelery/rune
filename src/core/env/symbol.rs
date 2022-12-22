@@ -5,7 +5,7 @@ use anyhow::{bail, Result};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use super::super::gc::Trace;
-use super::super::object::{Function, Gc, SubrFn, WithLifetime};
+use super::super::object::{Function, Gc, WithLifetime};
 use super::sym;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -89,7 +89,7 @@ impl Hash for Symbol {
 
 impl Symbol {
     const NULL: *mut u8 = std::ptr::null_mut();
-    pub(crate) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
+    pub(super) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
         // We have to do this workaround because starts_with is not const
         let func = if name.as_bytes()[0] == b':' {
             // If func is none then this cannot take a function
@@ -105,10 +105,12 @@ impl Symbol {
         }
     }
 
-    pub(crate) fn name(&self) -> &str {
-        match &self.name {
-            SymbolName::Interned(x) => x,
-            SymbolName::Uninterned(x) => x,
+    pub(super) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
+        Symbol {
+            name: SymbolName::Interned(name),
+            func: None,
+            sym,
+            marked: AtomicBool::new(true),
         }
     }
 
@@ -121,27 +123,10 @@ impl Symbol {
         }
     }
 
-    pub(crate) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
-        Symbol {
-            name: SymbolName::Interned(name),
-            func: None,
-            sym,
-            marked: AtomicBool::new(true),
-        }
-    }
-
-    pub(crate) const unsafe fn new_with_subr(
-        name: &'static str,
-        subr: &'static SubrFn,
-        func: fn() -> &'static Self,
-    ) -> Self {
-        Symbol {
-            name: SymbolName::Interned(name),
-            func: Some(AtomicPtr::new(
-                (subr as *const SubrFn).cast::<u8>() as *mut u8
-            )),
-            sym: ConstSymbol::new(func),
-            marked: AtomicBool::new(true),
+    pub(crate) fn name(&self) -> &str {
+        match &self.name {
+            SymbolName::Interned(x) => x,
+            SymbolName::Uninterned(x) => x,
         }
     }
 
@@ -160,22 +145,6 @@ impl Symbol {
         self == &sym::NIL
     }
 
-    // This is workaround due to the limitations of const functions in rust. We
-    // need to bind the function to the symbol when it is declared with
-    // #[defun], but tagging the value is not const, so we can't initialize it
-    // with a tagged value. Instead we put the untagged value in the function
-    // cell and then use this function to ensure it get's tagged before first
-    // use.
-    pub(super) unsafe fn tag_subr(&self) {
-        if let Some(func) = &self.func {
-            let ptr = func.load(Ordering::Acquire);
-            if !ptr.is_null() {
-                let func = SubrFn::gc_from_raw_ptr(ptr.cast::<SubrFn>());
-                self.set_func(func.into()).unwrap();
-            }
-        }
-    }
-
     pub(crate) fn has_func(&self) -> bool {
         match &self.func {
             Some(func) => !func.load(Ordering::Acquire).is_null(),
@@ -184,11 +153,6 @@ impl Symbol {
     }
 
     fn get(&self) -> Option<Gc<Function>> {
-        #[cfg(test)]
-        assert!(
-            super::SYMBOLS_INIT.load(Ordering::Acquire),
-            "Symbols were not initalized"
-        );
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
             if !ptr.is_null() {

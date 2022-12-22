@@ -86,12 +86,13 @@ fn main() {
                     name.replace('_', "-")
                 };
                 // convert the path name to a hierarchy name with slashes replaced with colons
-                let import_path = {
+                let struct_name = {
                     let path_name = path.to_str().unwrap();
                     let basename = path_name.strip_prefix("src/").unwrap().strip_suffix(".rs");
-                    basename.unwrap().replace('/', ":")
+                    let import_path = basename.unwrap().replace('/', ":");
+                    format!("crate::{import_path}::S{name}")
                 };
-                all_defun.push((import_path, name.to_string(), lisp_name));
+                all_defun.push((struct_name, name.to_string(), lisp_name));
             }
             // process all strings starting with defvar
             for (start, _) in contents.match_indices("\ndefvar") {
@@ -178,27 +179,28 @@ Symbol::new_const(\"t\", ConstSymbol::new(__FN_PTR_TRUE)),",
         .unwrap();
     }
 
-    // write the list of all defun to a file in out_dir
-    for (path, defun, lisp_name) in &all_defun {
-        let struct_name = format!("crate::{path}::S{defun}");
-        let matcher_name = format!("__FN_PTR_{}", defun.to_ascii_uppercase());
-        #[rustfmt::skip]
-        writeln!(f, "unsafe {{Symbol::new_with_subr(\"{lisp_name}\", &{struct_name}, {matcher_name})}},").unwrap();
-    }
     for (ident, name, _, _) in &all_defvar {
         let const_name = format!("__FN_PTR_{ident}");
         #[rustfmt::skip]
         writeln!(f, "Symbol::new(\"{name}\", ConstSymbol::new({const_name})),").unwrap();
     }
 
+    // write the list of all defun to a file in out_dir
+    for (_, defun, lisp_name) in &all_defun {
+        let matcher_name = format!("__FN_PTR_{}", defun.to_ascii_uppercase());
+        #[rustfmt::skip]
+        writeln!(f, "Symbol::new(\"{lisp_name}\", ConstSymbol::new({matcher_name})),").unwrap();
+    }
+
+    // End BUILTIN_SYMBOLS
     writeln!(f, "];\n").unwrap();
 
     let special = ["nil".to_owned(), "true".to_owned()];
     let all_elements = special
         .iter()
         .chain(all_defsym.iter().map(|x| &x.0))
-        .chain(all_defun.iter().map(|x| &x.1))
         .chain(all_defvar.iter().map(|x| &x.0))
+        .chain(all_defun.iter().map(|x| &x.1))
         .enumerate();
     for (idx, element) in all_elements {
         let sym_name = element.to_ascii_uppercase();
@@ -209,8 +211,23 @@ Symbol::new_const(\"t\", ConstSymbol::new(__FN_PTR_TRUE)),",
         writeln!(f, "pub(crate) const {sym_name}: ConstSymbol = ConstSymbol::new({matcher_name});").unwrap();
     }
 
+    // all SubrFn
+    let subr_len = all_defun.len();
+    writeln!(
+        f,
+        "pub(super) static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",
+    )
+    .unwrap();
+    for (subr_name, _, _) in &all_defun {
+        writeln!(f, "&{subr_name},",).unwrap();
+    }
+    // End SUBR_DEFS
+    writeln!(f, "];\n").unwrap();
+
+    // End mod sym
     writeln!(f, "}}").unwrap();
 
+    let defun_start = symbol_len - subr_len;
     writeln!(
         f,
         "
@@ -218,10 +235,11 @@ lazy_static! {{
     pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
-        #[cfg(test)]
-        SYMBOLS_INIT.store(true, std::sync::atomic::Ordering::Release);
-        for sym in sym::BUILTIN_SYMBOLS.iter() {{
-            unsafe {{ sym.tag_subr(); }}
+        for sym in sym::BUILTIN_SYMBOLS[..{defun_start}].iter() {{
+            map.pre_init(sym);
+        }}
+        for (sym, func) in sym::BUILTIN_SYMBOLS[{defun_start}..].iter().zip(sym::SUBR_DEFS.iter()) {{
+            unsafe {{ sym.set_func((*func).into()).unwrap(); }}
             map.pre_init(sym);
         }}
         ObjectMap {{
