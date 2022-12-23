@@ -4,7 +4,6 @@ use syn::parse_macro_input;
 
 mod defun;
 mod trace;
-mod varname;
 
 #[proc_macro_attribute]
 pub fn defun(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
@@ -15,12 +14,6 @@ pub fn defun(attr_ts: TokenStream, fn_ts: TokenStream) -> TokenStream {
         Ok(spec) => defun::expand(function, spec).into(),
         Err(e) => TokenStream::from(e.write_errors()),
     }
-}
-
-#[proc_macro]
-pub fn varname(stream: TokenStream) -> TokenStream {
-    let ident = parse_macro_input!(stream as syn::Ident);
-    varname::expand(ident).into()
 }
 
 #[proc_macro_derive(Trace, attributes(no_trace))]
