@@ -102,11 +102,19 @@ impl<const CONST: bool> Block<CONST> {
         Self::default()
     }
 
-    #[allow(clippy::useless_conversion)]
-    pub(crate) fn add<'ob, T, U, V>(&'ob self, obj: T) -> Gc<V>
+    pub(crate) fn add<'ob, T, U>(&'ob self, obj: T) -> GcObj
+    where
+        T: IntoObject<Out<'ob> = U>,
+        Gc<U>: Into<GcObj<'ob>>,
+    {
+        obj.into_obj(self).into()
+    }
+
+    pub(crate) fn add_as<'ob, T, U, V>(&'ob self, obj: T) -> Gc<V>
     where
         T: IntoObject<Out<'ob> = U>,
         Gc<U>: Into<Gc<V>>,
+
     {
         obj.into_obj(self).into()
     }

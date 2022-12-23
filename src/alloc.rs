@@ -31,7 +31,7 @@ pub(crate) fn make_closure<'ob>(
     for (cnst, var) in zipped {
         *cnst = *var;
     }
-    let new_constants: Gc<&LispVec> = cx.add(constants);
+    let new_constants = constants.into_obj(cx);
 
     // TODO: returning an owned type is not safe here
     Ok(unsafe {
@@ -87,5 +87,5 @@ fn purecopy(obj: GcObj) -> GcObj {
 #[defun]
 fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<SymbolX<'ob>> {
     let sym = Symbol::new_uninterned(name);
-    cx.add(sym)
+    sym.into_obj(cx)
 }

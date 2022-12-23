@@ -512,7 +512,7 @@ mod test {
 
     macro_rules! check_reader {
         ($expect:expr, $compare:expr, $cx:expr) => {{
-            let obj: GcObj = $cx.add($expect);
+            let obj = $cx.add($expect);
             assert_eq!(obj, read($compare, $cx).unwrap().0)
         }};
     }

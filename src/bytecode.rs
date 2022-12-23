@@ -622,11 +622,11 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Concat4 => todo!("Concat4 bytecode"),
                 op::Sub1 => {
                     let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::sub_one(top.bind_as(cx)?)));
+                    top.set(cx.add(arith::sub_one(top.bind_as(cx)?)));
                 }
                 op::Add1 => {
                     let top = self.stack.top(cx);
-                    top.set::<GcObj>(cx.add(arith::add_one(top.bind_as(cx)?)));
+                    top.set(cx.add(arith::add_one(top.bind_as(cx)?)));
                 }
                 op::EqlSign => {
                     let rhs = self.stack.pop(cx);
@@ -656,36 +656,31 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
                 op::Diff => todo!("Diff bytecode"),
                 op::Negate => {
                     let top = self.stack.top(cx);
-                    let result: GcObj = cx.add(arith::sub(top.bind_as(cx)?, &[]));
-                    top.set(result);
+                    top.set(cx.add(arith::sub(top.bind_as(cx)?, &[])));
                 }
                 op::Plus => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
                     let args = &[top.bind_as(cx)?, arg1.try_into()?];
-                    let result: GcObj = cx.add(arith::add(args));
-                    top.set(result);
+                    top.set(cx.add(arith::add(args)));
                 }
                 op::Max => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
                     let args = &[arg1.try_into()?];
-                    let result: GcObj = cx.add(arith::max(top.bind_as(cx)?, args));
-                    top.set(result);
+                    top.set(cx.add(arith::max(top.bind_as(cx)?, args)));
                 }
                 op::Min => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
                     let args = &[arg1.try_into()?];
-                    let result: GcObj = cx.add(arith::min(top.bind_as(cx)?, args));
-                    top.set(result);
+                    top.set(cx.add(arith::min(top.bind_as(cx)?, args)));
                 }
                 op::Multiply => {
                     let arg1 = self.stack.pop(cx);
                     let top = self.stack.top(cx);
                     let args = &[top.bind_as(cx)?, arg1.try_into()?];
-                    let result: GcObj = cx.add(arith::mul(args));
-                    top.set(result);
+                    top.set(cx.add(arith::mul(args)));
                 }
                 op::Point => todo!("Point bytecode"),
                 op::GotoChar => todo!("GotoChar bytecode"),
@@ -1008,21 +1003,21 @@ mod test {
         [$($constants:expr),* $(,)?],
         $cx:expr $(,)?
     ) => (
-        let cx: &Context = $cx;
+        // https://github.com/rust-lang/rust-analyzer/issues/11681
+        let cx1: &Context = $cx;
         let constants: &LispVec = {
-            let vec: Vec<GcObj> = vec![$($constants.into_obj(cx).into()),*];
-            vec.into_obj(cx).untag()
+            let vec: Vec<GcObj> = vec![$(cx1.add($constants)),*];
+            vec.into_obj(cx1).untag()
         };
         let opcodes = {
             #[allow(trivial_numeric_casts)]
             let opcodes = vec![$($opcodes as u8),*];
             println!("Test seq: {opcodes:?}");
-            opcodes.into_obj(cx).untag()
+            opcodes.into_obj(cx1).untag()
         };
-        let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx).unwrap();
-        root!(bytecode, cx);
+        let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx1).unwrap();
+        root!(bytecode, cx1);
         let $name = bytecode;
-
         )
     }
 
@@ -1035,8 +1030,8 @@ mod test {
             let bytecode: &Rt<&ByteFn> = $bytecode;
             let cx: &mut Context = $cx;
 
-            let args: Vec<GcObj> = { vec![$($args.into_obj(cx).into()),*] };
-            let expect: GcObj = $expect.into_obj(cx).into();
+            let args: Vec<GcObj> = { vec![$(cx.add($args)),*] };
+            let expect = cx.add($expect);
 
             root!(args, cx);
             root!(expect, cx);

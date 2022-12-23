@@ -3,7 +3,6 @@
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
 * implement symbols with an offset
-* remove tag subr
 * make special variable part of symbol type
 * use index for symbols
 * Steps to add a new object type

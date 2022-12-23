@@ -385,7 +385,7 @@ fn require<'ob>(
         Some(file) => file.get(cx).try_into()?,
         None => feature.get(cx).name(),
     };
-    let file: Gc<&LispString> = cx.add(file);
+    let file = file.into_obj(cx);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.get(cx)),
@@ -487,6 +487,8 @@ pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
         other => Err(TypeError::new(Type::Sequence, other).into()),
     }
 }
+
+defsym!(KW_TEST);
 
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
@@ -717,7 +719,7 @@ mod test {
         table.insert(1.into(), 6.into());
         table.insert(2.into(), 8.into());
         table.insert(3.into(), 10.into());
-        let table: Gc<&LispHashTable> = cx.add(table);
+        let table = table.into_obj(cx);
         let func = sym::EQ.func(cx).unwrap();
         root!(env, Env::default(), cx);
         root!(table, cx);
@@ -737,5 +739,3 @@ mod test {
         assert_eq!(alist, result);
     }
 }
-
-defsym!(KW_TEST);

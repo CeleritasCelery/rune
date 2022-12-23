@@ -141,7 +141,7 @@ define_unbox!(Cons, &'ob Cons);
 #[macro_export]
 macro_rules! cons {
     ($car:expr, $cdr:expr; $cx:expr) => {
-        $cx.add::<_, _, $crate::core::object::Object>(
+        $cx.add(
             #[allow(unused_unsafe)]
             unsafe {
                 $crate::core::cons::Cons::new($cx.add($car), $cx.add($cdr))
@@ -149,7 +149,7 @@ macro_rules! cons {
         )
     };
     ($car:expr; $cx:expr) => {
-        $cx.add::<_, _, $crate::core::object::Object>(unsafe {
+        $cx.add(unsafe {
             $crate::core::cons::Cons::new($cx.add($car), $crate::core::object::nil())
         })
     };

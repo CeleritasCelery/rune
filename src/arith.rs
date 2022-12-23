@@ -277,7 +277,7 @@ mod test {
         let cx = &Context::new(roots);
         assert_eq!(add(&[]), NumberValue::Int(0));
         assert_eq!(add(&[7.into(), 13.into()]), NumberValue::Int(20));
-        assert_eq!(add(&[1.into(), cx.add(2.5)]), NumberValue::Float(3.5));
+        assert_eq!(add(&[1.into(), cx.add_as(2.5)]), NumberValue::Float(3.5));
         assert_eq!(add(&[0.into(), (-1).into()]), NumberValue::Int(-1));
     }
 
@@ -301,7 +301,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
 
-        assert_eq!(div(cx.add(12.0), &[]), NumberValue::Float(12.0));
+        assert_eq!(div(cx.add_as(12.0), &[]), NumberValue::Float(12.0));
         assert_eq!(div(12.into(), &[5.into(), 2.into()]), NumberValue::Int(1));
     }
 
@@ -310,11 +310,11 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let int1 = 1.into();
-        let float1: Gc<Number> = cx.add(1.0);
-        let float1_1 = cx.add(1.1);
+        let float1 = cx.add_as(1.0);
+        let float1_1 = cx.add_as(1.1);
 
         assert!(num_eq(int1, &[]));
-        assert!(num_eq(int1, &[cx.add(1.0)]));
+        assert!(num_eq(int1, &[cx.add_as(1.0)]));
         assert!(num_eq(float1, &[1.into()]));
         assert!(!num_eq(float1, &[1.into(), 1.into(), float1_1]));
     }
@@ -324,11 +324,11 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         assert!(less_than(1.into(), &[]));
-        assert!(less_than(1.into(), &[cx.add(1.1)]));
-        assert!(!less_than(cx.add(1.0), &[1.into()]));
+        assert!(less_than(1.into(), &[cx.add_as(1.1)]));
+        assert!(!less_than(cx.add_as(1.0), &[1.into()]));
         assert!(less_than(
-            cx.add(1.0),
-            &[cx.add(1.1), 2.into(), cx.add(2.1)]
+            cx.add_as(1.0),
+            &[cx.add_as(1.1), 2.into(), cx.add_as(2.1)]
         ));
     }
 
@@ -337,12 +337,18 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         assert_eq!(
-            max(cx.add(1.0), &[cx.add(2.1), cx.add(1.1), cx.add(1.0)]),
-            cx.add(2.1).val()
+            max(
+                cx.add_as(1.0),
+                &[cx.add_as(2.1), cx.add_as(1.1), cx.add_as(1.0)]
+            ),
+            cx.add_as(2.1).val()
         );
         assert_eq!(
-            min(cx.add(1.1), &[cx.add(1.0), cx.add(2.1), cx.add(1.0)]),
-            cx.add(1.0).val()
+            min(
+                cx.add_as(1.1),
+                &[cx.add_as(1.0), cx.add_as(2.1), cx.add_as(1.0)]
+            ),
+            cx.add_as(1.0).val()
         );
     }
 
@@ -350,6 +356,6 @@ mod test {
     fn test_other() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        assert_eq!(logand(&[cx.add(258), cx.add(255)]), 2);
+        assert_eq!(logand(&[258.into_obj(cx), 255.into_obj(cx)]), 2);
     }
 }

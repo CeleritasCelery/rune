@@ -142,7 +142,7 @@ pub(crate) fn load(
     if !nomessage {
         println!("Loading {file}...");
     }
-    let new_load_file: GcObj = cx.add(final_file.to_string_lossy().to_string());
+    let new_load_file = cx.add(final_file.to_string_lossy().to_string());
     let prev_load_file = match env.as_mut(cx).vars.get_mut(&*sym::LOAD_FILE_NAME) {
         Some(val) => {
             let prev = val.bind(cx);

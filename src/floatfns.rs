@@ -22,7 +22,7 @@ fn floor(arg: Gc<Number>, divisor: Option<Gc<Number>>) -> i64 {
 #[defun]
 fn float<'ob>(arg: Gc<Number<'ob>>, cx: &'ob Context) -> Gc<Number<'ob>> {
     match arg.untag() {
-        Number::Int(i) => cx.add(i as f64),
+        Number::Int(i) => cx.add_as(i as f64),
         Number::Float(_) => arg,
     }
 }

@@ -243,7 +243,7 @@ fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> G
     match i64::from_str_radix(string, base as u32) {
         Ok(x) => x.into(),
         Err(_) => match string.parse::<f64>() {
-            Ok(x) => cx.add(x),
+            Ok(x) => cx.add_as(x),
             Err(_) => 0.into(),
         },
     }

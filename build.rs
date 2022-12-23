@@ -220,7 +220,9 @@ static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
     writeln!(f, "];\n").unwrap();
 
     let defun_start = symbol_len - subr_len;
-    writeln!(f, "
+    writeln!(
+        f,
+        "
 pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
     for sym in BUILTIN_SYMBOLS[..{defun_start}].iter() {{
         map.pre_init(sym);
@@ -230,7 +232,9 @@ pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
         map.pre_init(sym);
     }}
 }}
-").unwrap();
+"
+    )
+    .unwrap();
     // End mod sym
     writeln!(f, "}}").unwrap();
 
@@ -264,7 +268,7 @@ pub(crate) fn init_variables(
     .unwrap();
 
     // write out the value of each defvar
-    for (ident, _, value, ty) in &all_defvar {
+    for (ident, _, value, ty) in all_defvar {
         let nil = "crate::core::object::nil()";
         let mut value = match value {
             Some(value) => Cow::from(value),
@@ -276,11 +280,7 @@ pub(crate) fn init_variables(
             let len = value.len();
             value.to_mut().insert_str(len - 1, "; cx");
         }
-        writeln!(
-            f,
-            "env.vars.insert::<_, GcObj>(sym::{ident}, cx.add({value}));"
-        )
-        .unwrap();
+        writeln!(f, "env.vars.insert(sym::{ident}, cx.add({value}));").unwrap();
         writeln!(f, "env.special_variables.insert(sym::{ident});").unwrap();
         match ty {
             DefvarType::Bool => {
