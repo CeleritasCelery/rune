@@ -9,7 +9,7 @@ path = "lib.rs"
 proc-macro = true
 
 [dependencies]
-quote = "1.0.21"
-darling = "0.14.1"
-syn = { version = "1.0.99", features = ["full"] }
-proc-macro2 = "1.0.43"
+quote = "1.0.23"
+darling = "0.14.2"
+syn = { version = "1.0.107"}
+proc-macro2 = "1.0.49"
