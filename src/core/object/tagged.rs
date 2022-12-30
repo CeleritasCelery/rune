@@ -242,7 +242,7 @@ impl IntoObject for bool {
         } else {
             SymbolX::new(&crate::core::env::sym::NIL)
         };
-        unsafe { Self::Out::tag_ptr(sym.as_ptr()) }
+        unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
 }
 
@@ -269,7 +269,8 @@ impl IntoObject for Symbol {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        unsafe { Self::Out::tag_ptr(ptr) }
+        let sym = unsafe { SymbolX::from_ptr(ptr) };
+        unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
 }
 
@@ -278,7 +279,8 @@ impl IntoObject for ConstSymbol {
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr: &Symbol = &self;
-        unsafe { Self::Out::tag_ptr(ptr) }
+        let sym = unsafe { SymbolX::from_ptr(ptr) };
+        unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
 }
 
@@ -537,14 +539,19 @@ impl TaggedPtr for &SubrFn {
 }
 
 impl TaggedPtr for SymbolX<'_> {
-    type Ptr = Symbol;
+    type Ptr = u8;
     const TAG: Tag = Tag::Symbol;
+
+    unsafe fn tag_ptr(ptr: *const Self::Ptr) -> Gc<Self> {
+        Gc::from_ptr(ptr, Self::TAG)
+    }
+
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-        SymbolX::new(&*ptr.cast::<Self::Ptr>())
+        SymbolX::from_offset_ptr(ptr)
     }
 
     fn get_ptr(self) -> *const Self::Ptr {
-        self.get() as *const Self::Ptr
+        self.as_ptr()
     }
 }
 
@@ -656,8 +663,10 @@ cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let sym: &Symbol = &crate::core::env::sym::NIL;
-        unsafe { cast_gc(<SymbolX>::tag_ptr(sym)) }
+        let ptr: &Symbol = &crate::core::env::sym::NIL;
+        let sym = unsafe { SymbolX::from_ptr(ptr) };
+        let gc: GcObj = sym.into();
+        unsafe { cast_gc(gc) }
     }
 }
 

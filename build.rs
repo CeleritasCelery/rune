@@ -158,10 +158,10 @@ use crate::core::env::SymbolX;
 use crate::core::env::ConstSymbol;
 
 static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new(\"_dummy_runtime_symbol\", RUNTIME_SYMBOL);
-fn __RUNTIME_SYMBOL_FN () -> SymbolX<'static> {{SymbolX::new(&__RUNTIME_SYMBOL_GLOBAL)}}
+fn __RUNTIME_SYMBOL_FN () -> &'static Symbol {{&__RUNTIME_SYMBOL_GLOBAL}}
 pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
-static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
+pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
     Symbol::new_const(\"nil\", NIL),
     Symbol::new_const(\"t\", TRUE),",
     )
@@ -202,7 +202,7 @@ static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
         let sym_name = element.to_ascii_uppercase();
         let matcher_name = format!("__FN_PTR_{sym_name}");
         #[rustfmt::skip]
-        writeln!(f, "fn {matcher_name}() -> SymbolX<'static> {{ SymbolX::new(&BUILTIN_SYMBOLS[{idx}]) }}").unwrap();
+        writeln!(f, "fn {matcher_name}() -> &'static Symbol {{ &BUILTIN_SYMBOLS[{idx}] }}").unwrap();
         #[rustfmt::skip]
         writeln!(f, "pub(crate) const {sym_name}: ConstSymbol = ConstSymbol::new({matcher_name});").unwrap();
     }

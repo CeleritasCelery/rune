@@ -1,3 +1,4 @@
+#![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
 use super::object::{CloneIn, Function, Gc, GcObj};
 use crate::hashmap::{HashMap, HashSet};

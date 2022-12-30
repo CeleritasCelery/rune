@@ -1,15 +1,17 @@
+#![allow(unstable_name_collisions)]
+use super::super::gc::Trace;
+use super::super::object::{Function, Gc, WithLifetime};
+use super::sym;
+use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::GcManaged;
 use crate::core::object::{CloneIn, IntoObject, TagType};
 use crate::core::{gc::Context, object::RawObj};
 use anyhow::{bail, Result};
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-
-use super::super::gc::Trace;
-use super::super::object::{Function, Gc, WithLifetime};
-use super::sym;
+use sptr::Strict;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
@@ -43,24 +45,57 @@ impl std::ops::Deref for SymbolX<'_> {
     type Target = Symbol;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data }
+        self.get()
     }
 }
 
 impl<'a> SymbolX<'a> {
     pub(crate) fn get(self) -> &'a Symbol {
-        unsafe { &*self.data }
+        unsafe {
+            let ptr = self.data;
+            let ptr = ptr.map_addr(|x| x.wrapping_add(BUILTIN_SYMBOLS.as_ptr().addr()));
+            // If type was a static symbol then we need to give it provenance
+            if BUILTIN_SYMBOLS.as_ptr_range().contains(&ptr) {
+                &*BUILTIN_SYMBOLS.as_ptr().with_addr(ptr.addr())
+            } else {
+                &*ptr
+            }
+        }
     }
 
-    pub(crate) fn as_ptr(self) -> *const Symbol {
-        self.data
+    pub(in crate::core) fn as_ptr(self) -> *const u8 {
+        self.data.cast()
     }
 
     pub(crate) fn new(data: &'a Symbol) -> Self {
+        Self::new_runtime(data)
+    }
+
+    pub(in crate::core) unsafe fn from_offset_ptr(ptr: *const u8) -> Self {
         Self {
-            data,
+            data: ptr.cast(),
             marker: PhantomData,
         }
+    }
+
+    pub(in crate::core) unsafe fn from_ptr(ptr: *const Symbol) -> Self {
+        let ptr = ptr.map_addr(|x| (x.wrapping_sub(BUILTIN_SYMBOLS.as_ptr().addr())));
+        Self {
+            data: ptr,
+            marker: PhantomData,
+        }
+    }
+
+    pub(super) const fn new_builtin(idx: usize) -> Self {
+        let ptr = sptr::invalid(idx * std::mem::size_of::<Symbol>());
+        Self {
+            data: ptr,
+            marker: PhantomData,
+        }
+    }
+
+    pub(super) fn new_runtime(sym: &Symbol) -> Self {
+        unsafe { Self::from_ptr(sym) }
     }
 
     // TODO: remove this
@@ -142,10 +177,10 @@ impl<'old, 'new> SymbolX<'old> {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> SymbolX<'static>);
+pub(crate) struct ConstSymbol(fn() -> &'static Symbol);
 
 impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> SymbolX<'static>) -> Self {
+    pub(crate) const fn new(f: fn() -> &'static Symbol) -> Self {
         Self(f)
     }
 }
@@ -154,7 +189,7 @@ impl std::ops::Deref for ConstSymbol {
     type Target = Symbol;
 
     fn deref(&self) -> &Self::Target {
-        self.0().get()
+        self.0()
     }
 }
 
@@ -174,13 +209,13 @@ impl PartialEq for Symbol {
 
 impl PartialEq<ConstSymbol> for SymbolX<'_> {
     fn eq(&self, other: &ConstSymbol) -> bool {
-        *self == other.0()
+        &**self == other.0()
     }
 }
 
 impl PartialEq<SymbolX<'_>> for ConstSymbol {
     fn eq(&self, other: &SymbolX<'_>) -> bool {
-        self.0() == *other
+        self.0() == &**other
     }
 }
 

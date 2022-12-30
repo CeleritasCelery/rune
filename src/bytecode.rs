@@ -989,7 +989,7 @@ pub(crate) fn call<'ob>(
 #[cfg(test)]
 mod test {
     use crate::core::{
-        env::sym,
+        env::{sym, Symbol},
         gc::RootSet,
         object::{HashTable, IntoObject, LispVec},
     };
