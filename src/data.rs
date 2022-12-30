@@ -97,7 +97,7 @@ pub(crate) fn symbol_value<'ob>(
 
 #[defun]
 pub(crate) fn symbol_name(symbol: SymbolX<'_>) -> &str {
-    symbol.name()
+    symbol.get().name()
 }
 
 #[defun]

@@ -2,6 +2,7 @@ use crate::core::gc::GcManaged;
 use crate::core::object::{CloneIn, IntoObject, TagType};
 use crate::core::{gc::Context, object::RawObj};
 use anyhow::{bail, Result};
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use super::super::gc::Trace;
@@ -9,8 +10,6 @@ use super::super::object::{Function, Gc, WithLifetime};
 use super::sym;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-
-pub(crate) type SymbolX<'a> = &'a Symbol;
 
 /// The allocation of a global symbol. This is shared
 /// between threads, so the interned value of a symbol
@@ -34,6 +33,113 @@ enum SymbolName {
     Uninterned(Box<str>),
 }
 
+#[derive(PartialEq, Copy, Clone)]
+pub(crate) struct SymbolX<'a> {
+    data: *const Symbol,
+    marker: PhantomData<&'a Symbol>,
+}
+
+impl std::ops::Deref for SymbolX<'_> {
+    type Target = Symbol;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data }
+    }
+}
+
+impl<'a> SymbolX<'a> {
+    pub(crate) fn get(self) -> &'a Symbol {
+        unsafe { &*self.data }
+    }
+
+    pub(crate) fn as_ptr(self) -> *const Symbol {
+        self.data
+    }
+
+    pub(crate) fn new(data: &'a Symbol) -> Self {
+        Self {
+            data,
+            marker: PhantomData,
+        }
+    }
+
+    // TODO: remove this
+    #[inline(always)]
+    pub(crate) fn nil(&self) -> bool {
+        self == &sym::NIL
+    }
+}
+
+unsafe impl Send for SymbolX<'_> {}
+
+// implement withlifetime for symbolx
+impl<'old, 'new> WithLifetime<'new> for SymbolX<'old> {
+    type Out = SymbolX<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+impl Trace for SymbolX<'_> {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        // interned symbols are not collected yet
+        if matches!(self.name, SymbolName::Uninterned(_)) {
+            self.mark();
+            if let Some(func) = self.get().get() {
+                func.as_obj().trace_mark(stack);
+            }
+        }
+    }
+}
+
+impl fmt::Display for SymbolX<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl fmt::Debug for SymbolX<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl Eq for SymbolX<'_> {}
+
+impl Hash for SymbolX<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+    }
+}
+
+impl<'old, 'new> SymbolX<'old> {
+    pub(in crate::core) fn clone_in<const C: bool>(
+        &self,
+        bk: &'new crate::core::gc::Block<C>,
+    ) -> Gc<SymbolX<'new>> {
+        if let SymbolName::Uninterned(name) = &self.name {
+            match bk.uninterned_symbol_map.get(*self) {
+                Some(new) => new.tag(),
+                None => {
+                    let sym = Symbol::new_uninterned(name);
+                    if let Some(old_func) = self.get().get() {
+                        let new_func = old_func.clone_in(bk);
+                        unsafe {
+                            sym.set_func(new_func).unwrap();
+                        }
+                    }
+                    let new = sym.into_obj(bk);
+                    bk.uninterned_symbol_map.insert(*self, new.untag());
+                    new
+                }
+            }
+        } else {
+            unsafe { self.with_lifetime().tag() }
+        }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub(crate) struct ConstSymbol(fn() -> SymbolX<'static>);
@@ -48,12 +154,12 @@ impl std::ops::Deref for ConstSymbol {
     type Target = Symbol;
 
     fn deref(&self) -> &Self::Target {
-        self.0()
+        self.0().get()
     }
 }
 
 impl AsRef<Symbol> for ConstSymbol {
-    fn as_ref(&self) -> SymbolX {
+    fn as_ref(&self) -> &Symbol {
         self
     }
 }
@@ -66,15 +172,15 @@ impl PartialEq for Symbol {
     }
 }
 
-impl PartialEq<ConstSymbol> for Symbol {
+impl PartialEq<ConstSymbol> for SymbolX<'_> {
     fn eq(&self, other: &ConstSymbol) -> bool {
-        self == other.0()
+        *self == other.0()
     }
 }
 
-impl PartialEq<Symbol> for ConstSymbol {
-    fn eq(&self, other: SymbolX) -> bool {
-        self.0() == other
+impl PartialEq<SymbolX<'_>> for ConstSymbol {
+    fn eq(&self, other: &SymbolX<'_>) -> bool {
+        self.0() == *other
     }
 }
 
@@ -140,11 +246,6 @@ impl Symbol {
         self.func.is_none()
     }
 
-    #[inline(always)]
-    pub(crate) fn nil(&self) -> bool {
-        self == &sym::NIL
-    }
-
     pub(crate) fn has_func(&self) -> bool {
         match &self.func {
             Some(func) => !func.load(Ordering::Acquire).is_null(),
@@ -195,30 +296,6 @@ impl Symbol {
     pub(crate) fn unbind_func(&self) {
         if let Some(func) = &self.func {
             func.store(Self::NULL, Ordering::Release);
-        }
-    }
-}
-
-impl<'new> CloneIn<'new, &'new Self> for Symbol {
-    fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
-        if let SymbolName::Uninterned(name) = &self.name {
-            match bk.uninterned_symbol_map.get(self) {
-                Some(new) => new.tag(),
-                None => {
-                    let sym = Self::new_uninterned(name);
-                    if let Some(old_func) = self.get() {
-                        let new_func = old_func.clone_in(bk);
-                        unsafe {
-                            sym.set_func(new_func).unwrap();
-                        }
-                    }
-                    let new = sym.into_obj(bk);
-                    bk.uninterned_symbol_map.insert(self, new.untag());
-                    new
-                }
-            }
-        } else {
-            unsafe { self.with_lifetime().tag() }
         }
     }
 }

@@ -91,7 +91,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
 }
 
 fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<PathBuf> {
-    let load_path = env.vars.get(&*sym::LOAD_PATH).unwrap();
+    let load_path = env.vars.get(SymbolX::new(&*sym::LOAD_PATH)).unwrap();
     let paths = load_path
         .bind(cx)
         .as_list()
@@ -143,7 +143,11 @@ pub(crate) fn load(
         println!("Loading {file}...");
     }
     let new_load_file = cx.add(final_file.to_string_lossy().to_string());
-    let prev_load_file = match env.as_mut(cx).vars.get_mut(&*sym::LOAD_FILE_NAME) {
+    let prev_load_file = match env
+        .as_mut(cx)
+        .vars
+        .get_mut(SymbolX::new(&*sym::LOAD_FILE_NAME))
+    {
         Some(val) => {
             let prev = val.bind(cx);
             val.set(new_load_file);
@@ -163,7 +167,7 @@ pub(crate) fn load(
     };
     env.as_mut(cx)
         .vars
-        .insert(&*sym::LOAD_FILE_NAME, &**prev_load_file);
+        .insert(SymbolX::new(&*sym::LOAD_FILE_NAME), &**prev_load_file);
     result
 }
 
@@ -180,14 +184,14 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<SymbolX>
             if sym.interned() {
                 Ok(sym)
             } else {
-                Ok(&sym::NIL)
+                Ok(SymbolX::new(&sym::NIL))
             }
         }
         Object::String(string) => {
             let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
             match map.get(string.try_into()?) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),
-                None => Ok(&sym::NIL),
+                None => Ok(SymbolX::new(&sym::NIL)),
             }
         }
         x => Err(TypeError::new(Type::String, x).into()),

@@ -107,12 +107,12 @@ impl SymbolBox {
     }
 
     fn from_static(inner: SymbolX<'static>) -> Self {
-        Self(inner)
+        Self(inner.get())
     }
 }
 
 impl AsRef<Symbol> for SymbolBox {
-    fn as_ref(&self) -> SymbolX {
+    fn as_ref(&self) -> &Symbol {
         unsafe { &*self.0 }
     }
 }
@@ -144,7 +144,7 @@ impl SymbolMap {
         unsafe {
             self.map.get(name).map(|x| {
                 let ptr: *const Symbol = x.as_ref();
-                &*ptr
+                SymbolX::new(&*ptr)
             })
         }
     }
@@ -170,12 +170,12 @@ impl SymbolMap {
         // no methods to remove items from SymbolMap and SymbolMap has a private
         // constructor, so the only one that exists is the one we create in this
         // module, which is static.
-        unsafe { &*sym }
+        unsafe { SymbolX::new(&*sym) }
     }
 
     fn pre_init(&mut self, sym: SymbolX<'static>) {
         use std::collections::hash_map::Entry;
-        let name = sym.name();
+        let name = sym.get().name();
         let entry = self.map.entry(name);
         assert!(
             matches!(entry, Entry::Vacant(_)),
@@ -244,7 +244,7 @@ mod test {
         let cx = &Context::new(roots);
         lazy_static::initialize(&INTERNED_SYMBOLS);
         let inner = Symbol::new("foo", super::sym::RUNTIME_SYMBOL);
-        let sym = unsafe { fix_lifetime(&inner) };
+        let sym = unsafe { fix_lifetime(SymbolX::new(&inner)) };
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());
         let func1 = cons!(1; cx);

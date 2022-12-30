@@ -139,7 +139,7 @@ fn autoload<'ob>(
     cx: &'ob Context,
 ) -> Result<SymbolX<'ob>> {
     if function.has_func() {
-        Ok(&sym::NIL)
+        Ok(SymbolX::new(&sym::NIL))
     } else {
         let autoload = list![sym::AUTOLOAD, file, docstring, interactive, load_type; cx];
         crate::data::fset(function, autoload)

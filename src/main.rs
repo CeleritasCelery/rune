@@ -94,6 +94,7 @@ mod print;
 mod reader;
 mod search;
 
+use crate::core::env::SymbolX;
 use crate::core::{
     env::{intern, Env},
     gc::{Context, Root, RootSet},
@@ -146,7 +147,7 @@ fn load(env: &mut Root<Env>, cx: &mut Context) {
     crate::core::env::init_variables(cx, env.as_mut(cx));
     crate::data::defalias(
         intern("not", cx),
-        (&*crate::core::env::sym::NULL).into(),
+        (SymbolX::new(&*crate::core::env::sym::NULL)).into(),
         None,
     )
     .expect("null should be defined");

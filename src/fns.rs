@@ -378,19 +378,19 @@ fn require<'ob>(
 ) -> Result<SymbolX<'ob>> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.get(cx).into_root() };
-    if crate::data::FEATURES.lock().unwrap().contains(feat) {
+    if crate::data::FEATURES.lock().unwrap().contains(&feat) {
         return Ok(feature.get(cx));
     }
     let file = match filename {
         Some(file) => file.get(cx).try_into()?,
-        None => feature.get(cx).name(),
+        None => feature.get(cx).get().name(),
     };
     let file = file.into_obj(cx);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.get(cx)),
         Err(e) => match noerror {
-            Some(()) => Ok(&*sym::NIL),
+            Some(()) => Ok(SymbolX::new(&*sym::NIL)),
             None => Err(e),
         },
     }

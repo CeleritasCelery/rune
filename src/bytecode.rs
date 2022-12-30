@@ -347,7 +347,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
             #[allow(clippy::never_loop)]
             while let Some(handler) = self.handlers.as_mut(cx).pop_obj(cx) {
                 match handler.condition.untag() {
-                    Object::Symbol(s) if s == &sym::ERROR => {}
+                    Object::Symbol(s) if s == sym::ERROR => {}
                     Object::Cons(cons) => {
                         for x in cons.elements() {
                             let x = x?;

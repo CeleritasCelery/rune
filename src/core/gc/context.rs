@@ -114,7 +114,6 @@ impl<const CONST: bool> Block<CONST> {
     where
         T: IntoObject<Out<'ob> = U>,
         Gc<U>: Into<Gc<V>>,
-
     {
         obj.into_obj(self).into()
     }

@@ -77,7 +77,7 @@ impl IntoRoot<SymbolX<'static>> for SymbolX<'_> {
 
 impl IntoRoot<SymbolX<'static>> for ConstSymbol {
     unsafe fn into_root(self) -> SymbolX<'static> {
-        self.with_lifetime()
+        SymbolX::new(self.with_lifetime())
     }
 }
 

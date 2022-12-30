@@ -238,11 +238,11 @@ impl IntoObject for bool {
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
         let sym: SymbolX = if self {
-            &crate::core::env::sym::TRUE
+            SymbolX::new(&crate::core::env::sym::TRUE)
         } else {
-            &crate::core::env::sym::NIL
+            SymbolX::new(&crate::core::env::sym::NIL)
         };
-        unsafe { Self::Out::tag_ptr(sym) }
+        unsafe { Self::Out::tag_ptr(sym.as_ptr()) }
     }
 }
 
@@ -277,7 +277,7 @@ impl IntoObject for ConstSymbol {
     type Out<'ob> = SymbolX<'ob>;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: SymbolX = &self;
+        let ptr: &Symbol = &self;
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -540,11 +540,11 @@ impl TaggedPtr for SymbolX<'_> {
     type Ptr = Symbol;
     const TAG: Tag = Tag::Symbol;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-        &*ptr.cast::<Self::Ptr>()
+        SymbolX::new(&*ptr.cast::<Self::Ptr>())
     }
 
     fn get_ptr(self) -> *const Self::Ptr {
-        self as *const Self::Ptr
+        self.get() as *const Self::Ptr
     }
 }
 
@@ -656,7 +656,7 @@ cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let sym: SymbolX = &crate::core::env::sym::NIL;
+        let sym: &Symbol = &crate::core::env::sym::NIL;
         unsafe { cast_gc(<SymbolX>::tag_ptr(sym)) }
     }
 }
@@ -821,8 +821,8 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
 
 impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
     fn from(x: ConstSymbol) -> Self {
-        let sym: SymbolX = &x;
-        sym.into()
+        let sym: &Symbol = &x;
+        SymbolX::new(sym).into()
     }
 }
 
@@ -1032,19 +1032,10 @@ impl<'ob> PartialEq<SymbolX<'_>> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<Symbol> for Gc<Object<'ob>> {
-    fn eq(&self, other: SymbolX) -> bool {
-        match self.untag() {
-            Object::Symbol(x) => x == other,
-            _ => false,
-        }
-    }
-}
-
 impl<'ob> PartialEq<ConstSymbol> for Gc<Object<'ob>> {
     fn eq(&self, other: &ConstSymbol) -> bool {
         match self.untag() {
-            Object::Symbol(x) => x == other,
+            Object::Symbol(x) => x == *other,
             _ => false,
         }
     }
