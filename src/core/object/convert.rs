@@ -2,13 +2,13 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
-use crate::core::env::SymbolX;
-
 use super::{
     super::error::{ArgError, Type, TypeError},
     nil, qtrue, LispHashTable, LispString, LispVec,
 };
 use super::{GcObj, LispFloat};
+use crate::core::env::sym;
+use crate::core::env::SymbolX;
 use anyhow::Context;
 
 use super::{Gc, Object};
@@ -27,7 +27,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::Symbol(x) if x.nil() => Ok(None),
+            Object::Symbol(sym::NIL) => Ok(None),
             Object::String(x) => Ok(Some(x.try_into()?)),
             x => Err(TypeError::new(Type::String, x).into()),
         }
@@ -66,7 +66,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
                 Ok(x) => Ok(Some(x)),
                 Err(e) => Err(e).with_context(|| format!("Integer must be positive, but was {x}")),
             },
-            Object::Symbol(s) if s.nil() => Ok(None),
+            Object::Symbol(sym::NIL) => Ok(None),
             _ => Err(TypeError::new(Type::Int, obj).into()),
         }
     }

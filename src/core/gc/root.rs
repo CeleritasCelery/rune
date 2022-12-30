@@ -9,7 +9,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::env::{ConstSymbol, SymbolX};
+use crate::core::env::SymbolX;
 use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
@@ -72,12 +72,6 @@ impl IntoRoot<&'static ByteFn> for &ByteFn {
 impl IntoRoot<SymbolX<'static>> for SymbolX<'_> {
     unsafe fn into_root(self) -> SymbolX<'static> {
         self.with_lifetime()
-    }
-}
-
-impl IntoRoot<SymbolX<'static>> for ConstSymbol {
-    unsafe fn into_root(self) -> SymbolX<'static> {
-        SymbolX::new(self.with_lifetime())
     }
 }
 

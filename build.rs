@@ -155,15 +155,10 @@ fn main() {
 pub(crate) mod sym {{
 use crate::core::env::Symbol;
 use crate::core::env::SymbolX;
-use crate::core::env::ConstSymbol;
-
-static __RUNTIME_SYMBOL_GLOBAL: Symbol = Symbol::new(\"_dummy_runtime_symbol\", RUNTIME_SYMBOL);
-fn __RUNTIME_SYMBOL_FN () -> &'static Symbol {{&__RUNTIME_SYMBOL_GLOBAL}}
-pub(crate) const RUNTIME_SYMBOL: ConstSymbol = ConstSymbol::new(__RUNTIME_SYMBOL_FN);
 
 pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
-    Symbol::new_const(\"nil\", NIL),
-    Symbol::new_const(\"t\", TRUE),",
+    Symbol::new_const(\"nil\"),
+    Symbol::new_const(\"t\"),",
     )
     .unwrap();
 
@@ -173,19 +168,18 @@ pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
             Some(name) => name.trim_matches('"').to_string(),
             None => map_varname(sym),
         };
-        writeln!(f, "    Symbol::new(\"{sym_name}\", {sym}),").unwrap();
+        writeln!(f, "    Symbol::new(\"{sym_name}\"),").unwrap();
     }
 
-    for (ident, name, _, _) in &all_defvar {
+    for (_, name, _, _) in &all_defvar {
         #[rustfmt::skip]
-        writeln!(f, "    Symbol::new(\"{name}\", {ident}),").unwrap();
+        writeln!(f, "    Symbol::new(\"{name}\"),").unwrap();
     }
 
     // write the list of all defun to a file in out_dir
-    for (_, name, lisp_name) in &all_defun {
-        let const_name = name.to_ascii_uppercase();
+    for (_, _, lisp_name) in &all_defun {
         #[rustfmt::skip]
-        writeln!(f, "    Symbol::new(\"{lisp_name}\", {const_name}),").unwrap();
+        writeln!(f, "    Symbol::new(\"{lisp_name}\"),").unwrap();
     }
 
     // End BUILTIN_SYMBOLS
@@ -200,11 +194,8 @@ pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
         .enumerate();
     for (idx, element) in all_elements {
         let sym_name = element.to_ascii_uppercase();
-        let matcher_name = format!("__FN_PTR_{sym_name}");
         #[rustfmt::skip]
-        writeln!(f, "fn {matcher_name}() -> &'static Symbol {{ &BUILTIN_SYMBOLS[{idx}] }}").unwrap();
-        #[rustfmt::skip]
-        writeln!(f, "pub(crate) const {sym_name}: ConstSymbol = ConstSymbol::new({matcher_name});").unwrap();
+        writeln!(f, "pub(crate) const {sym_name}: SymbolX = SymbolX::new_builtin({idx});").unwrap();
     }
 
     // all SubrFn

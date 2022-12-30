@@ -2,6 +2,7 @@ use super::super::{
     gc::{Root, Rt},
     object::{Gc, GcObj, List, Object},
 };
+use crate::core::env::sym;
 use streaming_iterator::StreamingIterator;
 
 use anyhow::{anyhow, Result};
@@ -47,7 +48,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
             Some(cons) => {
                 self.cons = match cons.cdr().untag() {
                     Object::Cons(next) => Some(next),
-                    Object::Symbol(s) if s.nil() => None,
+                    Object::Symbol(sym::NIL) => None,
                     _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons.car()))
@@ -87,7 +88,7 @@ impl<'ob> Iterator for ConsIter<'ob> {
             List::Cons(cons) => {
                 self.list = match cons.cdr().untag() {
                     Object::Cons(next) => List::Cons(next),
-                    Object::Symbol(s) if s.nil() => List::Nil,
+                    Object::Symbol(sym::NIL) => List::Nil,
                     _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
                 };
                 Some(Ok(cons))

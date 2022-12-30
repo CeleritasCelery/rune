@@ -82,7 +82,7 @@ pub(crate) fn mapcar<'ob>(
 ) -> Result<GcObj<'ob>> {
     let sequence = sequence.bind(cx);
     match sequence.untag() {
-        Object::Symbol(s) if s.nil() => Ok(nil()),
+        Object::Symbol(sym::NIL) => Ok(nil()),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
             mapcar_internal(iter, function, env, cx)
@@ -390,7 +390,7 @@ fn require<'ob>(
     match crate::lread::load(file, None, None, cx, env) {
         Ok(_) => Ok(feature.get(cx)),
         Err(e) => match noerror {
-            Some(()) => Ok(SymbolX::new(&*sym::NIL)),
+            Some(()) => Ok(sym::NIL),
             None => Err(e),
         },
     }
@@ -429,7 +429,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
                     concated.push(x.get());
                 }
             }
-            Object::Symbol(s) if s.nil() => {}
+            Object::Symbol(sym::NIL) => {}
             obj => bail!(TypeError::new(Type::Sequence, obj)),
         }
     }
@@ -442,7 +442,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
-        Object::Symbol(s) if s.nil() => 0,
+        Object::Symbol(sym::NIL) => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
     Ok(size
@@ -479,7 +479,7 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
     match sequence.untag() {
         Object::Cons(x) => nth(n, x.into()),
-        Object::Symbol(s) if s.nil() => Ok(nil()),
+        Object::Symbol(sym::NIL) => Ok(nil()),
         Object::Vec(x) => aref(x.into(), n),
         Object::Record(x) => aref(x.into(), n),
         Object::String(x) => aref(x.into(), n),
@@ -575,7 +575,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
                 Err(_) => Ok(cx.add(x.to_vec())),
             }
         }
-        Object::Symbol(s) if s.nil() => Ok(nil()),
+        Object::Symbol(sym::NIL) => Ok(nil()),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }

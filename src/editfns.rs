@@ -63,8 +63,6 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
 
 #[cfg(test)]
 mod test {
-    use crate::core::env::SymbolX;
-
     use super::*;
 
     #[test]
@@ -75,7 +73,7 @@ mod test {
             &format("foo-%s %s", &[3.into(), 4.into()]).unwrap(),
             "foo-3 4"
         );
-        let sym = SymbolX::new(&*crate::core::env::sym::FUNCTION).into();
+        let sym = crate::core::env::sym::FUNCTION.into();
         assert_eq!(&format("%s", &[sym]).unwrap(), "function");
 
         assert!(&format("%s", &[]).is_err());

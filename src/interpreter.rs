@@ -51,7 +51,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         let forms = cons.cdr();
         root!(forms, cx);
         match cons.car().untag() {
-            Object::Symbol(sym) => match sym.sym {
+            Object::Symbol(sym) => match sym {
                 sym::QUOTE => self.quote(forms.bind(cx)),
                 sym::LET => self.eval_let(forms, true, cx),
                 sym::LET_STAR => self.eval_let(forms, false, cx),
@@ -568,7 +568,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.vars.as_mut(cx).pop();
                     return Ok(result);
                 }
-                Object::Symbol(s) if s.nil() => {}
+                Object::Symbol(sym::NIL) => {}
                 invalid => bail_err!("Invalid condition handler: {invalid}"),
             }
         }
@@ -734,7 +734,7 @@ fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<SymbolX>, Vec<SymbolX>, Opt
     let mut iter = bindings.as_list()?;
     while let Some(binding) = iter.next() {
         let sym: SymbolX = binding?.try_into()?;
-        match sym.sym {
+        match sym {
             sym::AND_OPTIONAL => arg_type = &mut optional,
             sym::AND_REST => {
                 if let Some(last) = iter.next() {

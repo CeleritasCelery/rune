@@ -71,7 +71,7 @@ fn run_hooks<'ob>(
                                 func.call(args, env, cx, None)?;
                             }
                         }
-                        Object::Symbol(s) if s.nil() => {}
+                        Object::Symbol(sym::NIL) => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
@@ -139,7 +139,7 @@ fn autoload<'ob>(
     cx: &'ob Context,
 ) -> Result<SymbolX<'ob>> {
     if function.has_func() {
-        Ok(SymbolX::new(&sym::NIL))
+        Ok(sym::NIL)
     } else {
         let autoload = list![sym::AUTOLOAD, file, docstring, interactive, load_type; cx];
         crate::data::fset(function, autoload)

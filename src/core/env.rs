@@ -160,7 +160,7 @@ impl SymbolMap {
                     let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
                     &*name_ptr
                 };
-                let inner = Symbol::new(static_name, sym::RUNTIME_SYMBOL);
+                let inner = Symbol::new(static_name);
                 let sym = SymbolBox::new(inner);
                 let ptr: *const Symbol = sym.as_ref();
                 self.map.insert(static_name, sym);
@@ -244,7 +244,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         lazy_static::initialize(&INTERNED_SYMBOLS);
-        let inner = Symbol::new("foo", super::sym::RUNTIME_SYMBOL);
+        let inner = Symbol::new("foo");
         let sym = unsafe { fix_lifetime(SymbolX::new(&inner)) };
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());

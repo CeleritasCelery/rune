@@ -1,5 +1,6 @@
 use super::gc::{Block, GcManaged, GcMark, Trace};
 use super::object::{CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
+use crate::core::env::sym;
 use anyhow::{anyhow, Result};
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
@@ -103,7 +104,7 @@ impl Display for Cons {
                     cons = tail;
                     f.write_char(' ')?;
                 }
-                Object::Symbol(s) if s.nil() => break,
+                Object::Symbol(sym::NIL) => break,
                 x => {
                     write!(f, " . {x}")?;
                     break;
@@ -125,7 +126,7 @@ impl Debug for Cons {
                     cons = tail;
                     f.write_char(' ')?;
                 }
-                Object::Symbol(s) if s.nil() => break,
+                Object::Symbol(sym::NIL) => break,
                 end => {
                     write!(f, " . {end:?}")?;
                     break;

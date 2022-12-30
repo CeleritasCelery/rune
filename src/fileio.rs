@@ -4,7 +4,7 @@ use std::path::Path;
 use fn_macros::defun;
 
 use crate::core::{
-    env::{sym, Env, SymbolX},
+    env::{sym, Env},
     gc::{Context, Root},
     object::Object,
 };
@@ -24,10 +24,7 @@ pub(crate) fn expand_file_name(
         let path = Path::new(dir);
         Ok(path.join(name).to_string_lossy().to_string())
     } else {
-        let dir = env
-            .vars
-            .get(SymbolX::new(&*sym::DEFAULT_DIRECTORY))
-            .unwrap();
+        let dir = env.vars.get(sym::DEFAULT_DIRECTORY).unwrap();
         match dir.get(cx) {
             Object::String(s) => {
                 let name: &str = s.try_into()?;

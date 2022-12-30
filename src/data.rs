@@ -138,11 +138,7 @@ pub(crate) fn default_boundp(symbol: SymbolX, env: &Root<Env>) -> bool {
 
 #[defun]
 pub(crate) fn listp(object: GcObj) -> bool {
-    match object.untag() {
-        Object::Symbol(s) if s.nil() => true,
-        Object::Cons(_) => true,
-        _ => false,
-    }
+    matches!(object.untag(), Object::Symbol(sym::NIL) | Object::Cons(_))
 }
 
 #[defun]

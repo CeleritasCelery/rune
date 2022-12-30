@@ -1,7 +1,6 @@
 #![allow(unstable_name_collisions)]
 use super::super::gc::Trace;
 use super::super::object::{Function, Gc, WithLifetime};
-use super::sym;
 use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::GcManaged;
 use crate::core::object::{CloneIn, IntoObject, TagType};
@@ -24,7 +23,6 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// yet.
 pub(crate) struct Symbol {
     name: SymbolName,
-    pub(crate) sym: ConstSymbol,
     marked: AtomicBool,
     func: Option<AtomicPtr<u8>>,
 }
@@ -35,7 +33,7 @@ enum SymbolName {
     Uninterned(Box<str>),
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub(crate) struct SymbolX<'a> {
     data: *const Symbol,
     marker: PhantomData<&'a Symbol>,
@@ -67,7 +65,7 @@ impl<'a> SymbolX<'a> {
         self.data.cast()
     }
 
-    pub(crate) fn new(data: &'a Symbol) -> Self {
+    pub(in crate::core) fn new(data: &'a Symbol) -> Self {
         Self::new_runtime(data)
     }
 
@@ -96,12 +94,6 @@ impl<'a> SymbolX<'a> {
 
     pub(super) fn new_runtime(sym: &Symbol) -> Self {
         unsafe { Self::from_ptr(sym) }
-    }
-
-    // TODO: remove this
-    #[inline(always)]
-    pub(crate) fn nil(&self) -> bool {
-        self == &sym::NIL
     }
 }
 
@@ -140,8 +132,6 @@ impl fmt::Debug for SymbolX<'_> {
     }
 }
 
-impl Eq for SymbolX<'_> {}
-
 impl Hash for SymbolX<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.data.hash(state);
@@ -150,11 +140,11 @@ impl Hash for SymbolX<'_> {
 
 impl<'old, 'new> SymbolX<'old> {
     pub(in crate::core) fn clone_in<const C: bool>(
-        &self,
+        self,
         bk: &'new crate::core::gc::Block<C>,
     ) -> Gc<SymbolX<'new>> {
         if let SymbolName::Uninterned(name) = &self.name {
-            match bk.uninterned_symbol_map.get(*self) {
+            match bk.uninterned_symbol_map.get(self) {
                 Some(new) => new.tag(),
                 None => {
                     let sym = Symbol::new_uninterned(name);
@@ -165,7 +155,7 @@ impl<'old, 'new> SymbolX<'old> {
                         }
                     }
                     let new = sym.into_obj(bk);
-                    bk.uninterned_symbol_map.insert(*self, new.untag());
+                    bk.uninterned_symbol_map.insert(self, new.untag());
                     new
                 }
             }
@@ -175,47 +165,11 @@ impl<'old, 'new> SymbolX<'old> {
     }
 }
 
-#[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub(crate) struct ConstSymbol(fn() -> &'static Symbol);
-
-impl ConstSymbol {
-    pub(crate) const fn new(f: fn() -> &'static Symbol) -> Self {
-        Self(f)
-    }
-}
-
-impl std::ops::Deref for ConstSymbol {
-    type Target = Symbol;
-
-    fn deref(&self) -> &Self::Target {
-        self.0()
-    }
-}
-
-impl AsRef<Symbol> for ConstSymbol {
-    fn as_ref(&self) -> &Symbol {
-        self
-    }
-}
-
 // Since global symbols are globally unique we can
 // compare them with a pointer equal test.
 impl PartialEq for Symbol {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
-    }
-}
-
-impl PartialEq<ConstSymbol> for SymbolX<'_> {
-    fn eq(&self, other: &ConstSymbol) -> bool {
-        &**self == other.0()
-    }
-}
-
-impl PartialEq<SymbolX<'_>> for ConstSymbol {
-    fn eq(&self, other: &SymbolX<'_>) -> bool {
-        self.0() == &**other
     }
 }
 
@@ -230,7 +184,7 @@ impl Hash for Symbol {
 
 impl Symbol {
     const NULL: *mut u8 = std::ptr::null_mut();
-    pub(super) const fn new(name: &'static str, sym: ConstSymbol) -> Self {
+    pub(super) const fn new(name: &'static str) -> Self {
         // We have to do this workaround because starts_with is not const
         let func = if name.as_bytes()[0] == b':' {
             // If func is none then this cannot take a function
@@ -240,17 +194,15 @@ impl Symbol {
         };
         Symbol {
             name: SymbolName::Interned(name),
-            sym,
             func,
             marked: AtomicBool::new(true),
         }
     }
 
-    pub(super) const fn new_const(name: &'static str, sym: ConstSymbol) -> Self {
+    pub(super) const fn new_const(name: &'static str) -> Self {
         Symbol {
             name: SymbolName::Interned(name),
             func: None,
-            sym,
             marked: AtomicBool::new(true),
         }
     }
@@ -258,7 +210,6 @@ impl Symbol {
     pub(crate) fn new_uninterned(name: &str) -> Self {
         Symbol {
             name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
-            sym: sym::RUNTIME_SYMBOL,
             func: Some(AtomicPtr::new(Self::NULL)),
             marked: AtomicBool::new(false),
         }

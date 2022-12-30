@@ -1,23 +1,19 @@
 #![allow(unstable_name_collisions)]
-use sptr::Strict;
-use std::fmt;
-use std::marker::PhantomData;
-
-use crate::core::env::ConstSymbol;
-use crate::core::gc::{GcManaged, Trace};
-
 use super::super::{
     cons::Cons,
     env::{Symbol, SymbolX},
     error::{Type, TypeError},
     gc::{AllocObject, Block},
 };
-
-use private::{Tag, TaggedPtr};
-
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
+use crate::core::env::sym;
+use crate::core::gc::{GcManaged, Trace};
+use private::{Tag, TaggedPtr};
+use sptr::Strict;
+use std::fmt;
+use std::marker::PhantomData;
 
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
 
@@ -237,10 +233,10 @@ impl IntoObject for bool {
     type Out<'a> = SymbolX<'a>;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let sym: SymbolX = if self {
-            SymbolX::new(&crate::core::env::sym::TRUE)
+        let sym = if self {
+            crate::core::env::sym::TRUE
         } else {
-            SymbolX::new(&crate::core::env::sym::NIL)
+            crate::core::env::sym::NIL
         };
         unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
@@ -269,16 +265,6 @@ impl IntoObject for Symbol {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         let ptr = self.alloc_obj(block);
-        let sym = unsafe { SymbolX::from_ptr(ptr) };
-        unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
-    }
-}
-
-impl IntoObject for ConstSymbol {
-    type Out<'ob> = SymbolX<'ob>;
-
-    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr: &Symbol = &self;
         let sym = unsafe { SymbolX::from_ptr(ptr) };
         unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
@@ -828,13 +814,6 @@ impl<'ob> From<i32> for Gc<Object<'ob>> {
     }
 }
 
-impl<'ob> From<ConstSymbol> for Gc<Object<'ob>> {
-    fn from(x: ConstSymbol) -> Self {
-        let sym: &Symbol = &x;
-        SymbolX::new(sym).into()
-    }
-}
-
 impl From<Gc<Object<'_>>> for () {
     fn from(_: Gc<Object>) {}
 }
@@ -867,8 +846,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.untag() {
-            Object::Symbol(s) if s.nil() => unsafe { Ok(cast_gc(value)) },
-            Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
+            Object::Symbol(sym::NIL) | Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
     }
@@ -1034,15 +1012,6 @@ impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
 
 impl<'ob> PartialEq<SymbolX<'_>> for Gc<Object<'ob>> {
     fn eq(&self, other: &SymbolX) -> bool {
-        match self.untag() {
-            Object::Symbol(x) => x == *other,
-            _ => false,
-        }
-    }
-}
-
-impl<'ob> PartialEq<ConstSymbol> for Gc<Object<'ob>> {
-    fn eq(&self, other: &ConstSymbol) -> bool {
         match self.untag() {
             Object::Symbol(x) => x == *other,
             _ => false,
