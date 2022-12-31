@@ -624,9 +624,10 @@ macro_rules! cast_gc {
 
 // Number
 #[derive(Copy, Clone)]
+#[repr(u8)]
 pub(crate) enum Number<'ob> {
-    Int(i64),
-    Float(&'ob LispFloat),
+    Int(i64) = Tag::Int as u8,
+    Float(&'ob LispFloat) = Tag::Float as u8,
 }
 cast_gc!(Number<'ob> => i64, &LispFloat);
 
@@ -640,17 +641,16 @@ impl<'old, 'new> WithLifetime<'new> for Number<'old> {
 
 // List
 #[derive(Copy, Clone, Debug)]
+#[repr(u8)]
 pub(crate) enum List<'ob> {
-    Nil,
-    Cons(&'ob Cons),
+    Nil = 0,
+    Cons(&'ob Cons) = Tag::Cons as u8,
 }
 cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let ptr: &SymbolCell = &crate::core::env::sym::NIL;
-        let sym = unsafe { Symbol::from_ptr(ptr) };
-        let gc: GcObj = sym.into();
+        let gc: GcObj = sym::NIL.into();
         unsafe { cast_gc(gc) }
     }
 }
@@ -665,11 +665,12 @@ impl<'old, 'new> WithLifetime<'new> for List<'old> {
 
 // Function
 #[derive(Copy, Clone, Debug)]
+#[repr(u8)]
 pub(crate) enum Function<'ob> {
-    ByteFn(&'ob ByteFn),
-    SubrFn(&'static SubrFn),
-    Cons(&'ob Cons),
-    Symbol(Symbol<'ob>),
+    ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
+    SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
+    Cons(&'ob Cons) = Tag::Cons as u8,
+    Symbol(Symbol<'ob>) = Tag::Symbol as u8,
 }
 cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, Symbol<'ob>);
 
@@ -715,26 +716,27 @@ impl<'ob> Function<'ob> {
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
 /// The Object defintion that contains all other possible lisp objects. This
 /// type must remain covariant over 'ob. This is just an expanded form of our
 /// tagged pointer type to take advantage of ergonomics of enums in Rust.
 pub(crate) enum Object<'ob> {
-    Int(i64),
-    Float(&'ob LispFloat),
-    Symbol(Symbol<'ob>),
-    Cons(&'ob Cons),
-    Vec(&'ob LispVec),
-    Record(&'ob Record),
-    HashTable(&'ob LispHashTable),
-    String(&'ob LispString),
-    ByteFn(&'ob ByteFn),
-    SubrFn(&'static SubrFn),
+    Int(i64) = Tag::Int as u8,
+    Float(&'ob LispFloat) = Tag::Float as u8,
+    Symbol(Symbol<'ob>) = Tag::Symbol as u8,
+    Cons(&'ob Cons) = Tag::Cons as u8,
+    Vec(&'ob LispVec) = Tag::Vec as u8,
+    Record(&'ob Record) = Tag::Record as u8,
+    HashTable(&'ob LispHashTable) = Tag::HashTable as u8,
+    String(&'ob LispString) = Tag::String as u8,
+    ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
+    SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
 }
 cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
-    pub(crate) const NIL: Object<'static> = Object::Symbol(crate::core::env::sym::NIL);
-    pub(crate) const TRUE: Object<'static> = Object::Symbol(crate::core::env::sym::TRUE);
+    pub(crate) const NIL: Object<'static> = Object::Symbol(sym::NIL);
+    pub(crate) const TRUE: Object<'static> = Object::Symbol(sym::TRUE);
     /// Return the type of an object
     pub(crate) fn get_type(self) -> Type {
         match self {
@@ -897,7 +899,7 @@ impl<'ob> GcObj<'ob> {
     }
 
     pub(crate) fn nil(self) -> bool {
-        self == crate::core::env::sym::NIL
+        self == sym::NIL
     }
 }
 

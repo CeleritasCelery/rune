@@ -263,6 +263,11 @@ mod test {
         let Function::Cons(after) = cell2.untag() else {unreachable!("Type should be a lisp function")};
         assert_eq!(after.car(), 2);
         assert_eq!(before.car(), 1);
+
+        unsafe {
+            sym.set_func(sym::NIL.into()).unwrap();
+        }
+        assert!(!sym.has_func());
     }
 
     #[test]

@@ -24,6 +24,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 pub(crate) struct SymbolCell {
     name: SymbolName,
     marked: AtomicBool,
+    // We can't use AtomicCell due to this issue:
+    // https://github.com/crossbeam-rs/crossbeam/issues/748
     func: Option<AtomicPtr<u8>>,
 }
 
@@ -165,7 +167,7 @@ impl<'old, 'new> Symbol<'old> {
     }
 }
 
-// Since global symbols are globally unique we can
+// Since symbols are globally unique we can
 // compare them with a pointer equal test.
 impl PartialEq for SymbolCell {
     fn eq(&self, other: &Self) -> bool {
@@ -240,12 +242,9 @@ impl SymbolCell {
     fn get(&self) -> Option<Gc<Function>> {
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
+            // If ptr is null then the symbol-function is nil. This is because
+            // nil is represented as a null pointer.
             if !ptr.is_null() {
-                // SAFETY: we ensure that 0 is not representable in the enum
-                // Function (by making a reference the first element, which will
-                // never be null). So it is safe to use 0 as niche value for
-                // `None`. We can't use AtomicCell due to this issue:
-                // https://github.com/crossbeam-rs/crossbeam/issues/748
                 return Some(unsafe { Gc::from_raw_ptr(ptr) });
             }
         }
