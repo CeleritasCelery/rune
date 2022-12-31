@@ -536,7 +536,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     // Check that conditions match
                     let condition = cons.car();
                     match condition.untag() {
-                        Object::Symbol(s) if s == sym::ERROR => {}
+                        Object::Symbol(sym::ERROR) => {}
                         Object::Cons(cons) => {
                             for x in cons.elements() {
                                 let x = x?;
@@ -635,7 +635,7 @@ fn call_closure<'ob>(
     cx.garbage_collect(false);
     let closure: &Cons = closure.get(cx);
     match closure.car().untag() {
-        Object::Symbol(s) if s == sym::CLOSURE => {
+        Object::Symbol(sym::CLOSURE) => {
             rooted_iter!(forms, closure.cdr(), cx);
             // TODO: remove this temp vector
             let args = args.iter().map(|x| x.bind(cx)).collect();
@@ -675,7 +675,7 @@ fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
             Object::Cons(pair) => {
                 env.push(pair);
             }
-            Object::Symbol(s) if s == sym::TRUE => return Ok(env),
+            Object::TRUE => return Ok(env),
             x => bail!("Invalid closure environment member: {x}"),
         }
     }

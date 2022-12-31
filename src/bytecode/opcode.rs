@@ -1,4 +1,5 @@
 use num_enum::TryFromPrimitive;
+
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, TryFromPrimitive)]
 #[repr(u8)]

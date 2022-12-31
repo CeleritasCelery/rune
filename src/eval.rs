@@ -1,6 +1,4 @@
-use fn_macros::defun;
-use streaming_iterator::StreamingIterator;
-
+use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{EvalError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{nil, LispString, Object};
@@ -10,10 +8,9 @@ use crate::core::{
 };
 use crate::fns::assq;
 use crate::{root, rooted_iter};
-
-use crate::core::env::{sym, Env, Symbol};
-
 use anyhow::{anyhow, bail, ensure, Result};
+use fn_macros::defun;
+use streaming_iterator::StreamingIterator;
 
 #[defun]
 pub(crate) fn apply<'ob>(

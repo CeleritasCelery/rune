@@ -1,9 +1,8 @@
+use super::Block;
 use crate::core::cons::Cons;
 use crate::core::env::SymbolCell;
 use crate::core::object::{ByteFn, LispFloat, LispHashTable, LispString, LispVec};
 use std::fmt::Debug;
-
-use super::Block;
 
 /// The owner of an object allocation. No references to
 /// the object can outlive this.

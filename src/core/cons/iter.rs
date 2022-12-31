@@ -2,11 +2,9 @@ use super::super::{
     gc::{Root, Rt},
     object::{Gc, GcObj, List, Object},
 };
-use streaming_iterator::StreamingIterator;
-
-use anyhow::{anyhow, Result};
-
 use super::Cons;
+use anyhow::{anyhow, Result};
+use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
 pub(crate) struct ElemIter<'ob> {

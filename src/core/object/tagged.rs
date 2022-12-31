@@ -8,6 +8,7 @@ use super::super::{
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
+use crate::core::env::sym;
 use crate::core::gc::{GcManaged, Trace};
 use private::{Tag, TaggedPtr};
 use sptr::Strict;
@@ -31,11 +32,11 @@ impl Default for RawObj {
 
 #[inline(always)]
 pub(crate) fn nil<'a>() -> GcObj<'a> {
-    crate::core::env::sym::NIL.into()
+    sym::NIL.into()
 }
 
 pub(crate) fn qtrue<'a>() -> GcObj<'a> {
-    crate::core::env::sym::TRUE.into()
+    sym::TRUE.into()
 }
 
 #[derive(Copy, Clone)]
@@ -232,10 +233,9 @@ impl IntoObject for bool {
     type Out<'a> = Symbol<'a>;
 
     fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
-        let sym = if self {
-            crate::core::env::sym::TRUE
-        } else {
-            crate::core::env::sym::NIL
+        let sym = match self {
+            true => sym::TRUE,
+            false => sym::NIL,
         };
         unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
@@ -734,6 +734,7 @@ cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, 
 
 impl Object<'_> {
     pub(crate) const NIL: Object<'static> = Object::Symbol(crate::core::env::sym::NIL);
+    pub(crate) const TRUE: Object<'static> = Object::Symbol(crate::core::env::sym::TRUE);
     /// Return the type of an object
     pub(crate) fn get_type(self) -> Type {
         match self {

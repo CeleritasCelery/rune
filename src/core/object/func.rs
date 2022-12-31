@@ -7,11 +7,11 @@ use super::{
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt};
-use std::fmt::{self, Debug, Display};
-
 use anyhow::{bail, ensure, Result};
 use fn_macros::Trace;
+use std::fmt::{self, Debug, Display};
 use streaming_iterator::StreamingIterator;
+
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq, Eq, Trace)]

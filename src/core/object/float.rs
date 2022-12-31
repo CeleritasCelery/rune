@@ -1,7 +1,6 @@
+use crate::core::gc::{GcManaged, GcMark};
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
-
-use crate::core::gc::{GcManaged, GcMark};
 
 #[derive(PartialEq)]
 pub(crate) struct LispFloat {

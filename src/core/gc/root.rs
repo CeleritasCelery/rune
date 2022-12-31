@@ -1,9 +1,3 @@
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
-use std::slice::SliceIndex;
-
 use super::super::{
     cons::Cons,
     object::{GcObj, RawObj},
@@ -12,6 +6,11 @@ use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;
 use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
+use std::fmt::{Debug, Display};
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::slice::SliceIndex;
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;

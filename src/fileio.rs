@@ -1,13 +1,11 @@
-use anyhow::Result;
-use std::path::Path;
-
-use fn_macros::defun;
-
 use crate::core::{
     env::{sym, Env},
     gc::{Context, Root},
     object::Object,
 };
+use anyhow::Result;
+use fn_macros::defun;
+use std::path::Path;
 
 #[defun]
 pub(crate) fn expand_file_name(

@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use crate::core::{
     cons::Cons,
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
@@ -11,6 +9,7 @@ use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;
+use std::sync::Mutex;
 
 lazy_static! {
     pub(crate) static ref FEATURES: Mutex<HashSet<Symbol<'static>>> = Mutex::new({

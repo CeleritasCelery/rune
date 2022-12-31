@@ -1,9 +1,7 @@
+use super::{display_slice, CloneIn, GcObj, IntoObject, WithLifetime};
+use crate::core::gc::{GcManaged, GcMark, Trace};
 use anyhow::{anyhow, Result};
 use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
-
-use crate::core::gc::{GcManaged, GcMark, Trace};
-
-use super::{display_slice, CloneIn, GcObj, IntoObject, WithLifetime};
 
 /// A lisp vector. Unlike vectors in other languages this is not resizeable.
 /// This type is represented as slice of [`ObjCell`] which is immutable by

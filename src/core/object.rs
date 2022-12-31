@@ -16,16 +16,16 @@ mod hashtable;
 mod string;
 mod tagged;
 mod vector;
-use std::fmt::Write as _;
-
-pub(crate) use tagged::*;
 
 pub(crate) use convert::*;
 pub(crate) use float::*;
 pub(crate) use func::*;
 pub(crate) use hashtable::*;
 pub(crate) use string::*;
+pub(crate) use tagged::*;
 pub(crate) use vector::*;
+
+use std::fmt::Write as _;
 
 pub(crate) fn display_slice<T: std::fmt::Display>(slice: &[T]) -> String {
     let mut buffer = String::new();

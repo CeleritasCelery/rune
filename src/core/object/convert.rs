@@ -6,11 +6,10 @@ use super::{
     super::error::{ArgError, Type, TypeError},
     nil, qtrue, LispHashTable, LispString, LispVec,
 };
+use super::{Gc, Object};
 use super::{GcObj, LispFloat};
 use crate::core::env::Symbol;
 use anyhow::Context;
-
-use super::{Gc, Object};
 
 impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
     type Error = anyhow::Error;

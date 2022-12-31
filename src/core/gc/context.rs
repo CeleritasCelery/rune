@@ -1,12 +1,11 @@
 use super::OwnedObject;
+use super::Trace;
 use crate::core::env::UninternedSymbolMap;
 use crate::core::object::{Gc, GcObj, IntoObject, RawInto, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
-
-use super::Trace;
 
 /// A global store of all gc roots. This struct should be passed to the [Context]
 /// when it is created.

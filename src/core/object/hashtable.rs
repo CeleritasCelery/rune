@@ -1,17 +1,13 @@
-use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
-use std::fmt::{Debug, Display};
-
-use std::collections::hash_map::Iter as HashIter;
-
-use streaming_iterator::StreamingIterator;
-
+use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
 use crate::core::gc::{Context, Root, Rt};
 use crate::{
     core::gc::{GcManaged, GcMark, Trace},
     hashmap::HashMap,
 };
-
-use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
+use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
+use std::collections::hash_map::Iter as HashIter;
+use std::fmt::{Debug, Display};
+use streaming_iterator::StreamingIterator;
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;

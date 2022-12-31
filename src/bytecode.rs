@@ -1,16 +1,13 @@
 //! The main bytecode interpeter.
-
-use std::ops::{DerefMut, Index, IndexMut, RangeTo};
-
-use anyhow::{bail, Result};
-use bstr::ByteSlice;
-use fn_macros::{defun, Trace};
-
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
 use crate::root;
+use anyhow::{bail, Result};
+use bstr::ByteSlice;
+use fn_macros::{defun, Trace};
+use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 mod opcode;
 
@@ -347,7 +344,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
             #[allow(clippy::never_loop)]
             while let Some(handler) = self.handlers.as_mut(cx).pop_obj(cx) {
                 match handler.condition.untag() {
-                    Object::Symbol(s) if s == sym::ERROR => {}
+                    Object::Symbol(sym::ERROR) => {}
                     Object::Cons(cons) => {
                         for x in cons.elements() {
                             let x = x?;

@@ -1,3 +1,4 @@
+use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcManaged, GcMark};
 use anyhow::Result;
 use bstr::{BStr, BString, ByteSlice};
@@ -6,8 +7,6 @@ use std::{
     fmt::{Debug, Display},
     ops::Deref,
 };
-
-use super::{CloneIn, IntoObject};
 
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct LispString {

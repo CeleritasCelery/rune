@@ -6,11 +6,9 @@ use crate::core::gc::{Context, Root};
 use crate::core::object::{nil, Gc, GcObj, LispString, Object, WithLifetime};
 use crate::reader;
 use crate::{interpreter, root};
-use fn_macros::defun;
-
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
-
+use fn_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
 

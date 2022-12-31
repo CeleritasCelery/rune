@@ -1,6 +1,5 @@
-use fn_macros::defun;
-
 use crate::core::object::{nil, GcObj};
+use fn_macros::defun;
 
 #[defun]
 pub(crate) fn make_keymap(_string: Option<&str>) -> GcObj {
