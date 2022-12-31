@@ -1,6 +1,5 @@
 use super::gc::{Block, GcManaged, GcMark, Trace};
 use super::object::{CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
-use crate::core::env::sym;
 use anyhow::{anyhow, Result};
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
@@ -21,6 +20,8 @@ impl PartialEq for Cons {
         self.car() == other.car() && self.cdr() == other.cdr()
     }
 }
+
+impl Eq for Cons {}
 
 impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
@@ -104,7 +105,7 @@ impl Display for Cons {
                     cons = tail;
                     f.write_char(' ')?;
                 }
-                Object::Symbol(sym::NIL) => break,
+                Object::NIL => break,
                 x => {
                     write!(f, " . {x}")?;
                     break;
@@ -126,7 +127,7 @@ impl Debug for Cons {
                     cons = tail;
                     f.write_char(' ')?;
                 }
-                Object::Symbol(sym::NIL) => break,
+                Object::NIL => break,
                 end => {
                     write!(f, " . {end:?}")?;
                     break;

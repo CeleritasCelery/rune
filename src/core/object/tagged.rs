@@ -8,7 +8,6 @@ use super::super::{
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
-use crate::core::env::sym;
 use crate::core::gc::{GcManaged, Trace};
 use private::{Tag, TaggedPtr};
 use sptr::Strict;
@@ -715,7 +714,7 @@ impl<'ob> Function<'ob> {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 /// The Object defintion that contains all other possible lisp objects. This
 /// type must remain covariant over 'ob. This is just an expanded form of our
 /// tagged pointer type to take advantage of ergonomics of enums in Rust.
@@ -734,6 +733,7 @@ pub(crate) enum Object<'ob> {
 cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, SymbolX<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
 
 impl Object<'_> {
+    pub(crate) const NIL: Object<'static> = Object::Symbol(crate::core::env::sym::NIL);
     /// Return the type of an object
     pub(crate) fn get_type(self) -> Type {
         match self {
@@ -746,24 +746,6 @@ impl Object<'_> {
             Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
             Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
-        }
-    }
-}
-
-impl PartialEq for Object<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Object::Int(l0), Object::Int(r0)) => l0 == r0,
-            (Object::Float(l0), Object::Float(r0)) => l0 == r0,
-            (Object::Symbol(l0), Object::Symbol(r0)) => l0 == r0,
-            (Object::Cons(l0), Object::Cons(r0)) => l0 == r0,
-            (Object::Vec(l0), Object::Vec(r0)) => l0 == r0,
-            (Object::String(l0), Object::String(r0)) => l0 == r0,
-            (Object::ByteFn(_), Object::ByteFn(_)) => todo!(),
-            (Object::SubrFn(l0), Object::SubrFn(r0)) => l0 == r0,
-            (Object::Record(_), Object::Record(_)) => todo!(),
-            (Object::HashTable(_), Object::HashTable(_)) => todo!(),
-            _ => false,
         }
     }
 }
@@ -846,7 +828,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
         match value.untag() {
-            Object::Symbol(sym::NIL) | Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
+            Object::NIL | Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
     }

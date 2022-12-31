@@ -71,7 +71,7 @@ fn run_hooks<'ob>(
                                 func.call(args, env, cx, None)?;
                             }
                         }
-                        Object::Symbol(sym::NIL) => {}
+                        Object::NIL => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);

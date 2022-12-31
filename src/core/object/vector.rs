@@ -23,6 +23,8 @@ impl PartialEq for LispVec {
     }
 }
 
+impl Eq for LispVec {}
+
 /// This type represents and immutable view into an Object. The reason we have
 /// an additional type is because there could be other references to this same
 /// cell that can change the underlying data, so this is wrapper around
@@ -160,7 +162,7 @@ impl Debug for LispVec {
 #[repr(transparent)]
 pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<GcObj<'ob>>);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct Record(LispVec);
 

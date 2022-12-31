@@ -22,6 +22,14 @@ pub(crate) struct LispHashTable {
     inner: RefCell<HashTableView<'static, ObjCell>>,
 }
 
+impl PartialEq for LispHashTable {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl Eq for LispHashTable {}
+
 impl LispHashTable {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to create an owned version in context of the allocator.

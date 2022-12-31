@@ -9,6 +9,8 @@ pub(crate) struct LispFloat {
     float: f64,
 }
 
+impl Eq for LispFloat {}
+
 impl LispFloat {
     pub(in crate::core) fn new(float: f64) -> Self {
         Self {

@@ -173,8 +173,6 @@ impl PartialEq for Symbol {
     }
 }
 
-impl Eq for Symbol {}
-
 impl Hash for Symbol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let ptr: *const Self = self;

@@ -82,7 +82,7 @@ pub(crate) fn mapcar<'ob>(
 ) -> Result<GcObj<'ob>> {
     let sequence = sequence.bind(cx);
     match sequence.untag() {
-        Object::Symbol(sym::NIL) => Ok(nil()),
+        Object::NIL => Ok(nil()),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
             mapcar_internal(iter, function, env, cx)
@@ -429,7 +429,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
                     concated.push(x.get());
                 }
             }
-            Object::Symbol(sym::NIL) => {}
+            Object::NIL => {}
             obj => bail!(TypeError::new(Type::Sequence, obj)),
         }
     }
@@ -442,7 +442,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
-        Object::Symbol(sym::NIL) => 0,
+        Object::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
     Ok(size
@@ -479,7 +479,7 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
     match sequence.untag() {
         Object::Cons(x) => nth(n, x.into()),
-        Object::Symbol(sym::NIL) => Ok(nil()),
+        Object::NIL => Ok(nil()),
         Object::Vec(x) => aref(x.into(), n),
         Object::Record(x) => aref(x.into(), n),
         Object::String(x) => aref(x.into(), n),
@@ -575,7 +575,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
                 Err(_) => Ok(cx.add(x.to_vec())),
             }
         }
-        Object::Symbol(sym::NIL) => Ok(nil()),
+        Object::NIL => Ok(nil()),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }

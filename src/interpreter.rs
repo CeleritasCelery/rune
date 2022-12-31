@@ -568,7 +568,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     self.vars.as_mut(cx).pop();
                     return Ok(result);
                 }
-                Object::Symbol(sym::NIL) => {}
+                Object::NIL => {}
                 invalid => bail_err!("Invalid condition handler: {invalid}"),
             }
         }

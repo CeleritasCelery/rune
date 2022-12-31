@@ -76,6 +76,8 @@ impl PartialEq for GcMark {
     }
 }
 
+impl Eq for GcMark {}
+
 thread_local! {
     static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
 }

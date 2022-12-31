@@ -9,7 +9,7 @@ use std::{
 
 use super::{CloneIn, IntoObject};
 
-#[derive(PartialEq, Trace)]
+#[derive(PartialEq, Eq, Trace)]
 pub(crate) struct LispString {
     gc: GcMark,
     #[no_trace]
@@ -18,7 +18,7 @@ pub(crate) struct LispString {
 
 unsafe impl Sync for LispString {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum StrType {
     String(String),
     BString(BString),

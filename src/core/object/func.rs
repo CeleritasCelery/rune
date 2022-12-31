@@ -14,7 +14,7 @@ use fn_macros::Trace;
 use streaming_iterator::StreamingIterator;
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
-#[derive(PartialEq, Trace)]
+#[derive(PartialEq, Eq, Trace)]
 pub(crate) struct ByteFn {
     gc: GcMark,
     #[no_trace]
@@ -145,7 +145,7 @@ impl<'rt, 'id> StreamingIterator for ByteFnStreamIter<'rt, 'id> {
 }
 
 /// Argument requirments to a function.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FnArgs {
     /// a &rest argument.
     pub(crate) rest: bool,
@@ -267,6 +267,8 @@ impl PartialEq for SubrFn {
         lhs == rhs
     }
 }
+
+impl Eq for SubrFn {}
 
 #[cfg(test)]
 mod test {
