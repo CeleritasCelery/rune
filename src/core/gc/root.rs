@@ -9,7 +9,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::env::SymbolX;
+use crate::core::env::Symbol;
 use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 
@@ -69,8 +69,8 @@ impl IntoRoot<&'static ByteFn> for &ByteFn {
     }
 }
 
-impl IntoRoot<SymbolX<'static>> for SymbolX<'_> {
-    unsafe fn into_root(self) -> SymbolX<'static> {
+impl IntoRoot<Symbol<'static>> for Symbol<'_> {
+    unsafe fn into_root(self) -> Symbol<'static> {
         self.with_lifetime()
     }
 }
@@ -250,13 +250,13 @@ impl PartialEq for Rt<GcObj<'_>> {
     }
 }
 
-impl PartialEq for Rt<SymbolX<'_>> {
+impl PartialEq for Rt<Symbol<'_>> {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl Eq for Rt<SymbolX<'_>> {}
+impl Eq for Rt<Symbol<'_>> {}
 
 impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
     fn eq(&self, other: &U) -> bool {

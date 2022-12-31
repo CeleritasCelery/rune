@@ -1,7 +1,7 @@
 //! Lisp reader that reads an object from a string.
 
 use crate::core::{
-    env::{intern, sym, SymbolX},
+    env::{intern, sym, Symbol},
     gc::Context,
     object::GcObj,
 };
@@ -280,7 +280,7 @@ impl<'a> Iterator for Tokenizer<'a> {
     }
 }
 
-fn intern_symbol<'ob>(symbol: &str, cx: &'ob Context) -> SymbolX<'ob> {
+fn intern_symbol<'ob>(symbol: &str, cx: &'ob Context) -> Symbol<'ob> {
     let mut escaped = false;
     let is_not_escape = |c: &char| {
         if escaped {
@@ -417,7 +417,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// Quote an item using `symbol`.
-    fn quote_item(&mut self, pos: usize, symbol: SymbolX) -> Result<GcObj<'ob>> {
+    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<GcObj<'ob>> {
         let obj: GcObj = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),

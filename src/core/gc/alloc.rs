@@ -1,5 +1,5 @@
 use crate::core::cons::Cons;
-use crate::core::env::Symbol;
+use crate::core::env::SymbolCell;
 use crate::core::object::{ByteFn, LispFloat, LispHashTable, LispString, LispVec};
 use std::fmt::Debug;
 
@@ -14,7 +14,7 @@ pub(super) enum OwnedObject {
     Vec(Box<LispVec>),
     HashTable(Box<LispHashTable>),
     String(Box<LispString>),
-    Symbol(Box<Symbol>),
+    Symbol(Box<SymbolCell>),
     ByteFn(Box<ByteFn>),
 }
 
@@ -52,8 +52,8 @@ impl AllocObject for Cons {
     }
 }
 
-impl AllocObject for Symbol {
-    type Output = Symbol;
+impl AllocObject for SymbolCell {
+    type Output = SymbolCell;
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<CONST>::register(&mut objects, OwnedObject::Symbol(Box::new(self)));

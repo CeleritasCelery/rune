@@ -7,7 +7,7 @@ use super::{
     nil, qtrue, LispHashTable, LispString, LispVec,
 };
 use super::{GcObj, LispFloat};
-use crate::core::env::SymbolX;
+use crate::core::env::Symbol;
 use anyhow::Context;
 
 use super::{Gc, Object};
@@ -117,7 +117,7 @@ define_unbox!(Float, &'ob LispFloat);
 define_unbox!(HashTable, &'ob LispHashTable);
 define_unbox!(String, &'ob LispString);
 define_unbox!(Vec, &'ob LispVec);
-define_unbox!(Symbol, SymbolX<'ob>);
+define_unbox!(Symbol, Symbol<'ob>);
 
 impl<'ob, T> From<Option<T>> for GcObj<'ob>
 where

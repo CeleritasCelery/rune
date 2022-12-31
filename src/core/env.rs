@@ -11,19 +11,19 @@ pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env {
-    pub(crate) vars: HashMap<SymbolX<'static>, GcObj<'static>>,
-    pub(crate) props: HashMap<SymbolX<'static>, Vec<(SymbolX<'static>, GcObj<'static>)>>,
+    pub(crate) vars: HashMap<Symbol<'static>, GcObj<'static>>,
+    pub(crate) props: HashMap<Symbol<'static>, Vec<(Symbol<'static>, GcObj<'static>)>>,
     pub(crate) catch_stack: Vec<GcObj<'static>>,
     exception: (GcObj<'static>, GcObj<'static>),
     #[no_trace]
     exception_id: u32,
-    pub(crate) special_variables: HashSet<SymbolX<'static>>,
-    binding_stack: Vec<(SymbolX<'static>, Option<GcObj<'static>>)>,
+    pub(crate) special_variables: HashSet<Symbol<'static>>,
+    binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
 }
 
 impl Rt<Env> {
-    pub(crate) fn set_var(&mut self, sym: SymbolX, value: GcObj) -> Result<()> {
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))
         } else {
@@ -32,7 +32,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn set_prop(&mut self, symbol: SymbolX, propname: SymbolX, value: GcObj) {
+    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
         match self.props.get_mut(symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
@@ -58,7 +58,7 @@ impl Rt<Env> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 
-    pub(crate) fn varbind(&mut self, var: SymbolX, value: GcObj, cx: &Context) {
+    pub(crate) fn varbind(&mut self, var: Symbol, value: GcObj, cx: &Context) {
         let prev_value = self.vars.get(var).map(|x| x.bind(cx));
         self.binding_stack.push((var, prev_value));
         self.vars.insert(var, value);
@@ -76,7 +76,7 @@ impl Rt<Env> {
         }
     }
 
-    pub(crate) fn defvar(&mut self, var: SymbolX, value: GcObj) -> Result<()> {
+    pub(crate) fn defvar(&mut self, var: Symbol, value: GcObj) -> Result<()> {
         self.set_var(var, value)?;
         self.special_variables.insert(var);
         // If this variable was unbound previously in the binding stack,
@@ -98,22 +98,22 @@ pub(crate) struct ObjectMap {
 /// Box is marked as unique. However we are freely sharing the pointer to this
 /// Symbol amoung threads. So instead of Box we need to use a custom wrapper
 /// type for this to be sound.
-struct SymbolBox(*const Symbol);
+struct SymbolBox(*const SymbolCell);
 unsafe impl Send for SymbolBox {}
 
 impl SymbolBox {
-    fn new(inner: Symbol) -> Self {
+    fn new(inner: SymbolCell) -> Self {
         let ptr = Box::into_raw(Box::new(inner));
         Self(ptr)
     }
 
-    fn from_static(inner: SymbolX<'static>) -> Self {
+    fn from_static(inner: Symbol<'static>) -> Self {
         Self(inner.get())
     }
 }
 
-impl AsRef<Symbol> for SymbolBox {
-    fn as_ref(&self) -> &Symbol {
+impl AsRef<SymbolCell> for SymbolBox {
+    fn as_ref(&self) -> &SymbolCell {
         unsafe { &*self.0 }
     }
 }
@@ -141,16 +141,16 @@ impl SymbolMap {
         }
     }
 
-    fn get(&self, name: &str) -> Option<SymbolX> {
+    fn get(&self, name: &str) -> Option<Symbol> {
         unsafe {
             self.map.get(name).map(|x| {
-                let ptr: *const Symbol = x.as_ref();
-                SymbolX::new(&*ptr)
+                let ptr: *const SymbolCell = x.as_ref();
+                Symbol::new(&*ptr)
             })
         }
     }
 
-    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> SymbolX<'ob> {
+    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> Symbol<'ob> {
         let sym = match self.map.get(name) {
             Some(x) => x.0,
             None => {
@@ -160,9 +160,9 @@ impl SymbolMap {
                     let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
                     &*name_ptr
                 };
-                let inner = Symbol::new(static_name);
+                let inner = SymbolCell::new(static_name);
                 let sym = SymbolBox::new(inner);
-                let ptr: *const Symbol = sym.as_ref();
+                let ptr: *const SymbolCell = sym.as_ref();
                 self.map.insert(static_name, sym);
                 ptr
             }
@@ -171,10 +171,10 @@ impl SymbolMap {
         // no methods to remove items from SymbolMap and SymbolMap has a private
         // constructor, so the only one that exists is the one we create in this
         // module, which is static.
-        unsafe { SymbolX::new(&*sym) }
+        unsafe { Symbol::new(&*sym) }
     }
 
-    fn pre_init(&mut self, sym: SymbolX<'static>) {
+    fn pre_init(&mut self, sym: Symbol<'static>) {
         use std::collections::hash_map::Entry;
         let name = sym.get().name();
         let entry = self.map.entry(name);
@@ -187,11 +187,11 @@ impl SymbolMap {
 }
 
 impl ObjectMap {
-    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> SymbolX<'ob> {
+    pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> Symbol<'ob> {
         self.map.intern(name, cx)
     }
 
-    pub(crate) fn set_func(&self, symbol: SymbolX, func: Gc<Function>) -> Result<()> {
+    pub(crate) fn set_func(&self, symbol: Symbol, func: Gc<Function>) -> Result<()> {
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]
@@ -202,7 +202,7 @@ impl ObjectMap {
         unsafe { symbol.set_func(new_func) }
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<SymbolX> {
+    pub(crate) fn get(&self, name: &str) -> Option<Symbol> {
         self.map.get(name)
     }
 }
@@ -211,7 +211,7 @@ impl ObjectMap {
 include!(concat!(env!("OUT_DIR"), "/sym.rs"));
 
 /// Intern a new symbol based on `name`
-pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> SymbolX<'ob> {
+pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
     INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
 }
 
@@ -224,12 +224,12 @@ mod test {
 
     #[test]
     fn size() {
-        assert_eq!(size_of::<isize>(), size_of::<SymbolX>());
+        assert_eq!(size_of::<isize>(), size_of::<Symbol>());
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
     }
 
-    unsafe fn fix_lifetime(inner: SymbolX) -> SymbolX<'static> {
-        std::mem::transmute::<SymbolX, SymbolX<'static>>(inner)
+    unsafe fn fix_lifetime(inner: Symbol) -> Symbol<'static> {
+        std::mem::transmute::<Symbol, Symbol<'static>>(inner)
     }
 
     #[test]
@@ -244,8 +244,8 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         lazy_static::initialize(&INTERNED_SYMBOLS);
-        let inner = Symbol::new("foo");
-        let sym = unsafe { fix_lifetime(SymbolX::new(&inner)) };
+        let inner = SymbolCell::new("foo");
+        let sym = unsafe { fix_lifetime(Symbol::new(&inner)) };
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());
         let func1 = cons!(1; cx);

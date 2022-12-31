@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// In order to garbage collect the function we need to
 /// halt all running threads. This has not been implemented
 /// yet.
-pub(crate) struct Symbol {
+pub(crate) struct SymbolCell {
     name: SymbolName,
     marked: AtomicBool,
     func: Option<AtomicPtr<u8>>,
@@ -34,21 +34,21 @@ enum SymbolName {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone)]
-pub(crate) struct SymbolX<'a> {
-    data: *const Symbol,
-    marker: PhantomData<&'a Symbol>,
+pub(crate) struct Symbol<'a> {
+    data: *const SymbolCell,
+    marker: PhantomData<&'a SymbolCell>,
 }
 
-impl std::ops::Deref for SymbolX<'_> {
-    type Target = Symbol;
+impl std::ops::Deref for Symbol<'_> {
+    type Target = SymbolCell;
 
     fn deref(&self) -> &Self::Target {
         self.get()
     }
 }
 
-impl<'a> SymbolX<'a> {
-    pub(crate) fn get(self) -> &'a Symbol {
+impl<'a> Symbol<'a> {
+    pub(crate) fn get(self) -> &'a SymbolCell {
         unsafe {
             let ptr = self.data;
             let ptr = ptr.map_addr(|x| x.wrapping_add(BUILTIN_SYMBOLS.as_ptr().addr()));
@@ -65,7 +65,7 @@ impl<'a> SymbolX<'a> {
         self.data.cast()
     }
 
-    pub(in crate::core) fn new(data: &'a Symbol) -> Self {
+    pub(in crate::core) fn new(data: &'a SymbolCell) -> Self {
         Self::new_runtime(data)
     }
 
@@ -76,7 +76,7 @@ impl<'a> SymbolX<'a> {
         }
     }
 
-    pub(in crate::core) unsafe fn from_ptr(ptr: *const Symbol) -> Self {
+    pub(in crate::core) unsafe fn from_ptr(ptr: *const SymbolCell) -> Self {
         let ptr = ptr.map_addr(|x| (x.wrapping_sub(BUILTIN_SYMBOLS.as_ptr().addr())));
         Self {
             data: ptr,
@@ -85,30 +85,30 @@ impl<'a> SymbolX<'a> {
     }
 
     pub(super) const fn new_builtin(idx: usize) -> Self {
-        let ptr = sptr::invalid(idx * std::mem::size_of::<Symbol>());
+        let ptr = sptr::invalid(idx * std::mem::size_of::<SymbolCell>());
         Self {
             data: ptr,
             marker: PhantomData,
         }
     }
 
-    pub(super) fn new_runtime(sym: &Symbol) -> Self {
+    pub(super) fn new_runtime(sym: &SymbolCell) -> Self {
         unsafe { Self::from_ptr(sym) }
     }
 }
 
-unsafe impl Send for SymbolX<'_> {}
+unsafe impl Send for Symbol<'_> {}
 
 // implement withlifetime for symbolx
-impl<'old, 'new> WithLifetime<'new> for SymbolX<'old> {
-    type Out = SymbolX<'new>;
+impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
+    type Out = Symbol<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         unsafe { std::mem::transmute(self) }
     }
 }
 
-impl Trace for SymbolX<'_> {
+impl Trace for Symbol<'_> {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
@@ -120,34 +120,34 @@ impl Trace for SymbolX<'_> {
     }
 }
 
-impl fmt::Display for SymbolX<'_> {
+impl fmt::Display for Symbol<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl fmt::Debug for SymbolX<'_> {
+impl fmt::Debug for Symbol<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl Hash for SymbolX<'_> {
+impl Hash for Symbol<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.data.hash(state);
     }
 }
 
-impl<'old, 'new> SymbolX<'old> {
+impl<'old, 'new> Symbol<'old> {
     pub(in crate::core) fn clone_in<const C: bool>(
         self,
         bk: &'new crate::core::gc::Block<C>,
-    ) -> Gc<SymbolX<'new>> {
+    ) -> Gc<Symbol<'new>> {
         if let SymbolName::Uninterned(name) = &self.name {
             match bk.uninterned_symbol_map.get(self) {
                 Some(new) => new.tag(),
                 None => {
-                    let sym = Symbol::new_uninterned(name);
+                    let sym = SymbolCell::new_uninterned(name);
                     if let Some(old_func) = self.get().get() {
                         let new_func = old_func.clone_in(bk);
                         unsafe {
@@ -167,20 +167,20 @@ impl<'old, 'new> SymbolX<'old> {
 
 // Since global symbols are globally unique we can
 // compare them with a pointer equal test.
-impl PartialEq for Symbol {
+impl PartialEq for SymbolCell {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl Hash for Symbol {
+impl Hash for SymbolCell {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let ptr: *const Self = self;
         ptr.hash(state);
     }
 }
 
-impl Symbol {
+impl SymbolCell {
     const NULL: *mut u8 = std::ptr::null_mut();
     pub(super) const fn new(name: &'static str) -> Self {
         // We have to do this workaround because starts_with is not const
@@ -190,7 +190,7 @@ impl Symbol {
         } else {
             Some(AtomicPtr::new(Self::NULL))
         };
-        Symbol {
+        SymbolCell {
             name: SymbolName::Interned(name),
             func,
             marked: AtomicBool::new(true),
@@ -198,7 +198,7 @@ impl Symbol {
     }
 
     pub(super) const fn new_const(name: &'static str) -> Self {
-        Symbol {
+        SymbolCell {
             name: SymbolName::Interned(name),
             func: None,
             marked: AtomicBool::new(true),
@@ -206,7 +206,7 @@ impl Symbol {
     }
 
     pub(crate) fn new_uninterned(name: &str) -> Self {
-        Symbol {
+        SymbolCell {
             name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
             func: Some(AtomicPtr::new(Self::NULL)),
             marked: AtomicBool::new(false),
@@ -284,7 +284,7 @@ impl Symbol {
     }
 }
 
-impl GcManaged for Symbol {
+impl GcManaged for SymbolCell {
     fn get_mark(&self) -> &crate::core::gc::GcMark {
         panic!("Symbol does not use GcMark")
     }
@@ -309,7 +309,7 @@ impl GcManaged for Symbol {
     }
 }
 
-impl Trace for Symbol {
+impl Trace for SymbolCell {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
@@ -321,13 +321,13 @@ impl Trace for Symbol {
     }
 }
 
-impl fmt::Display for Symbol {
+impl fmt::Display for SymbolCell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl fmt::Debug for Symbol {
+impl fmt::Debug for SymbolCell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
@@ -338,11 +338,11 @@ impl fmt::Debug for Symbol {
 /// the same address if they did originally. This keeps a mapping from old
 /// symbols to new.
 pub(in crate::core) struct UninternedSymbolMap {
-    map: std::cell::RefCell<Vec<(SymbolX<'static>, SymbolX<'static>)>>,
+    map: std::cell::RefCell<Vec<(Symbol<'static>, Symbol<'static>)>>,
 }
 
 impl UninternedSymbolMap {
-    fn get<'a>(&'a self, symbol: SymbolX) -> Option<SymbolX<'a>> {
+    fn get<'a>(&'a self, symbol: Symbol) -> Option<Symbol<'a>> {
         self.map
             .borrow()
             .iter()
@@ -350,7 +350,7 @@ impl UninternedSymbolMap {
             .map(|x| x.1)
     }
 
-    fn insert(&self, old: SymbolX, new: SymbolX) {
+    fn insert(&self, old: Symbol, new: Symbol) {
         self.map
             .borrow_mut()
             .push(unsafe { (old.with_lifetime(), new.with_lifetime()) });

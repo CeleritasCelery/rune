@@ -1,7 +1,7 @@
 use crate::{
     core::{
         cons::Cons,
-        env::{sym, Env, SymbolX},
+        env::{sym, Env, Symbol},
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Root, Rt},
         object::{
@@ -354,28 +354,28 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 
 #[defun]
 pub(crate) fn defvaralias<'ob>(
-    new_alias: SymbolX<'ob>,
-    _base_variable: SymbolX,
+    new_alias: Symbol<'ob>,
+    _base_variable: Symbol,
     _docstring: Option<&str>,
-) -> SymbolX<'ob> {
+) -> Symbol<'ob> {
     // TODO: implement
     new_alias
 }
 
 #[defun]
-pub(crate) fn featurep(_feature: SymbolX, _subfeature: Option<SymbolX>) -> bool {
+pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
     // TODO: implement
     false
 }
 
 #[defun]
 fn require<'ob>(
-    feature: &Rt<Gc<SymbolX>>,
+    feature: &Rt<Gc<Symbol>>,
     filename: Option<&Rt<Gc<&LispString>>>,
     noerror: Option<()>,
     env: &mut Root<Env>,
     cx: &'ob mut Context,
-) -> Result<SymbolX<'ob>> {
+) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.get(cx).into_root() };
     if crate::data::FEATURES.lock().unwrap().contains(&feat) {

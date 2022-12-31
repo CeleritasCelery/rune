@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use fn_macros::{defun, Trace};
 
-use crate::core::env::{sym, Env, SymbolX};
+use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Root, Rt, Trace};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
@@ -258,7 +258,7 @@ impl<'brw, 'ob> Routine<'brw, '_, '_, '_, '_> {
 
     fn varset(&mut self, idx: usize, env: &mut Root<Env>, cx: &Context) -> Result<()> {
         let obj = self.frame.get_const(idx, cx);
-        let symbol: SymbolX = obj.try_into()?;
+        let symbol: Symbol = obj.try_into()?;
         let value = self.stack.pop(cx);
         crate::data::set(symbol, value, env, cx)?;
         Ok(())

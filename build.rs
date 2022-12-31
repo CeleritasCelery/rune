@@ -153,12 +153,12 @@ fn main() {
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 pub(crate) mod sym {{
+use crate::core::env::SymbolCell;
 use crate::core::env::Symbol;
-use crate::core::env::SymbolX;
 
-pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
-    Symbol::new_const(\"nil\"),
-    Symbol::new_const(\"t\"),",
+pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
+    SymbolCell::new_const(\"nil\"),
+    SymbolCell::new_const(\"t\"),",
     )
     .unwrap();
 
@@ -168,18 +168,18 @@ pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
             Some(name) => name.trim_matches('"').to_string(),
             None => map_varname(sym),
         };
-        writeln!(f, "    Symbol::new(\"{sym_name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new(\"{sym_name}\"),").unwrap();
     }
 
     for (_, name, _, _) in &all_defvar {
         #[rustfmt::skip]
-        writeln!(f, "    Symbol::new(\"{name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new(\"{name}\"),").unwrap();
     }
 
     // write the list of all defun to a file in out_dir
     for (_, _, lisp_name) in &all_defun {
         #[rustfmt::skip]
-        writeln!(f, "    Symbol::new(\"{lisp_name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new(\"{lisp_name}\"),").unwrap();
     }
 
     // End BUILTIN_SYMBOLS
@@ -195,7 +195,7 @@ pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
     for (idx, element) in all_elements {
         let sym_name = element.to_ascii_uppercase();
         #[rustfmt::skip]
-        writeln!(f, "pub(crate) const {sym_name}: SymbolX = SymbolX::new_builtin({idx});").unwrap();
+        writeln!(f, "pub(crate) const {sym_name}: Symbol = Symbol::new_builtin({idx});").unwrap();
     }
 
     // all SubrFn
@@ -217,11 +217,11 @@ pub(super) static BUILTIN_SYMBOLS: [Symbol; {symbol_len}] = [
         "
 pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
     for sym in BUILTIN_SYMBOLS[..{defun_start}].iter() {{
-        map.pre_init(SymbolX::new(sym));
+        map.pre_init(Symbol::new(sym));
     }}
     for (sym, func) in BUILTIN_SYMBOLS[{defun_start}..].iter().zip(SUBR_DEFS.iter()) {{
         unsafe {{ sym.set_func((*func).into()).unwrap(); }}
-        map.pre_init(SymbolX::new(sym));
+        map.pre_init(Symbol::new(sym));
     }}
 }}
 "
@@ -255,13 +255,15 @@ lazy_static::lazy_static! {{
 pub(crate) fn init_variables(
     cx: &crate::core::gc::Context,
     env: &mut crate::core::gc::Rt<crate::core::env::Env>,
-) {{"
+) {{
+use crate::core::object::Object;
+"
     )
     .unwrap();
 
     // write out the value of each defvar
     for (ident, _, value, ty) in all_defvar {
-        let nil = "crate::core::object::nil()";
+        let nil = "Object::NIL";
         let mut value = match value {
             Some(value) => Cow::from(value),
             None => Cow::from(nil),
