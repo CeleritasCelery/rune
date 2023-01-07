@@ -1,12 +1,12 @@
 #+title: rune
 * overview
-I want to learn rust, and I also have a real interest in compilers, Garbage collectors, optimizations etc. And of course I really like emacs. I think I could put all of these things together and build and emacs lisp interpreter in rust from scratch. This would be very similar to the crafting interpreters version. I could start out with just a simple elisp parser, then start to add things like GC, and byte code. Eventually I could try something like [[https://gtk-rs.org/][gtk-rs]] to even make a GUI window. Of course right now I am imagining myself building it all the way to a fully functional Emacs that people could use at their day job, but that would be a ton of work. Nice thing is that I can just build it in steps and eventually I will find a spot where it is really hard. That will give me more appreciation for what Emacs already has implemented. I can stop there having learned all sorts of cool things along the way. And who knows, if I kept at this for years I could maybe have the dream of building my own emacsen. The goal would be to be completely compatible with current user space elisp. But I am really building my own editor that happens to run elisp.
-
 ** Why rust?
-The real reason is because I want to play with rust. I seriously doubt this will actually go anywhere. There are 1500 defuns in C currently within Emacs. But I wonder how many of those I can remove? I can see the [[https://github.com/remacs/remacs/wiki/Progress][break-down]] on the remacs page of what functions they have been porting. I really don't want to copy remacs because I want this to be a learning experience for me. However if I got far along in this I could reuse the crate from remacs. They are packaging them up just for that reason.
+The main reason is that I want to learn Rust, and this a great project for it. I don't expect this to actually become something people could use as a GNU Emacs replacement, but who knows. Rust has the advantage of being memory safe. Which is not really an advantage over a battle tested existing C code base, because there are probably not many memory issues in GNU Emacs core. But when writing from scratch, it saves a lot of bugs and issues. Another advantage of Rust is Cargo and [[https://crates.io/][crates.io]]. It makes it easy to use external packages and manage dependencies.
+** How much work would this involve?
+There are about 1500 defuns written in C within Emacs. But I wonder how many of those can be removed? There is a [[https://github.com/remacs/remacs/wiki/Progress][break-down]] on the remacs page of what functions they have been porting. I really don't want to copy remacs because I want this to be a learning experience for me. However if I got far along in this I could reuse the crate from remacs. They are packaging them up just for that reason.
 
 ** Licensing
-Take any license that is open and permissive. Including GPL, MIT, and Apache. The first party code would be all GPL, but that would not stop others from contributing. This could offer a real advantage over regular emacs if this ever became a thing. This effectively means that the code will never be made part of the actual emacs, because the license will not match the requirements of FSF. But GNU Emacs would not use rust anyways because LLVM is not GPL.
+The nice thing about GPL is that it works with most other licenses, including MIT and Apache. The first party code should be all GPL, but we can use any open license in dependencies. This effectively means that the code can't be made part of GNU Emacs, because the license will not match the requirements of FSF. But GNU Emacs would never use Rust anyways because LLVM is not GPL.
 
 * Goals
 ** GUI
@@ -16,7 +16,9 @@ Separate the GUI code from the backend code. So that you could make the front en
 Make it so that any component can be a crate and removed and repackaged. We can change string representation without issue. We can change GC without issue. We can change GUI toolkit without issue. We can change the interpreter without issue. Make everything easier to change and replace.
 
 ** Garbage collector
-I think the best GC for emacs would be a compacting, generational GC. That should be much easier to write then a concurrent GC. We would run the generational GC anytime we are in an idle state. That means that each command will trigger gc, but only for the generation that it created. We could also run it when the minibuffer is torn down and after loading a file. If we have predefined points where we run the generational GC, then we will hopefully only need to run it when the user is executing very rarely. We could have nested generations so that nested commands (such as minibuffer) would be each cleaning their own generation.
+I think the best GC for Emacs would be a compacting, generational GC. That should be much easier to write then a concurrent GC. We would run the generational GC anytime we are in an idle state. That means that each command will trigger gc, but only for the nursery it created. We could also run it when the minibuffer is torn down and after loading a file. If we have predefined points where we run the generational GC, then we will hopefully only rarely need to run it when the user is waiting. We could have nested generations so that nested commands (such as minibuffer) would be each cleaning their own generation.
+
+Current approach to a safe GC is documented [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][here]].
 
 *** links
 There is no perfect crate the gives me what I want. [[https://crates.io/crates/cgc-single-threaded][alpha compacting generational GC]] [[https://github.com/Manishearth/rust-gc][mature mark and sweep GC]] [[https://github.com/redradist/ferris-gc][thread safe GC]]
@@ -25,18 +27,19 @@ There is no perfect crate the gives me what I want. [[https://crates.io/crates/c
 This will really help me get in the habit. Try writing simple unit tests that will make sure you are not breaking anything as you develop. You might thank yourself later.
 
 ** Performance
-Having good performance in all cases is very critical. Specifically want to handle long lines, sinking input, and text properties to be very fast. Everything will be byte compiled when it is read so we don't need and interpreter and a byte code engine. Just one. We can also take advantage of things like trace trees to get optimization.
+Having good performance in all cases is very critical. Specifically want to handle long lines, sinking input, and text properties to be very fast. Everything will be byte compiled so we don't need an interpreter and byte code engine. Just one. We can also take advantage of things like trace trees to get optimization.
 
 *** function calls
 Current elisp function calls are very slow, even in byte code. They have to be looked up in global hash each time. My idea to solve this is to have an array that contains a pointer to every named symbol. Then we have a hash table that maps symbols to indexes. When a function is first run, all the calls are replaced with the index in the array. That way a function call is just a array access and follow pointer. Still not as fast as having the start address like compiled languages, but since any elisp function can be replaced at any time we can't have that. If a function is changed then we just update the pointer in the array. That way it is always correct but still faster. In a trace tree we could even inline the call to the address since we can check if the function will be changed.
 
 *** JIT vs AOT
-As of Emacs 28, There is [[https://akrl.sdf.org/gccemacs.html][native compilation]] in Emacs! This allows Elisp functions to be compiled to C code. By doing so you can remove the overhead of the bytecode interpreter and optimizing the code as a single compilation unit (better code).
+As of Emacs 28, There is [[https://akrl.sdf.org/gccemacs.html][native compilation]] in Emacs! This allows Elisp functions to be compiled to C code. By doing so you can remove the overhead of the bytecode interpreter and optimizing the code as a single compilation unit (which results in better code).
 
 However there are a few things you loose by compiling ahead-of-time:
 
 1. You don't have any type information. Since elisp is dynamically typed, you have to assume that your input arguments can be any type. Sometimes you can do [[https://akrl.sdf.org/gccemacs.html#orge596749][type inference]] because the built-in function usually have type requirements, but it is limited in the elisp world.
 2. You don't know what code paths are most important. Since the code has never been run when it is compiled, you don't know what code paths are "hot". So everything is compiled the same.
+3. You have limited ability to inline. Only builtin function can be inlined, because any function in elisp can be dynamically updated.
 
 Both of these can be solved with a little run time information. If you are able to profile the code as it runs, you can see what types it gets called with (which is usually the only types it will use) and you know which functions get called frequently. This allows for more aggressive optimizations then AOT and let's you only compile the functions that actually matter, because 95% of them are not worth the effort.
 
@@ -57,7 +60,7 @@ It would guess that lambda's are often inside loops, since we pass them in as hi
 ***** issues
 - How do you handle cases where you have a branch in the loop and it can be taken about 50% of the time. Do you have a branching trace?
 - how big do you make the traces? When do start and when do say it is not worth it? This will all take tuning.
-- Is there a way to eliminate the need to push and pop from the stack so much? Or is that overhead even really an issue. If you emit IR for all the common functions then you can just have data flow IR with out the functions calls and LLVM can inline those.
+- Is there a way to eliminate the need to push and pop from the stack so much? Or is that overhead even really an issue. If you emit IR for all the common functions then you can just have data flow IR with out the functions calls and the compiler can inline those.
 
 ***** FTL JIT using LLVM backend
 [[https://webkit.org/blog/3362/introducing-the-webkit-ftl-jit/][link]]
@@ -65,13 +68,12 @@ It would guess that lambda's are often inside loops, since we pass them in as hi
 The original FTL JIT for Webkit uses LLVM for its final compilation stage. This goes into some detail about some of the approaches they use. One really cool thing here they use the barlet GC algorithm. This has the benefit of letting them unbox values in the C code as well as not worry about GC with LLVM. Essentially this algorithim is for handling GC with obscure roots.
 
 [[https://www.hpl.hp.com/techreports/Compaq-DEC/WRL-88-2.pdf][Bartlett GC]]
-
 A few years later FTL switched to B3 as a backend instead of LLVM. THe problem being that LLVM was just too slow. Often times the loop would be complete before the out of band LLVM compilation had completed. If I was using this for something like Emacs that would not be as big of deal because we be profiling between sessions so slow compilations would not have a lot of impact. Still good to note though.
 *** measure performance
 The only real way to know if an optimization is worth doing is to measure it. But even when you measure it can turn out that it is not worth the complexity. Anything less then 5% is certainly not worth it (especially since benchmarks can change wildly). Normally you want at least a 2x gain from an optimization. An example of a speed up that is not worth it is [[https://akrl.sdf.org/gccemacs.html#org2785354][pure function propagation in gccemacs]]. If you exclude the fibinacci sequences (which having a compile time resolvable program is very rare), then the total speed up on microbenchmarks is only 3%. Some of the benchmarks even got slower after the run.
 
 *** concurrency
-I have been thinking a lot about a model for async in Emacs. The traditional async await model is not really a good one because text editors are very CPU heavy, and are not often blocked by other applications. But it would be great to exploit multi-core on modern hardware. Maybe even just in a limited context. But I would need to find scenarios where data sharing is very limited to really exploit multithreading.
+I have been thinking a lot about a model for [[https://coredumped.dev/2022/05/19/a-vision-of-a-multi-threaded-emacs/][concurrent Emacs]]. The traditional async await model is not really a good one because text editors are very CPU heavy, and are not often blocked by other applications. But it would be great to exploit multi-core on modern hardware. Maybe even just in a limited context. But I would need to find scenarios where data sharing is very limited to really exploit multithreading.
 
 The area that I thought this could be really helpful would be in updating buffers in the background. Currently sinking input and parsing background compilation buffers can really slow down your main thread (your only thread). Imagine if you could have multiple buffers that were getting updated in the background and it did not impact your main thread. The only thing that you should be doing on your main thread is what the user is actively waiting for. My idea is to have a buffer local lock that a thread can obtain before it accesses a buffer. Once that lock is obtained then the thread knows that it is the only code that can modify or read the buffer. You could even lock specific regions of the buffer if that would be better. Then you can accept process output, run processing functions and syntax highlighting on it, and anything else without bothering the main thread.
 
@@ -103,7 +105,7 @@ Concurrency in clojure is supposed to be really top notch. So I decided to look 
 I [[https://www.reddit.com/r/Clojure/comments/isczlr/how_does_clojure_share_functions_among_threads/][asked on reddit]] How clojure shares functions and apparently you can redefine function in the REPL thread and will propagate to the threads without restarting. One of the problems with porting this to Emacs is that it is a 2-lisp, meaning that each symbol has a variable and function slot. So you have to find out some way to share function bindings without sharing variable bindings. As far as updating functions goes, If all functions were global, and were referenced via pointers, so long as updating the pointer was an atomic operation you could just update the pointer to the new function cell when you want to change the function. Any thread that is using the old version will continue to do so until the next call. You would just need to make sure that you didn't GC that function until all goroutines are done.
 
 *** evaluation
-The real questions to ask about concurrency is does it actually improve the user experience. Because if not then it is not worth doing. For one thing concurrency makes for some really nasty bugs and performance problems. It is also much harder to reason about. Also most of the time spent in Emacs is just waiting. Every single keypress Emacs goes off and does some work then sits and wait for you. The thing we want the most if a responsive user experience. If any sort of concurrency compromises that then we are worse off. Most long running work in Emacs is not really helped by concurrency. I can see the benefit of a model where we have something like greenthreads that are run in the same process. So long as they checked for user input at a regular interval to make sure the main flow control was not trying to do something, you could potentially have these little helper functions running at all times doing little bits of work like syntax highlighting, processing input, and waiting on IO. But as soon as you have a green thread that takes a long time to run you end up making the user experience worse. And you would really have no control over that. It seems like in an application where responsiveness is key, you can't have multiple threads running. The only clear distinction I can see is to have the UI run on it's own thread so that it never feels unresponsive. But in Emacs the UI is so tightly coupled to the interpreter that I don't know if even that would be possible.
+The real questions to ask about concurrency is does it actually improve the user experience. Because if not then it is not worth doing. For one thing concurrency makes for some really nasty bugs and performance problems. It is also much harder to reason about. Also most of the time spent in Emacs is just waiting. Every single keypress Emacs goes off and does some work then sits and wait for you. The thing we want the most is a responsive user experience. If any sort of concurrency compromises that then we are worse off. Most long running work in Emacs is not really helped by concurrency. I can see the benefit of a model where we have something like greenthreads that are run in the same process. So long as they checked for user input at a regular interval to make sure the main flow control was not trying to do something, you could potentially have these little helper functions running at all times doing little bits of work like syntax highlighting, processing input, and waiting on IO. But as soon as you have a green thread that takes a long time to run you end up making the user experience worse. And you would really have no control over that. It seems like in an application where responsiveness is key, you can't have multiple threads running. The only clear distinction I can see is to have the UI run on it's own thread so that it never feels unresponsive. But in Emacs the UI is so tightly coupled to the interpreter that I don't know if even that would be possible.
 
 *** Global functions or no?
 Should functions be stored in global immutable memory locations? It really depends on how often mutation is used.
@@ -114,22 +116,17 @@ Should functions be stored in global immutable memory locations? It really depen
 **** disadvantages
 - more complex, need to think about memory safety and concurrency bugs
 - does not exactly model Emacs
-- Might not be able to implement mutable [[id:oclosures][OClosures]]
+- Might not be able to implement mutable [[https://zenodo.org/record/6228797/files/paper.pdf][OClosures]]
 
 **** How to handle global immutable
 - add a bit to the cons cell that marks it immutable. Anytime ~setcar~ or ~setcdr~ is used they need to check this bit. We could even hide this bit in an extra bit range so that you don't normally see it. For example you could have an 8-bit tag with the 9th bit the mutation flag. When you unbox you just shift by 9. Or always mask it off when getting the tag. We will need to do something similar for the mark bit.
 - Always make copies of global constants when they are used (or at least the first time). That would make this data safe to mutate, but adds more overhead.
-- Use a copy on write scheme. This avoid the errors.
+- Use a copy on write scheme. This avoid the errors, But will lead to some surprising behavior when you mutate a object and only that reference to it gets updated. All the other objects pointing to it will still be pointing to the old value.
 - Copy when it is added to another collection. I don't like this because it makes the cheap operation ~cons~ more expensive.
-
-*** bytecount - fast counting in rust
-https://docs.rs/bytecount/0.6.0/bytecount/
-*** Counting Newlines Really Fast
-https://llogiq.github.io/2016/09/24/newline.html
 
 This also has some code to count the number of UTF-8 characters in a sequence. It does this by noting that all trailing utf-8 chars start with 10 so any byte that does not start with that must be start of character. Assumes valid utf8.
 ** FFI
-It may be easy to see this as an attempt to rewrite the emacs core in rust, but really this is an attempt to rewrite [[https://archive.fosdem.org/2020/schedule/event/emacsthoughts/][emacs in emacs lisp]]. The way we do this is with an FFI. Everything that is not runtime will be either emacs lisp or an FFI. This means that our rust core can be much smaller then the C core, which is 400K lines of code. The current module system can be removed, because a module is just a crappy FFI. And a module requires you to write C (or whatever language) but an FFI does not. You can just write the bindings.
+It may be easy to see this as an attempt to rewrite the emacs core in Rust, but really this is an attempt to rewrite [[https://archive.fosdem.org/2020/schedule/event/emacsthoughts/][emacs in emacs lisp]]. The way we do this is with an FFI. Everything that is not runtime will be either emacs lisp or an FFI. This means that our Rust core can be much smaller then the C core, which is 400K lines of code. The current module system can be removed, because a module is just a crappy FFI. And a module requires you to write C (or whatever language) but an FFI does not. You can just write the bindings.
 
 I would model the FFI interface after a combination of [[https://github.com/skeeto/elisp-ffi][Chris Wellons]] and[[https://github.com/tromey/emacs-ffi][Tom Tromey's]]. I would take the interface of Wellon's (use a single function ~ffi-call~) but use the implementation of Tromey's (I.e. Don't use pipes and handle the types the same way he does). The advtange of Wellon's idea of running the FFI in a separate process is that if the FFI lib crashes is does not impact emacs.
 
@@ -149,19 +146,20 @@ Reader macros are controversial. They enable some pretty amazing super powers (j
 
 * Details
 ** stack
-Traditional emacs uses recursion to implement calls, meaning that every function call will also push on the C stack. Meaning that having lisp eval depth go too far and you will crash emacs. That is why they limit it to 800 by default. It makes the implementation very simple because you can use the recursion to keep track of your stack frame. And you can just unwind your stack to unwind the lisp stack. However this also means you have to be careful to not stack overflow and it makes it hard to implement things like coroutines. If you are using those (or elisp threads) you need to unwind the stack
+Traditional emacs uses recursion to implement calls, meaning that every function call will also push on the C stack. Meaning that having lisp eval depth go too far and you will crash emacs. That is why they limit it to 800 by default. It makes the implementation very simple because you can use the recursion to keep track of your stack frame. And you can just unwind your stack to unwind the lisp stack. However this also means you have to be careful to not stack overflow and it makes it hard to implement things like stackful coroutines. If you are using those (or elisp threads) you need to unwind the stack.
 
 ** Storing data
 *** Buffer representation
-Emacs has traditionally used the gap buffer to store data, but most modern editors will use something like a [[https://en.wikipedia.org/wiki/Rope_(data_structure)][rope]] to store the text state. I was really looking at the crate [[https://docs.rs/xi-rope/0.3.0/xi_rope/][xi-rope]] for doing the basic buffer implementation. The nice thing about ropes is that insertion at an arbitrary point is very cheap and they have ~log n~ worst case behavior. However this comes with some trade offs. The first is that searching is much more expensive, as described in [[https://github.com/xi-editor/xi-editor/issues/1192][this issue]]. Basically since most fast search tools are expecting a continuous chunk of data, They don't work over structures that are broken into spans like ropes. So when xi is doing multi-line matching it has to parse the entire rope, allocate and copy it out into an array. Then it can run the regex and throw away that buffer it created. This leads to terrible performance on large buffers. To be fair the average case is better because if the matching is not multi-line it only has to copy one line at time into a new buffer. And best case is that it can just pass a slice if the rope leaf has the entire line in it. But still, very expensive worst case searching. There is an [[https://github.com/rust-lang/regex/issues/42][open issue]] in the rust regex crate to add support for stream input, but it would really hurt performance so they would have to redo a lot of stuff.
+Emacs has traditionally used the gap buffer to store data, but most modern editors will use something like a [[https://en.wikipedia.org/wiki/Rope_(data_structure)][rope]] to store the text state. I was really looking at the crate [[https://docs.rs/xi-rope/0.3.0/xi_rope/][xi-rope]] for doing the basic buffer implementation. The nice thing about ropes is that insertion at an arbitrary point is very cheap and they have ~log n~ worst case behavior. However this comes with some trade offs.
 
-As with everything, there are [[https://github.com/emacs-ng/emacs-ng/issues/378#issuecomment-907680382][tradeoffs]]. I don't think a rope is great choice. And honestly a gap buffer is [[http://www.goodmath.org/blog/2009/02/18/gap-buffers-or-dont-get-tied-up-with-ropes/][pretty fast]]. There are only two big problems with gap buffers, finding arbitrary lines, and how to solve regex, because gap buffers are still not contiguous, even if they are better then ropes.
+The first is that searching is much more expensive, as described in [[https://github.com/xi-editor/xi-editor/issues/1192][this issue]]. Basically since most fast search tools are expecting a continuous chunk of data, They don't work over structures that are broken into spans like ropes. So when xi is doing multi-line matching it has to parse the entire rope, allocate and copy it out into an array. Then it can run the regex and throw away that buffer it created! This leads to terrible performance on large buffers. To be fair the average case is better because if the matching is not multi-line it only has to copy one line at time into a new buffer. And best case is that it can just pass a slice if the rope leaf has the entire line in it. But still, very expensive worst case searching. There is an [[https://github.com/rust-lang/regex/issues/42][open issue]] in the rust regex crate to add support for stream input, but it would really hurt performance so they would have to redo a lot of stuff.
+
+As with everything, there are [[https://github.com/emacs-ng/emacs-ng/issues/378#issuecomment-907680382][tradeoffs]]. I don't think a rope is great choice. And honestly a gap buffer is [[http://www.goodmath.org/blog/2009/02/18/gap-buffers-or-dont-get-tied-up-with-ropes/][pretty fast]]. There are only two big problems with gap buffers, finding arbitrary lines, and how to solve  [[Regex Gap Buffer][regex]], because gap buffers are still not contiguous, even if they are better then ropes.
 
 **** find lines in a gap buffer
-If I say that I want to go to any arbitrary line in a gap buffer, how to do I do that efficiently? In current emacs it has to scan from your cursor to the line you want, which can be very expensive. Ropes handle this really well because they can hold metrics like a binary tree so you can do a binary B-Tree search to go to a line. My idea is to do the same thing but not store text, only store counts. Basicly build a B-Tree of the number of newlines in each chunk of a buffer. I still don't know the size a chunk. The obvious ones are ~u8~ (256) which seems too small and ~u16~ (65536) which seems too big. It all depends on how fast I can scan to the point. I could pick something in the middle if that was good trade off. I want to use the [[https://crates.io/crates/bytecount][bytecount]] crate to do the counting because it blazing fast. Either way I can just search the B-Tree to find chunk that has the line and then scan for the line. The exact same method could be used to store code-points or any of metric I want to track. And the nice thing is since I know the exact size of B-Tree when creating the buffer, I can allocate it without any points and use offsets, to get to the different chunks.
+If I say that I want to go to any arbitrary line in a gap buffer, how to do I do that efficiently? In current emacs it has to scan from your cursor to the line you want, which can be very expensive. Ropes handle this really well because they can hold metrics in a binary tree so you can do a binary B-Tree search to go to a line. My idea is to do the same thing but not store text, only store counts. Basicly build a B-Tree of the number of newlines in each chunk of a buffer. I still don't know the size a chunk. The obvious ones are ~u8~ (256) which seems too small and ~u16~ (65536) which seems too big. It all depends on how fast I can scan to the point. I could pick something in the middle if that was good trade off. I want to use the [[https://crates.io/crates/bytecount][bytecount]] crate to do the counting because it blazing fast. Either way I can just search the B-Tree to find chunk that has the line and then scan for the line. The exact same method could be used to store code-points or any of metric I want to track. And the nice thing is since I know the exact size of B-Tree when creating the buffer, I can allocate it without any points and use offsets, to get to the different chunks.
 
 *** Pointer Tagging
-[[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.39.4394&rep=rep1&type=pdf][link]]
 **** Tagged Arithmetic
 
 | op      | low any | low zero | high any | high zero | sign ext |
@@ -266,8 +264,8 @@ in rust as part of the [[https://github.com/rust-bio/rust-bio/tree/master/src/da
 implementation here, and the array packed one looks more interesting. It is
 based on the optimized one in [[https://github.com/lh3/cgranges][cgranges.]] Will have to benchmark.
 
-Actually the text properties in Emacs [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Not-Intervals.html][are not intervals]]. This is because
-intervals have the problem that they are not preserved across insertion and
+The text properties in Emacs [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Not-Intervals.html][are not proper intervals]]. This is because
+intervals have the property that they are not preserved across insertion and
 deletions. The link explains it well, but the basic idea is that two similar
 intervals that are next to each other are treated differently then a single
 interval with the same bounds. Text properties don't have that distinction.
@@ -314,14 +312,14 @@ make this optimization. It would be the overhead of the extra branch in the
 boxing code vs the overhead of allocating 0 as a heap float.
 *** big num conversion
 I am not a fan of automatic big num conversion for 3 reasons.
-1. YANGI. The range of values that can fix in a ~64-bit fixnum is way bigger then most use cases ever need. And we are 64 bit only, so this makes more sense then for 32 bit systems. If you happen to be doing calculations in the quadrillions then you will probably be aware of it and can just use a bignum.
+1. YANGI. The range of values that can fix in a ~64-bit fixnum is way bigger then most use cases ever need. If you happen to be doing calculations in the quadrillions then you will probably be aware of it and can just use an explicit bignum.
 2. Its not free. Even though you don't use this you have to pay for it on every calculation. And it is actually two separate checks. You need to check the operation did not overflow and then check that the resulting number will still fit in the fixnum size.
 3. It makes JIT/native-code type inference harder. You can no longer assume that ~add~ will be ~(i64 i64) -> i64~. Everything now has to become (~i64 i64) -> i64/Bignum~. Which makes type propagation less useful and requires guards everywhere. It also does not translate as nicely to machine code.
 
 ** regexp
 We could use the [[https://github.com/fancy-regex/fancy-regex][fancy-regex]] crate, since it is like the normal regex crate but with fallback to a slower engine to support some fancy features. However we would need to fix [[https://github.com/fancy-regex/fancy-regex/issues/84][fancy-regex/fancy-regex#84]] before we could use it in earnest.
-*** Gap buffer
-Since the gap buffer is not contiguous we still have a problem with regex. If the pattern is not multi-line then all we need to do is move the cursor to a line boundary and we are good to go. We can either zero -out the gap or ignore matches that span it. However it is not as easy with multi-line patterns. In that case my idea was to still move the cursor to a line boundary, but we will also need to modify the regex to ignore the gap. This means at very least we need to handle ~^~, ~$~, and patterns that match a null byte. So the pattern ~^foo\nbar$~ would need to become ~^*foo\n(\0*\n)?bar$~ or something like that. But what if we are trying to search for null bytes at the start of the line? Now that become harder.Maybe null is not the best pad character because you might actually see that in a real buffer. Maybe just a unusual marker to the start of the gap like ~\0\1\2\3\4~ (The first 5 ascii characters) and then match that. So the pattern ~foo\nbar~ becomes ~foo\n(\0\1\2\3\4.+\n)?bar~. That pattern looks longer but that turns the start of the gap into a literal that will almost never show up in real text. But also we need to be careful because the gap does not have to be valid unicode and that could break things. We will need to take care of that.
+*** Regex Gap Buffer
+Since the gap buffer is not contiguous we still have a problem with regex. If the pattern is not multi-line then all we need to do is move the cursor to a line boundary and we are good to go. We can either zero -out the gap or ignore matches that span it. However it is not as easy with multi-line patterns. In that case my idea was to still move the cursor to a line boundary, but we will also need to modify the regex to ignore the gap. This means at very least we need to handle ~^~, ~$~, and patterns that match a null byte. So the pattern ~^foo\nbar$~ would need to become ~^*foo\n(\0*\n)?bar$~ or something like that. But what if we are trying to search for null bytes at the start of the line? Now that become harder. Maybe null is not the best pad character because you might actually see that in a real buffer. Maybe just a unusual marker to the start of the gap like ~\0\1\2\3\4~ (The first 5 ascii characters) and then match that. So the pattern ~foo\nbar~ becomes ~foo\n(\0\1\2\3\4.+\n)?bar~. That pattern looks longer but that turns the start of the gap into a literal that will almost never show up in real text. But also we need to be careful because the gap does not have to be valid unicode and that could break things. We will need to take care of that.
 
 We don't need to add null padding to the single line case because we can place a newline before and after the gap so that are distinct lines. Basically treat the gap like a line of nulls. If we can move the gap to start or the end of the buffer then it becomes really easy because we can just do all regex searches like normal and ignore the gap. In general if we can move the gap outside the regexp range then we don't have to worry about it.
 
@@ -331,7 +329,7 @@ For the most part Emacs regex is pretty similar to "other" regex engines. Howeve
 
 However one that I think will be hard is the  syntax classes. The syntax class can be updated on the fly and can include a large range of characters. It might be possible to create a pattern that matches everything in the syntax class and use that for matching, but I am afraid that would be large.
 
-We would really need to do some fuzzy to ensure the same behavior between the current engine and a new one.
+We would really need to do some fuzzing to ensure the same behavior between the current engine and a new one.
 
 ** object model
 Currently all lisp objects hold either a immediate value (like int) or a pointer to some heap allocated object. When we create lisp object we make it a GC pointer so that it does not get dropped. This means that every object is GC by default. This has some issues. Unless an object is in a Gc collection (the stack) then the data could become invalid at any point. We prevent this by not running GC during rust functions, but that could get expensive. It means that in long running rust functions we will have to do all sorts of tricks to make sure the GC does not free objects we are still using. Another issue is this couples our lispObj to the gc module. However this is the most ergononmic solution since we can implement copy for the objects and they can be used freely. Until you need to GC that is. This means that technically our current model is unsound. Another thing to consider is that this option will make it basically impossible to have gc collector run in another thread, because you have live objects that cannot be accessed from the roots.
@@ -414,34 +412,15 @@ Objects that are part of a function can be shared between threads. This is safe 
 I have been heavily inspired by other rust gc projects. I want to use the afine types to make a safe and ergonomic API.
 
 Here is an [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][overview]] of my implementation so far.
-*** Rooting
-Libraries like shifgrethor have two gc types. There is ~Gc~ which means that an item is rooted. Passing something to a stack root macro will give you a ~Gc<T>~. If this type contains a ~GcStore~ is can be transitivley rooted. I am thinking of taking the same approach. There will be a ~Gc~ type that hold rooted values. Then we also have a ~GcRoot~ value that is an object but rooted. A ref to a ~GcRoot~ can be converted to an object, and the lifetime will be tied to the borrow of GcRoot. We need to make sure that you can't get a ~GcRoot~ out of the object that is rooted. So what do we do about ~pop~? Do we need to wrap ~Vec~ in some type to keep it from being accessed in that way. Or maybe you can only convert a ~&GcRoot~ to an ~Object~ with a ~Gc~. As in it will always be unsafe. We will have to generate accessor methods.
-
-Could we do something with closures? Like have a method that takes a type and let you modify things in a closure (where variables can't escape).
-
-So we will have a trait the defines some methods that take a ~Gc<T>~ and then provides a special token that let you call methods to create and ~AsRef~ the ~GcRoot~. We will unsafe rebind the lifetimes to only the scope of that method so that nothing can leak or escape.
-
-Or maybe it doesn't even have to be a method? Maybe it is just a function that takes a closure. Make sure to take the arena too so that Gc will not be called. A function would keep me from have to implement a trait everywhere for every new type.
 *** moving collector
-In order to implement a proper moving collector.
+In order to implement a proper moving collector. We need to make sure that no direct pointer to the GC heap can be held across garbage collection. Our current ~Root~ type adds a level of indirection, so that should be find for implementing a moving collector.
 
 * features
-** reader macros
-[[https://gist.github.com/chaitanyagupta/9324402][reader macros in CL]] Not really sure how to make the syntax for these. But I could totally add reader macros to elisp, since I have to implement the reader.
-
-** async
-Some simple things like refresh buffer or font lock could happen async. What I think would be really cool would be to open a file ~less~ style and just read the first part and display it. Then we could finish reading the rest of the file in the background. If something wanted info about later parts of the buffer, we would just block that call until the part of the buffer was ready.
-
-** tree-sitter
-Use [[https://github.com/ubolonton/emacs-tree-sitter][tree sitter]] to parse the files by default. I know that this is kind of out of scope, because all the parsing AFAIK is done in elisp, but tree-sitter is implemented in rust so that makes it easy.
-
-We can also just make tree sitter a FFI binding so that it does not have be part of the core. My biggest problem with Tree-sitter as it stands now is that the grammers are defined in javascript and reading that has a dependency on node.js. In order to make this more emacsy we would want the grammar defined in elisp and have no node or js dependencies at all. We want to make it really easy to define new grammers for languages. That will take some work.
-
 ** better IO
-Read from file-descriptors like stdin as well redirect errors to their own buffer. Could maybe implement pipes so as to build a better eshell.
+Read from file-descriptors like stdin as well redirect errors to their own buffer. Could maybe implement native pipes so as to build a better eshell.
 
 ** abstract data structures
-The most common lisp object is a list, and usually this is implemented as a linked list. But you could abstract away the data structure and implement it in different ways depending on the performance characteristics needed. For example linked lists are easy to insert in the middle. Arrays are faster for integration. Hash tables are faster for key look up (like alist). In fact, if you used a [[id:3EA61CCB-8B7D-4AEA-8E38-8D9C561B4DD5][packed hash]] You could use a hash table to look up items in a linked list in constant time. You would have to have some heuristics to determine the best data structure for a type, because they all have downsides.
+The most common lisp object is a list, and usually this is implemented as a linked list. But you could abstract away the data structure and implement it in different ways depending on the performance characteristics needed. For example linked lists are easy to insert in the middle. Arrays are faster for iteration. Hash tables are faster for key look up (like alist). In fact, if you used a [[id:3EA61CCB-8B7D-4AEA-8E38-8D9C561B4DD5][packed hash]] as a hash table to look up items in a linked list in constant time. You would have to have some heuristics to determine the best data structure for a type, because they all have downsides.
 
 ** more advanced layout tools
 HTML rendering in Emacs is terrible because there are no good tools for veritical layout (I.e. columns). You can use lines to divide a document into horizontal sections, but columar layout is hard. I was thinking that you could add special markers to parts of line to indicate column boundaries. These could have different behaviors depending on the text properties. For example you could say that this column always wraps at 80 chars or a certain width. You could say that that a column truncates after so long. The "column markers" would be zero width so you could still scan the document as a contiguous set of characters. This would let you implement spreadsheets in emacs that were more robust then org mode ones. You could also add web margins to ~shr~. By making the box property smarter you could draw around how columns of text and would not even need to add ascii boxes in tables. You could define column markers for the whole buffer so that it would be consistent even when editing.
@@ -454,17 +433,18 @@ Another part of this is making text property lookup extremely fast so that these
 - [[https://github.com/BurntSushi/ripgrep/issues/126][libripgrep]] :: file parsing and regex engine
 
 ** Rust encoding - convert from different encodings in rust
-https://github.com/lifthrasiir/rust-encoding
+[[https://github.com/lifthrasiir/rust-encoding][github]]
 ** Chardet: character encoding detection for rust
-https://github.com/thuleqaid/rust-chardet
+[[https://github.com/thuleqaid/rust-chardet][github]]
 ** num_bigint: bigint for rust
-https://docs.rs/num-bigint/0.2.6/num_bigint/
-* references
+[[https://docs.rs/num-bigint/0.2.6/num_bigint/][docs.rs]]
+** ByteCount: find occurances of a byte
+[[https://docs.rs/bytecount/latest/bytecount/index.html][doc.rs]]
+* Resources
+[[https://llogiq.github.io/2016/09/24/newline.html][counting newlines]]
 [[https://github.com/Wilfred/emacsbench][emacsbench]]
-
 [[https://github.com/remacs/remacs/issues/499][emacs string encoding]]
-
 [[https://github.com/remacs/remacs][remacs]]
-
+[[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.39.4394&rep=rep1&type=pdf][pointer tagging]]
 * Notes
 Using a recursive calling convention. Stack overflowed after 6879 iterations. That gives me a rough idea of how deep my recursion can go.
