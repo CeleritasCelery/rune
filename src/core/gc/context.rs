@@ -91,8 +91,17 @@ impl Block<true> {
     }
 }
 
-impl<const CONST: bool> Block<CONST> {
+impl Block<false> {
     pub(crate) fn new_local() -> Self {
+        Self::assert_unique();
+        Self::default()
+    }
+
+    pub(crate) fn new_local_unchecked() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn assert_unique() {
         SINGLETON_CHECK.with(|x| {
             assert!(
                 !x.get(),
@@ -100,9 +109,10 @@ impl<const CONST: bool> Block<CONST> {
             );
             x.set(true);
         });
-        Self::default()
     }
+}
 
+impl<const CONST: bool> Block<CONST> {
     pub(crate) fn add<'ob, T, U>(&'ob self, obj: T) -> GcObj
     where
         T: IntoObject<Out<'ob> = U>,
@@ -128,6 +138,15 @@ impl<'ob, 'rt> Context<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
         Context {
             block: Block::new_local(),
+            root_set: roots,
+            prev_obj_count: 0,
+        }
+    }
+
+    pub(crate) fn from_block(block: Block<false>, roots: &'rt RootSet) -> Self {
+        Block::assert_unique();
+        Context {
+            block,
             root_set: roots,
             prev_obj_count: 0,
         }

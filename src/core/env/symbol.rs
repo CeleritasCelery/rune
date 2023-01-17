@@ -37,6 +37,7 @@ enum SymbolName {
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub(crate) struct Symbol<'a> {
+    // Offset from the start of the symbol table
     data: *const SymbolCell,
     marker: PhantomData<&'a SymbolCell>,
 }

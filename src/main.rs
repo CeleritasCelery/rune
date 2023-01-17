@@ -62,6 +62,7 @@
     clippy::unwrap_in_result,
     clippy::unwrap_used,
     clippy::expect_used,
+    clippy::let_underscore_must_use,
     clippy::assertions_on_result_states,
     clippy::single_match_else,
     clippy::missing_trait_methods,
@@ -93,6 +94,7 @@ mod lread;
 mod print;
 mod reader;
 mod search;
+mod threads;
 
 use crate::core::{
     env::{intern, Env},

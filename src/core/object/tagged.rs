@@ -955,7 +955,7 @@ impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     }
 }
 
-pub(in crate::core) trait CloneIn<'new, T>
+pub(crate) trait CloneIn<'new, T>
 where
     T: 'new,
 {
