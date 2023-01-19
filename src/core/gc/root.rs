@@ -605,19 +605,6 @@ impl<K, V> Deref for Rt<HashMap<K, V>> {
     }
 }
 
-impl<T> Rt<HashSet<T>>
-where
-    T: Eq + Hash,
-{
-    pub(crate) fn insert<Tx: IntoRoot<T>>(&mut self, value: Tx) -> bool {
-        self.inner.insert(unsafe { value.into_root() })
-    }
-
-    pub(crate) fn contains<Q: IntoRoot<T>>(&self, value: Q) -> bool {
-        self.inner.contains(unsafe { &value.into_root() })
-    }
-}
-
 impl<T> Deref for Rt<HashSet<T>> {
     type Target = HashSet<Rt<T>>;
     fn deref(&self) -> &Self::Target {

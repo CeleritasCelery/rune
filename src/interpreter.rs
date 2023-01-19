@@ -464,7 +464,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn create_let_binding(&mut self, var: Symbol, val: GcObj, cx: &Context) -> u16 {
         let env = self.env.as_mut(cx);
-        if env.special_variables.contains(var) {
+        if var.is_special() {
             env.varbind(var, val, cx);
             // return 1 if the variable is bound
             1
@@ -814,23 +814,35 @@ mod test {
     fn dyn_variables() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        check_interpreter("(progn (defvar foo 1) foo)", 1, cx);
-        check_interpreter("(progn (defvar foo 1) (let ((foo 3)) foo))", 3, cx);
-        check_interpreter("(progn (defvar foo 1) (let ((foo 3))) foo)", 1, cx);
-        check_interpreter("(let ((foo 7)) (defvar foo 3) foo)", 7, cx);
+        check_interpreter("(progn (defvar dyn_test1 1) dyn_test1)", 1, cx);
         check_interpreter(
-            "(progn (defvar foo 1) (let (bar) (let ((foo 3)) (setq bar foo)) bar))",
+            "(progn (defvar dyn_test2 1) (let ((dyn_test2 3)) dyn_test2))",
+            3,
+            cx,
+        );
+        check_interpreter(
+            "(progn (defvar dyn_test3 1) (let ((dyn_test3 3))) dyn_test3)",
+            1,
+            cx,
+        );
+        check_interpreter(
+            "(let ((dyn_test4 7)) (defvar dyn_test4 3) dyn_test4)",
+            7,
+            cx,
+        );
+        check_interpreter(
+            "(progn (defvar dyn_test5 1) (let (bar) (let ((dyn_test5 3)) (setq bar dyn_test5)) bar))",
             3,
             cx,
         );
         // Special but unbound
         check_interpreter(
-            "(progn (defvar foo 1) (makunbound 'foo) (let ((fn #'(lambda () (defvar foo 3))) (foo 7)) (funcall fn)) foo)",
+            "(progn (defvar dyn_test6 1) (makunbound 'dyn_test6) (let ((fn #'(lambda () (defvar dyn_test6 3))) (dyn_test6 7)) (funcall fn)) dyn_test6)",
             3,
             cx,
         );
         check_interpreter(
-            "(progn (defvar foo 1) (makunbound 'foo) (let ((foo 7)) foo))",
+            "(progn (defvar dyn_test7 1) (makunbound 'dyn_test7) (let ((dyn_test7 7)) dyn_test7))",
             7,
             cx,
         );

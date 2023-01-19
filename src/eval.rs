@@ -205,8 +205,8 @@ fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Root<Env>, cx: &Contex
 }
 
 #[defun]
-fn special_variable_p(symbol: Symbol, env: &Root<Env>) -> bool {
-    env.special_variables.contains(symbol)
+fn special_variable_p(symbol: Symbol) -> bool {
+    symbol.is_special()
 }
 
 #[defun]

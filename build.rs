@@ -173,7 +173,7 @@ pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
 
     for (_, name, _, _) in &all_defvar {
         #[rustfmt::skip]
-        writeln!(f, "    SymbolCell::new(\"{name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new_special(\"{name}\"),").unwrap();
     }
 
     // write the list of all defun to a file in out_dir
@@ -275,7 +275,6 @@ use crate::core::object::Object;
             value.to_mut().insert_str(len - 1, "; cx");
         }
         writeln!(f, "env.vars.insert(sym::{ident}, cx.add({value}));").unwrap();
-        writeln!(f, "env.special_variables.insert(sym::{ident});").unwrap();
         match ty {
             DefvarType::Bool => {
                 writeln!(

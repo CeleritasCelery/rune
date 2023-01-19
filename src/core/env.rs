@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
 use super::object::{CloneIn, Function, Gc, GcObj};
-use crate::hashmap::{HashMap, HashSet};
+use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
 use std::sync::Mutex;
@@ -17,7 +17,6 @@ pub(crate) struct Env {
     exception: (GcObj<'static>, GcObj<'static>),
     #[no_trace]
     exception_id: u32,
-    pub(crate) special_variables: HashSet<Symbol<'static>>,
     binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
 }
@@ -78,7 +77,7 @@ impl Rt<Env> {
 
     pub(crate) fn defvar(&mut self, var: Symbol, value: GcObj) -> Result<()> {
         self.set_var(var, value)?;
-        self.special_variables.insert(var);
+        var.make_special();
         // If this variable was unbound previously in the binding stack,
         // we will bind it to the new value
         for binding in self.binding_stack.iter_mut() {
@@ -217,6 +216,8 @@ pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 
 #[cfg(test)]
 mod test {
+    use crate::root;
+
     use super::*;
 
     use super::super::gc::{Context, RootSet};
@@ -293,5 +294,13 @@ mod test {
         } else {
             unreachable!();
         }
+    }
+
+    #[test]
+    fn test_init_variables() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        root!(env, Env::default(), cx);
+        init_variables(cx, env.as_mut(cx));
     }
 }

@@ -27,6 +27,7 @@ pub(crate) struct SymbolCell {
     // We can't use AtomicCell due to this issue:
     // https://github.com/crossbeam-rs/crossbeam/issues/748
     func: Option<AtomicPtr<u8>>,
+    is_special: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -97,6 +98,14 @@ impl<'a> Symbol<'a> {
 
     pub(super) fn new_runtime(sym: &SymbolCell) -> Self {
         unsafe { Self::from_ptr(sym) }
+    }
+
+    pub(crate) fn make_special(self) {
+        self.is_special.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn is_special(self) -> bool {
+        self.is_special.load(Ordering::Acquire)
     }
 }
 
@@ -185,6 +194,7 @@ impl Hash for SymbolCell {
 
 impl SymbolCell {
     const NULL: *mut u8 = std::ptr::null_mut();
+
     pub(super) const fn new(name: &'static str) -> Self {
         // We have to do this workaround because starts_with is not const
         let func = if name.as_bytes()[0] == b':' {
@@ -197,6 +207,16 @@ impl SymbolCell {
             name: SymbolName::Interned(name),
             func,
             marked: AtomicBool::new(true),
+            is_special: AtomicBool::new(false),
+        }
+    }
+
+    pub(super) const fn new_special(name: &'static str) -> Self {
+        SymbolCell {
+            name: SymbolName::Interned(name),
+            func: Some(AtomicPtr::new(Self::NULL)),
+            marked: AtomicBool::new(true),
+            is_special: AtomicBool::new(true),
         }
     }
 
@@ -205,6 +225,7 @@ impl SymbolCell {
             name: SymbolName::Interned(name),
             func: None,
             marked: AtomicBool::new(true),
+            is_special: AtomicBool::new(true),
         }
     }
 
@@ -213,6 +234,7 @@ impl SymbolCell {
             name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
             func: Some(AtomicPtr::new(Self::NULL)),
             marked: AtomicBool::new(false),
+            is_special: AtomicBool::new(false),
         }
     }
 
