@@ -23,11 +23,13 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// yet.
 pub(crate) struct SymbolCell {
     name: SymbolName,
+    // Global symbols are always immutable, so we mark them so they are not
+    // traced by the GC.
     marked: AtomicBool,
     // We can't use AtomicCell due to this issue:
     // https://github.com/crossbeam-rs/crossbeam/issues/748
     func: Option<AtomicPtr<u8>>,
-    is_special: AtomicBool,
+    special: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -101,11 +103,11 @@ impl<'a> Symbol<'a> {
     }
 
     pub(crate) fn make_special(self) {
-        self.is_special.store(true, Ordering::Release);
+        self.special.store(true, Ordering::Release);
     }
 
     pub(crate) fn is_special(self) -> bool {
-        self.is_special.load(Ordering::Acquire)
+        self.special.load(Ordering::Acquire)
     }
 }
 
@@ -194,47 +196,47 @@ impl Hash for SymbolCell {
 
 impl SymbolCell {
     const NULL: *mut u8 = std::ptr::null_mut();
+    #[allow(clippy::declare_interior_mutable_const)]
+    const EMTPTY: AtomicPtr<u8> = AtomicPtr::new(Self::NULL);
 
     pub(super) const fn new(name: &'static str) -> Self {
         // We have to do this workaround because starts_with is not const
-        let func = if name.as_bytes()[0] == b':' {
-            // If func is none then this cannot take a function
-            None
+        if name.as_bytes()[0] == b':' {
+            Self::new_const(name)
         } else {
-            Some(AtomicPtr::new(Self::NULL))
-        };
-        SymbolCell {
-            name: SymbolName::Interned(name),
-            func,
-            marked: AtomicBool::new(true),
-            is_special: AtomicBool::new(false),
+            Self {
+                name: SymbolName::Interned(name),
+                func: Some(Self::EMTPTY),
+                marked: AtomicBool::new(true),
+                special: AtomicBool::new(false),
+            }
         }
     }
 
     pub(super) const fn new_special(name: &'static str) -> Self {
-        SymbolCell {
+        Self {
             name: SymbolName::Interned(name),
-            func: Some(AtomicPtr::new(Self::NULL)),
+            func: Some(Self::EMTPTY),
             marked: AtomicBool::new(true),
-            is_special: AtomicBool::new(true),
+            special: AtomicBool::new(true),
         }
     }
 
     pub(super) const fn new_const(name: &'static str) -> Self {
-        SymbolCell {
+        Self {
             name: SymbolName::Interned(name),
             func: None,
             marked: AtomicBool::new(true),
-            is_special: AtomicBool::new(true),
+            special: AtomicBool::new(true),
         }
     }
 
     pub(crate) fn new_uninterned(name: &str) -> Self {
-        SymbolCell {
+        Self {
             name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
-            func: Some(AtomicPtr::new(Self::NULL)),
+            func: Some(Self::EMTPTY),
             marked: AtomicBool::new(false),
-            is_special: AtomicBool::new(false),
+            special: AtomicBool::new(false),
         }
     }
 
