@@ -411,6 +411,21 @@ impl<'a> TaggedPtr for Object<'a> {
             }
         }
     }
+
+    fn tag(self) -> Gc<Self> {
+        match self {
+            Object::Int(x) => TaggedPtr::tag(x).into(),
+            Object::Float(x) => TaggedPtr::tag(x).into(),
+            Object::Symbol(x) => TaggedPtr::tag(x).into(),
+            Object::Cons(x) => TaggedPtr::tag(x).into(),
+            Object::Vec(x) => TaggedPtr::tag(x).into(),
+            Object::Record(x) => TaggedPtr::tag(x).into(),
+            Object::HashTable(x) => TaggedPtr::tag(x).into(),
+            Object::String(x) => TaggedPtr::tag(x).into(),
+            Object::ByteFn(x) => TaggedPtr::tag(x).into(),
+            Object::SubrFn(x) => TaggedPtr::tag(x).into(),
+        }
+    }
 }
 
 impl<'a> TaggedPtr for List<'a> {
@@ -427,6 +442,13 @@ impl<'a> TaggedPtr for List<'a> {
             Tag::Symbol => List::Nil,
             Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
             _ => unreachable!(),
+        }
+    }
+
+    fn tag(self) -> Gc<Self> {
+        match self {
+            List::Nil => unsafe { cast_gc(TaggedPtr::tag(sym::NIL)) },
+            List::Cons(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -452,6 +474,15 @@ impl<'a> TaggedPtr for Function<'a> {
             }
         }
     }
+
+    fn tag(self) -> Gc<Self> {
+        match self {
+            Function::Cons(x) => TaggedPtr::tag(x).into(),
+            Function::SubrFn(x) => TaggedPtr::tag(x).into(),
+            Function::ByteFn(x) => TaggedPtr::tag(x).into(),
+            Function::Symbol(x) => TaggedPtr::tag(x).into(),
+        }
+    }
 }
 
 impl<'a> TaggedPtr for Number<'a> {
@@ -470,6 +501,13 @@ impl<'a> TaggedPtr for Number<'a> {
                 Tag::Float => Number::Float(<&LispFloat>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
+        }
+    }
+
+    fn tag(self) -> Gc<Self> {
+        match self {
+            Number::Int(x) => TaggedPtr::tag(x).into(),
+            Number::Float(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
