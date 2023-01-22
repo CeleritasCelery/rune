@@ -9,6 +9,7 @@
 //! aligned. All objects should be bound to a lifetime to ensure sound operation
 //! of the vm.
 
+mod buffer;
 mod convert;
 mod float;
 mod func;
@@ -17,6 +18,7 @@ mod string;
 mod tagged;
 mod vector;
 
+pub(crate) use buffer::*;
 pub(crate) use convert::*;
 pub(crate) use float::*;
 pub(crate) use func::*;

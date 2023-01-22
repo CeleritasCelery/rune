@@ -1,10 +1,10 @@
 #+title: Next steps for Rune
+* Path to MVP
+
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
-* implement symbols with an offset
-* make special variable part of symbol type
-* use index for symbols
+* See how much we can unify the interpters
 * Steps to add a new object type
 - define in gc.rs
 - add boxing function
