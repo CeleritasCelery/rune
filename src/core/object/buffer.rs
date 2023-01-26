@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use bstr::ByteSlice;
 
+use bytecount::num_chars;
+
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
 pub(crate) struct Buffer {
@@ -12,6 +14,9 @@ pub(crate) struct Buffer {
     gap_start: usize,
     /// The end of the gap. This also represents the point.
     gap_end: usize,
+    /// The number of characters until the point. Start at one, since it
+    /// includes the current character.
+    pub(crate) point: usize,
 }
 
 impl Buffer {
@@ -30,6 +35,7 @@ impl Buffer {
             storage,
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
+            point: 1,
         }
     }
 
@@ -55,6 +61,7 @@ impl Buffer {
         self.storage = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
+        self.point += num_chars(slice.as_bytes());
     }
 
     pub(crate) fn insert_char(&mut self, chr: char) {
@@ -69,6 +76,7 @@ impl Buffer {
             let new_slice = &mut self.storage[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
+            self.point += num_chars(slice.as_bytes());
         }
     }
 
@@ -87,7 +95,6 @@ impl Buffer {
         self.assert_char_boundary(end);
         if end < self.gap_start {
             // delete before gap
-            let size = end - beg;
             // ++++|||||||*********
             // ^   ^      ^       ^
             // 0   beg    end     gap_start
@@ -97,26 +104,26 @@ impl Buffer {
             // ++++*********.......
             //             ^
             //             gap_start
+            let size = end - beg;
+            // remove the number of characters from the point
+            self.point -= num_chars(&self.storage[beg..end]);
             self.storage[..self.gap_start].copy_within(end.., beg);
             self.gap_start -= size;
         } else if beg >= self.gap_end {
             // delete after gap
-            //
-            // make beg/end relative to gap_end
-            let beg = beg - self.gap_end;
-            let end = end - self.gap_end;
-            let size = end - beg;
-            //       size
+            //       size (end - beg)
             //       v
             // *********|||||||++++
-            // ^        ^      ^
-            // gap_end  beg    end
+            // ^        ^
+            // gap_end  beg
             //
             // copy ..beg to size
             //
             // .......*********++++
             //        ^
             //        gap_end
+            let size = end - beg;
+            let beg = beg - self.gap_end;
             self.storage[self.gap_end..].copy_within(..beg, size);
             self.gap_end += size;
         } else if beg < self.gap_start && end >= self.gap_end {
@@ -133,17 +140,22 @@ impl Buffer {
     }
 
     fn move_gap(&mut self, pos: usize) {
-        assert!(pos <= self.storage.len(), "attempt to move gap out of bounds");
+        assert!(
+            pos <= self.storage.len(),
+            "attempt to move gap out of bounds"
+        );
         self.assert_char_boundary(pos);
         if pos < self.gap_start {
             // move gap backwards
             let size = self.gap_start - pos;
+            self.point -= num_chars(&self.storage[pos..self.gap_start]);
             self.storage
                 .copy_within(pos..self.gap_start, self.gap_end - size);
             self.gap_start = pos;
             self.gap_end -= size;
         } else if pos >= self.gap_end {
             // move gap forwards
+            self.point += num_chars(&self.storage[self.gap_end..pos]);
             self.storage.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             self.gap_start += size;
@@ -229,7 +241,7 @@ mod test {
         buffer.insert_string(hello);
         buffer.delete_forwards(4);
         assert_eq!(buffer.gap_start, hello.len());
-        // assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
+        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
         buffer.move_gap(0);
         assert_eq!(buffer.as_str(), "hello d");
     }
@@ -263,5 +275,14 @@ mod test {
         assert_eq!(buffer.gap_start, hello.len());
         buffer.move_gap(0);
         assert_eq!(buffer.as_str(), "hello world");
+    }
+
+    #[test]
+    fn point() {
+        let string = "world";
+        let new_string = "hi ";
+        let mut buffer = Buffer::new(string);
+        buffer.insert_string(new_string);
+        assert_eq!(buffer.point, new_string.len() + 1);
     }
 }
