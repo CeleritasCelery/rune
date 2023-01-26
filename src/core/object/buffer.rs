@@ -1,10 +1,16 @@
 #![allow(dead_code)]
 use bstr::ByteSlice;
 
+/// A Gap buffer. This represents the text of a buffer, and allows for
+/// efficient insertion and deletion of text.
 pub(crate) struct Buffer {
-    /// The pointer to the start of the buffer.
+    /// The buffer data
     storage: Box<[u8]>,
+    /// start of the gap. From a elisp perspective, both gap_start and gap_end
+    /// are the same point. But gap_start is never a valid byte index, and
+    /// gap_end is always used instead.
     gap_start: usize,
+    /// The end of the gap. This also represents the point.
     gap_end: usize,
 }
 
@@ -71,32 +77,48 @@ impl Buffer {
     }
 
     fn delete_forwards(&mut self, size: usize) {
-        // TODO: gap_end should work here
         self.delete_region(self.gap_end, self.gap_end + size);
     }
 
-    pub(crate) fn delete_region(&mut self, beg: usize, end: usize) {
+    fn delete_region(&mut self, beg: usize, end: usize) {
         assert!(beg <= end, "beg is greater then end");
         assert!(end <= self.storage.len(), "end out of bounds");
+        self.assert_char_boundary(beg);
+        self.assert_char_boundary(end);
         if end < self.gap_start {
             // delete before gap
-            let string = unsafe { self.storage[..self.gap_start].to_str_unchecked() };
-            assert!(string.is_char_boundary(beg), "beg not on utf8 boundary");
-            assert!(string.is_char_boundary(end), "end not on utf8 boundary");
+            let size = end - beg;
+            // ++++|||||||*********
+            // ^   ^      ^       ^
+            // 0   beg    end     gap_start
+            //
+            // copy end.. to beg
+            //
+            // ++++*********.......
+            //             ^
+            //             gap_start
             self.storage[..self.gap_start].copy_within(end.., beg);
-            self.gap_start -= end - beg;
+            self.gap_start -= size;
         } else if beg >= self.gap_end {
             // delete after gap
             //
             // make beg/end relative to gap_end
             let beg = beg - self.gap_end;
             let end = end - self.gap_end;
-            let string = unsafe { self.storage[self.gap_end..].to_str_unchecked() };
-            assert!(string.is_char_boundary(beg), "beg not on utf8 boundary");
-            assert!(string.is_char_boundary(end), "end not on utf8 boundary");
-            let dst = end - beg;
-            self.storage[self.gap_end..].copy_within(..beg, dst);
-            self.gap_end += dst;
+            let size = end - beg;
+            //       size
+            //       v
+            // *********|||||||++++
+            // ^        ^      ^
+            // gap_end  beg    end
+            //
+            // copy ..beg to size
+            //
+            // .......*********++++
+            //        ^
+            //        gap_end
+            self.storage[self.gap_end..].copy_within(..beg, size);
+            self.gap_end += size;
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
             self.gap_start = beg;
@@ -110,15 +132,11 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn move_gap(&mut self, pos: usize) {
-        assert!(pos <= self.storage.len(), "move_gap out of bounds");
+    fn move_gap(&mut self, pos: usize) {
+        assert!(pos <= self.storage.len(), "attempt to move gap out of bounds");
+        self.assert_char_boundary(pos);
         if pos < self.gap_start {
             // move gap backwards
-            let string = unsafe { self.storage[..self.gap_start].to_str_unchecked() };
-            assert!(
-                string.is_char_boundary(pos),
-                "move_gap not on utf8 boundary"
-            );
             let size = self.gap_start - pos;
             self.storage
                 .copy_within(pos..self.gap_start, self.gap_end - size);
@@ -126,17 +144,12 @@ impl Buffer {
             self.gap_end -= size;
         } else if pos >= self.gap_end {
             // move gap forwards
-            let string = unsafe { self.storage[self.gap_end..].to_str_unchecked() };
-            assert!(
-                string.is_char_boundary(pos - self.gap_end),
-                "move_gap not on utf8 boundary"
-            );
             self.storage.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             self.gap_start += size;
             self.gap_end = pos;
         } else {
-            panic!("move-gap position inside gap");
+            panic!("move gap position inside gap");
         }
     }
 
@@ -148,6 +161,15 @@ impl Buffer {
         } else {
             panic!("gap not at start or end");
         }
+    }
+
+    fn assert_char_boundary(&self, pos: usize) {
+        let is_boundary = match self.storage.get(pos) {
+            // This is bit magic equivalent to: b < 128 || b >= 192
+            Some(byte) => (*byte as i8) >= -0x40,
+            None => pos == self.storage.len(),
+        };
+        assert!(is_boundary, "position {pos} not on utf8 boundary");
     }
 }
 
