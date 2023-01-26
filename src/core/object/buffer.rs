@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use bstr::ByteSlice;
 
 pub(crate) struct Buffer {
@@ -65,14 +66,88 @@ impl Buffer {
         }
     }
 
-    fn delete(&mut self, size: usize) {
-        let string = unsafe { self.storage[..self.gap_start].to_str_unchecked() };
-        let idx = string.len().saturating_sub(size);
-        assert!(
-            string.is_char_boundary(idx),
-            "deletion not on utf8 boundary"
-        );
-        self.gap_start = idx;
+    fn delete_backwards(&mut self, size: usize) {
+        self.delete_region(self.gap_start - size, self.gap_end);
+    }
+
+    fn delete_forwards(&mut self, size: usize) {
+        // TODO: gap_end should work here
+        self.delete_region(self.gap_end, self.gap_end + size);
+    }
+
+    pub(crate) fn delete_region(&mut self, beg: usize, end: usize) {
+        assert!(beg <= end, "beg is greater then end");
+        assert!(end <= self.storage.len(), "end out of bounds");
+        if end < self.gap_start {
+            // delete before gap
+            let string = unsafe { self.storage[..self.gap_start].to_str_unchecked() };
+            assert!(string.is_char_boundary(beg), "beg not on utf8 boundary");
+            assert!(string.is_char_boundary(end), "end not on utf8 boundary");
+            self.storage[..self.gap_start].copy_within(end.., beg);
+            self.gap_start -= end - beg;
+        } else if beg >= self.gap_end {
+            // delete after gap
+            //
+            // make beg/end relative to gap_end
+            let beg = beg - self.gap_end;
+            let end = end - self.gap_end;
+            let string = unsafe { self.storage[self.gap_end..].to_str_unchecked() };
+            assert!(string.is_char_boundary(beg), "beg not on utf8 boundary");
+            assert!(string.is_char_boundary(end), "end not on utf8 boundary");
+            let dst = end - beg;
+            self.storage[self.gap_end..].copy_within(..beg, dst);
+            self.gap_end += dst;
+        } else if beg < self.gap_start && end >= self.gap_end {
+            // delete spans gap
+            self.gap_start = beg;
+            self.gap_end = end;
+        } else {
+            // error
+            panic!(
+                "delete region inside gap -- gap: {}-{}, span: {beg}-{end}",
+                self.gap_start, self.gap_end
+            );
+        }
+    }
+
+    pub(crate) fn move_gap(&mut self, pos: usize) {
+        assert!(pos <= self.storage.len(), "move_gap out of bounds");
+        if pos < self.gap_start {
+            // move gap backwards
+            let string = unsafe { self.storage[..self.gap_start].to_str_unchecked() };
+            assert!(
+                string.is_char_boundary(pos),
+                "move_gap not on utf8 boundary"
+            );
+            let size = self.gap_start - pos;
+            self.storage
+                .copy_within(pos..self.gap_start, self.gap_end - size);
+            self.gap_start = pos;
+            self.gap_end -= size;
+        } else if pos >= self.gap_end {
+            // move gap forwards
+            let string = unsafe { self.storage[self.gap_end..].to_str_unchecked() };
+            assert!(
+                string.is_char_boundary(pos - self.gap_end),
+                "move_gap not on utf8 boundary"
+            );
+            self.storage.copy_within(self.gap_end..pos, self.gap_start);
+            let size = pos - self.gap_end;
+            self.gap_start += size;
+            self.gap_end = pos;
+        } else {
+            panic!("move-gap position inside gap");
+        }
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        if self.gap_start == 0 {
+            self.storage[self.gap_end..].to_str().unwrap()
+        } else if self.gap_end == self.storage.len() {
+            self.storage[..self.gap_start].to_str().unwrap()
+        } else {
+            panic!("gap not at start or end");
+        }
     }
 }
 
@@ -97,17 +172,18 @@ mod test {
         assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "xhello buffer");
     }
 
     #[test]
     fn insert_slice() {
-        let string = "hello buffer";
-        let new_string = "world";
+        let string = "world";
+        let new_string = "hi ";
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
-        assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
-        assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
-        assert_eq!(buffer.gap_start, new_string.len());
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "hi world");
     }
 
     #[test]
@@ -116,9 +192,39 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
-        buffer.delete(4);
+        buffer.delete_backwards(4);
         assert_eq!(buffer.gap_start, hello.len() - 4);
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "heworld");
+    }
+
+    #[test]
+    fn delete_forwards() {
+        let world = "world";
+        let hello = "hello ";
+        let mut buffer = Buffer::new(world);
+        buffer.insert_string(hello);
+        buffer.delete_forwards(4);
+        assert_eq!(buffer.gap_start, hello.len());
+        // assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "hello d");
+    }
+
+    #[test]
+    fn delete_region() {
+        let world = "world";
+        let hello = "hello ";
+        let mut buffer = Buffer::new(world);
+        buffer.insert_string(hello);
+        buffer.delete_region(2, 3);
+        assert_eq!(buffer.gap_start, hello.len() - 1);
+        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
+        buffer.delete_region(11, 13);
+        buffer.delete_region(3, 13);
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "helrld");
     }
 
     #[test]
@@ -133,5 +239,7 @@ mod test {
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
+        buffer.move_gap(0);
+        assert_eq!(buffer.as_str(), "hello world");
     }
 }
