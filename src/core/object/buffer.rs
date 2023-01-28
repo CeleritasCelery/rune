@@ -14,9 +14,12 @@ pub(crate) struct Buffer {
     gap_start: usize,
     /// The end of the gap. This also represents the point.
     gap_end: usize,
-    /// The number of characters until the point. Start at one, since it
+    /// The number of characters until the gap. Starts at one, since it
     /// includes the current character.
-    pub(crate) point: usize,
+    gap_chars: usize,
+    /// The current point. The first field is the byte index, the second is the
+    /// character count.
+    point: (usize, usize),
 }
 
 impl Buffer {
@@ -35,7 +38,8 @@ impl Buffer {
             storage,
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
-            point: 1,
+            gap_chars: 1,
+            point: (0, 1),
         }
     }
 
@@ -61,7 +65,7 @@ impl Buffer {
         self.storage = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
-        self.point += num_chars(slice.as_bytes());
+        self.gap_chars += num_chars(slice.as_bytes());
     }
 
     pub(crate) fn insert_char(&mut self, chr: char) {
@@ -76,7 +80,7 @@ impl Buffer {
             let new_slice = &mut self.storage[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
-            self.point += num_chars(slice.as_bytes());
+            self.gap_chars += num_chars(slice.as_bytes());
         }
     }
 
@@ -105,8 +109,7 @@ impl Buffer {
             //             ^
             //             gap_start
             let size = end - beg;
-            // remove the number of characters from the point
-            self.point -= num_chars(&self.storage[beg..end]);
+            self.gap_chars -= num_chars(&self.storage[beg..end]);
             self.storage[..self.gap_start].copy_within(end.., beg);
             self.gap_start -= size;
         } else if beg >= self.gap_end {
@@ -148,14 +151,14 @@ impl Buffer {
         if pos < self.gap_start {
             // move gap backwards
             let size = self.gap_start - pos;
-            self.point -= num_chars(&self.storage[pos..self.gap_start]);
+            self.gap_chars -= num_chars(&self.storage[pos..self.gap_start]);
             self.storage
                 .copy_within(pos..self.gap_start, self.gap_end - size);
             self.gap_start = pos;
             self.gap_end -= size;
         } else if pos >= self.gap_end {
             // move gap forwards
-            self.point += num_chars(&self.storage[self.gap_end..pos]);
+            self.gap_chars += num_chars(&self.storage[self.gap_end..pos]);
             self.storage.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             self.gap_start += size;
@@ -172,6 +175,47 @@ impl Buffer {
             self.storage[..self.gap_start].to_str().unwrap()
         } else {
             panic!("gap not at start or end");
+        }
+    }
+
+    fn char_pos_to_byte_pos(&self, pos: usize) -> usize {
+        // (byte position, char positions) pairs sorted in ascending order
+        #[rustfmt::skip]
+        let positions = if self.point.1 <= self.gap_chars {
+            [(0, 1), self.point, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
+        } else {
+            [(0, 1), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.point]
+        };
+
+        // find which positions window the char position falls into
+        let window = positions
+            .windows(2)
+            .find(|slice| slice[0].1 <= pos && pos < slice[1].1);
+
+        let Some([(beg_byte, beg_char), (end_byte, end_char)]) = window else {
+            // char pos is past the last char we have cached. Search for it from the end.
+            let (idx, char) = positions.last().unwrap();
+            self.assert_char_boundary(*idx);
+            let string = unsafe { std::str::from_utf8_unchecked(&self.storage[*idx..]) };
+            let count = pos - char;
+            return string.char_indices().nth(count).unwrap().0;
+        };
+
+        self.assert_char_boundary(*beg_byte);
+        self.assert_char_boundary(*end_byte);
+
+        let num_chars = end_char - beg_char;
+        if end_byte - beg_byte == num_chars {
+            // the slice is ascii text, so we can just index into it
+            beg_byte + (pos - beg_char)
+        } else {
+            let string =
+                unsafe { std::str::from_utf8_unchecked(&self.storage[*beg_byte..*end_byte]) };
+            if pos - beg_char <= num_chars / 2 {
+                string.char_indices().nth(pos - beg_char).unwrap().0
+            } else {
+                string.char_indices().rev().nth(end_char - pos).unwrap().0
+            }
         }
     }
 
@@ -283,6 +327,6 @@ mod test {
         let new_string = "hi ";
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
-        assert_eq!(buffer.point, new_string.len() + 1);
+        assert_eq!(buffer.gap_chars, new_string.len() + 1);
     }
 }

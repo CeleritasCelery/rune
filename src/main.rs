@@ -47,6 +47,7 @@
     clippy::unreachable,
     clippy::panic_in_result_fn,
     clippy::integer_arithmetic,
+    clippy::integer_division,
     clippy::float_arithmetic,
     clippy::arithmetic_side_effects,
     clippy::pattern_type_mismatch,
