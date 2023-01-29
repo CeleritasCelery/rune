@@ -14,11 +14,10 @@ pub(crate) struct Buffer {
     gap_start: usize,
     /// The end of the gap. This also represents the point.
     gap_end: usize,
-    /// The number of characters until the gap. Starts at one, since it
-    /// includes the current character.
+    /// The number of characters until the gap. Starts at one.
     gap_chars: usize,
     /// The current point. The first field is the byte index, the second is the
-    /// character count.
+    /// character count, starting at one.
     point: (usize, usize),
 }
 
@@ -85,15 +84,21 @@ impl Buffer {
     }
 
     fn delete_backwards(&mut self, size: usize) {
-        self.delete_region(self.gap_start - size, self.gap_end);
+        self.delete_region(self.gap_chars - size, self.gap_chars);
     }
 
     fn delete_forwards(&mut self, size: usize) {
-        self.delete_region(self.gap_end, self.gap_end + size);
+        self.delete_region(self.gap_chars, self.gap_chars + size);
     }
 
     fn delete_region(&mut self, beg: usize, end: usize) {
-        assert!(beg <= end, "beg is greater then end");
+        let beg = self.char_to_byte(beg);
+        let end = self.char_to_byte(end);
+        self.delete_byte_region(beg, end);
+    }
+
+    fn delete_byte_region(&mut self, beg: usize, end: usize) {
+        assert!(beg <= end, "beg ({beg}) is greater then end ({end})");
         assert!(end <= self.storage.len(), "end out of bounds");
         self.assert_char_boundary(beg);
         self.assert_char_boundary(end);
@@ -178,7 +183,7 @@ impl Buffer {
         }
     }
 
-    fn char_pos_to_byte_pos(&self, pos: usize) -> usize {
+    fn char_to_byte(&self, pos: usize) -> usize {
         // (byte position, char positions) pairs sorted in ascending order
         #[rustfmt::skip]
         let positions = if self.point.1 <= self.gap_chars {
@@ -194,11 +199,11 @@ impl Buffer {
 
         let Some([(beg_byte, beg_char), (end_byte, end_char)]) = window else {
             // char pos is past the last char we have cached. Search for it from the end.
-            let (idx, char) = positions.last().unwrap();
+            let (idx, chr) = positions.last().unwrap();
             self.assert_char_boundary(*idx);
             let string = unsafe { std::str::from_utf8_unchecked(&self.storage[*idx..]) };
-            let count = pos - char;
-            return string.char_indices().nth(count).unwrap().0;
+            let count = pos - chr;
+            return string.char_indices().nth(count).unwrap().0 + idx;
         };
 
         self.assert_char_boundary(*beg_byte);
@@ -212,9 +217,9 @@ impl Buffer {
             let string =
                 unsafe { std::str::from_utf8_unchecked(&self.storage[*beg_byte..*end_byte]) };
             if pos - beg_char <= num_chars / 2 {
-                string.char_indices().nth(pos - beg_char).unwrap().0
+                string.char_indices().nth(pos - beg_char).unwrap().0 + beg_byte
             } else {
-                string.char_indices().rev().nth(end_char - pos).unwrap().0
+                end_byte - string.char_indices().rev().nth(end_char - pos).unwrap().0
             }
         }
     }
@@ -296,13 +301,10 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
-        buffer.delete_region(2, 3);
-        assert_eq!(buffer.gap_start, hello.len() - 1);
-        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
-        buffer.delete_region(11, 13);
-        buffer.delete_region(3, 13);
+        buffer.delete_region(2, 4);
+        buffer.delete_region(5, 7);
         buffer.move_gap(0);
-        assert_eq!(buffer.as_str(), "helrld");
+        assert_eq!(buffer.as_str(), "hlo rld");
     }
 
     #[test]
