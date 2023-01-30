@@ -5,6 +5,7 @@ use bytecount::num_chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
+#[derive(Debug)]
 pub(crate) struct Buffer {
     /// The buffer data
     storage: Box<[u8]>,
@@ -136,6 +137,7 @@ impl Buffer {
             self.gap_end += size;
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
+            self.gap_chars -= num_chars(&self.storage[beg..self.gap_start]);
             self.gap_start = beg;
             self.gap_end = end;
         } else {
@@ -148,6 +150,7 @@ impl Buffer {
     }
 
     fn move_gap(&mut self, pos: usize) {
+        let pos = self.char_to_byte(pos);
         assert!(
             pos <= self.storage.len(),
             "attempt to move gap out of bounds"
@@ -157,6 +160,7 @@ impl Buffer {
             // move gap backwards
             let size = self.gap_start - pos;
             self.gap_chars -= num_chars(&self.storage[pos..self.gap_start]);
+
             self.storage
                 .copy_within(pos..self.gap_start, self.gap_end - size);
             self.gap_start = pos;
@@ -217,8 +221,14 @@ impl Buffer {
             let string =
                 unsafe { std::str::from_utf8_unchecked(&self.storage[*beg_byte..*end_byte]) };
             if pos - beg_char <= num_chars / 2 {
-                string.char_indices().nth(pos - beg_char).unwrap().0 + beg_byte
+                // search from the beginning
+                let char_count = match string.char_indices().nth(pos - beg_char) {
+                    Some((i, _)) => i,
+                    None => 0,
+                };
+                beg_byte + char_count
             } else {
+                // search from the end
                 end_byte - string.char_indices().rev().nth(end_char - pos).unwrap().0
             }
         }
@@ -255,7 +265,7 @@ mod test {
         assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
-        buffer.move_gap(0);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "xhello buffer");
     }
 
@@ -265,7 +275,7 @@ mod test {
         let new_string = "hi ";
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
-        buffer.move_gap(0);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "hi world");
     }
 
@@ -278,7 +288,8 @@ mod test {
         buffer.delete_backwards(4);
         assert_eq!(buffer.gap_start, hello.len() - 4);
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
-        buffer.move_gap(0);
+        buffer.move_gap(1);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "heworld");
     }
 
@@ -291,7 +302,7 @@ mod test {
         buffer.delete_forwards(4);
         assert_eq!(buffer.gap_start, hello.len());
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
-        buffer.move_gap(0);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "hello d");
     }
 
@@ -302,8 +313,10 @@ mod test {
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
         buffer.delete_region(2, 4);
+        buffer.move_gap(1);
+        assert_eq!(buffer.as_str(), "hlo world");
         buffer.delete_region(5, 7);
-        buffer.move_gap(0);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "hlo rld");
     }
 
@@ -319,7 +332,7 @@ mod test {
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
-        buffer.move_gap(0);
+        buffer.move_gap(1);
         assert_eq!(buffer.as_str(), "hello world");
     }
 
