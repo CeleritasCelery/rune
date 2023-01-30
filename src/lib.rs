@@ -8,7 +8,7 @@ use bytecount::num_chars;
 #[derive(Debug)]
 pub(crate) struct Buffer {
     /// The buffer data
-    storage: Box<[u8]>,
+    data: Box<[u8]>,
     /// start of the gap. From a elisp perspective, both gap_start and gap_end
     /// are the same point. But gap_start is never a valid byte index, and
     /// gap_end is always used instead.
@@ -35,7 +35,7 @@ impl Buffer {
             storage.into_boxed_slice()
         };
         Self {
-            storage,
+            data: storage,
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
@@ -46,23 +46,23 @@ impl Buffer {
     fn grow(&mut self, slice: &str) {
         let new_capacity = {
             let pre_gap = self.gap_start;
-            let post_gap = self.storage.len() - self.gap_end;
+            let post_gap = self.data.len() - self.gap_end;
             pre_gap + slice.len() + Self::GAP_SIZE + post_gap
         };
         let new_storage = {
             let mut buffer = Vec::with_capacity(new_capacity);
             // pre-gap
-            buffer.extend_from_slice(&self.storage[..self.gap_start]);
+            buffer.extend_from_slice(&self.data[..self.gap_start]);
             // new text
             buffer.extend_from_slice(slice.as_bytes());
             // gap
             buffer.resize(buffer.len() + Self::GAP_SIZE, 0);
             // post-gap
-            buffer.extend_from_slice(&self.storage[self.gap_end..]);
+            buffer.extend_from_slice(&self.data[self.gap_end..]);
             buffer.into_boxed_slice()
         };
         assert_eq!(new_storage.len(), new_capacity);
-        self.storage = new_storage;
+        self.data = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
         self.gap_chars += num_chars(slice.as_bytes());
@@ -77,7 +77,7 @@ impl Buffer {
         if (self.gap_end - self.gap_start) < slice.len() {
             self.grow(slice);
         } else {
-            let new_slice = &mut self.storage[self.gap_start..(self.gap_start + slice.len())];
+            let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
             self.gap_chars += num_chars(slice.as_bytes());
@@ -100,7 +100,7 @@ impl Buffer {
 
     fn delete_byte_region(&mut self, beg: usize, end: usize) {
         assert!(beg <= end, "beg ({beg}) is greater then end ({end})");
-        assert!(end <= self.storage.len(), "end out of bounds");
+        assert!(end <= self.data.len(), "end out of bounds");
         self.assert_char_boundary(beg);
         self.assert_char_boundary(end);
         if end < self.gap_start {
@@ -115,8 +115,8 @@ impl Buffer {
             //             ^
             //             gap_start
             let size = end - beg;
-            self.gap_chars -= num_chars(&self.storage[beg..end]);
-            self.storage[..self.gap_start].copy_within(end.., beg);
+            self.gap_chars -= num_chars(&self.data[beg..end]);
+            self.data[..self.gap_start].copy_within(end.., beg);
             self.gap_start -= size;
         } else if beg >= self.gap_end {
             // delete after gap
@@ -133,11 +133,11 @@ impl Buffer {
             //        gap_end
             let size = end - beg;
             let beg = beg - self.gap_end;
-            self.storage[self.gap_end..].copy_within(..beg, size);
+            self.data[self.gap_end..].copy_within(..beg, size);
             self.gap_end += size;
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
-            self.gap_chars -= num_chars(&self.storage[beg..self.gap_start]);
+            self.gap_chars -= num_chars(&self.data[beg..self.gap_start]);
             self.gap_start = beg;
             self.gap_end = end;
         } else {
@@ -171,24 +171,21 @@ impl Buffer {
 
     fn move_gap(&mut self, pos: usize) {
         let pos = self.char_to_byte(pos);
-        assert!(
-            pos <= self.storage.len(),
-            "attempt to move gap out of bounds"
-        );
+        assert!(pos <= self.data.len(), "attempt to move gap out of bounds");
         self.assert_char_boundary(pos);
         if pos < self.gap_start {
             // move gap backwards
             let size = self.gap_start - pos;
-            self.gap_chars -= num_chars(&self.storage[pos..self.gap_start]);
+            self.gap_chars -= num_chars(&self.data[pos..self.gap_start]);
 
-            self.storage
+            self.data
                 .copy_within(pos..self.gap_start, self.gap_end - size);
             self.gap_start = pos;
             self.gap_end -= size;
         } else if pos >= self.gap_end {
             // move gap forwards
-            self.gap_chars += num_chars(&self.storage[self.gap_end..pos]);
-            self.storage.copy_within(self.gap_end..pos, self.gap_start);
+            self.gap_chars += num_chars(&self.data[self.gap_end..pos]);
+            self.data.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             self.gap_start += size;
             self.gap_end = pos;
@@ -199,9 +196,9 @@ impl Buffer {
 
     pub(crate) fn as_str(&self) -> &str {
         if self.gap_start == 0 {
-            unsafe { std::str::from_utf8_unchecked(&self.storage[self.gap_end..]) }
-        } else if self.gap_end == self.storage.len() {
-            unsafe { std::str::from_utf8_unchecked(&self.storage[..self.gap_start]) }
+            unsafe { std::str::from_utf8_unchecked(&self.data[self.gap_end..]) }
+        } else if self.gap_end == self.data.len() {
+            unsafe { std::str::from_utf8_unchecked(&self.data[..self.gap_start]) }
         } else {
             panic!("gap not at start or end");
         }
@@ -225,7 +222,7 @@ impl Buffer {
             // char pos is past the last char we have cached. Search for it from the end.
             let (idx, chr) = positions.last().unwrap();
             self.assert_char_boundary(*idx);
-            let string = unsafe { std::str::from_utf8_unchecked(&self.storage[*idx..]) };
+            let string = unsafe { std::str::from_utf8_unchecked(&self.data[*idx..]) };
             let count = pos - chr;
             return Self::nth_char(string, count) + idx;
         };
@@ -238,8 +235,7 @@ impl Buffer {
             // the slice is ascii text, so we can just index into it
             beg_byte + (pos - beg_char)
         } else {
-            let string =
-                unsafe { std::str::from_utf8_unchecked(&self.storage[*beg_byte..*end_byte]) };
+            let string = unsafe { std::str::from_utf8_unchecked(&self.data[*beg_byte..*end_byte]) };
             let byte_idx = if pos - beg_char <= num_chars / 2 {
                 Self::nth_char(string, pos - beg_char)
             } else {
@@ -250,9 +246,9 @@ impl Buffer {
     }
 
     fn assert_char_boundary(&self, pos: usize) {
-        let is_boundary = match self.storage.get(pos) {
+        let is_boundary = match self.data.get(pos) {
             Some(byte) => Self::is_char_boundary(*byte),
-            None => pos == self.storage.len(),
+            None => pos == self.data.len(),
         };
         assert!(is_boundary, "position {pos} not on utf8 boundary");
     }
@@ -316,7 +312,7 @@ mod test {
     fn create() {
         let string = "hello buffer";
         let buffer = Buffer::new(string);
-        assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
+        assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 0);
     }
@@ -326,7 +322,7 @@ mod test {
         let string = "hello buffer";
         let mut buffer = Buffer::new(string);
         buffer.insert_char('x');
-        assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
+        assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
         buffer.move_gap_out_of(..);
@@ -397,7 +393,7 @@ mod test {
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
         assert_eq!(
-            buffer.storage.len(),
+            buffer.data.len(),
             hello.len() + world.len() + Buffer::GAP_SIZE
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
