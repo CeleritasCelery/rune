@@ -10,17 +10,17 @@ use bytecount::num_chars;
 pub(crate) struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
-    /// start of the gap. From a elisp perspective, both gap_start and gap_end
-    /// are the same point. But gap_start is never a valid byte index, and
-    /// gap_end is always used instead.
+    /// start of the gap. Both gap_start and gap_end are the same point, but
+    /// gap_start is never a valid byte index, and gap_end is always used
+    /// instead.
     gap_start: usize,
-    /// The end of the gap. This also represents the point.
+    /// The end of the gap in bytes
     gap_end: usize,
     /// The number of characters until the gap
     gap_chars: usize,
-    /// The current point. The first field is the byte index, the second is the
+    /// The current cursor. The first field is the byte index, the second is the
     /// character count.
-    point: (usize, usize),
+    cursor: (usize, usize),
 }
 
 impl Buffer {
@@ -40,7 +40,7 @@ impl Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            point: (0, 0),
+            cursor: (0, 0),
         }
     }
 
@@ -208,10 +208,10 @@ impl Buffer {
     fn char_to_byte(&self, pos: usize) -> usize {
         // (byte position, char positions) pairs sorted in ascending order
         #[rustfmt::skip]
-        let positions = if self.point.1 <= self.gap_chars {
-            [(0, 0), self.point, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
+        let positions = if self.cursor.1 <= self.gap_chars {
+            [(0, 0), self.cursor, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
         } else {
-            [(0, 0), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.point]
+            [(0, 0), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.cursor]
         };
 
         // find which positions window the char position falls into
@@ -409,7 +409,7 @@ mod test {
     }
 
     #[test]
-    fn point() {
+    fn cursor() {
         let string = "world";
         let new_string = "hi ";
         let mut buffer = Buffer::new(string);
