@@ -45,6 +45,7 @@
     clippy::match_bool,
     clippy::string_slice,
     clippy::separated_literal_suffix,
+    clippy::non_ascii_literal,
     clippy::unreachable,
     clippy::panic_in_result_fn,
     clippy::integer_arithmetic,
