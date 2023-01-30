@@ -17,10 +17,10 @@ pub(crate) struct Buffer {
     gap_start: usize,
     /// The end of the gap. This also represents the point.
     gap_end: usize,
-    /// The number of characters until the gap. Starts at one.
+    /// The number of characters until the gap
     gap_chars: usize,
     /// The current point. The first field is the byte index, the second is the
-    /// character count, starting at one.
+    /// character count.
     point: (usize, usize),
 }
 
@@ -40,8 +40,8 @@ impl Buffer {
             storage,
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
-            gap_chars: 1,
-            point: (0, 1),
+            gap_chars: 0,
+            point: (0, 0),
         }
     }
 
@@ -159,7 +159,7 @@ impl Buffer {
         let start = match range.start_bound() {
             Bound::Included(x) => *x,
             Bound::Excluded(_) => unreachable!(),
-            Bound::Unbounded => 1,
+            Bound::Unbounded => 0,
         };
 
         let _end = match range.end_bound() {
@@ -213,9 +213,9 @@ impl Buffer {
         // (byte position, char positions) pairs sorted in ascending order
         #[rustfmt::skip]
         let positions = if self.point.1 <= self.gap_chars {
-            [(0, 1), self.point, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
+            [(0, 0), self.point, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
         } else {
-            [(0, 1), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.point]
+            [(0, 0), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.point]
         };
 
         // find which positions window the char position falls into
@@ -276,7 +276,7 @@ impl Buffer {
         }
         assert!(
             count == n,
-            "n is greater than the number of characters in the string"
+            "n {n} is greater than the number of characters in the string"
         );
         byte_idx
     }
@@ -344,7 +344,7 @@ mod test {
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hi world");
         buffer.insert_string("starting Θ text ");
-        buffer.move_gap(20);
+        buffer.move_gap(19);
         buffer.insert_string("x");
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "starting Θ text hi xworld");
@@ -361,7 +361,7 @@ mod test {
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         buffer.move_gap_out_of(..);
         buffer.move_gap_out_of(..);
-        buffer.move_gap(8);
+        buffer.move_gap(7);
         assert_eq!(buffer.as_str(), "heworld");
     }
 
@@ -384,10 +384,10 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
-        buffer.delete_region(2, 4);
+        buffer.delete_region(1, 3);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hlo world");
-        buffer.delete_region(5, 7);
+        buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hlo rld");
     }
@@ -414,6 +414,6 @@ mod test {
         let new_string = "hi ";
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
-        assert_eq!(buffer.gap_chars, new_string.len() + 1);
+        assert_eq!(buffer.gap_chars, new_string.len());
     }
 }
