@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+use std::ops::{Bound, RangeBounds};
+
 use bstr::ByteSlice;
 
 use bytecount::num_chars;
@@ -149,6 +151,26 @@ impl Buffer {
         }
     }
 
+    fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
+        if !range.contains(&self.gap_chars) {
+            return;
+        }
+
+        let start = match range.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(_) => unreachable!(),
+            Bound::Unbounded => 1,
+        };
+
+        let _end = match range.end_bound() {
+            Bound::Included(_) => panic!("inclusive end bound not supported"),
+            Bound::Excluded(x) => Some(*x),
+            Bound::Unbounded => None,
+        };
+
+        self.move_gap(start);
+    }
+
     fn move_gap(&mut self, pos: usize) {
         let pos = self.char_to_byte(pos);
         assert!(
@@ -252,6 +274,10 @@ impl Buffer {
             }
             byte_idx += 1;
         }
+        assert!(
+            count == n,
+            "n is greater than the number of characters in the string"
+        );
         byte_idx
     }
 
@@ -270,6 +296,10 @@ impl Buffer {
             }
             byte_idx -= 1;
         }
+        assert!(
+            count == n,
+            "n is greater than the number of characters in the string"
+        );
         byte_idx
     }
 
@@ -301,7 +331,7 @@ mod test {
         assert_eq!(buffer.storage.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "xhello buffer");
     }
 
@@ -311,13 +341,13 @@ mod test {
         let new_string = "hi ";
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hi world");
         buffer.insert_string("starting Θ text ");
-        buffer.move_gap(14);
+        buffer.move_gap(20);
         buffer.insert_string("x");
-        buffer.move_gap(1);
-        assert_eq!(buffer.as_str(), "starting Θ texxt hi world");
+        buffer.move_gap_out_of(..);
+        assert_eq!(buffer.as_str(), "starting Θ text hi xworld");
     }
 
     #[test]
@@ -329,8 +359,8 @@ mod test {
         buffer.delete_backwards(4);
         assert_eq!(buffer.gap_start, hello.len() - 4);
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
-        buffer.move_gap(1);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
+        buffer.move_gap_out_of(..);
         buffer.move_gap(8);
         assert_eq!(buffer.as_str(), "heworld");
     }
@@ -344,7 +374,7 @@ mod test {
         buffer.delete_forwards(4);
         assert_eq!(buffer.gap_start, hello.len());
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hello d");
     }
 
@@ -355,10 +385,10 @@ mod test {
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
         buffer.delete_region(2, 4);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hlo world");
         buffer.delete_region(5, 7);
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hlo rld");
     }
 
@@ -374,7 +404,7 @@ mod test {
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
-        buffer.move_gap(1);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hello world");
     }
 
