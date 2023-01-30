@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![warn(clippy::all, clippy::pedantic)]
 use std::ops::{Bound, RangeBounds};
 
 use bytecount::num_chars;
@@ -196,9 +197,9 @@ impl Buffer {
 
     pub(crate) fn as_str(&self) -> &str {
         if self.gap_start == 0 {
-            unsafe { std::str::from_utf8_unchecked(&self.data[self.gap_end..]) }
+            self.to_str(self.gap_end..)
         } else if self.gap_end == self.data.len() {
-            unsafe { std::str::from_utf8_unchecked(&self.data[..self.gap_start]) }
+            self.to_str(..self.gap_start)
         } else {
             panic!("gap not at start or end");
         }
@@ -222,7 +223,7 @@ impl Buffer {
             // char pos is past the last char we have cached. Search for it from the end.
             let (idx, chr) = positions.last().unwrap();
             self.assert_char_boundary(*idx);
-            let string = unsafe { std::str::from_utf8_unchecked(&self.data[*idx..]) };
+            let string = self.to_str(*idx..);
             let count = pos - chr;
             return Self::nth_char(string, count) + idx;
         };
@@ -235,7 +236,7 @@ impl Buffer {
             // the slice is ascii text, so we can just index into it
             beg_byte + (pos - beg_char)
         } else {
-            let string = unsafe { std::str::from_utf8_unchecked(&self.data[*beg_byte..*end_byte]) };
+            let string = self.to_str(*beg_byte..*end_byte);
             let byte_idx = if pos - beg_char <= num_chars / 2 {
                 Self::nth_char(string, pos - beg_char)
             } else {
@@ -243,6 +244,11 @@ impl Buffer {
             };
             beg_byte + byte_idx
         }
+    }
+
+    fn to_str(&self, range: impl std::slice::SliceIndex<[u8], Output = [u8]>) -> &str {
+        // TODO: remove this check once we are confident the code is correct
+        std::str::from_utf8(&self.data[range]).unwrap()
     }
 
     fn assert_char_boundary(&self, pos: usize) {
@@ -297,7 +303,7 @@ impl Buffer {
         byte_idx
     }
 
-    #[inline(always)]
+    #[allow(clippy::cast_possible_wrap)]
     const fn is_char_boundary(byte: u8) -> bool {
         // This is bit magic equivalent to: b < 128 || b >= 192
         (byte as i8) >= -0x40
