@@ -164,7 +164,9 @@ impl Buffer {
     }
 
     fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
-        if !range.contains(&self.gap_chars) {
+        if !range.contains(&self.gap_chars)
+            || range.start_bound() == Bound::Included(&self.gap_chars)
+        {
             return;
         }
 
@@ -174,13 +176,17 @@ impl Buffer {
             Bound::Unbounded => 0,
         };
 
-        let _end = match range.end_bound() {
+        let end = match range.end_bound() {
             Bound::Included(_) => panic!("inclusive end bound not supported"),
-            Bound::Excluded(x) => Some(*x),
-            Bound::Unbounded => None,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => self.total_chars,
         };
 
-        self.move_gap(start);
+        if self.gap_chars - start < end - self.gap_chars {
+            self.move_gap(start);
+        } else {
+            self.move_gap(end);
+        }
     }
 
     fn move_gap(&mut self, pos: usize) {
