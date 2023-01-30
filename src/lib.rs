@@ -7,7 +7,7 @@ use bytecount::num_chars;
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
 #[derive(Debug)]
-pub(crate) struct Buffer {
+pub struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
     /// start of the gap. Both gap_start and gap_end are the same point, but
@@ -21,6 +21,7 @@ pub(crate) struct Buffer {
     /// The current cursor. The first field is the byte index, the second is the
     /// character count.
     cursor: (usize, usize),
+    total_chars: usize,
 }
 
 impl Buffer {
@@ -41,6 +42,7 @@ impl Buffer {
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
             cursor: (0, 0),
+            total_chars: num_chars(data.as_bytes()),
         }
     }
 
@@ -66,7 +68,9 @@ impl Buffer {
         self.data = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
-        self.gap_chars += num_chars(slice.as_bytes());
+        let num_chars = num_chars(slice.as_bytes());
+        self.gap_chars += num_chars;
+        self.total_chars += num_chars;
     }
 
     pub(crate) fn insert_char(&mut self, chr: char) {
@@ -81,7 +85,9 @@ impl Buffer {
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
-            self.gap_chars += num_chars(slice.as_bytes());
+            let num_chars = num_chars(slice.as_bytes());
+            self.gap_chars += num_chars;
+            self.total_chars += num_chars;
         }
     }
 
@@ -100,6 +106,7 @@ impl Buffer {
     }
 
     fn delete_byte_region(&mut self, beg: usize, end: usize) {
+        // TODO: optimize this so that we count the chars deleted when calculating position
         assert!(beg <= end, "beg ({beg}) is greater then end ({end})");
         assert!(end <= self.data.len(), "end out of bounds");
         self.assert_char_boundary(beg);
@@ -116,7 +123,9 @@ impl Buffer {
             //             ^
             //             gap_start
             let size = end - beg;
-            self.gap_chars -= num_chars(&self.data[beg..end]);
+            let num_chars = num_chars(&self.data[beg..end]);
+            self.gap_chars -= num_chars;
+            self.total_chars -= num_chars;
             self.data[..self.gap_start].copy_within(end.., beg);
             self.gap_start -= size;
         } else if beg >= self.gap_end {
@@ -133,12 +142,16 @@ impl Buffer {
             //        ^
             //        gap_end
             let size = end - beg;
-            let beg = beg - self.gap_end;
-            self.data[self.gap_end..].copy_within(..beg, size);
+            let num_chars = num_chars(&self.data[beg..end]);
+            self.total_chars -= num_chars;
+            self.data[self.gap_end..].copy_within(..beg - self.gap_end, size);
             self.gap_end += size;
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
-            self.gap_chars -= num_chars(&self.data[beg..self.gap_start]);
+            let chars_before = num_chars(&self.data[beg..self.gap_start]);
+            let chars_after = num_chars(&self.data[self.gap_end..end]);
+            self.gap_chars -= chars_before;
+            self.total_chars -= chars_before + chars_after;
             self.gap_start = beg;
             self.gap_end = end;
         } else {
@@ -191,7 +204,10 @@ impl Buffer {
             self.gap_start += size;
             self.gap_end = pos;
         } else {
-            panic!("move gap position inside gap");
+            panic!(
+                "move gap position byte: ({pos}) inside gap (({}-{}))",
+                self.gap_start, self.gap_end
+            );
         }
     }
 
@@ -201,17 +217,30 @@ impl Buffer {
         } else if self.gap_end == self.data.len() {
             self.to_str(..self.gap_start)
         } else {
-            panic!("gap not at start or end");
+            panic!(
+                "gap ({}-{}) not at start or end",
+                self.gap_start, self.gap_end
+            );
         }
     }
 
     fn char_to_byte(&self, pos: usize) -> usize {
+        if pos == 0 {
+            return if self.gap_start == 0 { self.gap_end } else { 0 };
+        }
+        if pos == self.total_chars {
+            return self.data.len();
+        }
         // (byte position, char positions) pairs sorted in ascending order
-        #[rustfmt::skip]
-        let positions = if self.cursor.1 <= self.gap_chars {
-            [(0, 0), self.cursor, (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars)]
-        } else {
-            [(0, 0), (self.gap_start, self.gap_chars), (self.gap_end, self.gap_chars), self.cursor]
+        let positions = {
+            let start = (self.gap_start, self.gap_chars);
+            let end = (self.gap_end, self.gap_chars);
+            let total = (self.data.len(), self.total_chars);
+            if self.cursor.1 <= self.gap_chars {
+                [(0, 0), self.cursor, start, end, total]
+            } else {
+                [(0, 0), start, end, self.cursor, total]
+            }
         };
 
         // find which positions window the char position falls into
@@ -220,12 +249,7 @@ impl Buffer {
             .find(|slice| slice[0].1 <= pos && pos < slice[1].1);
 
         let Some([(beg_byte, beg_char), (end_byte, end_char)]) = window else {
-            // char pos is past the last char we have cached. Search for it from the end.
-            let (idx, chr) = positions.last().unwrap();
-            self.assert_char_boundary(*idx);
-            let string = self.to_str(*idx..);
-            let count = pos - chr;
-            return Self::nth_char(string, count) + idx;
+            unreachable!("char position ({pos}) did not fall into any window");
         };
 
         self.assert_char_boundary(*beg_byte);
@@ -256,7 +280,7 @@ impl Buffer {
             Some(byte) => Self::is_char_boundary(*byte),
             None => pos == self.data.len(),
         };
-        assert!(is_boundary, "position {pos} not on utf8 boundary");
+        assert!(is_boundary, "position ({pos}) not on utf8 boundary");
     }
 
     // Return the byte index of the nth character. Can potentially be one past
