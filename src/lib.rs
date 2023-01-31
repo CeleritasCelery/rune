@@ -300,11 +300,7 @@ impl Buffer {
             beg_byte + (pos - beg_char)
         } else {
             let string = self.to_str(*beg_byte..*end_byte);
-            let byte_idx = if pos - beg_char <= num_chars / 2 {
-                Self::nth_char(string, pos - beg_char)
-            } else {
-                Self::nth_char_from_end(string, end_char - pos)
-            };
+            let byte_idx = str_indices::chars::to_byte_idx(string, end_char - pos);
             beg_byte + byte_idx
         }
     }
@@ -320,50 +316,6 @@ impl Buffer {
             None => pos == self.data.len(),
         };
         assert!(is_boundary, "position ({pos}) not on utf8 boundary");
-    }
-
-    // Return the byte index of the nth character. Can potentially be one past
-    // the end of the string. Note that this will not error if n is greater than
-    // the number of characters in the string, instead just returning the string length.
-    fn nth_char(string: &str, n: usize) -> usize {
-        let mut count = 0;
-        let mut byte_idx = 0;
-        for byte in string.as_bytes() {
-            if Self::is_char_boundary(*byte) {
-                if count == n {
-                    break;
-                }
-                count += 1;
-            }
-            byte_idx += 1;
-        }
-        assert!(
-            count == n,
-            "n {n} is greater than the number of characters in the string"
-        );
-        byte_idx
-    }
-
-    fn nth_char_from_end(string: &str, n: usize) -> usize {
-        let mut count = 0;
-        let mut byte_idx = string.len();
-        if n == 0 {
-            return byte_idx;
-        }
-        for byte in string.as_bytes().iter().rev() {
-            if Self::is_char_boundary(*byte) {
-                if count == n {
-                    break;
-                }
-                count += 1;
-            }
-            byte_idx -= 1;
-        }
-        assert!(
-            count == n,
-            "n is greater than the number of characters in the string"
-        );
-        byte_idx
     }
 
     #[allow(clippy::cast_possible_wrap)]

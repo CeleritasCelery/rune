@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 bytecount = "0.6.3"
+str_indices = "0.4.1"
