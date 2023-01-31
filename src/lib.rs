@@ -79,7 +79,13 @@ impl Buffer {
     }
 
     pub(crate) fn insert_string(&mut self, slice: &str) {
+        // if gap is not at cursor, move it there
+        if self.gap_chars != self.cursor.1 {
+            // TODO: we don't need to recalculate the position
+            self.move_gap(self.cursor.1);
+        }
         if (self.gap_end - self.gap_start) < slice.len() {
+            // TODO: grow the gap and move the cursor in one go
             self.grow(slice);
         } else {
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
@@ -215,6 +221,11 @@ impl Buffer {
                 self.gap_start, self.gap_end
             );
         }
+    }
+
+    fn move_cursor(&mut self, pos: usize) {
+        let byte_pos = self.char_to_byte(pos);
+        self.cursor = (byte_pos, pos);
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -374,7 +385,7 @@ mod test {
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hi world");
         buffer.insert_string("starting Θ text ");
-        buffer.move_gap(19);
+        buffer.move_cursor(19);
         buffer.insert_string("x");
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "starting Θ text hi xworld");
@@ -392,6 +403,7 @@ mod test {
         buffer.move_gap_out_of(..);
         buffer.move_gap_out_of(..);
         buffer.move_gap(7);
+        buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "heworld");
     }
 
