@@ -20,8 +20,14 @@ pub struct Buffer {
     gap_chars: usize,
     /// The current cursor. The first field is the byte index, the second is the
     /// character count.
-    cursor: (usize, usize),
+    cursor: Point,
     total_chars: usize,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+struct Point {
+    byte: usize,
+    char: usize,
 }
 
 impl Buffer {
@@ -41,7 +47,7 @@ impl Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            cursor: (0, 0),
+            cursor: Point::default(),
             total_chars: num_chars(data.as_bytes()),
         }
     }
@@ -80,9 +86,9 @@ impl Buffer {
 
     pub(crate) fn insert_string(&mut self, slice: &str) {
         // if gap is not at cursor, move it there
-        if self.gap_chars != self.cursor.1 {
+        if self.gap_chars != self.cursor.char {
             // TODO: we don't need to recalculate the position
-            self.move_gap(self.cursor.1);
+            self.move_gap(self.cursor.char);
         }
         if (self.gap_end - self.gap_start) < slice.len() {
             // TODO: grow the gap and move the cursor in one go
@@ -225,7 +231,22 @@ impl Buffer {
 
     fn move_cursor(&mut self, pos: usize) {
         let byte_pos = self.char_to_byte(pos);
-        self.cursor = (byte_pos, pos);
+        self.cursor = Point {
+            byte: byte_pos,
+            char: pos,
+        };
+    }
+
+    fn update_point_delete(point: &mut Point, beg: &Point, end: &Point) {
+        if end.char < point.char {
+            // move point back by the number of chars deleted
+            point.char -= end.char - beg.char;
+            point.byte -= end.byte - beg.byte;
+        } else if beg.char < point.char {
+            *point = *beg;
+        }
+        // If we didn't hit either case, then the point is before the deleted
+        // region
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -253,10 +274,11 @@ impl Buffer {
             let start = (self.gap_start, self.gap_chars);
             let end = (self.gap_end, self.gap_chars);
             let total = (self.data.len(), self.total_chars);
-            if self.cursor.1 <= self.gap_chars {
-                [(0, 0), self.cursor, start, end, total]
+            let cursor = (self.cursor.byte, self.cursor.char);
+            if self.cursor.char <= self.gap_chars {
+                [(0, 0), cursor, start, end, total]
             } else {
-                [(0, 0), start, end, self.cursor, total]
+                [(0, 0), start, end, cursor, total]
             }
         };
 
