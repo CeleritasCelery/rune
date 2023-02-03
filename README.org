@@ -1,29 +1,37 @@
 * Rune
 *R* ust *UN* der *E* macs
 
-This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using Rust as an host language. See the [[file:design.org][design doc]] for more details.
+This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using Rust as a host language. See the [[file:design.org][design doc]] for more details.
 ** Status
-The current goal of this project is to eventually bootstrap all elisp builtin elisp files. This includes things like buffers, regex, file io, etc. The project currently features a elisp interpreter and bytecode VM to enable bootstrap.
+The current goal of this project is to create an editor MVP. We have a basic elisp runtime, and we are working on adding basic editing functionality in a minimal GUI. This will include:
 
-Development on this project is driven by trying to add new elisp files and seeing where things break. Most of the time, it is just missing builtin functions, but occasionally new functionality needs to be added.
+- buffer
+- text insertion/deletion
+- cursor
+- line wrapping
+- scrolling
+- file IO
+- display tables
+
+If you want to contribute or have ideas for things to add, please open an [[https://github.com/CeleritasCelery/rune/issues/new][issue]].
 
 ** Running
 The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl. Running with both arguments (~cargo run -- --load --repl~) will load the elisp and then open the repl. Running with no arguments is equivalent to ~cargo run -- --load~.
 
 ** Exploring this repo
 This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
-- [[file:src/core/object/][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types are also found here.
+- [[file:src/core/object/][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types is also found here.
 - [[file:src/reader.rs][reader]] :: The emacs lisp reader that translates a string to a cons cell. Due to the simple nature of lisp syntax, the reader is hand rolled and does not rely on any parsing libraries.
-- [[file:src/core/env.rs][env]] :: The global obarray. Currently function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them.
-- [[file:src/core/gc.rs][gc]] :: Contains the allocator and garbage collector. All code for rooting and managing objects live here as well.
+- [[file:src/core/env.rs][env]] :: The global obarray. Currently, function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them.
+- [[file:src/core/gc.rs][gc]] :: Contains the allocator and garbage collector. All code for rooting and managing objects lives here as well.
 - [[src/bytecode.rs][bytecode]] :: The bytecode VM. This uses the same opcodes as Emacs and uses the bytecomp.el to compile.
 - [[file:src/interpreter.rs][interpreter]] :: The basic elisp interpreter. This is used only to bootstrap the elisp byte-compiler.
 - [[file:src/fns.rs][fns]], [[file:src/data.rs][data]], [[file:src/alloc.rs][alloc]] :: These modules contain definitions of builtin in functions. Some of these are just stubbed out until the functionality is actually needed.
 
 ** Contributing
-This project is moved forward by trying to load new elisp files and seeing what breaks. The best way to do  that is with ~cargo run~, which will load the currently bootstrapped files. The bootstrapped files are located in [[file:src/main.rs][main.rs]] as part of the ~load~ function.
+This project is moved forward by trying to load new elisp files and seeing what breaks. The best way to do that is with ~cargo run~, which will load the currently bootstrapped files. The bootstrapped files are located in [[file:src/main.rs][main.rs]] as part of the ~load~ function.
 
-Usually what is needed is to implement more primitive functions. This is done with the [[file:fn_macros/lib.rs][defun]] macro. For example if we wanted to implement the  ~substring~ function, we would first look at the lisp signature.
+Usually what is needed is to implement more primitive functions. This is done with the [[file:fn_macros/lib.rs][defun]] macro. For example, if we wanted to implement the  ~substring~ function, we would first look at the lisp signature.
 
 #+begin_src lisp
 (substring STRING &optional FROM TO)
@@ -35,13 +43,14 @@ Then we would translate the types to their rust equivalent. If the correct type 
   fn substring(string: &str, from: Option<i64>, to: Option<i64>) -> String {...}
 #+end_src
 
-If you run with ~cargo run -- --load --repo~ that will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. Files that are not bootstrapped  are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
+If you run with ~cargo run -- --load --repo~ that will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. Files that are not bootstrapped are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
 
 ** Blog posts
 - [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in rust. It serves as in intro to this project.
-- [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]]  :: An overview of the garbage collector used in this project and how Rust enables safe GC abstractions.
-- [[https://coredumped.dev/2022/05/19/a-vision-of-a-multi-threaded-emacs/][A vision of a multi-threaded Emacs]] :: Some ideas about how to add multi-threading to the existing language.
+- [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]] :: An overview of the garbage collector used in this project and how Rust enables safe GC abstractions.
+- [[https://coredumped.dev/2022/05/19/a-vision-of-a-multi-threaded-emacs/][A vision of a multi-threaded Emacs ]]:: Some ideas about how to add multi-threading to the existing language.
 ** Further exploration
-- [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained, but is a big inspiration for rune.
+- [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained but is a big inspiration for Rune.
 - [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more mature ecosystem (which is part of the promise of rust).
-- [[http://craftinginterpreters.com/][crafting interpreters]] :: This was a big inspiration for this project, and it probably one of the best introductions to programming language implementations.
+- [[https://github.com/helix-editor/helix][helix]] :: A fast modern text editor written in Rust.
+- [[http://craftinginterpreters.com/][crafting interpreters]] :: This was a big inspiration for this project, and it's probably one of the best introductions to programming language implementations.
