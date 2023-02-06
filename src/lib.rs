@@ -2,6 +2,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 use std::ops::{Bound, RangeBounds};
 
+use str_indices::chars;
 use bytecount::num_chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
@@ -48,7 +49,7 @@ impl Buffer {
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
             cursor: Point::default(),
-            total_chars: num_chars(data.as_bytes()),
+            total_chars: chars::count(data),
         }
     }
 
@@ -74,7 +75,7 @@ impl Buffer {
         self.data = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
-        let num_chars = num_chars(slice.as_bytes());
+        let num_chars = chars::count(slice);
         self.gap_chars += num_chars;
         self.total_chars += num_chars;
     }
@@ -97,7 +98,7 @@ impl Buffer {
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
-            let num_chars = num_chars(slice.as_bytes());
+            let num_chars = chars::count(slice);
             self.gap_chars += num_chars;
             self.total_chars += num_chars;
         }
@@ -300,7 +301,7 @@ impl Buffer {
             beg_byte + (pos - beg_char)
         } else {
             let string = self.to_str(*beg_byte..*end_byte);
-            let byte_idx = str_indices::chars::to_byte_idx(string, end_char - pos);
+            let byte_idx = chars::to_byte_idx(string, end_char - pos);
             beg_byte + byte_idx
         }
     }
