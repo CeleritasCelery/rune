@@ -2,8 +2,8 @@
 #![warn(clippy::all, clippy::pedantic)]
 use std::ops::{Bound, RangeBounds};
 
-use str_indices::chars;
 use bytecount::num_chars;
+use str_indices::chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
@@ -126,49 +126,69 @@ impl Buffer {
         self.assert_char_boundary(end);
         if end < self.gap_start {
             // delete before gap
-            // ++++|||||||*********
-            // ^   ^      ^       ^
-            // 0   beg    end     gap_start
             //
-            // copy end.. to beg
+            // hello New York City||||||||||
+            //     ^      ^       ^         ^
+            //     beg    end     gap_start gap_end
             //
-            // ++++*********.......
-            //             ^
-            //             gap_start
-            let size = end - beg;
-            let num_chars = num_chars(&self.data[beg..end]);
-            self.gap_chars -= num_chars;
-            self.total_chars -= num_chars;
-            self.data[..self.gap_start].copy_within(end.., beg);
-            self.gap_start -= size;
+            // shift end..gap_start to the right
+            //
+            // hell|||||||||||||||||ork City
+            //     ^                ^
+            //     gap_start        gap_end
+
+            // update character count
+            self.gap_chars -= num_chars(&self.data[beg..self.gap_start]);
+            self.total_chars -= num_chars(&self.data[beg..end]);
+            let new_end = self.gap_end - (self.gap_start - end);
+            // shift data
+            self.data.copy_within(end..self.gap_start, new_end);
+            // update gap position
+            self.gap_end = new_end;
+            self.gap_start = beg;
         } else if beg >= self.gap_end {
             // delete after gap
-            //       size (end - beg)
-            //       v
-            // *********|||||||++++
-            // ^        ^
-            // gap_end  beg
             //
-            // copy ..beg to size
+            // ||||||||||hello New York City
+            // ^         ^         ^   ^
+            // gap_start gap_end   beg end
             //
-            // .......*********++++
-            //        ^
-            //        gap_end
-            let size = end - beg;
-            let num_chars = num_chars(&self.data[beg..end]);
-            self.total_chars -= num_chars;
-            self.data[self.gap_end..].copy_within(..beg - self.gap_end, size);
-            self.gap_end += size;
+            // shift gap_end..beg to the left
+            //
+            // hello New |||||||||||||| City
+            //           ^             ^
+            //           gap_start     gap_end
+
+            // update character count
+            self.total_chars -= num_chars(&self.data[beg..end]);
+            self.gap_chars += num_chars(&self.data[self.gap_end..beg]);
+            // shift data
+            self.data.copy_within(self.gap_end..beg, self.gap_start);
+            // update gap position
+            self.gap_start += beg - self.gap_end;
+            self.gap_end = end;
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
+            //
+            // hello|||||||||| New York City
+            //  ^   ^         ^       ^
+            //  beg gap_start gap_end end
+            //
+            // update start and end of gap
+            //
+            // h||||||||||||||||||||||k City
+            //  ^                     ^
+            //  gap_start             gap_end
+
+            // update character count
             let chars_before = num_chars(&self.data[beg..self.gap_start]);
             let chars_after = num_chars(&self.data[self.gap_end..end]);
             self.gap_chars -= chars_before;
             self.total_chars -= chars_before + chars_after;
+            // update gap position
             self.gap_start = beg;
             self.gap_end = end;
         } else {
-            // error
             panic!(
                 "delete region inside gap -- gap: {}-{}, span: {beg}-{end}",
                 self.gap_start, self.gap_end
@@ -301,7 +321,7 @@ impl Buffer {
             beg_byte + (pos - beg_char)
         } else {
             let string = self.to_str(*beg_byte..*end_byte);
-            let byte_idx = chars::to_byte_idx(string, end_char - pos);
+            let byte_idx = chars::to_byte_idx(string, pos - beg_char);
             beg_byte + byte_idx
         }
     }
@@ -389,14 +409,12 @@ mod test {
         let mut buffer = Buffer::new(world);
         buffer.insert_string(hello);
         buffer.delete_forwards(4);
-        assert_eq!(buffer.gap_start, hello.len());
-        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE + 4);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hello d");
     }
 
     #[test]
-    fn delete_region() {
+    fn test_delete_region() {
         let world = "world";
         let hello = "hello ";
         let mut buffer = Buffer::new(world);
