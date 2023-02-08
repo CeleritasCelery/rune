@@ -150,10 +150,8 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 macro_rules! rooted_iter {
     ($ident:ident, $value:expr, $cx:ident) => {
         // Allocate stack space for potential roots
-        #[allow(unused_assignments)]
-        let mut root_elem = None;
-        #[allow(unused_assignments)]
-        let mut root_cons = None;
+        let mut root_elem;
+        let mut root_cons;
         // Create roots, but don't initialize them
         let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
