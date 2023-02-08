@@ -73,8 +73,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                     }
                 }
 
+                #[automatically_derived]
                 #[allow(non_camel_case_types)]
-                #[doc(hidden)]
                 #vis struct #rooted_name #orig_generics #new_fields
             }
         }

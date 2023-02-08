@@ -41,7 +41,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         };
 
     quote! {
-        #[doc(hidden)]
+        #[automatically_derived]
         #[allow(non_snake_case)]
         fn #func_name<'ob, 'id>(
             args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
@@ -51,7 +51,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             #subr_call
         }
 
-        #[doc(hidden)]
+        #[automatically_derived]
         #[allow(non_upper_case_globals)]
         pub(crate) const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
