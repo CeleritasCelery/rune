@@ -335,6 +335,16 @@ impl Buffer {
         }
     }
 
+    #[allow(clippy::inherent_to_string)]
+    pub(crate) fn to_string(&self) -> String {
+        let front = self.to_str(..self.gap_start);
+        let back = self.to_str(self.gap_end..);
+        let mut string = String::with_capacity(front.len() + back.len());
+        string.push_str(front);
+        string.push_str(back);
+        string
+    }
+
     fn char_to_byte(&self, pos: usize) -> usize {
         if pos == 0 {
             return if self.gap_start == 0 { self.gap_end } else { 0 };
@@ -419,8 +429,7 @@ mod test {
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
-        buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "xhello buffer");
+        assert_eq!(buffer.to_string(), "xhello buffer");
     }
 
     #[test]
@@ -430,14 +439,12 @@ mod test {
         let mut buffer = Buffer::new(string);
         buffer.insert_string(new_string);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hi world");
+        assert_eq!(buffer.to_string(), "hi world");
         buffer.insert_string("starting Θ text ");
-        buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hi starting Θ text world");
+        assert_eq!(buffer.to_string(), "hi starting Θ text world");
         buffer.move_cursor(21);
         buffer.insert_string("x");
-        buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hi starting Θ text woxrld");
+        assert_eq!(buffer.to_string(), "hi starting Θ text woxrld");
     }
 
     #[test]
@@ -453,7 +460,7 @@ mod test {
         buffer.move_gap_out_of(..);
         buffer.move_gap(7);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "heworld");
+        assert_eq!(buffer.to_string(), "heworld");
     }
 
     #[test]
@@ -464,7 +471,7 @@ mod test {
         buffer.insert_string(hello);
         buffer.delete_forwards(4);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hello d");
+        assert_eq!(buffer.to_string(), "hello d");
     }
 
     #[test]
@@ -473,10 +480,10 @@ mod test {
         buffer.insert_string("hello ");
         buffer.delete_region(1, 3);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hlo world");
+        assert_eq!(buffer.to_string(), "hlo world");
         buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hlo rld");
+        assert_eq!(buffer.to_string(), "hlo rld");
     }
 
     #[test]
@@ -491,8 +498,7 @@ mod test {
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
-        buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "hello world");
+        assert_eq!(buffer.to_string(), "hello world");
     }
 
     #[test]
