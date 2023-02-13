@@ -48,7 +48,10 @@ impl Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            cursor: Point::default(),
+            cursor: Point {
+                byte: Self::GAP_SIZE,
+                char: 0,
+            },
             total_chars: chars::count(data),
         }
     }
@@ -75,8 +78,10 @@ impl Buffer {
         self.data = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
+        self.cursor.byte = self.gap_end;
         let num_chars = chars::count(slice);
         self.gap_chars += num_chars;
+        self.cursor.char = self.gap_chars;
         self.total_chars += num_chars;
     }
 
@@ -100,6 +105,7 @@ impl Buffer {
             self.gap_start += slice.len();
             let num_chars = chars::count(slice);
             self.gap_chars += num_chars;
+            self.cursor.char += num_chars;
             self.total_chars += num_chars;
         }
     }
@@ -139,13 +145,23 @@ impl Buffer {
 
             // update character count
             self.gap_chars -= num_chars(&self.data[beg..self.gap_start]);
-            self.total_chars -= num_chars(&self.data[beg..end]);
+            let deleted_chars = num_chars(&self.data[beg..end]);
+            self.total_chars -= deleted_chars;
             let new_end = self.gap_end - (self.gap_start - end);
             // shift data
             self.data.copy_within(end..self.gap_start, new_end);
+            // update cursor
+            if self.cursor.byte < self.gap_start {
+                if self.cursor.byte > end {
+                    self.cursor.byte += self.gap_len();
+                } else if self.cursor.byte >= beg {
+                    self.cursor.byte = new_end;
+                }
+            }
             // update gap position
             self.gap_end = new_end;
             self.gap_start = beg;
+            self.update_cursor_chars(beg, end, deleted_chars);
         } else if beg >= self.gap_end {
             // delete after gap
             //
@@ -160,13 +176,23 @@ impl Buffer {
             //           gap_start     gap_end
 
             // update character count
-            self.total_chars -= num_chars(&self.data[beg..end]);
+            let deleted_chars = num_chars(&self.data[beg..end]);
+            self.total_chars -= deleted_chars;
             self.gap_chars += num_chars(&self.data[self.gap_end..beg]);
             // shift data
             self.data.copy_within(self.gap_end..beg, self.gap_start);
             // update gap position
             self.gap_start += beg - self.gap_end;
+            // update cursor
+            if self.cursor.byte >= self.gap_end {
+                if self.cursor.byte < beg {
+                    self.cursor.byte -= self.gap_len();
+                } else if self.cursor.byte < end {
+                    self.cursor.byte = end;
+                }
+            }
             self.gap_end = end;
+            self.update_cursor_chars(beg, end, deleted_chars);
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
             //
@@ -183,16 +209,30 @@ impl Buffer {
             // update character count
             let chars_before = num_chars(&self.data[beg..self.gap_start]);
             let chars_after = num_chars(&self.data[self.gap_end..end]);
+            let total_chars = chars_before + chars_after;
             self.gap_chars -= chars_before;
-            self.total_chars -= chars_before + chars_after;
+            self.total_chars -= total_chars;
             // update gap position
             self.gap_start = beg;
             self.gap_end = end;
+            self.update_cursor_chars(beg, end, total_chars);
         } else {
             panic!(
                 "delete region inside gap -- gap: {}-{}, span: {beg}-{end}",
                 self.gap_start, self.gap_end
             );
+        }
+
+        // update cursor chars
+    }
+
+    fn update_cursor_chars(&mut self, beg: usize, end: usize, size: usize) {
+        if self.cursor.byte > beg {
+            if self.cursor.byte > end {
+                self.cursor.char -= size;
+            } else {
+                self.cursor.char = self.gap_chars;
+            }
         }
     }
 
@@ -233,6 +273,10 @@ impl Buffer {
 
             self.data
                 .copy_within(pos..self.gap_start, self.gap_end - size);
+            // if gap moves across cursor, update cursor position
+            if self.cursor.byte < self.gap_start && self.cursor.byte >= pos {
+                self.cursor.byte += self.gap_len();
+            }
             self.gap_start = pos;
             self.gap_end -= size;
         } else if pos >= self.gap_end {
@@ -240,11 +284,15 @@ impl Buffer {
             self.gap_chars += num_chars(&self.data[self.gap_end..pos]);
             self.data.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
+            // if gap moves across cursor, update cursor position
+            if self.cursor.byte >= self.gap_end && self.cursor.byte < pos {
+                self.cursor.byte -= self.gap_len();
+            }
             self.gap_start += size;
             self.gap_end = pos;
         } else {
             panic!(
-                "move gap position byte: ({pos}) inside gap (({}-{}))",
+                "move gap position byte: ({pos}) inside gap ({}-{})",
                 self.gap_start, self.gap_end
             );
         }
@@ -256,6 +304,10 @@ impl Buffer {
             byte: byte_pos,
             char: pos,
         };
+    }
+
+    fn gap_len(&self) -> usize {
+        self.gap_end - self.gap_start
     }
 
     fn update_point_delete(point: &mut Point, beg: &Point, end: &Point) {
@@ -380,10 +432,12 @@ mod test {
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hi world");
         buffer.insert_string("starting Θ text ");
-        buffer.move_cursor(19);
+        buffer.move_gap_out_of(..);
+        assert_eq!(buffer.as_str(), "hi starting Θ text world");
+        buffer.move_cursor(21);
         buffer.insert_string("x");
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.as_str(), "starting Θ text hi xworld");
+        assert_eq!(buffer.as_str(), "hi starting Θ text woxrld");
     }
 
     #[test]
@@ -415,10 +469,8 @@ mod test {
 
     #[test]
     fn test_delete_region() {
-        let world = "world";
-        let hello = "hello ";
-        let mut buffer = Buffer::new(world);
-        buffer.insert_string(hello);
+        let mut buffer = Buffer::new("world");
+        buffer.insert_string("hello ");
         buffer.delete_region(1, 3);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.as_str(), "hlo world");
