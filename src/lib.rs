@@ -1,13 +1,15 @@
 #![allow(dead_code)]
 #![warn(clippy::all, clippy::pedantic)]
-use std::ops::{Bound, RangeBounds};
+use std::{
+    fmt::{Debug, Display},
+    ops::{Bound, RangeBounds},
+};
 
 use bytecount::num_chars;
 use str_indices::chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
-#[derive(Debug)]
 pub struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
@@ -23,6 +25,30 @@ pub struct Buffer {
     /// character count.
     cursor: Point,
     total_chars: usize,
+}
+
+impl Display for Buffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_str(..self.gap_start))?;
+        f.write_str(self.to_str(self.gap_end..))
+    }
+}
+
+impl Debug for Buffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let start = self.to_str(..self.gap_start);
+        let end = self.to_str(self.gap_end..);
+        // repeat _ for the gap length
+        let gap = "_".repeat(self.gap_len());
+        f.debug_struct("Buffer")
+            .field("data", &format!("{start}{gap}{end}"))
+            .field("gap_start", &self.gap_start)
+            .field("gap_end", &self.gap_end)
+            .field("gap_chars", &self.gap_chars)
+            .field("cursor", &self.cursor)
+            .field("total_chars", &self.total_chars)
+            .finish()
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -333,16 +359,6 @@ impl Buffer {
                 self.gap_start, self.gap_end
             );
         }
-    }
-
-    #[allow(clippy::inherent_to_string)]
-    pub(crate) fn to_string(&self) -> String {
-        let front = self.to_str(..self.gap_start);
-        let back = self.to_str(self.gap_end..);
-        let mut string = String::with_capacity(front.len() + back.len());
-        string.push_str(front);
-        string.push_str(back);
-        string
     }
 
     fn char_to_byte(&self, pos: usize) -> usize {
