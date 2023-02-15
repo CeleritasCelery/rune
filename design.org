@@ -159,6 +159,20 @@ As with everything, there are [[https://github.com/emacs-ng/emacs-ng/issues/378#
 **** find lines in a gap buffer
 If I say that I want to go to any arbitrary line in a gap buffer, how to do I do that efficiently? In current emacs it has to scan from your cursor to the line you want, which can be very expensive. Ropes handle this really well because they can hold metrics in a binary tree so you can do a binary B-Tree search to go to a line. My idea is to do the same thing but not store text, only store counts. Basicly build a B-Tree of the number of newlines in each chunk of a buffer. I still don't know the size a chunk. The obvious ones are ~u8~ (256) which seems too small and ~u16~ (65536) which seems too big. It all depends on how fast I can scan to the point. I could pick something in the middle if that was good trade off. I want to use the [[https://crates.io/crates/bytecount][bytecount]] crate to do the counting because it blazing fast. Either way I can just search the B-Tree to find chunk that has the line and then scan for the line. The exact same method could be used to store code-points or any of metric I want to track. And the nice thing is since I know the exact size of B-Tree when creating the buffer, I can allocate it without any points and use offsets, to get to the different chunks.
 
+*** indexing
+Currently Emacs uses [[https://en.wikipedia.org/wiki/Code_point][code points]] for indexing into buffers and strings. This works well most of the time allows Emacs to handle many unicode [[https://en.wikipedia.org/wiki/Grapheme][graphemes]] correctly. However you start to run into problems when working with multi-codepoint graphemes, such as ~é~, which is represented by a pair of codepoints. Currently emacs will operate on a single codepoint at a time, meaning that if you delete it will only delete half the character. This issue can also be seen with emoji, which are often composed of many codepoints. All the places this is an issue is explained in [[https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/][this post]].
+
+So what to do? The current scheme breaks in weird places, but works just fine for 95% of cases. The /most correct™/ way to handle this would be indexing by graphemes. But that is really expensive. In my testing, iterating by graphemes was well over 100x slower then code points. And this was just on Ascii text. Determining grapheme boundaries is really hard.
+
+Another approach is to continue indexing by code points, but make all operations move by graphemes. So if you call ~forward-char~ it moves forward by a grapheme. If you call ~backward-delete-char~ it will delete an entire grapheme. Inorder to work with existing code, which treats chars as indexes you would need to handle arithmetic as well. For example it is a common idiom to see ~(1+ (point))~ to get the char after the current one. This would need specially handling as well so that we jump over an entire grapheme. This has the side effect of making point arithmetic not work like normal arithmetic. 1 + 1 != 2.
+
+Whenever you give a particular point you want to move too, it would need to be rounded to the nearest grapheme boundary. This is similar to how Emacs works now, because it will move the cursor over graphemes after the current command is executed. This gives the impression of operating of graphemes most of the time.
+
+Another thing to consider is that if codepoints are not meaningful boundaries, why bother indexing by them at all? Indexing by bytes would be almost as meaningful, but would enable constant time access. You wouldn't have to worry about scanning for codepoints if given an arbitrary index, but could instead jump to that point and round to the nearest grapheme boundary. This would bypass having to deal with [[https://nullprogram.com/blog/2019/05/29/][codepoint indexing strategies]]. But on the flip side, it would be a much harder breaking with the current "strings are indexable by character" mental model. This is not really true now, but it still /just works/ for most text. Using bytes instead would make it only work for ascii, and that might be too big of a footgun.
+
+If we didn't have to work with existing code, a better API would be to not expose "characters" as indexes, but instead provide a cursor API. This would let you seek forwards or backwards, but not jump to an arbitrary point.
+
+
 *** Pointer Tagging
 **** Tagged Arithmetic
 
@@ -434,10 +448,6 @@ Another part of this is making text property lookup extremely fast so that these
 
 ** Rust encoding - convert from different encodings in rust
 [[https://github.com/lifthrasiir/rust-encoding][github]]
-** Chardet: character encoding detection for rust
-[[https://github.com/thuleqaid/rust-chardet][github]]
-** num_bigint: bigint for rust
-[[https://docs.rs/num-bigint/0.2.6/num_bigint/][docs.rs]]
 ** ByteCount: find occurances of a byte
 [[https://docs.rs/bytecount/latest/bytecount/index.html][doc.rs]]
 * Resources

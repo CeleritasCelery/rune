@@ -149,7 +149,6 @@ fn main() {
     writeln!(
         f,
         "
-#[allow(unused_imports)]
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 pub(crate) mod sym {{
