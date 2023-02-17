@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::must_use_candidate)]
 use std::{
     fmt::{Debug, Display},
     ops::{Bound, RangeBounds},
@@ -339,6 +340,14 @@ impl Buffer {
             byte: byte_pos,
             char: pos,
         };
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len() - self.gap_len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.total_chars == 0
     }
 
     fn gap_len(&self) -> usize {
