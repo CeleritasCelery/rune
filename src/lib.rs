@@ -150,8 +150,8 @@ impl Buffer {
         if beg > end {
             (beg, end) = (end, beg);
         }
-        end = end.min(self.total_chars);
-        (beg, end) = (self.char_to_byte(beg), self.char_to_byte(end));
+        let end = self.char_to_byte(end.min(self.total_chars));
+        let beg = self.char_to_byte(beg.min(self.total_chars));
         self.delete_byte_region(beg, end);
     }
 
@@ -380,7 +380,7 @@ impl Buffer {
             let end = (self.gap_end, self.gap_chars);
             let total = (self.data.len(), self.total_chars);
             let cursor = (self.cursor.byte, self.cursor.char);
-            if self.cursor.char <= self.gap_chars {
+            if self.cursor.char < self.gap_chars {
                 [(0, 0), cursor, start, end, total]
             } else {
                 [(0, 0), start, end, cursor, total]
@@ -467,6 +467,14 @@ mod test {
         buffer.set_cursor(21);
         buffer.insert("x");
         assert_eq!(buffer.to_string(), "hi starting Θ text woxrld");
+    }
+
+    #[test]
+    fn empty() {
+        let mut buffer = Buffer::new("");
+        assert_eq!(buffer.to_string(), "");
+        buffer.delete_region(1, 2);
+        assert_eq!(buffer.to_string(), "");
     }
 
     #[test]
