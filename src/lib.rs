@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::uninlined_format_args)]
 use std::{
     fmt::{Debug, Display},
     ops::{Bound, RangeBounds},
@@ -152,7 +153,9 @@ impl Buffer {
         }
         let end = self.char_to_byte(end.min(self.total_chars));
         let beg = self.char_to_byte(beg.min(self.total_chars));
-        self.delete_byte_region(beg, end);
+        if end != beg {
+            self.delete_byte_region(beg, end);
+        }
     }
 
     fn delete_byte_region(&mut self, beg: usize, end: usize) {
@@ -212,8 +215,6 @@ impl Buffer {
             self.gap_chars += num_chars(&self.data[self.gap_end..beg]);
             // shift data
             self.data.copy_within(self.gap_end..beg, self.gap_start);
-            // update gap position
-            self.gap_start += beg - self.gap_end;
             // update cursor
             if self.cursor.byte >= self.gap_end {
                 if self.cursor.byte < beg {
@@ -222,6 +223,8 @@ impl Buffer {
                     self.cursor.byte = end;
                 }
             }
+            // update gap position
+            self.gap_start += beg - self.gap_end;
             self.gap_end = end;
             self.update_cursor_chars(beg, end, deleted_chars);
         } else if beg < self.gap_start && end >= self.gap_end {
@@ -524,6 +527,14 @@ mod test {
         assert_eq!(buffer.to_string(), "hel");
         buffer.delete_region(10, 1);
         assert_eq!(buffer.to_string(), "h");
+
+        let mut buffer = Buffer::new(",\0\0\0\0\0\0 \0");
+        buffer.delete_region(10, 10);
+        assert_eq!(buffer.gap_len(), 5);
+
+        let mut buffer = Buffer::new("+\0\0\u{1}\0\0\0\0\0'\0\0\0\0");
+        buffer.delete_region(30, 6);
+        assert_eq!(buffer.gap_len(), 13);
     }
 
     #[test]
