@@ -146,11 +146,12 @@ impl Buffer {
     }
 
     pub fn delete_region(&mut self, beg: usize, end: usize) {
-        let (beg, end) = if beg > end {
-            (self.char_to_byte(end), self.char_to_byte(beg))
-        } else {
-            (self.char_to_byte(beg), self.char_to_byte(end))
-        };
+        let (mut beg, mut end) = (beg, end);
+        if beg > end {
+            (beg, end) = (end, beg);
+        }
+        end = end.min(self.total_chars);
+        (beg, end) = (self.char_to_byte(beg), self.char_to_byte(end));
         self.delete_byte_region(beg, end);
     }
 
@@ -328,7 +329,8 @@ impl Buffer {
         }
     }
 
-    pub fn move_cursor(&mut self, pos: usize) {
+    pub fn set_cursor(&mut self, pos: usize) {
+        let pos = pos.min(self.total_chars);
         let byte_pos = self.char_to_byte(pos);
         self.cursor = Point {
             byte: byte_pos,
@@ -462,7 +464,7 @@ mod test {
         assert_eq!(buffer.to_string(), "hi world");
         buffer.insert("starting Θ text ");
         assert_eq!(buffer.to_string(), "hi starting Θ text world");
-        buffer.move_cursor(21);
+        buffer.set_cursor(21);
         buffer.insert("x");
         assert_eq!(buffer.to_string(), "hi starting Θ text woxrld");
     }
@@ -504,6 +506,16 @@ mod test {
         buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.to_string(), "hlo rld");
+    }
+
+    #[test]
+    fn test_bounds() {
+        let mut buffer = Buffer::new("world");
+        buffer.insert("hello ");
+        buffer.delete_region(3, 100);
+        assert_eq!(buffer.to_string(), "hel");
+        buffer.delete_region(10, 1);
+        assert_eq!(buffer.to_string(), "h");
     }
 
     #[test]
