@@ -4,6 +4,8 @@
 // This lint makes code more verbose with little benefit
 #![allow(elided_lifetimes_in_paths)]
 #![warn(
+    clippy::all,
+    clippy::pedantic,
     unused_qualifications,
     meta_variable_misuse,
     explicit_outlives_requirements,
@@ -14,62 +16,22 @@
     unreachable_pub,
     unused_lifetimes
 )]
-// Enable all clippy lints, and then selectivly disable the ones we don't want
-#![warn(clippy::all, clippy::pedantic, clippy::restriction)]
+// Will enable this lint in the future
+// #![warn(clippy::undocumented_unsafe_blocks)]
 #![allow(
-    clippy::undocumented_unsafe_blocks, // Will enable this later
-    clippy::semicolon_outside_block,
     clippy::unused_self,
-    clippy::todo,
-    clippy::std_instead_of_core,
-    clippy::std_instead_of_alloc,
-    clippy::unimplemented,
-    clippy::blanket_clippy_restriction_lints,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    clippy::as_conversions,
     clippy::similar_names,
-    clippy::self_named_module_files,
     clippy::module_name_repetitions,
-    clippy::shadow_reuse,
-    clippy::shadow_same,
-    clippy::use_debug,
-    clippy::single_char_lifetime_names,
-    clippy::shadow_unrelated,
-    clippy::missing_docs_in_private_items,
     clippy::needless_pass_by_value,
-    clippy::implicit_return,
     clippy::let_and_return,
     clippy::inline_always,
-    clippy::wildcard_enum_match_arm,
     clippy::match_bool,
-    clippy::string_slice,
-    clippy::separated_literal_suffix,
-    clippy::non_ascii_literal,
-    clippy::unreachable,
-    clippy::panic_in_result_fn,
-    clippy::integer_arithmetic,
-    clippy::integer_division,
-    clippy::float_arithmetic,
-    clippy::arithmetic_side_effects,
-    clippy::pattern_type_mismatch,
-    clippy::indexing_slicing,
     clippy::cast_precision_loss,
-    clippy::default_numeric_fallback,
-    clippy::box_collection,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::cast_ptr_alignment,
-    clippy::mem_forget,
-    clippy::unwrap_in_result,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::let_underscore_must_use,
-    clippy::assertions_on_result_states,
-    clippy::single_match_else,
-    clippy::missing_trait_methods,
-    clippy::panic
+    clippy::single_match_else
 )]
 
 #[macro_use]

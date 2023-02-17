@@ -18,6 +18,7 @@ mod string;
 mod tagged;
 mod vector;
 
+#[allow(unused_imports)]
 pub(crate) use buffer::*;
 pub(crate) use convert::*;
 pub(crate) use float::*;
