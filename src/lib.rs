@@ -431,6 +431,9 @@ impl Buffer {
     }
 
     fn assert_char_boundary(&self, pos: usize) {
+        if pos == self.gap_start {
+            return;
+        }
         let is_boundary = match self.data.get(pos) {
             Some(byte) => Self::is_char_boundary(*byte),
             None => pos == self.data.len(),
@@ -442,6 +445,15 @@ impl Buffer {
     const fn is_char_boundary(byte: u8) -> bool {
         // This is bit magic equivalent to: b < 128 || b >= 192
         (byte as i8) >= -0x40
+    }
+}
+
+#[cfg(test)]
+impl Buffer {
+    fn wrap(&self, pos: usize) -> usize {
+        let pos = pos % (self.len() + 1);
+        println!("pos: {:?}", pos);
+        pos
     }
 }
 
@@ -531,8 +543,9 @@ mod test {
         assert_eq!(buffer.to_string(), "hlo rld");
     }
 
+    // cases found during fuzzing
     #[test]
-    fn simple() {
+    fn edge_cases() {
         let mut buffer = Buffer::new(":?abdix7");
         assert_eq!(buffer.len(), 8);
         buffer.delete_region(2, 5);
@@ -548,6 +561,11 @@ mod test {
         assert_eq!(buffer.to_string(), "ayz");
         buffer.insert("b");
         assert_eq!(buffer.to_string(), "abyz");
+
+        let mut buffer = Buffer::new("ƽaejcoeuz");
+        buffer.delete_region(5, 6);
+        buffer.delete_region(1, 8);
+        assert_eq!(buffer.to_string(), "ƽ");
     }
 
     #[test]
