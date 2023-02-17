@@ -450,8 +450,9 @@ impl Buffer {
 
 #[cfg(test)]
 impl Buffer {
+    // used to convert indexes from the fuzzer
     fn wrap(&self, pos: usize) -> usize {
-        let pos = pos % (self.len() + 1);
+        let pos = pos % (self.len() + 2);
         println!("pos: {:?}", pos);
         pos
     }
