@@ -186,6 +186,7 @@ impl Buffer {
             // shift data
             self.data.copy_within(end..self.gap_start, new_end);
             // update cursor
+            self.update_cursor_chars(beg, end, deleted_chars);
             if self.cursor.byte < self.gap_start {
                 if self.cursor.byte > end {
                     self.cursor.byte += self.gap_len();
@@ -196,7 +197,6 @@ impl Buffer {
             // update gap position
             self.gap_end = new_end;
             self.gap_start = beg;
-            self.update_cursor_chars(beg, end, deleted_chars);
         } else if beg >= self.gap_end {
             // delete after gap
             //
@@ -217,6 +217,7 @@ impl Buffer {
             // shift data
             self.data.copy_within(self.gap_end..beg, self.gap_start);
             // update cursor
+            self.update_cursor_chars(beg, end, deleted_chars);
             if self.cursor.byte >= self.gap_end {
                 if self.cursor.byte < beg {
                     self.cursor.byte -= self.gap_len();
@@ -227,7 +228,6 @@ impl Buffer {
             // update gap position
             self.gap_start += beg - self.gap_end;
             self.gap_end = end;
-            self.update_cursor_chars(beg, end, deleted_chars);
         } else if beg < self.gap_start && end >= self.gap_end {
             // delete spans gap
             //
@@ -251,6 +251,9 @@ impl Buffer {
             self.gap_start = beg;
             self.gap_end = end;
             self.update_cursor_chars(beg, end, total_chars);
+            if (beg..end).contains(&self.cursor.byte) {
+                self.cursor.byte = end;
+            }
         } else {
             panic!(
                 "delete region inside gap -- gap: {}-{}, span: {beg}-{end}",
@@ -526,6 +529,25 @@ mod test {
         buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.to_string(), "hlo rld");
+    }
+
+    #[test]
+    fn simple() {
+        let mut buffer = Buffer::new(":?abdix7");
+        assert_eq!(buffer.len(), 8);
+        buffer.delete_region(2, 5);
+        assert_eq!(buffer.len(), 5);
+        buffer.delete_region(5, 4);
+        assert_eq!(buffer.len(), 4);
+        buffer.delete_region(0, 3);
+
+        let mut buffer = Buffer::new("xyz");
+        buffer.insert("abc");
+        buffer.set_cursor(2);
+        buffer.delete_region(1, 4);
+        assert_eq!(buffer.to_string(), "ayz");
+        buffer.insert("b");
+        assert_eq!(buffer.to_string(), "abyz");
     }
 
     #[test]
