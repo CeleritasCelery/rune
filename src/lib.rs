@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::must_use_candidate)]
@@ -115,7 +114,7 @@ impl Buffer {
         self.total_chars += num_chars;
     }
 
-    pub(crate) fn insert_char(&mut self, chr: char) {
+    pub fn insert_char(&mut self, chr: char) {
         let buf = &mut [0; 4];
         self.insert(chr.encode_utf8(buf));
     }
@@ -140,7 +139,7 @@ impl Buffer {
         }
     }
 
-    fn delete_backwards(&mut self, size: usize) {
+    pub fn delete_backwards(&mut self, size: usize) {
         let size = size.min(self.cursor.char);
         self.delete_region(self.cursor.char - size, self.cursor.char);
     }
@@ -276,7 +275,7 @@ impl Buffer {
         }
     }
 
-    fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
+    pub fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
         if !range.contains(&self.gap_chars)
             || range.start_bound() == Bound::Included(&self.gap_chars)
         {
@@ -290,7 +289,7 @@ impl Buffer {
         };
 
         let end = match range.end_bound() {
-            Bound::Included(_) => panic!("inclusive end bound not supported"),
+            Bound::Included(_) => unimplemented!("inclusive end bound not supported"),
             Bound::Excluded(x) => *x,
             Bound::Unbounded => self.total_chars,
         };
@@ -359,31 +358,6 @@ impl Buffer {
         self.gap_end - self.gap_start
     }
 
-    fn update_point_delete(point: &mut Point, beg: &Point, end: &Point) {
-        if end.char < point.char {
-            // move point back by the number of chars deleted
-            point.char -= end.char - beg.char;
-            point.byte -= end.byte - beg.byte;
-        } else if beg.char < point.char {
-            *point = *beg;
-        }
-        // If we didn't hit either case, then the point is before the deleted
-        // region
-    }
-
-    pub(crate) fn as_str(&self) -> &str {
-        if self.gap_start == 0 {
-            self.to_str(self.gap_end..)
-        } else if self.gap_end == self.data.len() {
-            self.to_str(..self.gap_start)
-        } else {
-            panic!(
-                "gap ({}-{}) not at start or end",
-                self.gap_start, self.gap_end
-            );
-        }
-    }
-
     fn char_to_byte(&self, pos: usize) -> usize {
         if pos == 0 {
             return if self.gap_start == 0 { self.gap_end } else { 0 };
@@ -450,6 +424,7 @@ impl Buffer {
     }
 }
 
+#[allow(dead_code)]
 #[cfg(test)]
 impl Buffer {
     // used to convert indexes from the fuzzer
