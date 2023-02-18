@@ -64,6 +64,7 @@ impl Buffer {
 
     #[must_use]
     pub fn new(data: &str) -> Self {
+        // TODO: could we make a non-allocation version of this?
         let storage = {
             let capacity = data.len() + Self::GAP_SIZE;
             let mut storage = Vec::with_capacity(capacity);
@@ -140,11 +141,12 @@ impl Buffer {
     }
 
     fn delete_backwards(&mut self, size: usize) {
-        self.delete_region(self.gap_chars - size, self.gap_chars);
+        let size = size.min(self.cursor.char);
+        self.delete_region(self.cursor.char - size, self.cursor.char);
     }
 
-    fn delete_forwards(&mut self, size: usize) {
-        self.delete_region(self.gap_chars, self.gap_chars + size);
+    pub fn delete_char(&mut self, size: usize) {
+        self.delete_region(self.cursor.char, self.cursor.char + size);
     }
 
     pub fn delete_region(&mut self, beg: usize, end: usize) {
@@ -527,7 +529,7 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::new(world);
         buffer.insert(hello);
-        buffer.delete_forwards(4);
+        buffer.delete_char(4);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.to_string(), "hello d");
     }
@@ -569,6 +571,17 @@ mod test {
         assert_eq!(buffer.to_string(), "ƽ");
     }
 
+    // from reference implementation
+    #[test]
+    fn test_delete_to_gap() {
+        let mut buffer = Buffer::new("\n\n\n\nAutomerge is too");
+        buffer.insert("per. Some graduate students in ");
+        buffer.set_cursor(10);
+        buffer.delete_char(21);
+        assert_eq!(buffer.to_string(), "per. Some \n\n\n\nAutomerge is too");
+    }
+
+    // fuzzing
     #[test]
     fn test_bounds() {
         let mut buffer = Buffer::new("world");
@@ -578,11 +591,11 @@ mod test {
         buffer.delete_region(10, 1);
         assert_eq!(buffer.to_string(), "h");
 
-        let mut buffer = Buffer::new(",\0\0\0\0\0\0 \0");
+        let mut buffer = Buffer::new(",skeobg x");
         buffer.delete_region(10, 10);
         assert_eq!(buffer.gap_len(), 5);
 
-        let mut buffer = Buffer::new("+\0\0\u{1}\0\0\0\0\0'\0\0\0\0");
+        let mut buffer = Buffer::new("+skeocptv'eigp");
         buffer.delete_region(30, 6);
         assert_eq!(buffer.gap_len(), 13);
     }
