@@ -20,7 +20,7 @@ fn main() -> Result<(), usize> {
     let mut debug_internals = String::new();
 
     println!("applying {} tokens", test_data.txns.len());
-    let mut buffer = Buffer::new(&test_data.start_content);
+    let mut buffer = Buffer::from(test_data.start_content.as_str());
     for (i, txn) in test_data.txns.iter().enumerate() {
         if i % 10000 == 0 {
             println!("step {i}");
@@ -64,7 +64,7 @@ mod test {
     use super::*;
     fn apply_tokens(path: &str) {
         let test_data = crdt_testdata::load_testing_data(path);
-        let mut buffer = Buffer::new(&test_data.start_content);
+        let mut buffer = Buffer::from(test_data.start_content.as_str());
         for txn in test_data.txns.iter() {
             for TestPatch(pos, del, ins) in &txn.patches {
                 buffer.set_cursor(*pos);

@@ -11,6 +11,7 @@ use str_indices::chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
+#[derive(Default)]
 pub struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
@@ -58,12 +59,8 @@ struct Point {
     char: usize,
 }
 
-impl Buffer {
-    const GAP_SIZE: usize = 5;
-
-    #[must_use]
-    pub fn new(data: &str) -> Self {
-        // TODO: could we make a non-allocation version of this?
+impl From<&str> for Buffer {
+    fn from(data: &str) -> Self {
         let storage = {
             let capacity = data.len() + Self::GAP_SIZE;
             let mut storage = Vec::with_capacity(capacity);
@@ -83,6 +80,15 @@ impl Buffer {
             },
             total_chars: chars::count(data),
         }
+    }
+}
+
+impl Buffer {
+    const GAP_SIZE: usize = 5;
+
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn grow(&mut self, slice: &str) {
@@ -125,7 +131,7 @@ impl Buffer {
             // TODO: we don't need to recalculate the position
             self.move_gap(self.cursor.char);
         }
-        if (self.gap_end - self.gap_start) < slice.len() {
+        if self.gap_len() < slice.len() {
             // TODO: grow the gap and move the cursor in one go
             self.grow(slice);
         } else {
@@ -442,16 +448,32 @@ mod test {
     #[test]
     fn create() {
         let string = "hello buffer";
-        let buffer = Buffer::new(string);
+        let buffer = Buffer::from(string);
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 0);
     }
 
     #[test]
+    fn test_empty() {
+        let mut buffer = Buffer::new();
+        assert_eq!(buffer.data.len(), 0);
+        assert_eq!(buffer.gap_len(), 0);
+        assert_eq!(buffer.to_string(), "");
+        buffer.insert("hello");
+        assert_eq!(buffer.to_string(), "hello");
+
+        let mut buffer = Buffer::new();
+        buffer.delete_region(0, 0);
+        assert_eq!(buffer.to_string(), "");
+        buffer.delete_region(0, 5);
+        assert_eq!(buffer.to_string(), "");
+    }
+
+    #[test]
     fn insert() {
         let string = "hello buffer";
-        let mut buffer = Buffer::new(string);
+        let mut buffer = Buffer::from(string);
         buffer.insert_char('x');
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
@@ -463,7 +485,7 @@ mod test {
     fn insert_slice() {
         let string = "world";
         let new_string = "hi ";
-        let mut buffer = Buffer::new(string);
+        let mut buffer = Buffer::from(string);
         buffer.insert(new_string);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.to_string(), "hi world");
@@ -476,7 +498,7 @@ mod test {
 
     #[test]
     fn empty() {
-        let mut buffer = Buffer::new("");
+        let mut buffer = Buffer::from("");
         assert_eq!(buffer.to_string(), "");
         buffer.delete_region(1, 2);
         assert_eq!(buffer.to_string(), "");
@@ -486,7 +508,7 @@ mod test {
     fn delete() {
         let world = "world";
         let hello = "hello ";
-        let mut buffer = Buffer::new(world);
+        let mut buffer = Buffer::from(world);
         buffer.insert(hello);
         buffer.delete_backwards(4);
         assert_eq!(buffer.gap_start, hello.len() - 4);
@@ -502,7 +524,7 @@ mod test {
     fn delete_forwards() {
         let world = "world";
         let hello = "hello ";
-        let mut buffer = Buffer::new(world);
+        let mut buffer = Buffer::from(world);
         buffer.insert(hello);
         buffer.delete_char(4);
         buffer.move_gap_out_of(..);
@@ -511,7 +533,7 @@ mod test {
 
     #[test]
     fn test_delete_region() {
-        let mut buffer = Buffer::new("world");
+        let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
         buffer.delete_region(1, 3);
         buffer.move_gap_out_of(..);
@@ -524,7 +546,7 @@ mod test {
     // cases found during fuzzing
     #[test]
     fn edge_cases() {
-        let mut buffer = Buffer::new(":?abdix7");
+        let mut buffer = Buffer::from(":?abdix7");
         assert_eq!(buffer.len(), 8);
         buffer.delete_region(2, 5);
         assert_eq!(buffer.len(), 5);
@@ -532,7 +554,7 @@ mod test {
         assert_eq!(buffer.len(), 4);
         buffer.delete_region(0, 3);
 
-        let mut buffer = Buffer::new("xyz");
+        let mut buffer = Buffer::from("xyz");
         buffer.insert("abc");
         buffer.set_cursor(2);
         buffer.delete_region(1, 4);
@@ -540,7 +562,7 @@ mod test {
         buffer.insert("b");
         assert_eq!(buffer.to_string(), "abyz");
 
-        let mut buffer = Buffer::new("ƽaejcoeuz");
+        let mut buffer = Buffer::from("ƽaejcoeuz");
         buffer.delete_region(5, 6);
         buffer.delete_region(1, 8);
         assert_eq!(buffer.to_string(), "ƽ");
@@ -549,7 +571,7 @@ mod test {
     // from reference implementation
     #[test]
     fn test_delete_to_gap() {
-        let mut buffer = Buffer::new("\n\n\n\nAutomerge is too");
+        let mut buffer = Buffer::from("\n\n\n\nAutomerge is too");
         buffer.insert("per. Some graduate students in ");
         buffer.set_cursor(10);
         buffer.delete_char(21);
@@ -559,18 +581,18 @@ mod test {
     // fuzzing
     #[test]
     fn test_bounds() {
-        let mut buffer = Buffer::new("world");
+        let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
         buffer.delete_region(3, 100);
         assert_eq!(buffer.to_string(), "hel");
         buffer.delete_region(10, 1);
         assert_eq!(buffer.to_string(), "h");
 
-        let mut buffer = Buffer::new(",skeobg x");
+        let mut buffer = Buffer::from(",skeobg x");
         buffer.delete_region(10, 10);
         assert_eq!(buffer.gap_len(), 5);
 
-        let mut buffer = Buffer::new("+skeocptv'eigp");
+        let mut buffer = Buffer::from("+skeocptv'eigp");
         buffer.delete_region(30, 6);
         assert_eq!(buffer.gap_len(), 13);
     }
@@ -579,7 +601,7 @@ mod test {
     fn resize() {
         let world = "world";
         let hello = "hello ";
-        let mut buffer = Buffer::new(world);
+        let mut buffer = Buffer::from(world);
         buffer.insert(hello);
         assert_eq!(
             buffer.data.len(),
@@ -594,7 +616,7 @@ mod test {
     fn cursor() {
         let string = "world";
         let new_string = "hi ";
-        let mut buffer = Buffer::new(string);
+        let mut buffer = Buffer::from(string);
         buffer.insert(new_string);
         assert_eq!(buffer.gap_chars, new_string.len());
     }
