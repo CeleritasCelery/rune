@@ -36,13 +36,12 @@ impl TestData {
     }
 }
 
-// TODO: Make a try_ version of this method, which returns an appropriate Error object.
 pub fn load_testing_data(filename: &str) -> TestData {
     let file = File::open(filename).unwrap();
     let input = BufReader::new(file);
-    let mut reader = Decoder::new(input).unwrap();
+    let mut decoder = Decoder::new(input).unwrap();
     let mut raw_json = vec![];
-    reader.read_to_end(&mut raw_json).unwrap();
+    decoder.read_to_end(&mut raw_json).unwrap();
     serde_json::from_reader(raw_json.as_slice()).unwrap()
 }
 
@@ -53,6 +52,6 @@ mod tests {
     #[test]
     fn it_works() {
         let data = load_testing_data("data/sveltecomponent.json.gz");
-        assert!(data.txns.len() > 0);
+        assert!(!data.txns.is_empty());
     }
 }

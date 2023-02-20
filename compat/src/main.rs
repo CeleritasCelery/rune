@@ -26,6 +26,7 @@ fn main() -> Result<(), usize> {
             println!("step {i}");
         }
         if let Some(step) = steps {
+            // dump out debug info
             if i == step {
                 let mut file = File::create("rust_output.txt").unwrap();
                 file.write_all(buffer.to_string().as_bytes()).unwrap();
@@ -36,7 +37,7 @@ fn main() -> Result<(), usize> {
                 let mut file = File::create("old_buffer.txt").unwrap();
                 file.write_all(debug_internals.as_bytes()).unwrap();
                 return Ok(());
-            } else if i + 1 == step {
+            } else if i == step - 1 {
                 debug_txn = format!("{txn:?}");
                 debug_buffer = format!("{buffer}");
                 debug_internals = format!("{buffer:?}");
@@ -45,7 +46,7 @@ fn main() -> Result<(), usize> {
         for TestPatch(pos, del, ins) in &txn.patches {
             buffer.set_cursor(*pos);
             buffer.delete_char(*del);
-            buffer.insert(&ins);
+            buffer.insert(ins);
         }
     }
 
@@ -55,5 +56,42 @@ fn main() -> Result<(), usize> {
         Err(step)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    fn apply_tokens(path: &str) {
+        let test_data = crdt_testdata::load_testing_data(path);
+        let mut buffer = Buffer::new(&test_data.start_content);
+        for txn in test_data.txns.iter() {
+            for TestPatch(pos, del, ins) in &txn.patches {
+                buffer.set_cursor(*pos);
+                buffer.delete_char(*del);
+                buffer.insert(ins);
+            }
+        }
+        assert_eq!(buffer.to_string(), test_data.end_content);
+    }
+
+    #[test]
+    fn test_seph() {
+        apply_tokens("../crdt-testdata/data/seph-blog1.json.gz");
+    }
+
+    #[test]
+    fn test_rustcode() {
+        apply_tokens("../crdt-testdata/data/rustcode.json.gz");
+    }
+
+    #[test]
+    fn test_automerge() {
+        apply_tokens("../crdt-testdata/data/automerge-paper.json.gz");
+    }
+
+    #[test]
+    fn test_svelte() {
+        apply_tokens("../crdt-testdata/data/sveltecomponent.json.gz");
     }
 }
