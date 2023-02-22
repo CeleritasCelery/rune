@@ -28,13 +28,13 @@ fn main() -> Result<(), usize> {
         if let Some(step) = steps {
             // dump out debug info
             if i == step {
-                let mut file = File::create("rust_output.txt").unwrap();
+                let mut file = File::create("output/rust_output.txt").unwrap();
                 file.write_all(buffer.to_string().as_bytes()).unwrap();
-                let mut file = File::create("old_output.txt").unwrap();
+                let mut file = File::create("output/old_output.txt").unwrap();
                 file.write_all(debug_buffer.as_bytes()).unwrap();
-                let mut file = File::create("token.txt").unwrap();
+                let mut file = File::create("output/token.txt").unwrap();
                 file.write_all(debug_txn.as_bytes()).unwrap();
-                let mut file = File::create("old_buffer.txt").unwrap();
+                let mut file = File::create("output/old_buffer.txt").unwrap();
                 file.write_all(debug_internals.as_bytes()).unwrap();
                 return Ok(());
             } else if i == step - 1 {
