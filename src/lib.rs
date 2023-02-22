@@ -83,8 +83,35 @@ impl From<&str> for Buffer {
     }
 }
 
+impl From<String> for Buffer {
+    fn from(data: String) -> Self {
+        let storage = {
+            let capacity = data.len() + Self::GAP_SIZE;
+            let mut storage = Vec::with_capacity(capacity);
+            storage.resize(Self::GAP_SIZE, 0);
+            storage.extend_from_slice(data.as_bytes());
+            debug_assert_eq!(storage.len(), capacity);
+            storage.into_boxed_slice()
+        };
+        Self {
+            data: storage,
+            gap_start: 0,
+            gap_end: Self::GAP_SIZE,
+            gap_chars: 0,
+            cursor: Point {
+                byte: Self::GAP_SIZE,
+                char: 0,
+            },
+            total_chars: chars::count(&data),
+        }
+    }
+}
+
 impl Buffer {
+    #[cfg(test)]
     const GAP_SIZE: usize = 5;
+    #[cfg(not(test))]
+    const GAP_SIZE: usize = 2000;
 
     #[must_use]
     pub fn new() -> Self {
@@ -356,6 +383,10 @@ impl Buffer {
         self.data.len() - self.gap_len()
     }
 
+    pub fn len_chars(&self) -> usize {
+        self.total_chars
+    }
+
     pub fn is_empty(&self) -> bool {
         self.total_chars == 0
     }
@@ -541,6 +572,14 @@ mod test {
         buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer.to_string(), "hlo rld");
+    }
+
+    #[test]
+    fn test_delete_nothing() {
+        let mut buffer = Buffer::from("world");
+        buffer.insert("hello ");
+        buffer.delete_region(3, 3);
+        assert_eq!(buffer.to_string(), "hello world");
     }
 
     // cases found during fuzzing
