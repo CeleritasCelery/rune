@@ -63,7 +63,12 @@ fn main() -> Result<(), usize> {
 mod test {
     use super::*;
     fn apply_tokens(path: &str) {
-        let test_data = crdt_testdata::load_testing_data(path);
+        let path = format!(
+            "{}/../crdt-testdata/data/{}.json.gz",
+            env!("CARGO_MANIFEST_DIR"),
+            path,
+        );
+        let test_data = crdt_testdata::load_testing_data(&path);
         let mut buffer = Buffer::from(test_data.start_content.as_str());
         for txn in test_data.txns.iter() {
             for TestPatch(pos, del, ins) in &txn.patches {
@@ -77,21 +82,21 @@ mod test {
 
     #[test]
     fn test_seph() {
-        apply_tokens("../crdt-testdata/data/seph-blog1.json.gz");
+        apply_tokens("seph-blog1");
     }
 
     #[test]
     fn test_rustcode() {
-        apply_tokens("../crdt-testdata/data/rustcode.json.gz");
+        apply_tokens("rustcode");
     }
 
     #[test]
     fn test_automerge() {
-        apply_tokens("../crdt-testdata/data/automerge-paper.json.gz");
+        apply_tokens("automerge-paper");
     }
 
     #[test]
     fn test_svelte() {
-        apply_tokens("../crdt-testdata/data/sveltecomponent.json.gz");
+        apply_tokens("sveltecomponent");
     }
 }
