@@ -149,14 +149,16 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 #[macro_export]
 macro_rules! rooted_iter {
     ($ident:ident, $value:expr, $cx:ident) => {
-        // Allocate stack space for potential roots
         let mut root_elem;
         let mut root_cons;
         // Create roots, but don't initialize them
         let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
-        // Convert the value into a list
-        let obj = unsafe { $crate::core::gc::IntoRoot::into_root($value) };
+        // use match to ensure that $value is not evaled inside the unsafe block
+        let obj = match $value {
+            // Convert the value into a list
+            value => unsafe { $crate::core::gc::IntoRoot::into_root(value) },
+        };
         let list: $crate::core::object::Gc<$crate::core::object::List> = obj.try_into()?;
         #[allow(unused_mut)]
         let mut $ident = if let $crate::core::object::List::Cons(cons) = list.untag() {

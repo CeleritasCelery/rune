@@ -208,16 +208,17 @@ macro_rules! root {
         );
     };
     ($ident:ident, move($value:expr), $cx:ident) => {
+        // eval value outside the unsafe block
+        let value = $value;
         root!(
             $ident,
-            unsafe { $crate::core::gc::IntoRoot::into_root($value) },
+            unsafe { $crate::core::gc::IntoRoot::into_root(value) },
             $cx
         );
     };
     ($ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;
-        let mut root: $crate::core::gc::Root<_> =
-            unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
+        let mut root = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
     };
 }

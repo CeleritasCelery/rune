@@ -271,12 +271,10 @@ impl<const CONST: bool> Drop for Block<CONST> {
 /// ```
 #[macro_export]
 macro_rules! rebind {
-    ($value:expr, $cx:ident) => {
-        unsafe {
-            let bits = $value.into_raw();
-            $cx.rebind_raw_ptr(bits)
-        }
-    };
+    ($value:expr, $cx:ident) => {{
+        let bits = $value.into_raw();
+        unsafe { $cx.rebind_raw_ptr(bits) }
+    }};
 }
 
 #[cfg(test)]
