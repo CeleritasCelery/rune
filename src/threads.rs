@@ -26,7 +26,7 @@ fn go_internal(obj: GcObj) -> JoinHandle<()> {
         root!(env, Env::default(), cx);
         let obj = unsafe { GcObj::from_raw(raw) };
         root!(obj, cx);
-        let _ = crate::interpreter::eval(obj, None, env, cx);
+        _ = crate::interpreter::eval(obj, None, env, cx);
     })
 }
 

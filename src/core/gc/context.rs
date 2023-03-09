@@ -293,7 +293,7 @@ mod test {
         let roots = &RootSet::default();
         let mut cx = Context::new(roots);
         let obj = rebind!(bind_to_mut(&mut cx), cx);
-        let _ = "foo".into_obj(&cx);
+        _ = "foo".into_obj(&cx);
         assert_eq!(obj, "invariant");
     }
 

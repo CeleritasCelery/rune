@@ -7,18 +7,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.68"
-bstr = "1.1.0"
+anyhow = "1.0.69"
+bstr = "1.3.0"
 bytecount = "0.6.3"
 fancy-regex = "0.10.0"
 float-cmp = "0.9.0"
 fn_macros = { version = "0.1.0", path = "fn_macros" }
 lazy_static = "1.4.0"
-num_enum = "0.5.7"
-paste = "1.0.11"
+num_enum = "0.5.11"
+paste = "1.0.12"
 rustc-hash = "1.1.0"
 sptr = "0.3.2"
-streaming-iterator = "0.1.8"
+streaming-iterator = "0.1.9"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.2.0"
@@ -35,6 +35,6 @@ default = []
 debug_bytecode = []
 
 [build-dependencies]
-syn = { version = "1.0.99" }
-quote = "1.0.21"
-proc-macro2 = "1.0.43"
+syn = "1" 
+quote = "1"
+proc-macro2 = "1"
