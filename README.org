@@ -18,6 +18,11 @@ If you want to contribute or have ideas for things to add, please open an [[http
 ** Running
 The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl. Running with both arguments (~cargo run -- --load --repl~) will load the elisp and then open the repl. Running with no arguments is equivalent to ~cargo run -- --load~.
 
+*** MIRI
+Run the test suite with MIRI
+#+begin_src sh
+MIRIFLAGS='-Zmiri-strict-provenance -Zmiri-symbolic-alignment-check' cargo +nightly miri test
+#+end_src
 ** Exploring this repo
 This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
 - [[file:src/core/object/][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types is also found here.
