@@ -2,7 +2,7 @@ use crate::core::{
     cons::Cons,
     env::{sym, Env, Symbol, INTERNED_SYMBOLS},
     error::{Type, TypeError},
-    gc::{Context, IntoRoot, Root},
+    gc::{Context, IntoRoot, Rt},
     object::{nil, Gc, GcObj, List, Number, Object, SubrFn},
 };
 use crate::hashmap::HashSet;
@@ -39,13 +39,8 @@ pub(crate) fn defalias<'ob>(
 }
 
 #[defun]
-pub(crate) fn set<'ob>(
-    place: Symbol,
-    newlet: GcObj<'ob>,
-    env: &mut Root<Env>,
-    cx: &Context,
-) -> Result<GcObj<'ob>> {
-    env.as_mut(cx).set_var(place, newlet)?;
+pub(crate) fn set<'ob>(place: Symbol, newlet: GcObj<'ob>, env: &mut Rt<Env>) -> Result<GcObj<'ob>> {
+    env.set_var(place, newlet)?;
     Ok(newlet)
 }
 
@@ -54,10 +49,9 @@ pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
     value: GcObj<'ob>,
-    env: &mut Root<Env>,
-    cx: &Context,
+    env: &mut Rt<Env>,
 ) -> GcObj<'ob> {
-    env.as_mut(cx).set_prop(symbol, propname, value);
+    env.set_prop(symbol, propname, value);
     value
 }
 
@@ -65,7 +59,7 @@ pub(crate) fn put<'ob>(
 pub(crate) fn get<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    env: &Root<Env>,
+    env: &Rt<Env>,
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     match env.props.get(symbol) {
@@ -88,7 +82,7 @@ pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'o
 #[defun]
 pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
-    env: &Root<Env>,
+    env: &Rt<Env>,
     cx: &'ob Context,
 ) -> Option<GcObj<'ob>> {
     env.vars.get(symbol).map(|x| x.bind(cx))
@@ -116,22 +110,18 @@ pub(crate) fn fmakunbound(symbol: Symbol) -> Symbol {
 }
 
 #[defun]
-pub(crate) fn boundp(symbol: Symbol, env: &Root<Env>) -> bool {
+pub(crate) fn boundp(symbol: Symbol, env: &Rt<Env>) -> bool {
     env.vars.get(symbol).is_some()
 }
 
 #[defun]
-pub(crate) fn makunbound<'ob>(
-    symbol: Symbol<'ob>,
-    env: &mut Root<Env>,
-    cx: &'ob Context,
-) -> Symbol<'ob> {
-    env.as_mut(cx).vars.remove(symbol);
+pub(crate) fn makunbound<'ob>(symbol: Symbol<'ob>, env: &mut Rt<Env>) -> Symbol<'ob> {
+    env.vars.remove(symbol);
     symbol
 }
 
 #[defun]
-pub(crate) fn default_boundp(symbol: Symbol, env: &Root<Env>) -> bool {
+pub(crate) fn default_boundp(symbol: Symbol, env: &Rt<Env>) -> bool {
     env.vars.get(symbol).is_some()
 }
 
@@ -249,11 +239,10 @@ pub(crate) fn defvar<'ob>(
     symbol: Symbol,
     initvalue: Option<GcObj<'ob>>,
     _docstring: Option<&str>,
-    env: &mut Root<Env>,
-    cx: &Context,
+    env: &mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
     let value = initvalue.unwrap_or_default();
-    set(symbol, value, env, cx)
+    set(symbol, value, env)
 }
 
 #[defun]

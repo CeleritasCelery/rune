@@ -1,6 +1,6 @@
 use crate::core::{
     env::{sym, Env},
-    gc::{Context, Root},
+    gc::{Context, Rt},
     object::Object,
 };
 use anyhow::Result;
@@ -11,7 +11,7 @@ use std::path::Path;
 pub(crate) fn expand_file_name(
     name: &str,
     default_directory: Option<&str>,
-    env: &Root<Env>,
+    env: &Rt<Env>,
     cx: &Context,
 ) -> Result<String> {
     // TODO: this needs to be tested to ensure it has the same behavior as GNU

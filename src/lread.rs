@@ -1,8 +1,8 @@
 use crate::core::env::Symbol;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
+use crate::core::gc::Context;
 use crate::core::gc::Rt;
-use crate::core::gc::{Context, Root};
 use crate::core::object::{nil, Gc, GcObj, LispString, Object, WithLifetime};
 use crate::reader;
 use crate::{interpreter, root};
@@ -55,7 +55,7 @@ pub(crate) fn read_from_string<'ob>(
     Ok(cons!(obj, new_pos as i64; cx))
 }
 
-pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Root<Env>) -> Result<bool> {
+pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<bool> {
     let mut pos = 0;
     loop {
         let (obj, new_pos) = match reader::read(&contents[pos..], cx) {
@@ -88,7 +88,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
     }
 }
 
-fn find_file_in_load_path(file: &str, cx: &Context, env: &Root<Env>) -> Result<PathBuf> {
+fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<PathBuf> {
     let load_path = env.vars.get(sym::LOAD_PATH).unwrap();
     let paths = load_path
         .bind(cx)
@@ -118,7 +118,7 @@ pub(crate) fn load(
     noerror: Option<()>,
     nomessage: Option<()>,
     cx: &mut Context,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
 ) -> Result<bool> {
     let noerror = noerror.is_some();
     let nomessage = nomessage.is_some();
@@ -141,7 +141,7 @@ pub(crate) fn load(
         println!("Loading {file}...");
     }
     let new_load_file = cx.add(final_file.to_string_lossy().to_string());
-    let prev_load_file = match env.as_mut(cx).vars.get_mut(sym::LOAD_FILE_NAME) {
+    let prev_load_file = match env.vars.get_mut(sym::LOAD_FILE_NAME) {
         Some(val) => {
             let prev = val.bind(cx);
             val.set(new_load_file);
@@ -159,9 +159,7 @@ pub(crate) fn load(
             false => Err(e),
         },
     };
-    env.as_mut(cx)
-        .vars
-        .insert(sym::LOAD_FILE_NAME, &**prev_load_file);
+    env.vars.insert(sym::LOAD_FILE_NAME, &*prev_load_file);
     result
 }
 

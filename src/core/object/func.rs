@@ -1,7 +1,7 @@
 use super::{
     super::{
         error::ArgError,
-        gc::{Block, Context, Root},
+        gc::{Block, Context},
     },
     display_slice, nil, CloneIn, IntoObject, LispString, LispVec,
 };
@@ -111,15 +111,15 @@ impl Debug for ByteFn {
     }
 }
 
-pub(crate) struct ByteFnStreamIter<'rt, 'rs> {
-    vector: &'rt Root<'rs, 'rt, &'static ByteFn>,
+pub(crate) struct ByteFnStreamIter<'rt> {
+    vector: &'rt Rt<&'static ByteFn>,
     elem: Option<Rt<GcObj<'static>>>,
     idx: usize,
 }
 
-impl<'rt, 'rs> Root<'rs, 'rt, &'static ByteFn> {
+impl<'rt> Rt<&'static ByteFn> {
     #[allow(clippy::iter_not_returning_iterator)]
-    pub(crate) fn iter(&'rt mut self) -> ByteFnStreamIter<'rt, 'rs> {
+    pub(crate) fn iter(&'rt mut self) -> ByteFnStreamIter<'rt> {
         ByteFnStreamIter {
             vector: self,
             elem: None,
@@ -128,7 +128,7 @@ impl<'rt, 'rs> Root<'rs, 'rt, &'static ByteFn> {
     }
 }
 
-impl<'rt, 'id> StreamingIterator for ByteFnStreamIter<'rt, 'id> {
+impl<'rt> StreamingIterator for ByteFnStreamIter<'rt> {
     type Item = Rt<GcObj<'static>>;
 
     fn advance(&mut self) {
@@ -209,7 +209,7 @@ impl FnArgs {
 
 pub(crate) type BuiltInFn = for<'ob> fn(
     &[Rt<GcObj<'static>>],
-    &mut Root<crate::core::env::Env>,
+    &mut Rt<crate::core::env::Env>,
     &'ob mut Context,
 ) -> Result<GcObj<'ob>>;
 
@@ -223,12 +223,11 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'ob>(
         &self,
-        args: &mut Root<Vec<GcObj<'static>>>,
-        env: &mut Root<crate::core::env::Env>,
+        args: &mut Rt<Vec<GcObj<'static>>>,
+        env: &mut Rt<crate::core::env::Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
         {
-            let args = args.as_mut(cx);
             let arg_cnt = args.len() as u16;
             let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
             for _ in 0..fill_args {

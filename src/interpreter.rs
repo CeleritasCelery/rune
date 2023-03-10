@@ -2,7 +2,7 @@ use crate::core::{
     cons::{Cons, ElemStreamIter},
     env::{sym, Env, Symbol},
     error::{ArgError, ErrorType, EvalError, EvalResult, Type, TypeError},
-    gc::{Context, Root, Rt},
+    gc::{Context, Rt},
     object::{nil, qtrue, Function, Gc, GcObj, List, Object},
 };
 use crate::{root, rooted_iter};
@@ -12,16 +12,16 @@ use anyhow::{anyhow, bail, ensure};
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
-struct Interpreter<'brw, '_1, '_2, '_3, '_4> {
-    vars: &'brw mut Root<'_1, '_3, Vec<&'static Cons>>,
-    env: &'brw mut Root<'_2, '_4, Env>,
+struct Interpreter<'brw> {
+    vars: &'brw mut Rt<Vec<&'static Cons>>,
+    env: &'brw mut Rt<Env>,
 }
 
 #[defun]
 pub(crate) fn eval<'ob>(
     form: &Rt<GcObj>,
     _lexical: Option<()>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>, anyhow::Error> {
     cx.garbage_collect(false);
@@ -30,7 +30,7 @@ pub(crate) fn eval<'ob>(
     interpreter.eval_form(form, cx).map_err(Into::into)
 }
 
-impl Interpreter<'_, '_, '_, '_, '_> {
+impl Interpreter<'_> {
     fn eval_form<'ob>(&mut self, rt: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         match rt.get(cx) {
             Object::Symbol(sym) => self.var_ref(sym, cx),
@@ -84,7 +84,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         rooted_iter!(forms, obj, cx);
         let Some(tag) = forms.next() else {bail_err!(ArgError::new(1, 0, "catch"))};
         // push this tag on the catch stack
-        self.env.as_mut(cx).catch_stack.push(tag);
+        self.env.catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
@@ -100,7 +100,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             }
         };
         // pop this tag from the catch stack
-        self.env.as_mut(cx).catch_stack.pop_obj(cx);
+        self.env.catch_stack.pop_obj(cx);
         result
     }
 
@@ -112,11 +112,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }
         let tag = forms.next().unwrap()?;
         let value = forms.next().unwrap()?;
-        let env = self.env.as_mut(cx);
         // Need to check now that there is a catch, because we may have a
         // condition-case along the unwind path
-        if env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
-            Err(EvalError::throw(tag, value, env))
+        if self.env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
+            Err(EvalError::throw(tag, value, self.env))
         } else {
             Err(error!("No catch for {tag}"))
         }
@@ -134,7 +133,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             // (defvar x)
             None => nil(),
         };
-        self.env.as_mut(cx).defvar(name.bind(cx), value)?;
+        self.env.defvar(name.bind(cx), value)?;
         Ok(value)
     }
 
@@ -150,8 +149,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         match func.get(cx) {
             Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                 crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)?;
-                func.as_mut(cx)
-                    .set(sym.bind(cx).follow_indirect(cx).unwrap());
+                func.set(sym.bind(cx).follow_indirect(cx).unwrap());
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
@@ -170,7 +168,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
             let result = rebind!(self.eval_form(x, cx)?, cx);
-            args.as_mut(cx).push(result);
+            args.push(result);
         }
         let name = sym.bind(cx).name().to_owned();
         func.call(args, self.env, cx, Some(&name))
@@ -215,10 +213,10 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             let value = rebind!(self.eval_form(form, cx)?, cx);
             count += 1;
             if prog_num == count {
-                returned_form.as_mut(cx).set(value);
+                returned_form.set(value);
             }
         }
-        match &***returned_form {
+        match &**returned_form {
             Some(x) => Ok(x.bind(cx)),
             None => {
                 let name = match prog_num {
@@ -247,7 +245,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         root!(condition, cx);
         root!(body, cx);
         while self.eval_form(condition, cx)? != nil() {
-            rooted_iter!(forms, &**body, cx);
+            rooted_iter!(forms, &*body, cx);
             self.implicit_progn(forms, cx)?;
         }
         Ok(nil())
@@ -279,7 +277,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
             if result == nil() {
                 return Ok(nil());
             }
-            last.as_mut(cx).set(result);
+            last.set(result);
         }
         Ok(last.bind(cx))
     }
@@ -320,7 +318,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     root!(val, cx);
                     let val = rebind!(self.eval_form(val, cx)?, cx);
                     self.var_set(var.bind(cx), val, cx)?;
-                    last_value.as_mut(cx).set(val);
+                    last_value.set(val);
                 }
                 (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
                 (_, None) => bail_err!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
@@ -335,7 +333,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn pairs<'ob>(
-        iter: &mut ElemStreamIter<'_, '_>,
+        iter: &mut ElemStreamIter<'_>,
         cx: &'ob Context,
     ) -> Option<(GcObj<'ob>, Option<GcObj<'ob>>)> {
         let first = iter.next().map(|x| x.bind(cx));
@@ -368,7 +366,7 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                     .expect("variables should never be immutable");
                 Ok(())
             }
-            None => self.env.as_mut(cx).set_var(name, new_value),
+            None => self.env.set_var(name, new_value),
         }
     }
 
@@ -397,8 +395,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
         }?;
         let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
         // Remove old bindings
-        self.vars.as_mut(cx).truncate(prev_len);
-        self.env.as_mut(cx).unbind(varbind_count, cx);
+        self.vars.truncate(prev_len);
+        self.env.unbind(varbind_count, cx);
         Ok(obj)
     }
 
@@ -445,11 +443,11 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                         .car()
                         .try_into()
                         .context("let variable must be a symbol")?;
-                    let_bindings.as_mut(cx).push((sym, var));
+                    let_bindings.push((sym, var));
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    let_bindings.as_mut(cx).push((sym, nil()));
+                    let_bindings.push((sym, nil()));
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
@@ -463,14 +461,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
     }
 
     fn create_let_binding(&mut self, var: Symbol, val: GcObj, cx: &Context) -> u16 {
-        let env = self.env.as_mut(cx);
         if var.is_special() {
-            env.varbind(var, val, cx);
+            self.env.varbind(var, val, cx);
             // return 1 if the variable is bound
             1
         } else {
             let cons = cons!(var, val; cx).as_cons();
-            self.vars.as_mut(cx).push(cons);
+            self.vars.push(cons);
             0
         }
     }
@@ -496,13 +493,13 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 
     fn implicit_progn<'ob>(
         &mut self,
-        mut forms: ElemStreamIter<'_, '_>,
+        mut forms: ElemStreamIter<'_>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         root!(last, nil(), cx);
         while let Some(form) = forms.next() {
             let value = rebind!(self.eval_form(form, cx)?, cx);
-            last.as_mut(cx).set(value);
+            last.set(value);
         }
         Ok(last.bind(cx))
     }
@@ -558,14 +555,14 @@ impl Interpreter<'_, '_, '_, '_, '_> {
                         cons!(sym::ERROR, format!("{err}"); cx)
                     };
                     let binding = list!(var, error; cx).as_cons();
-                    self.vars.as_mut(cx).push(binding);
+                    self.vars.push(binding);
                     let list: Gc<List> = match cons.cdr().try_into() {
                         Ok(x) => x,
                         Err(_) => return Ok(nil()),
                     };
                     rooted_iter!(handlers, list, cx);
                     let result = rebind!(self.implicit_progn(handlers, cx)?, cx);
-                    self.vars.as_mut(cx).pop();
+                    self.vars.pop();
                     return Ok(result);
                 }
                 Object::NIL => {}
@@ -579,8 +576,8 @@ impl Interpreter<'_, '_, '_, '_, '_> {
 impl Rt<Gc<Function<'_>>> {
     pub(crate) fn call<'ob>(
         &self,
-        args: &mut Root<Vec<GcObj<'static>>>,
-        env: &mut Root<Env>,
+        args: &mut Rt<Vec<GcObj<'static>>>,
+        env: &mut Rt<Env>,
         cx: &'ob mut Context,
         name: Option<&str>,
     ) -> EvalResult<'ob> {
@@ -627,9 +624,9 @@ impl Rt<Gc<Function<'_>>> {
 
 fn call_closure<'ob>(
     closure: &Rt<Gc<&Cons>>,
-    args: &Root<Vec<GcObj>>,
+    args: &Rt<Vec<GcObj>>,
     name: &str,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
@@ -648,7 +645,7 @@ fn call_closure<'ob>(
 }
 
 fn bind_variables<'a>(
-    forms: &mut ElemStreamIter<'_, '_>,
+    forms: &mut ElemStreamIter<'_>,
     args: Vec<GcObj<'a>>,
     name: &str,
     cx: &'a Context,

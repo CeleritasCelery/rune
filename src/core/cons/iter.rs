@@ -1,5 +1,5 @@
 use super::super::{
-    gc::{Root, Rt},
+    gc::Rt,
     object::{Gc, GcObj, List, Object},
 };
 use super::Cons;
@@ -94,21 +94,21 @@ impl<'ob> Iterator for ConsIter<'ob> {
     }
 }
 
-pub(crate) struct ElemStreamIter<'rt, 'rs> {
-    elem: Option<&'rt mut Root<'rs, 'rt, GcObj<'static>>>,
-    cons: Option<&'rt mut Root<'rs, 'rt, &'static Cons>>,
+pub(crate) struct ElemStreamIter<'rt> {
+    elem: Option<&'rt mut Rt<GcObj<'static>>>,
+    cons: Option<&'rt mut Rt<&'static Cons>>,
 }
 
-impl<'rt, 'rs> ElemStreamIter<'rt, 'rs> {
+impl<'rt> ElemStreamIter<'rt> {
     pub(crate) fn new(
-        elem: Option<&'rt mut Root<'rs, 'rt, GcObj<'static>>>,
-        cons: Option<&'rt mut Root<'rs, 'rt, &'static Cons>>,
+        elem: Option<&'rt mut Rt<GcObj<'static>>>,
+        cons: Option<&'rt mut Rt<&'static Cons>>,
     ) -> Self {
         Self { elem, cons }
     }
 }
 
-impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
+impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
     type Item = Rt<GcObj<'static>>;
 
     fn advance(&mut self) {
@@ -117,8 +117,6 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
                 .elem
                 .as_mut()
                 .expect("Element should never be None while Cons is Some");
-            let cons = unsafe { cons.deref_mut_unchecked() };
-            let elem = unsafe { elem.deref_mut_unchecked() };
             let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
             match unsafe { cons.bind_unchecked().cdr().untag() } {
@@ -136,11 +134,11 @@ impl<'rt, 'id> StreamingIterator for ElemStreamIter<'rt, 'id> {
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        self.elem.as_ref().map(AsRef::as_ref)
+        self.elem.as_deref()
     }
 }
 
-impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
+impl<'rt> ElemStreamIter<'rt> {
     pub(crate) fn is_empty(&self) -> bool {
         self.cons.is_none()
     }
@@ -149,40 +147,29 @@ impl<'rt, 'id> ElemStreamIter<'rt, 'id> {
 #[macro_export]
 macro_rules! rooted_iter {
     ($ident:ident, $value:expr, $cx:ident) => {
+        // Create roots, but don't initialize them
+        let mut elem;
+        let mut cons;
         let mut root_elem;
         let mut root_cons;
-        // Create roots, but don't initialize them
-        let mut gc_root_elem = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
-        let mut gc_root_cons = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
         // use match to ensure that $value is not evaled inside the unsafe block
-        let obj = match $value {
+        let list: $crate::core::object::Gc<$crate::core::object::List> = match $value {
             // Convert the value into a list
-            value => unsafe { $crate::core::gc::IntoRoot::into_root(value) },
+            value => unsafe { $crate::core::gc::IntoRoot::into_root(value).try_into()? },
         };
-        let list: $crate::core::object::Gc<$crate::core::object::List> = obj.try_into()?;
-        #[allow(unused_mut)]
-        let mut $ident = if let $crate::core::object::List::Cons(cons) = list.untag() {
+        #[allow(unused_qualifications, unused_mut)]
+        let mut $ident = if let $crate::core::object::List::Cons(head) = list.untag() {
+            use $crate::core::{cons, gc, object};
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {
-                root_elem = Some($crate::core::object::nil());
-                root_cons = Some($crate::core::object::WithLifetime::with_lifetime(cons));
-                $crate::core::cons::ElemStreamIter::new(
-                    Some($crate::core::gc::Root::init(
-                        &mut gc_root_elem,
-                        root_elem.as_mut().unwrap(),
-                    )),
-                    Some($crate::core::gc::Root::init(
-                        &mut gc_root_cons,
-                        root_cons.as_mut().unwrap(),
-                    )),
-                )
+                elem = object::nil();
+                cons = object::WithLifetime::with_lifetime(head);
+                root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
+                root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
+                cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))
             }
         } else {
-            // If the list is empty, forget the roots and return an iterator
-            // that will yield None
-            std::mem::forget(gc_root_elem);
-            std::mem::forget(gc_root_cons);
             $crate::core::cons::ElemStreamIter::new(None, None)
         };
     };

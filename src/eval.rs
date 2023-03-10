@@ -3,7 +3,7 @@ use crate::core::error::{EvalError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{nil, LispString, Object};
 use crate::core::{
-    gc::{Context, IntoRoot, Root},
+    gc::{Context, IntoRoot},
     object::{Function, Gc, GcObj},
 };
 use crate::fns::assq;
@@ -16,7 +16,7 @@ use streaming_iterator::StreamingIterator;
 pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let args = match arguments.len() {
@@ -40,7 +40,7 @@ pub(crate) fn apply<'ob>(
 pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
     arguments: &[Rt<GcObj>],
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
@@ -51,7 +51,7 @@ pub(crate) fn funcall<'ob>(
 #[defun]
 fn run_hooks<'ob>(
     hooks: &[Rt<GcObj>],
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     for hook in hooks {
@@ -89,7 +89,7 @@ pub(crate) fn autoload_do_load<'ob>(
     fundef: &Rt<GcObj>,
     funname: Option<&Rt<Gc<Symbol>>>,
     macro_only: Option<&Rt<GcObj>>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     // TODO: want to handle the case where the file is already loaded.
@@ -148,7 +148,7 @@ pub(crate) fn macroexpand<'ob>(
     form: &Rt<GcObj>,
     environment: Option<&Rt<GcObj>>,
     cx: &'ob mut Context,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
     if let Object::Cons(form) = form.get(cx) {
         if let Object::Symbol(sym) = form.car().untag() {
@@ -197,11 +197,11 @@ fn internal__define_uninitialized_variable<'ob>(
 }
 
 #[defun]
-fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Root<Env>, cx: &Context) -> Result<bool> {
+fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Result<bool> {
     if error_symbol.nil() && data.nil() {
         error_symbol = sym::ERROR.into();
     }
-    Err(EvalError::signal(error_symbol, data, env.as_mut(cx)).into())
+    Err(EvalError::signal(error_symbol, data, env).into())
 }
 
 #[defun]
@@ -213,10 +213,9 @@ fn special_variable_p(symbol: Symbol) -> bool {
 fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
     value: GcObj,
-    env: &'ob mut Root<Env>,
-    cx: &'ob Context,
+    env: &'ob mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
-    env.as_mut(cx).set_var(symbol, value)?;
+    env.set_var(symbol, value)?;
     Ok(nil())
 }
 
@@ -224,11 +223,10 @@ fn set_default_toplevel_value<'ob>(
 fn set_default<'ob>(
     symbol: Symbol,
     value: GcObj<'ob>,
-    env: &'ob mut Root<Env>,
-    cx: &'ob Context,
+    env: &'ob mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
     // TODO: implement buffer local variables
-    env.as_mut(cx).set_var(symbol, value)?;
+    env.set_var(symbol, value)?;
     Ok(value)
 }
 

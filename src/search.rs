@@ -1,6 +1,6 @@
 use crate::core::{
     env::Env,
-    gc::{Context, Root},
+    gc::{Context, Rt},
     object::{nil, Gc, GcObj, List},
 };
 use anyhow::{ensure, Result};
@@ -12,7 +12,7 @@ fn string_match<'ob>(
     regexp: &str,
     string: &str,
     start: Option<i64>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     let re = Regex::new(&lisp_regex_to_rust(regexp))?;
@@ -27,7 +27,7 @@ fn string_match<'ob>(
             all.push(group.end().into());
         }
         let match_data = crate::fns::slice_into_list(&all, None, cx);
-        env.as_mut(cx).match_data.set(match_data);
+        env.match_data.set(match_data);
         Ok(match_data.as_cons().car())
     } else {
         Ok(nil())
@@ -55,7 +55,7 @@ fn match_data<'ob>(
     integer: Option<()>,
     reuse: Option<()>,
     reseat: Option<()>,
-    env: &Root<Env>,
+    env: &Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     ensure!(
@@ -71,20 +71,15 @@ fn match_data<'ob>(
 }
 
 #[defun]
-fn set_match_data<'ob>(
-    list: Gc<List>,
-    _reseat: Option<()>,
-    env: &mut Root<Env>,
-    cx: &'ob Context,
-) -> GcObj<'ob> {
+fn set_match_data<'ob>(list: Gc<List>, _reseat: Option<()>, env: &mut Rt<Env>) -> GcObj<'ob> {
     // TODO: add reseat when markers implemented
     let obj: GcObj = list.into();
-    env.as_mut(cx).match_data.set(obj);
+    env.match_data.set(obj);
     nil()
 }
 
 #[defun]
-fn match_beginning<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     env.match_data
         .bind(cx)
         .as_list()?
@@ -93,7 +88,7 @@ fn match_beginning<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Res
 }
 
 #[defun]
-fn match_end<'ob>(subexp: usize, env: &Root<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     env.match_data
         .bind(cx)
         .as_list()?

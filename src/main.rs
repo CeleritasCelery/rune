@@ -63,7 +63,7 @@ mod threads;
 
 use crate::core::{
     env::{intern, Env},
-    gc::{Context, Root, RootSet},
+    gc::{Context, RootSet, Rt},
 };
 use std::env;
 use std::io::{self, Write};
@@ -74,7 +74,7 @@ fn parens_closed(buffer: &str) -> bool {
     open <= close
 }
 
-fn repl(env: &mut Root<Env>, cx: &mut Context) {
+fn repl(env: &mut Rt<Env>, cx: &mut Context) {
     println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
@@ -109,8 +109,8 @@ fn repl(env: &mut Root<Env>, cx: &mut Context) {
     }
 }
 
-fn load(env: &mut Root<Env>, cx: &mut Context) {
-    crate::core::env::init_variables(cx, env.as_mut(cx));
+fn load(env: &mut Rt<Env>, cx: &mut Context) {
+    crate::core::env::init_variables(cx, env);
     crate::data::defalias(
         intern("not", cx),
         (crate::core::env::sym::NULL).into(),

@@ -301,6 +301,6 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         root!(env, Env::default(), cx);
-        init_variables(cx, env.as_mut(cx));
+        init_variables(cx, env);
     }
 }

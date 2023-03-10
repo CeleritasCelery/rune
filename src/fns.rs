@@ -3,7 +3,7 @@ use crate::{
         cons::Cons,
         env::{sym, Env, Symbol},
         error::{Type, TypeError},
-        gc::{Context, IntoRoot, Root, Rt},
+        gc::{Context, IntoRoot, Rt},
         object::{
             nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec,
             List, ObjCell, Object,
@@ -77,7 +77,7 @@ pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String
 pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<GcObj>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     let sequence = sequence.bind(cx);
@@ -98,7 +98,7 @@ pub(crate) fn mapcar<'ob>(
 fn mapcar_internal<'ob, T>(
     mut iter: T,
     function: &Rt<Gc<Function>>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>>
 where
@@ -108,10 +108,10 @@ where
     root!(call_arg, Vec::new(), cx);
     while let Some(x) = iter.next() {
         let obj = x.bind(cx);
-        call_arg.as_mut(cx).push(obj);
+        call_arg.push(obj);
         let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
-        outputs.as_mut(cx).push(output);
-        call_arg.as_mut(cx).clear();
+        outputs.push(output);
+        call_arg.clear();
     }
     // TODO: remove this intermediate vector
     let slice = Rt::bind_slice(outputs, cx);
@@ -122,7 +122,7 @@ where
 pub(crate) fn mapc<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<Gc<List>>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.get(cx) {
@@ -131,9 +131,9 @@ pub(crate) fn mapc<'ob>(
             root!(call_arg, Vec::new(), cx);
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next() {
-                call_arg.as_mut(cx).push(elem);
+                call_arg.push(elem);
                 function.call(call_arg, env, cx, None)?;
-                call_arg.as_mut(cx).clear();
+                call_arg.clear();
             }
             Ok(sequence.bind(cx).into())
         }
@@ -144,7 +144,7 @@ pub(crate) fn mapc<'ob>(
 fn maphash(
     function: &Rt<Gc<Function>>,
     table: &Rt<Gc<&'static LispHashTable>>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {
     root!(cell, (nil(), nil()), cx);
@@ -152,10 +152,10 @@ fn maphash(
 
     root!(call_arg, Vec::new(), cx);
     while let Some((key, val)) = iter.next() {
-        call_arg.as_mut(cx).push(key);
-        call_arg.as_mut(cx).push(val);
+        call_arg.push(key);
+        call_arg.push(val);
         function.call(call_arg, env, cx, None)?;
-        call_arg.as_mut(cx).clear();
+        call_arg.clear();
     }
     Ok(false)
 }
@@ -373,7 +373,7 @@ fn require<'ob>(
     feature: &Rt<Gc<Symbol>>,
     filename: Option<&Rt<Gc<&LispString>>>,
     noerror: Option<()>,
-    env: &mut Root<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root

@@ -45,7 +45,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         #[allow(non_snake_case)]
         fn #func_name<'ob, 'id>(
             args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
-            env: &mut crate::core::gc::Root<crate::core::env::Env>,
+            env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
             #subr_call
@@ -319,7 +319,6 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
         }) => match elem.as_ref() {
             syn::Type::Path(path) => match get_path_ident_name(path).to_string().as_str() {
                 "Context" => ArgType::Context(mutability.is_some()),
-                "Root" => ArgType::Env,
                 "Rt" => get_rt_type(path)?,
                 _ => ArgType::Other,
             },
@@ -363,6 +362,8 @@ fn get_object_type(type_path: &syn::TypePath) -> ArgType {
             _ => Gc::Other,
         };
         ArgType::Gc(inner)
+    } else if outer_type.ident == "Env" {
+        ArgType::Env
     } else {
         ArgType::Other
     }
@@ -373,6 +374,7 @@ fn get_rt_type(type_path: &syn::TypePath) -> Result<ArgType, Error> {
     match get_generic_param(segment) {
         Some(syn::Type::Path(inner)) => match get_object_type(inner) {
             ArgType::Gc(gc) => Ok(ArgType::Rt(gc)),
+            ArgType::Env => Ok(ArgType::Env),
             _ => Err(Error::new_spanned(inner, "Found Rt of non-Gc type")),
         },
         _ => Ok(ArgType::Other),
@@ -429,12 +431,12 @@ mod test {
             (2, 1, false),
         );
         test_sig(
-            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Root<Env>, cx: &mut Context) -> u8 {0} },
+            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Rt<Env>, cx: &mut Context) -> u8 {0} },
             None,
             (1, 0, true),
         );
         test_sig(
-            quote! { fn foo(env: &Root<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<GcObj>]) -> u8 {0} },
+            quote! { fn foo(env: &Rt<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<GcObj>]) -> u8 {0} },
             None,
             (1, 1, true),
         );
@@ -467,9 +469,9 @@ mod test {
         test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
-        test_args(quote! {x: &Root<Env>}, &[ArgType::Env]);
+        test_args(quote! {x: &Rt<Env>}, &[ArgType::Env]);
         test_args(
-            quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Root<Env>},
+            quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Rt<Env>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),

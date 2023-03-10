@@ -1,5 +1,5 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
-use crate::core::gc::{Context, Root, Rt};
+use crate::core::gc::{Context, Rt};
 use crate::{
     core::gc::{GcManaged, GcMark, Trace},
     hashmap::HashMap,
@@ -84,11 +84,11 @@ impl LispHashTable {
         }
     }
 
-    pub(crate) fn iter<'rt, 'rs, 'a>(
+    pub(crate) fn iter<'rt, 'a>(
         table: &'rt Rt<Gc<&'static LispHashTable>>,
-        root: &'rt mut Root<'rs, 'rt, (GcObj<'static>, GcObj<'static>)>,
+        root: &'rt mut Rt<(GcObj<'static>, GcObj<'static>)>,
         cx: &'a Context,
-    ) -> HashTableStreamIter<'rt, 'rs> {
+    ) -> HashTableStreamIter<'rt> {
         // SAFETY: Since we know table is rooted, it is safe to change the inner
         // lifetime to static and the outer one to match 'rt
         let ref_cell = unsafe {
@@ -151,13 +151,13 @@ impl GcManaged for LispHashTable {
     }
 }
 
-pub(crate) struct HashTableStreamIter<'rt, 'rs> {
+pub(crate) struct HashTableStreamIter<'rt> {
     _rf: Ref<'rt, HashTableView<'static, ObjCell>>,
     iter: HashIter<'rt, GcObj<'static>, ObjCell>,
-    item: Option<&'rt mut Root<'rs, 'rt, (GcObj<'static>, GcObj<'static>)>>,
+    item: Option<&'rt mut Rt<(GcObj<'static>, GcObj<'static>)>>,
 }
 
-impl<'rt, 'rs> StreamingIterator for HashTableStreamIter<'rt, 'rs> {
+impl<'rt> StreamingIterator for HashTableStreamIter<'rt> {
     type Item = (Rt<GcObj<'static>>, Rt<GcObj<'static>>);
 
     fn advance(&mut self) {
@@ -166,18 +166,16 @@ impl<'rt, 'rs> StreamingIterator for HashTableStreamIter<'rt, 'rs> {
                 .item
                 .as_mut()
                 .expect("item should never be None while iter is Some");
-            unsafe {
-                let tuple: &mut (Rt<GcObj>, Rt<GcObj>) = item.deref_mut_unchecked();
-                tuple.0.set(*k);
-                tuple.1.set(v.get());
-            }
+            let tuple: &mut (Rt<GcObj>, Rt<GcObj>) = item;
+            tuple.0.set(*k);
+            tuple.1.set(v.get());
         } else {
             self.item = None;
         }
     }
 
     fn get(&self) -> Option<&Self::Item> {
-        self.item.as_ref().map(|x| &****x)
+        self.item.as_ref().map(|x| &***x)
     }
 }
 

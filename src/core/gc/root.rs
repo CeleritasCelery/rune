@@ -6,11 +6,13 @@ use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;
 use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
-use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
+use std::{
+    fmt::{Debug, Display},
+    marker::PhantomPinned,
+};
 
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
@@ -26,12 +28,12 @@ where
     }
 }
 
-impl<T> IntoRoot<T> for &Root<'_, '_, T>
+impl<T> IntoRoot<T> for &__StackRoot<'_, T>
 where
     T: Copy,
 {
     unsafe fn into_root(self) -> T {
-        *self.data
+        self.data.inner
     }
 }
 
@@ -105,96 +107,52 @@ impl<T> Trace for Gc<T> {
     }
 }
 
-/// Represents a Rooted object T. The purpose of this type is we cannot have
-/// mutable references to the inner data, because the garbage collector will
-/// need to trace it. This type will only give us a mut [`Rt`] (rooted mutable
-/// reference) when we are also holding a reference to the Context, meaning that
-/// garbage collection cannot happen.
-pub(crate) struct Root<'rt, 'a, T> {
-    data: *mut T,
+// Represents an object T rooted on the Stack. This will remove the the object
+// from the root set when dropped.
+#[doc(hidden)]
+pub(crate) struct __StackRoot<'rt, T> {
+    data: &'rt mut Rt<T>,
     root_set: &'rt RootSet,
-    // This lifetime parameter ensures that functions like mem::swap cannot be
-    // called in a way that would lead to memory unsafety. Since the drop guard
-    // of Root is critical to ensure that T gets unrooted the same time it is
-    // dropped, calling swap would invalidate this invariant.
-    safety: PhantomData<&'a ()>,
 }
 
-impl<'rt, T> Root<'rt, '_, T> {
-    pub(crate) unsafe fn new(root_set: &'rt RootSet) -> Self {
-        Self {
-            data: std::ptr::null_mut(),
-            root_set,
-            safety: PhantomData,
-        }
-    }
-
-    pub(crate) fn as_mut<'a>(&'a mut self, _cx: &'a Context) -> &'a mut Rt<T> {
-        // SAFETY: We have a reference to the Context
-        unsafe { self.deref_mut_unchecked() }
-    }
-
-    pub(crate) unsafe fn deref_mut_unchecked(&mut self) -> &mut Rt<T> {
-        assert!(
-            !self.data.is_null(),
-            "Attempt to mutably deref uninitialzed Root"
-        );
-        &mut *self.data.cast::<Rt<T>>()
+impl<T> AsMut<Rt<T>> for __StackRoot<'_, T> {
+    fn as_mut(&mut self) -> &mut Rt<T> {
+        self.data
     }
 }
 
-impl<T> Deref for Root<'_, '_, T> {
-    type Target = Rt<T>;
-
-    fn deref(&self) -> &Self::Target {
-        assert!(!self.data.is_null(), "Attempt to deref uninitialzed Root");
-        unsafe { &*self.data.cast::<Rt<T>>() }
-    }
-}
-
-impl<T> AsRef<Rt<T>> for Root<'_, '_, T> {
-    fn as_ref(&self) -> &Rt<T> {
-        self
-    }
-}
-
-impl<T: Debug> Debug for Root<'_, '_, T> {
+impl<T: Debug> Debug for __StackRoot<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&**self, f)
+        Debug::fmt(self.data, f)
     }
 }
 
-impl<T: Display> Display for Root<'_, '_, T> {
+impl<T: Display> Display for __StackRoot<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&**self, f)
+        Display::fmt(self.data, f)
     }
 }
 
-impl<'rt, T: Trace + 'static> Root<'rt, '_, T> {
-    pub(crate) unsafe fn init<'brw>(
-        root: &'brw mut Self,
-        data: &'brw mut T,
-    ) -> &'brw mut Root<'rt, 'brw, T> {
-        assert!(root.data.is_null(), "Attempt to reinit Root");
+// Do not use this function directly. Use the `root` macro instead.
+//
+// SAFETY: An owned StackRoot must never be exposed to the rest of the program.
+// That could result in calling `mem::forget` on the root, which would
+// invalidate the stack property of the root set.
+impl<'rt, T: Trace + 'static> __StackRoot<'rt, T> {
+    pub(crate) unsafe fn new(data: &'rt mut T, root_set: &'rt RootSet) -> __StackRoot<'rt, T> {
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
-        root.data = dyn_ptr.cast::<T>();
-        root.root_set.roots.borrow_mut().push(dyn_ptr);
-        // We need the safety lifetime to match the borrow
-        std::mem::transmute::<&mut Root<'rt, '_, T>, &mut Root<'rt, 'brw, T>>(root)
+        // TODO: See if there is a safer way to do this. We are relying on the
+        // layout of `dyn Trace`, which is not guaranteed.
+        let data = &mut *(dyn_ptr.cast::<Rt<T>>());
+        let root = Self { data, root_set };
+        root_set.roots.borrow_mut().push(dyn_ptr);
+        root
     }
 }
 
-impl<T> Drop for Root<'_, '_, T> {
+impl<T> Drop for __StackRoot<'_, T> {
     fn drop(&mut self) {
-        if self.data.is_null() {
-            if std::thread::panicking() {
-                eprintln!("Error: Root was dropped while still not set");
-            } else {
-                panic!("Error: Root was dropped while still not set");
-            }
-        } else {
-            self.root_set.roots.borrow_mut().pop();
-        }
+        self.root_set.roots.borrow_mut().pop();
     }
 }
 
@@ -218,8 +176,9 @@ macro_rules! root {
     };
     ($ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;
-        let mut root = unsafe { $crate::core::gc::Root::new($cx.get_root_set()) };
-        let $ident = unsafe { $crate::core::gc::Root::init(&mut root, &mut rooted) };
+        let mut root =
+            unsafe { $crate::core::gc::__StackRoot::new(&mut rooted, $cx.get_root_set()) };
+        let $ident = root.as_mut();
     };
 }
 
@@ -229,6 +188,7 @@ macro_rules! root {
 /// to access the inner data, the [`Rt::bind`] method must be used.
 #[repr(transparent)]
 pub(crate) struct Rt<T: ?Sized> {
+    _aliasable: PhantomPinned,
     inner: T,
 }
 
@@ -334,7 +294,10 @@ impl<T> Rt<T> {
     /// that resulting Rt is only exposed through references and that it is
     /// properly rooted.
     pub(crate) unsafe fn new_unchecked(item: T) -> Rt<T> {
-        Rt { inner: item }
+        Rt {
+            inner: item,
+            _aliasable: PhantomPinned,
+        }
     }
 }
 
@@ -433,15 +396,7 @@ impl IntoObject for &Rt<GcObj<'static>> {
     }
 }
 
-impl IntoObject for &Root<'_, '_, GcObj<'static>> {
-    type Out<'ob> = Object<'ob>;
-
-    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { self.inner.with_lifetime() }
-    }
-}
-
-impl IntoObject for &mut Root<'_, '_, GcObj<'static>> {
+impl IntoObject for &mut Rt<GcObj<'static>> {
     type Out<'ob> = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -625,7 +580,10 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let cx = &Context::new(root);
-        let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![] };
+        let mut vec: Rt<Vec<GcObj<'static>>> = Rt {
+            inner: vec![],
+            _aliasable: PhantomPinned,
+        };
 
         vec.push(nil());
         assert_eq!(vec[0], nil());
