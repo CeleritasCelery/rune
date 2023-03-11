@@ -21,7 +21,7 @@ The easiest way to run the interpreter is with ~cargo run~. Running with the loa
 *** MIRI
 Run the test suite with MIRI
 #+begin_src sh
-MIRIFLAGS='-Zmiri-strict-provenance -Zmiri-symbolic-alignment-check' cargo +nightly miri test
+MIRIFLAGS=-Zmiri-strict-provenance cargo +nightly miri test
 #+end_src
 ** Exploring this repo
 This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
