@@ -54,6 +54,7 @@ If you run with ~cargo run -- --load --repo~ that will load the current bootstra
 - [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in rust. It serves as in intro to this project.
 - [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]] :: An overview of the garbage collector used in this project and how Rust enables safe GC abstractions.
 - [[https://coredumped.dev/2022/05/19/a-vision-of-a-multi-threaded-emacs/][A vision of a multi-threaded Emacs ]]:: Some ideas about how to add multi-threading to the existing language.
+- [[https://coredumped.dev/2023/01/17/design-of-emacs-in-rust/][Design of Emacs in Rust]] :: Some of the unique benefits that Rust could bring to Emacs.
 ** Further exploration
 - [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained but is a big inspiration for Rune.
 - [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more mature ecosystem (which is part of the promise of rust).

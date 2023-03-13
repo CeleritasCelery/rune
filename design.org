@@ -83,6 +83,8 @@ Other things that would be great to have as async would be filesystem IO, networ
 
 How do you handle when the main thread changes some a variable that the buffer thread is using. Then that could create some very difficult bugs.
 
+There is also the issue of handling [[https://lists.gnu.org/archive/html/emacs-devel/2018-08/msg00456.html][user input]] from multiple threads. I would just disallow this entirely. Only the main thread can prompt the user.
+
 **** proposal
 Been thinking about async more and I think I have a pretty good start. There is the main interpreter thread and then child threads. Threads share no variables. When you start a child thread it inherits only the variables that are let bound at the time of it's definition. Or maybe give it an exclusive list. But from then on it has it's own variable space. Even if variable lookup is more expensive in child threads it won't matter a ton. Functions are bit harder because you don't know which functions will be called ahead of time. However my idea was that there would be two function spaces, main and child. Main behaves like normal, but anytime a child thread calls a function, if it is not in child function space it sends a message to the main thread to request the definition of that function. It then copies it over to the thread space. Since child threads can't change functions it would be basically be read only. Then if the main thread updates a function it can send a message to the child function space. Once all the child threads are idle the function can be updated.
 
