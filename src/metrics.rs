@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::ops::AddAssign;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use bytecount::num_chars;
 
@@ -15,10 +15,39 @@ impl Node {
     }
 }
 
+impl Add for Node {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Node {
+            bytes: self.bytes + rhs.bytes,
+            chars: self.chars + rhs.chars,
+        }
+    }
+}
+
+impl Sub for Node {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Node {
+            bytes: self.bytes - rhs.bytes,
+            chars: self.chars - rhs.chars,
+        }
+    }
+}
+
 impl AddAssign for Node {
     fn add_assign(&mut self, other: Node) {
         self.bytes += other.bytes;
         self.chars += other.chars;
+    }
+}
+
+impl SubAssign for Node {
+    fn sub_assign(&mut self, other: Node) {
+        self.bytes -= other.bytes;
+        self.chars -= other.chars;
     }
 }
 
@@ -95,6 +124,44 @@ impl Rope {
         self.update(idx - 1, |n| *n += Node { chars, bytes });
     }
 
+    fn move_gap(&mut self, bytes: usize, chars: usize) {
+        let new_gap = Node { bytes, chars };
+        let (new_gap_idx, gap_node_start) = self.node_at_byte(bytes);
+        if self.gap_idx == new_gap_idx {
+            return;
+        }
+        if self.gap_idx - 1 == new_gap_idx {
+            // split the node at the new gap position and update before and after the gap
+            let after_gap = gap_node_start + self.data[new_gap_idx] - new_gap;
+            self.update(new_gap_idx, |n| *n -= after_gap);
+            self.update(new_gap_idx + 2, |n| *n += after_gap);
+        } else if self.gap_idx + 1 == new_gap_idx {
+            // same as above but with the new gap position after the gap
+            let before_gap = new_gap - gap_node_start;
+            self.update(new_gap_idx, |n| *n -= before_gap);
+            self.update(new_gap_idx - 2, |n| *n += before_gap);
+        } else {
+            // make sure to handle gap at the start of the file
+            todo!();
+        }
+    }
+
+    fn node_at_byte(&self, bytes: usize) -> (usize, Node) {
+        let mut bytes = bytes;
+        let mut closet = Node::default();
+        let mut i = 0;
+        while let Some(node) = self.data.get(i) {
+            if node.bytes > bytes {
+                i = Self::left_child(i);
+            } else {
+                bytes -= node.bytes;
+                closet += *node;
+                i = Self::right_child(i);
+            }
+        }
+        (Self::parent(i).unwrap(), closet)
+    }
+
     fn byte_to_char(&self, bytes: usize) -> Node {
         let mut bytes = bytes;
         let mut closet = Node::default();
@@ -109,12 +176,12 @@ impl Rope {
             }
         }
         // if the current node is ascii, we can just index
-        if let Some(node) = self.data.get(Self::parent(i).unwrap()) {
-            if node.all_ascii() {
-                let idx = bytes.min(node.bytes);
-                closet.bytes += idx;
-                closet.chars += idx;
-            }
+
+        let node = self.data[Self::parent(i).unwrap()];
+        if node.all_ascii() {
+            let idx = bytes.min(node.bytes);
+            closet.bytes += idx;
+            closet.chars += idx;
         }
         closet
     }
@@ -133,12 +200,11 @@ impl Rope {
             }
         }
         // if the current node is ascii we can index
-        if let Some(node) = self.data.get(Self::parent(i).unwrap()) {
-            if node.all_ascii() {
-                let idx = chars.min(node.chars);
-                closet.bytes += idx;
-                closet.chars += idx;
-            }
+        let node = self.data[Self::parent(i).unwrap()];
+        if node.all_ascii() {
+            let idx = chars.min(node.chars);
+            closet.bytes += idx;
+            closet.chars += idx;
         }
         closet
     }
@@ -218,6 +284,19 @@ mod test {
         assert_eq!(rope.data[idx].bytes, 1);
         assert_eq!(rope.data[idx - 1].bytes, 7);
         assert_eq!(rope.data[0].chars, 6);
+    }
+
+    #[test]
+    fn test_move_gap() {
+        let data = b"hello world";
+        let mut rope = Rope::new(data, 5, 6);
+        rope.move_gap(4, 4);
+        assert_eq!(rope.data[rope.gap_idx - 1].bytes, 4);
+        assert_eq!(rope.data[rope.gap_idx + 1].bytes, 6);
+
+        rope.move_gap(7, 6);
+        assert_eq!(rope.data[rope.gap_idx - 1].bytes, 6);
+        assert_eq!(rope.data[rope.gap_idx + 1].bytes, 4);
     }
 
     #[test]
