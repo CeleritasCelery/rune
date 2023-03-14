@@ -127,7 +127,6 @@ impl Rope {
     }
 
     fn move_gap(&mut self, bytes: usize, chars: usize) {
-        println!("move_gap({}, {})", bytes, chars);
         let new_gap = Node { bytes, chars };
         let (new_gap_idx, gap_node_start) = self.node_at_byte(bytes);
         if self.gap_idx == new_gap_idx {
@@ -135,18 +134,37 @@ impl Rope {
         }
         if self.gap_idx - 1 == new_gap_idx {
             // split the node at the new gap position and update before and after the gap
+            //
+            // | A^B | Gap | C  | ...
+            // | A   | Gap | BC | ...
             let after_gap = gap_node_start + self.data[new_gap_idx] - new_gap;
             self.update(new_gap_idx, |n| *n -= after_gap);
             self.update(new_gap_idx + 2, |n| *n += after_gap);
         } else if self.gap_idx + 1 == new_gap_idx {
             // same as above but with the new gap position after the gap
+            //
+            // | A  | Gap | B^C | ...
+            // | AB | Gap | C   | ...
             let before_gap = new_gap - gap_node_start;
             self.update(new_gap_idx, |n| *n -= before_gap);
             self.update(new_gap_idx - 2, |n| *n += before_gap);
+        } else if new_gap_idx == self.leaf_start {
+            // if the new gap is the first node, then move it to the second so
+            // we have a node for insertion
+            //
+            // | A^B | C   | D   | ...
+            // | A   | Gap | BCD | ...
+            let before_gap = new_gap - gap_node_start;
+            let after_gap = self.data[new_gap_idx] - before_gap;
+            self.update(new_gap_idx, |n| *n -= after_gap);
+            let second_node = self.data[new_gap_idx + 1];
+            self.update(new_gap_idx + 2, |n| *n += second_node + after_gap);
+            let old_gap_node = self.data[self.gap_idx];
+            self.update(new_gap_idx + 1, |n| *n = *n + old_gap_node - second_node);
+            self.gap_idx = new_gap_idx + 1;
         } else {
-            if new_gap_idx == self.leaf_start {
-                todo!("implement gap at start");
-            }
+            // | A | Gap | C | ... | D  | E^F | G | ...
+            // | A | 0   | C | ... | DE | Gap | FG | ...
             {
                 // Take the metrics from the new gap and split it before and after
                 // the gap
@@ -333,6 +351,13 @@ mod test {
         rope.move_gap(rope.char_to_byte(14).bytes, 14);
         assert_eq!(rope.data[rope.gap_idx].bytes, 1);
         assert_eq!(rope.data[rope.gap_idx].chars, 0);
+
+        let data = b"hello world this date";
+        let mut rope = Rope::new(data, 10, 11);
+        rope.move_gap(0, 0);
+        assert_eq!(rope.gap_idx, rope.leaf_start + 1);
+        assert_eq!(rope.data[rope.leaf_start].bytes, 0);
+        assert_eq!(rope.data[rope.leaf_start].chars, 0);
     }
 
     #[test]
