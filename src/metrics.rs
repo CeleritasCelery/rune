@@ -72,6 +72,7 @@ impl RopeBuilder {
 pub(crate) struct Rope {
     data: Box<[Node]>,
     gap_idx: usize,
+    leaf_start: usize,
 }
 
 // const NODE_SIZE: usize = 2^11;
@@ -114,6 +115,7 @@ impl Rope {
         Self {
             data: builder.0.into_boxed_slice(),
             gap_idx: parent_nodes + pre_len,
+            leaf_start: parent_nodes,
         }
     }
 
@@ -125,6 +127,7 @@ impl Rope {
     }
 
     fn move_gap(&mut self, bytes: usize, chars: usize) {
+        println!("move_gap({}, {})", bytes, chars);
         let new_gap = Node { bytes, chars };
         let (new_gap_idx, gap_node_start) = self.node_at_byte(bytes);
         if self.gap_idx == new_gap_idx {
@@ -141,8 +144,27 @@ impl Rope {
             self.update(new_gap_idx, |n| *n -= before_gap);
             self.update(new_gap_idx - 2, |n| *n += before_gap);
         } else {
-            // make sure to handle gap at the start of the file
-            todo!();
+            if new_gap_idx == self.leaf_start {
+                todo!("implement gap at start");
+            }
+            {
+                // Take the metrics from the new gap and split it before and after
+                // the gap
+                let before_gap = new_gap - gap_node_start;
+                let after_gap = self.data[new_gap_idx] - before_gap;
+                self.update(new_gap_idx - 1, |n| *n += before_gap);
+                self.update(new_gap_idx + 1, |n| *n += after_gap);
+            }
+            {
+                // Update the new gap and clear the old gap
+                let gap_node = self.data[new_gap_idx];
+                let old_gap_node = self.data[self.gap_idx];
+                self.update(new_gap_idx, |n| *n = *n + old_gap_node - gap_node);
+                // TODO: if one of the neighbours is large we can split it into the
+                // old gap
+                self.update(self.gap_idx, |n| *n -= old_gap_node);
+            }
+            self.gap_idx = new_gap_idx;
         }
     }
 
@@ -199,12 +221,16 @@ impl Rope {
                 i = Self::right_child(i);
             }
         }
-        // if the current node is ascii we can index
-        let node = self.data[Self::parent(i).unwrap()];
-        if node.all_ascii() {
-            let idx = chars.min(node.chars);
-            closet.bytes += idx;
-            closet.chars += idx;
+        let parent = Self::parent(i).unwrap();
+        // If the parent node was a leaf node, then check if we can index into
+        // it via ascii
+        if parent >= self.leaf_start {
+            let node = self.data[parent];
+            if node.all_ascii() {
+                let idx = chars.min(node.chars);
+                closet.bytes += idx;
+                closet.chars += idx;
+            }
         }
         closet
     }
@@ -293,10 +319,20 @@ mod test {
         rope.move_gap(4, 4);
         assert_eq!(rope.data[rope.gap_idx - 1].bytes, 4);
         assert_eq!(rope.data[rope.gap_idx + 1].bytes, 6);
+        assert_eq!(rope.data[rope.gap_idx].bytes, 1);
+        assert_eq!(rope.data[rope.gap_idx].chars, 0);
 
-        rope.move_gap(7, 6);
+        rope.move_gap(rope.char_to_byte(6).bytes, 6);
         assert_eq!(rope.data[rope.gap_idx - 1].bytes, 6);
         assert_eq!(rope.data[rope.gap_idx + 1].bytes, 4);
+        assert_eq!(rope.data[rope.gap_idx].bytes, 1);
+        assert_eq!(rope.data[rope.gap_idx].chars, 0);
+
+        let data = b"hello world this date";
+        let mut rope = Rope::new(data, 5, 6);
+        rope.move_gap(rope.char_to_byte(14).bytes, 14);
+        assert_eq!(rope.data[rope.gap_idx].bytes, 1);
+        assert_eq!(rope.data[rope.gap_idx].chars, 0);
     }
 
     #[test]
