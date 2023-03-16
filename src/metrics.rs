@@ -126,6 +126,24 @@ impl Rope {
         self.update(idx - 1, |n| *n += Node { chars, bytes });
     }
 
+    // Assumes that gap is at the start of the deleted region and then deletes
+    // forward
+    fn delete(&mut self, bytes: usize, chars: usize) {
+        let delete = Node { bytes, chars };
+        let (delete_node_idx, delete_node_offset) = self.node_at_byte(bytes);
+        assert!(delete_node_idx > self.gap_idx);
+        let mut total_size = 0;
+        for i in self.gap_idx + 1..delete_node_idx {
+            let node = self.data[i];
+            total_size += node.bytes;
+            self.update(i, |n| *n -= node);
+        }
+        let before = delete - delete_node_offset;
+        total_size += before.bytes;
+        self.update(delete_node_idx, |n| *n -= before);
+        self.update(self.gap_idx, |n| n.bytes += total_size);
+    }
+
     fn move_gap(&mut self, bytes: usize, chars: usize) {
         let new_gap = Node { bytes, chars };
         let (new_gap_idx, gap_node_start) = self.node_at_byte(bytes);
@@ -358,6 +376,15 @@ mod test {
         assert_eq!(rope.gap_idx, rope.leaf_start + 1);
         assert_eq!(rope.data[rope.leaf_start].bytes, 0);
         assert_eq!(rope.data[rope.leaf_start].chars, 0);
+    }
+
+    #[test]
+    fn test_delete() {
+        let data = b"hello world";
+        let mut rope = Rope::new(data, 5, 6);
+        rope.delete(rope.char_to_byte(7).bytes, 7);
+        assert_eq!(rope.data[rope.gap_idx].bytes, 3);
+        assert_eq!(rope.data[rope.gap_idx + 1].chars, 3);
     }
 
     #[test]
