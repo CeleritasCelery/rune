@@ -2,6 +2,7 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use bytecount::num_chars;
+use str_indices::chars;
 
 #[derive(Debug, Default, Clone, Copy)]
 struct Node {
@@ -220,7 +221,7 @@ impl Rope {
         (Self::parent(i).unwrap(), closet)
     }
 
-    fn byte_to_char(&self, bytes: usize) -> Node {
+    fn byte_to_char(&self, bytes: usize, data: &[u8]) -> usize {
         let mut bytes = bytes;
         let mut closet = Node::default();
         let mut i = 0;
@@ -233,42 +234,48 @@ impl Rope {
                 i = Self::right_child(i);
             }
         }
-        // if the current node is ascii, we can just index
-
-        let node = self.data[Self::parent(i).unwrap()];
-        if node.all_ascii() {
-            let idx = bytes.min(node.bytes);
-            closet.bytes += idx;
-            closet.chars += idx;
+        let parent = Self::parent(i).unwrap();
+        if parent >= self.leaf_start {
+            let node = self.data[parent];
+            assert!(bytes <= node.bytes);
+            // if the current node is ascii, we can just index
+            if node.all_ascii() {
+                closet.chars + bytes
+            } else {
+                let slice = unsafe { std::str::from_utf8_unchecked(&data[closet.bytes..]) };
+                closet.chars + chars::from_byte_idx(slice, bytes)
+            }
+        } else {
+            closet.chars
         }
-        closet
     }
 
-    fn char_to_byte(&self, chars: usize) -> Node {
+    fn char_to_byte(&self, chars: usize, data: &[u8]) -> usize {
         let mut chars = chars;
-        let mut closet = Node::default();
+        let mut bytes = 0;
         let mut i = 0;
         while let Some(node) = self.data.get(i) {
             if node.chars > chars {
                 i = Self::left_child(i);
             } else {
                 chars -= node.chars;
-                closet += *node;
+                bytes += node.bytes;
                 i = Self::right_child(i);
             }
         }
         let parent = Self::parent(i).unwrap();
-        // If the parent node was a leaf node, then check if we can index into
-        // it via ascii
         if parent >= self.leaf_start {
             let node = self.data[parent];
+            assert!(chars <= node.chars);
             if node.all_ascii() {
-                let idx = chars.min(node.chars);
-                closet.bytes += idx;
-                closet.chars += idx;
+                bytes + chars
+            } else {
+                let slice = unsafe { std::str::from_utf8_unchecked(&data[bytes..]) };
+                bytes + chars::to_byte_idx(slice, chars)
             }
+        } else {
+            bytes
         }
-        closet
     }
 
     fn propagate(data: &mut [Node], idx: usize) {
@@ -358,7 +365,7 @@ mod test {
         assert_eq!(rope.data[rope.gap_idx].bytes, 1);
         assert_eq!(rope.data[rope.gap_idx].chars, 0);
 
-        rope.move_gap(rope.char_to_byte(6).bytes, 6);
+        rope.move_gap(rope.char_to_byte(6, data), 6);
         assert_eq!(rope.data[rope.gap_idx - 1].bytes, 6);
         assert_eq!(rope.data[rope.gap_idx + 1].bytes, 4);
         assert_eq!(rope.data[rope.gap_idx].bytes, 1);
@@ -366,7 +373,7 @@ mod test {
 
         let data = b"hello world this date";
         let mut rope = Rope::new(data, 5, 6);
-        rope.move_gap(rope.char_to_byte(14).bytes, 14);
+        rope.move_gap(rope.char_to_byte(14, data), 14);
         assert_eq!(rope.data[rope.gap_idx].bytes, 1);
         assert_eq!(rope.data[rope.gap_idx].chars, 0);
 
@@ -382,7 +389,7 @@ mod test {
     fn test_delete() {
         let data = b"hello world";
         let mut rope = Rope::new(data, 5, 6);
-        rope.delete(rope.char_to_byte(7).bytes, 7);
+        rope.delete(rope.char_to_byte(7, data), 7);
         assert_eq!(rope.data[rope.gap_idx].bytes, 3);
         assert_eq!(rope.data[rope.gap_idx + 1].chars, 3);
     }
@@ -391,29 +398,29 @@ mod test {
     fn test_indexing() {
         let data = b"hello world";
         let rope = Rope::new(data, 5, 6);
-        assert_eq!(rope.byte_to_char(0).chars, 0);
-        assert_eq!(rope.byte_to_char(3).chars, 3);
-        assert_eq!(rope.byte_to_char(5).chars, 5);
-        assert_eq!(rope.byte_to_char(6).chars, 5);
-        assert_eq!(rope.byte_to_char(10).chars, 9);
+        assert_eq!(rope.byte_to_char(0, data), 0);
+        assert_eq!(rope.byte_to_char(3, data), 3);
+        assert_eq!(rope.byte_to_char(5, data), 5);
+        assert_eq!(rope.byte_to_char(6, data), 5);
+        assert_eq!(rope.byte_to_char(10, data), 9);
 
-        assert_eq!(rope.char_to_byte(0).bytes, 0);
-        assert_eq!(rope.char_to_byte(3).bytes, 3);
-        assert_eq!(rope.char_to_byte(4).bytes, 4);
-        assert_eq!(rope.char_to_byte(5).bytes, 6);
-        assert_eq!(rope.char_to_byte(6).bytes, 7);
-        assert_eq!(rope.char_to_byte(9).bytes, 10);
+        assert_eq!(rope.char_to_byte(0, data), 0);
+        assert_eq!(rope.char_to_byte(3, data), 3);
+        assert_eq!(rope.char_to_byte(4, data), 4);
+        assert_eq!(rope.char_to_byte(5, data), 6);
+        assert_eq!(rope.char_to_byte(6, data), 7);
+        assert_eq!(rope.char_to_byte(9, data), 10);
 
         let data = b"hello world. This is a test string that contains a lot of ascii characters.";
         let rope = Rope::new(data, 40, 50);
-        assert_eq!(rope.char_to_byte(1).bytes, 1);
-        assert_eq!(rope.char_to_byte(11).bytes, 11);
-        assert_eq!(rope.char_to_byte(23).bytes, 23);
-        assert_eq!(rope.char_to_byte(23).bytes, 23);
-        assert_eq!(rope.char_to_byte(39).bytes, 39);
-        assert_eq!(rope.char_to_byte(40).bytes, 50);
-        assert_eq!(rope.char_to_byte(51).bytes, 61);
-        assert_eq!(rope.char_to_byte(65).bytes, 75);
-        assert_eq!(rope.char_to_byte(100).bytes, 75);
+        assert_eq!(rope.char_to_byte(1, data), 1);
+        assert_eq!(rope.char_to_byte(11, data), 11);
+        assert_eq!(rope.char_to_byte(23, data), 23);
+        assert_eq!(rope.char_to_byte(23, data), 23);
+        assert_eq!(rope.char_to_byte(39, data), 39);
+        assert_eq!(rope.char_to_byte(40, data), 50);
+        assert_eq!(rope.char_to_byte(51, data), 61);
+        assert_eq!(rope.char_to_byte(65, data), 75);
+        assert_eq!(rope.char_to_byte(100, data), 75);
     }
 }
