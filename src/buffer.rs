@@ -379,19 +379,19 @@ impl Buffer {
         };
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.data.len() - self.gap_len()
     }
 
-    pub fn len_chars(&self) -> usize {
+    pub const fn len_chars(&self) -> usize {
         self.total_chars
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.total_chars == 0
     }
 
-    fn gap_len(&self) -> usize {
+    const fn gap_len(&self) -> usize {
         self.gap_end - self.gap_start
     }
 

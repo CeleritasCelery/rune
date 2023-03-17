@@ -11,7 +11,7 @@ struct Node {
 }
 
 impl Node {
-    fn all_ascii(&self) -> bool {
+    const fn all_ascii(&self) -> bool {
         self.bytes == self.chars
     }
 }
@@ -211,14 +211,14 @@ impl Rope {
         let mut i = 0;
         while let Some(node) = self.data.get(i) {
             if node.bytes > bytes {
-                i = Self::left_child(i);
+                i = left_child(i);
             } else {
                 bytes -= node.bytes;
                 closet += *node;
-                i = Self::right_child(i);
+                i = right_child(i);
             }
         }
-        (Self::parent(i).unwrap(), closet)
+        (parent(i), closet)
     }
 
     fn byte_to_char(&self, bytes: usize, data: &[u8]) -> usize {
@@ -227,14 +227,14 @@ impl Rope {
         let mut i = 0;
         while let Some(node) = self.data.get(i) {
             if node.bytes > bytes {
-                i = Self::left_child(i);
+                i = left_child(i);
             } else {
                 bytes -= node.bytes;
                 closet += *node;
-                i = Self::right_child(i);
+                i = right_child(i);
             }
         }
-        let parent = Self::parent(i).unwrap();
+        let parent = parent(i);
         if parent >= self.leaf_start {
             let node = self.data[parent];
             assert!(bytes <= node.bytes);
@@ -259,14 +259,14 @@ impl Rope {
         let mut i = 0;
         while let Some(node) = self.data.get(i) {
             if node.chars > chars {
-                i = Self::left_child(i);
+                i = left_child(i);
             } else {
                 chars -= node.chars;
                 bytes += node.bytes;
-                i = Self::right_child(i);
+                i = right_child(i);
             }
         }
-        let parent = Self::parent(i).unwrap();
+        let parent = parent(i);
         if parent >= self.leaf_start {
             let node = self.data[parent];
             assert!(chars <= node.chars);
@@ -287,7 +287,7 @@ impl Rope {
         while i > 0 {
             // is odd
             let is_left_child = i & 1 == 1;
-            i = Self::parent(i).unwrap();
+            i = parent(i);
             if is_left_child {
                 data[i] += data[idx];
             }
@@ -302,28 +302,24 @@ impl Rope {
                 f(&mut self.data[i]);
             }
             is_left_child = i & 1 == 1; // is odd
-            i = match Self::parent(i) {
-                Some(p) => p,
-                None => break,
-            };
+            if i == 0 {
+                break;
+            }
+            i = parent(i);
         }
     }
+}
 
-    fn parent(idx: usize) -> Option<usize> {
-        if idx == 0 {
-            None
-        } else {
-            Some((idx - 1) / 2)
-        }
-    }
+const fn parent(idx: usize) -> usize {
+    (idx - 1) / 2
+}
 
-    fn left_child(idx: usize) -> usize {
-        2 * idx + 1
-    }
+const fn left_child(idx: usize) -> usize {
+    2 * idx + 1
+}
 
-    fn right_child(idx: usize) -> usize {
-        2 * idx + 2
-    }
+const fn right_child(idx: usize) -> usize {
+    2 * idx + 2
 }
 
 const fn is_char_boundary(byte: &u8) -> bool {
