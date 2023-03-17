@@ -273,9 +273,11 @@ impl Rope {
             if node.all_ascii() {
                 bytes + chars
             } else {
-                // TODO: make this checked
-                let slice = unsafe { std::str::from_utf8_unchecked(&data[bytes..]) };
-                bytes + chars::to_byte_idx(slice, chars)
+                let start = next_char_boundary(data, bytes);
+                let end = prev_char_boundary(data, bytes + node.bytes);
+                // TODO: make this unchecked
+                let slice = std::str::from_utf8(&data[start..end]).unwrap();
+                start + chars::to_byte_idx(slice, chars)
             }
         } else {
             bytes
