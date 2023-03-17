@@ -65,7 +65,7 @@ impl RopeBuilder {
     fn push(&mut self, node: Node) {
         let end = self.0.len();
         self.0.push(node);
-        Rope::propagate(&mut self.0, end);
+        propagate(&mut self.0, end, |n| *n += node);
     }
 }
 
@@ -73,7 +73,9 @@ impl RopeBuilder {
 pub(crate) struct Rope {
     data: Box<[Node]>,
     gap_idx: usize,
+    // TODO: see if we can remove this if we includ the total length
     leaf_start: usize,
+    largest_leaf: usize,
 }
 
 // const NODE_SIZE: usize = 2^11;
@@ -117,6 +119,7 @@ impl Rope {
             data: builder.0.into_boxed_slice(),
             gap_idx: parent_nodes + pre_len,
             leaf_start: parent_nodes,
+            largest_leaf: NODE_SIZE,
         }
     }
 
@@ -284,30 +287,24 @@ impl Rope {
         }
     }
 
-    fn propagate(data: &mut [Node], idx: usize) {
-        let mut i = idx;
-        while i > 0 {
-            // is odd
-            let is_left_child = i & 1 == 1;
-            i = parent(i);
-            if is_left_child {
-                data[i] += data[idx];
-            }
-        }
-    }
-
     fn update(&mut self, idx: usize, f: impl Fn(&mut Node)) {
-        let mut i = idx;
-        let mut is_left_child = true;
-        loop {
-            if is_left_child {
-                f(&mut self.data[i]);
-            }
-            is_left_child = i & 1 == 1; // is odd
-            if i == 0 {
-                break;
-            }
-            i = parent(i);
+        let leaf = &mut self.data[idx];
+        f(leaf);
+        // don't count the gap
+        if leaf.chars != 0 && leaf.bytes > self.largest_leaf {
+            self.largest_leaf = leaf.bytes;
+        }
+        propagate(&mut self.data, idx, f);
+    }
+}
+
+fn propagate(data: &mut [Node], idx: usize, f: impl Fn(&mut Node)) {
+    let mut i = idx;
+    while i > 0 {
+        let from_left = i & 1 == 1; // is odd
+        i = parent(i);
+        if from_left {
+            f(&mut data[i]);
         }
     }
 }
