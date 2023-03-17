@@ -222,7 +222,7 @@ impl Rope {
     }
 
     fn byte_to_char(&self, bytes: usize, data: &[u8]) -> usize {
-        let mut bytes = bytes;
+        let mut bytes = prev_char_boundary(data, bytes);
         let mut closet = Node::default();
         let mut i = 0;
         while let Some(node) = self.data.get(i) {
@@ -242,7 +242,10 @@ impl Rope {
             if node.all_ascii() {
                 closet.chars + bytes
             } else {
-                let slice = unsafe { std::str::from_utf8_unchecked(&data[closet.bytes..]) };
+                let start = next_char_boundary(data, closet.bytes);
+                let end = prev_char_boundary(data, closet.bytes + node.bytes);
+                // TODO: make this unchecked
+                let slice = std::str::from_utf8(&data[start..end]).unwrap();
                 closet.chars + chars::from_byte_idx(slice, bytes)
             }
         } else {
@@ -270,6 +273,7 @@ impl Rope {
             if node.all_ascii() {
                 bytes + chars
             } else {
+                // TODO: make this checked
                 let slice = unsafe { std::str::from_utf8_unchecked(&data[bytes..]) };
                 bytes + chars::to_byte_idx(slice, chars)
             }
@@ -320,6 +324,23 @@ impl Rope {
     fn right_child(idx: usize) -> usize {
         2 * idx + 2
     }
+}
+
+const fn is_char_boundary(byte: &u8) -> bool {
+    // This is bit magic equivalent to: b < 128 || b >= 192
+    (*byte as i8) >= -0x40
+}
+
+fn next_char_boundary(data: &[u8], i: usize) -> usize {
+    i + data[i..].iter().position(is_char_boundary).unwrap()
+}
+
+fn prev_char_boundary(data: &[u8], i: usize) -> usize {
+    let mut i = i;
+    while Some(true) == data.get(i).map(|b| !is_char_boundary(b)) {
+        i -= 1;
+    }
+    i
 }
 
 #[cfg(test)]
@@ -411,7 +432,8 @@ mod test {
         assert_eq!(rope.char_to_byte(6, data), 7);
         assert_eq!(rope.char_to_byte(9, data), 10);
 
-        let data = b"hello world. This is a test string that contains a lot of ascii characters.";
+        let data = b"hello world. This is a test string that \
+                     contains a lot of ascii characters.";
         let rope = Rope::new(data, 40, 50);
         assert_eq!(rope.char_to_byte(1, data), 1);
         assert_eq!(rope.char_to_byte(11, data), 11);
@@ -422,5 +444,50 @@ mod test {
         assert_eq!(rope.char_to_byte(51, data), 61);
         assert_eq!(rope.char_to_byte(65, data), 75);
         assert_eq!(rope.char_to_byte(100, data), 75);
+    }
+
+    #[test]
+    fn test_indexing_unicode() {
+        let data_str = "せかい せかい";
+        let gap_start = 9;
+        let gap_end = 10;
+        let gap_len = gap_end - gap_start;
+        assert!(data_str.is_char_boundary(gap_start));
+        assert!(data_str.is_char_boundary(gap_end));
+        let data = data_str.as_bytes();
+        let rope = Rope::new(data, gap_start, gap_end);
+        for i in 0..=gap_start {
+            assert_eq!(
+                rope.byte_to_char(i, data),
+                chars::from_byte_idx(data_str, i),
+                "mismatch on idx {i}"
+            );
+        }
+        for i in gap_end..data.len() + 5 {
+            assert_eq!(
+                rope.byte_to_char(i, data),
+                // remove gap_len from the result to account for gap
+                chars::from_byte_idx(data_str, i) - gap_len,
+                "mismatch on idx {i}"
+            );
+        }
+
+        let chars_before = data_str[..gap_start].chars().count();
+
+        for i in 0..chars_before {
+            assert_eq!(
+                rope.char_to_byte(i, data),
+                chars::to_byte_idx(data_str, i),
+                "mismatch on idx {i}"
+            );
+        }
+        for i in chars_before..data.len() {
+            assert_eq!(
+                rope.char_to_byte(i, data),
+                // add gap_len to i to account for gap
+                chars::to_byte_idx(data_str, i + gap_len),
+                "mismatch on idx {i}"
+            );
+        }
     }
 }
