@@ -181,7 +181,7 @@ impl SymbolMap {
             matches!(entry, Entry::Vacant(_)),
             "Attempt to intitalize {name} twice"
         );
-        entry.or_insert(SymbolBox::from_static(sym));
+        entry.or_insert_with(|| SymbolBox::from_static(sym));
     }
 }
 

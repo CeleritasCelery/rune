@@ -109,7 +109,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<Pat
             }
         }
     }
-    final_file.ok_or(anyhow!("Unable to find file `{file}' in load-path"))
+    final_file.ok_or_else(|| anyhow!("Unable to find file `{file}' in load-path"))
 }
 
 #[defun]

@@ -6,6 +6,10 @@
 #![warn(
     clippy::all,
     clippy::pedantic,
+    clippy::as_ptr_cast_mut,
+    clippy::equatable_if_let,
+    clippy::nonstandard_macro_braces,
+    clippy::or_fun_call,
     unused_qualifications,
     meta_variable_misuse,
     explicit_outlives_requirements,
