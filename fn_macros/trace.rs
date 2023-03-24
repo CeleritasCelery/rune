@@ -84,6 +84,12 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     quote! {
         #derive
 
+        // Note that this is techincally unsound, since the layout of rust types
+        // are not guaranteed. We could use memoffset to check that it is safe,
+        // but that would require https://github.com/Gilnaa/memoffset/issues/71
+        // or a nightly compiler. For now we will rely on the fact that it is
+        // highly unlikely that the layout will be different since they have the
+        // same fields, and that it would fail quickly if it did happen.
         impl std::ops::Deref for #rt<#orig_name #static_generics> {
             type Target = #rooted_name #static_generics;
             fn deref(&self) -> &Self::Target {
