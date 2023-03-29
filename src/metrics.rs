@@ -53,13 +53,13 @@ impl SubAssign for Node {
 }
 
 #[derive(Debug)]
-struct RopeBuilder(Vec<Node>);
+struct MetricBuilder(Vec<Node>);
 
-impl RopeBuilder {
+impl MetricBuilder {
     fn new(parents: usize, leafs: usize) -> Self {
         let mut data = Vec::with_capacity(parents + leafs);
         data.resize_with(parents, Node::default);
-        RopeBuilder(data)
+        MetricBuilder(data)
     }
 
     fn push(&mut self, node: Node) {
@@ -75,10 +75,13 @@ pub(crate) struct Rope {
     gap_idx: usize,
     // TODO: see if we can remove this if we includ the total length
     leaf_start: usize,
+    total: Node,
     largest_leaf: usize,
 }
 
-// const NODE_SIZE: usize = 2^11;
+#[cfg(not(test))]
+const NODE_SIZE: usize = 2 ^ 10;
+#[cfg(test)]
 const NODE_SIZE: usize = 5;
 // the tree field of the Rope struct is a binary tree of Metrics implemented as
 // a binary heap
@@ -90,9 +93,10 @@ impl Rope {
         let size = pre_len + post.len() + 1;
 
         let parent_nodes = size.next_power_of_two() - 1;
-        let mut builder = RopeBuilder::new(parent_nodes, size);
+        let mut builder = MetricBuilder::new(parent_nodes, size);
+        let mut total = Node::default();
         // add nodes before the gap
-        if pre_len == 0 {
+        if pre.len() == 0 {
             // if the gap is at the start of the file, we need to add a dummy
             // node so that inserts can go here
             builder.push(Node::default());
@@ -100,25 +104,32 @@ impl Rope {
             for chunk in pre {
                 let chars = num_chars(chunk);
                 let bytes = chunk.len();
-                builder.push(Node { bytes, chars })
+                let span = Node { bytes, chars };
+                total += span;
+                builder.push(span)
             }
         }
         // add node for gap
-        builder.push(Node {
+        let span = Node {
             bytes: gap_end - gap_start,
             chars: 0,
-        });
+        };
+        total += span;
+        builder.push(span);
         // add nodes after the gap
         for chunk in post {
             let chars = num_chars(chunk);
             let bytes = chunk.len();
-            builder.push(Node { bytes, chars });
+            let span = Node { bytes, chars };
+            total += span;
+            builder.push(span);
         }
         assert_eq!(builder.0.len(), size + parent_nodes);
         Self {
             data: builder.0.into_boxed_slice(),
             gap_idx: parent_nodes + pre_len,
             leaf_start: parent_nodes,
+            total,
             largest_leaf: NODE_SIZE,
         }
     }
@@ -126,6 +137,7 @@ impl Rope {
     fn insert(&mut self, chars: usize, bytes: usize) {
         let idx = self.gap_idx;
         assert!((1..self.data.len()).contains(&idx));
+        self.total.chars += chars;
         self.update(idx, |n| n.bytes -= bytes);
         self.update(idx - 1, |n| *n += Node { chars, bytes });
     }
@@ -356,6 +368,8 @@ mod test {
         assert_eq!(rope.data[4].chars, 0);
         assert_eq!(rope.data[4].bytes, 1);
         assert_eq!(rope.data[5].bytes, 5);
+        assert_eq!(rope.total.bytes, data.len());
+        assert_eq!(rope.total.chars, data.len() - rope.data[rope.gap_idx].bytes);
     }
 
     #[test]
@@ -365,10 +379,13 @@ mod test {
         let idx = rope.gap_idx;
         assert_eq!(rope.data[idx].bytes, 3);
         assert_eq!(rope.data[0].chars, 5);
+        assert_eq!(rope.total.chars, 10);
         rope.insert(1, 2);
         assert_eq!(rope.data[idx].bytes, 1);
         assert_eq!(rope.data[idx - 1].bytes, 7);
         assert_eq!(rope.data[0].chars, 6);
+        assert_eq!(rope.total.bytes, data.len());
+        assert_eq!(rope.total.chars, 11);
     }
 
     #[test]
