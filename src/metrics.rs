@@ -308,6 +308,10 @@ impl Rope {
         }
         propagate(&mut self.data, idx, f);
     }
+
+    pub(crate) fn total_chars(&self) -> usize {
+        self.total.chars
+    }
 }
 
 fn propagate(data: &mut [Node], idx: usize, f: impl Fn(&mut Node)) {
