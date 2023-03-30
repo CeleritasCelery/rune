@@ -17,35 +17,40 @@ defvar!(MESSAGE_TYPE, "new message");
 #[defun]
 fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     let mut result = String::new();
-    let mut last_end = 0;
     let mut iter = objects.iter();
-    let mut escaped = false;
-    let is_format_char = |c: char| {
-        if escaped {
-            escaped = false;
-            false
-        } else if c == '\\' {
-            escaped = true;
-            false
-        } else {
-            c == '%'
+    // "%%" inserts a single "%" in the output
+    for segment in string.split("%%") {
+        let mut last_end = 0;
+        let mut escaped = false;
+        let is_format_char = |c: char| {
+            if escaped {
+                escaped = false;
+                false
+            } else if c == '\\' {
+                escaped = true;
+                false
+            } else {
+                c == '%'
+            }
+        };
+        for (start, _) in segment.match_indices(is_format_char) {
+            result.push_str(&segment[last_end..start]);
+            // TODO: currently handles all format types the same. Need to check the modifier characters.
+            let Some(val) = iter.next() else {bail!("Not enough objects for format string")};
+            match val.untag() {
+                Object::String(s) => result.push_str(s.try_into()?),
+                obj => write!(result, "{obj}")?,
+            }
+            last_end = start + 2;
         }
-    };
-    for (start, _) in string.match_indices(is_format_char) {
-        result.push_str(&string[last_end..start]);
-        // TODO: currently handles all format types the same. Need to check the modifier characters.
-        let Some(val) = iter.next() else {bail!("Not enough objects for format string")};
-        match val.untag() {
-            Object::String(s) => result.push_str(s.try_into()?),
-            obj => write!(result, "{obj}")?,
-        }
-        last_end = start + 2;
+        result.push_str(&segment[last_end..segment.len()]);
+        result.push_str("%");
     }
+    result.pop();  // the last "%"
     ensure!(
         iter.next().is_none(),
         "Too many arguments for format string"
     );
-    result.push_str(&string[last_end..string.len()]);
     Ok(result)
 }
 
