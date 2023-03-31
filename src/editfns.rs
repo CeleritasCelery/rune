@@ -17,38 +17,40 @@ defvar!(MESSAGE_TYPE, "new message");
 #[defun]
 fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     let mut result = String::new();
-    let mut iter = objects.iter();
-    // "%%" inserts a single "%" in the output
-    for segment in string.split("%%") {
-        let mut last_end = 0;
-        let mut escaped = false;
-        let is_format_char = |c: char| {
-            if escaped {
-                escaped = false;
-                false
-            } else if c == '\\' {
-                escaped = true;
-                false
-            } else {
-                c == '%'
-            }
-        };
-        for (start, _) in segment.match_indices(is_format_char) {
-            result.push_str(&segment[last_end..start]);
+    let mut arguments = objects.iter();
+    let mut remaining = string;
+
+    let mut escaped = false;
+    let mut is_format_char = |c: char| {
+        if escaped {
+            escaped = false;
+            false
+        } else if c == '\\' {
+            escaped = true;
+            false
+        } else {
+            c == '%'
+        }
+    };
+    while let Some(start) = remaining.find(&mut is_format_char) {
+        result.push_str(&remaining[..start]);
+        let Some(specifier) = string.as_bytes().get(start+1) else {bail!("Format string ends in middle of format specifier")};
+        // "%%" inserts a single "%" in the output
+        if *specifier == b'%' {
+            result.push('%');
+        } else {
             // TODO: currently handles all format types the same. Need to check the modifier characters.
-            let Some(val) = iter.next() else {bail!("Not enough objects for format string")};
+            let Some(val) = arguments.next() else {bail!("Not enough arguments for format string")};
             match val.untag() {
-                Object::String(s) => result.push_str(s.try_into()?),
+                Object::String(s) => result.push_str(s.try_into().unwrap()),
                 obj => write!(result, "{obj}")?,
             }
-            last_end = start + 2;
         }
-        result.push_str(&segment[last_end..segment.len()]);
-        result.push_str("%");
+        remaining = &remaining[start + 2..];
     }
-    result.pop();  // the last "%"
+    result.push_str(remaining);
     ensure!(
-        iter.next().is_none(),
+        arguments.next().is_none(),
         "Too many arguments for format string"
     );
     Ok(result)
@@ -72,6 +74,8 @@ mod test {
     fn test_format() {
         assert_eq!(&format("%s", &[1.into()]).unwrap(), "1");
         assert_eq!(&format("foo-%s", &[2.into()]).unwrap(), "foo-2");
+        assert_eq!(&format("%%", &[]).unwrap(), "%");
+        assert_eq!(&format("_%%_", &[]).unwrap(), "_%_");
         assert_eq!(
             &format("foo-%s %s", &[3.into(), 4.into()]).unwrap(),
             "foo-3 4"
