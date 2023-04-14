@@ -9,8 +9,6 @@ use std::{
 use bytecount::num_chars;
 use str_indices::chars;
 
-use crate::metrics::Rope;
-
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
 #[derive(Default)]
@@ -28,7 +26,6 @@ pub struct Buffer {
     /// The current cursor.
     cursor: Point,
     total_chars: usize,
-    metrics: Rope,
 }
 
 impl Display for Buffer {
@@ -71,7 +68,6 @@ impl From<&str> for Buffer {
             debug_assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
         };
-        let metrics = Rope::new(&storage, 0, Self::GAP_SIZE);
         Self {
             data: storage,
             gap_start: 0,
@@ -82,7 +78,6 @@ impl From<&str> for Buffer {
                 char: 0,
             },
             total_chars: chars::count(data),
-            metrics,
         }
     }
 }
@@ -97,7 +92,6 @@ impl From<String> for Buffer {
             debug_assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
         };
-        let metrics = Rope::new(&storage, 0, Self::GAP_SIZE);
         Self {
             data: storage,
             gap_start: 0,
@@ -108,7 +102,6 @@ impl From<String> for Buffer {
                 char: 0,
             },
             total_chars: chars::count(&data),
-            metrics,
         }
     }
 }
