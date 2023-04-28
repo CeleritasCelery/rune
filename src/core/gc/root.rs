@@ -577,6 +577,21 @@ mod test {
     use super::*;
 
     #[test]
+    fn mem_swap() {
+        let root = &RootSet::default();
+        let cx = &mut Context::new(root);
+        let outer = cx.add("outer");
+        root!(outer, cx);
+        {
+            let inner = cx.add("inner");
+            root!(inner, cx);
+            std::mem::swap(outer, inner);
+        }
+        cx.garbage_collect(true);
+        assert_eq!(outer.bind(cx), "inner");
+    }
+
+    #[test]
     fn indexing() {
         let root = &RootSet::default();
         let cx = &Context::new(root);
