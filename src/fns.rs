@@ -109,7 +109,7 @@ where
     while let Some(x) = iter.next() {
         let obj = x.bind(cx);
         call_arg.push(obj);
-        let output = rebind!(function.call(call_arg, env, cx, None)?, cx);
+        let output = function.call(call_arg, env, cx, None)?;
         outputs.push(output);
         call_arg.clear();
     }

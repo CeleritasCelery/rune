@@ -12,9 +12,8 @@ use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 lazy_static! {
-    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol<'static>>> = Mutex::new({
-        HashSet::with_capacity_and_hasher(0, std::hash::BuildHasherDefault::default())
-    });
+    pub(crate) static ref FEATURES: Mutex<HashSet<Symbol<'static>>> =
+        Mutex::new(HashSet::default());
 }
 
 #[defun]

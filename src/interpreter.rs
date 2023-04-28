@@ -167,7 +167,7 @@ impl Interpreter<'_> {
         rooted_iter!(iter, args, cx);
         root!(args, Vec::new(), cx);
         while let Some(x) = iter.next() {
-            let result = rebind!(self.eval_form(x, cx)?, cx);
+            let result = self.eval_form(x, cx)?;
             args.push(result);
         }
         let name = sym.bind(cx).name().to_owned();
@@ -210,7 +210,7 @@ impl Interpreter<'_> {
         root!(returned_form, None, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
-            let value = rebind!(self.eval_form(form, cx)?, cx);
+            let value = self.eval_form(form, cx)?;
             count += 1;
             if prog_num == count {
                 returned_form.set(value);
@@ -273,7 +273,7 @@ impl Interpreter<'_> {
         root!(last, qtrue(), cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next() {
-            let result = rebind!(self.eval_form(form, cx)?, cx);
+            let result = self.eval_form(form, cx)?;
             if result == nil() {
                 return Ok(nil());
             }
@@ -408,8 +408,7 @@ impl Interpreter<'_> {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
-                    let val = self.let_bind_value(cons, cx)?;
-                    let val = rebind!(val, cx);
+                    let val = rebind!(self.let_bind_value(cons, cx)?, cx);
                     let var: Symbol = cons
                         .get(cx)
                         .car()
@@ -436,8 +435,7 @@ impl Interpreter<'_> {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
-                    let var = self.let_bind_value(cons, cx)?;
-                    let var = rebind!(var, cx);
+                    let var = rebind!(self.let_bind_value(cons, cx)?, cx);
                     let sym: Symbol = cons
                         .get(cx)
                         .car()
@@ -480,7 +478,7 @@ impl Interpreter<'_> {
         rooted_iter!(iter, cons.bind(cx).cdr(), cx);
         let value = match iter.next() {
             // (let ((x y)))
-            Some(x) => rebind!(self.eval_form(x, cx)?, cx),
+            Some(x) => self.eval_form(x, cx)?,
             // (let ((x)))
             None => nil(),
         };
@@ -498,7 +496,7 @@ impl Interpreter<'_> {
     ) -> EvalResult<'ob> {
         root!(last, nil(), cx);
         while let Some(form) = forms.next() {
-            let value = rebind!(self.eval_form(form, cx)?, cx);
+            let value = self.eval_form(form, cx)?;
             last.set(value);
         }
         Ok(last.bind(cx))
@@ -561,7 +559,7 @@ impl Interpreter<'_> {
                         Err(_) => return Ok(nil()),
                     };
                     rooted_iter!(handlers, list, cx);
-                    let result = rebind!(self.implicit_progn(handlers, cx)?, cx);
+                    let result = self.implicit_progn(handlers, cx)?;
                     self.vars.pop();
                     return Ok(result);
                 }

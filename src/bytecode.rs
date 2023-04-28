@@ -320,7 +320,7 @@ impl<'brw, 'ob> Routine<'brw> {
         let name = sym.name().to_owned();
         root!(args, cx);
         root!(func, cx);
-        let result = rebind!(func.call(args, env, cx, Some(&name))?, cx);
+        let result = func.call(args, env, cx, Some(&name))?;
         self.stack.remove_top(arg_cnt);
         self.stack[0].set(result);
         cx.garbage_collect(false);
