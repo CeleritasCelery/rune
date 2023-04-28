@@ -158,13 +158,17 @@ The first is that searching is much more expensive, as described in [[https://gi
 
 As with everything, there are [[https://github.com/emacs-ng/emacs-ng/issues/378#issuecomment-907680382][tradeoffs]]. I don't think a rope is great choice. And honestly a gap buffer is [[http://www.goodmath.org/blog/2009/02/18/gap-buffers-or-dont-get-tied-up-with-ropes/][pretty fast]]. There are only two big problems with gap buffers, finding arbitrary lines, and how to solve  [[Regex Gap Buffer][regex]], because gap buffers are still not contiguous, even if they are better then ropes.
 
-**** find lines in a gap buffer
+**** metrics
 If I say that I want to go to any arbitrary line in a gap buffer, how to do I do that efficiently? In current emacs it has to scan from your cursor to the line you want, which can be very expensive.
 
+***** ropes
 Ropes handle this really well because they can hold metrics in a binary tree so you can do a binary B-Tree search to go to a line. My idea is to do the same thing but not store text, only store counts. Basicly build a B-Tree of the number of newlines in each chunk of a buffer. I still don't know the size a chunk. The obvious ones are ~u8~ (256) which seems too small and ~u16~ (65536) which seems too big. It all depends on how fast I can scan to the point. I could pick something in the middle if that was good trade off. I want to use the [[https://crates.io/crates/bytecount][bytecount]] crate to do the counting because it blazing fast. Either way I can just search the B-Tree to find chunk that has the line and then scan for the line. The exact same method could be used to store code-points or any of metric I want to track. And the nice thing is since I know the exact size of B-Tree when creating the buffer, I can allocate it without any points and use offsets, to get to the different chunks.
 
 The downside of this is that if you ever move the gap from side of the buffer to the other, you may have to recalculate all of your metrics because now everything is shifted. Ropes obviously don't have this problem. You might be able to work around this by not having implicit byte indexes, but instead have each part of the tree store its byte index. This would make the structure bigger, and make look up a little slower (you can no longer use arithmetic to calculate offsets) but would mean you couldn't invalidate your entire cache by moving the gap.
 
+Rather then having each chunk be a fixed size if you let them be variable size, then it makes some of this easier.
+
+***** markers
 The other approach would be have markers through out the buffer. These track both metric and byte position in an absolute form. Problem is that you would potentially have to update all of your markers on each character inserted or deleted, which would get expensive if you have a lot of them.
 
 *** indexing
