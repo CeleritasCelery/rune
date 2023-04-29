@@ -259,6 +259,14 @@ impl<const CONST: bool> Drop for Block<CONST> {
     }
 }
 
+// helper macro for the `rebind!` macro
+macro_rules! last {
+    ($arg:expr) => { $arg };
+    ($head:expr, $($rest:expr),+) => {
+        last!($($rest),+)
+    };
+}
+
 /// Rebinds an object so that it is bound to an immutable borrow of [Context]
 /// instead of a mutable borrow. This can release the mutable borrow and allow
 /// Context to be used for other things.
@@ -266,14 +274,28 @@ impl<const CONST: bool> Drop for Block<CONST> {
 /// # Examples
 ///
 /// ```
-/// let object = func_taking_mut_context(&mut cx);
-/// rebind!(object, cx);
+/// let object = rebind!(func1(&mut cx));
+/// func2(&mut cx);
+/// let object2 = object;
 /// ```
+///
+/// wthout this macro the above code would not compile because `object` can't
+/// outlive the call to func2.
 #[macro_export]
 macro_rules! rebind {
-    ($value:expr, $cx:ident) => {{
+    // rebind!(func(x, cx)?)
+    ($($path:ident).*($($arg:expr),+)$($x:tt)?) => {{
+        rebind!($($path).*($($arg),+)$($x)?, last!($($arg),+))
+    }};
+    // rebind!(func(x, cx).unwrap())
+    ($($path:ident).*($($arg:expr),+).unwrap()) => {{
+        rebind!($($path).*($($arg),+).unwrap(), last!($($arg),+))
+    }};
+    // rebind!(x, cx)
+    ($value:expr, $cx:expr) => {{
         let bits = $value.into_raw();
-        unsafe { $cx.rebind_raw_ptr(bits) }
+        #[allow(clippy::unnecessary_mut_passed)]
+        unsafe { $crate::core::gc::Context::rebind_raw_ptr($cx, bits)  }
     }};
 }
 
@@ -290,7 +312,7 @@ mod test {
     fn test_reborrow() {
         let roots = &RootSet::default();
         let mut cx = Context::new(roots);
-        let obj = rebind!(bind_to_mut(&mut cx), cx);
+        let obj = rebind!(bind_to_mut(&mut cx));
         _ = "foo".into_obj(&cx);
         assert_eq!(obj, "invariant");
     }

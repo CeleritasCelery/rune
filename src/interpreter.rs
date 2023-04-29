@@ -129,7 +129,7 @@ impl Interpreter<'_> {
         root!(name, cx);
         let value = match forms.next() {
             // (defvar x y)
-            Some(value) => rebind!(self.eval_form(value, cx)?, cx),
+            Some(value) => rebind!(self.eval_form(value, cx)?),
             // (defvar x)
             None => nil(),
         };
@@ -316,7 +316,7 @@ impl Interpreter<'_> {
                 (Object::Symbol(var), Some(val)) => {
                     root!(var, cx);
                     root!(val, cx);
-                    let val = rebind!(self.eval_form(val, cx)?, cx);
+                    let val = rebind!(self.eval_form(val, cx)?);
                     self.var_set(var.bind(cx), val, cx)?;
                     last_value.set(val);
                 }
@@ -393,7 +393,7 @@ impl Interpreter<'_> {
         } else {
             self.let_bind_serial(obj, cx)
         }?;
-        let obj = rebind!(self.implicit_progn(iter, cx)?, cx);
+        let obj = rebind!(self.implicit_progn(iter, cx)?);
         // Remove old bindings
         self.vars.truncate(prev_len);
         self.env.unbind(varbind_count, cx);
@@ -408,7 +408,7 @@ impl Interpreter<'_> {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
-                    let val = rebind!(self.let_bind_value(cons, cx)?, cx);
+                    let val = rebind!(self.let_bind_value(cons, cx)?);
                     let var: Symbol = cons
                         .get(cx)
                         .car()
@@ -435,7 +435,7 @@ impl Interpreter<'_> {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
-                    let var = rebind!(self.let_bind_value(cons, cx)?, cx);
+                    let var = rebind!(self.let_bind_value(cons, cx)?);
                     let sym: Symbol = cons
                         .get(cx)
                         .car()
@@ -762,7 +762,7 @@ mod test {
         println!("Test String: {test_str}");
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
-        let compare = rebind!(eval(obj, None, env, cx).unwrap(), cx);
+        let compare = rebind!(eval(obj, None, env, cx).unwrap());
         let expect: GcObj = expect.into_obj(cx).copy_as_obj();
         assert_eq!(compare, expect);
     }

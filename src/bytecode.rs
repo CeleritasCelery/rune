@@ -1041,7 +1041,7 @@ mod test {
         cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
-        let val = rebind!(call(bytecode, args, "test", env, cx).unwrap(), cx);
+        let val = rebind!(call(bytecode, args, "test", env, cx).unwrap());
         let expect = expect.bind(cx);
         assert_eq!(val, expect);
     }
