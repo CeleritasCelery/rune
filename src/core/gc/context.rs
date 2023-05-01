@@ -1,7 +1,7 @@
 use super::OwnedObject;
 use super::Trace;
 use crate::core::env::UninternedSymbolMap;
-use crate::core::object::{Gc, GcObj, IntoObject, RawInto, WithLifetime};
+use crate::core::object::{Gc, GcObj, IntoObject, FromRaw, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -161,9 +161,9 @@ impl<'ob, 'rt> Context<'rt> {
 
     pub(crate) unsafe fn rebind_raw_ptr<T, U>(&'ob self, raw: T) -> U
     where
-        T: RawInto<U>,
+        T: FromRaw<'ob, Out = U>,
     {
-        raw.raw_into()
+        raw.from_raw()
     }
 
     pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {
@@ -311,9 +311,9 @@ mod test {
     #[test]
     fn test_reborrow() {
         let roots = &RootSet::default();
-        let mut cx = Context::new(roots);
-        let obj = rebind!(bind_to_mut(&mut cx));
-        _ = "foo".into_obj(&cx);
+        let cx = &mut Context::new(roots);
+        let obj = rebind!(bind_to_mut(cx));
+        _ = "foo".into_obj(cx);
         assert_eq!(obj, "invariant");
     }
 

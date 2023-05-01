@@ -505,12 +505,17 @@ impl Interpreter<'_> {
     fn unwind_protect<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let Some(body) = forms.next() else {bail_err!(ArgError::new(1, 0, "unwind-protect"))};
-        let result = match self.eval_form(body, cx) {
-            Ok(x) => Ok(rebind!(x, cx)),
-            Err(e) => Err(e),
-        };
-        self.implicit_progn(forms, cx)?;
-        result
+        match self.eval_form(body, cx) {
+            Ok(x) => {
+                root!(x, cx);
+                self.implicit_progn(forms, cx)?;
+                Ok(x.bind(cx))
+            }
+            Err(e) => {
+                self.implicit_progn(forms, cx)?;
+                Err(e)
+            }
+        }
     }
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
