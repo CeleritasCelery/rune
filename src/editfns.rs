@@ -34,7 +34,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     };
     while let Some(start) = remaining.find(&mut is_format_char) {
         result.push_str(&remaining[..start]);
-        let Some(specifier) = string.as_bytes().get(start+1) else {bail!("Format string ends in middle of format specifier")};
+        let Some(specifier) = remaining.as_bytes().get(start+1) else {bail!("Format string ends in middle of format specifier")};
         // "%%" inserts a single "%" in the output
         if *specifier == b'%' {
             result.push('%');
@@ -85,5 +85,7 @@ mod test {
 
         assert!(&format("%s", &[]).is_err());
         assert!(&format("%s", &[1.into(), 2.into()]).is_err());
+
+        assert!(format("`%s' %s%s%s", &[0.into(), 1.into(), 2.into(), 3.into()]).is_ok());
     }
 }
