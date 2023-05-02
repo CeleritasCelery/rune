@@ -323,10 +323,10 @@ impl<T> Rt<Gc<T>> {
     /// Like `try_into().bind(cx)`, but needed to due no specialization
     pub(crate) fn bind_as<'ob, U, E>(&self, _cx: &'ob Context) -> Result<U, E>
     where
-        Gc<T>: TryInto<U, Error = E> + Copy,
-        U: 'ob,
+        Gc<T>: WithLifetime<'ob> + Copy,
+        <Gc<T> as WithLifetime<'ob>>::Out: TryInto<U, Error = E> + Copy,
     {
-        self.inner.try_into()
+        unsafe { self.inner.with_lifetime().try_into() }
     }
 
     /// Like `From`, but needed to due no specialization

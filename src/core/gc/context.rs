@@ -1,7 +1,7 @@
 use super::OwnedObject;
 use super::Trace;
 use crate::core::env::UninternedSymbolMap;
-use crate::core::object::{Gc, GcObj, IntoObject, FromRaw, WithLifetime};
+use crate::core::object::{FromRaw, Gc, GcObj, IntoObject, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -186,8 +186,7 @@ impl<'ob, 'rt> Context<'rt> {
                 (**x).trace(gray_stack);
             }
         }
-        while !gray_stack.is_empty() {
-            let raw = gray_stack.pop().unwrap();
+        while let Some(raw) = gray_stack.pop() {
             let obj = unsafe { GcObj::from_raw(raw) };
             if !obj.is_marked() {
                 obj.trace_mark(gray_stack);
@@ -295,6 +294,8 @@ macro_rules! rebind {
     ($value:expr, $cx:expr) => {{
         let bits = $value.into_raw();
         #[allow(clippy::unnecessary_mut_passed)]
+        // TODO: Need to move this expression out of the unsafe block, otherwise
+        // you could sneak in unsafe code and be unsound
         unsafe { $crate::core::gc::Context::rebind_raw_ptr($cx, bits)  }
     }};
 }
