@@ -293,10 +293,9 @@ macro_rules! rebind {
     // rebind!(x, cx)
     ($value:expr, $cx:expr) => {{
         let bits = $value.into_raw();
-        #[allow(clippy::unnecessary_mut_passed)]
-        // TODO: Need to move this expression out of the unsafe block, otherwise
-        // you could sneak in unsafe code and be unsound
-        unsafe { $crate::core::gc::Context::rebind_raw_ptr($cx, bits)  }
+        // keep $cx out of the unsafe block
+        let cx: &$crate::core::gc::Context = $cx;
+        unsafe { cx.rebind_raw_ptr(bits)  }
     }};
 }
 
