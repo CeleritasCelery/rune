@@ -1,0 +1,13 @@
+[package]
+name = "buffer-the-gap"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["compat", "crdt-testdata"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytecount = "0.6.3"
+str_indices = "0.4.1"
