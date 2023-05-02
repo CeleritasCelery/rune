@@ -1,7 +1,7 @@
 use super::OwnedObject;
 use super::Trace;
 use crate::core::env::UninternedSymbolMap;
-use crate::core::object::{FromRaw, Gc, GcObj, IntoObject, WithLifetime};
+use crate::core::object::{BindRaw, Gc, GcObj, IntoObject, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -161,9 +161,9 @@ impl<'ob, 'rt> Context<'rt> {
 
     pub(crate) unsafe fn rebind_raw_ptr<T, U>(&'ob self, raw: T) -> U
     where
-        T: FromRaw<'ob, Out = U>,
+        T: BindRaw<'ob, Out = U>,
     {
-        raw.from_raw()
+        raw.bind_raw()
     }
 
     pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {

@@ -168,21 +168,21 @@ impl<'new, 'old, T: GcManaged + 'new> WithLifetime<'new> for &'old T {
     }
 }
 
-pub(crate) trait FromRaw<'ob> {
+pub(crate) trait BindRaw<'ob> {
     type Out: 'ob;
-    unsafe fn from_raw(self) -> Self::Out;
+    unsafe fn bind_raw(self) -> Self::Out;
 }
 
-impl<'ob> FromRaw<'ob> for RawObj {
+impl<'ob> BindRaw<'ob> for RawObj {
     type Out = GcObj<'ob>;
-    unsafe fn from_raw(self) -> GcObj<'ob> {
+    unsafe fn bind_raw(self) -> GcObj<'ob> {
         GcObj::new(self.ptr)
     }
 }
 
-impl<'ob> FromRaw<'ob> for *const Cons {
+impl<'ob> BindRaw<'ob> for *const Cons {
     type Out = &'ob Cons;
-    unsafe fn from_raw(self) -> &'ob Cons {
+    unsafe fn bind_raw(self) -> &'ob Cons {
         &*self
     }
 }
