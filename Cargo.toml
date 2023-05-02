@@ -1,5 +1,5 @@
 [package]
-name = "gap-buffer"
+name = "buffer-the-gap"
 version = "0.1.0"
 edition = "2021"
 
