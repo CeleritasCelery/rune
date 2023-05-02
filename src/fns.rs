@@ -114,8 +114,7 @@ where
         call_arg.clear();
     }
     // TODO: remove this intermediate vector
-    let slice = Rt::bind_slice(outputs, cx);
-    Ok(slice_into_list(slice, None, cx))
+    Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
 }
 
 #[defun]

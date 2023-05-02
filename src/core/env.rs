@@ -65,7 +65,7 @@ impl Rt<Env> {
 
     pub(crate) fn unbind(&mut self, count: u16, cx: &Context) {
         for _ in 0..count {
-            match self.binding_stack.pop_obj(cx) {
+            match self.binding_stack.bind_mut(cx).pop() {
                 Some((sym, val)) => match val {
                     Some(val) => self.vars.insert(sym, val),
                     None => self.vars.remove(sym),

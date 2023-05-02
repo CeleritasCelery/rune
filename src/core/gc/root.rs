@@ -241,6 +241,17 @@ where
     }
 }
 
+impl<'new, T> WithLifetime<'new> for Vec<T>
+where
+    T: WithLifetime<'new>,
+{
+    type Out = Vec<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute(self)
+    }
+}
+
 impl<'new, T> WithLifetime<'new> for Option<T>
 where
     T: WithLifetime<'new>,
@@ -281,6 +292,31 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob> + Copy,
     {
         self.inner.with_lifetime()
+    }
+
+    pub(crate) fn bind_ref<'a, 'ob>(&'a self, _: &'ob Context) -> &'a <T as WithLifetime<'ob>>::Out
+    where
+        T: WithLifetime<'ob>,
+    {
+        // SAFETY: We are holding a reference to the context
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        unsafe {
+            std::mem::transmute(&self.inner)
+        }
+    }
+
+    pub(crate) fn bind_mut<'a, 'ob>(
+        &'a mut self,
+        _: &'ob Context,
+    ) -> &'a mut <T as WithLifetime<'ob>>::Out
+    where
+        T: WithLifetime<'ob>,
+    {
+        // SAFETY: We are holding a reference to the context
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        unsafe {
+            std::mem::transmute(&mut self.inner)
+        }
     }
 
     pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Context) -> &'ob [U]
@@ -486,13 +522,6 @@ impl<T> Rt<Vec<T>> {
     pub(crate) fn swap_remove(&mut self, index: usize) {
         self.as_mut_ref().swap_remove(index);
     }
-
-    pub(crate) fn pop_obj<'ob, U>(&mut self, _cx: &'ob Context) -> Option<U>
-    where
-        T: WithLifetime<'ob, Out = U>,
-    {
-        self.inner.pop().map(|x| unsafe { x.with_lifetime() })
-    }
 }
 
 impl<T> Deref for Rt<Vec<T>> {
@@ -606,7 +635,6 @@ mod test {
         let str2 = cx.add("str2");
         vec.push(str1);
         vec.push(str2);
-        let slice = &vec[0..3];
-        assert_eq!(vec![nil(), str1, str2], Rt::bind_slice(slice, cx));
+        assert_eq!(vec![nil(), str1, str2], vec.bind_ref(cx)[0..3]);
     }
 }

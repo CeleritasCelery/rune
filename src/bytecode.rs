@@ -138,12 +138,12 @@ impl IndexMut<usize> for Rt<LispStack> {
     }
 }
 
-impl Index<RangeTo<u16>> for Rt<LispStack> {
+impl Index<RangeTo<usize>> for Rt<LispStack> {
     type Output = [Rt<GcObj<'static>>];
 
-    fn index(&self, index: RangeTo<u16>) -> &Self::Output {
-        debug_assert!((index.end as usize) <= self.len());
-        let end = self.len() - (index.end as usize);
+    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
+        debug_assert!(index.end <= self.len());
+        let end = self.len() - index.end;
         let vec: &[Rt<GcObj>] = self;
         &vec[end..]
     }
@@ -163,7 +163,7 @@ impl Trace for LispStack {
 
 impl Rt<LispStack> {
     fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
-        self.deref_mut().pop_obj(cx).unwrap()
+        self.bind_mut(cx).pop().unwrap()
     }
 
     fn top(&mut self) -> &mut Rt<GcObj<'static>> {
@@ -290,7 +290,7 @@ impl<'brw, 'ob> Routine<'brw> {
         let total_args = arg_cnt + fill_args;
         let rest_size = total_args - (func.args.required + func.args.optional);
         if rest_size > 0 {
-            let slice = &self.stack[..rest_size];
+            let slice = &self.stack[..rest_size as usize];
             let list = crate::fns::slice_into_list(Rt::bind_slice(slice, cx), None, cx);
             self.stack.remove_top(rest_size - 1);
             self.stack[0].set(list);
@@ -309,7 +309,8 @@ impl<'brw, 'ob> Routine<'brw> {
         env: &mut Rt<Env>,
         cx: &'ob mut Context,
     ) -> Result<(), EvalError> {
-        let sym = match self.stack[arg_cnt as usize].get(cx) {
+        let arg_cnt = arg_cnt as usize;
+        let sym = match self.stack[arg_cnt].get(cx) {
             Object::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
@@ -336,7 +337,7 @@ impl<'brw, 'ob> Routine<'brw> {
 
             // we will fix this once we can handle different error types
             #[allow(clippy::never_loop)]
-            while let Some(handler) = self.handlers.pop_obj(cx) {
+            while let Some(handler) = self.handlers.bind_mut(cx).pop() {
                 match handler.condition.untag() {
                     Object::Symbol(sym::ERROR) => {}
                     Object::Cons(cons) => {
@@ -842,11 +843,11 @@ impl<'brw, 'ob> Routine<'brw> {
                     top.set(data::integerp(top.bind(cx)));
                 }
                 op::ListN => {
-                    let size = self.frame.pc.arg1();
+                    let size = self.frame.pc.arg1() as usize;
                     let slice = Rt::bind_slice(&self.stack[..size], cx);
                     let list = alloc::list(slice, cx);
                     let len = self.stack.len();
-                    self.stack.truncate(len - (size as usize - 1));
+                    self.stack.truncate(len - (size - 1));
                     self.stack.top().set(list);
                 }
                 op::ConcatN => todo!("ConcatN bytecode"),

@@ -100,7 +100,7 @@ impl Interpreter<'_> {
             }
         };
         // pop this tag from the catch stack
-        self.env.catch_stack.pop_obj(cx);
+        self.env.catch_stack.bind_mut(cx).pop();
         result
     }
 
@@ -452,7 +452,7 @@ impl Interpreter<'_> {
             }
         }
         let mut sum = 0;
-        for (var, val) in Rt::bind_slice(let_bindings, cx) {
+        for (var, val) in let_bindings.bind_ref(cx) {
             sum += self.create_let_binding(*var, *val, cx);
         }
         Ok(sum)
