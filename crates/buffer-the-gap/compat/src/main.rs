@@ -1,5 +1,5 @@
 use crdt_testdata::TestPatch;
-use buffer_the_gap::Buffer;
+use text_buffer::Buffer;
 use std::fs::File;
 use std::io::Write as _;
 

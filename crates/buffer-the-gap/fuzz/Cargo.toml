@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.gap-buffer]
+[dependencies.text-buffer]
 path = ".."
 
 # Prevent this from interfering with workspaces

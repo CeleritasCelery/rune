@@ -1,6 +1,6 @@
 #![no_main]
 
-use gap_buffer::Buffer;
+use text_buffer::Buffer;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|transactions: Vec<Result<(usize, &str), (usize, usize)>>| {
