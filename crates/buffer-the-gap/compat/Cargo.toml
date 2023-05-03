@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gap-buffer = {path = "../"}
-crdt-testdata = { path = "../crdt-testdata" }
+buffer-the-gap = {path = "../"}
+crdt-testdata = { path = "crdt-testdata" }

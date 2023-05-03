@@ -1,5 +1,5 @@
 use crdt_testdata::TestPatch;
-use gap_buffer::Buffer;
+use buffer_the_gap::Buffer;
 use std::fs::File;
 use std::io::Write as _;
 
@@ -64,7 +64,7 @@ mod test {
     use super::*;
     fn apply_tokens(path: &str) {
         let path = format!(
-            "{}/../crdt-testdata/data/{}.json.gz",
+            "{}/crdt-testdata/data/{}.json.gz",
             env!("CARGO_MANIFEST_DIR"),
             path,
         );
