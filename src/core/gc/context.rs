@@ -1,7 +1,7 @@
 use super::OwnedObject;
 use super::Trace;
 use crate::core::env::UninternedSymbolMap;
-use crate::core::object::{BindRaw, Gc, GcObj, IntoObject, WithLifetime};
+use crate::core::object::{Gc, GcObj, IntoObject, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -159,13 +159,6 @@ impl<'ob, 'rt> Context<'rt> {
         unsafe { obj.with_lifetime() }
     }
 
-    pub(crate) unsafe fn rebind_raw_ptr<T, U>(&'ob self, raw: T) -> U
-    where
-        T: BindRaw<'ob, Out = U>,
-    {
-        raw.bind_raw()
-    }
-
     pub(crate) fn get_root_set(&'ob self) -> &'rt RootSet {
         self.root_set
     }
@@ -292,10 +285,11 @@ macro_rules! rebind {
     }};
     // rebind!(x, cx)
     ($value:expr, $cx:expr) => {{
-        let bits = $value.into_raw();
-        // keep $cx out of the unsafe block
-        let cx: &$crate::core::gc::Context = $cx;
-        unsafe { cx.rebind_raw_ptr(bits)  }
+        // Eval value outside the unsafe block
+        let unbound = match $value {
+            v => unsafe { $crate::core::object::WithLifetime::<'static>::with_lifetime(v) }
+        };
+        $cx.bind(unbound)
     }};
 }
 
