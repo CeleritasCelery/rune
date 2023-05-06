@@ -1,9 +1,12 @@
 #![allow(unstable_name_collisions)]
-use super::super::{
-    cons::Cons,
-    env::{Symbol, SymbolCell},
-    error::{Type, TypeError},
-    gc::{AllocObject, Block},
+use super::{
+    super::{
+        cons::Cons,
+        env::{Symbol, SymbolCell},
+        error::{Type, TypeError},
+        gc::{AllocObject, Block},
+    },
+    Buffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
@@ -343,6 +346,7 @@ mod private {
         HashTable,
         SubrFn,
         ByteFn,
+        Buffer,
     }
 
     pub(crate) trait TaggedPtr: Copy + for<'a> WithLifetime<'a> {
@@ -392,6 +396,7 @@ impl<'a> TaggedPtr for Object<'a> {
                 Tag::Vec => Object::Vec(<&LispVec>::from_obj_ptr(ptr)),
                 Tag::Record => Object::Record(<&Record>::from_obj_ptr(ptr)),
                 Tag::HashTable => Object::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
+                Tag::Buffer => Object::Buffer(<&Buffer>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -408,6 +413,7 @@ impl<'a> TaggedPtr for Object<'a> {
             Object::String(x) => TaggedPtr::tag(x).into(),
             Object::ByteFn(x) => TaggedPtr::tag(x).into(),
             Object::SubrFn(x) => TaggedPtr::tag(x).into(),
+            Object::Buffer(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -622,6 +628,18 @@ impl TaggedPtr for &LispHashTable {
     }
 }
 
+impl TaggedPtr for &Buffer {
+    type Ptr = Buffer;
+    const TAG: Tag = Tag::Buffer;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
 macro_rules! cast_gc {
     ($supertype:ty => $($subtype:ty),+ $(,)?) => {
         $(
@@ -753,8 +771,9 @@ pub(crate) enum Object<'ob> {
     String(&'ob LispString) = Tag::String as u8,
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
+    Buffer(&'static Buffer) = Tag::Buffer as u8,
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn);
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn, &'ob Buffer);
 
 impl Object<'_> {
     pub(crate) const NIL: Object<'static> = Object::Symbol(sym::NIL);
@@ -771,6 +790,7 @@ impl Object<'_> {
             Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
             Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
+            Object::Buffer(_) => Type::Buffer,
         }
     }
 }
@@ -1002,6 +1022,7 @@ where
             Object::Vec(x) => x.clone_in(bk).into(),
             Object::Record(x) => x.clone_in(bk).into(),
             Object::HashTable(x) => x.clone_in(bk).into(),
+            Object::Buffer(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else {unreachable!()};
         x
@@ -1106,6 +1127,7 @@ impl fmt::Display for Object<'_> {
             Object::ByteFn(x) => D::fmt(x, f),
             Object::SubrFn(x) => D::fmt(x, f),
             Object::Float(x) => D::fmt(x, f),
+            Object::Buffer(x) => D::fmt(x, f),
         }
     }
 }
@@ -1126,6 +1148,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::String(x) => x.is_marked(),
             Object::ByteFn(x) => x.is_marked(),
             Object::Symbol(x) => x.is_marked(),
+            Object::Buffer(x) => x.is_marked(),
         }
     }
 
@@ -1140,6 +1163,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Cons(x) => x.trace(stack),
             Object::Symbol(x) => x.trace(stack),
             Object::ByteFn(x) => x.trace(stack),
+            Object::Buffer(x) => x.trace(stack),
         }
     }
 }

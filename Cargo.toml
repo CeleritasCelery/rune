@@ -19,6 +19,7 @@ paste = "1.0.12"
 rustc-hash = "1.1.0"
 sptr = "0.3.2"
 streaming-iterator = "0.1.9"
+text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.2.0"

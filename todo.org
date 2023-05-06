@@ -9,7 +9,8 @@ Currently symbol-function of a special form will return nil
 - define in gc.rs
 - add boxing function
 - define in object
-- implement intoObject
+- impl ~IntoObject~
+- impl ~TaggedPtr~
 - implement tryfrom object
 - implement tracing
 - Add to ~OwnedObject~

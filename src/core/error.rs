@@ -174,6 +174,7 @@ pub(crate) enum Type {
     Func,
     Number,
     List,
+    Buffer,
 }
 
 /// Error provided if object was the wrong type

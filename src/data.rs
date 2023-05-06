@@ -350,6 +350,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::HashTable(_) => sym::HASH_TABLE.into(),
         Object::String(_) => sym::STRING.into(),
         Object::SubrFn(_) => sym::SUBR.into(),
+        Object::Buffer(_) => sym::BUFFER.into(),
     }
 }
 
@@ -441,5 +442,6 @@ defsym!(INTEGER);
 defsym!(SYMBOL);
 defsym!(COMPILED_FUNCTION);
 defsym!(HASH_TABLE);
+defsym!(BUFFER);
 defsym!(STRING);
 defsym!(SUBR);
