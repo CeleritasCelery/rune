@@ -27,6 +27,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
         syn::Data::Struct(strct) => {
             let mut new_fields = TokenStream::new();
             let mut mark_fields = TokenStream::new();
+            let mut test_fields = TokenStream::new();
             match &strct.fields {
                 syn::Fields::Named(fields) => {
                     for x in &fields.named {
@@ -35,6 +36,10 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                         let ident = ident
                             .as_ref()
                             .expect("named fields should have an identifer");
+                        test_fields.extend(quote! {
+                            assert_eq!(memoffset::offset_of!(super::#orig_name, #ident),
+                                       memoffset::offset_of!(super::#rooted_name, #ident));
+                        });
                         if no_trace(attrs) {
                             new_fields.extend(quote! {#vis #ident: #ty,});
                             // Remove dead_code warnings
@@ -52,6 +57,10 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                     for (i, x) in fields.unnamed.iter().enumerate() {
                         let syn::Field { vis, ty, attrs, .. } = &x;
                         let idx = syn::Index::from(i);
+                        test_fields.extend(quote! {
+                            assert_eq!(memoffset::offset_of_tuple!(super::#orig_name, #idx),
+                                       memoffset::offset_of_tuple!(super::#rooted_name, #idx));
+                        });
                         if no_trace(attrs) {
                             new_fields.extend(quote! {#vis #ty,});
                             // Remove dead_code warnings
@@ -66,6 +75,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 }
                 syn::Fields::Unit => panic!("fieldless structs don't need tracing"),
             }
+            let test_mod = format_ident!("derive_trace_{orig_name}");
             quote! {
                 impl crate::core::gc::Trace for #orig_name #static_generics {
                     fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
@@ -76,6 +86,20 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 #[automatically_derived]
                 #[allow(non_camel_case_types)]
                 #vis struct #rooted_name #orig_generics #new_fields
+
+                // This makes sure that the offsets of the fields are the same
+                // between the derived and orignal structs. Once
+                // https://github.com/rust-lang/rust/issues/80384 is stabilized
+                // or we switch to nightly, this can be moved into a const
+                // assertion.
+                #[cfg(test)]
+                mod #test_mod {
+                    #[test]
+                    #[doc(hidden)]
+                    fn offsets() {
+                        #test_fields
+                    }
+                }
             }
         }
         _ => todo!(),
@@ -84,12 +108,6 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     quote! {
         #derive
 
-        // Note that this is techincally unsound, since the layout of rust types
-        // are not guaranteed. We could use memoffset to check that it is safe,
-        // but that would require https://github.com/Gilnaa/memoffset/issues/71
-        // or a nightly compiler. For now we will rely on the fact that it is
-        // highly unlikely that the layout will be different since they have the
-        // same fields, and that it would fail quickly if it did happen.
         impl std::ops::Deref for #rt<#orig_name #static_generics> {
             type Target = #rooted_name #static_generics;
             fn deref(&self) -> &Self::Target {

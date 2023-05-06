@@ -130,6 +130,8 @@ impl Index<usize> for Rt<LispStack> {
     }
 }
 
+// This impl is specifically for the Stack. It takes the index from the end of
+// the vector instead of the start. This matches how the lisp stack behaves.
 impl IndexMut<usize> for Rt<LispStack> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let index = self.offset_end(index);
@@ -138,6 +140,8 @@ impl IndexMut<usize> for Rt<LispStack> {
     }
 }
 
+// This impl is specifically for the Stack. It takes the range from the end of
+// the vector instead of the start. This matches how the lisp stack behaves.
 impl Index<RangeTo<usize>> for Rt<LispStack> {
     type Output = [Rt<GcObj<'static>>];
 
