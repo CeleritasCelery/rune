@@ -13,7 +13,6 @@ struct BufferData {
 
 #[derive(Debug)]
 pub(crate) struct Buffer {
-    gc: GcMark,
     text_buffer: Mutex<Option<BufferData>>,
 }
 
@@ -44,7 +43,7 @@ impl Trace for Buffer {
 
 impl GcManaged for Buffer {
     fn get_mark(&self) -> &GcMark {
-        &self.gc
+        panic!("Buffer does not use GcMark")
     }
 }
 

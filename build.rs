@@ -74,7 +74,7 @@ fn main() {
         let path = entry.path();
         if path.is_file() {
             let contents = fs::read_to_string(&path).unwrap();
-            for (start, end) in contents.match_indices("#[defun") {
+            for (start, end) in contents.match_indices("\n#[defun") {
                 let non_symbol = |c: char| !(c.is_alphanumeric() || c == '_');
                 let name = get_substring_between_predicate(&contents[start..], "fn ", non_symbol);
 
