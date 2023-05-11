@@ -256,15 +256,6 @@ impl IntoObject for SymbolCell {
     }
 }
 
-impl IntoObject for LispString {
-    type Out<'ob> = &'ob Self;
-
-    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
-        unsafe { Self::Out::tag_ptr(ptr) }
-    }
-}
-
 impl IntoObject for String {
     type Out<'ob> = &'ob LispString;
 

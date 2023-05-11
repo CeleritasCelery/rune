@@ -210,6 +210,7 @@ impl OwnedObject {
             OwnedObject::String(x) => x.unmark(),
             OwnedObject::Symbol(x) => x.unmark(),
             OwnedObject::ByteFn(x) => x.unmark(),
+            OwnedObject::Buffer(_) => todo!("unmark buffer"),
         }
     }
 
@@ -222,6 +223,7 @@ impl OwnedObject {
             OwnedObject::String(x) => x.is_marked(),
             OwnedObject::Symbol(x) => x.is_marked(),
             OwnedObject::ByteFn(x) => x.is_marked(),
+            OwnedObject::Buffer(_) => todo!("is_marked buffer"),
         }
     }
 }

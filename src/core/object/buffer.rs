@@ -1,5 +1,5 @@
 use super::{Gc, RawObj, TagType, WithLifetime};
-use crate::core::gc::{GcManaged, GcMark, Trace};
+use crate::core::gc::{AllocObject, Block, GcManaged, GcMark, Trace};
 use std::{fmt::Display, sync::Mutex};
 use text_buffer::Buffer as TextBuffer;
 
@@ -7,13 +7,30 @@ use text_buffer::Buffer as TextBuffer;
 #[allow(dead_code)]
 struct BufferData {
     name: String,
-    file_name: String,
     text: TextBuffer,
 }
 
 #[derive(Debug)]
 pub(crate) struct Buffer {
     text_buffer: Mutex<Option<BufferData>>,
+}
+
+impl Buffer {
+    pub(crate) fn create(name: String, block: &Block<true>) -> &Buffer {
+        let new = Self::new(name);
+        let ptr = new.alloc_obj(block);
+        unsafe { &*ptr }
+    }
+    // This constructor is not safe to expose outside this module because it is
+    // GcManaged
+    fn new(name: String) -> Self {
+        Self {
+            text_buffer: Mutex::new(Some(BufferData {
+                name,
+                text: TextBuffer::new(),
+            })),
+        }
+    }
 }
 
 impl PartialEq for Buffer {
@@ -50,7 +67,7 @@ impl GcManaged for Buffer {
 impl<'old, 'new> Buffer {
     pub(in crate::core) fn clone_in<const C: bool>(
         &'old self,
-        _: &'new crate::core::gc::Block<C>,
+        _: &'new Block<C>,
     ) -> Gc<&'new Buffer> {
         unsafe { self.with_lifetime().tag() }
     }

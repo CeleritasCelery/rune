@@ -1,7 +1,7 @@
 use super::Block;
 use crate::core::cons::Cons;
 use crate::core::env::SymbolCell;
-use crate::core::object::{ByteFn, LispFloat, LispHashTable, LispString, LispVec};
+use crate::core::object::{Buffer, ByteFn, LispFloat, LispHashTable, LispString, LispVec};
 use std::fmt::Debug;
 
 /// The owner of an object allocation. No references to
@@ -15,6 +15,7 @@ pub(super) enum OwnedObject {
     String(Box<LispString>),
     Symbol(Box<SymbolCell>),
     ByteFn(Box<ByteFn>),
+    Buffer(Box<Buffer>),
 }
 
 pub(in crate::core) trait AllocObject
@@ -107,6 +108,18 @@ impl AllocObject for LispHashTable {
         }
         Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(self)));
         let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
+        x.as_ref()
+    }
+}
+
+impl AllocObject for Buffer {
+    type Output = Self;
+
+    fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
+        assert!(CONST, "Buffers must only be created in the shared block");
+        let mut objects = block.objects.borrow_mut();
+        Block::<CONST>::register(&mut objects, OwnedObject::Buffer(Box::new(self)));
+        let Some(OwnedObject::Buffer(x)) = objects.last() else {unreachable!()};
         x.as_ref()
     }
 }
