@@ -1,10 +1,12 @@
-use super::super::{
-    cons::Cons,
-    object::{GcObj, RawObj},
+use super::{
+    super::{
+        cons::Cons,
+        object::{GcObj, RawObj},
+    },
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;
-use crate::core::object::{ByteFn, Gc, IntoObject, LispString, Object, Untag, WithLifetime};
+use crate::core::object::{Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -14,6 +16,8 @@ use std::{
     marker::PhantomPinned,
 };
 
+/// Creates a root for garbage collection. This trait is only safe to implement
+/// for types that managed by the garbage collector.
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
@@ -28,12 +32,12 @@ where
     }
 }
 
-impl<T> IntoRoot<T> for &__StackRoot<'_, T>
+impl<T, U> IntoRoot<U> for &T
 where
-    T: Copy,
+    for<'a> &'a T: WithLifetime<'static, Out = U>,
 {
-    unsafe fn into_root(self) -> T {
-        self.data.inner
+    unsafe fn into_root(self) -> U {
+        self.with_lifetime()
     }
 }
 
@@ -55,18 +59,6 @@ impl IntoRoot<GcObj<'static>> for bool {
 impl IntoRoot<GcObj<'static>> for i64 {
     unsafe fn into_root(self) -> GcObj<'static> {
         self.into()
-    }
-}
-
-impl IntoRoot<&'static Cons> for &Cons {
-    unsafe fn into_root(self) -> &'static Cons {
-        self.with_lifetime()
-    }
-}
-
-impl IntoRoot<&'static ByteFn> for &ByteFn {
-    unsafe fn into_root(self) -> &'static ByteFn {
-        self.with_lifetime()
     }
 }
 

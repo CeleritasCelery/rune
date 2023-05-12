@@ -1,27 +1,46 @@
 use crate::{
     core::{
-        env::INTERNED_SYMBOLS,
+        env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
-        gc::Context,
-        object::{Buffer, GcObj, Object, TagType},
+        gc::{Context, Rt},
+        object::{Buffer, GcObj, Object},
     },
     hashmap::HashMap,
 };
-use anyhow::Result;
+use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 // static hashmap containing all the buffers
 lazy_static! {
-    pub(crate) static ref BUFFERS: Mutex<HashMap<String, &'static Buffer>> =
-        Mutex::new(HashMap::default());
+    static ref BUFFERS: Mutex<HashMap<String, &'static Buffer>> = Mutex::new(HashMap::default());
 }
 
 #[defun]
-fn set_buffer(buffer_or_name: GcObj) -> GcObj {
-    // TODO: implement
-    buffer_or_name
+fn set_buffer<'ob>(
+    buffer_or_name: GcObj<'ob>,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<GcObj<'ob>> {
+    let buffer: &Buffer = match buffer_or_name.untag() {
+        Object::Buffer(b) => {
+            ensure!(b.is_live(), "Selecting deleted buffer");
+            b
+        }
+        Object::String(s) => {
+            let name: &str = s.try_into()?;
+            let buffer_list = BUFFERS.lock().unwrap();
+            let Some(buffer) = buffer_list.get(name) else {
+                bail!("No buffer named {}", name);
+            };
+            assert!(buffer.is_live());
+            cx.bind(*buffer)
+        }
+        x => bail!(TypeError::new(Type::String, x)),
+    };
+    env.current_buffer.set(buffer);
+    Ok(cx.add(buffer))
 }
 
 #[defun]
@@ -40,8 +59,8 @@ fn get_buffer_create<'ob>(
         Object::String(x) => {
             let name = x.try_into()?;
             let mut buffer_list = BUFFERS.lock().unwrap();
-            let buffer = match buffer_list.get(name) {
-                Some(x) => x,
+            match buffer_list.get(name) {
+                Some(b) => Ok(cx.add(*b)),
                 None => {
                     // If not already in the global buffer list, create a new
                     // buffer and add it
@@ -53,10 +72,9 @@ fn get_buffer_create<'ob>(
                         unsafe { &*(buffer as *const Buffer) }
                     };
                     buffer_list.insert(name.to_string(), buffer);
-                    buffer
+                    Ok(cx.add(buffer))
                 }
-            };
-            Ok(cx.bind(Object::Buffer(buffer).tag()))
+            }
         }
         Object::Buffer(_) => Ok(buffer_or_name),
         other => Err(TypeError::new(Type::String, other).into()),

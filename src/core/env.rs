@@ -19,6 +19,7 @@ pub(crate) struct Env {
     exception_id: u32,
     binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
+    pub(crate) current_buffer: Option<&'static Buffer>,
 }
 
 impl Rt<Env> {

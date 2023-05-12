@@ -17,19 +17,18 @@ pub(crate) struct Buffer {
 
 impl Buffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &Buffer {
-        let new = Self::new(name);
-        let ptr = new.alloc_obj(block);
-        unsafe { &*ptr }
-    }
-    // This constructor is not safe to expose outside this module because it is
-    // GcManaged
-    fn new(name: String) -> Self {
-        Self {
+        let new = Self {
             text_buffer: Mutex::new(Some(BufferData {
                 name,
                 text: TextBuffer::new(),
             })),
-        }
+        } ;
+        let ptr = new.alloc_obj(block);
+        unsafe { &*ptr }
+    }
+
+    pub(crate) fn is_live(&self) -> bool {
+        self.text_buffer.lock().unwrap().is_some()
     }
 }
 
