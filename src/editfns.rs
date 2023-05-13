@@ -1,4 +1,8 @@
-use crate::core::object::{GcObj, Object};
+use crate::core::{
+    env::Env,
+    gc::{Context, Rt},
+    object::{GcObj, Object},
+};
 use anyhow::{bail, ensure, Result};
 use fn_macros::defun;
 use std::{fmt::Write as _, io::Write};
@@ -64,6 +68,17 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
         .chars()
         .map(|c| if matches!(c, '`' | '\'') { '"' } else { c })
         .collect())
+}
+
+#[defun]
+fn insert(args: &[GcObj], env: &mut Rt<Env>, cx: &Context) -> Result<()> {
+    let Some(buffer) = &*env.current_buffer else {bail!("No current buffer")};
+    let buffer = buffer.bind(cx);
+    for arg in args {
+        buffer.insert(*arg)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

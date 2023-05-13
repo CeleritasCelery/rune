@@ -1,8 +1,6 @@
-use super::{
-    super::{
-        cons::Cons,
-        object::{GcObj, RawObj},
-    },
+use super::super::{
+    cons::Cons,
+    object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;

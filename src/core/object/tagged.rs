@@ -228,6 +228,14 @@ impl IntoObject for bool {
     }
 }
 
+impl IntoObject for () {
+    type Out<'a> = Symbol<'a>;
+
+    fn into_obj<const C: bool>(self, _: &Block<C>) -> Gc<Self::Out<'_>> {
+        unsafe { Self::Out::tag_ptr(sym::NIL.get_ptr()) }
+    }
+}
+
 impl IntoObject for Cons {
     type Out<'ob> = &'ob Cons;
 

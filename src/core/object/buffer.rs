@@ -1,5 +1,9 @@
-use super::{Gc, RawObj, TagType, WithLifetime};
-use crate::core::gc::{AllocObject, Block, GcManaged, GcMark, Trace};
+use super::{Gc, GcObj, Object, RawObj, TagType, WithLifetime};
+use crate::core::{
+    error::{Type, TypeError},
+    gc::{AllocObject, Block, GcManaged, GcMark, Trace},
+};
+use anyhow::{bail, Result};
 use std::{fmt::Display, sync::Mutex};
 use text_buffer::Buffer as TextBuffer;
 
@@ -22,9 +26,24 @@ impl Buffer {
                 name,
                 text: TextBuffer::new(),
             })),
-        } ;
+        };
         let ptr = new.alloc_obj(block);
         unsafe { &*ptr }
+    }
+
+    pub(crate) fn insert(&self, arg: GcObj) -> Result<()> {
+        let data = &mut *self.text_buffer.lock().unwrap();
+        let Some(buffer) = data else {bail!("Buffer is deleted")};
+        match arg.untag() {
+            Object::Int(i) => {
+                let Ok(u_32) = i.try_into() else {bail!("{i} is an invalid char")};
+                let Some(chr) = char::from_u32(u_32) else {bail!("{i} is an Invalid char")};
+                buffer.text.insert_char(chr);
+            }
+            Object::String(s) => buffer.text.insert(s.try_into()?),
+            x => bail!(TypeError::new(Type::String, x)),
+        }
+        Ok(())
     }
 
     pub(crate) fn is_live(&self) -> bool {
