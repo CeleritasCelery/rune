@@ -1,8 +1,7 @@
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::uninlined_format_args)]
 #![allow(clippy::must_use_candidate)]
 use std::{
-    fmt::{Debug, Display},
+    fmt::Debug,
     ops::{Bound, RangeBounds},
 };
 
@@ -26,13 +25,6 @@ pub struct Buffer {
     /// The current cursor.
     cursor: Point,
     total_chars: usize,
-}
-
-impl Display for Buffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_str(..self.gap_start))?;
-        f.write_str(self.to_str(self.gap_end..))
-    }
 }
 
 impl Debug for Buffer {
@@ -103,6 +95,16 @@ impl From<String> for Buffer {
             },
             total_chars: chars::count(&data),
         }
+    }
+}
+
+impl PartialEq<&str> for Buffer {
+    fn eq(&self, other: &&str) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        self.to_str(..self.gap_start) == &other[..self.gap_start]
+            && self.to_str(self.gap_end..) == &other[self.gap_start..]
     }
 }
 
@@ -466,7 +468,7 @@ impl Buffer {
     // used to convert indexes from the fuzzer
     fn wrap(&self, pos: usize) -> usize {
         let pos = pos % (self.len() + 2);
-        println!("pos: {:?}", pos);
+        println!("pos: {pos:?}");
         pos
     }
 }
@@ -489,15 +491,15 @@ mod test {
         let mut buffer = Buffer::new();
         assert_eq!(buffer.data.len(), 0);
         assert_eq!(buffer.gap_len(), 0);
-        assert_eq!(buffer.to_string(), "");
+        assert_eq!(buffer, "");
         buffer.insert("hello");
-        assert_eq!(buffer.to_string(), "hello");
+        assert_eq!(buffer, "hello");
 
         let mut buffer = Buffer::new();
         buffer.delete_region(0, 0);
-        assert_eq!(buffer.to_string(), "");
+        assert_eq!(buffer, "");
         buffer.delete_region(0, 5);
-        assert_eq!(buffer.to_string(), "");
+        assert_eq!(buffer, "");
     }
 
     #[test]
@@ -508,7 +510,7 @@ mod test {
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
-        assert_eq!(buffer.to_string(), "xhello buffer");
+        assert_eq!(buffer, "xhello buffer");
     }
 
     #[test]
@@ -518,20 +520,20 @@ mod test {
         let mut buffer = Buffer::from(string);
         buffer.insert(new_string);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.to_string(), "hi world");
+        assert_eq!(buffer, "hi world");
         buffer.insert("starting Θ text ");
-        assert_eq!(buffer.to_string(), "hi starting Θ text world");
+        assert_eq!(buffer, "hi starting Θ text world");
         buffer.set_cursor(21);
         buffer.insert("x");
-        assert_eq!(buffer.to_string(), "hi starting Θ text woxrld");
+        assert_eq!(buffer, "hi starting Θ text woxrld");
     }
 
     #[test]
     fn empty() {
         let mut buffer = Buffer::from("");
-        assert_eq!(buffer.to_string(), "");
+        assert_eq!(buffer, "");
         buffer.delete_region(1, 2);
-        assert_eq!(buffer.to_string(), "");
+        assert_eq!(buffer, "");
     }
 
     #[test]
@@ -547,7 +549,7 @@ mod test {
         buffer.move_gap_out_of(..);
         buffer.move_gap(7);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.to_string(), "heworld");
+        assert_eq!(buffer, "heworld");
     }
 
     #[test]
@@ -558,7 +560,7 @@ mod test {
         buffer.insert(hello);
         buffer.delete_char(4);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.to_string(), "hello d");
+        assert_eq!(buffer, "hello d");
     }
 
     #[test]
@@ -567,10 +569,10 @@ mod test {
         buffer.insert("hello ");
         buffer.delete_region(1, 3);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.to_string(), "hlo world");
+        assert_eq!(buffer, "hlo world");
         buffer.delete_region(4, 6);
         buffer.move_gap_out_of(..);
-        assert_eq!(buffer.to_string(), "hlo rld");
+        assert_eq!(buffer, "hlo rld");
     }
 
     #[test]
@@ -578,7 +580,7 @@ mod test {
         let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
         buffer.delete_region(3, 3);
-        assert_eq!(buffer.to_string(), "hello world");
+        assert_eq!(buffer, "hello world");
     }
 
     // cases found during fuzzing
@@ -596,14 +598,14 @@ mod test {
         buffer.insert("abc");
         buffer.set_cursor(2);
         buffer.delete_region(1, 4);
-        assert_eq!(buffer.to_string(), "ayz");
+        assert_eq!(buffer, "ayz");
         buffer.insert("b");
-        assert_eq!(buffer.to_string(), "abyz");
+        assert_eq!(buffer, "abyz");
 
         let mut buffer = Buffer::from("ƽaejcoeuz");
         buffer.delete_region(5, 6);
         buffer.delete_region(1, 8);
-        assert_eq!(buffer.to_string(), "ƽ");
+        assert_eq!(buffer, "ƽ");
     }
 
     // from reference implementation
@@ -613,7 +615,7 @@ mod test {
         buffer.insert("per. Some graduate students in ");
         buffer.set_cursor(10);
         buffer.delete_char(21);
-        assert_eq!(buffer.to_string(), "per. Some \n\n\n\nAutomerge is too");
+        assert_eq!(buffer, "per. Some \n\n\n\nAutomerge is too");
     }
 
     // fuzzing
@@ -622,9 +624,9 @@ mod test {
         let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
         buffer.delete_region(3, 100);
-        assert_eq!(buffer.to_string(), "hel");
+        assert_eq!(buffer, "hel");
         buffer.delete_region(10, 1);
-        assert_eq!(buffer.to_string(), "h");
+        assert_eq!(buffer, "h");
 
         let mut buffer = Buffer::from(",skeobg x");
         buffer.delete_region(10, 10);
@@ -647,7 +649,7 @@ mod test {
         );
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
-        assert_eq!(buffer.to_string(), "hello world");
+        assert_eq!(buffer, "hello world");
     }
 
     #[test]
