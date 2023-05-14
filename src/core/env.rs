@@ -1,6 +1,6 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
-use super::object::{Buffer, CloneIn, Function, Gc, GcObj};
+use super::object::{LispBuffer, CloneIn, Function, Gc, GcObj};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
@@ -19,7 +19,7 @@ pub(crate) struct Env {
     exception_id: u32,
     binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
-    pub(crate) current_buffer: Option<&'static Buffer>,
+    pub(crate) current_buffer: Option<&'static LispBuffer>,
 }
 
 impl Rt<Env> {
@@ -202,8 +202,8 @@ impl ObjectMap {
         unsafe { symbol.set_func(new_func) }
     }
 
-    pub(crate) fn create_buffer(&self, name: &str) -> &Buffer {
-        Buffer::create(name.to_owned(), &self.block)
+    pub(crate) fn create_buffer(&self, name: &str) -> &LispBuffer {
+        LispBuffer::create(name.to_owned(), &self.block)
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<Symbol> {

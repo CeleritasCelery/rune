@@ -4,25 +4,43 @@ use crate::core::{
     gc::{AllocObject, Block, GcManaged, GcMark, Trace},
 };
 use anyhow::{bail, Result};
-use std::{fmt::Display, sync::Mutex};
+use std::{
+    fmt::Display,
+    sync::{Mutex, MutexGuard},
+};
 use text_buffer::Buffer as TextBuffer;
 
 #[derive(Debug)]
 #[allow(dead_code)]
-struct BufferData {
+pub(crate) struct Buffer {
     name: String,
     text: TextBuffer,
 }
 
-#[derive(Debug)]
-pub(crate) struct Buffer {
-    text_buffer: Mutex<Option<BufferData>>,
+impl Buffer {
+    pub(crate) fn insert(&mut self, arg: GcObj) -> Result<()> {
+        match arg.untag() {
+            Object::Int(i) => {
+                let Ok(u_32) = i.try_into() else {bail!("{i} is an invalid char")};
+                let Some(chr) = char::from_u32(u_32) else {bail!("{i} is an Invalid char")};
+                self.text.insert_char(chr);
+            }
+            Object::String(s) => self.text.insert(s.try_into()?),
+            x => bail!(TypeError::new(Type::String, x)),
+        }
+        Ok(())
+    }
 }
 
-impl Buffer {
-    pub(crate) fn create(name: String, block: &Block<true>) -> &Buffer {
+#[derive(Debug)]
+pub(crate) struct LispBuffer {
+    text_buffer: Mutex<Option<Buffer>>,
+}
+
+impl LispBuffer {
+    pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
         let new = Self {
-            text_buffer: Mutex::new(Some(BufferData {
+            text_buffer: Mutex::new(Some(Buffer {
                 name,
                 text: TextBuffer::new(),
             })),
@@ -31,19 +49,8 @@ impl Buffer {
         unsafe { &*ptr }
     }
 
-    pub(crate) fn insert(&self, arg: GcObj) -> Result<()> {
-        let data = &mut *self.text_buffer.lock().unwrap();
-        let Some(buffer) = data else {bail!("Buffer is deleted")};
-        match arg.untag() {
-            Object::Int(i) => {
-                let Ok(u_32) = i.try_into() else {bail!("{i} is an invalid char")};
-                let Some(chr) = char::from_u32(u_32) else {bail!("{i} is an Invalid char")};
-                buffer.text.insert_char(chr);
-            }
-            Object::String(s) => buffer.text.insert(s.try_into()?),
-            x => bail!(TypeError::new(Type::String, x)),
-        }
-        Ok(())
+    pub(crate) fn get(&self) -> MutexGuard<'_, Option<Buffer>> {
+        self.text_buffer.lock().unwrap()
     }
 
     pub(crate) fn is_live(&self) -> bool {
@@ -51,15 +58,15 @@ impl Buffer {
     }
 }
 
-impl PartialEq for Buffer {
+impl PartialEq for LispBuffer {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl Eq for Buffer {}
+impl Eq for LispBuffer {}
 
-impl Display for Buffer {
+impl Display for LispBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.text_buffer.lock().unwrap();
         let name = match data.as_ref() {
@@ -70,23 +77,23 @@ impl Display for Buffer {
     }
 }
 
-impl Trace for Buffer {
+impl Trace for LispBuffer {
     fn trace(&self, _v: &mut Vec<RawObj>) {
         todo!()
     }
 }
 
-impl GcManaged for Buffer {
+impl GcManaged for LispBuffer {
     fn get_mark(&self) -> &GcMark {
         panic!("Buffer does not use GcMark")
     }
 }
 
-impl<'old, 'new> Buffer {
+impl<'old, 'new> LispBuffer {
     pub(in crate::core) fn clone_in<const C: bool>(
         &'old self,
         _: &'new Block<C>,
-    ) -> Gc<&'new Buffer> {
+    ) -> Gc<&'new LispBuffer> {
         unsafe { self.with_lifetime().tag() }
     }
 }

@@ -6,7 +6,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    Buffer,
+    LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
@@ -395,7 +395,7 @@ impl<'a> TaggedPtr for Object<'a> {
                 Tag::Vec => Object::Vec(<&LispVec>::from_obj_ptr(ptr)),
                 Tag::Record => Object::Record(<&Record>::from_obj_ptr(ptr)),
                 Tag::HashTable => Object::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
-                Tag::Buffer => Object::Buffer(<&Buffer>::from_obj_ptr(ptr)),
+                Tag::Buffer => Object::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -627,8 +627,8 @@ impl TaggedPtr for &LispHashTable {
     }
 }
 
-impl TaggedPtr for &Buffer {
-    type Ptr = Buffer;
+impl TaggedPtr for &LispBuffer {
+    type Ptr = LispBuffer;
     const TAG: Tag = Tag::Buffer;
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
@@ -770,9 +770,9 @@ pub(crate) enum Object<'ob> {
     String(&'ob LispString) = Tag::String as u8,
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
-    Buffer(&'static Buffer) = Tag::Buffer as u8,
+    Buffer(&'static LispBuffer) = Tag::Buffer as u8,
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn, &'ob Buffer);
+cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn, &'ob LispBuffer);
 
 impl Object<'_> {
     pub(crate) const NIL: Object<'static> = Object::Symbol(sym::NIL);

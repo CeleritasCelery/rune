@@ -3,7 +3,7 @@ use crate::{
         env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{Buffer, GcObj, Object},
+        object::{LispBuffer, GcObj, Object},
     },
     hashmap::HashMap,
 };
@@ -14,7 +14,7 @@ use std::sync::Mutex;
 
 // static hashmap containing all the buffers
 lazy_static! {
-    static ref BUFFERS: Mutex<HashMap<String, &'static Buffer>> = Mutex::new(HashMap::default());
+    static ref BUFFERS: Mutex<HashMap<String, &'static LispBuffer>> = Mutex::new(HashMap::default());
 }
 
 #[defun]
@@ -23,7 +23,7 @@ fn set_buffer<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    let buffer: &Buffer = match buffer_or_name.untag() {
+    let buffer: &LispBuffer = match buffer_or_name.untag() {
         Object::Buffer(b) => {
             ensure!(b.is_live(), "Selecting deleted buffer");
             b
@@ -69,7 +69,7 @@ fn get_buffer_create<'ob>(
                         let buffer = global.create_buffer(name);
                         // SAFETY: This can be 'static because it is stored in the
                         // global block. Eventually it will be garbage collected
-                        unsafe { &*(buffer as *const Buffer) }
+                        unsafe { &*(buffer as *const LispBuffer) }
                     };
                     buffer_list.insert(name.to_string(), buffer);
                     Ok(cx.add(buffer))
