@@ -34,6 +34,14 @@ impl<T: Trace> Trace for Vec<T> {
     }
 }
 
+impl<T: Trace> Trace for std::collections::VecDeque<T> {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        for x in self {
+            x.trace(stack);
+        }
+    }
+}
+
 impl<K: Trace, V: Trace> Trace for HashMap<K, V> {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         for key in self.keys() {

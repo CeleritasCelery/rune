@@ -6,9 +6,12 @@ use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;
 use crate::core::object::{Gc, IntoObject, LispString, Object, Untag, WithLifetime};
 use crate::hashmap::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
+use std::{
+    collections::VecDeque,
+    hash::{Hash, Hasher},
+};
 use std::{
     fmt::{Debug, Display},
     marker::PhantomPinned,
@@ -236,6 +239,17 @@ where
     T: WithLifetime<'new>,
 {
     type Out = Vec<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'new, T> WithLifetime<'new> for VecDeque<T>
+where
+    T: WithLifetime<'new>,
+{
+    type Out = VecDeque<<T as WithLifetime<'new>>::Out>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute(self)
@@ -487,7 +501,8 @@ impl<T> Rt<Option<T>> {
 }
 
 impl<T> Rt<Vec<T>> {
-    // This is not safe to expose pub(crate)
+    // This is not safe to expose pub(crate) because you could call pop and get
+    // an owned Rt
     fn as_mut_ref(&mut self) -> &mut Vec<Rt<T>> {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
         unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<T>>>() }

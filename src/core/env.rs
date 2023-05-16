@@ -1,9 +1,10 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
-use super::object::{LispBuffer, CloneIn, Function, Gc, GcObj};
+use super::object::{Buffer, CloneIn, Function, Gc, GcObj, LispBuffer, WithLifetime};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
+use std::collections::VecDeque;
 use std::sync::Mutex;
 
 mod symbol;
@@ -19,7 +20,9 @@ pub(crate) struct Env {
     exception_id: u32,
     binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
-    pub(crate) current_buffer: Option<&'static LispBuffer>,
+    pub(crate) buffer_list: VecDeque<&'static LispBuffer>,
+    #[no_trace]
+    pub(crate) current_buffer: Option<Buffer<'static>>,
 }
 
 impl Rt<Env> {
@@ -86,6 +89,16 @@ impl Rt<Env> {
                 binding.1.set(value);
             }
         }
+        Ok(())
+    }
+
+    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer, cx: &Context) -> Result<()> {
+        let buffer_list = self.buffer_list.bind_mut(cx);
+        buffer_list.push_front(buffer);
+        // SAFETY: We are not dropping the buffer until we have can trace it
+        // with the garbage collector
+        let lock = unsafe { buffer.lock()?.with_lifetime() };
+        self.current_buffer = Some(lock);
         Ok(())
     }
 }

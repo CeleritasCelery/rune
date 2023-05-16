@@ -11,36 +11,62 @@ use std::{
 use text_buffer::Buffer as TextBuffer;
 
 #[derive(Debug)]
-#[allow(dead_code)]
-pub(crate) struct Buffer {
-    name: String,
-    text: TextBuffer,
+pub(crate) struct Buffer<'a> {
+    data: MutexGuard<'a, Option<BufferData>>,
 }
 
-impl Buffer {
+impl<'a> Buffer<'a> {
+    fn new(data: MutexGuard<'a, Option<BufferData>>) -> Result<Self> {
+        if data.is_none() {
+            bail!("selecting deleted buffer");
+        }
+        Ok(Self { data })
+    }
+
+    fn get_mut(&mut self) -> &mut BufferData {
+        // buffer can never be none because we check it as part of `new`. Could
+        // make this unchecked at some point.
+        self.data.as_mut().unwrap()
+    }
+
     pub(crate) fn insert(&mut self, arg: GcObj) -> Result<()> {
         match arg.untag() {
             Object::Int(i) => {
                 let Ok(u_32) = i.try_into() else {bail!("{i} is an invalid char")};
                 let Some(chr) = char::from_u32(u_32) else {bail!("{i} is an Invalid char")};
-                self.text.insert_char(chr);
+                self.get_mut().text.insert_char(chr);
             }
-            Object::String(s) => self.text.insert(s.try_into()?),
+            Object::String(s) => self.get_mut().text.insert(s.try_into()?),
             x => bail!(TypeError::new(Type::String, x)),
         }
         Ok(())
     }
 }
 
+impl<'old, 'new> WithLifetime<'new> for Buffer<'old> {
+    type Out = Buffer<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute(self)
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct BufferData {
+    name: String,
+    text: TextBuffer,
+}
+
 #[derive(Debug)]
 pub(crate) struct LispBuffer {
-    text_buffer: Mutex<Option<Buffer>>,
+    text_buffer: Mutex<Option<BufferData>>,
 }
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
         let new = Self {
-            text_buffer: Mutex::new(Some(Buffer {
+            text_buffer: Mutex::new(Some(BufferData {
                 name,
                 text: TextBuffer::new(),
             })),
@@ -49,12 +75,9 @@ impl LispBuffer {
         unsafe { &*ptr }
     }
 
-    pub(crate) fn get(&self) -> MutexGuard<'_, Option<Buffer>> {
-        self.text_buffer.lock().unwrap()
-    }
-
-    pub(crate) fn is_live(&self) -> bool {
-        self.text_buffer.lock().unwrap().is_some()
+    pub(crate) fn lock(&self) -> Result<Buffer<'_>> {
+        let buffer = self.text_buffer.lock().unwrap();
+        Buffer::new(buffer)
     }
 }
 
@@ -78,6 +101,12 @@ impl Display for LispBuffer {
 }
 
 impl Trace for LispBuffer {
+    fn trace(&self, _v: &mut Vec<RawObj>) {
+        todo!()
+    }
+}
+
+impl Trace for BufferData {
     fn trace(&self, _v: &mut Vec<RawObj>) {
         todo!()
     }

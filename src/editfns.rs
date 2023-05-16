@@ -1,6 +1,6 @@
 use crate::core::{
     env::Env,
-    gc::{Context, Rt},
+    gc::Rt,
     object::{GcObj, Object},
 };
 use anyhow::{bail, ensure, Result};
@@ -71,10 +71,8 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
 }
 
 #[defun]
-fn insert(args: &[GcObj], env: &mut Rt<Env>, cx: &Context) -> Result<()> {
-    let Some(current) = &*env.current_buffer else {bail!("No current buffer")};
-    let mut guard = current.bind(cx).get();
-    let buffer = guard.as_mut().unwrap();
+fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
+    let Some(buffer) = env.current_buffer.as_mut() else {bail!("No current buffer")};
     for arg in args {
         buffer.insert(*arg)?;
     }

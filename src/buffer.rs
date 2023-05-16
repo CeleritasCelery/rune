@@ -3,18 +3,19 @@ use crate::{
         env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{LispBuffer, GcObj, Object},
+        object::{GcObj, LispBuffer, Object},
     },
     hashmap::HashMap,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, Result};
 use fn_macros::defun;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 // static hashmap containing all the buffers
 lazy_static! {
-    static ref BUFFERS: Mutex<HashMap<String, &'static LispBuffer>> = Mutex::new(HashMap::default());
+    static ref BUFFERS: Mutex<HashMap<String, &'static LispBuffer>> =
+        Mutex::new(HashMap::default());
 }
 
 #[defun]
@@ -24,22 +25,18 @@ fn set_buffer<'ob>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     let buffer: &LispBuffer = match buffer_or_name.untag() {
-        Object::Buffer(b) => {
-            ensure!(b.is_live(), "Selecting deleted buffer");
-            b
-        }
+        Object::Buffer(b) => b,
         Object::String(s) => {
             let name: &str = s.try_into()?;
             let buffer_list = BUFFERS.lock().unwrap();
             let Some(buffer) = buffer_list.get(name) else {
                 bail!("No buffer named {}", name);
             };
-            assert!(buffer.is_live());
             cx.bind(*buffer)
         }
         x => bail!(TypeError::new(Type::String, x)),
     };
-    env.current_buffer.set(buffer);
+    env.set_buffer(buffer, cx)?;
     Ok(cx.add(buffer))
 }
 
