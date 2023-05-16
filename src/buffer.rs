@@ -19,7 +19,7 @@ lazy_static! {
 }
 
 #[defun]
-fn set_buffer<'ob>(
+pub(crate) fn set_buffer<'ob>(
     buffer_or_name: GcObj<'ob>,
     env: &mut Rt<Env>,
     cx: &'ob Context,
@@ -47,7 +47,7 @@ fn set_buffer_modified_p(flag: GcObj) -> GcObj {
 }
 
 #[defun]
-fn get_buffer_create<'ob>(
+pub(crate) fn get_buffer_create<'ob>(
     buffer_or_name: GcObj<'ob>,
     _inhibit_buffer_hooks: GcObj,
     cx: &'ob Context,

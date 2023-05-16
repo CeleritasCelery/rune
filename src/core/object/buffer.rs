@@ -23,6 +23,12 @@ impl<'a> Buffer<'a> {
         Ok(Self { data })
     }
 
+    fn get(&self) -> &BufferData {
+        // buffer can never be none because we check it as part of `new`. Could
+        // make this unchecked at some point.
+        self.data.as_ref().unwrap()
+    }
+
     fn get_mut(&mut self) -> &mut BufferData {
         // buffer can never be none because we check it as part of `new`. Could
         // make this unchecked at some point.
@@ -48,6 +54,12 @@ impl<'old, 'new> WithLifetime<'new> for Buffer<'old> {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute(self)
+    }
+}
+
+impl PartialEq<str> for Buffer<'_> {
+    fn eq(&self, other: &str) -> bool {
+        self.get().text == other
     }
 }
 
@@ -102,13 +114,7 @@ impl Display for LispBuffer {
 
 impl Trace for LispBuffer {
     fn trace(&self, _v: &mut Vec<RawObj>) {
-        todo!()
-    }
-}
-
-impl Trace for BufferData {
-    fn trace(&self, _v: &mut Vec<RawObj>) {
-        todo!()
+        // Implement once we hold gc data in the buffer
     }
 }
 
