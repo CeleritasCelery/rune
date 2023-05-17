@@ -87,7 +87,7 @@ impl LispBuffer {
         unsafe { &*ptr }
     }
 
-    pub(crate) fn lock(&self) -> Result<Buffer<'_>> {
+    pub(in crate::core) fn lock(&self) -> Result<Buffer<'_>> {
         let buffer = self.text_buffer.lock().unwrap();
         Buffer::new(buffer)
     }

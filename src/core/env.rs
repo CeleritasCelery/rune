@@ -101,6 +101,20 @@ impl Rt<Env> {
         self.current_buffer = Some(lock);
         Ok(())
     }
+
+    pub(crate) fn with_buffer<T>(
+        &mut self,
+        buffer: &LispBuffer,
+        func: impl Fn(Option<&mut Buffer>) -> T,
+    ) -> T {
+        if let Some(current) = unsafe { self.buffer_list.bind_mut_unchecked().front() } {
+            if *current == buffer && self.current_buffer.is_some() {
+                return func(Some(self.current_buffer.as_mut().unwrap()));
+            }
+        }
+        let mut buffer = buffer.lock().ok();
+        func(buffer.as_mut())
+    }
 }
 
 pub(crate) struct ObjectMap {

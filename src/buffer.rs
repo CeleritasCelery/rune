@@ -47,6 +47,14 @@ fn set_buffer_modified_p(flag: GcObj) -> GcObj {
 }
 
 #[defun]
+fn buffer_live_p(buffer: GcObj, env: &mut Rt<Env>) -> bool {
+    match buffer.untag() {
+        Object::Buffer(b) => env.with_buffer(b, |b| b.is_some()),
+        _ => false,
+    }
+}
+
+#[defun]
 pub(crate) fn get_buffer_create<'ob>(
     buffer_or_name: GcObj<'ob>,
     _inhibit_buffer_hooks: GcObj,
