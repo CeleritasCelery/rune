@@ -121,6 +121,7 @@ fn load(env: &mut Rt<Env>, cx: &mut Context) {
         None,
     )
     .expect("null should be defined");
+    buffer::get_buffer_create(cx.add("*scratch*"), core::object::nil(), cx).unwrap();
 
     let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);
 
