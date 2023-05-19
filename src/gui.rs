@@ -10,9 +10,8 @@ pub(crate) fn launch() {
     let main_window = WindowDesc::new(build_ui())
         .window_size((600.0, 400.0))
         .title("My first Druid App");
-    let initial_data = ();
 
     AppLauncher::with_window(main_window)
-        .launch(initial_data)
+        .launch(())
         .expect("Failed to launch application");
 }

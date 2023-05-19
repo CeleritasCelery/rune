@@ -70,7 +70,6 @@ use crate::core::{
     env::{intern, Env},
     gc::{Context, RootSet, Rt},
 };
-use std::env;
 use std::io::{self, Write};
 
 fn parens_closed(buffer: &str) -> bool {
@@ -132,39 +131,55 @@ fn load(env: &mut Rt<Env>, cx: &mut Context) {
     }
 }
 
+#[derive(Default)]
+struct Args {
+    load: bool,
+    repl: bool,
+    gui: bool,
+}
+
+impl Args {
+    fn empty(&self) -> bool {
+        !self.load && !self.repl && !self.gui
+    }
+
+    fn parse() -> Self {
+        let mut args = Args::default();
+        for arg in std::env::args() {
+            match arg.as_str() {
+                "--repl" => args.repl = true,
+                "--load" => args.load = true,
+                "--gui" => args.gui = true,
+                x => println!("unknown arg: {x}"),
+            }
+        }
+        if args.empty() {
+            args.load = true;
+        }
+        args
+    }
+}
+
 fn main() {
     let roots = &RootSet::default();
     let cx = &mut Context::new(roots);
     root!(env, Env::default(), cx);
-    let mut arg_load = false;
-    let mut arg_repl = false;
-    let mut arg_gui = false;
 
-    for arg in env::args() {
-        match arg.as_str() {
-            "--repl" => arg_repl = true,
-            "--load" => arg_load = true,
-            "--gui" => arg_gui = true,
-            x => println!("unknown arg: {x}"),
-        }
-    }
+    let args = Args::parse();
 
-    if !arg_load && !arg_repl {
-        arg_load = true;
-    }
-
-    // Ensure this is always initalized before anything else
+    // Ensure this is always initalized before anything else. We need this to
+    // code to run to properly initialize the symbol table.
     lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
 
-    if arg_load {
+    if args.load {
         load(env, cx);
     }
 
-    if arg_repl {
+    if args.repl {
         repl(env, cx);
     }
 
-    if arg_gui {
+    if args.gui {
         gui::launch();
     }
 }
