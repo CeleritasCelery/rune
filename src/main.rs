@@ -56,6 +56,7 @@ mod eval;
 mod fileio;
 mod floatfns;
 mod fns;
+mod gui;
 mod hashmap;
 mod interpreter;
 mod keymap;
@@ -137,11 +138,13 @@ fn main() {
     root!(env, Env::default(), cx);
     let mut arg_load = false;
     let mut arg_repl = false;
+    let mut arg_gui = false;
 
     for arg in env::args() {
         match arg.as_str() {
             "--repl" => arg_repl = true,
             "--load" => arg_load = true,
+            "--gui" => arg_gui = true,
             x => println!("unknown arg: {x}"),
         }
     }
@@ -159,5 +162,9 @@ fn main() {
 
     if arg_repl {
         repl(env, cx);
+    }
+
+    if arg_gui {
+        gui::launch();
     }
 }
