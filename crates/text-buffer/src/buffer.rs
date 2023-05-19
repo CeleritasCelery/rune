@@ -46,8 +46,8 @@ impl Debug for Buffer {
 
 #[derive(Debug, Default, Copy, Clone)]
 struct Point {
-    byte: usize,
-    char: usize,
+    bytes: usize,
+    chars: usize,
 }
 
 impl From<&str> for Buffer {
@@ -66,8 +66,8 @@ impl From<&str> for Buffer {
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
             cursor: Point {
-                byte: Self::GAP_SIZE,
-                char: 0,
+                bytes: Self::GAP_SIZE,
+                chars: 0,
             },
             total_chars: chars::count(data),
         }
@@ -90,8 +90,8 @@ impl From<String> for Buffer {
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
             cursor: Point {
-                byte: Self::GAP_SIZE,
-                char: 0,
+                bytes: Self::GAP_SIZE,
+                chars: 0,
             },
             total_chars: chars::count(&data),
         }
@@ -141,10 +141,10 @@ impl Buffer {
         self.data = new_storage;
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
-        self.cursor.byte = self.gap_end;
+        self.cursor.bytes = self.gap_end;
         let num_chars = chars::count(slice);
         self.gap_chars += num_chars;
-        self.cursor.char = self.gap_chars;
+        self.cursor.chars = self.gap_chars;
         self.total_chars += num_chars;
     }
 
@@ -155,9 +155,9 @@ impl Buffer {
 
     pub fn insert(&mut self, slice: &str) {
         // if gap is not at cursor, move it there
-        if self.gap_chars != self.cursor.char {
+        if self.gap_chars != self.cursor.chars {
             // TODO: we don't need to recalculate the position
-            self.move_gap(self.cursor.char);
+            self.move_gap(self.cursor.chars);
         }
         if self.gap_len() < slice.len() {
             // TODO: grow the gap and move the cursor in one go
@@ -168,18 +168,18 @@ impl Buffer {
             self.gap_start += slice.len();
             let num_chars = chars::count(slice);
             self.gap_chars += num_chars;
-            self.cursor.char += num_chars;
+            self.cursor.chars += num_chars;
             self.total_chars += num_chars;
         }
     }
 
     pub fn delete_backwards(&mut self, size: usize) {
-        let size = size.min(self.cursor.char);
-        self.delete_region(self.cursor.char - size, self.cursor.char);
+        let size = size.min(self.cursor.chars);
+        self.delete_region(self.cursor.chars - size, self.cursor.chars);
     }
 
     pub fn delete_char(&mut self, size: usize) {
-        self.delete_region(self.cursor.char, self.cursor.char + size);
+        self.delete_region(self.cursor.chars, self.cursor.chars + size);
     }
 
     pub fn delete_region(&mut self, beg: usize, end: usize) {
@@ -222,11 +222,11 @@ impl Buffer {
             self.data.copy_within(end..self.gap_start, new_end);
             // update cursor
             self.update_cursor_chars(beg, end, deleted_chars);
-            if self.cursor.byte < self.gap_start {
-                if self.cursor.byte > end {
-                    self.cursor.byte += self.gap_len();
-                } else if self.cursor.byte >= beg {
-                    self.cursor.byte = new_end;
+            if self.cursor.bytes < self.gap_start {
+                if self.cursor.bytes > end {
+                    self.cursor.bytes += self.gap_len();
+                } else if self.cursor.bytes >= beg {
+                    self.cursor.bytes = new_end;
                 }
             }
             // update gap position
@@ -253,11 +253,11 @@ impl Buffer {
             self.data.copy_within(self.gap_end..beg, self.gap_start);
             // update cursor
             self.update_cursor_chars(beg, end, deleted_chars);
-            if self.cursor.byte >= self.gap_end {
-                if self.cursor.byte < beg {
-                    self.cursor.byte -= self.gap_len();
-                } else if self.cursor.byte < end {
-                    self.cursor.byte = end;
+            if self.cursor.bytes >= self.gap_end {
+                if self.cursor.bytes < beg {
+                    self.cursor.bytes -= self.gap_len();
+                } else if self.cursor.bytes < end {
+                    self.cursor.bytes = end;
                 }
             }
             // update gap position
@@ -286,8 +286,8 @@ impl Buffer {
             self.gap_start = beg;
             self.gap_end = end;
             self.update_cursor_chars(beg, end, total_chars);
-            if (beg..end).contains(&self.cursor.byte) {
-                self.cursor.byte = end;
+            if (beg..end).contains(&self.cursor.bytes) {
+                self.cursor.bytes = end;
             }
         } else {
             panic!(
@@ -300,11 +300,11 @@ impl Buffer {
     }
 
     fn update_cursor_chars(&mut self, beg: usize, end: usize, size: usize) {
-        if self.cursor.byte > beg {
-            if self.cursor.byte > end {
-                self.cursor.char -= size;
+        if self.cursor.bytes > beg {
+            if self.cursor.bytes > end {
+                self.cursor.chars -= size;
             } else {
-                self.cursor.char = self.gap_chars;
+                self.cursor.chars = self.gap_chars;
             }
         }
     }
@@ -347,8 +347,8 @@ impl Buffer {
             self.data
                 .copy_within(pos..self.gap_start, self.gap_end - size);
             // if gap moves across cursor, update cursor position
-            if self.cursor.byte < self.gap_start && self.cursor.byte >= pos {
-                self.cursor.byte += self.gap_len();
+            if self.cursor.bytes < self.gap_start && self.cursor.bytes >= pos {
+                self.cursor.bytes += self.gap_len();
             }
             self.gap_start = pos;
             self.gap_end -= size;
@@ -358,8 +358,8 @@ impl Buffer {
             self.data.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             // if gap moves across cursor, update cursor position
-            if self.cursor.byte >= self.gap_end && self.cursor.byte < pos {
-                self.cursor.byte -= self.gap_len();
+            if self.cursor.bytes >= self.gap_end && self.cursor.bytes < pos {
+                self.cursor.bytes -= self.gap_len();
             }
             self.gap_start += size;
             self.gap_end = pos;
@@ -375,8 +375,8 @@ impl Buffer {
         let pos = pos.min(self.total_chars);
         let byte_pos = self.char_to_byte(pos);
         self.cursor = Point {
-            byte: byte_pos,
-            char: pos,
+            bytes: byte_pos,
+            chars: pos,
         };
     }
 
@@ -408,8 +408,8 @@ impl Buffer {
             let start = (self.gap_start, self.gap_chars);
             let end = (self.gap_end, self.gap_chars);
             let total = (self.data.len(), self.total_chars);
-            let cursor = (self.cursor.byte, self.cursor.char);
-            if self.cursor.char < self.gap_chars {
+            let cursor = (self.cursor.bytes, self.cursor.chars);
+            if self.cursor.chars < self.gap_chars {
                 [(0, 0), cursor, start, end, total]
             } else {
                 [(0, 0), start, end, cursor, total]
