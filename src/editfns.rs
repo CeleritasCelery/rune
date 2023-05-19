@@ -80,6 +80,13 @@ pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
     Ok(())
 }
 
+#[defun]
+fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
+    let Some(buffer) = env.current_buffer.as_mut() else {bail!("No current buffer")};
+    buffer.delete(start, end);
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::env::sym;
@@ -124,5 +131,20 @@ mod test {
         )
         .unwrap();
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_delete_region() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, Env::default(), cx);
+        let buffer = get_buffer_create(cx.add("test_delete_region"), sym::NIL.into(), cx).unwrap();
+        set_buffer(buffer, env, cx).unwrap();
+        cx.garbage_collect(true);
+        insert(&[cx.add("hello"), cx.add(" world")], env).unwrap();
+
+        assert_eq!(env.current_buffer.as_ref().unwrap(), "hello world");
+        delete_region(1, 3, env).unwrap();
+        assert_eq!(env.current_buffer.as_ref().unwrap(), "hlo world");
     }
 }

@@ -175,14 +175,14 @@ impl Buffer {
 
     pub fn delete_backwards(&mut self, size: usize) {
         let size = size.min(self.cursor.chars);
-        self.delete_region(self.cursor.chars - size, self.cursor.chars);
+        self.delete_range(self.cursor.chars - size, self.cursor.chars);
     }
 
-    pub fn delete_char(&mut self, size: usize) {
-        self.delete_region(self.cursor.chars, self.cursor.chars + size);
+    pub fn delete_forwards(&mut self, size: usize) {
+        self.delete_range(self.cursor.chars, self.cursor.chars + size);
     }
 
-    pub fn delete_region(&mut self, beg: usize, end: usize) {
+    pub fn delete_range(&mut self, beg: usize, end: usize) {
         let (mut beg, mut end) = (beg, end);
         if beg > end {
             (beg, end) = (end, beg);
@@ -190,11 +190,11 @@ impl Buffer {
         let end = self.char_to_byte(end.min(self.total_chars));
         let beg = self.char_to_byte(beg.min(self.total_chars));
         if end != beg {
-            self.delete_byte_region(beg, end);
+            self.delete_byte_range(beg, end);
         }
     }
 
-    fn delete_byte_region(&mut self, beg: usize, end: usize) {
+    fn delete_byte_range(&mut self, beg: usize, end: usize) {
         // TODO: optimize this so that we count the chars deleted when calculating position
         assert!(beg <= end, "beg ({beg}) is greater then end ({end})");
         assert!(end <= self.data.len(), "end out of bounds");
@@ -496,9 +496,9 @@ mod test {
         assert_eq!(buffer, "hello");
 
         let mut buffer = Buffer::new();
-        buffer.delete_region(0, 0);
+        buffer.delete_range(0, 0);
         assert_eq!(buffer, "");
-        buffer.delete_region(0, 5);
+        buffer.delete_range(0, 5);
         assert_eq!(buffer, "");
     }
 
@@ -532,7 +532,7 @@ mod test {
     fn empty() {
         let mut buffer = Buffer::from("");
         assert_eq!(buffer, "");
-        buffer.delete_region(1, 2);
+        buffer.delete_range(1, 2);
         assert_eq!(buffer, "");
     }
 
@@ -558,7 +558,7 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::from(world);
         buffer.insert(hello);
-        buffer.delete_char(4);
+        buffer.delete_forwards(4);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "hello d");
     }
@@ -567,10 +567,10 @@ mod test {
     fn test_delete_region() {
         let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
-        buffer.delete_region(1, 3);
+        buffer.delete_range(1, 3);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "hlo world");
-        buffer.delete_region(4, 6);
+        buffer.delete_range(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "hlo rld");
     }
@@ -579,7 +579,7 @@ mod test {
     fn test_delete_nothing() {
         let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
-        buffer.delete_region(3, 3);
+        buffer.delete_range(3, 3);
         assert_eq!(buffer, "hello world");
     }
 
@@ -588,23 +588,23 @@ mod test {
     fn edge_cases() {
         let mut buffer = Buffer::from(":?abdix7");
         assert_eq!(buffer.len(), 8);
-        buffer.delete_region(2, 5);
+        buffer.delete_range(2, 5);
         assert_eq!(buffer.len(), 5);
-        buffer.delete_region(5, 4);
+        buffer.delete_range(5, 4);
         assert_eq!(buffer.len(), 4);
-        buffer.delete_region(0, 3);
+        buffer.delete_range(0, 3);
 
         let mut buffer = Buffer::from("xyz");
         buffer.insert("abc");
         buffer.set_cursor(2);
-        buffer.delete_region(1, 4);
+        buffer.delete_range(1, 4);
         assert_eq!(buffer, "ayz");
         buffer.insert("b");
         assert_eq!(buffer, "abyz");
 
         let mut buffer = Buffer::from("ƽaejcoeuz");
-        buffer.delete_region(5, 6);
-        buffer.delete_region(1, 8);
+        buffer.delete_range(5, 6);
+        buffer.delete_range(1, 8);
         assert_eq!(buffer, "ƽ");
     }
 
@@ -614,7 +614,7 @@ mod test {
         let mut buffer = Buffer::from("\n\n\n\nAutomerge is too");
         buffer.insert("per. Some graduate students in ");
         buffer.set_cursor(10);
-        buffer.delete_char(21);
+        buffer.delete_forwards(21);
         assert_eq!(buffer, "per. Some \n\n\n\nAutomerge is too");
     }
 
@@ -623,17 +623,17 @@ mod test {
     fn test_bounds() {
         let mut buffer = Buffer::from("world");
         buffer.insert("hello ");
-        buffer.delete_region(3, 100);
+        buffer.delete_range(3, 100);
         assert_eq!(buffer, "hel");
-        buffer.delete_region(10, 1);
+        buffer.delete_range(10, 1);
         assert_eq!(buffer, "h");
 
         let mut buffer = Buffer::from(",skeobg x");
-        buffer.delete_region(10, 10);
+        buffer.delete_range(10, 10);
         assert_eq!(buffer.gap_len(), 5);
 
         let mut buffer = Buffer::from("+skeocptv'eigp");
-        buffer.delete_region(30, 6);
+        buffer.delete_range(30, 6);
         assert_eq!(buffer.gap_len(), 13);
     }
 

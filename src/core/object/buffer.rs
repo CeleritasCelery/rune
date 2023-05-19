@@ -47,6 +47,10 @@ impl<'a> Buffer<'a> {
         }
         Ok(())
     }
+
+    pub(crate) fn delete(&mut self, beg: usize, end: usize) {
+        self.get_mut().text.delete_range(beg, end);
+    }
 }
 
 impl<'old, 'new> WithLifetime<'new> for Buffer<'old> {
