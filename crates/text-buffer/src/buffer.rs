@@ -1,8 +1,9 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::must_use_candidate)]
 use std::{
+    borrow::Cow,
     fmt::Debug,
-    ops::{Bound, RangeBounds},
+    ops::{Bound, Range, RangeBounds},
 };
 
 use bytecount::num_chars;
@@ -444,22 +445,66 @@ impl Buffer {
         std::str::from_utf8(&self.data[range]).unwrap()
     }
 
+    pub fn read(&self, range: Range<usize>) -> Cow<'_, str> {
+        // if past gap_start, add gap_len to range
+        let mut range = range;
+        if range.start >= self.gap_start {
+            range.start += self.gap_len()
+        }
+        if range.end >= self.gap_start {
+            range.end += self.gap_len()
+        }
+        assert!(range.end <= self.data.len(), "range end out of bounds");
+        assert!(range.start <= self.data.len(), "range start out of bounds");
+        for i in 0..4 {
+            if self.is_char_boundary(range.end - i) {
+                range.end -= i;
+                break;
+            }
+        }
+        for i in 0..4 {
+            if self.is_char_boundary(range.start + i) {
+                range.start += i;
+                break;
+            }
+        }
+        // assert the range does not overlap with the gap
+        assert!(range.start >= self.gap_end || range.end < self.gap_start);
+
+        // the range straddles the gap, so we need to copy the two halves
+        if range.start < self.gap_start && self.gap_start < range.end {
+            let mut string = String::with_capacity(range.len());
+            string.push_str(self.to_str(range.start..self.gap_start));
+            string.push_str(self.to_str(self.gap_end..range.end));
+            assert_eq!(string.len(), range.len());
+            Cow::Owned(string)
+        } else {
+            Cow::Borrowed(self.to_str(range))
+        }
+    }
+
     fn assert_char_boundary(&self, pos: usize) {
         if pos == self.gap_start {
             return;
         }
-        let is_boundary = match self.data.get(pos) {
-            Some(byte) => Self::is_char_boundary(*byte),
-            None => pos == self.data.len(),
-        };
-        assert!(is_boundary, "position ({pos}) not on utf8 boundary");
+        assert!(
+            self.is_char_boundary(pos),
+            "position ({pos}) not on utf8 boundary"
+        );
     }
 
-    #[allow(clippy::cast_possible_wrap)]
-    const fn is_char_boundary(byte: u8) -> bool {
-        // This is bit magic equivalent to: b < 128 || b >= 192
-        (byte as i8) >= -0x40
+    fn is_char_boundary(&self, pos: usize) -> bool {
+        match self.data.get(pos) {
+            Some(byte) => is_char_boundary(*byte),
+            None => pos == self.data.len(),
+        }
     }
+}
+
+#[allow(clippy::cast_possible_wrap)]
+const fn is_char_boundary(byte: u8) -> bool {
+    // This is bit magic equivalent to: b < 128 || b >= 192
+    (byte as i8) >= -0x40
 }
 
 #[allow(dead_code)]
@@ -659,5 +704,15 @@ mod test {
         let mut buffer = Buffer::from(string);
         buffer.insert(new_string);
         assert_eq!(buffer.gap_chars, new_string.len());
+    }
+
+    #[test]
+    fn test_read() {
+        let mut buffer = Buffer::from("hello world");
+        buffer.set_cursor(5);
+        assert_eq!(buffer.read(0..0), Cow::Borrowed(""));
+        assert_eq!(buffer.read(0..5), Cow::Borrowed("hello"));
+        assert_eq!(buffer.read(5..11), Cow::Borrowed(" world"));
+        assert_eq!(buffer.read(4..6), Cow::<str>::Owned(String::from("o ")));
     }
 }
