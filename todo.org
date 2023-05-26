@@ -15,3 +15,9 @@ Currently symbol-function of a special form will return nil
 - implement tracing
 - Add to ~OwnedObject~
 - Add to ~ObjectAllocation~
+* GUI steps
+- Display a text widget in window
+- display a buffer in the window
+- custom widget the get's a slice of the buffer
+- allow buffer to be edited
+- new UI thread
