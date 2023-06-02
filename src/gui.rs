@@ -15,40 +15,19 @@
 //! An example of various text layout features.
 
 // On Windows platform, don't show a console when opening the app.
-use druid::piet::{PietTextLayoutBuilder, TextStorage as PietTextStorage};
-use druid::text::{Attribute, RichText, TextStorage};
-use druid::widget::prelude::*;
+use druid::text::{Attribute, RichText};
 use druid::widget::{LineBreaking, RawLabel, Scroll};
 use druid::{
-    AppLauncher, Color, Data, FontFamily, FontStyle, FontWeight, Lens,
-    TextAlignment, Widget, WidgetExt, WindowDesc,
+    AppLauncher, Color, Data, FontFamily, FontStyle, FontWeight, Lens, Widget, WidgetExt,
+    WindowDesc,
 };
 
 const TEXT: &str = r#"Contrary to what we would like to believe, there is no such thing as a structureless group. Any group of people of whatever nature that comes together for any length of time for any purpose will inevitably structure itself in some fashion. The structure may be flexible; it may vary over time; it may evenly or unevenly distribute tasks, power and resources over the members of the group. But it will be formed regardless of the abilities, personalities, or intentions of the people involved. The very fact that we are individuals, with different talents, predispositions, and backgrounds makes this inevitable. Only if we refused to relate or interact on any basis whatsoever could we approximate structurelessness -- and that is not the nature of a human group.
 This means that to strive for a structureless group is as useful, and as deceptive, as to aim at an "objective" news story, "value-free" social science, or a "free" economy. A "laissez faire" group is about as realistic as a "laissez faire" society; the idea becomes a smokescreen for the strong or the lucky to establish unquestioned hegemony over others. This hegemony can be so easily established because the idea of "structurelessness" does not prevent the formation of informal structures, only formal ones. Similarly "laissez faire" philosophy did not prevent the economically powerful from establishing control over wages, prices, and distribution of goods; it only prevented the government from doing so. As long as the structure of the group is informal, the rules of how decisions are made are known only to a few and awareness of power is limited to those who know the rules. Those who do not know the rules and are not chosen for initiation must remain in confusion, or suffer from paranoid delusions that something is happening of which they are not quite aware."#;
 
-const SPACER_SIZE: f64 = 8.0;
-
 #[derive(Clone, Data, Lens)]
 struct AppState {
     text: RichText,
-    line_break_mode: LineBreaking,
-    alignment: TextAlignment,
-}
-
-//NOTE: we implement these traits for our base data (instead of just lensing
-//into the RichText object, for the label) so that our label controller can
-//have access to the other fields.
-impl PietTextStorage for AppState {
-    fn as_str(&self) -> &str {
-        self.text.as_str()
-    }
-}
-
-impl TextStorage for AppState {
-    fn add_attributes(&self, builder: PietTextLayoutBuilder, env: &Env) -> PietTextLayoutBuilder {
-        self.text.add_attributes(builder, env)
-    }
 }
 
 pub(crate) fn launch() {
@@ -66,11 +45,7 @@ pub(crate) fn launch() {
         .with_attribute(764.., Attribute::style(FontStyle::Italic));
 
     // create the initial app state
-    let initial_state = AppState {
-        line_break_mode: LineBreaking::WordWrap,
-        alignment: TextAlignment::default(),
-        text,
-    };
+    let initial_state = AppState { text };
 
     // start the application
     AppLauncher::with_window(main_window)
@@ -80,13 +55,7 @@ pub(crate) fn launch() {
 }
 
 fn build_root_widget() -> impl Widget<AppState> {
-    Scroll::new(
-        RawLabel::new()
-            .with_text_color(Color::BLACK)
-            .with_line_break_mode(LineBreaking::WordWrap)
-            .background(Color::WHITE)
-            .expand_width()
-            .padding((SPACER_SIZE * 4.0, SPACER_SIZE))
-            .background(Color::grey8(222)),
-    ).vertical()
+    Scroll::new(RawLabel::new().with_line_break_mode(LineBreaking::WordWrap))
+        .vertical()
+        .lens(AppState::text)
 }
