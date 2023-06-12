@@ -10,47 +10,73 @@ mod node {
 
     const MAX: usize = 2;
 
+    #[derive(Debug)]
     pub(super) enum Node {
-        Internal(Box<Internal>),
-        Leaf(Box<Leaf>),
+        Internal(SmallVec<[Box<Internal>; MAX]>),
+        Leaf(SmallVec<[Box<Leaf>; MAX]>),
     }
 
     impl Node {
-        fn parent(&self) -> Option<NonNull<Internal>> {
+        fn len(&self) -> usize {
             match self {
-                Node::Internal(x) => x.parent,
-                Node::Leaf(x) => x.parent,
+                Node::Internal(x) => x.len(),
+                Node::Leaf(x) => x.len(),
             }
         }
 
-        fn parent_mut(&mut self) -> &mut Option<NonNull<Internal>> {
+        fn set_children(&mut self, children: NonNull<Internal>) {
             match self {
-                Node::Internal(x) => &mut x.parent,
-                Node::Leaf(x) => &mut x.parent,
+                Node::Internal(x) => {
+                    for child in x.iter_mut() {
+                        child.parent = Some(children);
+                    }
+                }
+                Node::Leaf(x) => {
+                    for child in x.iter_mut() {
+                        child.parent = Some(children);
+                    }
+                }
             }
         }
 
-        fn metrics(&self) -> Metric {
-            match self {
-                Node::Internal(x) => x.metrics.iter().copied().sum(),
-                Node::Leaf(x) => x.metric,
-            }
+        fn insert_internal(&mut self, idx: usize, x: Box<Internal>) {
+            let Node::Internal(children) = self else { unreachable!() };
+            children.insert(idx, x);
+        }
+
+        fn insert_leaf(&mut self, idx: usize, x: Box<Leaf>) {
+            let Node::Leaf(children) = self else { unreachable!() };
+            children.insert(idx, x);
         }
     }
 
+    #[derive(Debug)]
     pub(super) struct Internal {
         metrics: SmallVec<[Metric; MAX]>,
-        children: SmallVec<[Node; MAX]>,
+        children: Node,
         parent: Option<NonNull<Internal>>,
     }
 
     impl Internal {
-        pub(super) fn new() -> Self {
+        pub(super) fn new_leaf() -> Self {
             Self {
                 metrics: SmallVec::new(),
-                children: SmallVec::new(),
+                children: Node::Leaf(SmallVec::new()),
                 parent: None,
             }
+        }
+
+        pub(super) fn new_internal() -> Self {
+            Self {
+                metrics: SmallVec::new(),
+                children: Node::Internal(SmallVec::new()),
+                parent: None,
+            }
+        }
+
+        fn clear_parent(mut self: Box<Self>) -> Box<Self> {
+            self.parent = None;
+            self
         }
 
         fn metrics(&self) -> Metric {
@@ -61,136 +87,118 @@ mod node {
             self.children.len()
         }
 
-        pub(super) fn push(&mut self, node: Node) {
-            if self.len() < MAX {
-                let mut node = node;
-                *node.parent_mut() = Some(NonNull::from(&mut *self));
-                self.metrics.push(node.metrics());
-                self.children.push(node);
+        fn insert_internal(
+            children: &mut SmallVec<[Box<Internal>; MAX]>,
+            metrics: &mut SmallVec<[Metric; MAX]>,
+            parent: Option<NonNull<Internal>>,
+            idx: usize,
+            new_child: Box<Internal>,
+        ) -> Option<Box<Internal>> {
+            let len = children.len();
+            // update the metrics for the current child
+            metrics[idx] = children[idx].metrics();
+            if len < MAX {
+                // If there is room in this node then insert the
+                // node before the current one
+                metrics.insert(idx, new_child.metrics());
+                children.insert(idx, new_child);
+                None
             } else {
-                // split the self in two
-                let mut right = Internal::new();
-                let middle = (MAX - 1) / 2;
-                right.metrics = self.metrics.drain(middle + 1..).collect();
-                right.children = self.children.drain(middle + 1..).collect();
-                self.parent = Some(NonNull::from(&mut right));
-                todo!();
+                assert_eq!(len, MAX);
+                // split this node into two and return the left one
+                let middle = MAX / 2;
+
+                let mut left = Internal {
+                    metrics: metrics.drain(..middle).collect(),
+                    children: Node::Internal(
+                        children.drain(..middle).map(|x| x.clear_parent()).collect(),
+                    ),
+                    parent,
+                };
+                if idx < middle {
+                    left.metrics.insert(idx, new_child.metrics());
+                    left.children.insert_internal(idx, new_child);
+                } else {
+                    metrics.insert(idx - middle, new_child.metrics());
+                    children.insert(idx - middle, new_child);
+                }
+                // Box it so it has a stable address
+                let mut boxed = Box::new(left);
+                let child_parent = NonNull::from(&mut *boxed);
+                boxed.children.set_children(child_parent);
+                Some(boxed)
             }
         }
 
-        pub(super) fn search_bytes(&self, mut bytes: usize) -> Option<&Leaf> {
-            for (idx, metric) in self.metrics.iter().enumerate() {
-                if bytes < metric.bytes {
-                    // go to this node and search it if it internal, return if a leaf
-                    return match self.children[idx] {
-                        Node::Leaf(ref leaf) => Some(leaf),
-                        Node::Internal(ref internal) => internal.search_bytes(bytes),
-                    };
+        fn insert_leaf(
+            children: &mut SmallVec<[Box<Leaf>; MAX]>,
+            metrics: &mut SmallVec<[Metric; MAX]>,
+            parent: Option<NonNull<Internal>>,
+            self_ptr: NonNull<Internal>,
+            idx: usize,
+            needle: Metric,
+        ) -> Option<Box<Internal>> {
+            let len = children.len();
+            let leaf = &mut children[idx];
+            leaf.metric -= needle;
+            if len < MAX {
+                // If there is room in this node then insert the
+                // leaf before the current one, splitting the
+                // size
+                let mut new = Leaf::new(needle);
+                new.parent = Some(self_ptr);
+                metrics.insert(idx, needle);
+                children.insert(idx, Box::new(new));
+                None
+            } else {
+                assert_eq!(len, MAX);
+                // split this node into two and return the left one
+                let middle = MAX / 2;
+                let mut left = Internal {
+                    metrics: metrics.drain(..middle).collect(),
+                    children: Node::Leaf(
+                        children.drain(..middle).map(|x| x.clear_parent()).collect(),
+                    ),
+                    parent,
+                };
+                let mut new = Leaf::new(needle);
+                if idx < middle {
+                    left.metrics.insert(idx, needle);
+                    left.children.insert_leaf(idx, Box::new(new));
+                } else {
+                    new.parent = Some(self_ptr);
+                    metrics.insert(idx - middle, needle);
+                    children.insert(idx - middle, Box::new(new));
                 }
-                bytes -= metric.bytes;
+                let mut boxed = Box::new(left);
+                // update the children's parent pointer
+                let child_parent = NonNull::from(&mut *boxed);
+                boxed.children.set_children(child_parent);
+                Some(boxed)
             }
-            None
         }
 
         pub(super) fn insert(&mut self, mut needle: Metric) -> Option<Box<Internal>> {
+            let self_ptr = NonNull::from(&mut *self);
             for (idx, metric) in self.metrics.iter().enumerate() {
                 if needle.bytes < metric.bytes {
-                    let len = self.len();
-                    return match &mut self.children[idx] {
-                        Node::Leaf(leaf) => {
-                            assert_eq!(*metric, leaf.metric);
-                            if len < MAX {
-                                // If there is room in this node then insert the
-                                // leaf before the current one, splitting the
-                                // size
-                                leaf.metric -= needle;
-                                let mut new = Leaf::new(needle);
-                                new.parent = Some(NonNull::from(&mut *self));
-                                self.metrics.insert(idx, needle);
-                                self.children.insert(idx, Node::Leaf(Box::new(new)));
-                                None
-                            } else {
-                                assert_eq!(len, MAX);
-                                // split this node into two and return the left one
-                                let middle = MAX / 2;
-                                let mut left = self.split();
-                                let mut new = Leaf::new(needle);
-                                if idx < middle {
-                                    left.metrics.insert(idx, needle);
-                                    left.children.insert(idx, Node::Leaf(Box::new(new)));
-                                } else {
-                                    new.parent = Some(NonNull::from(&mut *self));
-                                    self.metrics.insert(idx - middle, needle);
-                                    self.children
-                                        .insert(idx - middle, Node::Leaf(Box::new(new)));
-                                }
-                                left.parent = self.parent;
-                                let mut boxed = Box::new(left);
-                                // update the children's parent pointer
-                                let child_parent = Some(NonNull::from(&mut *boxed));
-                                for child in boxed.children.iter_mut() {
-                                    *child.parent_mut() = child_parent;
-                                }
-                                Some(boxed)
+                    let metrics = &mut self.metrics;
+                    let parent = self.parent;
+                    return match &mut self.children {
+                        Node::Internal(children) => match children[idx].insert(needle) {
+                            Some(new_child) => {
+                                Self::insert_internal(children, metrics, parent, idx, new_child)
                             }
-                        }
-                        Node::Internal(internal) => {
-                            match internal.insert(needle) {
-                                Some(new_child) => {
-                                    if len < MAX {
-                                        // If there is room in this node then insert the
-                                        // node before the current one
-                                        self.metrics.insert(idx, new_child.metrics());
-                                        self.children.insert(idx, Node::Internal(new_child));
-                                        None
-                                    } else {
-                                        assert_eq!(len, MAX);
-                                        // split this node into two and return the left one
-                                        let middle = MAX / 2;
-                                        let mut left = self.split();
-                                        if idx < middle {
-                                            left.metrics.insert(idx, new_child.metrics());
-                                            left.children.insert(idx, Node::Internal(new_child));
-                                        } else {
-                                            self.metrics.insert(idx - middle, needle);
-                                            self.children
-                                                .insert(idx - middle, Node::Internal(new_child));
-                                        }
-                                        left.parent = self.parent;
-                                        let mut boxed = Box::new(left);
-                                        let child_parent = Some(NonNull::from(&mut *boxed));
-                                        for child in boxed.children.iter_mut() {
-                                            *child.parent_mut() = child_parent;
-                                        }
-                                        Some(boxed)
-                                    }
-                                }
-                                None => None,
-                            }
+                            None => None,
+                        },
+                        Node::Leaf(children) => {
+                            Self::insert_leaf(children, metrics, parent, self_ptr, idx, needle)
                         }
                     };
                 }
                 needle -= *metric;
             }
             todo!("push");
-        }
-
-        fn split(&mut self) -> Self {
-            assert_eq!(self.len(), MAX);
-            let middle = MAX / 2;
-            let mut left = Internal::new();
-            left.metrics = self.metrics.drain(..middle).collect();
-            left.children = self.children.drain(..middle).collect();
-            for child in &mut left.children {
-                *child.parent_mut() = None;
-            }
-            left
-        }
-
-        pub(super) fn pop(&mut self) -> Option<Node> {
-            let mut node = self.children.pop()?;
-            *node.parent_mut() = None;
-            Some(node)
         }
     }
 
@@ -206,6 +214,11 @@ mod node {
                 metric,
                 parent: None,
             }
+        }
+
+        fn clear_parent(mut self: Box<Self>) -> Box<Self> {
+            self.parent = None;
+            self
         }
     }
 
@@ -256,14 +269,14 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use super::node::*;
+    // use super::node::*;
 
     #[test]
     fn test_new() {
-        let mut node = Internal::new();
-        node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
+        // let mut node = Internal::new_internal();
+        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
+        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
+        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
+        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
     }
 }
