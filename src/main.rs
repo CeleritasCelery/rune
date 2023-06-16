@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use std::{
+    fmt::Display,
     iter::Sum,
     ops::{AddAssign, Sub, SubAssign},
     ptr::NonNull,
@@ -27,7 +28,7 @@ impl Node {
         }
     }
 
-    fn set_children(&mut self, children: NonNull<Internal>) {
+    fn set_parent(&mut self, children: NonNull<Internal>) {
         match self {
             Node::Internal(x) => {
                 for child in x.iter_mut() {
@@ -42,14 +43,19 @@ impl Node {
         }
     }
 
-    fn insert_internal(&mut self, idx: usize, x: Box<Internal>) {
-        let Node::Internal(children) = self else { unreachable!() };
-        children.insert(idx, x);
-    }
-
-    fn insert_leaf(&mut self, idx: usize, x: Box<Leaf>) {
-        let Node::Leaf(children) = self else { unreachable!() };
-        children.insert(idx, x);
+    fn assert_parent(&self, parent: NonNull<Internal>) {
+        match self {
+            Node::Internal(x) => {
+                for child in x.iter() {
+                    assert_eq!(child.parent, Some(parent));
+                }
+            }
+            Node::Leaf(x) => {
+                for child in x.iter() {
+                    assert_eq!(child.parent, Some(parent));
+                }
+            }
+        }
     }
 }
 
@@ -128,7 +134,7 @@ impl Internal {
             // Box it so it has a stable address
             let mut boxed = Box::new(left);
             let child_parent = NonNull::from(&mut *boxed);
-            boxed.children.set_children(child_parent);
+            boxed.children.set_parent(child_parent);
             Some(boxed)
         }
     }
@@ -141,8 +147,8 @@ impl Internal {
         needle: Metric,
     ) -> Option<Box<Internal>> {
         let len = children.len();
-        let leaf = &mut children[idx];
-        leaf.metric -= needle;
+        children[idx].metric -= needle;
+        metrics[idx] -= needle;
         if len < MAX {
             // If there is room in this node then insert the
             // leaf before the current one, splitting the
@@ -176,19 +182,43 @@ impl Internal {
             let mut boxed = Box::new(left);
             // update the children's parent pointer
             let child_parent = NonNull::from(&mut *boxed);
-            boxed.children.set_children(child_parent);
+            boxed.children.set_parent(child_parent);
             Some(boxed)
         }
     }
 
-    fn insert(&mut self, mut needle: Metric) -> Option<Box<Internal>> {
+    fn insert(self: &mut Box<Self>, needle: Metric) {
+        match self.insert_impl(needle) {
+            None => {}
+            Some(left) => {
+                // split the root, making the old root the right child
+                let right = std::mem::replace(self, Box::new(Internal::new_internal()));
+                self.metrics = smallvec![left.metrics(), right.metrics()];
+                self.children = Node::Internal(smallvec![left, right]);
+                let this = NonNull::from(&mut **self);
+                self.children.set_parent(this);
+            }
+        }
+    }
+
+    fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Internal>> {
+        // debug checks
+        {
+            let children_metrics = match &self.children {
+                Node::Internal(x) => x.iter().map(|x| x.metrics()).sum(),
+                Node::Leaf(x) => x.iter().map(|x| x.metric).sum(),
+            };
+            assert_eq!(self.metrics(), children_metrics);
+            let this = NonNull::from(&mut *self);
+            self.children.assert_parent(this);
+        }
         let self_ptr = NonNull::from(&mut *self);
         for (idx, metric) in self.metrics.iter().enumerate() {
             if needle.bytes < metric.bytes {
                 let metrics = &mut self.metrics;
                 let mut new = match &mut self.children {
                     // call recursively and insert the new node
-                    Node::Internal(children) => match children[idx].insert(needle) {
+                    Node::Internal(children) => match children[idx].insert_impl(needle) {
                         Some(new) => Self::insert_internal(children, metrics, idx, new),
                         None => None,
                     },
@@ -201,10 +231,52 @@ impl Internal {
                     new.parent = self.parent;
                 }
                 return new;
+            } else {
+                needle -= *metric;
             }
-            needle -= *metric;
         }
         todo!("push");
+    }
+}
+
+impl Display for Internal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // print the children level by level by adding them to a pair of
+        // alternating queues for each level
+        let mut current = Vec::new();
+        let mut next: Vec<&Self> = Vec::new();
+        current.push(self);
+        let mut level = 0;
+        loop {
+            write!(f, "level {level}: ")?;
+            for node in &current {
+                for metric in &node.metrics {
+                    write!(f, "({}) ", metric)?;
+                }
+                if let Node::Internal(children) = &node.children {
+                    for child in children {
+                        next.push(child);
+                    }
+                }
+            }
+            writeln!(f)?;
+            level += 1;
+            // next will be empty when all the children are leafs
+            if next.is_empty() {
+                break;
+            }
+            std::mem::swap(&mut current, &mut next);
+            next.clear();
+        }
+        // we are at the level just before the leafs, so we can print them now
+        write!(f, "leafs {level}: ")?;
+        for node in current {
+            let Node::Leaf(children) = &node.children else {unreachable!()};
+            for child in children {
+                write!(f, "({}) ", child.metric)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -232,6 +304,12 @@ impl Leaf {
 struct Metric {
     bytes: usize,
     chars: usize,
+}
+
+impl Display for Metric {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "b: {}, c: {}", self.bytes, self.chars)
+    }
 }
 
 impl Sum for Metric {
@@ -274,14 +352,28 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    // use super::node::*;
+    use super::*;
+
+    fn metric(x: usize) -> Metric {
+        Metric { bytes: x, chars: x }
+    }
 
     #[test]
-    fn test_new() {
-        // let mut node = Internal::new_internal();
-        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
-        // node.push(Node::Leaf(Box::new(Leaf::new(Metric::default()))));
+    fn test_insert() {
+        let mut root = Box::new(Internal::new_leaf());
+        root.metrics.push(metric(10));
+        let root_ptr = NonNull::from(&mut *root);
+        if let Node::Leaf(children) = &mut root.children {
+            let mut leaf = Leaf::new(metric(10));
+            leaf.parent = Some(root_ptr);
+            children.push(Box::new(leaf));
+        }
+        println!("{}", root);
+        root.insert(metric(5));
+        for i in 0..10 {
+            println!("pushing {i}");
+            root.insert(metric(i));
+        }
+        println!("{}", root);
     }
 }
