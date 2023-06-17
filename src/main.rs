@@ -8,7 +8,7 @@ use std::{
     ptr::NonNull,
 };
 
-const MAX: usize = 2;
+const MAX: usize = 4;
 
 type Metrics = SmallVec<[Metric; MAX]>;
 type IntChildren = SmallVec<[Box<Internal>; MAX]>;
@@ -242,17 +242,20 @@ impl Internal {
 impl Display for Internal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // print the children level by level by adding them to a pair of
-        // alternating queues for each level
+        // alternating arrays for each level
         let mut current = Vec::new();
         let mut next: Vec<&Self> = Vec::new();
         current.push(self);
         let mut level = 0;
-        loop {
-            write!(f, "level {level}: ")?;
+        while !current.is_empty() {
+            next.clear();
+            write!(f, "level {level}:")?;
             for node in &current {
+                write!(f, " [")?;
                 for metric in &node.metrics {
-                    write!(f, "({}) ", metric)?;
+                    write!(f, "({metric}) ")?;
                 }
+                write!(f, "]")?;
                 if let Node::Internal(children) = &node.children {
                     for child in children {
                         next.push(child);
@@ -261,20 +264,7 @@ impl Display for Internal {
             }
             writeln!(f)?;
             level += 1;
-            // next will be empty when all the children are leafs
-            if next.is_empty() {
-                break;
-            }
             std::mem::swap(&mut current, &mut next);
-            next.clear();
-        }
-        // we are at the level just before the leafs, so we can print them now
-        write!(f, "leafs {level}: ")?;
-        for node in current {
-            let Node::Leaf(children) = &node.children else {unreachable!()};
-            for child in children {
-                write!(f, "({}) ", child.metric)?;
-            }
         }
         Ok(())
     }
@@ -308,7 +298,7 @@ struct Metric {
 
 impl Display for Metric {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "b: {}, c: {}", self.bytes, self.chars)
+        write!(f, "b:{}, c:{}", self.bytes, self.chars)
     }
 }
 
@@ -373,7 +363,7 @@ mod test {
         for i in 0..10 {
             println!("pushing {i}");
             root.insert(metric(i));
+            println!("{}", root);
         }
-        println!("{}", root);
     }
 }
