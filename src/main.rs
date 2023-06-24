@@ -192,6 +192,41 @@ impl Internal {
         }
     }
 
+    fn push_leaf(
+        children: &mut LeafChildren,
+        metrics: &mut Metrics,
+        self_ptr: NonNull<Internal>,
+        metric: Metric,
+    ) -> Option<Box<Internal>> {
+        let len = children.len();
+        if len < MAX {
+            // If there is room in this node then insert the
+            // leaf before the current one, splitting the
+            // size
+            let mut new = Leaf::new(metric);
+            new.parent = Some(self_ptr);
+            metrics.push(metric);
+            children.push(Box::new(new));
+            None
+        } else {
+            assert_eq!(len, MAX);
+            // split this node into two and return the left one
+            let new = Leaf::new(metric);
+            let right_metrics: Metrics = smallvec![metric];
+            let right_children: LeafChildren = smallvec![Box::new(new)];
+            let right = Internal {
+                metrics: right_metrics,
+                children: Node::Leaf(right_children),
+                parent: None,
+            };
+            let mut boxed = Box::new(right);
+            // update the children's parent pointer
+            let child_parent = NonNull::from(&mut *boxed);
+            boxed.children.set_parent(child_parent);
+            Some(boxed)
+        }
+    }
+
     fn insert(self: &mut Box<Self>, needle: Metric) {
         match self.insert_impl(needle) {
             None => {}
@@ -218,17 +253,33 @@ impl Internal {
             self.children.assert_parent(this);
         }
         let self_ptr = NonNull::from(&mut *self);
-        for (idx, metric) in self.metrics.iter().enumerate() {
-            if needle.bytes < metric.bytes {
-                let metrics = &mut self.metrics;
+        let last = self.metrics.len() - 1;
+        for (idx, metric) in self.metrics.iter_mut().enumerate() {
+            let in_range = needle.bytes < metric.bytes;
+            if idx == last || in_range {
                 let mut new = match &mut self.children {
                     // call recursively and insert the new node
                     Node::Internal(children) => match children[idx].insert_impl(needle) {
-                        Some(new) => Self::insert_internal(children, metrics, idx, new),
-                        None => None,
+                        Some(new) => Self::insert_internal(children, &mut self.metrics, idx, new),
+                        None => {
+                            // update the metric of the current node because we
+                            // increased the max size
+                            if !in_range {
+                                assert_eq!(idx, last);
+                                *metric = children.last().unwrap().metrics();
+                            }
+                            None
+                        }
                     },
                     Node::Leaf(children) => {
-                        Self::insert_leaf(children, metrics, self_ptr, idx, needle)
+                        if in_range {
+                            Self::insert_leaf(children, &mut self.metrics, self_ptr, idx, needle)
+                        } else {
+                            assert_eq!(idx, last);
+                            needle -= *metric;
+                            println!("needle: {:?}", needle);
+                            Self::push_leaf(children, &mut self.metrics, self_ptr, needle)
+                        }
                     }
                 };
                 // set the parent pointer of the new node
@@ -240,7 +291,7 @@ impl Internal {
                 needle -= *metric;
             }
         }
-        todo!("push");
+        unreachable!("we should always recurse into a child node");
     }
 
     fn insert_child(
@@ -388,6 +439,24 @@ mod test {
         println!("{}", root);
         root.insert(metric(5));
         for i in 0..10 {
+            println!("pushing {i}");
+            root.insert(metric(i));
+            println!("{}", root);
+        }
+    }
+
+    #[test]
+    fn test_push() {
+        let mut root = Box::new(Internal::new_leaf());
+        root.metrics.push(metric(10));
+        let root_ptr = NonNull::from(&mut *root);
+        if let Node::Leaf(children) = &mut root.children {
+            let mut leaf = Leaf::new(metric(10));
+            leaf.parent = Some(root_ptr);
+            children.push(Box::new(leaf));
+        }
+        println!("{}", root);
+        for i in 11..20 {
             println!("pushing {i}");
             root.insert(metric(i));
             println!("{}", root);
