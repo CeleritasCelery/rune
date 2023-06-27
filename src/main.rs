@@ -4,7 +4,7 @@ use smallvec::{smallvec, SmallVec};
 use std::{
     fmt::Display,
     iter::Sum,
-    ops::{AddAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Sub, SubAssign},
     ptr::NonNull,
 };
 
@@ -232,6 +232,34 @@ impl Internal {
         }
     }
 
+    pub(crate) fn search_byte(&self, byte: usize) -> Metric {
+        self.search_byte_impl(byte)
+    }
+
+    fn search_byte_impl(&self, bytes: usize) -> Metric {
+        if bytes == 0 {
+            return Metric::default();
+        }
+        let mut bytes = bytes;
+        let mut sum = Metric::default();
+        for (idx, metric) in self.metrics.iter().enumerate() {
+            if bytes < metric.bytes {
+                let child_sum = match &self.children {
+                    Node::Internal(children) => sum + children[idx].search_byte_impl(bytes),
+                    Node::Leaf(_) => sum,
+                };
+                return child_sum;
+            }
+            sum += *metric;
+            bytes -= metric.bytes;
+            // fast path if we happen get the exact number of bytes in the node
+            if bytes == 0 {
+                return sum;
+            }
+        }
+        unreachable!()
+    }
+
     pub(crate) fn insert(self: &mut Box<Self>, needle: Metric) {
         match self.insert_impl(needle) {
             None => {}
@@ -392,6 +420,17 @@ impl Sum for Metric {
     }
 }
 
+impl Add for Metric {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            bytes: self.bytes + rhs.bytes,
+            chars: self.chars + rhs.chars,
+        }
+    }
+}
+
 impl AddAssign for Metric {
     fn add_assign(&mut self, rhs: Self) {
         self.bytes += rhs.bytes;
@@ -450,6 +489,19 @@ mod test {
             println!("pushing {i}");
             root.insert(metric(i));
             println!("{}", root);
+        }
+    }
+
+    #[test]
+    fn test_search() {
+        let mut root = new_root();
+        for i in 1..20 {
+            root.insert(metric(i));
+        }
+        for i in 1..20 {
+            println!("searching for {i}");
+            let metric = root.search_byte(i);
+            assert_eq!(metric.bytes, i);
         }
     }
 }
