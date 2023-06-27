@@ -19,9 +19,7 @@ pub(crate) fn new_root() -> Box<Internal> {
     root.metrics.push(Metric::default());
     let root_ptr = NonNull::from(&*root);
     if let Node::Leaf(children) = &mut root.children {
-        let mut leaf = Leaf::new(Metric::default());
-        leaf.parent = Some(root_ptr);
-        children.push(Box::new(leaf));
+        children.push(Box::new(Leaf::new(root_ptr)));
     }
     root
 }
@@ -162,7 +160,6 @@ impl Internal {
     ) -> Option<Box<Internal>> {
         let len = children.len();
         let new_metric = metrics[idx] - needle;
-        children[idx].metric = needle;
         metrics[idx] = needle;
         // shift idx to the right
         let idx = idx + 1;
@@ -170,10 +167,8 @@ impl Internal {
             // If there is room in this node then insert the
             // leaf before the current one, splitting the
             // size
-            let mut new = Leaf::new(new_metric);
-            new.parent = Some(self_ptr);
             metrics.insert(idx, new_metric);
-            children.insert(idx, Box::new(new));
+            children.insert(idx, Box::new(Leaf::new(self_ptr)));
             None
         } else {
             assert_eq!(len, MAX);
@@ -182,7 +177,7 @@ impl Internal {
             let mut right_metrics: Metrics = metrics.drain(middle..).collect();
             let mut right_children: LeafChildren =
                 children.drain(middle..).map(|x| x.clear_parent()).collect();
-            let mut new = Leaf::new(new_metric);
+            let mut new = Leaf::default();
             if idx < middle {
                 new.parent = Some(self_ptr);
                 metrics.insert(idx, new_metric);
@@ -215,15 +210,13 @@ impl Internal {
             // If there is room in this node then insert the
             // leaf before the current one, splitting the
             // size
-            let mut new = Leaf::new(metric);
-            new.parent = Some(self_ptr);
             metrics.push(metric);
-            children.push(Box::new(new));
+            children.push(Box::new(Leaf::new(self_ptr)));
             None
         } else {
             assert_eq!(len, MAX);
             // split this node into two and return the left one
-            let new = Leaf::new(metric);
+            let new = Leaf::default();
             let right_metrics: Metrics = smallvec![metric];
             let right_children: LeafChildren = smallvec![Box::new(new)];
             let right = Internal {
@@ -320,11 +313,10 @@ impl Internal {
     }
 
     fn assert_invariants(&self) {
-        let children_metrics = match &self.children {
-            Node::Internal(x) => x.iter().map(|x| x.metrics()).sum(),
-            Node::Leaf(x) => x.iter().map(|x| x.metric).sum(),
+        if let Node::Internal(x) = &self.children {
+            let metrics = x.iter().map(|x| x.metrics()).sum();
+            assert_eq!(self.metrics(), metrics);
         };
-        assert_eq!(self.metrics(), children_metrics);
         let this = NonNull::from(self);
         self.children.assert_parent(this);
     }
@@ -363,15 +355,13 @@ impl Display for Internal {
 
 #[derive(Debug, Default)]
 struct Leaf {
-    metric: Metric,
     parent: Option<NonNull<Internal>>,
 }
 
 impl Leaf {
-    fn new(metric: Metric) -> Self {
+    fn new(parent: NonNull<Internal>) -> Self {
         Self {
-            metric,
-            parent: None,
+            parent: Some(parent),
         }
     }
 
