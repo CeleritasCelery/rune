@@ -232,32 +232,44 @@ impl Internal {
         }
     }
 
-    pub(crate) fn search_byte(&self, byte: usize) -> Metric {
-        self.search_byte_impl(byte)
+    pub(crate) fn search_byte(&self, bytes: usize) -> Metric {
+        self.search_impl::<{ Self::BYTE }>(bytes)
     }
 
-    fn search_byte_impl(&self, bytes: usize) -> Metric {
-        if bytes == 0 {
+    pub(crate) fn search_char(&self, chars: usize) -> Metric {
+        self.search_impl::<{ Self::CHAR }>(chars)
+    }
+
+    const BYTE: u8 = 0;
+    const CHAR: u8 = 1;
+
+    fn search_impl<const TYPE: u8>(&self, needle: usize) -> Metric {
+        if needle == 0 {
             return Metric::default();
         }
-        let mut bytes = bytes;
+        let mut needle = needle;
         let mut sum = Metric::default();
         for (idx, metric) in self.metrics.iter().enumerate() {
-            if bytes < metric.bytes {
+            let pos = match TYPE {
+                Self::BYTE => metric.bytes,
+                Self::CHAR => metric.chars,
+                _ => unreachable!(),
+            };
+            if needle < pos {
                 let child_sum = match &self.children {
-                    Node::Internal(children) => sum + children[idx].search_byte_impl(bytes),
+                    Node::Internal(children) => sum + children[idx].search_impl::<TYPE>(needle),
                     Node::Leaf(_) => sum,
                 };
                 return child_sum;
             }
             sum += *metric;
-            bytes -= metric.bytes;
-            // fast path if we happen get the exact number of bytes in the node
-            if bytes == 0 {
+            needle -= pos;
+            // fast path if we happen get the exact position in the node
+            if needle == 0 {
                 return sum;
             }
         }
-        unreachable!()
+        sum
     }
 
     pub(crate) fn insert(self: &mut Box<Self>, needle: Metric) {
@@ -279,7 +291,7 @@ impl Internal {
         let self_ptr = NonNull::from(&*self);
         let last = self.metrics.len() - 1;
         for (idx, metric) in self.metrics.iter_mut().enumerate() {
-            let in_range = needle.bytes < metric.bytes;
+            let in_range = needle.chars < metric.chars;
             if idx == last || in_range {
                 let mut new = match &mut self.children {
                     // call recursively and insert the new node
@@ -301,7 +313,6 @@ impl Internal {
                         } else {
                             assert_eq!(idx, last);
                             needle -= *metric;
-                            println!("needle: {:?}", needle);
                             Self::push_leaf(children, &mut self.metrics, self_ptr, needle)
                         }
                     }
@@ -468,15 +479,22 @@ mod test {
         Metric { bytes: x, chars: x }
     }
 
+    fn metric2(x: usize) -> Metric {
+        Metric {
+            bytes: x * 2,
+            chars: x,
+        }
+    }
+
     #[test]
     fn test_insert() {
         let mut root = new_root();
-        root.insert(metric(10));
+        root.insert(metric2(10));
         println!("{}", root);
-        root.insert(metric(5));
+        root.insert(metric2(5));
         for i in 0..10 {
             println!("pushing {i}");
-            root.insert(metric(i));
+            root.insert(metric2(i));
             println!("{}", root);
         }
     }
@@ -487,7 +505,7 @@ mod test {
         println!("{}", root);
         for i in 1..20 {
             println!("pushing {i}");
-            root.insert(metric(i));
+            root.insert(metric2(i));
             println!("{}", root);
         }
     }
@@ -496,12 +514,25 @@ mod test {
     fn test_search() {
         let mut root = new_root();
         for i in 1..20 {
-            root.insert(metric(i));
+            root.insert(metric2(i));
         }
         for i in 1..20 {
             println!("searching for {i}");
-            let metric = root.search_byte(i);
-            assert_eq!(metric.bytes, i);
+            let metric = root.search_byte(i * 2);
+            assert_eq!(metric.chars, i);
+        }
+    }
+
+    #[test]
+    fn test_search_chars() {
+        let mut root = new_root();
+        for i in 1..20 {
+            root.insert(metric2(i));
+        }
+        for i in 1..20 {
+            println!("searching for {i}");
+            let metric = root.search_char(i);
+            assert_eq!(metric.bytes, i * 2);
         }
     }
 }
