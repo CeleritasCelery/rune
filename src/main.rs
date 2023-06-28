@@ -244,12 +244,13 @@ impl Internal {
     const CHAR: u8 = 1;
 
     fn search_impl<const TYPE: u8>(&self, needle: usize) -> Metric {
-        if needle == 0 {
-            return Metric::default();
-        }
         let mut needle = needle;
         let mut sum = Metric::default();
         for (idx, metric) in self.metrics.iter().enumerate() {
+            // fast path if we happen get the exact position in the node
+            if needle == 0 {
+                break;
+            }
             let pos = match TYPE {
                 Self::BYTE => metric.bytes,
                 Self::CHAR => metric.chars,
@@ -264,10 +265,6 @@ impl Internal {
             }
             sum += *metric;
             needle -= pos;
-            // fast path if we happen get the exact position in the node
-            if needle == 0 {
-                return sum;
-            }
         }
         sum
     }
@@ -476,10 +473,6 @@ mod test {
     use super::*;
 
     fn metric(x: usize) -> Metric {
-        Metric { bytes: x, chars: x }
-    }
-
-    fn metric2(x: usize) -> Metric {
         Metric {
             bytes: x * 2,
             chars: x,
@@ -489,12 +482,12 @@ mod test {
     #[test]
     fn test_insert() {
         let mut root = new_root();
-        root.insert(metric2(10));
+        root.insert(metric(10));
         println!("{}", root);
-        root.insert(metric2(5));
+        root.insert(metric(5));
         for i in 0..10 {
             println!("pushing {i}");
-            root.insert(metric2(i));
+            root.insert(metric(i));
             println!("{}", root);
         }
     }
@@ -505,7 +498,7 @@ mod test {
         println!("{}", root);
         for i in 1..20 {
             println!("pushing {i}");
-            root.insert(metric2(i));
+            root.insert(metric(i));
             println!("{}", root);
         }
     }
@@ -514,9 +507,9 @@ mod test {
     fn test_search() {
         let mut root = new_root();
         for i in 1..20 {
-            root.insert(metric2(i));
+            root.insert(metric(i));
         }
-        for i in 1..20 {
+        for i in 0..20 {
             println!("searching for {i}");
             let metric = root.search_byte(i * 2);
             assert_eq!(metric.chars, i);
@@ -527,9 +520,9 @@ mod test {
     fn test_search_chars() {
         let mut root = new_root();
         for i in 1..20 {
-            root.insert(metric2(i));
+            root.insert(metric(i));
         }
-        for i in 1..20 {
+        for i in 0..20 {
             println!("searching for {i}");
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
