@@ -350,10 +350,9 @@ impl Internal {
     }
 
     // Go to a the correct node and then add the value of new to the metric there
-    fn update(&mut self, char_pos: usize, new: Metric) {
+    fn add(&mut self, char_pos: usize, new: Metric) {
         self.assert_invariants();
         let mut char_pos = char_pos;
-        let mut sum = Metric::default();
         for (idx, metric) in self.metrics.iter().enumerate() {
             let pos = metric.chars;
             // <= because we need to handle the last node correctly
@@ -361,7 +360,7 @@ impl Internal {
                 match &mut self.children {
                     Node::Internal(children) => {
                         self.metrics[idx] += new;
-                        children[idx].update(char_pos, new)
+                        children[idx].add(char_pos, new)
                     }
                     Node::Leaf(_) => {
                         let metric = &mut self.metrics[idx];
@@ -370,7 +369,30 @@ impl Internal {
                 };
                 return;
             }
-            sum += *metric;
+            char_pos -= pos;
+        }
+        unreachable!("we should always recurse into a child node");
+    }
+
+    fn remove(&mut self, char_pos: usize, update: Metric) {
+        self.assert_invariants();
+        let mut char_pos = char_pos;
+        for (idx, metric) in self.metrics.iter().enumerate() {
+            let pos = metric.chars;
+            // <= because we need to handle the last node correctly
+            if char_pos <= pos {
+                match &mut self.children {
+                    Node::Internal(children) => {
+                        self.metrics[idx] -= update;
+                        children[idx].remove(char_pos, update)
+                    }
+                    Node::Leaf(_) => {
+                        let metric = &mut self.metrics[idx];
+                        *metric -= update;
+                    }
+                };
+                return;
+            }
             char_pos -= pos;
         }
         unreachable!("we should always recurse into a child node");
@@ -558,23 +580,56 @@ mod test {
     }
 
     #[test]
-    fn test_update() {
+    fn test_add() {
         let mut root = new_root();
         for i in 1..20 {
             root.insert(metric(i));
         }
         for i in 0..20 {
-            println!("searching for {i}");
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
         }
         println!("init {root}");
         for i in (1..20).rev() {
-            println!("updating {i}");
-            root.update(i, metric(1));
+            println!("adding {i}");
+            root.add(i, metric(1));
             println!("{}", root);
         }
         for i in (0..20).step_by(2) {
+            println!("searching for {i}");
+            let metric = root.search_char(i);
+            assert_eq!(metric.bytes, i * 2);
+        }
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut root = new_root();
+        for i in 1..20 {
+            root.insert(metric(i));
+        }
+        for i in 0..20 {
+            let metric = root.search_char(i);
+            assert_eq!(metric.bytes, i * 2);
+        }
+
+        for i in (1..20).rev() {
+            root.add(i, metric(1));
+        }
+
+        for i in (0..20).step_by(2) {
+            let metric = root.search_char(i);
+            assert_eq!(metric.bytes, i * 2);
+        }
+
+        println!("init: {root}");
+        for i in (1..20).rev() {
+            println!("removing {i}");
+            root.remove(i * 2, metric(1));
+            println!("{}", root);
+        }
+
+        for i in 0..20 {
             println!("searching for {i}");
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
