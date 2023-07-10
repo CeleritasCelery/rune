@@ -14,7 +14,7 @@ type Metrics = SmallVec<[Metric; MAX]>;
 type IntChildren = SmallVec<[Box<Internal>; MAX]>;
 type LeafChildren = SmallVec<[Box<Leaf>; MAX]>;
 
-pub(crate) fn new_root() -> Box<Internal> {
+fn new_root() -> Box<Internal> {
     let mut root = Box::new(Internal::new_leaf());
     root.metrics.push(Metric::default());
     let root_ptr = NonNull::from(&*root);
