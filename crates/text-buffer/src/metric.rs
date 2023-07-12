@@ -9,6 +9,7 @@ use std::{
 };
 
 const MAX: usize = 4;
+const MIN: usize = MAX / 2;
 
 type Metrics = SmallVec<[Metric; MAX]>;
 type IntChildren = SmallVec<[Box<Internal>; MAX]>;
@@ -18,34 +19,40 @@ fn new_root() -> Box<Internal> {
     let mut root = Box::new(Internal::new_leaf());
     root.metrics.push(Metric::default());
     let root_ptr = NonNull::from(&*root);
-    if let Node::Leaf(children) = &mut root.children {
+    if let Children::Leaf(children) = &mut root.children {
         children.push(Box::new(Leaf::new(root_ptr)));
     }
     root
 }
 
 #[derive(Debug)]
-enum Node {
+enum Children {
     Internal(IntChildren),
     Leaf(LeafChildren),
 }
 
-impl Node {
+#[derive(Debug)]
+enum Node {
+    Internal(Box<Internal>),
+    Leaf(Box<Leaf>),
+}
+
+impl Children {
     fn len(&self) -> usize {
         match self {
-            Node::Internal(x) => x.len(),
-            Node::Leaf(x) => x.len(),
+            Children::Internal(x) => x.len(),
+            Children::Leaf(x) => x.len(),
         }
     }
 
     fn set_parent(&mut self, children: NonNull<Internal>) {
         match self {
-            Node::Internal(x) => {
+            Children::Internal(x) => {
                 for child in x.iter_mut() {
                     child.parent = Some(children);
                 }
             }
-            Node::Leaf(x) => {
+            Children::Leaf(x) => {
                 for child in x.iter_mut() {
                     child.parent = Some(children);
                 }
@@ -55,12 +62,12 @@ impl Node {
 
     fn assert_parent(&self, parent: NonNull<Internal>) {
         match self {
-            Node::Internal(x) => {
+            Children::Internal(x) => {
                 for child in x.iter() {
                     assert_eq!(child.parent, Some(parent));
                 }
             }
-            Node::Leaf(x) => {
+            Children::Leaf(x) => {
                 for child in x.iter() {
                     assert_eq!(child.parent, Some(parent));
                 }
@@ -72,7 +79,7 @@ impl Node {
 #[derive(Debug)]
 struct Internal {
     metrics: Metrics,
-    children: Node,
+    children: Children,
     parent: Option<NonNull<Internal>>,
 }
 
@@ -80,7 +87,7 @@ impl Internal {
     fn new_leaf() -> Self {
         Self {
             metrics: SmallVec::new(),
-            children: Node::Leaf(SmallVec::new()),
+            children: Children::Leaf(SmallVec::new()),
             parent: None,
         }
     }
@@ -88,7 +95,7 @@ impl Internal {
     fn new_internal() -> Self {
         Self {
             metrics: SmallVec::new(),
-            children: Node::Internal(SmallVec::new()),
+            children: Children::Internal(SmallVec::new()),
             parent: None,
         }
     }
@@ -140,7 +147,7 @@ impl Internal {
             }
             let right = Internal {
                 metrics: right_metrics,
-                children: Node::Internal(right_children),
+                children: Children::Internal(right_children),
                 parent: None,
             };
             // Box it so it has a stable address
@@ -188,7 +195,7 @@ impl Internal {
             }
             let right = Internal {
                 metrics: right_metrics,
-                children: Node::Leaf(right_children),
+                children: Children::Leaf(right_children),
                 parent: None,
             };
             let mut boxed = Box::new(right);
@@ -221,7 +228,7 @@ impl Internal {
             let right_children: LeafChildren = smallvec![Box::new(new)];
             let right = Internal {
                 metrics: right_metrics,
-                children: Node::Leaf(right_children),
+                children: Children::Leaf(right_children),
                 parent: None,
             };
             let mut boxed = Box::new(right);
@@ -239,7 +246,7 @@ impl Internal {
                 // split the root, making the old root the right child
                 let left = std::mem::replace(self, Box::new(Internal::new_internal()));
                 self.metrics = smallvec![left.metrics(), right.metrics()];
-                self.children = Node::Internal(smallvec![left, right]);
+                self.children = Children::Internal(smallvec![left, right]);
                 let this = NonNull::from(&**self);
                 self.children.set_parent(this);
             }
@@ -255,7 +262,7 @@ impl Internal {
             if idx == last || in_range {
                 let mut new = match &mut self.children {
                     // call recursively and insert the new node
-                    Node::Internal(children) => match children[idx].insert_impl(needle) {
+                    Children::Internal(children) => match children[idx].insert_impl(needle) {
                         Some(new) => Self::insert_internal(children, &mut self.metrics, idx, new),
                         None => {
                             // update the metric of the current node because we
@@ -267,7 +274,7 @@ impl Internal {
                             None
                         }
                     },
-                    Node::Leaf(children) => {
+                    Children::Leaf(children) => {
                         if in_range {
                             Self::insert_leaf(children, &mut self.metrics, self_ptr, idx, needle)
                         } else {
@@ -298,11 +305,11 @@ impl Internal {
         let metrics = &mut self.metrics;
         let mut new = match &mut self.children {
             // call recursively and insert the new node
-            Node::Internal(children) => match children[idx].insert_impl(needle) {
+            Children::Internal(children) => match children[idx].insert_impl(needle) {
                 Some(new) => Self::insert_internal(children, metrics, idx, new),
                 None => None,
             },
-            Node::Leaf(children) => Self::insert_leaf(children, metrics, this, idx, needle),
+            Children::Leaf(children) => Self::insert_leaf(children, metrics, this, idx, needle),
         };
         // set the parent pointer of the new node
         if let Some(new) = &mut new {
@@ -338,8 +345,8 @@ impl Internal {
             };
             if needle < pos {
                 let child_sum = match &self.children {
-                    Node::Internal(children) => sum + children[idx].search_impl::<TYPE>(needle),
-                    Node::Leaf(_) => sum,
+                    Children::Internal(children) => sum + children[idx].search_impl::<TYPE>(needle),
+                    Children::Leaf(_) => sum,
                 };
                 return child_sum;
             }
@@ -358,11 +365,11 @@ impl Internal {
             // <= because we need to handle the last node correctly
             if char_pos <= pos {
                 match &mut self.children {
-                    Node::Internal(children) => {
+                    Children::Internal(children) => {
                         self.metrics[idx] += new;
                         children[idx].add(char_pos, new)
                     }
-                    Node::Leaf(_) => {
+                    Children::Leaf(_) => {
                         let metric = &mut self.metrics[idx];
                         *metric += new;
                     }
@@ -382,11 +389,11 @@ impl Internal {
             // <= because we need to handle the last node correctly
             if char_pos <= pos {
                 match &mut self.children {
-                    Node::Internal(children) => {
+                    Children::Internal(children) => {
                         self.metrics[idx] -= update;
                         children[idx].remove(char_pos, update)
                     }
-                    Node::Leaf(_) => {
+                    Children::Leaf(_) => {
                         let metric = &mut self.metrics[idx];
                         *metric -= update;
                     }
@@ -399,11 +406,24 @@ impl Internal {
     }
 
     fn assert_invariants(&self) {
-        if let Node::Internal(x) = &self.children {
-            let metrics = x.iter().map(|x| x.metrics()).sum();
-            assert_eq!(self.metrics(), metrics);
-        };
+        assert_eq!(self.metrics.len(), self.children.len());
+        assert!(self.metrics.len() <= MAX);
         let this = NonNull::from(self);
+        match &self.children {
+            Children::Internal(children) => {
+                assert!(self.metrics.len() >= MIN);
+                for i in 0..children.len() {
+                    assert_eq!(children[i].metrics(), self.metrics[i]);
+                    assert_eq!(children[i].parent, Some(this));
+                }
+            }
+            Children::Leaf(children) => {
+                assert!(self.metrics.len() >= 1);
+                for i in 0..children.len() {
+                    assert_eq!(children[i].parent, Some(this));
+                }
+            }
+        };
         self.children.assert_parent(this);
     }
 }
@@ -425,7 +445,7 @@ impl Display for Internal {
                     write!(f, "({metric}) ")?;
                 }
                 write!(f, "]")?;
-                if let Node::Internal(children) = &node.children {
+                if let Children::Internal(children) = &node.children {
                     for child in children {
                         next.push(child);
                     }
