@@ -38,13 +38,17 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
     };
     while let Some(start) = remaining.find(&mut is_format_char) {
         result.push_str(&remaining[..start]);
-        let Some(specifier) = remaining.as_bytes().get(start+1) else {bail!("Format string ends in middle of format specifier")};
+        let Some(specifier) = remaining.as_bytes().get(start + 1) else {
+            bail!("Format string ends in middle of format specifier")
+        };
         // "%%" inserts a single "%" in the output
         if *specifier == b'%' {
             result.push('%');
         } else {
             // TODO: currently handles all format types the same. Need to check the modifier characters.
-            let Some(val) = arguments.next() else {bail!("Not enough arguments for format string")};
+            let Some(val) = arguments.next() else {
+                bail!("Not enough arguments for format string")
+            };
             match val.untag() {
                 Object::String(s) => result.push_str(s.try_into().unwrap()),
                 obj => write!(result, "{obj}")?,
@@ -72,7 +76,7 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
 
 #[defun]
 pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
-    let Some(buffer) = env.current_buffer.as_mut() else {bail!("No current buffer")};
+    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
     for arg in args {
         buffer.insert(*arg)?;
     }
@@ -82,7 +86,7 @@ pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
 
 #[defun]
 fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
-    let Some(buffer) = env.current_buffer.as_mut() else {bail!("No current buffer")};
+    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
     buffer.delete(start, end);
     Ok(())
 }

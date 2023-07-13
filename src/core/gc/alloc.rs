@@ -34,7 +34,7 @@ impl AllocObject for f64 {
             &mut objects,
             OwnedObject::Float(Box::new(LispFloat::new(self))),
         );
-        let Some(OwnedObject::Float(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -47,7 +47,7 @@ impl AllocObject for Cons {
             self.mark_const();
         }
         Block::<CONST>::register(&mut objects, OwnedObject::Cons(Box::new(self)));
-        let Some(OwnedObject::Cons(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::Cons(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -57,7 +57,7 @@ impl AllocObject for SymbolCell {
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<CONST>::register(&mut objects, OwnedObject::Symbol(Box::new(self)));
-        let Some(OwnedObject::Symbol(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::Symbol(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -68,7 +68,7 @@ impl AllocObject for LispString {
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         Block::<C>::register(&mut objects, OwnedObject::String(Box::new(self)));
-        let Some(OwnedObject::String(x)) = objects.last_mut() else {unreachable!()};
+        let Some(OwnedObject::String(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -79,7 +79,7 @@ impl AllocObject for ByteFn {
         let mut objects = block.objects.borrow_mut();
         let boxed = Box::new(self);
         Block::<C>::register(&mut objects, OwnedObject::ByteFn(boxed));
-        let Some(OwnedObject::ByteFn(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::ByteFn(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -93,7 +93,7 @@ impl AllocObject for LispVec {
             self.make_const();
         }
         Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(self)));
-        let Some(OwnedObject::Vec(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::Vec(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -107,7 +107,7 @@ impl AllocObject for LispHashTable {
             self.make_const();
         }
         Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(self)));
-        let Some(OwnedObject::HashTable(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::HashTable(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }
@@ -119,7 +119,7 @@ impl AllocObject for LispBuffer {
         assert!(CONST, "Buffers must only be created in the shared block");
         let mut objects = block.objects.borrow_mut();
         Block::<CONST>::register(&mut objects, OwnedObject::Buffer(Box::new(self)));
-        let Some(OwnedObject::Buffer(x)) = objects.last() else {unreachable!()};
+        let Some(OwnedObject::Buffer(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
 }

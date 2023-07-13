@@ -295,7 +295,9 @@ impl SymbolCell {
     /// 2. Has cloned the function into the `SymbolMap` block
     /// 3. Ensured the symbol is not constant
     pub(super) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
-        let Some(fn_cell) = self.func.as_ref() else {bail!("Attempt to set a constant symbol: {self}")};
+        let Some(fn_cell) = self.func.as_ref() else {
+            bail!("Attempt to set a constant symbol: {self}")
+        };
         let val = func.into_ptr().cast_mut();
         fn_cell.store(val, Ordering::Release);
         Ok(())

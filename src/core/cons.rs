@@ -178,7 +178,7 @@ mod test {
         // assert_eq!(16, size_of::<Cons>());
         let x = cons!("start", cons!(7, cons!(5, 9; cx); cx); cx);
         assert!(matches!(x.untag(), Object::Cons(_)));
-        let Object::Cons(cons1) = x.untag() else {unreachable!("Expected cons")};
+        let Object::Cons(cons1) = x.untag() else { unreachable!("Expected cons") };
 
         let start_str = "start".to_owned();
         assert_eq!(cx.add(start_str), cons1.car());
@@ -186,12 +186,12 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(cx.add(start2_str), cons1.car());
 
-        let Object::Cons(cons2) = cons1.cdr().untag() else {unreachable!("Expected cons")};
+        let Object::Cons(cons2) = cons1.cdr().untag() else { unreachable!("Expected cons") };
 
         let cmp: GcObj = 7.into();
         assert_eq!(cmp, cons2.car());
 
-        let Object::Cons(cons3) = cons2.cdr().untag() else {unreachable!("Expected cons")};
+        let Object::Cons(cons3) = cons2.cdr().untag() else { unreachable!("Expected cons") };
         let cmp1: GcObj = 5.into();
         assert_eq!(cmp1, cons3.car());
         let cmp2: GcObj = 9.into();

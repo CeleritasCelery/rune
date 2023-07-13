@@ -84,7 +84,7 @@ impl Rt<Env> {
         var.make_special();
         // If this variable was unbound previously in the binding stack,
         // we will bind it to the new value
-        for binding in self.binding_stack.iter_mut() {
+        for binding in &mut *self.binding_stack {
             if binding.0 == var && binding.1.is_none() {
                 binding.1.set(value);
             }
@@ -286,14 +286,18 @@ mod test {
             sym.set_func(func1.try_into().unwrap()).unwrap();
         }
         let cell1 = sym.func(cx).unwrap();
-        let Function::Cons(before) = cell1.untag() else {unreachable!("Type should be a lisp function")};
+        let Function::Cons(before) = cell1.untag() else {
+            unreachable!("Type should be a lisp function")
+        };
         assert_eq!(before.car(), 1);
         let func2 = cons!(2; cx);
         unsafe {
             sym.set_func(func2.try_into().unwrap()).unwrap();
         }
         let cell2 = sym.func(cx).unwrap();
-        let Function::Cons(after) = cell2.untag() else {unreachable!("Type should be a lisp function")};
+        let Function::Cons(after) = cell2.untag() else {
+            unreachable!("Type should be a lisp function")
+        };
         assert_eq!(after.car(), 2);
         assert_eq!(before.car(), 1);
 

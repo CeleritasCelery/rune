@@ -200,7 +200,7 @@ mod test {
         let list: Gc<List> = cons.try_into().unwrap();
         let iter = list.conses();
         let expects = vec![1, 2, 3, 4];
-        for (act, expect) in iter.zip(expects.into_iter()) {
+        for (act, expect) in iter.zip(expects) {
             let actual = act.unwrap().car();
             assert_eq!(actual, expect);
         }

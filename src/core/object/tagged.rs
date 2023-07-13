@@ -1023,7 +1023,7 @@ where
             Object::HashTable(x) => x.clone_in(bk).into(),
             Object::Buffer(x) => x.clone_in(bk).into(),
         };
-        let Ok(x) = Gc::<U>::try_from(obj) else {unreachable!()};
+        let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
     }
 }

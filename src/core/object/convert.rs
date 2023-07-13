@@ -93,7 +93,7 @@ pub(crate) fn try_from_slice<'brw, 'ob, T, E>(slice: &'brw [GcObj<'ob>]) -> Resu
 where
     Gc<T>: TryFrom<GcObj<'ob>, Error = E> + 'ob,
 {
-    for x in slice.iter() {
+    for x in slice {
         let _new = Gc::<T>::try_from(*x)?;
     }
     let ptr = slice.as_ptr().cast::<Gc<T>>();

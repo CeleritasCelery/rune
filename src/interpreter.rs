@@ -82,7 +82,7 @@ impl Interpreter<'_> {
 
     fn catch<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(tag) = forms.next() else {bail_err!(ArgError::new(1, 0, "catch"))};
+        let Some(tag) = forms.next() else { bail_err!(ArgError::new(1, 0, "catch")) };
         // push this tag on the catch stack
         self.env.catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
@@ -124,7 +124,7 @@ impl Interpreter<'_> {
     fn defvar<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         // (defvar x ...)                 // (defvar)
-        let Some(sym) = forms.next() else {bail_err!(ArgError::new(1, 0, "defvar"))};
+        let Some(sym) = forms.next() else { bail_err!(ArgError::new(1, 0, "defvar")) };
         let name: Symbol = sym.bind(cx).try_into()?;
         root!(name, cx);
         let value = match forms.next() {
@@ -143,7 +143,9 @@ impl Interpreter<'_> {
         args: &Rt<GcObj>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let Some(func) = sym.bind(cx).follow_indirect(cx) else {bail_err!("Invalid function: {sym}")};
+        let Some(func) = sym.bind(cx).follow_indirect(cx) else {
+            bail_err!("Invalid function: {sym}")
+        };
         root!(func, cx);
 
         match func.get(cx) {
@@ -295,9 +297,9 @@ impl Interpreter<'_> {
 
     fn eval_if<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(condition) = forms.next() else {bail_err!(ArgError::new(2, 0, "if"))};
+        let Some(condition) = forms.next() else { bail_err!(ArgError::new(2, 0, "if")) };
         root!(condition, cx);
-        let Some(true_branch) = forms.next() else {bail_err!(ArgError::new(2, 1, "if"))};
+        let Some(true_branch) = forms.next() else { bail_err!(ArgError::new(2, 1, "if")) };
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
         if self.eval_form(condition, cx)? != nil() {
@@ -387,7 +389,7 @@ impl Interpreter<'_> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
         // (let x ...)                   // (let)
-        let Some(obj) = iter.next() else {bail_err!(ArgError::new(1, 0, "let"))};
+        let Some(obj) = iter.next() else { bail_err!(ArgError::new(1, 0, "let")) };
         let varbind_count = if parallel {
             self.let_bind_parallel(obj, cx)
         } else {
@@ -504,7 +506,7 @@ impl Interpreter<'_> {
 
     fn unwind_protect<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(body) = forms.next() else {bail_err!(ArgError::new(1, 0, "unwind-protect"))};
+        let Some(body) = forms.next() else { bail_err!(ArgError::new(1, 0, "unwind-protect")) };
         match self.eval_form(body, cx) {
             Ok(x) => {
                 root!(x, cx);
@@ -520,9 +522,9 @@ impl Interpreter<'_> {
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, form, cx);
-        let Some(var) = forms.next() else {bail_err!(ArgError::new(2, 0, "condition-case"))};
+        let Some(var) = forms.next() else { bail_err!(ArgError::new(2, 0, "condition-case")) };
         root!(var, cx);
-        let Some(bodyform) = forms.next() else {bail_err!(ArgError::new(2, 1, "condition-case"))};
+        let Some(bodyform) = forms.next() else { bail_err!(ArgError::new(2, 1, "condition-case")) };
         let err = match self.eval_form(bodyform, cx) {
             Ok(x) => return Ok(rebind!(x, cx)),
             Err(e) => e,
@@ -550,7 +552,9 @@ impl Interpreter<'_> {
                     }
                     // Call handlers with error
                     let error = if let ErrorType::Signal(id) = err.error {
-                        let Some((sym, data)) = self.env.get_exception(id) else {unreachable!("Exception not found")};
+                        let Some((sym, data)) = self.env.get_exception(id) else {
+                            unreachable!("Exception not found")
+                        };
                         cons!(sym, data; cx)
                     } else {
                         // TODO: Need to remove the anyhow branch once
@@ -603,13 +607,15 @@ impl Rt<Gc<Function<'_>>> {
             Function::Cons(_) => call_closure(self.try_into().unwrap(), args, name, env, cx)
                 .map_err(|e| e.add_trace(name, args)),
             Function::Symbol(sym) => {
-                let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};
+                let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
                 match func.untag() {
                     Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
                         crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
-                        let Some(func) = sym.bind(cx).follow_indirect(cx) else {bail_err!("autoload for {sym} failed to define function")};
+                        let Some(func) = sym.bind(cx).follow_indirect(cx) else {
+                            bail_err!("autoload for {sym} failed to define function")
+                        };
                         root!(func, cx);
                         let name = sym.bind(cx).name().to_owned();
                         func.call(args, env, cx, Some(&name))
@@ -656,13 +662,13 @@ fn bind_variables<'a>(
     // Add closure environment to variables
     // (closure ((x . 1) (y . 2) t) ...)
     //          ^^^^^^^^^^^^^^^^^^^
-    let Some(env) = forms.next() else {bail!("Closure missing environment")};
+    let Some(env) = forms.next() else { bail!("Closure missing environment") };
     let mut vars = parse_closure_env(env.bind(cx))?;
 
     // Add function arguments to variables
     // (closure (t) (x y &rest z) ...)
     //              ^^^^^^^^^^^^^
-    let Some(arg_list) = forms.next() else {bail!("Closure missing argument list")};
+    let Some(arg_list) = forms.next() else { bail!("Closure missing argument list") };
     bind_args(arg_list.bind(cx), args, &mut vars, name, cx)?;
     Ok(vars)
 }

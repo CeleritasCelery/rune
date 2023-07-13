@@ -215,7 +215,7 @@ pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
         f,
         "
 pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
-    for sym in BUILTIN_SYMBOLS[..{defun_start}].iter() {{
+    for sym in &BUILTIN_SYMBOLS[..{defun_start}] {{
         map.pre_init(Symbol::new(sym));
     }}
     for (sym, func) in BUILTIN_SYMBOLS[{defun_start}..].iter().zip(SUBR_DEFS.iter()) {{

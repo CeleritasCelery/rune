@@ -121,7 +121,7 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
     fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
         let mut table = HashTable::default();
         let borrow = self.borrow();
-        for (key, value) in borrow.iter() {
+        for (key, value) in &*borrow {
             let new_key = key.clone_in(bk);
             let new_value = value.get().clone_in(bk);
             table.insert(new_key, new_value);

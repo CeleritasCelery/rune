@@ -107,7 +107,7 @@ impl Debug for ByteFn {
             .field("args", &self.args)
             .field("op_code", &self.op_codes)
             .field("constants", &self.constants)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

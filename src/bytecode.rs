@@ -245,7 +245,7 @@ impl<'brw, 'ob> Routine<'brw> {
     fn varref(&mut self, idx: u16, env: &Rt<Env>, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
-            let Some(var) = env.vars.get(sym) else {bail!("Void Variable: {sym}")};
+            let Some(var) = env.vars.get(sym) else { bail!("Void Variable: {sym}") };
             self.stack.push(var.bind(cx));
             Ok(())
         } else {
@@ -319,7 +319,7 @@ impl<'brw, 'ob> Routine<'brw> {
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
 
-        let Some(func) = sym.follow_indirect(cx) else {bail_err!("Void Function: {sym}")};
+        let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
         let slice = &self.stack[..arg_cnt];
         let args = Rt::bind_slice(slice, cx).to_vec();
         let name = sym.name().to_owned();
@@ -361,7 +361,9 @@ impl<'brw, 'ob> Routine<'brw> {
                     ..
                 } = err
                 {
-                    let Some((sym, data)) = env.get_exception(id) else {unreachable!("Exception not found")};
+                    let Some((sym, data)) = env.get_exception(id) else {
+                        unreachable!("Exception not found")
+                    };
                     cons!(sym, data; cx)
                 } else {
                     // TODO: Need to remove the anyhow branch once
@@ -857,10 +859,14 @@ impl<'brw, 'ob> Routine<'brw> {
                 op::ConcatN => todo!("ConcatN bytecode"),
                 op::InsertN => todo!("InsertN bytecode"),
                 op::Switch => {
-                    let Object::HashTable(table) = self.stack.pop(cx).untag() else {unreachable!("switch table was not a hash table")};
+                    let Object::HashTable(table) = self.stack.pop(cx).untag() else {
+                        unreachable!("switch table was not a hash table")
+                    };
                     let cond = self.stack.pop(cx);
                     if let Some(offset) = table.borrow().get(&cond) {
-                        let Object::Int(offset) = offset.get().untag() else {unreachable!("switch value was not a int")};
+                        let Object::Int(offset) = offset.get().untag() else {
+                            unreachable!("switch value was not a int")
+                        };
                         self.frame.pc.goto(offset as u16);
                     }
                 }
