@@ -205,9 +205,7 @@ impl<'a> Tokenizer<'a> {
 
     fn get_string(&mut self, open_delim_pos: usize) -> Token<'a> {
         let mut skip = false;
-        let idx_chr = self
-            .iter
-            .find(|(_, chr)| !escaped(&mut skip, *chr) && *chr == '"');
+        let idx_chr = self.iter.find(|(_, chr)| !escaped(&mut skip, *chr) && *chr == '"');
         match idx_chr {
             Some((end, '"')) => Token::String(&self.slice[(open_delim_pos + 1)..end]),
             _ => Token::Error(Error::MissingStringDel(open_delim_pos)),
@@ -339,10 +337,7 @@ fn unescape_string(string: &str) -> String {
 
 /// Return true if `chr` is a valid symbol character.
 const fn symbol_char(chr: char) -> bool {
-    !matches!(
-        chr,
-        '\x00'..=' ' | '(' | ')' | '[' | ']' | '#' | ',' | '`' | ';' | '"' | '\''
-    )
+    !matches!(chr, '\x00'..=' ' | '(' | ')' | '[' | ']' | '#' | ',' | '`' | ';' | '"' | '\'')
 }
 
 fn escaped(escaped: &mut bool, chr: char) -> bool {
@@ -602,11 +597,7 @@ baz""#,
         check_reader!(list!(1; cx), "(1)", cx);
         check_reader!(list!("foo"; cx), "(\"foo\")", cx);
         check_reader!(cons!(1, cons!(1.5, "foo"; cx); cx), "(1 1.5 . \"foo\")", cx);
-        check_reader!(
-            list!("foo", cons!(1, 1.5; cx); cx),
-            "(\"foo\" (1 . 1.5))",
-            cx
-        );
+        check_reader!(list!("foo", cons!(1, 1.5; cx); cx), "(\"foo\" (1 . 1.5))", cx);
         check_reader!(list!(1, 1.5; cx), "(1 1.5)", cx);
         check_reader!(list!(1, 1.5, -7; cx), "(1 1.5 -7)", cx);
         check_reader!(list!(1, 1.5, intern(".", cx); cx), "(1 1.5 .)", cx);

@@ -5,11 +5,7 @@ use syn::Error;
 
 pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     if let Some(required) = spec.required {
-        let actual_required = function
-            .args
-            .iter()
-            .filter(|x| x.is_positional_arg())
-            .count();
+        let actual_required = function.args.iter().filter(|x| x.is_positional_arg()).count();
         if required as usize > actual_required {
             return quote! { compile_error!("Spec `required` is larger then the number of arguments provided"); };
         }
@@ -137,9 +133,7 @@ fn get_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u16
         pos_args - required
     };
 
-    let rest = args
-        .iter()
-        .any(|x| matches!(x, ArgType::Slice(_) | ArgType::SliceRt(_)));
+    let rest = args.iter().any(|x| matches!(x, ArgType::Slice(_) | ArgType::SliceRt(_)));
 
     (required as u16, optional as u16, rest)
 }
@@ -221,10 +215,7 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
                 })
             }
         }
-        _ => Err(Error::new_spanned(
-            item,
-            "`lisp_fn` attribute can only be used on functions",
-        )),
+        _ => Err(Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions")),
     }
 }
 
@@ -241,10 +232,7 @@ fn check_invariants(args: &[ArgType], sig: &syn::Signature) -> Result<(), Error>
     }
     let mut iter = sig.inputs.iter().zip(args.iter());
     if let Some((arg, _)) = iter.find(|(_, ty)| matches!(ty, ArgType::SliceRt(Gc::Other))) {
-        return Err(Error::new_spanned(
-            arg,
-            "Converting an Rt slice to is unimplemented",
-        ));
+        return Err(Error::new_spanned(arg, "Converting an Rt slice to is unimplemented"));
     }
 
     for (arg, ty) in sig.inputs.iter().zip(args.iter()) {
@@ -259,17 +247,11 @@ fn check_invariants(args: &[ArgType], sig: &syn::Signature) -> Result<(), Error>
 
     let rest_args = args.iter().filter(|x| x.is_rest_arg()).count();
     if rest_args > 1 {
-        return Err(Error::new_spanned(
-            sig,
-            "Found duplicate argument slice in signature",
-        ));
+        return Err(Error::new_spanned(sig, "Found duplicate argument slice in signature"));
     }
 
     let first_opt = args.iter().position(|x| matches!(x, ArgType::Option));
-    let last_required = args
-        .iter()
-        .rposition(|x| x.is_required_arg())
-        .unwrap_or_default();
+    let last_required = args.iter().rposition(|x| x.is_required_arg()).unwrap_or_default();
     if let Some(first_optional) = first_opt {
         if last_required > first_optional {
             let arg = sig.inputs.iter().nth(last_required).unwrap();
@@ -305,10 +287,9 @@ fn return_type_is_result(output: &syn::ReturnType) -> Result<bool, Error> {
             syn::Type::Path(path) => Ok(get_path_ident_name(path) == "Result"),
             _ => Ok(false),
         },
-        syn::ReturnType::Default => Err(Error::new_spanned(
-            output,
-            "Lisp Function must return a value",
-        )),
+        syn::ReturnType::Default => {
+            Err(Error::new_spanned(output, "Lisp Function must return a value"))
+        }
     }
 }
 
@@ -415,11 +396,7 @@ mod test {
         test_sig(quote! {fn foo() -> u8 {}}, None, (0, 0, false));
         test_sig(quote! {fn foo(vars: &[u8]) -> u8 {0}}, None, (0, 0, true));
         test_sig(quote! {fn foo(var: u8) -> u8 {0}}, None, (1, 0, false));
-        test_sig(
-            quote! {fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}},
-            None,
-            (2, 0, true),
-        );
+        test_sig(quote! {fn foo(var0: u8, var1: u8, vars: &[u8]) -> u8 {0}}, None, (2, 0, true));
         test_sig(
             quote! {fn foo(var0: u8, var1: Option<u8>, vars: &[u8]) -> u8 {0}},
             None,
@@ -472,12 +449,7 @@ mod test {
         test_args(quote! {x: &Rt<Env>}, &[ArgType::Env]);
         test_args(
             quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Rt<Env>},
-            &[
-                ArgType::Other,
-                ArgType::SliceRt(Gc::Obj),
-                ArgType::Context(false),
-                ArgType::Env,
-            ],
+            &[ArgType::Other, ArgType::SliceRt(Gc::Obj), ArgType::Context(false), ArgType::Env],
         );
     }
 

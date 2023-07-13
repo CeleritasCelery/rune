@@ -250,10 +250,7 @@ pub(crate) fn assoc<'ob>(
     alist: Gc<List<'ob>>,
     testfn: Option<GcObj>,
 ) -> Result<GcObj<'ob>> {
-    ensure!(
-        testfn.is_none(),
-        "test functions for assoc not yet supported"
-    );
+    ensure!(testfn.is_none(), "test functions for assoc not yet supported");
     for elem in alist.elements() {
         if let Object::Cons(cons) = elem?.untag() {
             if equal(key, cons.car()) {
@@ -444,9 +441,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
-    Ok(size
-        .try_into()
-        .expect("conversion from usize to isize should never fail"))
+    Ok(size.try_into().expect("conversion from usize to isize should never fail"))
 }
 
 #[defun]
@@ -457,8 +452,7 @@ pub(crate) fn safe_length(sequence: GcObj) -> i64 {
         Object::String(x) => x.len(),
         _ => 0,
     };
-    size.try_into()
-        .expect("conversion from usize to isize should never fail")
+    size.try_into().expect("conversion from usize to isize should never fail")
 }
 
 #[defun]
@@ -494,10 +488,7 @@ pub(crate) fn make_hash_table<'ob>(
     keyword_args: &[GcObj<'ob>],
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    let kw_test_pos = keyword_args
-        .iter()
-        .step_by(2)
-        .position(|&x| x == sym::KW_TEST);
+    let kw_test_pos = keyword_args.iter().step_by(2).position(|&x| x == sym::KW_TEST);
     if let Some(i) = kw_test_pos {
         let Some(val) = keyword_args.get((i * 2) + 1) else {
             bail!("Missing keyword value for :test")

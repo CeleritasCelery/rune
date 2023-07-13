@@ -143,10 +143,7 @@ impl Display for ArgError {
             actual,
             name,
         } = self;
-        write!(
-            f,
-            "Expected {expect} argument(s) for `{name}', but found {actual}"
-        )
+        write!(f, "Expected {expect} argument(s) for `{name}', but found {actual}")
     }
 }
 

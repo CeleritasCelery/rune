@@ -33,9 +33,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                     for x in &fields.named {
                         #[rustfmt::skip]
                         let syn::Field { vis, ident, ty, attrs, .. } = &x;
-                        let ident = ident
-                            .as_ref()
-                            .expect("named fields should have an identifer");
+                        let ident = ident.as_ref().expect("named fields should have an identifer");
                         test_fields.extend(quote! {
                             assert_eq!(memoffset::offset_of!(super::#orig_name, #ident),
                                        memoffset::offset_of!(super::#rooted_name, #ident));

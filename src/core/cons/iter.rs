@@ -113,10 +113,7 @@ impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
 
     fn advance(&mut self) {
         if let Some(cons) = &mut self.cons {
-            let elem = self
-                .elem
-                .as_mut()
-                .expect("Element should never be None while Cons is Some");
+            let elem = self.elem.as_mut().expect("Element should never be None while Cons is Some");
             let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
             match unsafe { cons.bind_unchecked().cdr().untag() } {

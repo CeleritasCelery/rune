@@ -164,10 +164,7 @@ impl FnArgs {
         // specifies the maximum number of arguments (ignoring &rest) and the R
         // bit specifies whether there is a &rest argument to catch the
         // left-over arguments.
-        ensure!(
-            spec <= 0x7FFF,
-            "Invalid bytecode argument spec: bits out of range"
-        );
+        ensure!(spec <= 0x7FFF, "Invalid bytecode argument spec: bits out of range");
         let spec = spec as u16;
         let required = spec & 0x7F;
         let max = (spec >> 8) & 0x7F;

@@ -132,8 +132,7 @@ impl PartialOrd for NumberValue {
 
 #[defun(name = "+")]
 pub(crate) fn add(vars: &[Gc<Number>]) -> NumberValue {
-    vars.iter()
-        .fold(NumberValue::Int(0), |acc, x| acc + x.val())
+    vars.iter().fold(NumberValue::Int(0), |acc, x| acc + x.val())
 }
 
 #[defun(name = "-")]
@@ -153,9 +152,7 @@ pub(crate) fn sub(number: Option<Gc<Number>>, numbers: &[Gc<Number>]) -> NumberV
 
 #[defun(name = "*")]
 pub(crate) fn mul(numbers: &[Gc<Number>]) -> NumberValue {
-    numbers
-        .iter()
-        .fold(NumberValue::Int(1), |acc, x| acc * x.val())
+    numbers.iter().fold(NumberValue::Int(1), |acc, x| acc * x.val())
 }
 
 #[defun(name = "/")]
@@ -197,9 +194,7 @@ fn cmp(
 ) -> bool {
     numbers
         .iter()
-        .try_fold(number.val(), |acc, &x| {
-            cmp(&acc, &x.val()).then_some(NumberValue::Int(0))
-        })
+        .try_fold(number.val(), |acc, &x| cmp(&acc, &x.val()).then_some(NumberValue::Int(0)))
         .is_some()
 }
 
@@ -254,16 +249,12 @@ fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
 
 #[defun]
 pub(crate) fn max(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
-    number_or_markers
-        .iter()
-        .fold(number_or_marker.val(), max_val)
+    number_or_markers.iter().fold(number_or_marker.val(), max_val)
 }
 
 #[defun]
 pub(crate) fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
-    number_or_markers
-        .iter()
-        .fold(number_or_marker.val(), min_val)
+    number_or_markers.iter().fold(number_or_marker.val(), min_val)
 }
 
 #[cfg(test)]
@@ -326,10 +317,7 @@ mod test {
         assert!(less_than(1.into(), &[]));
         assert!(less_than(1.into(), &[cx.add_as(1.1)]));
         assert!(!less_than(cx.add_as(1.0), &[1.into()]));
-        assert!(less_than(
-            cx.add_as(1.0),
-            &[cx.add_as(1.1), 2.into(), cx.add_as(2.1)]
-        ));
+        assert!(less_than(cx.add_as(1.0), &[cx.add_as(1.1), 2.into(), cx.add_as(2.1)]));
     }
 
     #[test]
@@ -337,17 +325,11 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         assert_eq!(
-            max(
-                cx.add_as(1.0),
-                &[cx.add_as(2.1), cx.add_as(1.1), cx.add_as(1.0)]
-            ),
+            max(cx.add_as(1.0), &[cx.add_as(2.1), cx.add_as(1.1), cx.add_as(1.0)]),
             cx.add_as(2.1).val()
         );
         assert_eq!(
-            min(
-                cx.add_as(1.1),
-                &[cx.add_as(1.0), cx.add_as(2.1), cx.add_as(1.0)]
-            ),
+            min(cx.add_as(1.1), &[cx.add_as(1.0), cx.add_as(2.1), cx.add_as(1.0)]),
             cx.add_as(1.0).val()
         );
     }

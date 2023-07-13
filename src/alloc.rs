@@ -35,12 +35,7 @@ pub(crate) fn make_closure<'ob>(
 
     // TODO: returning an owned type is not safe here
     Ok(unsafe {
-        ByteFn::new(
-            prototype.codes(),
-            new_constants.untag(),
-            prototype.args,
-            prototype.depth,
-        )
+        ByteFn::new(prototype.codes(), new_constants.untag(), prototype.args, prototype.depth)
     })
 }
 

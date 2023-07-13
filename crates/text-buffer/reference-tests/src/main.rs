@@ -1,15 +1,13 @@
 use crdt_testdata::TestPatch;
-use text_buffer::Buffer;
 use std::fs::File;
 use std::io::Write as _;
+use text_buffer::Buffer;
 
 fn main() -> Result<(), usize> {
     let mut args = std::env::args();
     args.next();
     let filename = args.next().expect("missing file arg");
-    let steps = args
-        .next()
-        .map(|s| s.parse::<usize>().expect("invalid steps arg"));
+    let steps = args.next().map(|s| s.parse::<usize>().expect("invalid steps arg"));
 
     if let Some(steps) = steps {
         println!("running {steps} steps");
@@ -63,11 +61,7 @@ fn main() -> Result<(), usize> {
 mod test {
     use super::*;
     fn apply_tokens(path: &str) {
-        let path = format!(
-            "{}/crdt-testdata/data/{}.json.gz",
-            env!("CARGO_MANIFEST_DIR"),
-            path,
-        );
+        let path = format!("{}/crdt-testdata/data/{}.json.gz", env!("CARGO_MANIFEST_DIR"), path,);
         let test_data = crdt_testdata::load_testing_data(&path);
         let mut buffer = Buffer::from(test_data.start_content.as_str());
         for txn in test_data.txns.iter() {

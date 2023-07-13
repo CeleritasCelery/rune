@@ -9,10 +9,9 @@ macro_rules! define_unbox {
             fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
                 match obj.untag() {
                     crate::core::object::Object::$ident(x) => Ok(x),
-                    _ => Err(crate::core::error::TypeError::new(
-                        crate::core::error::Type::$ty,
-                        obj,
-                    )),
+                    _ => {
+                        Err(crate::core::error::TypeError::new(crate::core::error::Type::$ty, obj))
+                    }
                 }
             }
         }
@@ -23,10 +22,9 @@ macro_rules! define_unbox {
                 match obj.untag() {
                     crate::core::object::Object::NIL => Ok(None),
                     crate::core::object::Object::$ident(x) => Ok(Some(x)),
-                    _ => Err(crate::core::error::TypeError::new(
-                        crate::core::error::Type::$ty,
-                        obj,
-                    )),
+                    _ => {
+                        Err(crate::core::error::TypeError::new(crate::core::error::Type::$ty, obj))
+                    }
                 }
             }
         }

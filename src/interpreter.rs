@@ -362,10 +362,7 @@ impl Interpreter<'_> {
         let mut iter = self.vars.iter().rev();
         match iter.find(|cons| (cons.car(cx) == name)) {
             Some(value) => {
-                value
-                    .bind(cx)
-                    .set_cdr(new_value)
-                    .expect("variables should never be immutable");
+                value.bind(cx).set_cdr(new_value).expect("variables should never be immutable");
                 Ok(())
             }
             None => self.env.set_var(name, new_value),
@@ -411,11 +408,8 @@ impl Interpreter<'_> {
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
                     let val = rebind!(self.let_bind_value(cons, cx)?);
-                    let var: Symbol = cons
-                        .get(cx)
-                        .car()
-                        .try_into()
-                        .context("let variable must be a symbol")?;
+                    let var: Symbol =
+                        cons.get(cx).car().try_into().context("let variable must be a symbol")?;
                     varbind_count += self.create_let_binding(var, val, cx);
                 }
                 // (let (x))
@@ -438,11 +432,8 @@ impl Interpreter<'_> {
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
                     let var = rebind!(self.let_bind_value(cons, cx)?);
-                    let sym: Symbol = cons
-                        .get(cx)
-                        .car()
-                        .try_into()
-                        .context("let variable must be a symbol")?;
+                    let sym: Symbol =
+                        cons.get(cx).car().try_into().context("let variable must be a symbol")?;
                     let_bindings.push((sym, var));
                 }
                 // (let (x))
@@ -598,11 +589,10 @@ impl Rt<Gc<Function<'_>>> {
                     .map_err(|e| e.add_trace(name, &args[..arg_cnt]))
             }
             Function::SubrFn(f) => {
-                (*f).call(args, env, cx)
-                    .map_err(|e| match e.downcast::<EvalError>() {
-                        Ok(err) => err.add_trace(name, &args[..arg_cnt]),
-                        Err(e) => EvalError::with_trace(e, name, &args[..arg_cnt]),
-                    })
+                (*f).call(args, env, cx).map_err(|e| match e.downcast::<EvalError>() {
+                    Ok(err) => err.add_trace(name, &args[..arg_cnt]),
+                    Err(e) => EvalError::with_trace(e, name, &args[..arg_cnt]),
+                })
             }
             Function::Cons(_) => call_closure(self.try_into().unwrap(), args, name, env, cx)
                 .map_err(|e| e.add_trace(name, args)),
@@ -745,10 +735,7 @@ fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Optio
             sym::AND_REST => {
                 if let Some(last) = iter.next() {
                     rest = Some(last?.try_into()?);
-                    ensure!(
-                        iter.next().is_none(),
-                        "Found multiple arguments after &rest"
-                    );
+                    ensure!(iter.next().is_none(), "Found multiple arguments after &rest");
                 }
             }
             _ => {
@@ -821,21 +808,9 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         check_interpreter("(progn (defvar dyn_test1 1) dyn_test1)", 1, cx);
-        check_interpreter(
-            "(progn (defvar dyn_test2 1) (let ((dyn_test2 3)) dyn_test2))",
-            3,
-            cx,
-        );
-        check_interpreter(
-            "(progn (defvar dyn_test3 1) (let ((dyn_test3 3))) dyn_test3)",
-            1,
-            cx,
-        );
-        check_interpreter(
-            "(let ((dyn_test4 7)) (defvar dyn_test4 3) dyn_test4)",
-            7,
-            cx,
-        );
+        check_interpreter("(progn (defvar dyn_test2 1) (let ((dyn_test2 3)) dyn_test2))", 3, cx);
+        check_interpreter("(progn (defvar dyn_test3 1) (let ((dyn_test3 3))) dyn_test3)", 1, cx);
+        check_interpreter("(let ((dyn_test4 7)) (defvar dyn_test4 3) dyn_test4)", 7, cx);
         check_interpreter(
             "(progn (defvar dyn_test5 1) (let (bar) (let ((dyn_test5 3)) (setq bar dyn_test5)) bar))",
             3,
@@ -967,11 +942,7 @@ mod test {
         );
         // Test closures
         check_interpreter("(let* ((y 7)(x #'(lambda () y))) (funcall x))", 7, cx);
-        check_interpreter(
-            "(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))",
-            10,
-            cx,
-        );
+        check_interpreter("(let* ((y 7)(x #'(lambda (x) (+ x y)))) (funcall x 3))", 10, cx);
         // Test that closures capture their environments
         check_interpreter(
             "(progn (setq func (let ((x 3)) #'(lambda (y) (+ y x)))) (funcall func 5))",
@@ -1031,11 +1002,7 @@ mod test {
         check_interpreter("(catch 1 5 (throw 1 2) 3)", 2, cx);
         check_interpreter("(catch 1 (throw 1 2) (if))", 2, cx);
         check_interpreter("(condition-case nil (throw 1 2) (error 3))", 3, cx);
-        check_interpreter(
-            "(catch 1 (condition-case nil (throw 1 2) (error 3)))",
-            2,
-            cx,
-        );
+        check_interpreter("(catch 1 (condition-case nil (throw 1 2) (error 3)))", 2, cx);
         check_interpreter("(catch 1 (catch 2 (throw 1 3)))", 3, cx);
         check_error("(throw 1 2)", cx);
         check_error("(catch 2 (throw 3 4))", cx);

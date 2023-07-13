@@ -369,11 +369,7 @@ pub(in crate::core) struct UninternedSymbolMap {
 
 impl UninternedSymbolMap {
     fn get<'a>(&'a self, symbol: Symbol) -> Option<Symbol<'a>> {
-        self.map
-            .borrow()
-            .iter()
-            .find(|x| x.0 == symbol)
-            .map(|x| x.1)
+        self.map.borrow().iter().find(|x| x.0 == symbol).map(|x| x.1)
     }
 
     fn insert(&self, old: Symbol, new: Symbol) {

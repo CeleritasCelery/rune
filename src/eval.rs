@@ -95,16 +95,11 @@ pub(crate) fn autoload_do_load<'ob>(
     // TODO: want to handle the case where the file is already loaded.
     match fundef.get(cx) {
         Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-            ensure!(
-                macro_only.is_none(),
-                "autoload-do-load macro-only is not yet implemented"
-            );
+            ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
             let mut elem = cons.elements();
             elem.next(); // autoload
-            let file: Gc<&LispString> = elem
-                .next()
-                .ok_or_else(|| anyhow!("Malformed autoload"))??
-                .try_into()?;
+            let file: Gc<&LispString> =
+                elem.next().ok_or_else(|| anyhow!("Malformed autoload"))??.try_into()?;
             ensure!(
                 elem.all(|x| match x {
                     Ok(x) => x.nil(),

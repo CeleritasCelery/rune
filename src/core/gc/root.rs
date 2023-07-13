@@ -152,20 +152,12 @@ impl<T> Drop for __StackRoot<'_, T> {
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $cx:ident) => {
-        root!(
-            $ident,
-            unsafe { $crate::core::gc::IntoRoot::into_root($ident) },
-            $cx
-        );
+        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
     };
     ($ident:ident, move($value:expr), $cx:ident) => {
         // eval value outside the unsafe block
         let value = $value;
-        root!(
-            $ident,
-            unsafe { $crate::core::gc::IntoRoot::into_root(value) },
-            $cx
-        );
+        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root(value) }, $cx);
     };
     ($ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;
@@ -272,10 +264,7 @@ where
     T: WithLifetime<'new>,
     U: WithLifetime<'new>,
 {
-    type Out = (
-        <T as WithLifetime<'new>>::Out,
-        <U as WithLifetime<'new>>::Out,
-    );
+    type Out = (<T as WithLifetime<'new>>::Out, <U as WithLifetime<'new>>::Out);
 
     unsafe fn with_lifetime(self) -> Self::Out {
         (self.0.with_lifetime(), self.1.with_lifetime())
@@ -579,8 +568,7 @@ where
     K: Eq + Hash,
 {
     pub(crate) fn insert<Kx: IntoRoot<K>, Vx: IntoRoot<V>>(&mut self, k: Kx, v: Vx) {
-        self.inner
-            .insert(unsafe { k.into_root() }, unsafe { v.into_root() });
+        self.inner.insert(unsafe { k.into_root() }, unsafe { v.into_root() });
     }
 
     pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {

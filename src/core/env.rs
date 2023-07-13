@@ -149,11 +149,9 @@ impl AsRef<SymbolCell> for SymbolBox {
 // have a garbage collector
 impl Drop for SymbolBox {
     fn drop(&mut self) {
-        assert!(
-            !std::thread::panicking(),
-            "Error: Tried to drop Symbol: {:?}",
-            unsafe { &*self.0 }
-        );
+        assert!(!std::thread::panicking(), "Error: Tried to drop Symbol: {:?}", unsafe {
+            &*self.0
+        });
     }
 }
 
@@ -205,10 +203,7 @@ impl SymbolMap {
         use std::collections::hash_map::Entry;
         let name = sym.get().name();
         let entry = self.map.entry(name);
-        assert!(
-            matches!(entry, Entry::Vacant(_)),
-            "Attempt to intitalize {name} twice"
-        );
+        assert!(matches!(entry, Entry::Vacant(_)), "Attempt to intitalize {name} twice");
         entry.or_insert_with(|| SymbolBox::from_static(sym));
     }
 }

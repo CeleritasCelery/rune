@@ -57,10 +57,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
         remaining = &remaining[start + 2..];
     }
     result.push_str(remaining);
-    ensure!(
-        arguments.next().is_none(),
-        "Too many arguments for format string"
-    );
+    ensure!(arguments.next().is_none(), "Too many arguments for format string");
     Ok(result)
 }
 
@@ -108,10 +105,7 @@ mod test {
         assert_eq!(&format("foo-%s", &[2.into()]).unwrap(), "foo-2");
         assert_eq!(&format("%%", &[]).unwrap(), "%");
         assert_eq!(&format("_%%_", &[]).unwrap(), "_%_");
-        assert_eq!(
-            &format("foo-%s %s", &[3.into(), 4.into()]).unwrap(),
-            "foo-3 4"
-        );
+        assert_eq!(&format("foo-%s %s", &[3.into(), 4.into()]).unwrap(), "foo-3 4");
         let sym = crate::core::env::sym::FUNCTION.into();
         assert_eq!(&format("%s", &[sym]).unwrap(), "function");
 
@@ -129,11 +123,7 @@ mod test {
         let buffer = get_buffer_create(cx.add("test_insert"), sym::NIL.into(), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
-        insert(
-            &[104.into(), 101.into(), 108.into(), 108.into(), 111.into()],
-            env,
-        )
-        .unwrap();
+        insert(&[104.into(), 101.into(), 108.into(), 108.into(), 111.into()], env).unwrap();
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hello");
     }
 

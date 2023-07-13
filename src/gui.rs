@@ -32,9 +32,8 @@ struct AppState {
 
 pub(crate) fn launch() {
     // describe the main window
-    let main_window = WindowDesc::new(build_root_widget())
-        .title("rune")
-        .window_size((400.0, 600.0));
+    let main_window =
+        WindowDesc::new(build_root_widget()).title("rune").window_size((400.0, 600.0));
 
     let text = RichText::new(TEXT.into())
         .with_attribute(0..9, Attribute::text_color(Color::rgb(1.0, 0.2, 0.1)))

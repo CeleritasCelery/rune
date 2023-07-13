@@ -115,12 +115,8 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
 
 fn load(env: &mut Rt<Env>, cx: &mut Context) {
     crate::core::env::init_variables(cx, env);
-    crate::data::defalias(
-        intern("not", cx),
-        (crate::core::env::sym::NULL).into(),
-        None,
-    )
-    .expect("null should be defined");
+    crate::data::defalias(intern("not", cx), (crate::core::env::sym::NULL).into(), None)
+        .expect("null should be defined");
     buffer::get_buffer_create(cx.add("*scratch*"), core::object::nil(), cx).unwrap();
 
     let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);

@@ -11,10 +11,7 @@ pub fn parse_args(input: &str) -> Vec<String> {
     let pseudo_fn = format!("X{input}");
     let expr = syn::parse_str::<syn::ExprCall>(&pseudo_fn).unwrap();
     use quote::ToTokens;
-    expr.args
-        .into_iter()
-        .map(|e| e.to_token_stream().to_string())
-        .collect()
+    expr.args.into_iter().map(|e| e.to_token_stream().to_string()).collect()
 }
 
 // get the substring between two string
@@ -199,11 +196,7 @@ pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
 
     // all SubrFn
     let subr_len = all_defun.len();
-    writeln!(
-        f,
-        "static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",
-    )
-    .unwrap();
+    writeln!(f, "static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",).unwrap();
     for (subr_name, _, _) in &all_defun {
         writeln!(f, "    &{subr_name},",).unwrap();
     }

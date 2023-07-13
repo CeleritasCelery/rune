@@ -345,8 +345,7 @@ impl Buffer {
             let size = self.gap_start - pos;
             self.gap_chars -= num_chars(&self.data[pos..self.gap_start]);
 
-            self.data
-                .copy_within(pos..self.gap_start, self.gap_end - size);
+            self.data.copy_within(pos..self.gap_start, self.gap_end - size);
             // if gap moves across cursor, update cursor position
             if self.cursor.bytes < self.gap_start && self.cursor.bytes >= pos {
                 self.cursor.bytes += self.gap_len();
@@ -418,9 +417,7 @@ impl Buffer {
         };
 
         // find which positions window the char position falls into
-        let window = positions
-            .windows(2)
-            .find(|slice| slice[0].1 <= pos && pos < slice[1].1);
+        let window = positions.windows(2).find(|slice| slice[0].1 <= pos && pos < slice[1].1);
 
         let Some([(beg_byte, beg_char), (end_byte, end_char)]) = window else {
             unreachable!("char position ({pos}) did not fall into any window");
@@ -487,10 +484,7 @@ impl Buffer {
         if pos == self.gap_start {
             return;
         }
-        assert!(
-            self.is_char_boundary(pos),
-            "position ({pos}) not on utf8 boundary"
-        );
+        assert!(self.is_char_boundary(pos), "position ({pos}) not on utf8 boundary");
     }
 
     fn is_char_boundary(&self, pos: usize) -> bool {
@@ -688,10 +682,7 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::from(world);
         buffer.insert(hello);
-        assert_eq!(
-            buffer.data.len(),
-            hello.len() + world.len() + Buffer::GAP_SIZE
-        );
+        assert_eq!(buffer.data.len(), hello.len() + world.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
         assert_eq!(buffer, "hello world");

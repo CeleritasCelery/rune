@@ -58,15 +58,9 @@ fn match_data<'ob>(
     env: &Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    ensure!(
-        integer.is_none(),
-        "match-data integer field is not implemented"
-    );
+    ensure!(integer.is_none(), "match-data integer field is not implemented");
     ensure!(reuse.is_none(), "match-data reuse field is not implemented");
-    ensure!(
-        reseat.is_none(),
-        "match-data reseat field is not implemented"
-    );
+    ensure!(reseat.is_none(), "match-data reseat field is not implemented");
     Ok(env.match_data.bind(cx))
 }
 
@@ -80,20 +74,12 @@ fn set_match_data<'ob>(list: Gc<List>, _reseat: Option<()>, env: &mut Rt<Env>) -
 
 #[defun]
 fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    env.match_data
-        .bind(cx)
-        .as_list()?
-        .nth(subexp)
-        .unwrap_or_else(|| Ok(nil()))
+    env.match_data.bind(cx).as_list()?.nth(subexp).unwrap_or_else(|| Ok(nil()))
 }
 
 #[defun]
 fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    env.match_data
-        .bind(cx)
-        .as_list()?
-        .nth(subexp + 1)
-        .unwrap_or_else(|| Ok(nil()))
+    env.match_data.bind(cx).as_list()?.nth(subexp + 1).unwrap_or_else(|| Ok(nil()))
 }
 
 #[defun]

@@ -103,10 +103,7 @@ impl Block<false> {
 
     pub(crate) fn assert_unique() {
         SINGLETON_CHECK.with(|x| {
-            assert!(
-                !x.get(),
-                "There was already and active context when this context was created"
-            );
+            assert!(!x.get(), "There was already and active context when this context was created");
             x.set(true);
         });
     }

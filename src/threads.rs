@@ -61,9 +61,7 @@ mod tests {
         let roots = &RootSet::default();
         println!("hello main thread");
         let cx = &mut Context::new(roots);
-        let obj = crate::reader::read("(message \"hello from thread\")", cx)
-            .unwrap()
-            .0;
+        let obj = crate::reader::read("(message \"hello from thread\")", cx).unwrap().0;
         go_internal(obj).join().unwrap();
     }
 }

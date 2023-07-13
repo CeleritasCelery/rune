@@ -91,11 +91,7 @@ impl<'brw> CallFrame<'brw> {
     }
 
     fn get_const<'ob>(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
-        self.consts
-            .bind(cx)
-            .get(i)
-            .expect("constant had invalid index")
-            .get()
+        self.consts.bind(cx).get(i).expect("constant had invalid index").get()
     }
 }
 

@@ -162,10 +162,7 @@ impl<'rt> StreamingIterator for HashTableStreamIter<'rt> {
 
     fn advance(&mut self) {
         if let Some((k, v)) = self.iter.next() {
-            let item = self
-                .item
-                .as_mut()
-                .expect("item should never be None while iter is Some");
+            let item = self.item.as_mut().expect("item should never be None while iter is Some");
             let tuple: &mut (Rt<GcObj>, Rt<GcObj>) = item;
             tuple.0.set(*k);
             tuple.1.set(v.get());

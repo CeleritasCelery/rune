@@ -265,11 +265,7 @@ fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> GcObj<'ob> {
 
 #[defun]
 fn ash(value: i64, count: i64) -> i64 {
-    let shift = if count >= 0 {
-        std::ops::Shl::shl
-    } else {
-        std::ops::Shr::shr
-    };
+    let shift = if count >= 0 { std::ops::Shl::shl } else { std::ops::Shr::shr };
     let result = shift(value.abs(), count.abs());
     if value >= 0 {
         result

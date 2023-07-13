@@ -90,10 +90,7 @@ fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
 
 fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<PathBuf> {
     let load_path = env.vars.get(sym::LOAD_PATH).unwrap();
-    let paths = load_path
-        .bind(cx)
-        .as_list()
-        .context("`load-path' was not a list")?;
+    let paths = load_path.bind(cx).as_list().context("`load-path' was not a list")?;
     let mut final_file = None;
     for path in paths {
         match path?.untag() {

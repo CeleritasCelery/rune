@@ -138,9 +138,8 @@ impl GcManaged for LispVec {
 impl Trace for LispVec {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
-        let unmarked = self
-            .iter()
-            .filter_map(|x| x.get().is_markable().then(|| x.get().into_raw()));
+        let unmarked =
+            self.iter().filter_map(|x| x.get().is_markable().then(|| x.get().into_raw()));
         stack.extend(unmarked);
     }
 }

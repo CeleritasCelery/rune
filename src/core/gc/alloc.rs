@@ -30,10 +30,7 @@ impl AllocObject for f64 {
     type Output = LispFloat;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(
-            &mut objects,
-            OwnedObject::Float(Box::new(LispFloat::new(self))),
-        );
+        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(LispFloat::new(self))));
         let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
