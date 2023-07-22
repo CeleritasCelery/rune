@@ -254,7 +254,7 @@ impl Internal {
         match self.insert_impl(needle) {
             None => {}
             Some(right) => {
-                // split the root, making the old root the right child
+                // split the root, making the old root the left child
                 let left = mem::replace(self, Box::new(Internal::new_internal()));
                 self.metrics = smallvec![left.metrics(), right.metrics()];
                 self.children = Children::Internal(smallvec![left, right]);
@@ -329,8 +329,65 @@ impl Internal {
         new
     }
 
+    fn delete_range(&mut self, mut start: Metric, mut end: Metric) -> bool {
+        self.assert_invariants();
+        assert!(start.chars <= end.chars);
+        let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
+
+        match &mut self.children {
+            Children::Internal(_) => {}
+            Children::Leaf(children) => {
+                let end_metric = self.metrics[end_idx];
+                if start.bytes == 0 {
+                    assert_eq!(start_idx, 0);
+                }
+                let start_delete = if start.bytes == 0 { start_idx } else { start_idx + 1 };
+                let end_delete = if end.bytes != end_metric.bytes { end_idx } else { end_idx + 1 };
+
+                if start_delete < end_delete {
+                    // There is a range of children to delete in the middle
+                    self.metrics[end_idx] -= end;
+                    self.metrics[start_idx] = start;
+                    children.drain(start_delete..end_delete);
+                    self.metrics.drain(start_delete..end_delete);
+                } else {
+                    if start_idx == end_idx {
+                        self.metrics[start_idx] -= end - start;
+                    } else {
+                        self.metrics[end_idx] -= end;
+                        self.metrics[start_idx] = start;
+                    }
+                }
+                return children.len() == 0;
+            }
+        }
+        unreachable!("we should always recurse into a child node");
+    }
+
+    fn get_delete_indices(&self, start: &mut Metric, end: &mut Metric) -> (usize, usize) {
+        let len = self.metrics.len();
+        let mut start_idx = None;
+        let mut end_idx = None;
+        for idx in 0..len {
+            let metric = self.metrics[idx];
+            if start_idx.is_none() && start.chars <= metric.chars {
+                start_idx = Some(idx);
+            }
+            if end.chars <= metric.chars {
+                end_idx = Some(idx);
+                break;
+            }
+            if start_idx.is_none() {
+                *start -= metric;
+            }
+            *end -= metric;
+        }
+        (start_idx.unwrap(), end_idx.unwrap())
+    }
+
     fn delete(self: &mut Box<Self>, pos: Metric) {
         if self.delete_impl(pos) {
+            // shrink the height of the tree
             assert_eq!(self.metrics.len(), 1);
             match &mut self.children {
                 Children::Internal(children) => {
@@ -854,5 +911,28 @@ mod test {
         }
         let metrics_after = root.metrics();
         assert_eq!(metrics, metrics_after);
+    }
+
+    #[test]
+    fn test_delete_range_leaf() {
+        let mut root = new_root();
+        // shouldn't need more then a single leaf node
+        root.insert(metric(12));
+        root.insert(metric(4));
+        root.insert(metric(8));
+        assert_eq!(root.metrics(), metric(12));
+        println!("init: {root}");
+        root.delete_range(metric(1), metric(3));
+        assert_eq!(root.metrics(), metric(10));
+        println!("after: {root}");
+        root.delete_range(metric(2), metric(6));
+        assert_eq!(root.metrics(), metric(6));
+        println!("after: {root}");
+        root.delete_range(metric(1), metric(4));
+        assert_eq!(root.metrics(), metric(3));
+        println!("after: {root}");
+        root.delete_range(metric(0), metric(1));
+        assert_eq!(root.metrics(), metric(2));
+        println!("after: {root}");
     }
 }
