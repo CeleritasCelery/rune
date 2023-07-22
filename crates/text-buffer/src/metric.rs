@@ -624,7 +624,6 @@ impl fmt::Display for Internal {
             write!(f, "level {level}:")?;
             for node in &current {
                 write!(f, " [")?;
-                write!(f, "<{:?}>", node.parent)?;
                 for metric in &node.metrics {
                     write!(f, "({metric}) ")?;
                 }
@@ -846,16 +845,14 @@ mod test {
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
         }
+        let metrics = root.metrics();
 
         println!("init: {root}");
-        for i in 0..9 {
+        for i in 0..19 {
             root.delete(metric(12));
             println!("after {i} iteration: {root}");
         }
-        root.delete(metric(12));
-        println!("after merge 0: {root}");
-        root.delete(metric(12));
-        println!("after merge 1: {root}");
-        root.delete(metric(12));
+        let metrics_after = root.metrics();
+        assert_eq!(metrics, metrics_after);
     }
 }

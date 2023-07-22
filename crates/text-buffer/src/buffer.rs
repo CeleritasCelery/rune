@@ -446,10 +446,10 @@ impl Buffer {
         // if past gap_start, add gap_len to range
         let mut range = range;
         if range.start >= self.gap_start {
-            range.start += self.gap_len()
+            range.start += self.gap_len();
         }
         if range.end >= self.gap_start {
-            range.end += self.gap_len()
+            range.end += self.gap_len();
         }
         assert!(range.end <= self.data.len(), "range end out of bounds");
         assert!(range.start <= self.data.len(), "range start out of bounds");
