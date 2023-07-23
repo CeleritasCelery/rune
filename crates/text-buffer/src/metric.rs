@@ -5,7 +5,6 @@ use std::{
     fmt,
     iter::Sum,
     mem,
-    num::NonZeroUsize,
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
@@ -13,74 +12,83 @@ const MAX: usize = 4;
 const MIN: usize = MAX / 2;
 
 type Metrics = SmallVec<[Metric; MAX]>;
-type IntChildren = SmallVec<[Box<Internal>; MAX]>;
-type LeafChildren = SmallVec<[Box<Leaf>; MAX]>;
+type IntChildren = SmallVec<[Box<Node>; MAX]>;
 
-fn new_root() -> Box<Internal> {
-    let mut root = Box::new(Internal::new_leaf());
-    root.metrics.push(Metric::default());
-    if let Children::Leaf(children) = &mut root.children {
-        children.push(Box::new(Leaf::new()));
-    }
-    root
+fn new_root() -> Box<Node> {
+    let leaf = Leaf {
+        metrics: smallvec![Metric::default()],
+    };
+    Box::new(Node::Leaf(leaf))
 }
 
 #[derive(Debug)]
-enum Children {
-    Internal(IntChildren),
-    Leaf(LeafChildren),
-}
-
-#[derive(Debug)]
-enum Node {
-    Internal(Box<Internal>),
-    Leaf(Box<Leaf>),
-}
-
-impl Children {
-    fn len(&self) -> usize {
-        match self {
-            Children::Internal(x) => x.len(),
-            Children::Leaf(x) => x.len(),
-        }
-    }
+enum SingleNode {
+    Internal(Box<Node>),
+    Leaf,
 }
 
 #[derive(Debug)]
 struct Internal {
     metrics: Metrics,
-    children: Children,
+    children: IntChildren,
 }
 
-impl Internal {
+#[derive(Debug)]
+struct Leaf {
+    metrics: Metrics,
+}
+
+#[derive(Debug)]
+enum Node {
+    Internal(Internal),
+    Leaf(Leaf),
+}
+
+impl Node {
     fn new_leaf() -> Self {
-        Self {
+        Self::Leaf(Leaf {
             metrics: SmallVec::new(),
-            children: Children::Leaf(SmallVec::new()),
-        }
+        })
     }
 
     fn new_internal() -> Self {
-        Self {
+        Self::Internal(Internal {
             metrics: SmallVec::new(),
-            children: Children::Internal(SmallVec::new()),
+            children: IntChildren::default(),
+        })
+    }
+
+    fn metric_slice(&self) -> &[Metric] {
+        match self {
+            Self::Internal(x) => &x.metrics,
+            Self::Leaf(x) => &x.metrics,
         }
     }
 
     fn metrics(&self) -> Metric {
-        self.metrics.iter().copied().sum()
+        let metrics = match self {
+            Self::Internal(x) => &x.metrics,
+            Self::Leaf(x) => &x.metrics,
+        };
+        metrics.iter().copied().sum()
     }
 
     fn len(&self) -> usize {
-        self.children.len()
+        match self {
+            Self::Internal(x) => {
+                assert_eq!(x.metrics.len(), x.children.len());
+                x.metrics.len()
+            }
+            Self::Leaf(x) => x.metrics.len(),
+        }
     }
 
     fn insert_internal(
         children: &mut IntChildren,
         metrics: &mut Metrics,
         idx: usize,
-        new_child: Box<Internal>,
-    ) -> Option<Box<Internal>> {
+        new_child: Box<Node>,
+    ) -> Option<Box<Node>> {
         let len = children.len();
         // update the metrics for the current child
         metrics[idx] = children[idx].metrics();
@@ -106,22 +114,17 @@ impl Internal {
                 right_metrics.insert(idx - middle, new_child.metrics());
                 right_children.insert(idx - middle, new_child);
             }
-            let right = Internal {
+            let right = Self::Internal(Internal {
                 metrics: right_metrics,
-                children: Children::Internal(right_children),
-            };
+                children: right_children,
+            });
             // Box it so it has a stable address
             Some(Box::new(right))
         }
     }
 
-    fn insert_leaf(
-        children: &mut LeafChildren,
-        metrics: &mut Metrics,
-        idx: usize,
-        needle: Metric,
-    ) -> Option<Box<Internal>> {
-        let len = children.len();
+    fn insert_leaf(metrics: &mut Metrics, idx: usize, needle: Metric) -> Option<Box<Node>> {
+        let len = metrics.len();
         let new_metric = metrics[idx] - needle;
         metrics[idx] = needle;
         // shift idx to the right
@@ -131,53 +134,39 @@ impl Internal {
             // leaf before the current one, splitting the
             // size
             metrics.insert(idx, new_metric);
-            children.insert(idx, Box::new(Leaf::new()));
             None
         } else {
             assert_eq!(len, MAX);
             // split this node into two and return the left one
             let middle = MAX / 2;
             let mut right_metrics: Metrics = metrics.drain(middle..).collect();
-            let mut right_children: LeafChildren = children.drain(middle..).collect();
-            let new = Leaf::default();
             if idx < middle {
                 metrics.insert(idx, new_metric);
-                children.insert(idx, Box::new(new));
             } else {
                 right_metrics.insert(idx - middle, new_metric);
-                right_children.insert(idx - middle, Box::new(new));
             }
-            let right = Internal {
+            let right = Node::Leaf(Leaf {
                 metrics: right_metrics,
-                children: Children::Leaf(right_children),
-            };
+            });
             Some(Box::new(right))
         }
     }
 
-    fn push_leaf(
-        children: &mut LeafChildren,
-        metrics: &mut Metrics,
-        metric: Metric,
-    ) -> Option<Box<Internal>> {
-        let len = children.len();
+    fn push_leaf(metrics: &mut Metrics, metric: Metric) -> Option<Box<Node>> {
+        let len = metrics.len();
         if len < MAX {
             // If there is room in this node then insert the
             // leaf before the current one, splitting the
             // size
             metrics.push(metric);
-            children.push(Box::new(Leaf::new()));
             None
         } else {
             assert_eq!(len, MAX);
             // split this node into two and return the left one
-            let new = Leaf::default();
             let right_metrics: Metrics = smallvec![metric];
-            let right_children: LeafChildren = smallvec![Box::new(new)];
-            let right = Internal {
+            let right = Node::Leaf(Leaf {
                 metrics: right_metrics,
-                children: Children::Leaf(right_children),
-            };
+            });
             Some(Box::new(right))
         }
     }
@@ -187,160 +176,201 @@ impl Internal {
             None => {}
             Some(right) => {
                 // split the root, making the old root the left child
-                let left = mem::replace(self, Box::new(Internal::new_internal()));
-                self.metrics = smallvec![left.metrics(), right.metrics()];
-                self.children = Children::Internal(smallvec![left, right]);
+                let left = mem::replace(self, Box::new(Node::new_internal()));
+                match &mut **self {
+                    Node::Internal(int) => {
+                        int.metrics = smallvec![left.metrics(), right.metrics()];
+                        int.children = smallvec![left, right];
+                    }
+                    Node::Leaf(_) => unreachable!(),
+                }
             }
         }
     }
 
-    fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Internal>> {
+    fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Node>> {
         self.assert_invariants();
-        let last = self.metrics.len() - 1;
-        for (idx, metric) in self.metrics.iter_mut().enumerate() {
-            let in_range = needle.chars < metric.chars;
-            if idx == last || in_range {
-                let new = match &mut self.children {
-                    // call recursively and insert the new node
-                    Children::Internal(children) => match children[idx].insert_impl(needle) {
-                        Some(new) => Self::insert_internal(children, &mut self.metrics, idx, new),
-                        None => {
-                            // update the metric of the current node because we
-                            // increased the max size
-                            if !in_range {
-                                assert_eq!(idx, last);
-                                *metric = children.last().unwrap().metrics();
+        match self {
+            Node::Internal(int) => {
+                let last = int.metrics.len() - 1;
+                for (idx, metric) in int.metrics.iter_mut().enumerate() {
+                    let in_range = needle.chars < metric.chars;
+                    if idx == last || in_range {
+                        let new = match int.children[idx].insert_impl(needle) {
+                            Some(new) => {
+                                Self::insert_internal(&mut int.children, &mut int.metrics, idx, new)
                             }
-                            None
-                        }
-                    },
-                    Children::Leaf(children) => {
-                        if in_range {
-                            Self::insert_leaf(children, &mut self.metrics, idx, needle)
+                            None => {
+                                // update the metric of the current node because we
+                                // increased the max size
+                                if !in_range {
+                                    assert_eq!(idx, last);
+                                    *metric = int.children.last().unwrap().metrics();
+                                }
+                                None
+                            }
+                        };
+                        return new;
+                    } else {
+                        needle -= *metric;
+                    }
+                }
+            }
+            Node::Leaf(leaf) => {
+                let last = leaf.metrics.len() - 1;
+                for (idx, metric) in leaf.metrics.iter_mut().enumerate() {
+                    let in_range = needle.chars < metric.chars;
+                    if idx == last || in_range {
+                        return if in_range {
+                            Self::insert_leaf(&mut leaf.metrics, idx, needle)
                         } else {
                             assert_eq!(idx, last);
                             needle -= *metric;
-                            Self::push_leaf(children, &mut self.metrics, needle)
-                        }
+                            Self::push_leaf(&mut leaf.metrics, needle)
+                        };
+                    } else {
+                        needle -= *metric;
                     }
-                };
-                return new;
-            } else {
-                needle -= *metric;
+                }
             }
         }
         unreachable!("we should always recurse into a child node");
     }
 
     fn insert_child(&mut self, idx: usize, needle: Metric) -> Option<Box<Self>> {
-        let metrics = &mut self.metrics;
-        match &mut self.children {
+        match self {
             // call recursively and insert the new node
-            Children::Internal(children) => match children[idx].insert_impl(needle) {
-                Some(new) => Self::insert_internal(children, metrics, idx, new),
+            Node::Internal(int) => match int.children[idx].insert_impl(needle) {
+                Some(new) => Self::insert_internal(&mut int.children, &mut int.metrics, idx, new),
                 None => None,
             },
-            Children::Leaf(children) => Self::insert_leaf(children, metrics, idx, needle),
+            Node::Leaf(leaf) => Self::insert_leaf(&mut leaf.metrics, idx, needle),
         }
     }
 
-    fn delete_range(&mut self, mut start: Metric, mut end: Metric) -> Option<NonZeroUsize> {
+    fn delete_range(&mut self, mut start: Metric, mut end: Metric) -> (bool, bool) {
         self.assert_invariants();
         assert!(start.chars <= end.chars);
         let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
 
-        match &mut self.children {
-            Children::Internal(children) => {
+        match self {
+            Node::Internal(int) => {
                 if start_idx == end_idx {
                     // delete range is in a single child
                     let idx = start_idx;
-                    let metrics = &mut self.metrics;
-                    let needed = children[idx].delete_range(start, end);
-                    metrics[idx] = children[idx].metrics();
+                    let metrics = &mut int.metrics;
+                    let (needs_merge, needs_fixing) = int.children[idx].delete_range(start, end);
+                    metrics[idx] = int.children[idx].metrics();
+                    if !needs_merge {
+                        return (false, needs_fixing);
+                    }
 
-                    let needed = Self::try_steal_left(children, metrics, idx, needed?.into())?;
-                    Self::try_steal_right(children, metrics, idx, needed.into())?;
+                    if !Self::try_steal_left(&mut int.children, metrics, idx) {
+                        return (false, needs_fixing);
+                    }
+                    if !Self::try_steal_right(&mut int.children, metrics, idx) {
+                        return (false, needs_fixing);
+                    }
 
                     // merge the right child into the left one
-                    return Self::merge_children(children, metrics, idx);
+                    (Self::merge_children(&mut int.children, metrics, idx), needs_fixing)
                 } else {
+                    let metrics = &mut int.metrics;
                     // delete range is in multiple children
-
-                    let metric_bytes = self.metrics[end_idx].bytes;
+                    let metric_bytes = metrics[end_idx].bytes;
                     let start_delete = if start.bytes == 0 { start_idx } else { start_idx + 1 };
                     let end_delete = if end.bytes != metric_bytes { end_idx } else { end_idx + 1 };
-                    let mut left_needed = None;
+                    let mut may_needs_fixing = false;
+                    let mut left_merge = false;
                     if start_delete > start_idx {
-                        let needed =
-                            children[start_idx].delete_range(start, self.metrics[start_idx]);
-                        self.metrics[start_idx] = children[start_idx].metrics();
-                        left_needed = needed.and_then(|x| {
-                            Self::try_steal_left(children, &mut self.metrics, start_idx, x.into())
-                        });
+                        let (needs_merge, needs_fixing) =
+                            int.children[start_idx].delete_range(start, metrics[start_idx]);
+                        metrics[start_idx] = int.children[start_idx].metrics();
+                        may_needs_fixing |= needs_fixing;
+                        left_merge = needs_merge
+                            && Self::try_steal_left(&mut int.children, metrics, start_idx);
                     }
-                    let mut right_needed = None;
+                    let mut right_needed = false;
                     if end_delete <= end_idx {
-                        let needed = children[end_idx].delete_range(Metric::default(), end);
-                        self.metrics[end_idx] = children[end_idx].metrics();
-                        right_needed = needed.and_then(|x| {
-                            Self::try_steal_right(children, &mut self.metrics, end_idx, x.into())
-                        });
+                        let (needs_merge, needs_fixing) =
+                            int.children[end_idx].delete_range(Metric::default(), end);
+                        metrics[end_idx] = int.children[end_idx].metrics();
+                        may_needs_fixing |= needs_fixing;
+                        right_needed = needs_merge
+                            && Self::try_steal_right(&mut int.children, metrics, end_idx);
                     }
 
                     if start_delete < end_delete {
-                        children.drain(start_delete..end_delete);
-                        self.metrics.drain(start_delete..end_delete);
+                        int.children.drain(start_delete..end_delete);
+                        metrics.drain(start_delete..end_delete);
                     }
-                    return match (left_needed, right_needed) {
-                        (None, None) => None,
-                        (None, Some(_)) => todo!(),
-                        (Some(_), None) => todo!(),
-                        (Some(_), Some(_)) => {
+                    return match (left_merge, right_needed) {
+                        (false, false) => (false, may_needs_fixing),
+                        (false, true) => {
+                            let idx = end_idx - end_delete.saturating_sub(start_delete);
+                            if Self::try_steal_left(&mut int.children, metrics, idx) {
+                                (
+                                    Self::merge_children(&mut int.children, metrics, idx),
+                                    may_needs_fixing,
+                                )
+                            } else {
+                                (false, may_needs_fixing)
+                            }
+                        }
+                        (true, false) => {
+                            if Self::try_steal_right(&mut int.children, metrics, start_idx) {
+                                (
+                                    Self::merge_children(&mut int.children, metrics, start_idx),
+                                    may_needs_fixing,
+                                )
+                            } else {
+                                (false, may_needs_fixing)
+                            }
+                        }
+                        (true, true) => {
                             // start and end should be right next to each other
                             assert_eq!(
                                 end_idx,
                                 start_idx + 1 + end_delete.saturating_sub(start_delete)
                             );
                             // TODO handle the result is still not large enough
-                            Self::merge_children(children, &mut self.metrics, start_idx + 1);
-                            if children[start_idx].len() < MIN {
+                            Self::merge_children(
+                                &mut int.children,
+                                &mut int.metrics,
+                                start_idx + 1,
+                            );
+                            if int.children[start_idx].len() < MIN {
                                 todo!("merge again")
                             }
-                            NonZeroUsize::new(MIN.saturating_sub(children.len()))
+                            (int.children.len() < MIN, may_needs_fixing)
                         }
                     };
                 }
             }
-            Children::Leaf(children) => {
-                let end_metric = self.metrics[end_idx];
+            Node::Leaf(leaf) => {
+                let end_metric = leaf.metrics[end_idx];
                 let start_delete = if start.bytes == 0 { start_idx } else { start_idx + 1 };
                 let end_delete = if end.bytes != end_metric.bytes { end_idx } else { end_idx + 1 };
 
                 if start_delete < end_delete {
                     // There is a range of children to delete in the middle
-                    self.metrics[end_idx] -= end;
-                    self.metrics[start_idx] = start;
-                    children.drain(start_delete..end_delete);
-                    self.metrics.drain(start_delete..end_delete);
+                    leaf.metrics[end_idx] -= end;
+                    leaf.metrics[start_idx] = start;
+                    leaf.metrics.drain(start_delete..end_delete);
                 } else {
                     if start_idx == end_idx {
-                        self.metrics[start_idx] -= end - start;
+                        leaf.metrics[start_idx] -= end - start;
                     } else {
-                        self.metrics[end_idx] -= end;
-                        self.metrics[start_idx] = start;
+                        leaf.metrics[end_idx] -= end;
+                        leaf.metrics[start_idx] = start;
                     }
                 }
-                let needed = if children.is_empty() { 1 } else { 0 };
-                return NonZeroUsize::new(needed);
+                return (leaf.metrics.is_empty(), false);
             }
         }
     }
 
-    fn merge_children(
-        children: &mut IntChildren,
-        metrics: &mut Metrics,
-        idx: usize,
-    ) -> Option<NonZeroUsize> {
+    fn merge_children(children: &mut IntChildren, metrics: &mut Metrics, idx: usize) -> bool {
         let right_idx = if idx != 0 { idx } else { idx + 1 };
         let left_idx = right_idx - 1;
         let (left, right) = children.split_at_mut(right_idx);
@@ -350,69 +380,55 @@ impl Internal {
         children.remove(right_idx);
         let metric = metrics.remove(right_idx);
         metrics[left_idx] += metric;
-        NonZeroUsize::new(MIN.saturating_sub(children.len()))
+        children.len() < MIN
     }
 
-    fn try_steal_left(
-        children: &mut IntChildren,
-        metrics: &mut Metrics,
-        idx: usize,
-        needed: usize,
-    ) -> Option<NonZeroUsize> {
+    fn try_steal_left(children: &mut IntChildren, metrics: &mut Metrics, idx: usize) -> bool {
         assert!(idx < children.len());
         assert!(idx < metrics.len());
-        assert!(needed <= MIN);
-        assert!(needed > 0);
-        let Some(left_idx) = idx.checked_sub(1) else { return NonZeroUsize::new(needed) };
+        let Some(left_idx) = idx.checked_sub(1) else { return true };
 
-        for i in 0..needed {
+        while children[idx].len() < MIN {
             let left_node = children[left_idx].steal_greatest();
             if let Some((node, node_metric)) = left_node {
                 children[idx].merge_node(node, node_metric, 0);
                 metrics[idx] += node_metric;
                 metrics[left_idx] -= node_metric;
             } else {
-                return NonZeroUsize::new(needed - i);
+                return true;
             }
         }
-        return None;
+        return false;
     }
 
-    fn try_steal_right(
-        children: &mut IntChildren,
-        metrics: &mut Metrics,
-        idx: usize,
-        needed: usize,
-    ) -> Option<NonZeroUsize> {
+    fn try_steal_right(children: &mut IntChildren, metrics: &mut Metrics, idx: usize) -> bool {
         assert_eq!(children.len(), metrics.len());
-        assert!(needed <= MIN);
-        assert!(needed > 0);
         let right_idx = idx + 1;
         if right_idx >= children.len() {
-            return NonZeroUsize::new(needed);
+            return true;
         }
 
-        for i in 0..needed {
+        while children[idx].len() < MIN {
             let right_node = children[right_idx].steal_least();
             if let Some((node, node_metric)) = right_node {
                 let underfull_child = &mut children[idx];
-                let len = underfull_child.metrics.len();
+                let len = underfull_child.len();
                 underfull_child.merge_node(node, node_metric, len);
                 metrics[idx] += node_metric;
                 metrics[right_idx] -= node_metric;
             } else {
-                return NonZeroUsize::new(needed - i);
+                return true;
             }
         }
-        return None;
+        return false;
     }
 
     fn get_delete_indices(&self, start: &mut Metric, end: &mut Metric) -> (usize, usize) {
-        let len = self.metrics.len();
+        let len = self.len();
         let mut start_idx = None;
         let mut end_idx = None;
         for idx in 0..len {
-            let metric = self.metrics[idx];
+            let metric = self.metric_slice()[idx];
             if start_idx.is_none() && (start.chars < metric.chars || start.chars == 0) {
                 start_idx = Some(idx);
             }
@@ -428,108 +444,20 @@ impl Internal {
         (start_idx.unwrap(), end_idx.unwrap())
     }
 
-    fn delete(self: &mut Box<Self>, pos: Metric) {
-        if self.delete_impl(pos) {
-            // shrink the height of the tree
-            assert_eq!(self.metrics.len(), 1);
-            match &mut self.children {
-                Children::Internal(children) => {
-                    assert_eq!(children.len(), 1);
-                    let child = children.pop().unwrap();
-                    let _ = mem::replace(self, child);
-                }
-                Children::Leaf(children) => {
-                    assert_eq!(children.len(), 1);
-                    todo!("delete final node")
-                }
+    fn merge_node(&mut self, node: SingleNode, metric: Metric, idx: usize) {
+        match (self, node) {
+            (Node::Internal(int), SingleNode::Internal(node)) => {
+                int.metrics.insert(idx, metric);
+                int.children.insert(idx, node);
             }
-        }
-    }
-
-    fn delete_impl(&mut self, mut pos: Metric) -> bool {
-        self.assert_invariants();
-        let len = self.metrics.len();
-        for idx in 0..len {
-            let metric = self.metrics[idx];
-            if pos.chars < metric.chars {
-                match &mut self.children {
-                    Children::Internal(children) => {
-                        let needs_merge = children[idx].delete_impl(pos);
-                        if !needs_merge {
-                            return false;
-                        }
-                        // see if we can steal from the left or right child
-                        let left_sibling = idx.checked_sub(1).map(|i| &mut children[i]);
-                        let left_node = left_sibling.and_then(|x| x.steal_greatest());
-                        if let Some((node, node_metric)) = left_node {
-                            let underfull_child = &mut children[idx];
-                            underfull_child.merge_node(node, node_metric, 0);
-                            self.metrics[idx] += node_metric;
-                            self.metrics[idx - 1] -= node_metric;
-                            return false;
-                        }
-
-                        let right_sibling = children.get_mut(idx + 1);
-                        let right_node = right_sibling.and_then(|x| x.steal_least());
-                        if let Some((node, node_metric)) = right_node {
-                            let underfull_child = &mut children[idx];
-                            let len = underfull_child.metrics.len();
-                            underfull_child.merge_node(node, node_metric, len);
-                            self.metrics[idx] += node_metric;
-                            self.metrics[idx + 1] -= node_metric;
-                            return false;
-                        }
-
-                        // merge with sibling
-                        let right_idx = if idx != 0 { idx } else { idx + 1 };
-                        let (left, right) = children.split_at_mut(right_idx);
-                        let left = &mut left[right_idx - 1];
-                        let right = &mut right[0];
-                        left.merge_sibling(right);
-                        children.remove(right_idx);
-                        let right_metric = self.metrics.remove(right_idx);
-                        self.metrics[right_idx - 1] += right_metric;
-                        return children.len() < MIN;
-                    }
-                    Children::Leaf(children) => {
-                        if children.len() > 1 {
-                            if idx == 0 {
-                                self.metrics[idx + 1] += metric;
-                            } else {
-                                self.metrics[idx - 1] += metric;
-                            }
-                            children.remove(idx);
-                            self.metrics.remove(idx);
-                            return false;
-                        } else {
-                            // needs to be merged
-                            return true;
-                        }
-                    }
-                }
-            } else {
-                pos -= metric;
-            }
-        }
-        unreachable!("we should always recurse into a child node");
-    }
-
-    fn merge_node(&mut self, node: Node, metric: Metric, idx: usize) {
-        match (&mut self.children, node) {
-            (Children::Internal(children), Node::Internal(node)) => {
-                self.metrics.insert(idx, metric);
-                children.insert(idx, node);
-            }
-            (Children::Leaf(children), Node::Leaf(node)) => {
+            (Node::Leaf(leaf), SingleNode::Leaf) => {
                 // TODO remove this once the other delete is gone
-                match children.len() {
+                match leaf.metrics.len() {
                     0 => {
-                        self.metrics.push(metric);
-                        children.push(node);
+                        leaf.metrics.push(metric);
                     }
                     1 => {
-                        self.metrics[0] += metric;
-                        children[0] = node;
+                        leaf.metrics[0] += metric;
                     }
                     _ => unreachable!(),
                 }
@@ -539,64 +467,59 @@ impl Internal {
     }
 
     fn merge_sibling(&mut self, right: &mut Self) {
-        match (&mut self.children, &mut right.children) {
-            (Children::Internal(left_children), Children::Internal(right_children)) => {
-                self.metrics.append(&mut right.metrics);
-                left_children.append(right_children);
+        match (self, right) {
+            (Node::Internal(left), Node::Internal(right)) => {
+                left.metrics.append(&mut right.metrics);
+                left.children.append(&mut right.children);
             }
-            (Children::Leaf(children), Children::Leaf(right_children)) => {
-                assert_eq!(children.len(), 1);
-                assert_eq!(right_children.len(), 1);
-                assert_eq!(self.metrics.len(), 1);
+            (Node::Leaf(left), Node::Leaf(right)) => {
+                assert_eq!(left.metrics.len(), 1);
                 assert_eq!(right.metrics.len(), 1);
-                self.metrics[0] += right.metrics[0];
-                children[0] = right_children.pop().unwrap();
+                left.metrics[0] += right.metrics[0];
             }
             _ => unreachable!("cannot merge internal and leaf nodes"),
         }
     }
 
-    fn steal_greatest(&mut self) -> Option<(Node, Metric)> {
-        match &mut self.children {
-            Children::Internal(children) => match children.len() {
+    fn steal_greatest(&mut self) -> Option<(SingleNode, Metric)> {
+        match self {
+            Node::Internal(int) => match int.children.len() {
                 0 | 1 => unreachable!("node should never be below MIN"),
                 MIN => None,
                 _ => {
-                    let metric = self.metrics.pop().unwrap();
-                    let child = children.pop().unwrap();
-                    Some((Node::Internal(child), metric))
+                    let metric = int.metrics.pop().unwrap();
+                    let child = int.children.pop().unwrap();
+                    Some((SingleNode::Internal(child), metric))
                 }
             },
-            Children::Leaf(children) => match children.len() {
+            Node::Leaf(leaf) => match leaf.metrics.len() {
                 0 => unreachable!("leaf node should never be empty"),
                 1 => None,
                 _ => {
-                    let metric = self.metrics.pop().unwrap();
-                    let child = children.pop().unwrap();
-                    Some((Node::Leaf(child), metric))
+                    let metric = leaf.metrics.pop().unwrap();
+                    Some((SingleNode::Leaf, metric))
                 }
             },
         }
     }
 
-    fn steal_least(&mut self) -> Option<(Node, Metric)> {
-        match &mut self.children {
-            Children::Internal(children) => match children.len() {
+    fn steal_least(&mut self) -> Option<(SingleNode, Metric)> {
+        match self {
+            Node::Internal(int) => match int.metrics.len() {
                 0 | 1 => unreachable!("node should never be below MIN"),
                 MIN => None,
                 _ => {
-                    let metric = self.metrics.remove(0);
-                    let child = children.remove(0);
-                    Some((Node::Internal(child), metric))
+                    let metric = int.metrics.remove(0);
+                    let child = int.children.remove(0);
+                    Some((SingleNode::Internal(child), metric))
                 }
             },
-            Children::Leaf(children) => match children.len() {
+            Node::Leaf(leaf) => match leaf.metrics.len() {
                 0 => unreachable!("leaf node should never be empty"),
                 1 => None,
                 _ => {
-                    let metric = self.metrics.remove(0);
-                    let child = children.remove(0);
-                    Some((Node::Leaf(child), metric))
+                    let metric = leaf.metrics.remove(0);
+                    Some((SingleNode::Leaf, metric))
                 }
             },
         }
@@ -617,7 +540,7 @@ impl Internal {
         self.assert_invariants();
         let mut needle = needle;
         let mut sum = Metric::default();
-        for (idx, metric) in self.metrics.iter().enumerate() {
+        for (idx, metric) in self.metric_slice().iter().enumerate() {
             // fast path if we happen get the exact position in the node
             if needle == 0 {
                 break;
@@ -628,9 +551,9 @@ impl Internal {
                 _ => unreachable!(),
             };
             if needle < pos {
-                let child_sum = match &self.children {
-                    Children::Internal(children) => sum + children[idx].search_impl::<TYPE>(needle),
-                    Children::Leaf(_) => sum,
+                let child_sum = match &self {
+                    Node::Internal(int) => sum + int.children[idx].search_impl::<TYPE>(needle),
+                    Node::Leaf(_) => sum,
                 };
                 return child_sum;
             }
@@ -644,17 +567,17 @@ impl Internal {
     fn add(&mut self, char_pos: usize, new: Metric) {
         self.assert_invariants();
         let mut char_pos = char_pos;
-        for (idx, metric) in self.metrics.iter().enumerate() {
+        for (idx, metric) in self.metric_slice().iter().enumerate() {
             let pos = metric.chars;
             // <= because we need to handle the last node correctly
             if char_pos <= pos {
-                match &mut self.children {
-                    Children::Internal(children) => {
-                        self.metrics[idx] += new;
-                        children[idx].add(char_pos, new)
+                match self {
+                    Node::Internal(int) => {
+                        int.metrics[idx] += new;
+                        int.children[idx].add(char_pos, new)
                     }
-                    Children::Leaf(_) => {
-                        let metric = &mut self.metrics[idx];
+                    Node::Leaf(leaf) => {
+                        let metric = &mut leaf.metrics[idx];
                         *metric += new;
                     }
                 };
@@ -668,17 +591,17 @@ impl Internal {
     fn remove(&mut self, char_pos: usize, update: Metric) {
         self.assert_invariants();
         let mut char_pos = char_pos;
-        for (idx, metric) in self.metrics.iter().enumerate() {
+        for (idx, metric) in self.metric_slice().iter().enumerate() {
             let pos = metric.chars;
             // <= because we need to handle the last node correctly
             if char_pos <= pos {
-                match &mut self.children {
-                    Children::Internal(children) => {
-                        self.metrics[idx] -= update;
-                        children[idx].remove(char_pos, update)
+                match self {
+                    Node::Internal(int) => {
+                        int.metrics[idx] -= update;
+                        int.children[idx].remove(char_pos, update)
                     }
-                    Children::Leaf(_) => {
-                        let metric = &mut self.metrics[idx];
+                    Node::Leaf(leaf) => {
+                        let metric = &mut leaf.metrics[idx];
                         *metric -= update;
                     }
                 };
@@ -690,23 +613,24 @@ impl Internal {
     }
 
     fn assert_invariants(&self) {
-        assert_eq!(self.metrics.len(), self.children.len());
-        assert!(self.metrics.len() <= MAX);
-        match &self.children {
-            Children::Internal(children) => {
-                assert!(self.metrics.len() >= MIN);
-                for i in 0..children.len() {
-                    assert_eq!(children[i].metrics(), self.metrics[i]);
+        match self {
+            Node::Internal(int) => {
+                assert!(int.metrics.len() <= MAX);
+                assert_eq!(int.metrics.len(), int.children.len());
+                assert!(int.metrics.len() >= MIN);
+                for i in 0..int.children.len() {
+                    assert_eq!(int.children[i].metrics(), int.metrics[i]);
                 }
             }
-            Children::Leaf(_) => {
-                assert!(!self.metrics.is_empty());
+            Node::Leaf(leaf) => {
+                assert!(leaf.metrics.len() <= MAX);
+                assert!(!leaf.metrics.is_empty());
             }
         };
     }
 }
 
-impl fmt::Display for Internal {
+impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // print the children level by level by adding them to a pair of
         // alternating arrays for each level
@@ -719,13 +643,20 @@ impl fmt::Display for Internal {
             write!(f, "level {level}:")?;
             for node in &current {
                 write!(f, " [")?;
-                for metric in &node.metrics {
-                    write!(f, "({metric}) ")?;
-                }
-                write!(f, "]")?;
-                if let Children::Internal(children) = &node.children {
-                    for child in children {
-                        next.push(child);
+                match node {
+                    Node::Internal(int) => {
+                        for metric in &int.metrics {
+                            write!(f, "({metric}) ")?;
+                        }
+                        write!(f, "]")?;
+                        for child in &int.children {
+                            next.push(child);
+                        }
+                    }
+                    Node::Leaf(leaf) => {
+                        for metric in &leaf.metrics {
+                            write!(f, "({metric}) ")?;
+                        }
                     }
                 }
             }
@@ -734,15 +665,6 @@ impl fmt::Display for Internal {
             mem::swap(&mut current, &mut next);
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-struct Leaf {}
-
-impl Leaf {
-    fn new() -> Self {
-        Self {}
     }
 }
 
@@ -919,27 +841,6 @@ mod test {
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
         }
-    }
-
-    #[test]
-    fn test_delete() {
-        let mut root = new_root();
-        for i in 1..20 {
-            root.insert(metric(i));
-        }
-        for i in 0..20 {
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
-        }
-        let metrics = root.metrics();
-
-        println!("init: {root}");
-        for i in 0..19 {
-            root.delete(metric(12));
-            println!("after {i} iteration: {root}");
-        }
-        let metrics_after = root.metrics();
-        assert_eq!(metrics, metrics_after);
     }
 
     #[test]
