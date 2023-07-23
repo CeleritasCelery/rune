@@ -7,7 +7,6 @@ use std::{
     mem,
     num::NonZeroUsize,
     ops::{Add, AddAssign, Sub, SubAssign},
-    ptr::NonNull,
 };
 
 const MAX: usize = 4;
@@ -20,9 +19,8 @@ type LeafChildren = SmallVec<[Box<Leaf>; MAX]>;
 fn new_root() -> Box<Internal> {
     let mut root = Box::new(Internal::new_leaf());
     root.metrics.push(Metric::default());
-    let root_ptr = NonNull::from(&*root);
     if let Children::Leaf(children) = &mut root.children {
-        children.push(Box::new(Leaf::new(root_ptr)));
+        children.push(Box::new(Leaf::new()));
     }
     root
 }
@@ -39,51 +37,11 @@ enum Node {
     Leaf(Box<Leaf>),
 }
 
-impl Node {
-    fn set_parent(&mut self, parent: &Internal) {
-        let parent_ptr = NonNull::from(parent);
-        match self {
-            Node::Internal(x) => x.parent = Some(parent_ptr),
-            Node::Leaf(x) => x.parent = Some(parent_ptr),
-        }
-    }
-}
-
 impl Children {
     fn len(&self) -> usize {
         match self {
             Children::Internal(x) => x.len(),
             Children::Leaf(x) => x.len(),
-        }
-    }
-
-    fn set_parent(&mut self, parent: NonNull<Internal>) {
-        match self {
-            Children::Internal(x) => {
-                for child in x.iter_mut() {
-                    child.parent = Some(parent);
-                }
-            }
-            Children::Leaf(x) => {
-                for child in x.iter_mut() {
-                    child.parent = Some(parent);
-                }
-            }
-        }
-    }
-
-    fn assert_parent(&self, parent: NonNull<Internal>) {
-        match self {
-            Children::Internal(x) => {
-                for child in x.iter() {
-                    assert_eq!(child.parent, Some(parent));
-                }
-            }
-            Children::Leaf(x) => {
-                for child in x.iter() {
-                    assert_eq!(child.parent, Some(parent));
-                }
-            }
         }
     }
 }
@@ -92,7 +50,6 @@ impl Children {
 struct Internal {
     metrics: Metrics,
     children: Children,
-    parent: Option<NonNull<Internal>>,
 }
 
 impl Internal {
@@ -100,7 +57,6 @@ impl Internal {
         Self {
             metrics: SmallVec::new(),
             children: Children::Leaf(SmallVec::new()),
-            parent: None,
         }
     }
 
@@ -108,13 +64,7 @@ impl Internal {
         Self {
             metrics: SmallVec::new(),
             children: Children::Internal(SmallVec::new()),
-            parent: None,
         }
-    }
-
-    fn clear_parent(mut self: Box<Self>) -> Box<Self> {
-        self.parent = None;
-        self
     }
 
     fn metrics(&self) -> Metric {
@@ -148,8 +98,7 @@ impl Internal {
             let middle = MAX / 2;
 
             let mut right_metrics: Metrics = metrics.drain(middle..).collect();
-            let mut right_children: IntChildren =
-                children.drain(middle..).map(|x| x.clear_parent()).collect();
+            let mut right_children: IntChildren = children.drain(middle..).collect();
             if idx < middle {
                 metrics.insert(idx, new_child.metrics());
                 children.insert(idx, new_child);
@@ -160,20 +109,15 @@ impl Internal {
             let right = Internal {
                 metrics: right_metrics,
                 children: Children::Internal(right_children),
-                parent: None,
             };
             // Box it so it has a stable address
-            let mut boxed = Box::new(right);
-            let child_parent = NonNull::from(&*boxed);
-            boxed.children.set_parent(child_parent);
-            Some(boxed)
+            Some(Box::new(right))
         }
     }
 
     fn insert_leaf(
         children: &mut LeafChildren,
         metrics: &mut Metrics,
-        self_ptr: NonNull<Internal>,
         idx: usize,
         needle: Metric,
     ) -> Option<Box<Internal>> {
@@ -187,18 +131,16 @@ impl Internal {
             // leaf before the current one, splitting the
             // size
             metrics.insert(idx, new_metric);
-            children.insert(idx, Box::new(Leaf::new(self_ptr)));
+            children.insert(idx, Box::new(Leaf::new()));
             None
         } else {
             assert_eq!(len, MAX);
             // split this node into two and return the left one
             let middle = MAX / 2;
             let mut right_metrics: Metrics = metrics.drain(middle..).collect();
-            let mut right_children: LeafChildren =
-                children.drain(middle..).map(|x| x.clear_parent()).collect();
-            let mut new = Leaf::default();
+            let mut right_children: LeafChildren = children.drain(middle..).collect();
+            let new = Leaf::default();
             if idx < middle {
-                new.parent = Some(self_ptr);
                 metrics.insert(idx, new_metric);
                 children.insert(idx, Box::new(new));
             } else {
@@ -208,20 +150,14 @@ impl Internal {
             let right = Internal {
                 metrics: right_metrics,
                 children: Children::Leaf(right_children),
-                parent: None,
             };
-            let mut boxed = Box::new(right);
-            // update the children's parent pointer
-            let child_parent = NonNull::from(&*boxed);
-            boxed.children.set_parent(child_parent);
-            Some(boxed)
+            Some(Box::new(right))
         }
     }
 
     fn push_leaf(
         children: &mut LeafChildren,
         metrics: &mut Metrics,
-        self_ptr: NonNull<Internal>,
         metric: Metric,
     ) -> Option<Box<Internal>> {
         let len = children.len();
@@ -230,7 +166,7 @@ impl Internal {
             // leaf before the current one, splitting the
             // size
             metrics.push(metric);
-            children.push(Box::new(Leaf::new(self_ptr)));
+            children.push(Box::new(Leaf::new()));
             None
         } else {
             assert_eq!(len, MAX);
@@ -241,13 +177,8 @@ impl Internal {
             let right = Internal {
                 metrics: right_metrics,
                 children: Children::Leaf(right_children),
-                parent: None,
             };
-            let mut boxed = Box::new(right);
-            // update the children's parent pointer
-            let child_parent = NonNull::from(&*boxed);
-            boxed.children.set_parent(child_parent);
-            Some(boxed)
+            Some(Box::new(right))
         }
     }
 
@@ -259,20 +190,17 @@ impl Internal {
                 let left = mem::replace(self, Box::new(Internal::new_internal()));
                 self.metrics = smallvec![left.metrics(), right.metrics()];
                 self.children = Children::Internal(smallvec![left, right]);
-                let this = NonNull::from(&**self);
-                self.children.set_parent(this);
             }
         }
     }
 
     fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Internal>> {
         self.assert_invariants();
-        let self_ptr = NonNull::from(&*self);
         let last = self.metrics.len() - 1;
         for (idx, metric) in self.metrics.iter_mut().enumerate() {
             let in_range = needle.chars < metric.chars;
             if idx == last || in_range {
-                let mut new = match &mut self.children {
+                let new = match &mut self.children {
                     // call recursively and insert the new node
                     Children::Internal(children) => match children[idx].insert_impl(needle) {
                         Some(new) => Self::insert_internal(children, &mut self.metrics, idx, new),
@@ -288,18 +216,14 @@ impl Internal {
                     },
                     Children::Leaf(children) => {
                         if in_range {
-                            Self::insert_leaf(children, &mut self.metrics, self_ptr, idx, needle)
+                            Self::insert_leaf(children, &mut self.metrics, idx, needle)
                         } else {
                             assert_eq!(idx, last);
                             needle -= *metric;
-                            Self::push_leaf(children, &mut self.metrics, self_ptr, needle)
+                            Self::push_leaf(children, &mut self.metrics, needle)
                         }
                     }
                 };
-                // set the parent pointer of the new node
-                if let Some(new) = &mut new {
-                    new.parent = self.parent;
-                }
                 return new;
             } else {
                 needle -= *metric;
@@ -308,26 +232,16 @@ impl Internal {
         unreachable!("we should always recurse into a child node");
     }
 
-    fn insert_child(
-        &mut self,
-        idx: usize,
-        this: NonNull<Self>,
-        needle: Metric,
-    ) -> Option<Box<Self>> {
+    fn insert_child(&mut self, idx: usize, needle: Metric) -> Option<Box<Self>> {
         let metrics = &mut self.metrics;
-        let mut new = match &mut self.children {
+        match &mut self.children {
             // call recursively and insert the new node
             Children::Internal(children) => match children[idx].insert_impl(needle) {
                 Some(new) => Self::insert_internal(children, metrics, idx, new),
                 None => None,
             },
-            Children::Leaf(children) => Self::insert_leaf(children, metrics, this, idx, needle),
-        };
-        // set the parent pointer of the new node
-        if let Some(new) = &mut new {
-            new.parent = self.parent;
+            Children::Leaf(children) => Self::insert_leaf(children, metrics, idx, needle),
         }
-        new
     }
 
     fn delete_range(&mut self, mut start: Metric, mut end: Metric) -> Option<NonZeroUsize> {
@@ -523,7 +437,6 @@ impl Internal {
                     assert_eq!(children.len(), 1);
                     let child = children.pop().unwrap();
                     let _ = mem::replace(self, child);
-                    self.parent = None;
                 }
                 Children::Leaf(children) => {
                     assert_eq!(children.len(), 1);
@@ -601,8 +514,7 @@ impl Internal {
         unreachable!("we should always recurse into a child node");
     }
 
-    fn merge_node(&mut self, mut node: Node, metric: Metric, idx: usize) {
-        node.set_parent(self);
+    fn merge_node(&mut self, node: Node, metric: Metric, idx: usize) {
         match (&mut self.children, node) {
             (Children::Internal(children), Node::Internal(node)) => {
                 self.metrics.insert(idx, metric);
@@ -627,13 +539,8 @@ impl Internal {
     }
 
     fn merge_sibling(&mut self, right: &mut Self) {
-        let rf: &Self = self;
-        let this = NonNull::from(rf);
         match (&mut self.children, &mut right.children) {
             (Children::Internal(left_children), Children::Internal(right_children)) => {
-                for child in &mut *right_children {
-                    child.parent = Some(this);
-                }
                 self.metrics.append(&mut right.metrics);
                 left_children.append(right_children);
             }
@@ -643,7 +550,6 @@ impl Internal {
                 assert_eq!(self.metrics.len(), 1);
                 assert_eq!(right.metrics.len(), 1);
                 self.metrics[0] += right.metrics[0];
-                right_children[0].parent = Some(this);
                 children[0] = right_children.pop().unwrap();
             }
             _ => unreachable!("cannot merge internal and leaf nodes"),
@@ -786,23 +692,17 @@ impl Internal {
     fn assert_invariants(&self) {
         assert_eq!(self.metrics.len(), self.children.len());
         assert!(self.metrics.len() <= MAX);
-        let this = NonNull::from(self);
         match &self.children {
             Children::Internal(children) => {
                 assert!(self.metrics.len() >= MIN);
                 for i in 0..children.len() {
                     assert_eq!(children[i].metrics(), self.metrics[i]);
-                    assert_eq!(children[i].parent, Some(this));
                 }
             }
-            Children::Leaf(children) => {
+            Children::Leaf(_) => {
                 assert!(!self.metrics.is_empty());
-                for i in 0..children.len() {
-                    assert_eq!(children[i].parent, Some(this));
-                }
             }
         };
-        self.children.assert_parent(this);
     }
 }
 
@@ -838,20 +738,11 @@ impl fmt::Display for Internal {
 }
 
 #[derive(Debug, Default)]
-struct Leaf {
-    parent: Option<NonNull<Internal>>,
-}
+struct Leaf {}
 
 impl Leaf {
-    fn new(parent: NonNull<Internal>) -> Self {
-        Self {
-            parent: Some(parent),
-        }
-    }
-
-    fn clear_parent(mut self: Box<Self>) -> Box<Self> {
-        self.parent = None;
-        self
+    fn new() -> Self {
+        Self {}
     }
 }
 
