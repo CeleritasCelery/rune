@@ -23,8 +23,8 @@ fn new_root() -> Box<Node> {
 
 #[derive(Debug)]
 enum SingleNode {
-    Internal(Box<Node>),
     Leaf,
+    Internal(Box<Node>),
 }
 
 #[derive(Debug)]
@@ -89,6 +89,19 @@ impl Internal {
             // Box it so it has a stable address
             Some(Box::new(Node::Internal(right)))
         }
+    }
+
+    fn balance_node(&mut self, idx: usize) -> bool {
+        assert!(self.children[idx].is_underfull());
+
+        if !self.try_steal_left(idx) {
+            return false;
+        }
+        if !self.try_steal_right(idx) {
+            return false;
+        }
+
+        self.merge_children(idx)
     }
 
     fn merge_children(&mut self, idx: usize) -> bool {
@@ -208,8 +221,8 @@ impl Leaf {
 
 #[derive(Debug)]
 enum Node {
-    Internal(Internal),
     Leaf(Leaf),
+    Internal(Internal),
 }
 
 impl Node {
@@ -220,18 +233,25 @@ impl Node {
         }
     }
 
+    fn is_underfull(&self) -> bool {
+        match self {
+            Node::Leaf(leaf) => leaf.len() < 1,
+            Node::Internal(int) => int.len() < MIN,
+        }
+    }
+
     fn metrics(&self) -> Metric {
         let metrics = match self {
-            Self::Internal(x) => &x.metrics,
             Self::Leaf(x) => &x.metrics,
+            Self::Internal(x) => &x.metrics,
         };
         metrics.iter().copied().sum()
     }
 
     fn len(&self) -> usize {
         match self {
-            Self::Internal(x) => x.len(),
             Self::Leaf(x) => x.len(),
+            Self::Internal(x) => x.len(),
         }
     }
 
@@ -299,18 +319,24 @@ impl Node {
         unreachable!("we should always recurse into a child node");
     }
 
-    fn insert_child(&mut self, idx: usize, needle: Metric) -> Option<Box<Self>> {
-        match self {
-            // call recursively and insert the new node
-            Node::Internal(int) => match int.children[idx].insert_impl(needle) {
-                Some(new) => int.insert_node(idx, new),
-                None => None,
-            },
-            Node::Leaf(leaf) => leaf.insert_node(idx, needle),
+    fn delete(self: &mut Box<Self>, start: Metric, end: Metric) {
+        assert!(start.bytes <= end.bytes);
+        assert!(start.chars <= end.chars);
+        let fix_seam = self.delete_impl(start, end);
+        if fix_seam {
+            todo!("fix seam")
+        }
+        match &mut **self {
+            Node::Internal(int) if int.len() == 1 => {
+                // collapse the root
+                let child = int.children.pop().unwrap();
+                let _ = mem::replace(self, child);
+            }
+            _ => {}
         }
     }
 
-    fn delete_range(&mut self, mut start: Metric, mut end: Metric) -> (bool, bool) {
+    fn delete_impl(&mut self, mut start: Metric, mut end: Metric) -> bool {
         self.assert_invariants();
         assert!(start.chars <= end.chars);
         let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
@@ -321,79 +347,49 @@ impl Node {
                     // delete range is in a single child
                     let idx = start_idx;
                     let metrics = &mut int.metrics;
-                    let (needs_merge, needs_fixing) = int.children[idx].delete_range(start, end);
-                    metrics[idx] = int.children[idx].metrics();
-                    if !needs_merge {
-                        return (false, needs_fixing);
+                    let needs_fixing = int.children[idx].delete_impl(start, end);
+                    metrics[idx] -= end - start;
+                    if int.children[idx].is_underfull() {
+                        int.balance_node(idx);
                     }
-
-                    if !int.try_steal_left(idx) {
-                        return (false, needs_fixing);
-                    }
-                    if !int.try_steal_right(idx) {
-                        return (false, needs_fixing);
-                    }
-
-                    // merge the right child into the left one
-                    (int.merge_children(idx), needs_fixing)
+                    needs_fixing
                 } else {
-                    // delete range is in multiple children
-                    let metric_bytes = int.metrics[end_idx].bytes;
+                    // if the byte index covers the entire node, delete the
+                    // whole thing
                     let start_delete = if start.bytes == 0 { start_idx } else { start_idx + 1 };
-                    let end_delete = if end.bytes != metric_bytes { end_idx } else { end_idx + 1 };
-                    let mut may_needs_fixing = false;
-                    let mut left_merge = false;
-                    if start_delete > start_idx {
-                        let (needs_merge, needs_fixing) =
-                            int.children[start_idx].delete_range(start, int.metrics[start_idx]);
-                        int.metrics[start_idx] = int.children[start_idx].metrics();
-                        may_needs_fixing |= needs_fixing;
-                        left_merge = needs_merge && int.try_steal_left(start_idx);
-                    }
-                    let mut right_needed = false;
-                    if end_delete <= end_idx {
-                        let (needs_merge, needs_fixing) =
-                            int.children[end_idx].delete_range(Metric::default(), end);
-                        int.metrics[end_idx] = int.children[end_idx].metrics();
-                        may_needs_fixing |= needs_fixing;
-                        right_needed = needs_merge && int.try_steal_right(end_idx);
-                    }
-
+                    let end_delete =
+                        if end.bytes == int.metrics[end_idx].bytes { end_idx + 1 } else { end_idx };
+                    // Delete nodes in the middle
                     if start_delete < end_delete {
                         int.children.drain(start_delete..end_delete);
                         int.metrics.drain(start_delete..end_delete);
                     }
-                    return match (left_merge, right_needed) {
-                        (false, false) => (false, may_needs_fixing),
-                        (false, true) => {
-                            let idx = end_idx - end_delete.saturating_sub(start_delete);
-                            if int.try_steal_left(idx) {
-                                (int.merge_children(idx), may_needs_fixing)
-                            } else {
-                                (false, may_needs_fixing)
-                            }
+                    let mut needs_fixing = false;
+                    // has a left child
+                    if start_delete > start_idx {
+                        let idx = start_idx;
+                        needs_fixing |= int.children[idx].delete_impl(start, int.metrics[idx]);
+                        int.metrics[idx] = start;
+                        if int.children[idx].is_underfull() {
+                            needs_fixing |= int.balance_node(idx);
                         }
-                        (true, false) => {
-                            if int.try_steal_right(start_idx) {
-                                (int.merge_children(start_idx), may_needs_fixing)
-                            } else {
-                                (false, may_needs_fixing)
-                            }
+                    }
+                    // has a right child
+                    if end_delete <= end_idx {
+                        assert_eq!(
+                            end_idx,
+                            start_idx + 1 + end_delete.saturating_sub(start_delete)
+                        );
+                        // since we might have deleted nodes in the middle, the
+                        // index is now 1 more then start
+                        let idx = start_idx + 1;
+                        needs_fixing |= int.children[idx].delete_impl(Metric::default(), end);
+                        int.metrics[idx] -= end;
+                        if int.children[idx].is_underfull() {
+                            needs_fixing |= int.balance_node(idx);
                         }
-                        (true, true) => {
-                            // start and end should be right next to each other
-                            assert_eq!(
-                                end_idx,
-                                start_idx + 1 + end_delete.saturating_sub(start_delete)
-                            );
-                            // TODO handle the result is still not large enough
-                            int.merge_children(start_idx + 1);
-                            if int.children[start_idx].len() < MIN {
-                                todo!("merge again")
-                            }
-                            (int.children.len() < MIN, may_needs_fixing)
-                        }
-                    };
+                    }
+                    needs_fixing
                 }
             }
             Node::Leaf(leaf) => {
@@ -414,7 +410,7 @@ impl Node {
                         leaf.metrics[start_idx] = start;
                     }
                 }
-                return (leaf.metrics.is_empty(), false);
+                false
             }
         }
     }
@@ -639,7 +635,6 @@ impl fmt::Display for Node {
                         for metric in &int.metrics {
                             write!(f, "({metric}) ")?;
                         }
-                        write!(f, "]")?;
                         for child in &int.children {
                             next.push(child);
                         }
@@ -650,6 +645,7 @@ impl fmt::Display for Node {
                         }
                     }
                 }
+                write!(f, "]")?;
             }
             writeln!(f)?;
             level += 1;
@@ -691,6 +687,17 @@ impl Add for Metric {
     }
 }
 
+impl Sub for Metric {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            bytes: self.bytes - rhs.bytes,
+            chars: self.chars - rhs.chars,
+        }
+    }
+}
+
 impl AddAssign for Metric {
     fn add_assign(&mut self, rhs: Self) {
         self.bytes += rhs.bytes;
@@ -702,17 +709,6 @@ impl SubAssign for Metric {
     fn sub_assign(&mut self, rhs: Self) {
         self.bytes -= rhs.bytes;
         self.chars -= rhs.chars;
-    }
-}
-
-impl Sub for Metric {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            bytes: self.bytes - rhs.bytes,
-            chars: self.chars - rhs.chars,
-        }
     }
 }
 
@@ -843,16 +839,16 @@ mod test {
         root.insert(metric(8));
         assert_eq!(root.metrics(), metric(12));
         println!("init: {root}");
-        root.delete_range(metric(1), metric(3));
+        root.delete(metric(1), metric(3));
         assert_eq!(root.metrics(), metric(10));
         println!("after: {root}");
-        root.delete_range(metric(2), metric(6));
+        root.delete(metric(2), metric(6));
         assert_eq!(root.metrics(), metric(6));
         println!("after: {root}");
-        root.delete_range(metric(1), metric(4));
+        root.delete(metric(1), metric(4));
         assert_eq!(root.metrics(), metric(3));
         println!("after: {root}");
-        root.delete_range(metric(0), metric(1));
+        root.delete(metric(0), metric(1));
         assert_eq!(root.metrics(), metric(2));
         println!("after: {root}");
     }
@@ -866,7 +862,7 @@ mod test {
         root.insert(metric(12));
         root.insert(metric(8));
         println!("init: {root}");
-        root.delete_range(metric(0), metric(12));
+        root.delete(metric(0), metric(12));
         assert_eq!(root.metrics(), metric(12));
         println!("after: {root}");
 
@@ -877,7 +873,7 @@ mod test {
         root.insert(metric(12));
         root.insert(metric(8));
         println!("init: {root}");
-        root.delete_range(metric(12), metric(24));
+        root.delete(metric(12), metric(24));
         assert_eq!(root.metrics(), metric(12));
         println!("after: {root}");
     }
