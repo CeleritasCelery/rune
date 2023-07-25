@@ -121,7 +121,7 @@ impl Internal {
         let Some(left_idx) = idx.checked_sub(1) else { return true };
 
         while self.children[idx].len() < MIN {
-            let left_node = self.children[left_idx].steal_greatest();
+            let left_node = self.children[left_idx].steal(Steal::Last);
             if let Some((node, node_metric)) = left_node {
                 self.children[idx].merge_node(node, node_metric, 0);
                 self.metrics[idx] += node_metric;
@@ -141,7 +141,7 @@ impl Internal {
         }
 
         while self.children[idx].len() < MIN {
-            let right_node = self.children[right_idx].steal_least();
+            let right_node = self.children[right_idx].steal(Steal::First);
             if let Some((node, node_metric)) = right_node {
                 let underfull_child = &mut self.children[idx];
                 let len = underfull_child.len();
@@ -221,6 +221,11 @@ impl Leaf {
 enum Node {
     Leaf(Leaf),
     Internal(Internal),
+}
+
+enum Steal {
+    First,
+    Last,
 }
 
 impl Node {
@@ -463,29 +468,19 @@ impl Node {
         }
     }
 
-    fn steal_greatest(&mut self) -> Option<(Option<Box<Node>>, Metric)> {
+    fn steal(&mut self, pos: Steal) -> Option<(Option<Box<Node>>, Metric)> {
+        let idx = match pos {
+            Steal::First => 0,
+            Steal::Last => self.len() - 1,
+        };
         match self {
             Node::Internal(int) if int.len() > MIN => {
-                let (metric, child) = int.pop().unwrap();
+                let metric = int.metrics.remove(idx);
+                let child = int.children.remove(idx);
                 Some((Some(child), metric))
             }
             Node::Leaf(leaf) if leaf.len() > 1 => {
-                let metric = leaf.pop().unwrap();
-                Some((None, metric))
-            }
-            _ => None,
-        }
-    }
-
-    fn steal_least(&mut self) -> Option<(Option<Box<Node>>, Metric)> {
-        match self {
-            Node::Internal(int) if int.len() > MIN => {
-                let metric = int.metrics.remove(0);
-                let child = int.children.remove(0);
-                Some((Some(child), metric))
-            }
-            Node::Leaf(leaf) if leaf.len() > 1 => {
-                let metric = leaf.metrics.remove(0);
+                let metric = leaf.metrics.remove(idx);
                 Some((None, metric))
             }
             _ => None,
