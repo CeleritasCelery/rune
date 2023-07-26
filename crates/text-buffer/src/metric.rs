@@ -208,9 +208,8 @@ impl Leaf {
         } else {
             assert_eq!(self.len(), MAX);
             // split this node into two and return the left one
-            let right_metrics: Metrics = smallvec![metric];
             let right = Node::Leaf(Leaf {
-                metrics: right_metrics,
+                metrics: smallvec![metric],
             });
             Some(Box::new(right))
         }
@@ -258,18 +257,51 @@ impl Node {
         }
     }
 
-    pub(crate) fn insert(self: &mut Box<Self>, needle: Metric) {
-        match self.insert_impl(needle) {
-            None => {}
-            Some(right) => {
-                // split the root, making the old root the left child
-                let left = mem::replace(self, Box::new(Node::Internal(Internal::new())));
-                match &mut **self {
-                    Node::Internal(int) => {
-                        int.metrics = smallvec![left.metrics(), right.metrics()];
-                        int.children = smallvec![left, right];
+    fn search_idx(&self, needle: &mut Metric) -> usize {
+        let metrics = self.metric_slice();
+        for (i, metric) in metrics.iter().enumerate() {
+            if needle.chars < metric.chars {
+                return i;
+            } else {
+                *needle -= *metric;
+            }
+        }
+        metrics.len()
+    }
+
+    pub(crate) fn insert(&mut self, needle: Metric) {
+        let size = self.metrics();
+        let new = if size.chars < needle.chars {
+            self.append_impl(needle - size)
+        } else {
+            self.insert_impl(needle)
+        };
+
+        if let Some(right) = new {
+            // split the root, making the old root the left child
+            let left = mem::replace(self, Node::Internal(Internal::new()));
+            match self {
+                Node::Internal(int) => {
+                    int.metrics = smallvec![left.metrics(), right.metrics()];
+                    int.children = smallvec![Box::new(left), right];
+                }
+                Node::Leaf(_) => unreachable!(),
+            }
+        }
+    }
+
+    fn append_impl(&mut self, metric: Metric) -> Option<Box<Node>> {
+        self.assert_invariants();
+        match self {
+            Node::Leaf(leaf) => leaf.push(metric),
+            Node::Internal(int) => {
+                let last = int.len() - 1;
+                match int.children[last].append_impl(metric) {
+                    Some(new) => int.insert_node(last, new),
+                    None => {
+                        int.metrics[last] += metric;
+                        None
                     }
-                    Node::Leaf(_) => unreachable!(),
                 }
             }
         }
@@ -277,63 +309,31 @@ impl Node {
 
     fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Node>> {
         self.assert_invariants();
+        let idx = self.search_idx(&mut needle);
         match self {
             Node::Internal(int) => {
-                let last = int.len() - 1;
-                for (idx, metric) in int.metrics.iter_mut().enumerate() {
-                    let in_range = needle.chars < metric.chars;
-                    if idx == last || in_range {
-                        let new = match int.children[idx].insert_impl(needle) {
-                            Some(new) => int.insert_node(idx, new),
-                            None => {
-                                // update the metric of the current node because we
-                                // increased the max size
-                                if !in_range {
-                                    assert_eq!(idx, last);
-                                    *metric = int.children.last().unwrap().metrics();
-                                }
-                                None
-                            }
-                        };
-                        return new;
-                    } else {
-                        needle -= *metric;
-                    }
-                }
+                let new = match int.children[idx].insert_impl(needle) {
+                    Some(new) => int.insert_node(idx, new),
+                    None => None,
+                };
+                return new;
             }
-            Node::Leaf(leaf) => {
-                let last = leaf.len() - 1;
-                for (idx, metric) in leaf.metrics.iter_mut().enumerate() {
-                    let in_range = needle.chars < metric.chars;
-                    if idx == last || in_range {
-                        return if in_range {
-                            leaf.insert_node(idx, needle)
-                        } else {
-                            assert_eq!(idx, last);
-                            needle -= *metric;
-                            leaf.push(needle)
-                        };
-                    } else {
-                        needle -= *metric;
-                    }
-                }
-            }
+            Node::Leaf(leaf) => leaf.insert_node(idx, needle),
         }
-        unreachable!("we should always recurse into a child node");
     }
 
-    fn delete(self: &mut Box<Self>, start: Metric, end: Metric) {
+    fn delete(&mut self, start: Metric, end: Metric) {
         assert!(start.bytes <= end.bytes);
         assert!(start.chars <= end.chars);
         let fix_seam = self.delete_impl(start, end);
         if fix_seam {
             todo!("fix seam")
         }
-        match &mut **self {
+        match self {
             Node::Internal(int) if int.len() == 1 => {
                 // collapse the root
                 let child = int.children.pop().unwrap();
-                let _ = mem::replace(self, child);
+                let _ = mem::replace(self, *child);
             }
             _ => {}
         }
@@ -751,9 +751,12 @@ mod test {
     #[test]
     fn test_add() {
         let mut root = new_root();
+        println!("init: {root}");
         for i in 1..20 {
             root.insert(metric(i));
+            println!("insert: {root}");
         }
+        println!("init: {root}");
         for i in 0..20 {
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
