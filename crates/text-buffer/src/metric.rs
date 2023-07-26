@@ -12,29 +12,14 @@ const MAX: usize = 4;
 const MIN: usize = MAX / 2;
 
 type Metrics = SmallVec<[Metric; MAX]>;
-type IntChildren = SmallVec<[Box<Node>; MAX]>;
 
-fn new_root() -> Box<Node> {
-    let leaf = Leaf {
-        metrics: smallvec![Metric::default()],
-    };
-    Box::new(Node::Leaf(leaf))
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Internal {
     metrics: Metrics,
-    children: IntChildren,
+    children: SmallVec<[Box<Node>; MAX]>,
 }
 
 impl Internal {
-    fn new() -> Self {
-        Internal {
-            metrics: Metrics::new(),
-            children: IntChildren::new(),
-        }
-    }
-
     fn len(&self) -> usize {
         assert_eq!(self.metrics.len(), self.children.len());
         self.metrics.len()
@@ -156,7 +141,7 @@ impl Internal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Leaf {
     metrics: Metrics,
 }
@@ -228,6 +213,10 @@ enum Steal {
 }
 
 impl Node {
+    fn new() -> Self {
+        Self::Leaf(Leaf::default())
+    }
+
     fn metric_slice(&self) -> &[Metric] {
         match self {
             Self::Internal(x) => &x.metrics,
@@ -271,7 +260,7 @@ impl Node {
 
     pub(crate) fn insert(&mut self, needle: Metric) {
         let size = self.metrics();
-        let new = if size.chars < needle.chars {
+        let new = if self.len() == 0 || size.chars < needle.chars {
             self.append_impl(needle - size)
         } else {
             self.insert_impl(needle)
@@ -279,7 +268,7 @@ impl Node {
 
         if let Some(right) = new {
             // split the root, making the old root the left child
-            let left = mem::replace(self, Node::Internal(Internal::new()));
+            let left = mem::replace(self, Node::Internal(Internal::default()));
             match self {
                 Node::Internal(int) => {
                     int.metrics = smallvec![left.metrics(), right.metrics()];
@@ -291,7 +280,7 @@ impl Node {
     }
 
     fn append_impl(&mut self, metric: Metric) -> Option<Box<Node>> {
-        self.assert_invariants();
+        self.assert_integrity();
         match self {
             Node::Leaf(leaf) => leaf.push(metric),
             Node::Internal(int) => {
@@ -308,7 +297,7 @@ impl Node {
     }
 
     fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Node>> {
-        self.assert_invariants();
+        self.assert_integrity();
         let idx = self.search_idx(&mut needle);
         match self {
             Node::Internal(int) => {
@@ -340,7 +329,7 @@ impl Node {
     }
 
     fn delete_impl(&mut self, mut start: Metric, mut end: Metric) -> bool {
-        self.assert_invariants();
+        self.assert_integrity();
         assert!(start.chars <= end.chars);
         let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
 
@@ -499,7 +488,7 @@ impl Node {
     const CHAR: u8 = 1;
 
     fn search_impl<const TYPE: u8>(&self, needle: usize) -> Metric {
-        self.assert_invariants();
+        self.assert_integrity();
         let mut needle = needle;
         let mut sum = Metric::default();
         for (idx, metric) in self.metric_slice().iter().enumerate() {
@@ -527,7 +516,7 @@ impl Node {
 
     // Go to a the correct node and then add the value of new to the metric there
     fn add(&mut self, char_pos: usize, new: Metric) {
-        self.assert_invariants();
+        self.assert_integrity();
         let mut char_pos = char_pos;
         for (idx, metric) in self.metric_slice().iter().enumerate() {
             let pos = metric.chars;
@@ -551,7 +540,7 @@ impl Node {
     }
 
     fn remove(&mut self, char_pos: usize, update: Metric) {
-        self.assert_invariants();
+        self.assert_integrity();
         let mut char_pos = char_pos;
         for (idx, metric) in self.metric_slice().iter().enumerate() {
             let pos = metric.chars;
@@ -572,6 +561,21 @@ impl Node {
             char_pos -= pos;
         }
         unreachable!("we should always recurse into a child node");
+    }
+
+    fn assert_integrity(&self) {
+        match self {
+            Node::Internal(int) => {
+                assert!(int.metrics.len() <= MAX);
+                assert_eq!(int.metrics.len(), int.children.len());
+                for i in 0..int.children.len() {
+                    assert_eq!(int.children[i].metrics(), int.metrics[i]);
+                }
+            }
+            Node::Leaf(leaf) => {
+                assert!(leaf.metrics.len() <= MAX);
+            }
+        };
     }
 
     fn assert_invariants(&self) {
@@ -700,7 +704,7 @@ mod test {
 
     #[test]
     fn test_insert() {
-        let mut root = new_root();
+        let mut root = Node::new();
         root.insert(metric(10));
         println!("{}", root);
         root.insert(metric(5));
@@ -713,7 +717,7 @@ mod test {
 
     #[test]
     fn test_push() {
-        let mut root = new_root();
+        let mut root = Node::new();
         println!("{}", root);
         for i in 1..20 {
             println!("pushing {i}");
@@ -724,7 +728,7 @@ mod test {
 
     #[test]
     fn test_search() {
-        let mut root = new_root();
+        let mut root = Node::new();
         for i in 1..20 {
             root.insert(metric(i));
         }
@@ -737,7 +741,7 @@ mod test {
 
     #[test]
     fn test_search_chars() {
-        let mut root = new_root();
+        let mut root = Node::new();
         for i in 1..20 {
             root.insert(metric(i));
         }
@@ -750,7 +754,7 @@ mod test {
 
     #[test]
     fn test_add() {
-        let mut root = new_root();
+        let mut root = Node::new();
         println!("init: {root}");
         for i in 1..20 {
             root.insert(metric(i));
@@ -776,7 +780,7 @@ mod test {
 
     #[test]
     fn test_remove() {
-        let mut root = new_root();
+        let mut root = Node::new();
         for i in 1..20 {
             root.insert(metric(i));
         }
@@ -810,7 +814,7 @@ mod test {
 
     #[test]
     fn test_delete_range_leaf() {
-        let mut root = new_root();
+        let mut root = Node::new();
         // shouldn't need more then a single leaf node
         root.insert(metric(12));
         root.insert(metric(4));
@@ -833,7 +837,7 @@ mod test {
 
     #[test]
     fn test_delete_range_internal() {
-        let mut root = new_root();
+        let mut root = Node::new();
         root.insert(metric(24));
         root.insert(metric(20));
         root.insert(metric(16));
@@ -844,7 +848,7 @@ mod test {
         assert_eq!(root.metrics(), metric(12));
         println!("after: {root}");
 
-        let mut root = new_root();
+        let mut root = Node::new();
         root.insert(metric(24));
         root.insert(metric(20));
         root.insert(metric(16));
