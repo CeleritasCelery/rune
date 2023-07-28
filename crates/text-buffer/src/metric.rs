@@ -106,7 +106,7 @@ impl Internal {
         let Some(left_idx) = idx.checked_sub(1) else { return true };
 
         while self.children[idx].len() < MIN {
-            let left_node = self.children[left_idx].steal(Steal::Last);
+            let left_node = self.children[left_idx].steal(false);
             if let Some((node, node_metric)) = left_node {
                 self.children[idx].merge_node(node, node_metric, 0);
                 self.metrics[idx] += node_metric;
@@ -126,7 +126,7 @@ impl Internal {
         }
 
         while self.children[idx].len() < MIN {
-            let right_node = self.children[right_idx].steal(Steal::First);
+            let right_node = self.children[right_idx].steal(true);
             if let Some((node, node_metric)) = right_node {
                 let underfull_child = &mut self.children[idx];
                 let len = underfull_child.len();
@@ -207,11 +207,6 @@ enum Node {
     Internal(Internal),
 }
 
-enum Steal {
-    First,
-    Last,
-}
-
 impl Node {
     fn new() -> Self {
         Self::Leaf(Leaf::default())
@@ -246,16 +241,17 @@ impl Node {
         }
     }
 
-    fn search_idx(&self, needle: &mut Metric) -> usize {
+    fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
         let metrics = self.metric_slice();
+        let mut acc = Metric::default();
         for (i, metric) in metrics.iter().enumerate() {
-            if needle.chars < metric.chars {
-                return i;
+            if char_pos <= acc.chars + metric.chars {
+                return (i, acc);
             } else {
-                *needle -= *metric;
+                acc += *metric;
             }
         }
-        metrics.len()
+        unreachable!("char index {} out of bounds", char_pos);
     }
 
     pub(crate) fn insert(&mut self, needle: Metric) {
@@ -296,18 +292,18 @@ impl Node {
         }
     }
 
-    fn insert_impl(&mut self, mut needle: Metric) -> Option<Box<Node>> {
+    fn insert_impl(&mut self, needle: Metric) -> Option<Box<Node>> {
         self.assert_integrity();
-        let idx = self.search_idx(&mut needle);
+        let (idx, metric) = self.search_char_pos(needle.chars);
         match self {
             Node::Internal(int) => {
-                let new = match int.children[idx].insert_impl(needle) {
+                let new = match int.children[idx].insert_impl(needle - metric) {
                     Some(new) => int.insert_node(idx, new),
                     None => None,
                 };
                 return new;
             }
-            Node::Leaf(leaf) => leaf.insert_node(idx, needle),
+            Node::Leaf(leaf) => leaf.insert_node(idx, needle - metric),
         }
     }
 
@@ -457,11 +453,8 @@ impl Node {
         }
     }
 
-    fn steal(&mut self, pos: Steal) -> Option<(Option<Box<Node>>, Metric)> {
-        let idx = match pos {
-            Steal::First => 0,
-            Steal::Last => self.len() - 1,
-        };
+    fn steal(&mut self, first: bool) -> Option<(Option<Box<Node>>, Metric)> {
+        let idx = if first { 0 } else { self.len() - 1 };
         match self {
             Node::Internal(int) if int.len() > MIN => {
                 let metric = int.metrics.remove(idx);
@@ -517,50 +510,15 @@ impl Node {
     // Go to a the correct node and then add the value of new to the metric there
     fn add(&mut self, char_pos: usize, new: Metric) {
         self.assert_integrity();
-        let mut char_pos = char_pos;
-        for (idx, metric) in self.metric_slice().iter().enumerate() {
-            let pos = metric.chars;
-            // <= because we need to handle the last node correctly
-            if char_pos <= pos {
-                match self {
-                    Node::Internal(int) => {
-                        int.metrics[idx] += new;
-                        int.children[idx].add(char_pos, new)
-                    }
-                    Node::Leaf(leaf) => {
-                        let metric = &mut leaf.metrics[idx];
-                        *metric += new;
-                    }
-                };
-                return;
-            }
-            char_pos -= pos;
-        }
-        unreachable!("we should always recurse into a child node");
-    }
+        let (idx, metric) = self.search_char_pos(char_pos);
 
-    fn remove(&mut self, char_pos: usize, update: Metric) {
-        self.assert_integrity();
-        let mut char_pos = char_pos;
-        for (idx, metric) in self.metric_slice().iter().enumerate() {
-            let pos = metric.chars;
-            // <= because we need to handle the last node correctly
-            if char_pos <= pos {
-                match self {
-                    Node::Internal(int) => {
-                        int.metrics[idx] -= update;
-                        int.children[idx].remove(char_pos, update)
-                    }
-                    Node::Leaf(leaf) => {
-                        let metric = &mut leaf.metrics[idx];
-                        *metric -= update;
-                    }
-                };
-                return;
+        match self {
+            Node::Leaf(leaf) => leaf.metrics[idx] += new,
+            Node::Internal(int) => {
+                int.metrics[idx] += new;
+                int.children[idx].add(char_pos - metric.chars, new)
             }
-            char_pos -= pos;
-        }
-        unreachable!("we should always recurse into a child node");
+        };
     }
 
     fn assert_integrity(&self) {
@@ -755,12 +713,9 @@ mod test {
     #[test]
     fn test_add() {
         let mut root = Node::new();
-        println!("init: {root}");
         for i in 1..20 {
             root.insert(metric(i));
-            println!("insert: {root}");
         }
-        println!("init: {root}");
         for i in 0..20 {
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
@@ -772,40 +727,6 @@ mod test {
             println!("{}", root);
         }
         for i in (0..20).step_by(2) {
-            println!("searching for {i}");
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
-        }
-    }
-
-    #[test]
-    fn test_remove() {
-        let mut root = Node::new();
-        for i in 1..20 {
-            root.insert(metric(i));
-        }
-        for i in 0..20 {
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
-        }
-
-        for i in (1..20).rev() {
-            root.add(i, metric(1));
-        }
-
-        for i in (0..20).step_by(2) {
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
-        }
-
-        println!("init: {root}");
-        for i in (1..20).rev() {
-            println!("removing {i}");
-            root.remove(i * 2, metric(1));
-            println!("{}", root);
-        }
-
-        for i in 0..20 {
             println!("searching for {i}");
             let metric = root.search_char(i);
             assert_eq!(metric.bytes, i * 2);
