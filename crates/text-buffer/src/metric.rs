@@ -38,6 +38,18 @@ impl Internal {
         self.metrics.insert(idx, metric);
     }
 
+    fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
+        let mut acc = Metric::default();
+        for (i, metric) in self.metrics.iter().enumerate() {
+            if char_pos <= acc.chars + metric.chars {
+                return (i, acc);
+            } else {
+                acc += *metric;
+            }
+        }
+        unreachable!("char index {} out of bounds", char_pos);
+    }
+
     fn insert_node(&mut self, idx: usize, new_child: Box<Node>) -> Option<Box<Node>> {
         // update the metrics for the current child
         self.metrics[idx] = self.children[idx].metrics();
@@ -67,27 +79,34 @@ impl Internal {
     }
 
     /// Balance the node by either stealing from it's siblings or merging with
-    /// them
     ///
-    /// Returns true if the node is still is underfull
+    /// Return true if the node still underfull
     fn balance_node(&mut self, idx: usize) -> bool {
-        assert!(self.children[idx].is_underfull());
-
-        if !self.try_steal_left(idx) {
-            return false;
-        }
-        if !self.try_steal_right(idx) {
+        let missing = MIN.saturating_sub(self.children[idx].len());
+        if missing == 0 {
             return false;
         }
 
-        self.merge_children(idx)
+        let free_nodes = |x: &Box<Node>| x.len().saturating_sub(MIN);
+
+        let left_free = if idx == 0 { 0 } else { free_nodes(&self.children[idx - 1]) };
+        let right_free = self.children.get(idx + 1).map(free_nodes).unwrap_or(0);
+        if left_free + right_free >= missing {
+            // short circuit
+            let failed = self.try_steal_left(idx) && self.try_steal_right(idx);
+            assert!(!failed);
+            false
+        } else {
+            self.merge_children(idx)
+        }
     }
 
     /// Merge this node with it's siblings.
     ///
     /// Returns true if the merged node is still is underfull
     fn merge_children(&mut self, idx: usize) -> bool {
-        if self.len() < 2 {
+        if self.len() <= 1 {
+            // no siblings to merge
             return true;
         }
         let right_idx = if idx != 0 { idx } else { idx + 1 };
@@ -312,15 +331,17 @@ impl Node {
         assert!(start.chars <= end.chars);
         let fix_seam = self.delete_impl(start, end);
         if fix_seam {
-            todo!("fix seam")
+            self.fix_seam(start.chars);
         }
-        match self {
-            Node::Internal(int) if int.len() == 1 => {
-                // collapse the root
-                let child = int.children.pop().unwrap();
-                let _ = mem::replace(self, *child);
+        while self.len() == 1 {
+            match self {
+                Node::Internal(int) => {
+                    // collapse the root
+                    let child = int.children.pop().unwrap();
+                    let _ = mem::replace(self, *child);
+                }
+                Node::Leaf(_) => break,
             }
-            _ => {}
         }
     }
 
@@ -338,7 +359,8 @@ impl Node {
                     let fix_seam = int.children[idx].delete_impl(start, end);
                     metrics[idx] -= end - start;
                     if int.children[idx].is_underfull() {
-                        int.balance_node(idx);
+                        let fix = int.balance_node(idx);
+                        assert!(!fix);
                     }
                     fix_seam
                 } else {
@@ -352,14 +374,19 @@ impl Node {
                         int.children.drain(start_delete..end_delete);
                         int.metrics.drain(start_delete..end_delete);
                     }
+                    // since we might have deleted nodes in the middle, the
+                    // index is now 1 more then start.
+                    let end_idx = start_idx + 1;
                     let mut fix_seam = false;
+                    let mut merge_left = false;
+                    let mut merge_right = false;
                     // has a left child
                     if start_delete > start_idx {
-                        let idx = start_idx;
-                        fix_seam |= int.children[idx].delete_impl(start, int.metrics[idx]);
-                        int.metrics[idx] = start;
-                        if int.children[idx].is_underfull() {
-                            fix_seam |= int.balance_node(idx);
+                        fix_seam |=
+                            int.children[start_idx].delete_impl(start, int.metrics[start_idx]);
+                        int.metrics[start_idx] = start;
+                        if int.children[start_idx].is_underfull() {
+                            merge_left = true;
                         }
                     }
                     // has a right child
@@ -368,14 +395,18 @@ impl Node {
                             end_idx,
                             start_idx + 1 + end_delete.saturating_sub(start_delete)
                         );
-                        // since we might have deleted nodes in the middle, the
-                        // index is now 1 more then start
-                        let idx = start_idx + 1;
-                        fix_seam |= int.children[idx].delete_impl(Metric::default(), end);
-                        int.metrics[idx] -= end;
-                        if int.children[idx].is_underfull() {
-                            fix_seam |= int.balance_node(idx);
+                        fix_seam |= int.children[end_idx].delete_impl(Metric::default(), end);
+                        int.metrics[end_idx] -= end;
+                        if int.children[end_idx].is_underfull() {
+                            merge_right = true;
                         }
+                    }
+                    // merge right child first so that the index of left is not changed
+                    if merge_right {
+                        fix_seam |= int.balance_node(end_idx);
+                    }
+                    if merge_left {
+                        fix_seam |= int.balance_node(start_idx);
                     }
                     fix_seam
                 }
@@ -466,6 +497,48 @@ impl Node {
                 Some((None, metric))
             }
             _ => None,
+        }
+    }
+
+    fn fix_seam(&mut self, char_pos: usize) -> bool {
+        if let Node::Internal(int) = self {
+            let prev_len = int.len();
+            loop {
+                let (idx, metric) = int.search_char_pos(char_pos);
+                let on_seam = metric.chars == char_pos;
+                if on_seam && int.children.get(idx + 1).is_some_and(|x| x.is_underfull()) {
+                    // we are on a seam and there is a right sibling
+                    int.balance_node(idx + 1);
+                }
+
+                if int.children[idx].is_underfull() {
+                    int.balance_node(idx);
+                }
+
+                // recalculate because position might have changed
+                let (idx, metric) = int.search_char_pos(char_pos);
+                let mut retry = false;
+
+                // recurse into children
+                if let Some(child) = int.children.get_mut(idx + 1) {
+                    let on_seam = metric.chars == char_pos;
+                    if on_seam {
+                        retry |= child.fix_seam(0);
+                    }
+                }
+
+                let new_pos = char_pos - metric.chars;
+                retry |= int.children[idx].fix_seam(new_pos);
+                // If one of the children was underfull we need to retry the
+                // loop to merge it again
+                if !retry {
+                    break;
+                }
+            }
+            let len = int.len();
+            len < prev_len && len < MIN
+        } else {
+            false
         }
     }
 
