@@ -273,6 +273,20 @@ impl Node {
         unreachable!("char index {} out of bounds", char_pos);
     }
 
+    /// May return one past the end
+    fn search_char_pos_le(&self, char_pos: usize) -> (usize, Metric) {
+        let metrics = self.metric_slice();
+        let mut acc = Metric::default();
+        for (i, metric) in metrics.iter().enumerate() {
+            if char_pos < acc.chars + metric.chars {
+                return (i, acc);
+            } else {
+                acc += *metric;
+            }
+        }
+        (metrics.len(), acc)
+    }
+
     pub(crate) fn insert(&mut self, needle: Metric) {
         let size = self.metrics();
         let new = if self.len() == 0 || size.chars < needle.chars {
@@ -539,6 +553,49 @@ impl Node {
             len < prev_len && len < MIN
         } else {
             false
+        }
+    }
+
+    /// Split the tree at the given point. Returns the right side of the split.
+    /// Note that the resulting trees may have underfull nodes and will need to
+    /// be fixed later.
+    fn split(&mut self, pos: Metric) -> Node {
+        let (idx, metric) = self.search_char_pos_le(pos.chars);
+        match self {
+            Node::Leaf(leaf) => {
+                let offset = pos - metric;
+                let mut right;
+                if offset.bytes == 0 {
+                    right = leaf.metrics.drain(idx..).collect();
+                } else {
+                    let right_node = leaf.metrics[idx] - offset;
+                    leaf.metrics[idx] = offset;
+                    right = smallvec![right_node];
+                    right.extend(leaf.metrics.drain(idx + 1..));
+                }
+                Node::Leaf(Leaf { metrics: right })
+            }
+            Node::Internal(int) => {
+                let offset = pos - metric;
+                let mut right;
+                if offset.bytes == 0 {
+                    right = Internal {
+                        metrics: int.metrics.drain(idx..).collect(),
+                        children: int.children.drain(idx..).collect(),
+                    };
+                } else {
+                    let right_node = int.children[idx].split(offset);
+                    let right_metric = int.metrics[idx] - offset;
+                    int.metrics[idx] = offset;
+                    right = Internal {
+                        metrics: smallvec![right_metric],
+                        children: smallvec![Box::new(right_node)],
+                    };
+                    right.metrics.extend(int.metrics.drain(idx + 1..));
+                    right.children.extend(int.children.drain(idx + 1..));
+                }
+                Node::Internal(right)
+            }
         }
     }
 
@@ -872,5 +929,25 @@ mod test {
         root.delete(metric(12), metric(24));
         assert_eq!(root.metrics(), metric(12));
         println!("after: {root}");
+    }
+
+    #[test]
+    fn test_split() {
+        let mut root = Node::new();
+        for i in 1..=20 {
+            root.insert(metric(i));
+        }
+        println!("init: {root}");
+        let right = root.split(metric(10));
+        println!("left: {root}");
+        println!("right: {root}");
+        assert_eq!(root.metrics(), right.metrics());
+        for i in 0..10 {
+            println!("searching for {i}");
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
+            let cmp = mock_search_char(&right, i);
+            assert_eq!(cmp, metric(i));
+        }
     }
 }
