@@ -542,18 +542,18 @@ impl Node {
         }
     }
 
-    pub(crate) fn search_byte(&self, bytes: usize) -> Metric {
+    pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
         self.search_impl::<{ Self::BYTE }>(bytes)
     }
 
-    pub(crate) fn search_char(&self, chars: usize) -> Metric {
+    pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
         self.search_impl::<{ Self::CHAR }>(chars)
     }
 
     const BYTE: u8 = 0;
     const CHAR: u8 = 1;
 
-    fn search_impl<const TYPE: u8>(&self, needle: usize) -> Metric {
+    fn search_impl<const TYPE: u8>(&self, needle: usize) -> (Metric, usize) {
         self.assert_integrity();
         let mut needle = needle;
         let mut sum = Metric::default();
@@ -569,15 +569,19 @@ impl Node {
             };
             if needle < pos {
                 let child_sum = match &self {
-                    Node::Internal(int) => sum + int.children[idx].search_impl::<TYPE>(needle),
-                    Node::Leaf(_) => sum,
+                    Node::Internal(int) => {
+                        let (metric, offset) = int.children[idx].search_impl::<TYPE>(needle);
+                        (sum + metric, offset)
+                    }
+                    Node::Leaf(_) => (sum, needle),
                 };
                 return child_sum;
             }
             sum += *metric;
             needle -= pos;
         }
-        sum
+        // we are beyond total size of the tree
+        (sum, needle)
     }
 
     // Go to a the correct node and then add the value of new to the metric there
@@ -733,6 +737,22 @@ mod test {
         }
     }
 
+    fn mock_search_byte(root: &Node, needle: usize) -> Metric {
+        let (metric, offset) = root.search_byte(needle);
+        Metric {
+            bytes: metric.bytes + offset,
+            chars: metric.chars + offset / 2,
+        }
+    }
+
+    fn mock_search_char(root: &Node, needle: usize) -> Metric {
+        let (metric, offset) = root.search_char(needle);
+        Metric {
+            bytes: metric.bytes + offset * 2,
+            chars: metric.chars + offset,
+        }
+    }
+
     #[test]
     fn test_insert() {
         let mut root = Node::new();
@@ -765,8 +785,8 @@ mod test {
         }
         for i in 0..20 {
             println!("searching for {i}");
-            let metric = root.search_byte(i * 2);
-            assert_eq!(metric.chars, i);
+            let cmp = mock_search_byte(&root, i * 2);
+            assert_eq!(cmp, metric(i));
         }
     }
 
@@ -778,8 +798,8 @@ mod test {
         }
         for i in 0..20 {
             println!("searching for {i}");
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
         }
     }
 
@@ -790,8 +810,8 @@ mod test {
             root.insert(metric(i));
         }
         for i in 0..20 {
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
         }
         println!("init {root}");
         for i in (1..20).rev() {
@@ -801,8 +821,8 @@ mod test {
         }
         for i in (0..20).step_by(2) {
             println!("searching for {i}");
-            let metric = root.search_char(i);
-            assert_eq!(metric.bytes, i * 2);
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
         }
     }
 
