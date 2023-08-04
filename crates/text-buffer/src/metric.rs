@@ -5,7 +5,7 @@ use std::{
     fmt,
     iter::Sum,
     mem,
-    ops::{Add, AddAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, RangeBounds, Sub, SubAssign},
 };
 
 const MAX: usize = 4;
@@ -32,10 +32,21 @@ impl Internal {
         }
     }
 
+    fn push(&mut self, child: Box<Node>) {
+        let metric = child.metrics();
+        self.children.push(child);
+        self.metrics.push(metric);
+    }
+
     fn insert(&mut self, idx: usize, child: Box<Node>) {
         let metric = child.metrics();
         self.children.insert(idx, child);
         self.metrics.insert(idx, metric);
+    }
+
+    fn take(&mut self, other: &mut Self, range: impl RangeBounds<usize> + Clone) {
+        self.metrics.extend(other.metrics.drain(range.clone()));
+        self.children.extend(other.children.drain(range.clone()));
     }
 
     fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
@@ -260,6 +271,13 @@ impl Node {
         }
     }
 
+    fn depth(&self) -> usize {
+        match self {
+            Self::Leaf(_) => 0,
+            Self::Internal(x) => 1 + x.children[0].depth(),
+        }
+    }
+
     fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
         let metrics = self.metric_slice();
         let mut acc = Metric::default();
@@ -290,7 +308,7 @@ impl Node {
     pub(crate) fn insert(&mut self, needle: Metric) {
         let size = self.metrics();
         let new = if self.len() == 0 || size.chars < needle.chars {
-            self.append_impl(needle - size)
+            self.insert_append_impl(needle - size)
         } else {
             self.insert_impl(needle)
         };
@@ -298,23 +316,19 @@ impl Node {
         if let Some(right) = new {
             // split the root, making the old root the left child
             let left = mem::replace(self, Node::Internal(Internal::default()));
-            match self {
-                Node::Internal(int) => {
-                    int.metrics = smallvec![left.metrics(), right.metrics()];
-                    int.children = smallvec![Box::new(left), right];
-                }
-                Node::Leaf(_) => unreachable!(),
-            }
+            let Node::Internal(int) = self else { unreachable!() };
+            int.metrics = smallvec![left.metrics(), right.metrics()];
+            int.children = smallvec![Box::new(left), right];
         }
     }
 
-    fn append_impl(&mut self, metric: Metric) -> Option<Box<Node>> {
+    fn insert_append_impl(&mut self, metric: Metric) -> Option<Box<Node>> {
         self.assert_integrity();
         match self {
             Node::Leaf(leaf) => leaf.push(metric),
             Node::Internal(int) => {
                 let last = int.len() - 1;
-                match int.children[last].append_impl(metric) {
+                match int.children[last].insert_append_impl(metric) {
                     Some(new) => int.insert_node(last, new),
                     None => {
                         int.metrics[last] += metric;
@@ -591,11 +605,91 @@ impl Node {
                         metrics: smallvec![right_metric],
                         children: smallvec![Box::new(right_node)],
                     };
-                    right.metrics.extend(int.metrics.drain(idx + 1..));
-                    right.children.extend(int.children.drain(idx + 1..));
+                    right.take(int, idx + 1..);
                 }
                 Node::Internal(right)
             }
+        }
+    }
+
+    fn append(&mut self, other: Self) {
+        let self_depth = self.depth();
+        let other_depth = other.depth();
+        let new = if other_depth <= self_depth {
+            self.append_at_depth(other, self_depth - other_depth)
+        } else {
+            let left = mem::replace(self, other);
+            self.prepend_at_depth(left, other_depth - self_depth)
+        };
+        if let Some(right) = new {
+            // split the root, making the old root the left child
+            let left = mem::replace(self, Node::Internal(Internal::default()));
+            let Node::Internal(int) = self else { unreachable!() };
+            int.metrics = smallvec![left.metrics(), right.metrics()];
+            int.children = smallvec![Box::new(left), right];
+        }
+    }
+
+    fn append_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
+        if depth == 0 {
+            match (self, other) {
+                (Node::Leaf(_), Node::Leaf(right)) => Some(Box::new(Node::Leaf(right))),
+                (Node::Internal(left), Node::Internal(mut right)) => {
+                    if left.len() + right.len() <= MAX {
+                        left.take(&mut right, ..);
+                        None
+                    } else {
+                        Some(Box::new(Node::Internal(right)))
+                    }
+                }
+                _ => unreachable!("siblings have different types"),
+            }
+        } else if let Node::Internal(int) = self {
+            match int.children.last_mut().unwrap().append_at_depth(other, depth - 1) {
+                Some(new) if int.len() < MAX => {
+                    int.push(new);
+                    None
+                }
+                Some(new) => Some(Box::new(Node::Internal(Internal {
+                    metrics: smallvec![new.metrics()],
+                    children: smallvec![new],
+                }))),
+                None => None,
+            }
+        } else {
+            unreachable!("reached leaf node while depth was non-zero");
+        }
+    }
+
+    fn prepend_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
+        if depth == 0 {
+            match (other, self) {
+                (Node::Leaf(left), Node::Leaf(_)) => Some(Box::new(Node::Leaf(left))),
+                (Node::Internal(mut left), Node::Internal(right)) => {
+                    if left.len() + right.len() <= MAX {
+                        left.take(right, ..);
+                        *right = left;
+                        None
+                    } else {
+                        Some(Box::new(Node::Internal(left)))
+                    }
+                }
+                _ => unreachable!("siblings have different types"),
+            }
+        } else if let Node::Internal(int) = self {
+            match int.children.first_mut().unwrap().prepend_at_depth(other, depth - 1) {
+                Some(new) if int.len() < MAX => {
+                    int.insert(0, new);
+                    None
+                }
+                Some(new) => Some(Box::new(Node::Internal(Internal {
+                    metrics: smallvec![new.metrics()],
+                    children: smallvec![new],
+                }))),
+                None => None,
+            }
+        } else {
+            unreachable!("reached leaf node while depth was non-zero");
         }
     }
 
@@ -947,6 +1041,27 @@ mod test {
             let cmp = mock_search_char(&root, i);
             assert_eq!(cmp, metric(i));
             let cmp = mock_search_char(&right, i);
+            assert_eq!(cmp, metric(i));
+        }
+    }
+
+    #[test]
+    fn test_append() {
+        let mut root = Node::new();
+        for i in 1..=10 {
+            root.insert(metric(i));
+        }
+        println!("init: {root}");
+        let mut right = Node::new();
+        for i in 1..=10 {
+            right.insert(metric(i));
+        }
+        println!("right: {right}");
+        root.append(right);
+        println!("after: {root}");
+        for i in 0..20 {
+            println!("searching for {i}");
+            let cmp = mock_search_char(&root, i);
             assert_eq!(cmp, metric(i));
         }
     }
