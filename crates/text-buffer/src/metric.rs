@@ -305,6 +305,53 @@ impl Node {
         (metrics.len(), acc)
     }
 
+    fn build(each: impl Iterator<Item = Metric>) -> Self {
+        // build the base layer of leaf nodes
+        let mut nodes = Vec::new();
+        let mut leaf = Leaf::default();
+        for metric in each {
+            leaf.push(metric);
+            if leaf.len() == MAX {
+                nodes.push(Box::new(Node::Leaf(leaf)));
+                leaf = Leaf::default();
+            }
+        }
+        if leaf.len() > 0 {
+            nodes.push(Box::new(Node::Leaf(leaf)));
+        }
+        // build each layer of internal nodes from the bottom up
+        let mut next_level = Vec::new();
+        while nodes.len() > 1 {
+            let len = nodes.len();
+            let parent_count = len / MAX;
+            let remainder = len % MAX;
+            let split_idx = if remainder != 0 && remainder != len && remainder < MIN {
+                // If that last node is too small then merge it with the
+                // previous one by splitting it early
+                len - MIN - 1
+            } else {
+                // index will never equal len
+                len
+            };
+            let mut int = Internal::default();
+            for (idx, node) in nodes.drain(..).enumerate() {
+                int.metrics.push(node.metrics());
+                int.children.push(node);
+                if int.len() == MAX || idx == split_idx {
+                    next_level.push(Box::new(Node::Internal(int)));
+                    int = Internal::default();
+                }
+            }
+            assert_eq!(next_level.len(), parent_count);
+            mem::swap(&mut nodes, &mut next_level);
+
+            if int.len() > 0 {
+                nodes.push(Box::new(Node::Internal(int)));
+            }
+        }
+        *nodes.pop().unwrap_or(Box::new(Node::Leaf(Leaf::default())))
+    }
+
     pub(crate) fn insert(&mut self, needle: Metric) {
         let size = self.metrics();
         let new = if self.len() == 0 || size.chars < needle.chars {
@@ -904,6 +951,23 @@ mod test {
         }
     }
 
+    struct TreeBuilderBasic {
+        count: usize,
+    }
+
+    impl Iterator for TreeBuilderBasic {
+        type Item = Metric;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.count == 0 {
+                None
+            } else {
+                self.count -= 1;
+                Some(metric(1))
+            }
+        }
+    }
+
     #[test]
     fn test_insert() {
         let mut root = Node::new();
@@ -1059,6 +1123,28 @@ mod test {
         println!("right: {right}");
         root.append(right);
         println!("after: {root}");
+        for i in 0..20 {
+            println!("searching for {i}");
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
+        }
+    }
+
+    #[test]
+    fn test_build() {
+        {
+            let mut builder = TreeBuilderBasic { count: 0 };
+            let root = Node::build(&mut builder);
+            assert_eq!(root.len(), 0);
+        }
+        {
+            let mut builder = TreeBuilderBasic { count: 1 };
+            let root = Node::build(&mut builder);
+            assert_eq!(root.len(), 1);
+        }
+        let mut builder = TreeBuilderBasic { count: 20 };
+        let root = Node::build(&mut builder);
+        println!("{}", root);
         for i in 0..20 {
             println!("searching for {i}");
             let cmp = mock_search_char(&root, i);
