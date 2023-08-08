@@ -185,6 +185,59 @@ impl Leaf {
         self.metrics.pop()
     }
 
+    fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
+        let mut acc = Metric::default();
+        let last = self.len() - 1;
+        for (i, metric) in self.metrics[..last].iter().enumerate() {
+            if char_pos < acc.chars + metric.chars {
+                return (i, acc);
+            } else {
+                acc += *metric;
+            }
+        }
+        (last, acc)
+    }
+
+    fn insert_at(&mut self, idx: usize, pos: Metric, data: Metric) -> Option<Box<Node>> {
+        if (self.metrics[idx].bytes + data.bytes) < 20 {
+            self.metrics[idx] += data;
+            return None;
+        }
+        let left_metric = pos;
+        let right_metric = self.metrics[idx] - left_metric;
+
+        let new = if left_metric.bytes <= right_metric.bytes {
+            self.metrics[idx] = left_metric + data;
+            right_metric
+        } else {
+            self.metrics[idx] = left_metric;
+            right_metric + data
+        };
+        // shift idx to the right
+        let idx = idx + 1;
+        if self.len() < MAX {
+            // If there is room in this node then insert the
+            // leaf before the current one, splitting the
+            // size
+            self.metrics.insert(idx, new);
+            None
+        } else {
+            assert_eq!(self.len(), MAX);
+            // split this node into two and return the left one
+            let middle = MAX / 2;
+            let mut right_metrics: Metrics = self.metrics.drain(middle..).collect();
+            if idx < middle {
+                self.metrics.insert(idx, new);
+            } else {
+                right_metrics.insert(idx - middle, new);
+            }
+            let right = Node::Leaf(Leaf {
+                metrics: right_metrics,
+            });
+            Some(Box::new(right))
+        }
+    }
+
     fn insert_node(&mut self, idx: usize, needle: Metric) -> Option<Box<Node>> {
         let new_metric = self.metrics[idx] - needle;
         self.metrics[idx] = needle;
@@ -281,14 +334,15 @@ impl Node {
     fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
         let metrics = self.metric_slice();
         let mut acc = Metric::default();
-        for (i, metric) in metrics.iter().enumerate() {
-            if char_pos <= acc.chars + metric.chars {
+        let last = metrics.len() - 1;
+        for (i, metric) in metrics[..last].iter().enumerate() {
+            if char_pos < acc.chars + metric.chars {
                 return (i, acc);
             } else {
                 acc += *metric;
             }
         }
-        unreachable!("char index {} out of bounds", char_pos);
+        (last, acc)
     }
 
     /// May return one past the end
@@ -352,14 +406,16 @@ impl Node {
         *nodes.pop().unwrap_or(Box::new(Node::Leaf(Leaf::default())))
     }
 
-    pub(crate) fn insert(&mut self, needle: Metric) {
+    pub(crate) fn insert(&mut self, pos: Metric, data: Metric) {
         let size = self.metrics();
-        let new = if self.len() == 0 || size.chars < needle.chars {
-            self.insert_append_impl(needle - size)
-        } else {
-            self.insert_impl(needle)
-        };
-
+        assert!(pos.bytes <= size.bytes);
+        if self.len() == 0 {
+            assert!(pos.bytes == 0);
+            let Node::Leaf(leaf) = self else { unreachable!() };
+            leaf.metrics.push(data);
+            return;
+        }
+        let new = self.insert_impl(pos, data);
         if let Some(right) = new {
             // split the root, making the old root the left child
             let left = mem::replace(self, Node::Internal(Internal::default()));
@@ -369,35 +425,19 @@ impl Node {
         }
     }
 
-    fn insert_append_impl(&mut self, metric: Metric) -> Option<Box<Node>> {
+    fn insert_impl(&mut self, pos: Metric, data: Metric) -> Option<Box<Node>> {
         self.assert_integrity();
+        let (idx, metric) = self.search_char_pos(pos.chars);
+        let offset = pos - metric;
         match self {
-            Node::Leaf(leaf) => leaf.push(metric),
-            Node::Internal(int) => {
-                let last = int.len() - 1;
-                match int.children[last].insert_append_impl(metric) {
-                    Some(new) => int.insert_node(last, new),
-                    None => {
-                        int.metrics[last] += metric;
-                        None
-                    }
+            Node::Leaf(leaf) => leaf.insert_at(idx, offset, data),
+            Node::Internal(int) => match int.children[idx].insert_impl(offset, data) {
+                Some(new) => int.insert_node(idx, new),
+                None => {
+                    int.metrics[idx] += data;
+                    None
                 }
-            }
-        }
-    }
-
-    fn insert_impl(&mut self, needle: Metric) -> Option<Box<Node>> {
-        self.assert_integrity();
-        let (idx, metric) = self.search_char_pos(needle.chars);
-        match self {
-            Node::Internal(int) => {
-                let new = match int.children[idx].insert_impl(needle - metric) {
-                    Some(new) => int.insert_node(idx, new),
-                    None => None,
-                };
-                return new;
-            }
-            Node::Leaf(leaf) => leaf.insert_node(idx, needle - metric),
+            },
         }
     }
 
@@ -953,6 +993,7 @@ mod test {
 
     struct TreeBuilderBasic {
         count: usize,
+        step: usize,
     }
 
     impl Iterator for TreeBuilderBasic {
@@ -963,41 +1004,28 @@ mod test {
                 None
             } else {
                 self.count -= 1;
-                Some(metric(1))
+                Some(metric(self.step))
             }
         }
     }
 
     #[test]
     fn test_insert() {
-        let mut root = Node::new();
-        root.insert(metric(10));
+        let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
+        let mut root = Node::build(builder);
+        root.insert(metric(5), metric(5));
         println!("{}", root);
-        root.insert(metric(5));
-        for i in 0..10 {
-            println!("pushing {i}");
-            root.insert(metric(i));
-            println!("{}", root);
-        }
-    }
-
-    #[test]
-    fn test_push() {
-        let mut root = Node::new();
-        println!("{}", root);
-        for i in 1..20 {
-            println!("pushing {i}");
-            root.insert(metric(i));
-            println!("{}", root);
+        for i in 0..15 {
+            println!("searching for {i}");
+            let cmp = mock_search_char(&root, i);
+            assert_eq!(cmp, metric(i));
         }
     }
 
     #[test]
     fn test_search() {
-        let mut root = Node::new();
-        for i in 1..20 {
-            root.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
+        let root = Node::build(builder);
         for i in 0..20 {
             println!("searching for {i}");
             let cmp = mock_search_byte(&root, i * 2);
@@ -1007,10 +1035,8 @@ mod test {
 
     #[test]
     fn test_search_chars() {
-        let mut root = Node::new();
-        for i in 1..20 {
-            root.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
+        let root = Node::build(builder);
         for i in 0..20 {
             println!("searching for {i}");
             let cmp = mock_search_char(&root, i);
@@ -1020,10 +1046,8 @@ mod test {
 
     #[test]
     fn test_add() {
-        let mut root = Node::new();
-        for i in 1..20 {
-            root.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
+        let mut root = Node::build(builder);
         for i in 0..20 {
             let cmp = mock_search_char(&root, i);
             assert_eq!(cmp, metric(i));
@@ -1043,11 +1067,9 @@ mod test {
 
     #[test]
     fn test_delete_range_leaf() {
-        let mut root = Node::new();
         // shouldn't need more then a single leaf node
-        root.insert(metric(12));
-        root.insert(metric(4));
-        root.insert(metric(8));
+        let builder = &mut TreeBuilderBasic { count: 3, step: 4 };
+        let mut root = Node::build(builder);
         assert_eq!(root.metrics(), metric(12));
         println!("init: {root}");
         root.delete(metric(1), metric(3));
@@ -1066,23 +1088,15 @@ mod test {
 
     #[test]
     fn test_delete_range_internal() {
-        let mut root = Node::new();
-        root.insert(metric(24));
-        root.insert(metric(20));
-        root.insert(metric(16));
-        root.insert(metric(12));
-        root.insert(metric(8));
+        let builder = &mut TreeBuilderBasic { count: 6, step: 4 };
+        let mut root = Node::build(builder);
         println!("init: {root}");
         root.delete(metric(0), metric(12));
         assert_eq!(root.metrics(), metric(12));
         println!("after: {root}");
 
-        let mut root = Node::new();
-        root.insert(metric(24));
-        root.insert(metric(20));
-        root.insert(metric(16));
-        root.insert(metric(12));
-        root.insert(metric(8));
+        let builder = &mut TreeBuilderBasic { count: 6, step: 4 };
+        let mut root = Node::build(builder);
         println!("init: {root}");
         root.delete(metric(12), metric(24));
         assert_eq!(root.metrics(), metric(12));
@@ -1091,10 +1105,8 @@ mod test {
 
     #[test]
     fn test_split() {
-        let mut root = Node::new();
-        for i in 1..=20 {
-            root.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
+        let mut root = Node::build(builder);
         println!("init: {root}");
         let right = root.split(metric(10));
         println!("left: {root}");
@@ -1111,15 +1123,11 @@ mod test {
 
     #[test]
     fn test_append() {
-        let mut root = Node::new();
-        for i in 1..=10 {
-            root.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
+        let mut root = Node::build(builder);
         println!("init: {root}");
-        let mut right = Node::new();
-        for i in 1..=10 {
-            right.insert(metric(i));
-        }
+        let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
+        let right = Node::build(builder);
         println!("right: {right}");
         root.append(right);
         println!("after: {root}");
@@ -1133,17 +1141,17 @@ mod test {
     #[test]
     fn test_build() {
         {
-            let mut builder = TreeBuilderBasic { count: 0 };
-            let root = Node::build(&mut builder);
+            let builder = &mut TreeBuilderBasic { count: 0, step: 0 };
+            let root = Node::build(builder);
             assert_eq!(root.len(), 0);
         }
         {
-            let mut builder = TreeBuilderBasic { count: 1 };
-            let root = Node::build(&mut builder);
+            let builder = &mut TreeBuilderBasic { count: 1, step: 1 };
+            let root = Node::build(builder);
             assert_eq!(root.len(), 1);
         }
-        let mut builder = TreeBuilderBasic { count: 20 };
-        let root = Node::build(&mut builder);
+        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
+        let root = Node::build(builder);
         println!("{}", root);
         for i in 0..20 {
             println!("searching for {i}");
