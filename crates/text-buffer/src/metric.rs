@@ -284,6 +284,133 @@ impl Leaf {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct BufferMetrics {
+    root: Node,
+}
+
+impl BufferMetrics {
+    pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
+        self.root.search_impl(bytes, |x| x.bytes)
+    }
+
+    pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
+        self.root.search_impl(chars, |x| x.chars)
+    }
+
+    pub(crate) fn build(each: impl Iterator<Item = Metric>) -> Self {
+        // build the base layer of leaf nodes
+        let cap = (each.size_hint().0 / MAX) + 1;
+        let mut nodes = Vec::with_capacity(cap);
+        let mut leaf = Leaf::default();
+        for metric in each {
+            leaf.push(metric);
+            if leaf.len() == MAX {
+                nodes.push(Box::new(Node::Leaf(leaf)));
+                leaf = Leaf::default();
+            }
+        }
+        if leaf.len() > 0 {
+            nodes.push(Box::new(Node::Leaf(leaf)));
+        }
+        // build each layer of internal nodes from the bottom up
+        let mut next_level = Vec::with_capacity((nodes.len() / MAX) + 1);
+        while nodes.len() > 1 {
+            let len = nodes.len();
+            let parent_count = len / MAX;
+            let remainder = len % MAX;
+            let split_idx = if remainder != 0 && remainder != len && remainder < MIN {
+                // If that last node is too small then merge it with the
+                // previous one by splitting it early
+                len - MIN - 1
+            } else {
+                // index will never equal len
+                len
+            };
+            let mut int = Internal::default();
+            for (idx, node) in nodes.drain(..).enumerate() {
+                int.metrics.push(node.metrics());
+                int.children.push(node);
+                if int.len() == MAX || idx == split_idx {
+                    next_level.push(Box::new(Node::Internal(int)));
+                    int = Internal::default();
+                }
+            }
+            assert_eq!(next_level.len(), parent_count);
+            mem::swap(&mut nodes, &mut next_level);
+
+            if int.len() > 0 {
+                nodes.push(Box::new(Node::Internal(int)));
+            }
+        }
+        let root = *nodes.pop().unwrap_or_default();
+        Self { root }
+    }
+
+    pub(crate) fn insert(&mut self, pos: Metric, data: impl Iterator<Item = Metric>) {
+        let size = data.size_hint().0;
+        let len = self.root.metrics();
+        assert!(pos.bytes <= len.bytes);
+
+        if size == 0 {
+            return;
+        }
+        if len.bytes == 0 {
+            // empty tree
+            let _ = mem::replace(self, Self::build(data));
+            return;
+        }
+
+        if size < 6 {
+            let mut pos = pos;
+            for metric in data {
+                let offset = metric;
+                self.root.insert_at(pos, metric);
+                pos += offset;
+            }
+        } else {
+            // build a new tree and splice it in
+            let new = Self::build(data);
+            if len.bytes == pos.bytes {
+                // append
+                self.root.append(new.root);
+            } else {
+                let new_chars = new.root.metrics().chars;
+                let right = self.root.split(pos);
+                self.root.append(new.root);
+                self.root.append(right);
+                self.root.fix_seam(pos.chars);
+                self.root.fix_seam(pos.chars + new_chars);
+            }
+        }
+    }
+
+    pub(crate) fn delete(&mut self, start: Metric, end: Metric) {
+        assert!(start.bytes <= end.bytes);
+        assert!(start.chars <= end.chars);
+        let fix_seam = self.root.delete_impl(start, end);
+        if fix_seam {
+            self.root.fix_seam(start.chars);
+        }
+        while self.root.len() == 1 {
+            match &mut self.root {
+                Node::Internal(int) => {
+                    // collapse the root
+                    let child = int.children.pop().unwrap();
+                    let _ = mem::replace(&mut self.root, *child);
+                }
+                Node::Leaf(_) => break,
+            }
+        }
+    }
+}
+
+#[repr(u8)]
+enum SearchNeedle {
+    Char = 0,
+    Byte = 1,
+}
+
 #[derive(Debug)]
 enum Node {
     Leaf(Leaf),
@@ -292,7 +419,7 @@ enum Node {
 
 impl Node {
     fn new() -> Self {
-        Self::Leaf(Leaf::default())
+        Self::default()
     }
 
     fn metric_slice(&self) -> &[Metric] {
@@ -345,93 +472,7 @@ impl Node {
         (last, acc)
     }
 
-    fn build(each: impl Iterator<Item = Metric>) -> Self {
-        // build the base layer of leaf nodes
-        let cap = (each.size_hint().0 / MAX) + 1;
-        let mut nodes = Vec::with_capacity(cap);
-        let mut leaf = Leaf::default();
-        for metric in each {
-            leaf.push(metric);
-            if leaf.len() == MAX {
-                nodes.push(Box::new(Node::Leaf(leaf)));
-                leaf = Leaf::default();
-            }
-        }
-        if leaf.len() > 0 {
-            nodes.push(Box::new(Node::Leaf(leaf)));
-        }
-        // build each layer of internal nodes from the bottom up
-        let mut next_level = Vec::with_capacity((nodes.len() / MAX) + 1);
-        while nodes.len() > 1 {
-            let len = nodes.len();
-            let parent_count = len / MAX;
-            let remainder = len % MAX;
-            let split_idx = if remainder != 0 && remainder != len && remainder < MIN {
-                // If that last node is too small then merge it with the
-                // previous one by splitting it early
-                len - MIN - 1
-            } else {
-                // index will never equal len
-                len
-            };
-            let mut int = Internal::default();
-            for (idx, node) in nodes.drain(..).enumerate() {
-                int.metrics.push(node.metrics());
-                int.children.push(node);
-                if int.len() == MAX || idx == split_idx {
-                    next_level.push(Box::new(Node::Internal(int)));
-                    int = Internal::default();
-                }
-            }
-            assert_eq!(next_level.len(), parent_count);
-            mem::swap(&mut nodes, &mut next_level);
-
-            if int.len() > 0 {
-                nodes.push(Box::new(Node::Internal(int)));
-            }
-        }
-        *nodes.pop().unwrap_or(Box::new(Node::Leaf(Leaf::default())))
-    }
-
-    fn insert(&mut self, pos: Metric, data: impl Iterator<Item = Metric>) {
-        let size = data.size_hint().0;
-        let len = self.metrics();
-        assert!(pos.bytes <= len.bytes);
-
-        if size == 0 {
-            return;
-        }
-        if len.bytes == 0 {
-            // empty tree
-            let _ = mem::replace(self, Self::build(data));
-            return;
-        }
-
-        if size < 6 {
-            let mut pos = pos;
-            for metric in data {
-                let offset = metric;
-                self.insert_at(pos, metric);
-                pos += offset;
-            }
-        } else {
-            // build a new tree and splice it in
-            let new = Self::build(data);
-            if len.bytes == pos.bytes {
-                // append
-                self.append(new);
-            } else {
-                let new_chars = new.metrics().chars;
-                let right = self.split(pos);
-                self.append(new);
-                self.append(right);
-                self.fix_seam(pos.chars);
-                self.fix_seam(pos.chars + new_chars);
-            }
-        }
-    }
-
-    pub(crate) fn insert_at(&mut self, pos: Metric, data: Metric) {
+    fn insert_at(&mut self, pos: Metric, data: Metric) {
         let len = self.metrics();
         assert!(pos.bytes <= len.bytes);
         if self.len() == 0 {
@@ -463,25 +504,6 @@ impl Node {
                     None
                 }
             },
-        }
-    }
-
-    fn delete(&mut self, start: Metric, end: Metric) {
-        assert!(start.bytes <= end.bytes);
-        assert!(start.chars <= end.chars);
-        let fix_seam = self.delete_impl(start, end);
-        if fix_seam {
-            self.fix_seam(start.chars);
-        }
-        while self.len() == 1 {
-            match self {
-                Node::Internal(int) => {
-                    // collapse the root
-                    let child = int.children.pop().unwrap();
-                    let _ = mem::replace(self, *child);
-                }
-                Node::Leaf(_) => break,
-            }
         }
     }
 
@@ -806,17 +828,14 @@ impl Node {
     }
 
     pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
-        self.search_impl::<{ Self::BYTE }>(bytes)
+        self.search_impl(bytes, |x| x.bytes)
     }
 
     pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
-        self.search_impl::<{ Self::CHAR }>(chars)
+        self.search_impl(chars, |x| x.chars)
     }
 
-    const BYTE: u8 = 0;
-    const CHAR: u8 = 1;
-
-    fn search_impl<const TYPE: u8>(&self, needle: usize) -> (Metric, usize) {
+    fn search_impl(&self, needle: usize, getter: impl Fn(&Metric) -> usize) -> (Metric, usize) {
         self.assert_integrity();
         let mut needle = needle;
         let mut sum = Metric::default();
@@ -825,15 +844,11 @@ impl Node {
             if needle == 0 {
                 break;
             }
-            let pos = match TYPE {
-                Self::BYTE => metric.bytes,
-                Self::CHAR => metric.chars,
-                _ => unreachable!(),
-            };
+            let pos = getter(metric);
             if needle < pos {
                 let child_sum = match &self {
                     Node::Internal(int) => {
-                        let (metric, offset) = int.children[idx].search_impl::<TYPE>(needle);
+                        let (metric, offset) = int.children[idx].search_impl(needle, getter);
                         (sum + metric, offset)
                     }
                     Node::Leaf(_) => (sum, needle),
@@ -880,6 +895,12 @@ impl Node {
     }
 }
 
+impl Default for Node {
+    fn default() -> Self {
+        Self::Leaf(Leaf::default())
+    }
+}
+
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // print the children level by level by adding them to a pair of
@@ -919,7 +940,7 @@ impl fmt::Display for Node {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-struct Metric {
+pub(crate) struct Metric {
     bytes: usize,
     chars: usize,
 }
@@ -1027,23 +1048,23 @@ mod test {
     #[test]
     fn test_insert() {
         {
-            let mut root = Node::build(&mut TreeBuilderBasic { count: 1, step: 5 });
+            let mut buffer = BufferMetrics::build(&mut TreeBuilderBasic { count: 1, step: 5 });
             let builder = &mut TreeBuilderBasic { count: 4, step: 1 };
-            root.insert(metric(0), builder);
+            buffer.insert(metric(0), builder);
             for i in 0..10 {
                 println!("searching for {i}");
-                let cmp = mock_search_char(&root, i);
+                let cmp = mock_search_char(&buffer.root, i);
                 assert_eq!(cmp, metric(i));
             }
         }
-        let mut root = Node::new();
+        let mut buffer = BufferMetrics::default();
         let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
-        root.insert(metric(0), builder);
-        root.insert_at(metric(5), metric(5));
-        println!("{}", root);
+        buffer.insert(metric(0), builder);
+        buffer.root.insert_at(metric(5), metric(5));
+        println!("{}", buffer.root);
         for i in 0..15 {
             println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
+            let cmp = mock_search_char(&buffer.root, i);
             assert_eq!(cmp, metric(i));
         }
     }
@@ -1051,10 +1072,10 @@ mod test {
     #[test]
     fn test_search() {
         let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
-        let root = Node::build(builder);
+        let root = BufferMetrics::build(builder);
         for i in 0..20 {
             println!("searching for {i}");
-            let cmp = mock_search_byte(&root, i * 2);
+            let cmp = mock_search_byte(&root.root, i * 2);
             assert_eq!(cmp, metric(i));
         }
     }
@@ -1062,10 +1083,10 @@ mod test {
     #[test]
     fn test_search_chars() {
         let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
-        let root = Node::build(builder);
+        let root = BufferMetrics::build(builder);
         for i in 0..20 {
             println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
+            let cmp = mock_search_char(&root.root, i);
             assert_eq!(cmp, metric(i));
         }
     }
@@ -1074,52 +1095,52 @@ mod test {
     fn test_delete_range_leaf() {
         // shouldn't need more then a single leaf node
         let builder = &mut TreeBuilderBasic { count: 3, step: 4 };
-        let mut root = Node::build(builder);
-        assert_eq!(root.metrics(), metric(12));
-        println!("init: {root}");
-        root.delete(metric(1), metric(3));
-        assert_eq!(root.metrics(), metric(10));
-        println!("after: {root}");
-        root.delete(metric(2), metric(6));
-        assert_eq!(root.metrics(), metric(6));
-        println!("after: {root}");
-        root.delete(metric(1), metric(4));
-        assert_eq!(root.metrics(), metric(3));
-        println!("after: {root}");
-        root.delete(metric(0), metric(1));
-        assert_eq!(root.metrics(), metric(2));
-        println!("after: {root}");
+        let mut buffer = BufferMetrics::build(builder);
+        assert_eq!(buffer.root.metrics(), metric(12));
+        println!("init: {}", buffer.root);
+        buffer.delete(metric(1), metric(3));
+        assert_eq!(buffer.root.metrics(), metric(10));
+        println!("after: {}", buffer.root);
+        buffer.delete(metric(2), metric(6));
+        assert_eq!(buffer.root.metrics(), metric(6));
+        println!("after: {}", buffer.root);
+        buffer.delete(metric(1), metric(4));
+        assert_eq!(buffer.root.metrics(), metric(3));
+        println!("after: {}", buffer.root);
+        buffer.delete(metric(0), metric(1));
+        assert_eq!(buffer.root.metrics(), metric(2));
+        println!("after: {}", buffer.root);
     }
 
     #[test]
     fn test_delete_range_internal() {
         let builder = &mut TreeBuilderBasic { count: 6, step: 4 };
-        let mut root = Node::build(builder);
-        println!("init: {root}");
-        root.delete(metric(0), metric(12));
-        assert_eq!(root.metrics(), metric(12));
-        println!("after: {root}");
+        let mut buffer = BufferMetrics::build(builder);
+        println!("init: {}", buffer.root);
+        buffer.delete(metric(0), metric(12));
+        assert_eq!(buffer.root.metrics(), metric(12));
+        println!("after: {}", buffer.root);
 
         let builder = &mut TreeBuilderBasic { count: 6, step: 4 };
-        let mut root = Node::build(builder);
-        println!("init: {root}");
-        root.delete(metric(12), metric(24));
-        assert_eq!(root.metrics(), metric(12));
-        println!("after: {root}");
+        let mut buffer = BufferMetrics::build(builder);
+        println!("init: {}", buffer.root);
+        buffer.delete(metric(12), metric(24));
+        assert_eq!(buffer.root.metrics(), metric(12));
+        println!("after: {}", buffer.root);
     }
 
     #[test]
     fn test_split() {
         let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
-        let mut root = Node::build(builder);
-        println!("init: {root}");
-        let right = root.split(metric(10));
-        println!("left: {root}");
-        println!("right: {root}");
-        assert_eq!(root.metrics(), right.metrics());
+        let mut buffer = BufferMetrics::build(builder);
+        println!("init: {}", buffer.root);
+        let right = buffer.root.split(metric(10));
+        println!("left: {}", buffer.root);
+        println!("right: {}", buffer.root);
+        assert_eq!(buffer.root.metrics(), right.metrics());
         for i in 0..10 {
             println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
+            let cmp = mock_search_char(&buffer.root, i);
             assert_eq!(cmp, metric(i));
             let cmp = mock_search_char(&right, i);
             assert_eq!(cmp, metric(i));
@@ -1129,16 +1150,16 @@ mod test {
     #[test]
     fn test_append() {
         let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
-        let mut root = Node::build(builder);
-        println!("init: {root}");
+        let mut buffer = BufferMetrics::build(builder);
+        println!("init: {}", buffer.root);
         let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
-        let right = Node::build(builder);
-        println!("right: {right}");
-        root.append(right);
-        println!("after: {root}");
+        let right = BufferMetrics::build(builder);
+        println!("right: {}", right.root);
+        buffer.root.append(right.root);
+        println!("after: {}", buffer.root);
         for i in 0..20 {
             println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
+            let cmp = mock_search_char(&buffer.root, i);
             assert_eq!(cmp, metric(i));
         }
     }
@@ -1147,20 +1168,20 @@ mod test {
     fn test_build() {
         {
             let builder = &mut TreeBuilderBasic { count: 0, step: 0 };
-            let root = Node::build(builder);
-            assert_eq!(root.len(), 0);
+            let buffer = BufferMetrics::build(builder);
+            assert_eq!(buffer.root.len(), 0);
         }
         {
             let builder = &mut TreeBuilderBasic { count: 1, step: 1 };
-            let root = Node::build(builder);
-            assert_eq!(root.len(), 1);
+            let buffer = BufferMetrics::build(builder);
+            assert_eq!(buffer.root.len(), 1);
         }
         let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
-        let root = Node::build(builder);
-        println!("{}", root);
+        let buffer = BufferMetrics::build(builder);
+        println!("{}", buffer.root);
         for i in 0..20 {
             println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
+            let cmp = mock_search_char(&buffer.root, i);
             assert_eq!(cmp, metric(i));
         }
     }
