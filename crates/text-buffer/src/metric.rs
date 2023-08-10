@@ -345,23 +345,10 @@ impl Node {
         (last, acc)
     }
 
-    /// May return one past the end
-    fn search_char_pos_le(&self, char_pos: usize) -> (usize, Metric) {
-        let metrics = self.metric_slice();
-        let mut acc = Metric::default();
-        for (i, metric) in metrics.iter().enumerate() {
-            if char_pos < acc.chars + metric.chars {
-                return (i, acc);
-            } else {
-                acc += *metric;
-            }
-        }
-        (metrics.len(), acc)
-    }
-
     fn build(each: impl Iterator<Item = Metric>) -> Self {
         // build the base layer of leaf nodes
-        let mut nodes = Vec::new();
+        let cap = (each.size_hint().0 / MAX) + 1;
+        let mut nodes = Vec::with_capacity(cap);
         let mut leaf = Leaf::default();
         for metric in each {
             leaf.push(metric);
@@ -374,7 +361,7 @@ impl Node {
             nodes.push(Box::new(Node::Leaf(leaf)));
         }
         // build each layer of internal nodes from the bottom up
-        let mut next_level = Vec::new();
+        let mut next_level = Vec::with_capacity((nodes.len() / MAX) + 1);
         while nodes.len() > 1 {
             let len = nodes.len();
             let parent_count = len / MAX;
@@ -406,9 +393,47 @@ impl Node {
         *nodes.pop().unwrap_or(Box::new(Node::Leaf(Leaf::default())))
     }
 
-    pub(crate) fn insert(&mut self, pos: Metric, data: Metric) {
-        let size = self.metrics();
-        assert!(pos.bytes <= size.bytes);
+    fn insert(&mut self, pos: Metric, data: impl Iterator<Item = Metric>) {
+        let size = data.size_hint().0;
+        let len = self.metrics();
+        assert!(pos.bytes <= len.bytes);
+
+        if size == 0 {
+            return;
+        }
+        if len.bytes == 0 {
+            // empty tree
+            let _ = mem::replace(self, Self::build(data));
+            return;
+        }
+
+        if size < 6 {
+            let mut pos = pos;
+            for metric in data {
+                let offset = metric;
+                self.insert_at(pos, metric);
+                pos += offset;
+            }
+        } else {
+            // build a new tree and splice it in
+            let new = Self::build(data);
+            if len.bytes == pos.bytes {
+                // append
+                self.append(new);
+            } else {
+                let new_chars = new.metrics().chars;
+                let right = self.split(pos);
+                self.append(new);
+                self.append(right);
+                self.fix_seam(pos.chars);
+                self.fix_seam(pos.chars + new_chars);
+            }
+        }
+    }
+
+    pub(crate) fn insert_at(&mut self, pos: Metric, data: Metric) {
+        let len = self.metrics();
+        assert!(pos.bytes <= len.bytes);
         if self.len() == 0 {
             assert!(pos.bytes == 0);
             let Node::Leaf(leaf) = self else { unreachable!() };
@@ -661,7 +686,7 @@ impl Node {
     /// Note that the resulting trees may have underfull nodes and will need to
     /// be fixed later.
     fn split(&mut self, pos: Metric) -> Node {
-        let (idx, metric) = self.search_char_pos_le(pos.chars);
+        let (idx, metric) = self.search_char_pos(pos.chars);
         match self {
             Node::Leaf(leaf) => {
                 let offset = pos - metric;
@@ -820,20 +845,6 @@ impl Node {
         }
         // we are beyond total size of the tree
         (sum, needle)
-    }
-
-    // Go to a the correct node and then add the value of new to the metric there
-    fn add(&mut self, char_pos: usize, new: Metric) {
-        self.assert_integrity();
-        let (idx, metric) = self.search_char_pos(char_pos);
-
-        match self {
-            Node::Leaf(leaf) => leaf.metrics[idx] += new,
-            Node::Internal(int) => {
-                int.metrics[idx] += new;
-                int.children[idx].add(char_pos - metric.chars, new)
-            }
-        };
     }
 
     fn assert_integrity(&self) {
@@ -1007,13 +1018,28 @@ mod test {
                 Some(metric(self.step))
             }
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            (self.count, Some(self.count))
+        }
     }
 
     #[test]
     fn test_insert() {
+        {
+            let mut root = Node::build(&mut TreeBuilderBasic { count: 1, step: 5 });
+            let builder = &mut TreeBuilderBasic { count: 4, step: 1 };
+            root.insert(metric(0), builder);
+            for i in 0..10 {
+                println!("searching for {i}");
+                let cmp = mock_search_char(&root, i);
+                assert_eq!(cmp, metric(i));
+            }
+        }
+        let mut root = Node::new();
         let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
-        let mut root = Node::build(builder);
-        root.insert(metric(5), metric(5));
+        root.insert(metric(0), builder);
+        root.insert_at(metric(5), metric(5));
         println!("{}", root);
         for i in 0..15 {
             println!("searching for {i}");
@@ -1038,27 +1064,6 @@ mod test {
         let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
         let root = Node::build(builder);
         for i in 0..20 {
-            println!("searching for {i}");
-            let cmp = mock_search_char(&root, i);
-            assert_eq!(cmp, metric(i));
-        }
-    }
-
-    #[test]
-    fn test_add() {
-        let builder = &mut TreeBuilderBasic { count: 20, step: 1 };
-        let mut root = Node::build(builder);
-        for i in 0..20 {
-            let cmp = mock_search_char(&root, i);
-            assert_eq!(cmp, metric(i));
-        }
-        println!("init {root}");
-        for i in (1..20).rev() {
-            println!("adding {i}");
-            root.add(i, metric(1));
-            println!("{}", root);
-        }
-        for i in (0..20).step_by(2) {
             println!("searching for {i}");
             let cmp = mock_search_char(&root, i);
             assert_eq!(cmp, metric(i));
