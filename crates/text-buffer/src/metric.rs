@@ -985,8 +985,8 @@ impl fmt::Display for Node {
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct Metric {
-    bytes: usize,
-    chars: usize,
+    pub(crate) bytes: usize,
+    pub(crate) chars: usize,
 }
 
 impl fmt::Display for Metric {

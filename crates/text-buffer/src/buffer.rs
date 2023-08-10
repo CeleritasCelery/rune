@@ -1,12 +1,12 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::must_use_candidate)]
+use crate::metric::{BufferMetrics, Metric};
+use bytecount::num_chars;
 use std::{
     borrow::Cow,
     fmt::Debug,
     ops::{Bound, Range, RangeBounds},
 };
-
-use bytecount::num_chars;
 use str_indices::chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
@@ -26,6 +26,7 @@ pub struct Buffer {
     /// The current cursor.
     cursor: Point,
     total_chars: usize,
+    metrics: BufferMetrics,
 }
 
 impl Debug for Buffer {
@@ -51,6 +52,46 @@ struct Point {
     chars: usize,
 }
 
+const METRIC_SIZE: usize = 100;
+struct MetricBuilder<'a> {
+    slice: &'a str,
+    pos: usize,
+}
+
+impl<'a> MetricBuilder<'a> {
+    fn new(slice: &'a str) -> Self {
+        Self { slice, pos: 0 }
+    }
+}
+
+impl<'a> Iterator for MetricBuilder<'a> {
+    type Item = Metric;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos == self.slice.len() {
+            return None;
+        }
+        let mut end = self.slice.len().min(self.pos + METRIC_SIZE);
+        if end != self.slice.len() {
+            while !self.slice.is_char_boundary(end) {
+                end -= 1;
+            }
+        }
+        let slice = &self.slice[self.pos..end];
+        let bytes = slice.len();
+        let chars = chars::count(slice);
+        self.pos = end;
+        Some(Metric { chars, bytes })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.slice.len() - self.pos;
+        let extra = if len % METRIC_SIZE == 0 { 0 } else { 1 };
+        let size = len / METRIC_SIZE;
+        (size + extra, None)
+    }
+}
+
 impl From<&str> for Buffer {
     fn from(data: &str) -> Self {
         let storage = {
@@ -61,6 +102,8 @@ impl From<&str> for Buffer {
             debug_assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
         };
+        let builder = MetricBuilder::new(data);
+        let metrics = BufferMetrics::build(builder);
         Self {
             data: storage,
             gap_start: 0,
@@ -71,6 +114,7 @@ impl From<&str> for Buffer {
                 chars: 0,
             },
             total_chars: chars::count(data),
+            metrics,
         }
     }
 }
@@ -85,6 +129,8 @@ impl From<String> for Buffer {
             debug_assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
         };
+        let builder = MetricBuilder::new(&data);
+        let metrics = BufferMetrics::build(builder);
         Self {
             data: storage,
             gap_start: 0,
@@ -95,6 +141,7 @@ impl From<String> for Buffer {
                 chars: 0,
             },
             total_chars: chars::count(&data),
+            metrics,
         }
     }
 }
@@ -155,6 +202,7 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, slice: &str) {
+        self.metrics.insert(self.to_abs_pos(self.cursor), MetricBuilder::new(slice));
         // if gap is not at cursor, move it there
         if self.gap_chars != self.cursor.chars {
             // TODO: we don't need to recalculate the position
@@ -184,14 +232,26 @@ impl Buffer {
     }
 
     pub fn delete_range(&mut self, beg: usize, end: usize) {
-        let (mut beg, mut end) = (beg, end);
-        if beg > end {
-            (beg, end) = (end, beg);
+        let (mut beg_chars, mut end_chars) = (beg, end);
+        if beg_chars > end_chars {
+            (beg_chars, end_chars) = (end_chars, beg_chars);
         }
-        let end = self.char_to_byte(end.min(self.total_chars));
-        let beg = self.char_to_byte(beg.min(self.total_chars));
-        if end != beg {
-            self.delete_byte_range(beg, end);
+        end_chars = end_chars.min(self.total_chars);
+        beg_chars = beg_chars.min(self.total_chars);
+        let end_bytes = self.char_to_byte(end_chars);
+        let beg_bytes = self.char_to_byte(beg_chars);
+        if end_bytes != beg_bytes {
+            self.metrics.delete(
+                self.to_abs_pos(Point {
+                    bytes: beg_bytes,
+                    chars: beg_chars,
+                }),
+                self.to_abs_pos(Point {
+                    bytes: end_bytes,
+                    chars: end_chars,
+                }),
+            );
+            self.delete_byte_range(beg_bytes, end_bytes);
         }
     }
 
@@ -378,6 +438,18 @@ impl Buffer {
             bytes: byte_pos,
             chars: pos,
         };
+    }
+
+    fn to_abs_pos(&self, pos: Point) -> Metric {
+        let chars = pos.chars;
+        let bytes = if pos.bytes < self.gap_start {
+            pos.bytes
+        } else if pos.bytes >= self.gap_end {
+            pos.bytes - self.gap_len()
+        } else {
+            unreachable!()
+        };
+        Metric { chars, bytes }
     }
 
     pub const fn len(&self) -> usize {
