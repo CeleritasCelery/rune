@@ -344,7 +344,9 @@ impl BufferMetrics {
             }
         }
         let root = *nodes.pop().unwrap_or_default();
-        Self { root }
+        let built = Self { root };
+        built.assert_invariants();
+        built
     }
 
     pub(crate) fn insert(&mut self, pos: Metric, data: impl Iterator<Item = Metric>) {
@@ -383,6 +385,7 @@ impl BufferMetrics {
                 self.root.fix_seam(pos.chars + new_chars);
             }
         }
+        self.assert_invariants();
     }
 
     pub(crate) fn delete(&mut self, start: Metric, end: Metric) {
@@ -402,6 +405,13 @@ impl BufferMetrics {
                 Node::Leaf(_) => break,
             }
         }
+        self.assert_invariants();
+    }
+
+    fn assert_invariants(&self) {
+        self.root.assert_integrity();
+        self.root.assert_balance();
+        self.root.assert_node_size(true);
     }
 }
 
@@ -492,7 +502,7 @@ impl Node {
     }
 
     fn insert_impl(&mut self, pos: Metric, data: Metric) -> Option<Box<Node>> {
-        self.assert_integrity();
+        self.assert_node_integrity();
         let (idx, metric) = self.search_char_pos(pos.chars);
         let offset = pos - metric;
         match self {
@@ -508,7 +518,7 @@ impl Node {
     }
 
     fn delete_impl(&mut self, mut start: Metric, mut end: Metric) -> bool {
-        self.assert_integrity();
+        self.assert_node_integrity();
         assert!(start.chars <= end.chars);
         let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
 
@@ -836,7 +846,7 @@ impl Node {
     }
 
     fn search_impl(&self, needle: usize, getter: impl Fn(&Metric) -> usize) -> (Metric, usize) {
-        self.assert_integrity();
+        self.assert_node_integrity();
         let mut needle = needle;
         let mut sum = Metric::default();
         for (idx, metric) in self.metric_slice().iter().enumerate() {
@@ -862,9 +872,10 @@ impl Node {
         (sum, needle)
     }
 
-    fn assert_integrity(&self) {
+    fn assert_node_integrity(&self) {
         match self {
             Node::Internal(int) => {
+                assert!(int.metrics.len() > 0);
                 assert!(int.metrics.len() <= MAX);
                 assert_eq!(int.metrics.len(), int.children.len());
                 for i in 0..int.children.len() {
@@ -872,26 +883,59 @@ impl Node {
                 }
             }
             Node::Leaf(leaf) => {
+                assert!(leaf.metrics.len() > 0);
                 assert!(leaf.metrics.len() <= MAX);
             }
         };
     }
 
-    fn assert_invariants(&self) {
+    fn assert_integrity(&self) {
         match self {
+            Node::Leaf(_) => {}
             Node::Internal(int) => {
-                assert!(int.metrics.len() <= MAX);
                 assert_eq!(int.metrics.len(), int.children.len());
-                assert!(int.metrics.len() >= MIN);
                 for i in 0..int.children.len() {
                     assert_eq!(int.children[i].metrics(), int.metrics[i]);
+                    int.children[i].assert_integrity();
                 }
             }
-            Node::Leaf(leaf) => {
-                assert!(leaf.metrics.len() <= MAX);
-                assert!(!leaf.metrics.is_empty());
+        }
+    }
+
+    fn assert_balance(&self) -> usize {
+        match self {
+            Node::Leaf(_) => 1,
+            Node::Internal(int) => {
+                let first_depth = int.children[0].assert_balance();
+                for node in &int.children[1..] {
+                    assert_eq!(node.assert_balance(), first_depth);
+                }
+                first_depth + 1
             }
-        };
+        }
+    }
+
+    fn assert_node_size(&self, is_root: bool) {
+        match self {
+            Node::Leaf(leaf) => {
+                assert!(leaf.len() <= MAX);
+                if !is_root {
+                    assert!(leaf.len() > 0);
+                }
+            }
+            Node::Internal(int) => {
+                assert!(int.len() <= MAX);
+                if is_root {
+                    assert!(int.len() > 1);
+                } else {
+                    assert!(int.len() >= MIN);
+                }
+
+                for node in &int.children {
+                    node.assert_node_size(false);
+                }
+            }
+        }
     }
 }
 
@@ -1046,17 +1090,19 @@ mod test {
     }
 
     #[test]
-    fn test_insert() {
-        {
-            let mut buffer = BufferMetrics::build(&mut TreeBuilderBasic { count: 1, step: 5 });
-            let builder = &mut TreeBuilderBasic { count: 4, step: 1 };
-            buffer.insert(metric(0), builder);
-            for i in 0..10 {
-                println!("searching for {i}");
-                let cmp = mock_search_char(&buffer.root, i);
-                assert_eq!(cmp, metric(i));
-            }
+    fn test_insert_empty() {
+        let mut buffer = BufferMetrics::build(&mut TreeBuilderBasic { count: 1, step: 5 });
+        let builder = &mut TreeBuilderBasic { count: 4, step: 1 };
+        buffer.insert(metric(0), builder);
+        for i in 0..10 {
+            println!("searching for {i}");
+            let cmp = mock_search_char(&buffer.root, i);
+            assert_eq!(cmp, metric(i));
         }
+    }
+
+    #[test]
+    fn test_insert() {
         let mut buffer = BufferMetrics::default();
         let builder = &mut TreeBuilderBasic { count: 10, step: 1 };
         buffer.insert(metric(0), builder);
