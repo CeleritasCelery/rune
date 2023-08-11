@@ -51,14 +51,15 @@ impl Internal {
 
     fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
         let mut acc = Metric::default();
-        for (i, metric) in self.metrics.iter().enumerate() {
-            if char_pos <= acc.chars + metric.chars {
+        let last = self.metrics.len() - 1;
+        for (i, metric) in self.metrics[..last].iter().enumerate() {
+            if char_pos < acc.chars + metric.chars {
                 return (i, acc);
             } else {
                 acc += *metric;
             }
         }
-        unreachable!("char index {} out of bounds", char_pos);
+        (last, acc)
     }
 
     fn insert_node(&mut self, idx: usize, new_child: Box<Node>) -> Option<Box<Node>> {
@@ -183,19 +184,6 @@ impl Leaf {
 
     fn pop(&mut self) -> Option<Metric> {
         self.metrics.pop()
-    }
-
-    fn search_char_pos(&self, char_pos: usize) -> (usize, Metric) {
-        let mut acc = Metric::default();
-        let last = self.len() - 1;
-        for (i, metric) in self.metrics[..last].iter().enumerate() {
-            if char_pos < acc.chars + metric.chars {
-                return (i, acc);
-            } else {
-                acc += *metric;
-            }
-        }
-        (last, acc)
     }
 
     fn insert_at(&mut self, idx: usize, pos: Metric, data: Metric) -> Option<Box<Node>> {
@@ -548,10 +536,8 @@ impl Node {
                     }
                     // since we might have deleted nodes in the middle, the
                     // index is now 1 more then start.
-                    let end_idx = start_idx + 1;
                     let mut fix_seam = false;
                     let mut merge_left = false;
-                    let mut merge_right = false;
                     // has a left child
                     if start_delete > start_idx {
                         fix_seam |=
@@ -563,19 +549,21 @@ impl Node {
                     }
                     // has a right child
                     if end_delete <= end_idx {
-                        assert_eq!(
-                            end_idx,
-                            start_idx + 1 + end_delete.saturating_sub(start_delete)
-                        );
+                        let end_idx = if start_idx != start_delete {
+                            assert_eq!(
+                                end_idx,
+                                start_idx + 1 + end_delete.saturating_sub(start_delete)
+                            );
+                            start_idx + 1
+                        } else {
+                            start_idx
+                        };
                         fix_seam |= int.children[end_idx].delete_impl(Metric::default(), end);
                         int.metrics[end_idx] -= end;
+                        // merge right child first so that the index of left is not changed
                         if int.children[end_idx].is_underfull() {
-                            merge_right = true;
+                            fix_seam |= int.balance_node(end_idx);
                         }
-                    }
-                    // merge right child first so that the index of left is not changed
-                    if merge_right {
-                        fix_seam |= int.balance_node(end_idx);
                     }
                     if merge_left {
                         fix_seam |= int.balance_node(start_idx);
@@ -633,18 +621,16 @@ impl Node {
     }
 
     fn merge_sibling(&mut self, right: &mut Self) -> bool {
+        assert!(self.len() + right.len() <= MAX);
         match (self, right) {
             (Node::Internal(left), Node::Internal(right)) => {
                 left.metrics.append(&mut right.metrics);
                 left.children.append(&mut right.children);
-                left.children.len() < MIN
+                left.len() < MIN
             }
             (Node::Leaf(left), Node::Leaf(right)) => {
-                assert_eq!(left.len(), 1);
-                assert_eq!(right.len(), 1);
-                left.metrics[0] += right.metrics[0];
-                // TODO: fix this when we add a min size to the leaf node
-                false
+                left.metrics.append(&mut right.metrics);
+                left.len() < MIN
             }
             _ => unreachable!("cannot merge internal and leaf nodes"),
         }
@@ -771,7 +757,14 @@ impl Node {
     fn append_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
         if depth == 0 {
             match (self, other) {
-                (Node::Leaf(_), Node::Leaf(right)) => Some(Box::new(Node::Leaf(right))),
+                (Node::Leaf(left), Node::Leaf(mut right)) => {
+                    if left.len() + right.len() <= MAX {
+                        left.metrics.extend(right.metrics.drain(..));
+                        None
+                    } else {
+                        Some(Box::new(Node::Leaf(right)))
+                    }
+                }
                 (Node::Internal(left), Node::Internal(mut right)) => {
                     if left.len() + right.len() <= MAX {
                         left.take(&mut right, ..);
@@ -792,7 +785,11 @@ impl Node {
                     metrics: smallvec![new.metrics()],
                     children: smallvec![new],
                 }))),
-                None => None,
+                None => {
+                    let update = int.children.last().unwrap().metrics();
+                    *int.metrics.last_mut().unwrap() = update;
+                    None
+                }
             }
         } else {
             unreachable!("reached leaf node while depth was non-zero");
@@ -802,7 +799,15 @@ impl Node {
     fn prepend_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
         if depth == 0 {
             match (other, self) {
-                (Node::Leaf(left), Node::Leaf(_)) => Some(Box::new(Node::Leaf(left))),
+                (Node::Leaf(mut left), Node::Leaf(right)) => {
+                    if left.len() + right.len() <= MAX {
+                        left.metrics.extend(right.metrics.drain(..));
+                        *right = left;
+                        None
+                    } else {
+                        Some(Box::new(Node::Leaf(left)))
+                    }
+                }
                 (Node::Internal(mut left), Node::Internal(right)) => {
                     if left.len() + right.len() <= MAX {
                         left.take(right, ..);
@@ -824,7 +829,11 @@ impl Node {
                     metrics: smallvec![new.metrics()],
                     children: smallvec![new],
                 }))),
-                None => None,
+                None => {
+                    let update = int.children.last().unwrap().metrics();
+                    *int.metrics.last_mut().unwrap() = update;
+                    None
+                }
             }
         } else {
             unreachable!("reached leaf node while depth was non-zero");
