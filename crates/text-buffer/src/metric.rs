@@ -625,15 +625,9 @@ impl Node {
 
     fn merge_node(&mut self, node: Option<Box<Node>>, metric: Metric, idx: usize) {
         match (self, node) {
+            // TODO don't recalculate the metric
             (Node::Internal(int), Some(node)) => int.insert(idx, node),
-            (Node::Leaf(leaf), None) => {
-                // TODO remove this once the other delete is gone
-                match leaf.len() {
-                    0 => leaf.metrics.push(metric),
-                    1 => leaf.metrics[0] += metric,
-                    _ => unreachable!(),
-                }
-            }
+            (Node::Leaf(leaf), None) => leaf.metrics.insert(idx, metric),
             _ => unreachable!("cannot merge internal and leaf nodes"),
         }
     }

@@ -52,7 +52,7 @@ struct Point {
     chars: usize,
 }
 
-const METRIC_SIZE: usize = 100;
+const METRIC_SIZE: usize = 5;
 struct MetricBuilder<'a> {
     slice: &'a str,
     pos: usize,
@@ -220,6 +220,7 @@ impl Buffer {
             self.cursor.chars += num_chars;
             self.total_chars += num_chars;
         }
+        self.assert_integrity();
     }
 
     pub fn delete_backwards(&mut self, size: usize) {
@@ -253,6 +254,7 @@ impl Buffer {
             );
             self.delete_byte_range(beg_bytes, end_bytes);
         }
+        self.assert_integrity();
     }
 
     fn delete_byte_range(&mut self, beg: usize, end: usize) {
@@ -514,9 +516,22 @@ impl Buffer {
         std::str::from_utf8(&self.data[range]).unwrap()
     }
 
-    pub fn read(&self, range: Range<usize>) -> Cow<'_, str> {
+    fn assert_integrity(&self) {
+        let data = self.read(0..self.len()).to_owned();
+        for (char_idx, (byte_idx, _)) in data.char_indices().enumerate() {
+            let (byte_metric, byte_offset) = self.metrics.search_byte(byte_idx);
+            let (char_metric, char_offset) = self.metrics.search_char(char_idx);
+            assert_eq!(byte_metric, char_metric);
+            let real_chars = chars::count(&data[0..byte_metric.bytes]);
+            assert_eq!(char_metric.chars, real_chars);
+            assert_eq!(byte_metric.bytes + byte_offset, byte_idx);
+            assert_eq!(char_metric.chars + char_offset, char_idx);
+        }
+    }
+
+    pub fn read(&self, byte_range: Range<usize>) -> Cow<'_, str> {
         // if past gap_start, add gap_len to range
-        let mut range = range;
+        let mut range = byte_range.clone();
         if range.start >= self.gap_start {
             range.start += self.gap_len();
         }
@@ -538,14 +553,15 @@ impl Buffer {
             }
         }
         // assert the range does not overlap with the gap
-        assert!(range.start >= self.gap_end || range.end < self.gap_start);
+        assert!(range.start >= self.gap_end || range.start < self.gap_start);
+        assert!(range.end >= self.gap_end || range.end < self.gap_start);
 
         // the range straddles the gap, so we need to copy the two halves
         if range.start < self.gap_start && self.gap_start < range.end {
             let mut string = String::with_capacity(range.len());
             string.push_str(self.to_str(range.start..self.gap_start));
             string.push_str(self.to_str(self.gap_end..range.end));
-            assert_eq!(string.len(), range.len());
+            assert_eq!(string.len(), byte_range.len());
             Cow::Owned(string)
         } else {
             Cow::Borrowed(self.to_str(range))
