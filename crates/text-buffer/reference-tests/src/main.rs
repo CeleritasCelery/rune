@@ -37,13 +37,13 @@ fn main() -> Result<(), usize> {
                 return Ok(());
             } else if i == step - 1 {
                 debug_txn = format!("{txn:?}");
-                debug_buffer = format!("{buffer}");
+                debug_buffer = format!("{}", buffer.to_string());
                 debug_internals = format!("{buffer:?}");
             }
         }
         for TestPatch(pos, del, ins) in &txn.patches {
             buffer.set_cursor(*pos);
-            buffer.delete_char(*del);
+            buffer.delete_forwards(*del);
             buffer.insert(ins);
         }
     }
@@ -67,7 +67,7 @@ mod test {
         for txn in test_data.txns.iter() {
             for TestPatch(pos, del, ins) in &txn.patches {
                 buffer.set_cursor(*pos);
-                buffer.delete_char(*del);
+                buffer.delete_forwards(*del);
                 buffer.insert(ins);
             }
         }

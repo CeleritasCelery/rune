@@ -516,17 +516,8 @@ impl Buffer {
         std::str::from_utf8(&self.data[range]).unwrap()
     }
 
-    fn assert_integrity(&self) {
-        let data = self.read(0..self.len()).to_owned();
-        for (char_idx, (byte_idx, _)) in data.char_indices().enumerate() {
-            let (byte_metric, byte_offset) = self.metrics.search_byte(byte_idx);
-            let (char_metric, char_offset) = self.metrics.search_char(char_idx);
-            assert_eq!(byte_metric, char_metric);
-            let real_chars = chars::count(&data[0..byte_metric.bytes]);
-            assert_eq!(char_metric.chars, real_chars);
-            assert_eq!(byte_metric.bytes + byte_offset, byte_idx);
-            assert_eq!(char_metric.chars + char_offset, char_idx);
-        }
+    pub fn to_string(&self) -> String {
+        self.read(0..self.len()).to_string()
     }
 
     pub fn read(&self, byte_range: Range<usize>) -> Cow<'_, str> {
