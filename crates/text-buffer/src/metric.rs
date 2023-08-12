@@ -286,14 +286,24 @@ impl BufferMetrics {
         self.root.search_impl(chars, |x| x.chars)
     }
 
-    pub(crate) fn build(each: impl Iterator<Item = Metric>) -> Self {
+    pub(crate) fn build(metrics: impl Iterator<Item = Metric>) -> Self {
         // build the base layer of leaf nodes
-        let cap = (each.size_hint().0 / MAX) + 1;
-        let mut nodes = Vec::with_capacity(cap);
+        let len = metrics.size_hint().0;
+        let remainder = len % MAX;
+        let split_idx = if remainder != 0 && remainder != len && remainder < MIN {
+            // If that last node is too small then merge it with the
+            // previous one by splitting it early
+            len - MIN - 1
+        } else {
+            // index will never equal len
+            len
+        };
         let mut leaf = Leaf::default();
-        for metric in each {
+        let cap = (len / MAX) + 1;
+        let mut nodes = Vec::with_capacity(cap);
+        for (idx, metric) in metrics.enumerate() {
             leaf.push(metric);
-            if leaf.len() == MAX {
+            if leaf.len() == MAX || idx == split_idx {
                 nodes.push(Box::new(Node::Leaf(leaf)));
                 leaf = Leaf::default();
             }
@@ -433,7 +443,7 @@ impl Node {
 
     fn is_underfull(&self) -> bool {
         match self {
-            Node::Leaf(leaf) => leaf.len() < 1,
+            Node::Leaf(leaf) => leaf.len() < MIN,
             Node::Internal(int) => int.len() < MIN,
         }
     }
