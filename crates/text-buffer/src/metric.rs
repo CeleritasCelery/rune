@@ -365,12 +365,16 @@ impl BufferMetrics {
                 // append
                 self.root.append(new.root);
             } else {
-                let new_chars = new.root.metrics().chars;
+                let right_metric = self.root.metrics() - pos;
+                let new_metric = new.root.metrics();
                 let right = self.root.split(pos);
+                assert_eq!(self.root.metrics(), pos);
+                assert_eq!(right.metrics(), right_metric);
                 self.root.append(new.root);
                 self.root.append(right);
+                assert_eq!(self.root.metrics(), pos + right_metric + new_metric);
                 self.root.fix_seam(pos.chars);
-                self.root.fix_seam(pos.chars + new_chars);
+                self.root.fix_seam(pos.chars + new_metric.chars);
             }
         }
         self.assert_invariants();
@@ -657,26 +661,25 @@ impl Node {
             let prev_len = int.len();
             loop {
                 let (idx, metric) = int.search_char_pos(char_pos);
-                let on_seam = metric.chars == char_pos;
-                if on_seam && int.children.get(idx + 1).is_some_and(|x| x.is_underfull()) {
-                    // we are on a seam and there is a right sibling
-                    int.balance_node(idx + 1);
-                }
 
                 if int.children[idx].is_underfull() {
                     int.balance_node(idx);
                 }
+                let on_seam = metric.chars == char_pos && idx > 0;
+                if on_seam && int.children[idx - 1].is_underfull() {
+                    // we are on a seam and there is a left sibling
+                    int.balance_node(idx - 1);
+                }
 
                 // recalculate because position might have changed
                 let (idx, metric) = int.search_char_pos(char_pos);
-                let mut retry = false;
 
+                let mut retry = false;
                 // recurse into children
-                if let Some(child) = int.children.get_mut(idx + 1) {
-                    let on_seam = metric.chars == char_pos;
-                    if on_seam {
-                        retry |= child.fix_seam(0);
-                    }
+                let on_seam = metric.chars == char_pos && idx > 0;
+                if on_seam {
+                    let new_pos = int.metrics[idx - 1].chars;
+                    retry |= int.children[idx - 1].fix_seam(new_pos);
                 }
 
                 let new_pos = char_pos - metric.chars;
@@ -886,7 +889,6 @@ impl Node {
                 }
             }
             Node::Leaf(leaf) => {
-                assert!(leaf.metrics.len() > 0);
                 assert!(leaf.metrics.len() <= MAX);
             }
         };
@@ -923,17 +925,14 @@ impl Node {
             Node::Leaf(leaf) => {
                 assert!(leaf.len() <= MAX);
                 if !is_root {
-                    assert!(leaf.len() > 0);
+                    assert!(leaf.len() >= MIN);
                 }
             }
             Node::Internal(int) => {
                 assert!(int.len() <= MAX);
-                if is_root {
-                    assert!(int.len() > 1);
-                } else {
+                if !is_root {
                     assert!(int.len() >= MIN);
                 }
-
                 for node in &int.children {
                     node.assert_node_size(false);
                 }
