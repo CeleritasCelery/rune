@@ -393,6 +393,9 @@ impl BufferMetrics {
     pub(crate) fn delete(&mut self, start: Metric, end: Metric) {
         assert!(start.bytes <= end.bytes);
         assert!(start.chars <= end.chars);
+        if start.bytes == end.bytes {
+            return;
+        }
         let fix_seam = self.root.delete_impl(start, end);
         if fix_seam {
             self.root.fix_seam(start.chars);
@@ -519,7 +522,9 @@ impl Node {
         }
     }
 
-    fn delete_impl(&mut self, mut start: Metric, mut end: Metric) -> bool {
+    fn delete_impl(&mut self, start: Metric, end: Metric) -> bool {
+        let (mut start, mut end) = (start, end);
+
         self.assert_node_integrity();
         assert!(start.chars <= end.chars);
         let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
@@ -658,7 +663,7 @@ impl Node {
                 let child = int.children.remove(idx);
                 Some((Some(child), metric))
             }
-            Node::Leaf(leaf) if leaf.len() > 1 => {
+            Node::Leaf(leaf) if leaf.len() > MIN => {
                 let metric = leaf.metrics.remove(idx);
                 Some((None, metric))
             }
