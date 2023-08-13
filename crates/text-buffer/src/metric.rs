@@ -371,10 +371,18 @@ impl BufferMetrics {
         } else {
             // build a new tree and splice it in
             let new = Self::build(data);
-            if len.bytes == pos.bytes {
+            if pos.bytes == 0 {
+                // append at the start by swapping self and new
+                let new_pos = new.root.metrics().chars;
+                let right = mem::replace(self, new);
+                self.root.append(right.root);
+                self.root.fix_seam(new_pos);
+            } else if len.bytes == pos.bytes {
+                // append at the end
                 self.root.append(new.root);
                 self.root.fix_seam(pos.chars);
             } else {
+                // splice in the middle
                 let right_metric = self.root.metrics() - pos;
                 let new_metric = new.root.metrics();
                 let right = self.root.split(pos);
