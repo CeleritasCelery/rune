@@ -396,6 +396,12 @@ impl BufferMetrics {
         if start.bytes == end.bytes {
             return;
         }
+        if start.bytes == 0 && end.bytes == self.root.metrics().bytes {
+            // delete the whole tree
+            self.root = Node::default();
+            return;
+        }
+
         let fix_seam = self.root.delete_impl(start, end);
         if fix_seam {
             self.root.fix_seam(start.chars);
@@ -415,8 +421,8 @@ impl BufferMetrics {
 
     fn assert_invariants(&self) {
         self.root.assert_integrity();
-        self.root.assert_balance();
         self.root.assert_node_size(true);
+        self.root.assert_balance();
     }
 }
 
