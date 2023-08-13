@@ -372,8 +372,8 @@ impl BufferMetrics {
             // build a new tree and splice it in
             let new = Self::build(data);
             if len.bytes == pos.bytes {
-                // append
                 self.root.append(new.root);
+                self.root.fix_seam(pos.chars);
             } else {
                 let right_metric = self.root.metrics() - pos;
                 let new_metric = new.root.metrics();
@@ -945,6 +945,7 @@ impl Node {
             }
             Node::Internal(int) => {
                 assert!(int.len() <= MAX);
+                assert!(int.len() >= 1);
                 if !is_root {
                     assert!(int.len() >= MIN);
                 }
