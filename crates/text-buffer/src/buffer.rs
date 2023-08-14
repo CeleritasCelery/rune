@@ -220,7 +220,6 @@ impl Buffer {
             self.cursor.chars += num_chars;
             self.total_chars += num_chars;
         }
-        self.assert_integrity();
     }
 
     pub fn delete_backwards(&mut self, size: usize) {
@@ -254,7 +253,6 @@ impl Buffer {
             );
             self.delete_byte_range(beg_bytes, end_bytes);
         }
-        self.assert_integrity();
     }
 
     fn delete_byte_range(&mut self, beg: usize, end: usize) {

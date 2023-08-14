@@ -17,7 +17,7 @@ fuzz_target!(|transactions: Vec<Result<(usize, &str), (usize, usize)>>| {
             Err((start, end)) => {
                 let start = start % (buffer.len() + 2);
                 let end = end % (buffer.len() + 2);
-                buffer.delete_region(start, end)
+                buffer.delete_range(start, end)
             }
         }
     }
