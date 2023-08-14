@@ -606,8 +606,12 @@ impl Node {
             }
             Node::Leaf(leaf) => {
                 if start_idx == end_idx {
-                    // TODO: handle below min bytes
-                    leaf.metrics[start_idx] -= end - start;
+                    let chunk = end - start;
+                    if chunk == leaf.metrics[start_idx] {
+                        leaf.metrics.remove(start_idx);
+                    } else {
+                        leaf.metrics[start_idx] -= chunk;
+                    }
                 } else {
                     let start_delete = if start.bytes == 0 { start_idx } else { start_idx + 1 };
                     let end_size = leaf.metrics[end_idx].bytes;
