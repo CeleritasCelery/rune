@@ -55,12 +55,17 @@ struct Point {
 const METRIC_SIZE: usize = 5;
 struct MetricBuilder<'a> {
     slice: &'a str,
-    pos: usize,
+    start: usize,
+    end: usize,
 }
 
 impl<'a> MetricBuilder<'a> {
     fn new(slice: &'a str) -> Self {
-        Self { slice, pos: 0 }
+        Self {
+            slice,
+            start: 0,
+            end: slice.len().min(METRIC_SIZE),
+        }
     }
 }
 
@@ -68,24 +73,25 @@ impl<'a> Iterator for MetricBuilder<'a> {
     type Item = Metric;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pos == self.slice.len() {
+        if self.start == self.slice.len() {
             return None;
         }
-        let mut end = self.slice.len().min(self.pos + METRIC_SIZE);
+        let mut end = self.end;
         if end != self.slice.len() {
             while !self.slice.is_char_boundary(end) {
                 end -= 1;
             }
         }
-        let slice = &self.slice[self.pos..end];
+        let slice = &self.slice[self.start..end];
         let bytes = slice.len();
         let chars = chars::count(slice);
-        self.pos = end;
+        self.start = end;
+        self.end += METRIC_SIZE;
         Some(Metric { chars, bytes })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.slice.len() - self.pos;
+        let len = self.slice.len() - self.start;
         let extra = if len % METRIC_SIZE == 0 { 0 } else { 1 };
         let size = len / METRIC_SIZE;
         (size + extra, None)
@@ -782,5 +788,11 @@ mod test {
         assert_eq!(buffer.read(0..5), Cow::Borrowed("hello"));
         assert_eq!(buffer.read(5..11), Cow::Borrowed(" world"));
         assert_eq!(buffer.read(4..6), Cow::<str>::Owned(String::from("o ")));
+    }
+
+    #[test]
+    fn test_build_unicode() {
+        let string = "aaaaaaaaaՂaaaaaaaaa";
+        let _ = Buffer::from(string);
     }
 }

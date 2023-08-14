@@ -74,6 +74,8 @@ mod test {
         assert_eq!(buffer.to_string(), test_data.end_content);
     }
 
+    // NOTE: Run these tests in release mode, or it will take forever.
+
     #[test]
     fn test_seph() {
         apply_tokens("seph-blog1");
