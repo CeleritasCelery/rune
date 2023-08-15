@@ -803,4 +803,31 @@ mod test {
         let string = "B\u{1b}BBBBBB\u{1b}\0\0\0\0\0\0BB\u{1b}\u{1b}\u{1b}\u{1b}\u{1b}\u{1b}B\u{7}BBBBBBBBBBB\u{1b}\u{1b}\u{1b}B\u{7}BBBBBBBBBBBB\u{1b}\u{1b}B\u{7}BBBBBBBBB";
         buffer.insert(string);
     }
+
+    #[test]
+    fn test_fuzzer() {
+        let mut buffer = Buffer::new();
+        buffer.set_cursor(1);
+        buffer.insert("Ղ\u{2}\u{2}\0\0\0");
+        buffer.set_cursor(4);
+        buffer.insert("&\0''''''''''''''''''''%'''''&\0''''''''''''''''''''%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@''''''''''");
+        buffer.set_cursor(39);
+        buffer.insert("'\u{2}&\0''''''''''''''''''''%''''''''''''''''''''''''''''");
+        buffer.delete_range(184, 169);
+        buffer.set_cursor(127);
+        buffer.insert("00000000061288823:*********");
+        buffer.set_cursor(132);
+        buffer.insert("5''''''''''''''\0\0\0\0\0'''''''");
+        buffer.set_cursor(97);
+        buffer.insert("''?????????????????????z?????????????????????'''''\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{1d}\u{10}");
+        buffer.delete_range(13, 138);
+        buffer.set_cursor(25);
+        buffer
+            .insert("yyyyyyyyyyyyyy\u{2}\0\u{2}\0\0\u{1}\u{17}H\u{17}\u{17}\u{17}\u{17}\u{17}\0\0");
+        buffer.set_cursor(138);
+        buffer.insert("\u{17}?\u{17}\u{17}\u{17}\u{17}\u{17}\u{17}\u{17}\u{17}\u{17}\0\0\0\0\0\0\u{3}\0\0\0''''''''");
+        buffer.set_cursor(39);
+        buffer.insert("\0\0\0''''''''''");
+        buffer.delete_range(247, 45);
+    }
 }
