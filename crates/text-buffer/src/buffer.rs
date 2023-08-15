@@ -795,4 +795,12 @@ mod test {
         let string = "aaaaaaaaaՂaaaaaaaaa";
         let _ = Buffer::from(string);
     }
+
+    #[test]
+    fn test_append() {
+        let mut buffer = Buffer::from("aa");
+        buffer.set_cursor(3);
+        let string = "B\u{1b}BBBBBB\u{1b}\0\0\0\0\0\0BB\u{1b}\u{1b}\u{1b}\u{1b}\u{1b}\u{1b}B\u{7}BBBBBBBBBBB\u{1b}\u{1b}\u{1b}B\u{7}BBBBBBBBBBBB\u{1b}\u{1b}B\u{7}BBBBBBBBB";
+        buffer.insert(string);
+    }
 }

@@ -775,19 +775,28 @@ impl Node {
     fn append(&mut self, other: Self) {
         let self_depth = self.depth();
         let other_depth = other.depth();
-        let new = if other_depth <= self_depth {
-            self.append_at_depth(other, self_depth - other_depth)
+        if other_depth <= self_depth {
+            let new = self.append_at_depth(other, self_depth - other_depth);
+
+            if let Some(right) = new {
+                // split the root, making the old root the left child
+                let left = mem::replace(self, Node::Internal(Internal::default()));
+                let Node::Internal(int) = self else { unreachable!() };
+                int.metrics = smallvec![left.metrics(), right.metrics()];
+                int.children = smallvec![Box::new(left), right];
+            }
         } else {
             let left = mem::replace(self, other);
-            self.prepend_at_depth(left, other_depth - self_depth)
+            let new = self.prepend_at_depth(left, other_depth - self_depth);
+
+            if let Some(left) = new {
+                // split the root, making the old root the right child
+                let right = mem::replace(self, Node::Internal(Internal::default()));
+                let Node::Internal(int) = self else { unreachable!() };
+                int.metrics = smallvec![left.metrics(), right.metrics()];
+                int.children = smallvec![left, Box::new(right)];
+            }
         };
-        if let Some(right) = new {
-            // split the root, making the old root the left child
-            let left = mem::replace(self, Node::Internal(Internal::default()));
-            let Node::Internal(int) = self else { unreachable!() };
-            int.metrics = smallvec![left.metrics(), right.metrics()];
-            int.children = smallvec![Box::new(left), right];
-        }
     }
 
     fn append_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
@@ -866,8 +875,8 @@ impl Node {
                     children: smallvec![new],
                 }))),
                 None => {
-                    let update = int.children.last().unwrap().metrics();
-                    *int.metrics.last_mut().unwrap() = update;
+                    let update = int.children[0].metrics();
+                    int.metrics[0] = update;
                     None
                 }
             }
