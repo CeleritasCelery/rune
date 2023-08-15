@@ -394,6 +394,7 @@ impl BufferMetrics {
                 self.root.fix_seam(pos.chars);
                 self.root.fix_seam(pos.chars + new_metric.chars);
             }
+            self.root.collapse();
         }
         self.assert_invariants();
     }
@@ -414,16 +415,7 @@ impl BufferMetrics {
         if fix_seam {
             self.root.fix_seam(start.chars);
         }
-        while self.root.len() == 1 {
-            match &mut self.root {
-                Node::Internal(int) => {
-                    // collapse the root
-                    let child = int.children.pop().unwrap();
-                    let _ = mem::replace(&mut self.root, *child);
-                }
-                Node::Leaf(_) => break,
-            }
-        }
+        self.root.collapse();
         self.assert_invariants();
     }
 
@@ -499,6 +491,19 @@ impl Node {
             }
         }
         (last, acc)
+    }
+
+    /// If only a single child remains, collapse the node into that child.
+    fn collapse(&mut self) {
+        while self.len() == 1 {
+            match self {
+                Node::Internal(int) => {
+                    let child = int.children.pop().unwrap();
+                    let _ = mem::replace(self, *child);
+                }
+                Node::Leaf(_) => break,
+            }
+        }
     }
 
     fn insert_at(&mut self, pos: Metric, data: Metric) {
@@ -972,7 +977,7 @@ impl Node {
             }
             Node::Internal(int) => {
                 assert!(int.len() <= MAX);
-                assert!(int.len() >= 1);
+                assert!(int.len() >= 2);
                 if !is_root {
                     assert!(int.len() >= MIN);
                 }
