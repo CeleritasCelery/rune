@@ -490,10 +490,11 @@ impl Buffer {
         let (base, offset) = self.metrics.search_char(pos);
         assert_eq!(base.chars + offset, pos);
 
-        let base = self.to_gapped_pos(Metric {
-            bytes: base.bytes,
-            chars: base.chars,
-        });
+        let base = self.to_gapped_pos(base);
+
+        if offset == 0 {
+            return base.bytes;
+        }
 
         self.assert_char_boundary(base.bytes);
 

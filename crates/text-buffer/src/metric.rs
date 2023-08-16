@@ -279,11 +279,11 @@ pub(crate) struct BufferMetrics {
 
 impl BufferMetrics {
     pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
-        self.root.search_impl(bytes, |x| x.bytes)
+        self.root.search_byte(bytes)
     }
 
     pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
-        self.root.search_impl(chars, |x| x.chars)
+        self.root.search_char(chars)
     }
 
     pub(crate) fn build(metrics: impl Iterator<Item = Metric>) -> Self {
@@ -890,11 +890,11 @@ impl Node {
         }
     }
 
-    pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
+    fn search_byte(&self, bytes: usize) -> (Metric, usize) {
         self.search_impl(bytes, |x| x.bytes)
     }
 
-    pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
+    fn search_char(&self, chars: usize) -> (Metric, usize) {
         self.search_impl(chars, |x| x.chars)
     }
 
@@ -909,6 +909,14 @@ impl Node {
             }
             let pos = getter(metric);
             if needle < pos {
+                // if it is ascii then we can just calculate the offset
+                if metric.is_ascii() {
+                    let offset = Metric {
+                        bytes: needle,
+                        chars: needle,
+                    };
+                    return (sum + offset, 0);
+                }
                 let child_sum = match &self {
                     Node::Internal(int) => {
                         let (metric, offset) = int.children[idx].search_impl(needle, getter);
@@ -1037,6 +1045,12 @@ impl fmt::Display for Node {
 pub(crate) struct Metric {
     pub(crate) bytes: usize,
     pub(crate) chars: usize,
+}
+
+impl Metric {
+    fn is_ascii(&self) -> bool {
+        self.bytes == self.chars
+    }
 }
 
 impl fmt::Display for Metric {
