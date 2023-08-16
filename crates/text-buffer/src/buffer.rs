@@ -52,7 +52,7 @@ struct Point {
     chars: usize,
 }
 
-const METRIC_SIZE: usize = 5;
+const METRIC_SIZE: usize = 20;
 struct MetricBuilder<'a> {
     slice: &'a str,
     start: usize,
@@ -458,6 +458,18 @@ impl Buffer {
         Metric { chars, bytes }
     }
 
+    fn to_gapped_pos(&self, pos: Point) -> Metric {
+        let chars = pos.chars;
+        let bytes = if pos.bytes < self.gap_start {
+            pos.bytes
+        } else if pos.bytes >= self.gap_start {
+            pos.bytes + self.gap_len()
+        } else {
+            unreachable!()
+        };
+        Metric { chars, bytes }
+    }
+
     pub const fn len(&self) -> usize {
         self.data.len() - self.gap_len()
     }
@@ -481,37 +493,28 @@ impl Buffer {
         if pos == self.total_chars {
             return self.data.len();
         }
-        // (byte position, char positions) pairs sorted in ascending order
-        let positions = {
-            let start = (self.gap_start, self.gap_chars);
-            let end = (self.gap_end, self.gap_chars);
-            let total = (self.data.len(), self.total_chars);
-            let cursor = (self.cursor.bytes, self.cursor.chars);
-            if self.cursor.chars < self.gap_chars {
-                [(0, 0), cursor, start, end, total]
+        let (base, offset) = self.metrics.search_char(pos);
+        assert_eq!(base.chars + offset, pos);
+
+        let base = self.to_gapped_pos(Point {
+            bytes: base.bytes,
+            chars: base.chars,
+        });
+
+        self.assert_char_boundary(base.bytes);
+
+        if base.chars < self.gap_chars {
+            if pos < self.gap_chars {
+                let string = self.to_str(base.bytes..self.gap_start);
+                chars::to_byte_idx(string, offset) + base.bytes
             } else {
-                [(0, 0), start, end, cursor, total]
+                // the char crosses the gap
+                let string = self.to_str(self.gap_end..);
+                self.gap_end + chars::to_byte_idx(string, pos - self.gap_chars)
             }
-        };
-
-        // find which positions window the char position falls into
-        let window = positions.windows(2).find(|slice| slice[0].1 <= pos && pos < slice[1].1);
-
-        let Some([(beg_byte, beg_char), (end_byte, end_char)]) = window else {
-            unreachable!("char position ({pos}) did not fall into any window");
-        };
-
-        self.assert_char_boundary(*beg_byte);
-        self.assert_char_boundary(*end_byte);
-
-        let num_chars = end_char - beg_char;
-        if end_byte - beg_byte == num_chars {
-            // the slice is ascii text, so we can just index into it
-            beg_byte + (pos - beg_char)
         } else {
-            let string = self.to_str(*beg_byte..*end_byte);
-            let byte_idx = chars::to_byte_idx(string, pos - beg_char);
-            beg_byte + byte_idx
+            let string = self.to_str(base.bytes..);
+            chars::to_byte_idx(string, offset) + base.bytes
         }
     }
 
@@ -659,7 +662,7 @@ mod test {
     }
 
     #[test]
-    fn delete() {
+    fn test_delete() {
         let world = "world";
         let hello = "hello ";
         let mut buffer = Buffer::from(world);
@@ -829,5 +832,15 @@ mod test {
         buffer.set_cursor(39);
         buffer.insert("\0\0\0''''''''''");
         buffer.delete_range(247, 45);
+    }
+
+    #[test]
+    fn test_pos() {
+        let mut buffer = Buffer::new();
+        buffer.set_cursor(1);
+        buffer.insert("AAAAAAAAAAAAAAAAAAA");
+        buffer.set_cursor(10);
+        buffer.insert("AAAAAA\0\0AAAAAA");
+        buffer.set_cursor(26);
     }
 }
