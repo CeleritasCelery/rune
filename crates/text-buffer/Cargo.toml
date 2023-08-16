@@ -12,3 +12,6 @@ members = ["reference-tests"]
 bytecount = "0.6.3"
 smallvec = {version = "1.11.0", features = ["union"]}
 str_indices = "0.4.1"
+
+[dev-dependencies]
+proptest = "1.0"
