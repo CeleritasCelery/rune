@@ -24,7 +24,7 @@ pub struct Buffer {
     /// The number of characters until the gap
     gap_chars: usize,
     /// The current cursor.
-    cursor: Point,
+    cursor: Metric,
     total_chars: usize,
     metrics: BufferMetrics,
 }
@@ -44,12 +44,6 @@ impl Debug for Buffer {
             .field("total_chars", &self.total_chars)
             .finish()
     }
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-struct Point {
-    bytes: usize,
-    chars: usize,
 }
 
 const METRIC_SIZE: usize = 20;
@@ -115,7 +109,7 @@ impl From<&str> for Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            cursor: Point {
+            cursor: Metric {
                 bytes: Self::GAP_SIZE,
                 chars: 0,
             },
@@ -142,7 +136,7 @@ impl From<String> for Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            cursor: Point {
+            cursor: Metric {
                 bytes: Self::GAP_SIZE,
                 chars: 0,
             },
@@ -248,11 +242,11 @@ impl Buffer {
         let beg_bytes = self.char_to_byte(beg_chars);
         if end_bytes != beg_bytes {
             self.metrics.delete(
-                self.to_abs_pos(Point {
+                self.to_abs_pos(Metric {
                     bytes: beg_bytes,
                     chars: beg_chars,
                 }),
-                self.to_abs_pos(Point {
+                self.to_abs_pos(Metric {
                     bytes: end_bytes,
                     chars: end_chars,
                 }),
@@ -440,13 +434,13 @@ impl Buffer {
     pub fn set_cursor(&mut self, pos: usize) {
         let pos = pos.min(self.total_chars);
         let byte_pos = self.char_to_byte(pos);
-        self.cursor = Point {
+        self.cursor = Metric {
             bytes: byte_pos,
             chars: pos,
         };
     }
 
-    fn to_abs_pos(&self, pos: Point) -> Metric {
+    fn to_abs_pos(&self, pos: Metric) -> Metric {
         let chars = pos.chars;
         let bytes = if pos.bytes < self.gap_start {
             pos.bytes
@@ -458,7 +452,7 @@ impl Buffer {
         Metric { chars, bytes }
     }
 
-    fn to_gapped_pos(&self, pos: Point) -> Metric {
+    fn to_gapped_pos(&self, pos: Metric) -> Metric {
         let chars = pos.chars;
         let bytes = if pos.bytes < self.gap_start {
             pos.bytes
@@ -496,7 +490,7 @@ impl Buffer {
         let (base, offset) = self.metrics.search_char(pos);
         assert_eq!(base.chars + offset, pos);
 
-        let base = self.to_gapped_pos(Point {
+        let base = self.to_gapped_pos(Metric {
             bytes: base.bytes,
             chars: base.chars,
         });
