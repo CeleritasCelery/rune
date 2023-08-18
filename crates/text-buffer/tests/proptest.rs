@@ -26,7 +26,7 @@ fn insert(buffer: &mut Buffer, string: &mut String, pos: usize, ins_text: &str) 
     buffer.insert(ins_text);
     string_insert(string, pos % (len + 1), ins_text);
 
-    assert_eq!(buffer, &&**string);
+    assert_eq!(buffer, string);
 }
 
 fn delete(buffer: &mut Buffer, string: &mut String, beg: usize, end: usize) {
@@ -36,7 +36,7 @@ fn delete(buffer: &mut Buffer, string: &mut String, beg: usize, end: usize) {
     buffer.delete_range(beg, end);
     string_remove(string, beg, end);
 
-    assert_eq!(buffer, &&**string);
+    assert_eq!(buffer, string);
 }
 
 proptest! {

@@ -146,8 +146,14 @@ impl From<String> for Buffer {
     }
 }
 
-impl PartialEq<&str> for Buffer {
-    fn eq(&self, other: &&str) -> bool {
+impl<T> PartialEq<T> for Buffer where T: Deref<Target = str> {
+    fn eq(&self, other: &T) -> bool {
+        PartialEq::eq(self, Deref::deref(other))
+    }
+}
+
+impl PartialEq<str> for Buffer {
+    fn eq(&self, other: &str) -> bool {
         if self.len() != other.len() {
             return false;
         }
