@@ -1,10 +1,11 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::must_use_candidate)]
+#![allow(clippy::missing_panics_doc)]
 use crate::metric::{BufferMetrics, Metric};
 use bytecount::num_chars;
 use std::{
     borrow::Cow,
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Bound, Deref, Range, RangeBounds},
 };
 use str_indices::chars;
@@ -41,8 +42,15 @@ impl Debug for Buffer {
             .field("gap_end", &self.gap_end)
             .field("gap_chars", &self.gap_chars)
             .field("cursor", &self.cursor)
+            .field("metrics", &self.metrics)
             .field("total_chars", &self.total.chars)
             .finish()
+    }
+}
+
+impl Display for Buffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.read(0..self.len()))
     }
 }
 
@@ -81,12 +89,12 @@ impl<'a> Iterator for MetricBuilder<'a> {
         let chars = chars::count(slice);
         self.start = end;
         self.end += METRIC_SIZE;
-        Some(Metric { chars, bytes })
+        Some(Metric { bytes, chars })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.slice.len() - self.start;
-        let extra = if len % METRIC_SIZE == 0 { 0 } else { 1 };
+        let extra = usize::from(len % METRIC_SIZE != 0);
         let size = len / METRIC_SIZE;
         (size + extra, None)
     }
@@ -474,7 +482,7 @@ impl Buffer {
         } else {
             unreachable!()
         };
-        Metric { chars, bytes }
+        Metric { bytes, chars }
     }
 
     fn to_gapped_pos(&self, pos: Metric) -> Metric {
@@ -486,7 +494,7 @@ impl Buffer {
         } else {
             unreachable!()
         };
-        Metric { chars, bytes }
+        Metric { bytes, chars }
     }
 
     pub fn len(&self) -> usize {
@@ -542,10 +550,6 @@ impl Buffer {
     fn to_str(&self, range: impl std::slice::SliceIndex<[u8], Output = [u8]>) -> &str {
         // TODO: remove this check once we are confident the code is correct
         std::str::from_utf8(&self.data[range]).unwrap()
-    }
-
-    pub fn to_string(&self) -> String {
-        self.read(0..self.len()).to_string()
     }
 
     pub fn read(&self, byte_range: Range<usize>) -> Cow<'_, str> {

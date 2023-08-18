@@ -99,6 +99,7 @@ impl Internal {
             return false;
         }
 
+        #[allow(clippy::borrowed_box)]
         let free_nodes = |x: &Box<Node>| x.len().saturating_sub(MIN);
 
         let left_free = if idx == 0 { 0 } else { free_nodes(&self.children[idx - 1]) };
@@ -146,7 +147,7 @@ impl Internal {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn try_steal_right(&mut self, idx: usize) -> bool {
@@ -168,7 +169,7 @@ impl Internal {
                 return true;
             }
         }
-        return false;
+        false
     }
 }
 
@@ -936,7 +937,7 @@ impl Node {
     fn assert_node_integrity(&self) {
         match self {
             Node::Internal(int) => {
-                assert!(int.metrics.len() > 0);
+                assert!(!int.metrics.is_empty());
                 assert!(int.metrics.len() <= MAX);
                 assert_eq!(int.metrics.len(), int.children.len());
                 for i in 0..int.children.len() {
