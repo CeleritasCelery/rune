@@ -5,7 +5,7 @@ use bytecount::num_chars;
 use std::{
     borrow::Cow,
     fmt::Debug,
-    ops::{Bound, Range, RangeBounds},
+    ops::{Bound, Deref, Range, RangeBounds},
 };
 use str_indices::chars;
 
@@ -25,7 +25,7 @@ pub struct Buffer {
     gap_chars: usize,
     /// The current cursor.
     cursor: Metric,
-    total_chars: usize,
+    total: Metric,
     metrics: BufferMetrics,
 }
 
@@ -41,7 +41,7 @@ impl Debug for Buffer {
             .field("gap_end", &self.gap_end)
             .field("gap_chars", &self.gap_chars)
             .field("cursor", &self.cursor)
-            .field("total_chars", &self.total_chars)
+            .field("total_chars", &self.total.chars)
             .finish()
     }
 }
@@ -113,7 +113,10 @@ impl From<&str> for Buffer {
                 bytes: Self::GAP_SIZE,
                 chars: 0,
             },
-            total_chars: chars::count(data),
+            total: Metric {
+                bytes: data.len(),
+                chars: chars::count(data),
+            },
             metrics,
         }
     }
@@ -140,13 +143,19 @@ impl From<String> for Buffer {
                 bytes: Self::GAP_SIZE,
                 chars: 0,
             },
-            total_chars: chars::count(&data),
+            total: Metric {
+                bytes: data.len(),
+                chars: chars::count(&data),
+            },
             metrics,
         }
     }
 }
 
-impl<T> PartialEq<T> for Buffer where T: Deref<Target = str> {
+impl<T> PartialEq<T> for Buffer
+where
+    T: Deref<Target = str>,
+{
     fn eq(&self, other: &T) -> bool {
         PartialEq::eq(self, Deref::deref(other))
     }
@@ -199,7 +208,8 @@ impl Buffer {
         let num_chars = chars::count(slice);
         self.gap_chars += num_chars;
         self.cursor.chars = self.gap_chars;
-        self.total_chars += num_chars;
+        self.total.bytes += slice.len();
+        self.total.chars += num_chars;
     }
 
     pub fn insert_char(&mut self, chr: char) {
@@ -224,7 +234,8 @@ impl Buffer {
             let num_chars = chars::count(slice);
             self.gap_chars += num_chars;
             self.cursor.chars += num_chars;
-            self.total_chars += num_chars;
+            self.total.bytes += slice.len();
+            self.total.chars += num_chars;
         }
     }
 
@@ -242,8 +253,8 @@ impl Buffer {
         if beg_chars > end_chars {
             (beg_chars, end_chars) = (end_chars, beg_chars);
         }
-        end_chars = end_chars.min(self.total_chars);
-        beg_chars = beg_chars.min(self.total_chars);
+        end_chars = end_chars.min(self.total.chars);
+        beg_chars = beg_chars.min(self.total.chars);
         let end_bytes = self.char_to_byte(end_chars);
         let beg_bytes = self.char_to_byte(beg_chars);
         if end_bytes != beg_bytes {
@@ -281,9 +292,12 @@ impl Buffer {
             //     gap_start        gap_end
 
             // update character count
-            self.gap_chars -= num_chars(&self.data[beg..self.gap_start]);
             let deleted_chars = num_chars(&self.data[beg..end]);
-            self.total_chars -= deleted_chars;
+            let delete_offset = num_chars(&self.data[end..self.gap_start]);
+            self.gap_chars -= deleted_chars + delete_offset;
+            let slice = &self.data[beg..end];
+            self.total.bytes -= slice.len();
+            self.total.chars -= deleted_chars;
             let new_end = self.gap_end - (self.gap_start - end);
             // shift data
             self.data.copy_within(end..self.gap_start, new_end);
@@ -313,8 +327,11 @@ impl Buffer {
             //           gap_start     gap_end
 
             // update character count
-            let deleted_chars = num_chars(&self.data[beg..end]);
-            self.total_chars -= deleted_chars;
+
+            let slice = &self.data[beg..end];
+            let deleted_chars = num_chars(slice);
+            self.total.bytes -= slice.len();
+            self.total.chars -= deleted_chars;
             self.gap_chars += num_chars(&self.data[self.gap_end..beg]);
             // shift data
             self.data.copy_within(self.gap_end..beg, self.gap_start);
@@ -348,7 +365,9 @@ impl Buffer {
             let chars_after = num_chars(&self.data[self.gap_end..end]);
             let total_chars = chars_before + chars_after;
             self.gap_chars -= chars_before;
-            self.total_chars -= total_chars;
+            // self.total.bytes -= end - beg - self.gap_len();
+            self.total.bytes -= (self.gap_start - beg) + (end - self.gap_end);
+            self.total.chars -= total_chars;
             // update gap position
             self.gap_start = beg;
             self.gap_end = end;
@@ -392,7 +411,7 @@ impl Buffer {
         let end = match range.end_bound() {
             Bound::Included(_) => unimplemented!("inclusive end bound not supported"),
             Bound::Excluded(x) => *x,
-            Bound::Unbounded => self.total_chars,
+            Bound::Unbounded => self.total.chars,
         };
 
         if self.gap_chars - start < end - self.gap_chars {
@@ -438,7 +457,7 @@ impl Buffer {
     }
 
     pub fn set_cursor(&mut self, pos: usize) {
-        let pos = pos.min(self.total_chars);
+        let pos = pos.min(self.total.chars);
         let byte_pos = self.char_to_byte(pos);
         self.cursor = Metric {
             bytes: byte_pos,
@@ -470,16 +489,17 @@ impl Buffer {
         Metric { chars, bytes }
     }
 
-    pub const fn len(&self) -> usize {
-        self.data.len() - self.gap_len()
+    pub fn len(&self) -> usize {
+        assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
+        self.total.bytes
     }
 
     pub const fn len_chars(&self) -> usize {
-        self.total_chars
+        self.total.chars
     }
 
     pub const fn is_empty(&self) -> bool {
-        self.total_chars == 0
+        self.total.chars == 0
     }
 
     const fn gap_len(&self) -> usize {
@@ -490,7 +510,7 @@ impl Buffer {
         if pos == 0 {
             return if self.gap_start == 0 { self.gap_end } else { 0 };
         }
-        if pos == self.total_chars {
+        if pos == self.total.chars {
             return self.data.len();
         }
         let (base, offset) = self.metrics.search_char(pos);
@@ -632,7 +652,12 @@ mod test {
     fn insert() {
         let string = "hello buffer";
         let mut buffer = Buffer::from(string);
+        println!("insert");
+        buffer.len();
         buffer.insert_char('x');
+        println!("insert");
+        buffer.len();
+        println!("insert");
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
