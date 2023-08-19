@@ -186,7 +186,7 @@ impl Buffer {
         // if gap is not at cursor, move it there
         if self.gap_chars != self.cursor.chars {
             // TODO: we don't need to recalculate the position
-            self.move_gap(self.cursor.chars);
+            self.move_gap(self.cursor);
         }
         if self.gap_len() < slice.len() {
             // TODO: grow the gap and move the cursor in one go
@@ -363,40 +363,40 @@ impl Buffer {
             Bound::Unbounded => self.total.chars,
         };
 
-        if self.gap_chars - start < end - self.gap_chars {
-            self.move_gap(start);
+        let pos = if self.gap_chars - start < end - self.gap_chars {
+            Metric { bytes: self.char_to_byte(start), chars: start }
         } else {
-            self.move_gap(end);
-        }
+            Metric { bytes: self.char_to_byte(end), chars: end }
+        };
+        self.move_gap(pos);
     }
 
-    fn move_gap(&mut self, pos: usize) {
-        let pos = self.char_to_byte(pos);
-        assert!(pos <= self.data.len(), "attempt to move gap out of bounds");
-        self.assert_char_boundary(pos);
-        if pos < self.gap_start {
+    fn move_gap(&mut self, pos: Metric) {
+        assert!(pos.bytes <= self.data.len(), "attempt to move gap out of bounds");
+        self.assert_char_boundary(pos.bytes);
+        if pos.bytes < self.gap_start {
             // move gap backwards
-            let shift = metrics(&self.data[pos..self.gap_start]);
+            let shift = Metric { bytes: self.gap_start, chars: self.gap_chars } - pos;
             self.gap_chars -= shift.chars;
 
-            self.data.copy_within(pos..self.gap_start, self.gap_end - shift.bytes);
+            self.data.copy_within(pos.bytes..self.gap_start, self.gap_end - shift.bytes);
             // if gap moves across cursor, update cursor position
-            if self.cursor.bytes < self.gap_start && self.cursor.bytes >= pos {
+            if self.cursor.bytes < self.gap_start && self.cursor.bytes >= pos.bytes {
                 self.cursor.bytes += self.gap_len();
             }
-            self.gap_start = pos;
+            self.gap_start = pos.bytes;
             self.gap_end -= shift.bytes;
-        } else if pos >= self.gap_end {
+        } else if pos.bytes >= self.gap_end {
             // move gap forwards
-            self.gap_chars += metrics(&self.data[self.gap_end..pos]).chars;
-            self.data.copy_within(self.gap_end..pos, self.gap_start);
-            let size = pos - self.gap_end;
+            self.gap_chars += pos.chars - self.gap_chars;
+            self.data.copy_within(self.gap_end..pos.bytes, self.gap_start);
+            let size = pos.bytes - self.gap_end;
             // if gap moves across cursor, update cursor position
-            if self.cursor.bytes >= self.gap_end && self.cursor.bytes < pos {
+            if self.cursor.bytes >= self.gap_end && self.cursor.bytes < pos.bytes {
                 self.cursor.bytes -= self.gap_len();
             }
             self.gap_start += size;
-            self.gap_end = pos;
+            self.gap_end = pos.bytes;
         } else {
             panic!(
                 "move gap position byte: ({pos}) inside gap ({}-{})",
@@ -645,7 +645,7 @@ mod test {
         assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         buffer.move_gap_out_of(..);
         buffer.move_gap_out_of(..);
-        buffer.move_gap(7);
+        buffer.move_gap(Metric { bytes: buffer.char_to_byte(7), chars: 7 });
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "heworld");
     }
