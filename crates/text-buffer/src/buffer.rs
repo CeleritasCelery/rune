@@ -228,27 +228,26 @@ impl Buffer {
         let end_bytes = self.char_to_byte(end_chars);
         let beg_bytes = self.char_to_byte(beg_chars);
         if end_bytes != beg_bytes {
-            self.metrics.delete(
-                self.to_abs_pos(Metric {
-                    bytes: beg_bytes,
-                    chars: beg_chars,
-                }),
-                self.to_abs_pos(Metric {
-                    bytes: end_bytes,
-                    chars: end_chars,
-                }),
-            );
-            self.delete_byte_range(beg_bytes, end_bytes);
+            let beg = Metric {
+                bytes: beg_bytes,
+                chars: beg_chars,
+            };
+            let end = Metric {
+                bytes: end_bytes,
+                chars: end_chars,
+            };
+            self.metrics.delete(self.to_abs_pos(beg), self.to_abs_pos(end));
+            self.delete_byte_range(beg, end);
         }
     }
 
-    fn delete_byte_range(&mut self, beg: usize, end: usize) {
+    fn delete_byte_range(&mut self, beg: Metric, end: Metric) {
         // TODO: optimize this so that we count the chars deleted when calculating position
-        assert!(beg <= end, "beg ({beg}) is greater then end ({end})");
-        assert!(end <= self.data.len(), "end out of bounds");
-        self.assert_char_boundary(beg);
-        self.assert_char_boundary(end);
-        if end < self.gap_start {
+        assert!(beg.bytes <= end.bytes, "beg ({beg}) is greater then end ({end})");
+        assert!(end.bytes <= self.data.len(), "end out of bounds");
+        self.assert_char_boundary(beg.bytes);
+        self.assert_char_boundary(end.bytes);
+        if end.bytes < self.gap_start {
             // delete before gap
             //
             // hello New York City||||||||||
@@ -262,26 +261,26 @@ impl Buffer {
             //     gap_start        gap_end
 
             // update character count
-            let deleted = metrics(&self.data[beg..end]);
-            let delete_offset = metrics(&self.data[end..self.gap_start]);
-            self.gap_chars -= deleted.chars + delete_offset.chars;
+            let deleted = end - beg;
+            let delete_offset_chars = self.gap_chars - end.chars;
+            self.gap_chars -= deleted.chars + delete_offset_chars;
             self.total -= deleted;
-            let new_end = self.gap_end - (self.gap_start - end);
+            let new_end = self.gap_end - (self.gap_start - end.bytes);
             // shift data
-            self.data.copy_within(end..self.gap_start, new_end);
+            self.data.copy_within(end.bytes..self.gap_start, new_end);
             // update cursor
-            self.update_cursor_chars(beg, end, deleted.chars);
+            self.update_cursor_chars(beg.bytes, end.bytes, deleted.chars);
             if self.cursor.bytes < self.gap_start {
-                if self.cursor.bytes > end {
+                if self.cursor.bytes > end.bytes {
                     self.cursor.bytes += self.gap_len();
-                } else if self.cursor.bytes >= beg {
+                } else if self.cursor.bytes >= beg.bytes {
                     self.cursor.bytes = new_end;
                 }
             }
             // update gap position
             self.gap_end = new_end;
-            self.gap_start = beg;
-        } else if beg >= self.gap_end {
+            self.gap_start = beg.bytes;
+        } else if beg.bytes >= self.gap_end {
             // delete after gap
             //
             // ||||||||||hello New York City
@@ -296,24 +295,24 @@ impl Buffer {
 
             // update character count
 
-            let deleted = metrics(&self.data[beg..end]);
+            let deleted = end - beg;
             self.total -= deleted;
-            self.gap_chars += metrics(&self.data[self.gap_end..beg]).chars;
+            self.gap_chars += beg.chars - self.gap_chars;
             // shift data
-            self.data.copy_within(self.gap_end..beg, self.gap_start);
+            self.data.copy_within(self.gap_end..beg.bytes, self.gap_start);
             // update cursor
-            self.update_cursor_chars(beg, end, deleted.chars);
+            self.update_cursor_chars(beg.bytes, end.bytes, deleted.chars);
             if self.cursor.bytes >= self.gap_end {
-                if self.cursor.bytes < beg {
+                if self.cursor.bytes < beg.bytes {
                     self.cursor.bytes -= self.gap_len();
-                } else if self.cursor.bytes < end {
-                    self.cursor.bytes = end;
+                } else if self.cursor.bytes < end.bytes {
+                    self.cursor.bytes = end.bytes;
                 }
             }
             // update gap position
-            self.gap_start += beg - self.gap_end;
-            self.gap_end = end;
-        } else if beg < self.gap_start && end >= self.gap_end {
+            self.gap_start += beg.bytes - self.gap_end;
+            self.gap_end = end.bytes;
+        } else if beg.bytes < self.gap_start && end.bytes >= self.gap_end {
             // delete spans gap
             //
             // hello|||||||||| New York City
@@ -327,16 +326,24 @@ impl Buffer {
             //  gap_start             gap_end
 
             // update character count
-            let before = metrics(&self.data[beg..self.gap_start]);
-            let after = metrics(&self.data[self.gap_end..end]);
+            let gap_start = Metric {
+                bytes: self.gap_start,
+                chars: self.gap_chars,
+            };
+            let before = gap_start - beg;
+            let gap_end = Metric {
+                bytes: self.gap_end,
+                chars: self.gap_chars,
+            };
+            let after = end - gap_end;
             self.gap_chars -= before.chars;
             self.total -= before + after;
             // update gap position
-            self.gap_start = beg;
-            self.gap_end = end;
-            self.update_cursor_chars(beg, end, before.chars + after.chars);
-            if (beg..end).contains(&self.cursor.bytes) {
-                self.cursor.bytes = end;
+            self.gap_start = beg.bytes;
+            self.gap_end = end.bytes;
+            self.update_cursor_chars(beg.bytes, end.bytes, before.chars + after.chars);
+            if (beg.bytes..end.bytes).contains(&self.cursor.bytes) {
+                self.cursor.bytes = end.bytes;
             }
         } else {
             panic!(
@@ -344,8 +351,6 @@ impl Buffer {
                 self.gap_start, self.gap_end
             );
         }
-
-        // update cursor chars
     }
 
     fn update_cursor_chars(&mut self, beg: usize, end: usize, size: usize) {
