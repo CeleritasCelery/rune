@@ -2,7 +2,6 @@
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::missing_panics_doc)]
 use crate::metric::{BufferMetrics, Metric};
-use bytecount::num_chars;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
@@ -85,11 +84,9 @@ impl<'a> Iterator for MetricBuilder<'a> {
             }
         }
         let slice = &self.slice[self.start..end];
-        let bytes = slice.len();
-        let chars = chars::count(slice);
         self.start = end;
         self.end += METRIC_SIZE;
-        Some(Metric { bytes, chars })
+        Some(metrics(slice.as_bytes()))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -121,40 +118,7 @@ impl From<&str> for Buffer {
                 bytes: Self::GAP_SIZE,
                 chars: 0,
             },
-            total: Metric {
-                bytes: data.len(),
-                chars: chars::count(data),
-            },
-            metrics,
-        }
-    }
-}
-
-impl From<String> for Buffer {
-    fn from(data: String) -> Self {
-        let storage = {
-            let capacity = data.len() + Self::GAP_SIZE;
-            let mut storage = Vec::with_capacity(capacity);
-            storage.resize(Self::GAP_SIZE, 0);
-            storage.extend_from_slice(data.as_bytes());
-            debug_assert_eq!(storage.len(), capacity);
-            storage.into_boxed_slice()
-        };
-        let builder = MetricBuilder::new(&data);
-        let metrics = BufferMetrics::build(builder);
-        Self {
-            data: storage,
-            gap_start: 0,
-            gap_end: Self::GAP_SIZE,
-            gap_chars: 0,
-            cursor: Metric {
-                bytes: Self::GAP_SIZE,
-                chars: 0,
-            },
-            total: Metric {
-                bytes: data.len(),
-                chars: chars::count(&data),
-            },
+            total: metrics.len(),
             metrics,
         }
     }
@@ -213,11 +177,10 @@ impl Buffer {
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
         self.cursor.bytes = self.gap_end;
-        let num_chars = chars::count(slice);
-        self.gap_chars += num_chars;
+        let new = metrics(slice.as_bytes());
+        self.gap_chars += new.chars;
         self.cursor.chars = self.gap_chars;
-        self.total.bytes += slice.len();
-        self.total.chars += num_chars;
+        self.total += new;
     }
 
     pub fn insert_char(&mut self, chr: char) {
@@ -239,11 +202,10 @@ impl Buffer {
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
-            let num_chars = chars::count(slice);
-            self.gap_chars += num_chars;
-            self.cursor.chars += num_chars;
-            self.total.bytes += slice.len();
-            self.total.chars += num_chars;
+            let new = metrics(slice.as_bytes());
+            self.gap_chars += new.chars;
+            self.cursor.chars += new.chars;
+            self.total += new;
         }
     }
 
@@ -300,17 +262,15 @@ impl Buffer {
             //     gap_start        gap_end
 
             // update character count
-            let deleted_chars = num_chars(&self.data[beg..end]);
-            let delete_offset = num_chars(&self.data[end..self.gap_start]);
-            self.gap_chars -= deleted_chars + delete_offset;
-            let slice = &self.data[beg..end];
-            self.total.bytes -= slice.len();
-            self.total.chars -= deleted_chars;
+            let deleted = metrics(&self.data[beg..end]);
+            let delete_offset = metrics(&self.data[end..self.gap_start]);
+            self.gap_chars -= deleted.chars + delete_offset.chars;
+            self.total -= deleted;
             let new_end = self.gap_end - (self.gap_start - end);
             // shift data
             self.data.copy_within(end..self.gap_start, new_end);
             // update cursor
-            self.update_cursor_chars(beg, end, deleted_chars);
+            self.update_cursor_chars(beg, end, deleted.chars);
             if self.cursor.bytes < self.gap_start {
                 if self.cursor.bytes > end {
                     self.cursor.bytes += self.gap_len();
@@ -336,15 +296,13 @@ impl Buffer {
 
             // update character count
 
-            let slice = &self.data[beg..end];
-            let deleted_chars = num_chars(slice);
-            self.total.bytes -= slice.len();
-            self.total.chars -= deleted_chars;
-            self.gap_chars += num_chars(&self.data[self.gap_end..beg]);
+            let deleted = metrics(&self.data[beg..end]);
+            self.total -= deleted;
+            self.gap_chars += metrics(&self.data[self.gap_end..beg]).chars;
             // shift data
             self.data.copy_within(self.gap_end..beg, self.gap_start);
             // update cursor
-            self.update_cursor_chars(beg, end, deleted_chars);
+            self.update_cursor_chars(beg, end, deleted.chars);
             if self.cursor.bytes >= self.gap_end {
                 if self.cursor.bytes < beg {
                     self.cursor.bytes -= self.gap_len();
@@ -369,17 +327,14 @@ impl Buffer {
             //  gap_start             gap_end
 
             // update character count
-            let chars_before = num_chars(&self.data[beg..self.gap_start]);
-            let chars_after = num_chars(&self.data[self.gap_end..end]);
-            let total_chars = chars_before + chars_after;
-            self.gap_chars -= chars_before;
-            // self.total.bytes -= end - beg - self.gap_len();
-            self.total.bytes -= (self.gap_start - beg) + (end - self.gap_end);
-            self.total.chars -= total_chars;
+            let before = metrics(&self.data[beg..self.gap_start]);
+            let after = metrics(&self.data[self.gap_end..end]);
+            self.gap_chars -= before.chars;
+            self.total -= before + after;
             // update gap position
             self.gap_start = beg;
             self.gap_end = end;
-            self.update_cursor_chars(beg, end, total_chars);
+            self.update_cursor_chars(beg, end, before.chars + after.chars);
             if (beg..end).contains(&self.cursor.bytes) {
                 self.cursor.bytes = end;
             }
@@ -435,19 +390,19 @@ impl Buffer {
         self.assert_char_boundary(pos);
         if pos < self.gap_start {
             // move gap backwards
-            let size = self.gap_start - pos;
-            self.gap_chars -= num_chars(&self.data[pos..self.gap_start]);
+            let shift = metrics(&self.data[pos..self.gap_start]);
+            self.gap_chars -= shift.chars;
 
-            self.data.copy_within(pos..self.gap_start, self.gap_end - size);
+            self.data.copy_within(pos..self.gap_start, self.gap_end - shift.bytes);
             // if gap moves across cursor, update cursor position
             if self.cursor.bytes < self.gap_start && self.cursor.bytes >= pos {
                 self.cursor.bytes += self.gap_len();
             }
             self.gap_start = pos;
-            self.gap_end -= size;
+            self.gap_end -= shift.bytes;
         } else if pos >= self.gap_end {
             // move gap forwards
-            self.gap_chars += num_chars(&self.data[self.gap_end..pos]);
+            self.gap_chars += metrics(&self.data[self.gap_end..pos]).chars;
             self.data.copy_within(self.gap_end..pos, self.gap_start);
             let size = pos - self.gap_end;
             // if gap moves across cursor, update cursor position
@@ -603,6 +558,14 @@ impl Buffer {
             Some(byte) => is_char_boundary(*byte),
             None => pos == self.data.len(),
         }
+    }
+}
+
+fn metrics(slice: &[u8]) -> Metric {
+    let chars = bytecount::num_chars(slice);
+    Metric {
+        bytes: slice.len(),
+        chars,
     }
 }
 

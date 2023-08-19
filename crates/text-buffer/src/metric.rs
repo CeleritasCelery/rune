@@ -287,6 +287,10 @@ impl BufferMetrics {
         self.root.search_char(chars)
     }
 
+    pub(crate) fn len(&self) -> Metric {
+        self.root.metrics()
+    }
+
     pub(crate) fn build(metrics: impl Iterator<Item = Metric>) -> Self {
         // build the base layer of leaf nodes
         let len = metrics.size_hint().0;
