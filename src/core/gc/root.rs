@@ -336,10 +336,7 @@ impl<T> Rt<T> {
     /// that resulting Rt is only exposed through references and that it is
     /// properly rooted.
     pub(crate) unsafe fn new_unchecked(item: T) -> Rt<T> {
-        Rt {
-            inner: item,
-            _aliasable: PhantomPinned,
-        }
+        Rt { inner: item, _aliasable: PhantomPinned }
     }
 }
 
@@ -630,10 +627,7 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let cx = &Context::new(root);
-        let mut vec: Rt<Vec<GcObj<'static>>> = Rt {
-            inner: vec![],
-            _aliasable: PhantomPinned,
-        };
+        let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![], _aliasable: PhantomPinned };
 
         vec.push(nil());
         assert_eq!(vec[0], nil());

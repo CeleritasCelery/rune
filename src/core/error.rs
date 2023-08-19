@@ -38,10 +38,7 @@ impl Display for EvalError {
 
 impl EvalError {
     pub(crate) fn new_error(error: anyhow::Error) -> Self {
-        Self {
-            backtrace: Vec::new(),
-            error: ErrorType::Err(error),
-        }
+        Self { backtrace: Vec::new(), error: ErrorType::Err(error) }
     }
 
     pub(crate) fn signal(error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
@@ -52,10 +49,7 @@ impl EvalError {
     }
 
     pub(crate) fn throw(tag: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
-        Self {
-            backtrace: Vec::new(),
-            error: ErrorType::Throw(env.set_exception(tag, data)),
-        }
+        Self { backtrace: Vec::new(), error: ErrorType::Throw(env.set_exception(tag, data)) }
     }
 
     pub(crate) fn new(error: impl Into<Self>) -> Self {
@@ -64,10 +58,7 @@ impl EvalError {
 
     pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
         let display = display_slice(args);
-        Self {
-            backtrace: vec![format!("{name} {display}")],
-            error: ErrorType::Err(error),
-        }
+        Self { backtrace: vec![format!("{name} {display}")], error: ErrorType::Err(error) }
     }
 
     pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
@@ -138,22 +129,14 @@ impl std::error::Error for ArgError {}
 
 impl Display for ArgError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let Self {
-            expect,
-            actual,
-            name,
-        } = self;
+        let Self { expect, actual, name } = self;
         write!(f, "Expected {expect} argument(s) for `{name}', but found {actual}")
     }
 }
 
 impl ArgError {
     pub(crate) fn new(expect: u16, actual: u16, name: impl AsRef<str>) -> ArgError {
-        Self {
-            expect,
-            actual,
-            name: name.as_ref().to_owned(),
-        }
+        Self { expect, actual, name: name.as_ref().to_owned() }
     }
 }
 
@@ -186,11 +169,7 @@ impl std::error::Error for TypeError {}
 
 impl Display for TypeError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let Self {
-            expect,
-            actual,
-            print,
-        } = self;
+        let Self { expect, actual, print } = self;
         write!(f, "expected {expect:?}, found {actual:?}: {print}")
     }
 }
@@ -202,10 +181,6 @@ impl TypeError {
         T: Into<super::object::Object<'ob>>,
     {
         let obj = obj.into();
-        Self {
-            expect,
-            actual: obj.get_type(),
-            print: obj.to_string(),
-        }
+        Self { expect, actual: obj.get_type(), print: obj.to_string() }
     }
 }

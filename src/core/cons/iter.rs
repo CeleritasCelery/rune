@@ -18,9 +18,7 @@ impl Cons {
     }
 
     pub(crate) fn conses(&self) -> ConsIter {
-        ConsIter {
-            list: List::Cons(self),
-        }
+        ConsIter { list: List::Cons(self) }
     }
 }
 

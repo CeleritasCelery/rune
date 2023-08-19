@@ -53,10 +53,7 @@ unsafe impl<T> Send for Gc<T> {}
 
 impl<T> Gc<T> {
     const fn new(ptr: *const u8) -> Self {
-        Self {
-            ptr,
-            _data: PhantomData,
-        }
+        Self { ptr, _data: PhantomData }
     }
 
     fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {

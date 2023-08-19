@@ -22,10 +22,7 @@ struct ProgramCounter {
 
 impl ProgramCounter {
     fn new(vec: &[u8]) -> Self {
-        ProgramCounter {
-            range: vec.as_ptr_range(),
-            pc: vec.as_ptr(),
-        }
+        ProgramCounter { range: vec.as_ptr_range(), pc: vec.as_ptr() }
     }
 
     fn goto(&mut self, offset: u16) {
@@ -352,11 +349,7 @@ impl<'brw, 'ob> Routine<'brw> {
                     x => bail_err!("Invalid condition handler: {x}"),
                 }
 
-                let error = if let EvalError {
-                    error: ErrorType::Signal(id),
-                    ..
-                } = err
-                {
+                let error = if let EvalError { error: ErrorType::Signal(id), .. } = err {
                     let Some((sym, data)) = env.get_exception(id) else {
                         unreachable!("Exception not found")
                     };
@@ -971,12 +964,8 @@ pub(crate) fn call<'ob>(
     let arg_cnt = args.len() as u16;
     let stack = LispStack::from_root(args);
     root!(handlers, Vec::new(), cx);
-    let mut rout = Routine {
-        stack,
-        call_frames: vec![],
-        frame: CallFrame::new(func, 0, cx),
-        handlers,
-    };
+    let mut rout =
+        Routine { stack, call_frames: vec![], frame: CallFrame::new(func, 0, cx), handlers };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     rout.run(env, cx)
 }

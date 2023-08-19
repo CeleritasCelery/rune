@@ -62,11 +62,7 @@ struct MetricBuilder<'a> {
 
 impl<'a> MetricBuilder<'a> {
     fn new(slice: &'a str) -> Self {
-        Self {
-            slice,
-            start: 0,
-            end: slice.len().min(METRIC_SIZE),
-        }
+        Self { slice, start: 0, end: slice.len().min(METRIC_SIZE) }
     }
 }
 
@@ -114,10 +110,7 @@ impl From<&str> for Buffer {
             gap_start: 0,
             gap_end: Self::GAP_SIZE,
             gap_chars: 0,
-            cursor: Metric {
-                bytes: Self::GAP_SIZE,
-                chars: 0,
-            },
+            cursor: Metric { bytes: Self::GAP_SIZE, chars: 0 },
             total: metrics.len(),
             metrics,
         }
@@ -228,14 +221,8 @@ impl Buffer {
         let end_bytes = self.char_to_byte(end_chars);
         let beg_bytes = self.char_to_byte(beg_chars);
         if end_bytes != beg_bytes {
-            let beg = Metric {
-                bytes: beg_bytes,
-                chars: beg_chars,
-            };
-            let end = Metric {
-                bytes: end_bytes,
-                chars: end_chars,
-            };
+            let beg = Metric { bytes: beg_bytes, chars: beg_chars };
+            let end = Metric { bytes: end_bytes, chars: end_chars };
             self.metrics.delete(self.to_abs_pos(beg), self.to_abs_pos(end));
             self.delete_byte_range(beg, end);
         }
@@ -326,15 +313,9 @@ impl Buffer {
             //  gap_start             gap_end
 
             // update character count
-            let gap_start = Metric {
-                bytes: self.gap_start,
-                chars: self.gap_chars,
-            };
+            let gap_start = Metric { bytes: self.gap_start, chars: self.gap_chars };
             let before = gap_start - beg;
-            let gap_end = Metric {
-                bytes: self.gap_end,
-                chars: self.gap_chars,
-            };
+            let gap_end = Metric { bytes: self.gap_end, chars: self.gap_chars };
             let after = end - gap_end;
             self.gap_chars -= before.chars;
             self.total -= before + after;
@@ -427,10 +408,7 @@ impl Buffer {
     pub fn set_cursor(&mut self, pos: usize) {
         let pos = pos.min(self.total.chars);
         let byte_pos = self.char_to_byte(pos);
-        self.cursor = Metric {
-            bytes: byte_pos,
-            chars: pos,
-        };
+        self.cursor = Metric { bytes: byte_pos, chars: pos };
     }
 
     fn to_abs_pos(&self, pos: Metric) -> Metric {
@@ -568,10 +546,7 @@ impl Buffer {
 
 fn metrics(slice: &[u8]) -> Metric {
     let chars = bytecount::num_chars(slice);
-    Metric {
-        bytes: slice.len(),
-        chars,
-    }
+    Metric { bytes: slice.len(), chars }
 }
 
 #[allow(clippy::cast_possible_wrap)]

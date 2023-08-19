@@ -31,11 +31,7 @@ impl LispHashTable {
     // to create an owned version in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: HashTable) -> Self {
         let cell = std::mem::transmute::<HashTable<'_>, HashTableView<'static, ObjCell>>(vec);
-        Self {
-            gc: GcMark::default(),
-            is_const: false,
-            inner: RefCell::new(cell),
-        }
+        Self { gc: GcMark::default(), is_const: false, inner: RefCell::new(cell) }
     }
 
     pub(in crate::core) fn make_const(&mut self) {
@@ -109,11 +105,7 @@ impl LispHashTable {
             let hashtable: &'rt HashTableView<'static, ObjCell> = &*(hashtable as *const _);
             hashtable.iter()
         };
-        HashTableStreamIter {
-            iter,
-            _rf: ref_cell,
-            item: Some(root),
-        }
+        HashTableStreamIter { iter, _rf: ref_cell, item: Some(root) }
     }
 }
 

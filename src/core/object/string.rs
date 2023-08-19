@@ -39,17 +39,11 @@ impl LispString {
     }
 
     pub(crate) unsafe fn from_string(value: String) -> Self {
-        Self {
-            gc: GcMark::default(),
-            string: StrType::String(value),
-        }
+        Self { gc: GcMark::default(), string: StrType::String(value) }
     }
 
     pub(crate) unsafe fn from_bstring(value: Vec<u8>) -> Self {
-        Self {
-            gc: GcMark::default(),
-            string: StrType::BString(BString::from(value)),
-        }
+        Self { gc: GcMark::default(), string: StrType::BString(BString::from(value)) }
     }
 }
 

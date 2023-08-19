@@ -133,20 +133,12 @@ impl<const CONST: bool> Block<CONST> {
 
 impl<'ob, 'rt> Context<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        Context {
-            block: Block::new_local(),
-            root_set: roots,
-            prev_obj_count: 0,
-        }
+        Context { block: Block::new_local(), root_set: roots, prev_obj_count: 0 }
     }
 
     pub(crate) fn from_block(block: Block<false>, roots: &'rt RootSet) -> Self {
         Block::assert_unique();
-        Context {
-            block,
-            root_set: roots,
-            prev_obj_count: 0,
-        }
+        Context { block, root_set: roots, prev_obj_count: 0 }
     }
 
     pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime>::Out

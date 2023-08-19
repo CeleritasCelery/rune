@@ -136,10 +136,7 @@ struct Tokenizer<'a> {
 
 impl<'a> Tokenizer<'a> {
     fn new(slice: &'a str) -> Self {
-        Self {
-            slice,
-            iter: slice.char_indices().peekable(),
-        }
+        Self { slice, iter: slice.char_indices().peekable() }
     }
 
     /// Given a [`Token`] calculate it's position relative to this `Tokenizer`.
@@ -475,10 +472,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
 pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(GcObj<'ob>, usize)> {
-    let mut reader = Reader {
-        tokens: Tokenizer::new(slice),
-        cx,
-    };
+    let mut reader = Reader { tokens: Tokenizer::new(slice), cx };
     match reader.tokens.next() {
         Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
         None => Err(Error::EmptyStream),

@@ -207,12 +207,7 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
                 let args = parse_signature(sig)?;
                 check_invariants(&args, sig)?;
                 let fallible = return_type_is_result(&sig.output)?;
-                Ok(Function {
-                    name: sig.ident.clone(),
-                    body: item,
-                    args,
-                    fallible,
-                })
+                Ok(Function { name: sig.ident.clone(), body: item, args, fallible })
             }
         }
         _ => Err(Error::new_spanned(item, "`lisp_fn` attribute can only be used on functions")),
@@ -295,9 +290,7 @@ fn return_type_is_result(output: &syn::ReturnType) -> Result<bool, Error> {
 
 fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
     Ok(match ty {
-        syn::Type::Reference(syn::TypeReference {
-            elem, mutability, ..
-        }) => match elem.as_ref() {
+        syn::Type::Reference(syn::TypeReference { elem, mutability, .. }) => match elem.as_ref() {
             syn::Type::Path(path) => match get_path_ident_name(path).to_string().as_str() {
                 "Context" => ArgType::Context(mutability.is_some()),
                 "Rt" => get_rt_type(path)?,
@@ -479,11 +472,7 @@ mod test {
             }
         };
         let function: Function = syn::parse2(stream).unwrap();
-        let spec = Spec {
-            name: Some("+".into()),
-            required: None,
-            intspec: None,
-        };
+        let spec = Spec { name: Some("+".into()), required: None, intspec: None };
         let result = expand(function, spec);
         println!("{}", result);
     }

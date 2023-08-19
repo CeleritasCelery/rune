@@ -12,10 +12,7 @@ impl Eq for LispFloat {}
 
 impl LispFloat {
     pub(in crate::core) fn new(float: f64) -> Self {
-        Self {
-            gc: GcMark::default(),
-            float,
-        }
+        Self { gc: GcMark::default(), float }
     }
 }
 

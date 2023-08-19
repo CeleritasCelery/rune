@@ -81,11 +81,7 @@ impl LispVec {
     // to use in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: Vec<GcObj>) -> Self {
         let cell = std::mem::transmute::<Vec<GcObj>, Vec<ObjCell>>(vec);
-        Self {
-            gc: GcMark::default(),
-            is_const: false,
-            inner: cell.into_boxed_slice(),
-        }
+        Self { gc: GcMark::default(), is_const: false, inner: cell.into_boxed_slice() }
     }
 
     pub(in crate::core) fn make_const(&mut self) {

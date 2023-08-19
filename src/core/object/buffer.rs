@@ -81,12 +81,8 @@ pub(crate) struct LispBuffer {
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
-        let new = Self {
-            text_buffer: Mutex::new(Some(BufferData {
-                name,
-                text: TextBuffer::new(),
-            })),
-        };
+        let new =
+            Self { text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })) };
         let ptr = new.alloc_obj(block);
         unsafe { &*ptr }
     }

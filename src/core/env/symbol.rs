@@ -76,26 +76,17 @@ impl<'a> Symbol<'a> {
     }
 
     pub(in crate::core) unsafe fn from_offset_ptr(ptr: *const u8) -> Self {
-        Self {
-            data: ptr.cast(),
-            marker: PhantomData,
-        }
+        Self { data: ptr.cast(), marker: PhantomData }
     }
 
     pub(in crate::core) unsafe fn from_ptr(ptr: *const SymbolCell) -> Self {
         let ptr = ptr.map_addr(|x| (x.wrapping_sub(BUILTIN_SYMBOLS.as_ptr().addr())));
-        Self {
-            data: ptr,
-            marker: PhantomData,
-        }
+        Self { data: ptr, marker: PhantomData }
     }
 
     pub(super) const fn new_builtin(idx: usize) -> Self {
         let ptr = sptr::invalid(idx * std::mem::size_of::<SymbolCell>());
-        Self {
-            data: ptr,
-            marker: PhantomData,
-        }
+        Self { data: ptr, marker: PhantomData }
     }
 
     pub(super) fn new_runtime(sym: &SymbolCell) -> Self {

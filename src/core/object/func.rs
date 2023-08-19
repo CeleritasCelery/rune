@@ -120,11 +120,7 @@ pub(crate) struct ByteFnStreamIter<'rt> {
 impl<'rt> Rt<&'static ByteFn> {
     #[allow(clippy::iter_not_returning_iterator)]
     pub(crate) fn iter(&'rt mut self) -> ByteFnStreamIter<'rt> {
-        ByteFnStreamIter {
-            vector: self,
-            elem: None,
-            idx: 0,
-        }
+        ByteFnStreamIter { vector: self, elem: None, idx: 0 }
     }
 }
 
@@ -172,12 +168,7 @@ impl FnArgs {
             bail!("Invalid bytecode argument spec: max of {max} was smaller then min {required}")
         };
         let rest = spec & 0x80 != 0;
-        Ok(FnArgs {
-            required,
-            optional,
-            rest,
-            advice: false,
-        })
+        Ok(FnArgs { required, optional, rest, advice: false })
     }
 
     pub(crate) fn into_arg_spec(self) -> u64 {

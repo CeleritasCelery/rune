@@ -220,9 +220,7 @@ impl Leaf {
             } else {
                 right_metrics.insert(idx - middle, new);
             }
-            let right = Node::Leaf(Leaf {
-                metrics: right_metrics,
-            });
+            let right = Node::Leaf(Leaf { metrics: right_metrics });
             Some(Box::new(right))
         }
     }
@@ -248,9 +246,7 @@ impl Leaf {
             } else {
                 right_metrics.insert(idx - middle, new_metric);
             }
-            let right = Node::Leaf(Leaf {
-                metrics: right_metrics,
-            });
+            let right = Node::Leaf(Leaf { metrics: right_metrics });
             Some(Box::new(right))
         }
     }
@@ -265,9 +261,7 @@ impl Leaf {
         } else {
             assert_eq!(self.len(), MAX);
             // split this node into two and return the left one
-            let right = Node::Leaf(Leaf {
-                metrics: smallvec![metric],
-            });
+            let right = Node::Leaf(Leaf { metrics: smallvec![metric] });
             Some(Box::new(right))
         }
     }
@@ -916,10 +910,7 @@ impl Node {
             if needle < pos {
                 // if it is ascii then we can just calculate the offset
                 if metric.is_ascii() {
-                    let offset = Metric {
-                        bytes: needle,
-                        chars: needle,
-                    };
+                    let offset = Metric { bytes: needle, chars: needle };
                     return (sum + offset, 0);
                 }
                 let child_sum = match &self {
@@ -1077,10 +1068,7 @@ impl Add for Metric {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            bytes: self.bytes + rhs.bytes,
-            chars: self.chars + rhs.chars,
-        }
+        Self { bytes: self.bytes + rhs.bytes, chars: self.chars + rhs.chars }
     }
 }
 
@@ -1088,10 +1076,7 @@ impl Sub for Metric {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            bytes: self.bytes - rhs.bytes,
-            chars: self.chars - rhs.chars,
-        }
+        Self { bytes: self.bytes - rhs.bytes, chars: self.chars - rhs.chars }
     }
 }
 
@@ -1114,26 +1099,17 @@ mod test {
     use super::*;
 
     fn metric(x: usize) -> Metric {
-        Metric {
-            bytes: x * 2,
-            chars: x,
-        }
+        Metric { bytes: x * 2, chars: x }
     }
 
     fn mock_search_byte(root: &Node, needle: usize) -> Metric {
         let (metric, offset) = root.search_byte(needle);
-        Metric {
-            bytes: metric.bytes + offset,
-            chars: metric.chars + offset / 2,
-        }
+        Metric { bytes: metric.bytes + offset, chars: metric.chars + offset / 2 }
     }
 
     fn mock_search_char(root: &Node, needle: usize) -> Metric {
         let (metric, offset) = root.search_char(needle);
-        Metric {
-            bytes: metric.bytes + offset * 2,
-            chars: metric.chars + offset,
-        }
+        Metric { bytes: metric.bytes + offset * 2, chars: metric.chars + offset }
     }
 
     struct TreeBuilderBasic {
