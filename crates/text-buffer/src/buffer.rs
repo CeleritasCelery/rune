@@ -100,7 +100,7 @@ impl From<&str> for Buffer {
             let mut storage = Vec::with_capacity(capacity);
             storage.resize(Self::GAP_SIZE, 0);
             storage.extend_from_slice(data.as_bytes());
-            debug_assert_eq!(storage.len(), capacity);
+            assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
         };
         let builder = MetricBuilder::new(data);
@@ -436,7 +436,7 @@ impl Buffer {
     }
 
     pub fn len(&self) -> usize {
-        assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
+        debug_assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
         self.total.bytes
     }
 
@@ -460,7 +460,7 @@ impl Buffer {
             return self.data.len();
         }
         let (base, offset) = self.metrics.search_char(pos);
-        assert_eq!(base.chars + offset, pos);
+        debug_assert_eq!(base.chars + offset, pos);
 
         let base = self.to_gapped_pos(base);
 
@@ -530,10 +530,12 @@ impl Buffer {
     }
 
     fn assert_char_boundary(&self, pos: usize) {
-        if pos == self.gap_start {
-            return;
+        if cfg!(debug_assertions) {
+            if pos == self.gap_start {
+                return;
+            }
+            assert!(self.is_char_boundary(pos), "position ({pos}) not on utf8 boundary");
         }
-        assert!(self.is_char_boundary(pos), "position ({pos}) not on utf8 boundary");
     }
 
     fn is_char_boundary(&self, pos: usize) -> bool {
@@ -553,17 +555,6 @@ fn metrics(slice: &str) -> Metric {
 const fn is_char_boundary(byte: u8) -> bool {
     // This is bit magic equivalent to: b < 128 || b >= 192
     (byte as i8) >= -0x40
-}
-
-#[allow(dead_code)]
-#[cfg(test)]
-impl Buffer {
-    // used to convert indexes from the fuzzer
-    fn wrap(&self, pos: usize) -> usize {
-        let pos = pos % (self.len() + 2);
-        println!("pos: {pos:?}");
-        pos
-    }
 }
 
 #[cfg(test)]

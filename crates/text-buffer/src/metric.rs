@@ -21,7 +21,7 @@ struct Internal {
 
 impl Internal {
     fn len(&self) -> usize {
-        assert_eq!(self.metrics.len(), self.children.len());
+        debug_assert_eq!(self.metrics.len(), self.children.len());
         self.metrics.len()
     }
 
@@ -107,7 +107,7 @@ impl Internal {
         if left_free + right_free >= missing {
             // short circuit
             let failed = self.try_steal_left(idx) && self.try_steal_right(idx);
-            assert!(!failed);
+            debug_assert!(!failed);
             false
         } else {
             self.merge_children(idx)
@@ -333,7 +333,7 @@ impl BufferMetrics {
                     int = Internal::default();
                 }
             }
-            assert_eq!(next_level.len(), parent_count);
+            debug_assert_eq!(next_level.len(), parent_count);
             mem::swap(&mut nodes, &mut next_level);
 
             if int.len() > 0 {
@@ -385,11 +385,11 @@ impl BufferMetrics {
                 let right_metric = self.root.metrics() - pos;
                 let new_metric = new.root.metrics();
                 let right = self.root.split(pos);
-                assert_eq!(self.root.metrics(), pos);
-                assert_eq!(right.metrics(), right_metric);
+                debug_assert_eq!(self.root.metrics(), pos);
+                debug_assert_eq!(right.metrics(), right_metric);
                 self.root.append(new.root);
                 self.root.append(right);
-                assert_eq!(self.root.metrics(), pos + right_metric + new_metric);
+                debug_assert_eq!(self.root.metrics(), pos + right_metric + new_metric);
                 self.root.fix_seam(pos.chars);
                 self.root.fix_seam(pos.chars + new_metric.chars);
             }
@@ -399,8 +399,8 @@ impl BufferMetrics {
     }
 
     pub(crate) fn delete(&mut self, start: Metric, end: Metric) {
-        assert!(start.bytes <= end.bytes);
-        assert!(start.chars <= end.chars);
+        debug_assert!(start.bytes <= end.bytes);
+        debug_assert!(start.chars <= end.chars);
         if start.bytes == end.bytes {
             return;
         }
@@ -419,9 +419,11 @@ impl BufferMetrics {
     }
 
     fn assert_invariants(&self) {
-        self.root.assert_integrity();
-        self.root.assert_node_size(true);
-        self.root.assert_balance();
+        if cfg!(debug_assertions) {
+            self.root.assert_integrity();
+            self.root.assert_node_size(true);
+            self.root.assert_balance();
+        }
     }
 }
 
@@ -557,7 +559,7 @@ impl Node {
                     metrics[idx] -= end - start;
                     if int.children[idx].is_underfull() {
                         let fix = int.balance_node(idx);
-                        assert!(!fix);
+                        debug_assert!(!fix);
                     }
                     fix_seam
                 } else {
@@ -587,7 +589,7 @@ impl Node {
                     // has a right child
                     if end_delete <= end_idx {
                         let end_idx = if start_idx != start_delete {
-                            assert_eq!(
+                            debug_assert_eq!(
                                 end_idx,
                                 start_idx + 1 + end_delete.saturating_sub(start_delete)
                             );
@@ -930,19 +932,21 @@ impl Node {
     }
 
     fn assert_node_integrity(&self) {
-        match self {
-            Node::Internal(int) => {
-                assert!(!int.metrics.is_empty());
-                assert!(int.metrics.len() <= MAX);
-                assert_eq!(int.metrics.len(), int.children.len());
-                for i in 0..int.children.len() {
-                    assert_eq!(int.children[i].metrics(), int.metrics[i]);
+        if cfg!(debug_assertions) {
+            match self {
+                Node::Internal(int) => {
+                    assert!(!int.metrics.is_empty());
+                    assert!(int.metrics.len() <= MAX);
+                    assert_eq!(int.metrics.len(), int.children.len());
+                    for i in 0..int.children.len() {
+                        assert_eq!(int.children[i].metrics(), int.metrics[i]);
+                    }
                 }
-            }
-            Node::Leaf(leaf) => {
-                assert!(leaf.metrics.len() <= MAX);
-            }
-        };
+                Node::Leaf(leaf) => {
+                    assert!(leaf.metrics.len() <= MAX);
+                }
+            };
+        }
     }
 
     fn assert_integrity(&self) {
@@ -1037,10 +1041,22 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, Eq)]
 pub(crate) struct Metric {
     pub(crate) bytes: usize,
     pub(crate) chars: usize,
+}
+
+impl PartialEq for Metric {
+    fn eq(&self, other: &Self) -> bool {
+        let eq = self.bytes == other.bytes;
+        if eq {
+            debug_assert_eq!(self.chars, other.chars);
+        } else {
+            debug_assert_ne!(self.chars, other.chars);
+        }
+        eq
+    }
 }
 
 impl Metric {
