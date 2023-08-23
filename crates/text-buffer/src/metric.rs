@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use smallvec::{smallvec, SmallVec};
 use std::{
     fmt,
@@ -23,13 +21,6 @@ impl Internal {
     fn len(&self) -> usize {
         debug_assert_eq!(self.metrics.len(), self.children.len());
         self.metrics.len()
-    }
-
-    fn pop(&mut self) -> Option<(Metric, Box<Node>)> {
-        match self.len() {
-            0 => None,
-            _ => Some((self.metrics.pop().unwrap(), self.children.pop().unwrap())),
-        }
     }
 
     fn push(&mut self, child: Box<Node>) {
@@ -183,10 +174,6 @@ impl Leaf {
         self.metrics.len()
     }
 
-    fn pop(&mut self) -> Option<Metric> {
-        self.metrics.pop()
-    }
-
     fn insert_at(&mut self, idx: usize, pos: Metric, data: Metric) -> Option<Box<Node>> {
         if (self.metrics[idx].bytes + data.bytes) < 20 {
             self.metrics[idx] += data;
@@ -225,32 +212,6 @@ impl Leaf {
         }
     }
 
-    fn insert_node(&mut self, idx: usize, needle: Metric) -> Option<Box<Node>> {
-        let new_metric = self.metrics[idx] - needle;
-        self.metrics[idx] = needle;
-        // shift idx to the right
-        let idx = idx + 1;
-        if self.len() < MAX {
-            // If there is room in this node then insert the
-            // leaf before the current one, splitting the
-            // size
-            self.metrics.insert(idx, new_metric);
-            None
-        } else {
-            assert_eq!(self.len(), MAX);
-            // split this node into two and return the left one
-            let middle = MAX / 2;
-            let mut right_metrics: Metrics = self.metrics.drain(middle..).collect();
-            if idx < middle {
-                self.metrics.insert(idx, new_metric);
-            } else {
-                right_metrics.insert(idx - middle, new_metric);
-            }
-            let right = Node::Leaf(Leaf { metrics: right_metrics });
-            Some(Box::new(right))
-        }
-    }
-
     fn push(&mut self, metric: Metric) -> Option<Box<Node>> {
         if self.len() < MAX {
             // If there is room in this node then insert the
@@ -273,10 +234,6 @@ pub(crate) struct BufferMetrics {
 }
 
 impl BufferMetrics {
-    pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
-        self.root.search_byte(bytes)
-    }
-
     pub(crate) fn search_char(&self, chars: usize) -> (Metric, usize) {
         self.root.search_char(chars)
     }
@@ -427,12 +384,6 @@ impl BufferMetrics {
     }
 }
 
-#[repr(u8)]
-enum SearchNeedle {
-    Char = 0,
-    Byte = 1,
-}
-
 #[derive(Debug)]
 enum Node {
     Leaf(Leaf),
@@ -440,10 +391,6 @@ enum Node {
 }
 
 impl Node {
-    fn new() -> Self {
-        Self::default()
-    }
-
     fn metric_slice(&self) -> &[Metric] {
         match self {
             Self::Internal(x) => &x.metrics,
@@ -891,10 +838,6 @@ impl Node {
         }
     }
 
-    fn search_byte(&self, bytes: usize) -> (Metric, usize) {
-        self.search_impl(bytes, |x| x.bytes)
-    }
-
     fn search_char(&self, chars: usize) -> (Metric, usize) {
         self.search_impl(chars, |x| x.chars)
     }
@@ -1118,11 +1061,6 @@ mod test {
         Metric { bytes: x * 2, chars: x }
     }
 
-    fn mock_search_byte(root: &Node, needle: usize) -> Metric {
-        let (metric, offset) = root.search_byte(needle);
-        Metric { bytes: metric.bytes + offset, chars: metric.chars + offset / 2 }
-    }
-
     fn mock_search_char(root: &Node, needle: usize) -> Metric {
         let (metric, offset) = root.search_char(needle);
         Metric { bytes: metric.bytes + offset * 2, chars: metric.chars + offset }
@@ -1182,7 +1120,7 @@ mod test {
         let root = BufferMetrics::build(builder);
         for i in 0..20 {
             println!("searching for {i}");
-            let cmp = mock_search_byte(&root.root, i * 2);
+            let cmp = mock_search_char(&root.root, i);
             assert_eq!(cmp, metric(i));
         }
     }
