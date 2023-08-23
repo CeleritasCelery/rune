@@ -82,7 +82,7 @@ impl<'a> Iterator for MetricBuilder<'a> {
         let slice = &self.slice[self.start..end];
         self.start = end;
         self.end += METRIC_SIZE;
-        Some(metrics(slice.as_bytes()))
+        Some(metrics(slice))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -170,7 +170,7 @@ impl Buffer {
         self.gap_start += slice.len();
         self.gap_end = self.gap_start + Self::GAP_SIZE;
         self.cursor.bytes = self.gap_end;
-        let new = metrics(slice.as_bytes());
+        let new = metrics(slice);
         self.gap_chars += new.chars;
         self.cursor.chars = self.gap_chars;
         self.total += new;
@@ -195,7 +195,7 @@ impl Buffer {
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
-            let new = metrics(slice.as_bytes());
+            let new = metrics(slice);
             self.gap_chars += new.chars;
             self.cursor.chars += new.chars;
             self.total += new;
@@ -544,8 +544,8 @@ impl Buffer {
     }
 }
 
-fn metrics(slice: &[u8]) -> Metric {
-    let chars = bytecount::num_chars(slice);
+fn metrics(slice: &str) -> Metric {
+    let chars = chars::count(slice);
     Metric { bytes: slice.len(), chars }
 }
 

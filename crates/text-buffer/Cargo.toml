@@ -9,7 +9,6 @@ members = ["reference-tests"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytecount = "0.6.3"
 smallvec = {version = "1.11.0", features = ["union"]}
 str_indices = "0.4.1"
 
