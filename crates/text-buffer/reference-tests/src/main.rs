@@ -75,6 +75,7 @@ mod test {
     }
 
     // NOTE: Run these tests in release mode, or it will take forever.
+    // cargo test --profile=fast-debug
 
     #[test]
     fn test_seph() {
