@@ -2,7 +2,9 @@
 * benchmark
 - benchmark against rope implementations
 - benchmark the fastest way to convert codepoint to byte index. Maybe use stable indexes
-* convert line endings
+* line endings
+** adds line endings to metrics
+** convert line endings
 Convert \r\n to \n
 * add from_file constructor
 * make point a public type
