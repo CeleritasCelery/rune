@@ -19,10 +19,9 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 x => params.push(x.clone()),
             }
         }
-        let mut generics = syn::Generics::default();
-        generics.params = params;
-        generics
+        syn::Generics { params, ..Default::default() }
     };
+
     let derive = match &orig.data {
         syn::Data::Struct(strct) => {
             let mut new_fields = TokenStream::new();

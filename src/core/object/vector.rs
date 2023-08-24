@@ -1,5 +1,5 @@
-use super::{display_slice, CloneIn, GcObj, IntoObject, WithLifetime};
-use crate::core::gc::{GcManaged, GcMark, Trace};
+use super::{display_slice, CloneIn, Gc, GcObj, IntoObject, WithLifetime};
+use crate::core::gc::{Block, GcManaged, GcMark, Trace};
 use anyhow::{anyhow, Result};
 use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
 
@@ -116,10 +116,7 @@ impl Deref for LispVec {
 }
 
 impl<'new> CloneIn<'new, &'new Self> for LispVec {
-    fn clone_in<const C: bool>(
-        &self,
-        bk: &'new crate::core::gc::Block<C>,
-    ) -> super::Gc<&'new Self> {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
         let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
         vec.into_obj(bk)
     }
@@ -134,8 +131,7 @@ impl GcManaged for LispVec {
 impl Trace for LispVec {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
         self.mark();
-        let unmarked =
-            self.iter().filter_map(|x| x.get().is_markable().then(|| x.get().into_raw()));
+        let unmarked = self.iter().map(ObjCell::get).filter(|x| x.is_markable()).map(Gc::into_raw);
         stack.extend(unmarked);
     }
 }
@@ -168,10 +164,7 @@ impl Deref for Record {
 }
 
 impl<'new> CloneIn<'new, &'new Self> for Record {
-    fn clone_in<const C: bool>(
-        &self,
-        bk: &'new crate::core::gc::Block<C>,
-    ) -> super::Gc<&'new Self> {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
         let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
         RecordBuilder(vec).into_obj(bk)
     }
