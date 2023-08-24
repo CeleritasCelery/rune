@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 
 pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RawObj {
     ptr: *const u8,
 }

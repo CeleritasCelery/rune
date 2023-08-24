@@ -11,7 +11,7 @@ use streaming_iterator::StreamingIterator;
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 pub(crate) struct LispHashTable {
     gc: GcMark,
     is_const: bool,
@@ -23,8 +23,6 @@ impl PartialEq for LispHashTable {
         self.inner == other.inner
     }
 }
-
-impl Eq for LispHashTable {}
 
 impl LispHashTable {
     // SAFETY: Since this type does not have an object lifetime, it is only safe

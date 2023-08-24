@@ -41,7 +41,7 @@ impl<'rt> Drop for Context<'rt> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq)]
 pub(in crate::core) struct GcMark(Cell<bool>);
 
 impl Trace for GcMark {
@@ -74,8 +74,6 @@ impl PartialEq for GcMark {
         true
     }
 }
-
-impl Eq for GcMark {}
 
 thread_local! {
     static SINGLETON_CHECK: Cell<bool> = Cell::new(false);

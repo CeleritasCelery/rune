@@ -201,6 +201,7 @@ pub(crate) type BuiltInFn = for<'ob> fn(
     &'ob mut Context,
 ) -> Result<GcObj<'ob>>;
 
+#[derive(Eq)]
 pub(crate) struct SubrFn {
     pub(crate) subr: BuiltInFn,
     pub(crate) args: FnArgs,
@@ -254,8 +255,6 @@ impl PartialEq for SubrFn {
         lhs == rhs
     }
 }
-
-impl Eq for SubrFn {}
 
 #[cfg(test)]
 mod test {

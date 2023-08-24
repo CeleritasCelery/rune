@@ -8,6 +8,7 @@ mod iter;
 
 pub(crate) use iter::*;
 
+#[derive(Eq)]
 pub(crate) struct Cons {
     marked: GcMark,
     mutable: bool,
@@ -20,8 +21,6 @@ impl PartialEq for Cons {
         self.car() == other.car() && self.cdr() == other.cdr()
     }
 }
-
-impl Eq for Cons {}
 
 impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on

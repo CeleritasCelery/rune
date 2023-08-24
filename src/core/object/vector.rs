@@ -7,6 +7,7 @@ use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
 /// This type is represented as slice of [`ObjCell`] which is immutable by
 /// default. However with the [`try_mut`] method, you can obtain a mutable view
 /// into this slice.
+#[derive(Eq)]
 pub(crate) struct LispVec {
     gc: GcMark,
     is_const: bool,
@@ -21,8 +22,6 @@ impl PartialEq for LispVec {
     }
 }
 
-impl Eq for LispVec {}
-
 /// This type represents and immutable view into an Object. The reason we have
 /// an additional type is because there could be other references to this same
 /// cell that can change the underlying data, so this is wrapper around
@@ -30,7 +29,7 @@ impl Eq for LispVec {}
 /// unless it is inside an `Unsafe` Cell. However because this struct could also
 /// be used in an immutable data structure (function constants), we need to
 /// ensure that this cell cannot be mutated by default.
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct ObjCell(Cell<GcObj<'static>>);
 
