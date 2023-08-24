@@ -16,9 +16,13 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     let subr_name = subr.to_string();
     let struct_name = format_ident!("S{}", &subr_name);
     let func_name = format_ident!("F{}", &subr_name);
-    let lisp_name = spec.name.unwrap_or_else(|| map_function_name(subr_name));
-    let (required, optional, rest) = get_call_signature(&function.args, spec.required);
-    let arg_conversion = get_arg_conversion(function.args);
+    let lisp_name = spec.name.unwrap_or_else(|| map_function_name(&subr_name));
+    let (required, optional, rest) = match get_call_signature(&function.args, spec.required) {
+        Ok(x) => x,
+        Err(e) => return e,
+    };
+
+    let arg_conversion = get_arg_conversion(&function.args);
 
     let err = if function.fallible {
         quote! {?}
@@ -64,7 +68,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     }
 }
 
-fn get_arg_conversion(args: Vec<ArgType>) -> Vec<TokenStream> {
+fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
     let is_mut = args.iter().any(|ty| matches!(ty, ArgType::Context(MUT)));
     args.iter()
         .enumerate()
@@ -118,7 +122,10 @@ fn get_arg_conversion(args: Vec<ArgType>) -> Vec<TokenStream> {
         .collect()
 }
 
-fn get_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u16, bool) {
+fn get_call_signature(
+    args: &[ArgType],
+    spec_required: Option<u16>,
+) -> Result<(u16, u16, bool), TokenStream> {
     let required = {
         let actual_required = args.iter().filter(|x| x.is_required_arg()).count();
         let spec_required = match spec_required {
@@ -135,14 +142,20 @@ fn get_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u16
 
     let rest = args.iter().any(|x| matches!(x, ArgType::Slice(_) | ArgType::SliceRt(_)));
 
-    (required as u16, optional as u16, rest)
+    let Ok(required) = u16::try_from(required) else {
+        return Err(quote! {compile_error!("Required arguments greater then {}", u16::MAX)});
+    };
+    let Ok(optional) = u16::try_from(optional) else {
+        return Err(quote! {compile_error!("optional arguments greater then {}", u16::MAX)});
+    };
+    Ok((required, optional, rest))
 }
 
 fn get_path_ident_name(type_path: &syn::TypePath) -> &syn::Ident {
     &type_path.path.segments.last().unwrap().ident
 }
 
-fn map_function_name(name: String) -> String {
+fn map_function_name(name: &str) -> String {
     name.replace('_', "-")
 }
 
@@ -168,17 +181,17 @@ enum ArgType {
 }
 
 impl ArgType {
-    fn is_required_arg(&self) -> bool {
+    fn is_required_arg(self) -> bool {
         use ArgType::*;
         matches!(self, Rt(_) | Gc(_) | Other)
     }
 
-    fn is_positional_arg(&self) -> bool {
+    fn is_positional_arg(self) -> bool {
         use ArgType::*;
         matches!(self, Rt(_) | Gc(_) | Other | Option | OptionRt)
     }
 
-    fn is_rest_arg(&self) -> bool {
+    fn is_rest_arg(self) -> bool {
         use ArgType::*;
         matches!(self, SliceRt(_) | Slice(_))
     }
@@ -261,7 +274,7 @@ fn check_invariants(args: &[ArgType], sig: &syn::Signature) -> Result<(), Error>
 
 fn parse_signature(sig: &syn::Signature) -> Result<Vec<ArgType>, Error> {
     let mut args = Vec::new();
-    for input in sig.inputs.iter() {
+    for input in &sig.inputs {
         match input {
             syn::FnArg::Receiver(x) => {
                 return Err(Error::new_spanned(x, "Self is not valid in lisp functions"))
@@ -269,7 +282,7 @@ fn parse_signature(sig: &syn::Signature) -> Result<Vec<ArgType>, Error> {
             syn::FnArg::Typed(pat_type) => {
                 let ty = pat_type.ty.as_ref().clone();
                 let arg = get_arg_type(&ty)?;
-                args.push(arg)
+                args.push(arg);
             }
         }
     }
@@ -381,7 +394,8 @@ mod test {
 
     fn test_sig(stream: TokenStream, min: Option<u16>, expect: (u16, u16, bool)) {
         let function: Function = syn::parse2(stream).unwrap();
-        assert_eq!(get_call_signature(&function.args, min), expect);
+        let sig = get_call_signature(&function.args, min).unwrap();
+        assert_eq!(sig, expect);
     }
 
     #[test]
@@ -412,6 +426,7 @@ mod test {
         );
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn test_args(args: TokenStream, expect: &[ArgType]) {
         let stream = quote! {fn foo(#args) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();
@@ -474,6 +489,6 @@ mod test {
         let function: Function = syn::parse2(stream).unwrap();
         let spec = Spec { name: Some("+".into()), required: None, intspec: None };
         let result = expand(function, spec);
-        println!("{}", result);
+        println!("{result}");
     }
 }

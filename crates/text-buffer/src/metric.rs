@@ -46,9 +46,8 @@ impl Internal {
         for (i, metric) in self.metrics[..last].iter().enumerate() {
             if char_pos < acc.chars + metric.chars {
                 return (i, acc);
-            } else {
-                acc += *metric;
             }
+            acc += *metric;
         }
         (last, acc)
     }
@@ -94,7 +93,7 @@ impl Internal {
         let free_nodes = |x: &Box<Node>| x.len().saturating_sub(MIN);
 
         let left_free = if idx == 0 { 0 } else { free_nodes(&self.children[idx - 1]) };
-        let right_free = self.children.get(idx + 1).map(free_nodes).unwrap_or(0);
+        let right_free = self.children.get(idx + 1).map_or(0, free_nodes);
         if left_free + right_free >= missing {
             // short circuit
             let failed = self.try_steal_left(idx) && self.try_steal_right(idx);
@@ -113,7 +112,7 @@ impl Internal {
             // no siblings to merge
             return true;
         }
-        let right_idx = if idx != 0 { idx } else { idx + 1 };
+        let right_idx = if idx == 0 { idx + 1 } else { idx };
         let left_idx = right_idx - 1;
         let (left, right) = self.children.split_at_mut(right_idx);
         let underfull = left[left_idx].merge_sibling(&mut right[0]);
@@ -434,9 +433,8 @@ impl Node {
         for (i, metric) in metrics[..last].iter().enumerate() {
             if char_pos < acc.chars + metric.chars {
                 return (i, acc);
-            } else {
-                acc += *metric;
             }
+            acc += *metric;
         }
         (last, acc)
     }
@@ -479,13 +477,14 @@ impl Node {
         let offset = pos - metric;
         match self {
             Node::Leaf(leaf) => leaf.insert_at(idx, offset, data),
-            Node::Internal(int) => match int.children[idx].insert_impl(offset, data) {
-                Some(new) => int.insert_node(idx, new),
-                None => {
+            Node::Internal(int) => {
+                if let Some(new) = int.children[idx].insert_impl(offset, data) {
+                    int.insert_node(idx, new)
+                } else {
                     int.metrics[idx] += data;
                     None
                 }
-            },
+            }
         }
     }
 
@@ -535,14 +534,14 @@ impl Node {
                     }
                     // has a right child
                     if end_delete <= end_idx {
-                        let end_idx = if start_idx != start_delete {
+                        let end_idx = if start_idx == start_delete {
+                            start_idx
+                        } else {
                             debug_assert_eq!(
                                 end_idx,
                                 start_idx + 1 + end_delete.saturating_sub(start_delete)
                             );
                             start_idx + 1
-                        } else {
-                            start_idx
                         };
                         fix_seam |= int.children[end_idx].delete_impl(Metric::default(), end);
                         int.metrics[end_idx] -= end;

@@ -1,3 +1,21 @@
+#![warn(rust_2018_idioms)]
+#![allow(elided_lifetimes_in_paths)]
+#![warn(
+    clippy::all,
+    clippy::as_ptr_cast_mut,
+    clippy::equatable_if_let,
+    clippy::nonstandard_macro_braces,
+    clippy::or_fun_call,
+    unused_qualifications,
+    meta_variable_misuse,
+    explicit_outlives_requirements,
+    missing_copy_implementations,
+    noop_method_call,
+    semicolon_in_expressions_from_macros,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_lifetimes
+)]
 use darling::FromMeta;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;

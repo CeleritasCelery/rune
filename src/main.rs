@@ -10,6 +10,7 @@
     clippy::equatable_if_let,
     clippy::nonstandard_macro_braces,
     clippy::or_fun_call,
+    clippy::manual_let_else,
     unused_qualifications,
     meta_variable_misuse,
     explicit_outlives_requirements,

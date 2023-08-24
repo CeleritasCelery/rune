@@ -14,7 +14,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
             match generic {
                 syn::GenericParam::Lifetime(_) => {
                     let lt = syn::Lifetime::new("'static", proc_macro2::Span::call_site());
-                    params.push(syn::GenericParam::Lifetime(syn::LifetimeDef::new(lt)))
+                    params.push(syn::GenericParam::Lifetime(syn::LifetimeDef::new(lt)));
                 }
                 x => params.push(x.clone()),
             }
