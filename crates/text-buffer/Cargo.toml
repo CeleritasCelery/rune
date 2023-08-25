@@ -14,7 +14,13 @@ str_indices = "0.4.1"
 
 [dev-dependencies]
 proptest = "1.0"
+criterion = {version = "0.5.1", features = ["html_reports"]}
+crdt-testdata = { path = "reference-tests/crdt-testdata" }
 
 [profile.fast-debug]
 inherits = "release"
 debug = true
+
+[[bench]]
+name = "benches"
+harness = false

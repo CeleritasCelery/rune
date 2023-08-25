@@ -71,7 +71,7 @@ mod test {
                 buffer.insert(ins);
             }
         }
-        assert_eq!(buffer.to_string(), test_data.end_content);
+        assert_eq!(buffer, test_data.end_content);
     }
 
     // NOTE: Run these tests in release mode, or it will take forever.
