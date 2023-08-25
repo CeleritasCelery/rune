@@ -53,7 +53,7 @@ impl Display for Buffer {
     }
 }
 
-const METRIC_SIZE: usize = 20;
+const METRIC_SIZE: usize = crate::metric::MAX_LEAF / 2;
 struct MetricBuilder<'a> {
     slice: &'a str,
     start: usize,
@@ -458,6 +458,9 @@ impl Buffer {
         }
         if pos == self.total.chars {
             return self.data.len();
+        }
+        if pos == self.gap_chars {
+            return self.gap_end;
         }
         let (base, offset) = self.metrics.search_char(pos);
         debug_assert_eq!(base.chars + offset, pos);

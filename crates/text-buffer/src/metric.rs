@@ -6,8 +6,13 @@ use std::{
     ops::{Add, AddAssign, RangeBounds, Sub, SubAssign},
 };
 
-const MAX: usize = 4;
+const MAX: usize = 6;
 const MIN: usize = MAX / 2;
+#[cfg(test)]
+pub(crate) const MAX_LEAF: usize = 18;
+#[cfg(not(test))]
+pub(crate) const MAX_LEAF: usize = 8000;
+// pub(crate) const MAX_LEAF: usize = 512000;
 
 type Metrics = SmallVec<[Metric; MAX]>;
 
@@ -174,7 +179,7 @@ impl Leaf {
     }
 
     fn insert_at(&mut self, idx: usize, pos: Metric, data: Metric) -> Option<Box<Node>> {
-        if (self.metrics[idx].bytes + data.bytes) < 20 {
+        if (self.metrics[idx].bytes + data.bytes) < MAX_LEAF {
             self.metrics[idx] += data;
             return None;
         }

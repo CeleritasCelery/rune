@@ -29,7 +29,7 @@ fn real_world(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("direct", name), |b| {
             b.iter(|| {
-                let mut buffer = Buffer::from(test_data.start_content.as_str());
+                let mut buffer = Buffer::from(&*test_data.start_content);
                 for txn in test_data.txns.iter() {
                     for TestPatch(pos, del, ins) in &txn.patches {
                         buffer.set_cursor(*pos);
