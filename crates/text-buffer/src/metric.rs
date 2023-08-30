@@ -494,11 +494,9 @@ impl Node {
     }
 
     fn delete_impl(&mut self, start: Metric, end: Metric) -> bool {
-        let (mut start, mut end) = (start, end);
-
         self.assert_node_integrity();
         assert!(start.chars <= end.chars);
-        let (start_idx, end_idx) = self.get_delete_indices(&mut start, &mut end);
+        let ((start_idx, start), (end_idx, end)) = self.get_delete_indices(start, end);
 
         match self {
             Node::Internal(int) => {
@@ -585,7 +583,8 @@ impl Node {
         }
     }
 
-    fn get_delete_indices(&self, start: &mut Metric, end: &mut Metric) -> (usize, usize) {
+    fn get_delete_indices(&self, start: Metric, end: Metric) -> ((usize, Metric), (usize, Metric)) {
+        let (mut start, mut end) = (start, end);
         let mut start_idx = None;
         let mut end_idx = None;
         for idx in 0..self.len() {
@@ -598,11 +597,11 @@ impl Node {
                 break;
             }
             if start_idx.is_none() {
-                *start -= metric;
+                start -= metric;
             }
-            *end -= metric;
+            end -= metric;
         }
-        (start_idx.unwrap(), end_idx.unwrap())
+        ((start_idx.unwrap(), start), (end_idx.unwrap(), end))
     }
 
     fn merge_node(&mut self, node: Option<Box<Node>>, metric: Metric, idx: usize) {
