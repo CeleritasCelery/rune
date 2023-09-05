@@ -490,7 +490,11 @@ impl Buffer {
 
     fn to_str(&self, range: impl std::slice::SliceIndex<[u8], Output = [u8]>) -> &str {
         // TODO: remove this check once we are confident the code is correct
-        std::str::from_utf8(&self.data[range]).unwrap()
+        if cfg!(debug_assertions) {
+            std::str::from_utf8(&self.data[range]).unwrap()
+        } else {
+            unsafe { std::str::from_utf8_unchecked(&self.data[range]) }
+        }
     }
 
     pub fn read(&self, byte_range: Range<usize>) -> Cow<'_, str> {
