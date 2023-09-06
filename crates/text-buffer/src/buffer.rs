@@ -453,14 +453,14 @@ impl Buffer {
     }
 
     fn char_to_byte(&self, pos: usize) -> usize {
+        if pos == self.gap_chars {
+            return self.gap_end;
+        }
         if pos == 0 {
             return if self.gap_start == 0 { self.gap_end } else { 0 };
         }
         if pos == self.total.chars {
             return self.data.len();
-        }
-        if pos == self.gap_chars {
-            return self.gap_end;
         }
         let (base, offset) = self.metrics.search_char(pos);
         debug_assert_eq!(base.chars + offset, pos);
