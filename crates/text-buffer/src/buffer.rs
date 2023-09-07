@@ -456,12 +456,17 @@ impl Buffer {
         if pos == self.gap_chars {
             return self.gap_end;
         }
-        if pos == 0 {
-            return if self.gap_start == 0 { self.gap_end } else { 0 };
+
+        if pos + 1 == self.gap_chars {
+            for i in 1..=4 {
+                let pos = self.gap_start - i;
+                if self.is_char_boundary(pos) {
+                    return pos;
+                }
+            }
+            unreachable!("couldn't find char boundary");
         }
-        if pos == self.total.chars {
-            return self.data.len();
-        }
+
         let (base, offset) = self.metrics.search_char(pos);
         debug_assert_eq!(base.chars + offset, pos);
 
