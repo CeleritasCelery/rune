@@ -60,8 +60,8 @@ fn main() -> Result<(), usize> {
 #[cfg(test)]
 mod test {
     use super::*;
-    fn apply_tokens(path: &str) {
-        let path = format!("{}/crdt-testdata/data/{}.json.gz", env!("CARGO_MANIFEST_DIR"), path,);
+    fn apply_tokens(name: &str) {
+        let path = format!("{}/crdt-testdata/data/{}.json.gz", env!("CARGO_MANIFEST_DIR"), name);
         let test_data = crdt_testdata::load_testing_data(&path);
         let mut buffer = Buffer::from(test_data.start_content.as_str());
         for txn in test_data.txns.iter() {
@@ -73,9 +73,6 @@ mod test {
         }
         assert_eq!(buffer, test_data.end_content);
     }
-
-    // NOTE: Run these tests in release mode, or it will take forever.
-    // cargo test --profile=fast-debug
 
     #[test]
     fn test_seph() {

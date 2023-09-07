@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 text-buffer = {path = "../"}
 crdt-testdata = { path = "crdt-testdata" }
+
+# if run without optimizations these tests will take forever
+[profile.dev]
+opt-level = 3
