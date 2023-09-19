@@ -93,6 +93,12 @@ impl<'a> Iterator for MetricBuilder<'a> {
     }
 }
 
+impl From<String> for Buffer {
+    fn from(data: String) -> Self {
+        Self::from(data.as_str())
+    }
+}
+
 impl From<&str> for Buffer {
     fn from(data: &str) -> Self {
         let storage = {
@@ -327,7 +333,7 @@ impl Buffer {
                 self.cursor.bytes = end.bytes;
             }
         } else {
-            panic!(
+            unreachable!(
                 "delete region inside gap -- gap: {}-{}, span: {beg}-{end}",
                 self.gap_start, self.gap_end
             );
@@ -351,17 +357,7 @@ impl Buffer {
             return;
         }
 
-        let start = match range.start_bound() {
-            Bound::Included(x) => *x,
-            Bound::Excluded(_) => unreachable!(),
-            Bound::Unbounded => 0,
-        };
-
-        let end = match range.end_bound() {
-            Bound::Included(_) => unimplemented!("inclusive end bound not supported"),
-            Bound::Excluded(x) => *x,
-            Bound::Unbounded => self.total.chars,
-        };
+        let Range { start, end } = Self::bounds_to_range(range);
 
         let pos = if self.gap_chars - start < end - self.gap_chars {
             Metric { bytes: self.char_to_byte(start), chars: start }
@@ -369,6 +365,22 @@ impl Buffer {
             Metric { bytes: self.char_to_byte(end), chars: end }
         };
         self.move_gap(pos);
+    }
+
+    fn bounds_to_range(bounds: impl RangeBounds<usize>) -> Range<usize> {
+        let start = match bounds.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(_) => unreachable!(),
+            Bound::Unbounded => 0,
+        };
+
+        let end = match bounds.end_bound() {
+            Bound::Included(_) => unimplemented!("inclusive end bound not supported"),
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => usize::MAX,
+        };
+
+        start..end
     }
 
     fn move_gap(&mut self, pos: Metric) {
@@ -502,16 +514,30 @@ impl Buffer {
         }
     }
 
-    pub fn read(&self, byte_range: Range<usize>) -> Cow<'_, str> {
+    pub fn as_str(&mut self) -> &str {
+        self.move_gap_out_of(..);
+        let slice = if self.gap_start == 0 {
+            self.to_str(self.gap_end..)
+        } else {
+            self.to_str(..self.gap_start)
+        };
+        assert_eq!(slice.len(), self.len());
+        slice
+    }
+
+    pub fn read(&self, bounds: impl RangeBounds<usize>) -> Cow<'_, str> {
         // if past gap_start, add gap_len to range
-        let mut range = byte_range.clone();
+        let mut range = Self::bounds_to_range(bounds);
+        let orig_len = range.len();
+        if range.end >= self.total.bytes {
+            range.end = self.total.bytes;
+        }
         if range.start >= self.gap_start {
             range.start += self.gap_len();
         }
         if range.end >= self.gap_start {
             range.end += self.gap_len();
         }
-        assert!(range.end <= self.data.len(), "range end out of bounds");
         assert!(range.start <= self.data.len(), "range start out of bounds");
         for i in 0..4 {
             if self.is_char_boundary(range.end - i) {
@@ -534,7 +560,7 @@ impl Buffer {
             let mut string = String::with_capacity(range.len());
             string.push_str(self.to_str(range.start..self.gap_start));
             string.push_str(self.to_str(self.gap_end..range.end));
-            assert_eq!(string.len(), byte_range.len());
+            assert_eq!(string.len(), orig_len);
             Cow::Owned(string)
         } else {
             Cow::Borrowed(self.to_str(range))
@@ -762,6 +788,7 @@ mod test {
     #[test]
     fn test_read() {
         let mut buffer = Buffer::from("hello world");
+        assert_eq!(buffer.read(..), Cow::Borrowed("hello world"));
         buffer.set_cursor(5);
         assert_eq!(buffer.read(0..0), Cow::Borrowed(""));
         assert_eq!(buffer.read(0..5), Cow::Borrowed("hello"));

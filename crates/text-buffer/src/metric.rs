@@ -12,7 +12,6 @@ const MIN: usize = MAX / 2;
 pub(crate) const MAX_LEAF: usize = 18;
 #[cfg(not(test))]
 pub(crate) const MAX_LEAF: usize = 8000;
-// pub(crate) const MAX_LEAF: usize = 512000;
 
 type Metrics = SmallVec<[Metric; MAX]>;
 
