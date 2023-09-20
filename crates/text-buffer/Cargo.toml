@@ -9,6 +9,7 @@ members = ["reference-tests"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+get-size = {path = "/Users/troyhinckley/repos/get-size", features = ["derive"]}
 smallvec = {version = "1.11.0", features = ["union"]}
 str_indices = "0.4.1"
 

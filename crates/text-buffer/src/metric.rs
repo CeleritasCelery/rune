@@ -1,3 +1,4 @@
+use get_size::GetSize;
 use smallvec::{smallvec, SmallVec};
 use std::{
     fmt,
@@ -15,10 +16,19 @@ pub(crate) const MAX_LEAF: usize = 8000;
 
 type Metrics = SmallVec<[Metric; MAX]>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, GetSize)]
 struct Internal {
+    #[get_size(size_fn = smallvec_size_helper)]
     metrics: Metrics,
+    #[get_size(size_fn = smallvec_size_helper)]
     children: SmallVec<[Box<Node>; MAX]>,
+}
+
+fn smallvec_size_helper<T>(slice: &[T]) -> usize
+where
+    T: GetSize,
+{
+    slice.iter().map(|x| x.get_heap_size()).sum::<usize>()
 }
 
 impl Internal {
@@ -167,8 +177,9 @@ impl Internal {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, GetSize)]
 struct Leaf {
+    #[get_size(size_fn = smallvec_size_helper)]
     metrics: Metrics,
 }
 
@@ -231,7 +242,7 @@ impl Leaf {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, GetSize)]
 pub(crate) struct BufferMetrics {
     root: Node,
 }
@@ -387,7 +398,7 @@ impl BufferMetrics {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, GetSize)]
 enum Node {
     Leaf(Leaf),
     Internal(Internal),
@@ -986,7 +997,7 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq)]
+#[derive(Debug, Default, Copy, Clone, Eq, GetSize)]
 pub(crate) struct Metric {
     pub(crate) bytes: usize,
     pub(crate) chars: usize,

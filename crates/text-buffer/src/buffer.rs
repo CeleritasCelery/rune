@@ -2,6 +2,7 @@
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::missing_panics_doc)]
 use crate::metric::{BufferMetrics, Metric};
+use get_size::GetSize;
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
@@ -11,7 +12,7 @@ use str_indices::chars;
 
 /// A Gap buffer. This represents the text of a buffer, and allows for
 /// efficient insertion and deletion of text.
-#[derive(Default)]
+#[derive(Default, GetSize)]
 pub struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
