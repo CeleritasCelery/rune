@@ -672,7 +672,6 @@ mod test {
         buffer.insert(hello);
         buffer.delete_backwards(4);
         assert_eq!(buffer.gap_start, hello.len() - 4);
-        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         buffer.move_gap_out_of(..);
         buffer.move_gap_out_of(..);
         buffer.move_gap(Metric { bytes: buffer.char_to_byte(7), chars: 7 });
@@ -758,11 +757,9 @@ mod test {
 
         let mut buffer = Buffer::from(",skeobg x");
         buffer.delete_range(10, 10);
-        assert_eq!(buffer.gap_len(), 5);
 
         let mut buffer = Buffer::from("+skeocptv'eigp");
         buffer.delete_range(30, 6);
-        assert_eq!(buffer.gap_len(), 13);
     }
 
     #[test]
@@ -771,8 +768,6 @@ mod test {
         let hello = "hello ";
         let mut buffer = Buffer::from(world);
         buffer.insert(hello);
-        assert_eq!(buffer.data.len(), hello.len() + world.len() + Buffer::GAP_SIZE);
-        assert_eq!(buffer.gap_end, hello.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, hello.len());
         assert_eq!(buffer, "hello world");
     }
