@@ -96,7 +96,19 @@ impl<'a> Iterator for MetricBuilder<'a> {
 
 impl From<String> for Buffer {
     fn from(data: String) -> Self {
-        Self::from(data.as_str())
+        // reuse the allocation from the string
+        let builder = MetricBuilder::new(&data);
+        let metrics = BufferMetrics::build(builder);
+        let storage = data.into_bytes().into_boxed_slice();
+        Self {
+            data: storage,
+            gap_start: 0,
+            gap_end: 0,
+            gap_chars: 0,
+            cursor: Metric::default(),
+            total: metrics.len(),
+            metrics,
+        }
     }
 }
 
@@ -607,6 +619,10 @@ mod test {
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 0);
+
+        let string = String::from("hello buffer");
+        let buffer = Buffer::from(string);
+        assert_eq!(buffer.gap_start, 0);
     }
 
     #[test]
@@ -629,12 +645,9 @@ mod test {
     fn insert() {
         let string = "hello buffer";
         let mut buffer = Buffer::from(string);
-        println!("insert");
         buffer.len();
         buffer.insert_char('x');
-        println!("insert");
         buffer.len();
-        println!("insert");
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
@@ -643,7 +656,7 @@ mod test {
 
     #[test]
     fn insert_slice() {
-        let string = "world";
+        let string = String::from("world");
         let new_string = "hi ";
         let mut buffer = Buffer::from(string);
         buffer.insert(new_string);

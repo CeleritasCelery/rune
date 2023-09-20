@@ -40,8 +40,6 @@ fn delete(buffer: &mut Buffer, string: &mut String, beg: usize, end: usize) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(1000))]
-
     #[test]
     fn pt_build(ref text in "\\PC*") {
         let buffer = Buffer::from(&**text);
@@ -62,7 +60,7 @@ proptest! {
 
     #[test]
     fn pt_combo(beg in any::<usize>(), end in any::<usize>(), char_idx in any::<usize>(), ref mut text in "\\PC*", ref ins_text in "\\PC*", ins_first in any::<bool>()) {
-        let buffer = &mut Buffer::from(&**text);
+        let buffer = &mut Buffer::from(String::from(&**text));
         if ins_first {
             insert(buffer, text, char_idx, ins_text);
             delete(buffer, text, beg, end);
