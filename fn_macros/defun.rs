@@ -14,8 +14,8 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     let body = function.body;
     let subr = function.name;
     let subr_name = subr.to_string();
-    let struct_name = format_ident!("S{}", &subr_name);
-    let func_name = format_ident!("F{}", &subr_name);
+    let struct_name = format_ident!("__subr_{}", &subr_name);
+    let func_name = format_ident!("__wrapper_fn_{}", &subr_name);
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(&subr_name));
     let (required, optional, rest) = match get_call_signature(&function.args, spec.required) {
         Ok(x) => x,
@@ -42,7 +42,6 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
 
     quote! {
         #[automatically_derived]
-        #[allow(non_snake_case)]
         fn #func_name<'ob, 'id>(
             args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
@@ -52,7 +51,6 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         }
 
         #[automatically_derived]
-        #[allow(non_upper_case_globals)]
         pub(crate) const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
             subr: #func_name,

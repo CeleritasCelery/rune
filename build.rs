@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::io::Write as _;
 use std::{
@@ -88,7 +87,7 @@ fn main() {
                     let path_name = path.to_str().unwrap();
                     let basename = path_name.strip_prefix("src/").unwrap().strip_suffix(".rs");
                     let import_path = basename.unwrap().replace('/', ":");
-                    format!("crate::{import_path}::S{name}")
+                    format!("crate::{import_path}::__subr_{name}")
                 };
                 all_defun.push((struct_name, name.to_string(), lisp_name));
             }
@@ -262,16 +261,12 @@ use crate::core::object::Object;
         if ident == "BYTE_BOOLEAN_VARS" {
             continue;
         }
-        let nil = "Object::NIL";
-        let mut value = match value {
-            Some(value) => Cow::from(value),
-            None => Cow::from(nil),
-        };
+        let mut value = value.unwrap_or_else(|| "Object::NIL".to_string());
 
         // if value starts with list! then insert cx before that last character
         if value.starts_with("list") {
             let len = value.len();
-            value.to_mut().insert_str(len - 1, "; cx");
+            value.insert_str(len - 1, "; cx");
         }
         writeln!(f, "env.vars.insert(sym::{ident}, cx.add({value}));").unwrap();
         if DefvarType::Bool == ty {
