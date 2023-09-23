@@ -48,6 +48,7 @@ fn convert(lisp_name: impl Into<String>, rust_name: &str) -> String {
     lisp_name
 }
 
+#[derive(PartialEq)]
 enum DefvarType {
     Bool,
     Other,
@@ -253,8 +254,14 @@ use crate::core::object::Object;
     )
     .unwrap();
 
+    let mut bool_vars = Vec::new();
+
     // write out the value of each defvar
     for (ident, _, value, ty) in all_defvar {
+        // handled below
+        if ident == "BYTE_BOOLEAN_VARS" {
+            continue;
+        }
         let nil = "Object::NIL";
         let mut value = match value {
             Some(value) => Cow::from(value),
@@ -267,20 +274,18 @@ use crate::core::object::Object;
             value.to_mut().insert_str(len - 1, "; cx");
         }
         writeln!(f, "env.vars.insert(sym::{ident}, cx.add({value}));").unwrap();
-        match ty {
-            DefvarType::Bool => {
-                writeln!(
-                    f,
-                    "{{
-    let bool_vars = env.vars.get_mut(sym::BYTE_BOOLEAN_VARS).unwrap();
-    bool_vars.set(crate::cons!(sym::{ident}, bool_vars.bind(cx); cx));
-}}"
-                )
-                .unwrap();
-            }
-            DefvarType::Other => {}
+        if DefvarType::Bool == ty {
+            bool_vars.push(ident);
         }
     }
+
+    // write out the boolean vars
+    writeln!(f, "let bool_vars = list![").unwrap();
+    for ident in bool_vars {
+        writeln!(f, "    sym::{ident},").unwrap();
+    }
+    writeln!(f, "; cx];").unwrap();
+    writeln!(f, "env.vars.insert(sym::BYTE_BOOLEAN_VARS, bool_vars);").unwrap();
 
     writeln!(f, "}}").unwrap();
 }
