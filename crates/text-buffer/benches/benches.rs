@@ -99,5 +99,21 @@ fn move_gap(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, real_world, resize, move_cursor);
+fn move_cursor(c: &mut Criterion) {
+    let mut group = c.benchmark_group("move_cursor");
+
+    for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
+        group.sample_size(*sample);
+        let size = &usize::pow(2, *size);
+        let id = BenchmarkId::from_parameter(size);
+        group.bench_function(id, |b| {
+            let string: String = std::iter::repeat('a').take(*size).collect();
+            let buffer = &mut Buffer::from(&*string);
+            b.iter(|| buffer.benchmark_move_gap());
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, real_world, resize, move_cursor, move_gap);
 criterion_main!(benches);

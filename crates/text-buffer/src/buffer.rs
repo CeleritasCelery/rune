@@ -28,6 +28,7 @@ pub struct Buffer {
     cursor: Metric,
     total: Metric,
     metrics: BufferMetrics,
+    default_gap_size: usize,
 }
 
 impl Debug for Buffer {
@@ -108,6 +109,7 @@ impl From<String> for Buffer {
             cursor: Metric::default(),
             total: metrics.len(),
             metrics,
+            default_gap_size: Self::GAP_SIZE,
         }
     }
 }
@@ -131,6 +133,7 @@ impl From<&str> for Buffer {
             gap_chars: 0,
             cursor: Metric { bytes: Self::GAP_SIZE, chars: 0 },
             total: metrics.len(),
+            default_gap_size: Self::GAP_SIZE,
             metrics,
         }
     }
@@ -166,11 +169,17 @@ impl Buffer {
         Self::default()
     }
 
+    #[must_use]
+    pub fn with_gap(gap: usize) -> Self {
+        // set gap size to what is given but leave the rest of the fields deafult
+        Self { default_gap_size: gap, ..Self::default() }
+    }
+
     fn grow(&mut self, slice: &str) {
         let new_capacity = {
             let pre_gap = self.gap_start;
             let post_gap = self.data.len() - self.gap_end;
-            pre_gap + slice.len() + Self::GAP_SIZE + post_gap
+            pre_gap + slice.len() + self.default_gap_size + post_gap
         };
         let new_storage = {
             let mut buffer = Vec::with_capacity(new_capacity);
@@ -179,7 +188,7 @@ impl Buffer {
             // new text
             buffer.extend_from_slice(slice.as_bytes());
             // gap
-            buffer.resize(buffer.len() + Self::GAP_SIZE, 0);
+            buffer.resize(buffer.len() + self.default_gap_size, 0);
             // post-gap
             buffer.extend_from_slice(&self.data[self.gap_end..]);
             buffer.into_boxed_slice()
@@ -187,7 +196,7 @@ impl Buffer {
         assert_eq!(new_storage.len(), new_capacity);
         self.data = new_storage;
         self.gap_start += slice.len();
-        self.gap_end = self.gap_start + Self::GAP_SIZE;
+        self.gap_end = self.gap_start + self.default_gap_size;
         self.cursor.bytes = self.gap_end;
         let new = metrics(slice);
         self.gap_chars += new.chars;
@@ -394,6 +403,15 @@ impl Buffer {
         };
 
         start..end
+    }
+
+    #[doc(hidden)]
+    pub fn benchmark_move_gap(&mut self) {
+        if self.gap_chars == 0 {
+            self.move_gap(Metric { bytes: self.data.len(), chars: self.len_chars() });
+        } else {
+            self.move_gap(Metric::default());
+        }
     }
 
     fn move_gap(&mut self, pos: Metric) {
