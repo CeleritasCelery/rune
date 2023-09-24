@@ -9,13 +9,12 @@ members = ["reference-tests"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-get-size = {path = "/Users/troyhinckley/repos/get-size", features = ["derive"]}
+get-size = {git = "https://github.com/CeleritasCelery/get-size.git", branch = "boxed_slice_fix", features = ["derive"]}
 smallvec = {version = "1.11.0", features = ["union"]}
 str_indices = "0.4.1"
 
 [dev-dependencies]
 proptest = "1.0"
-rand = "0.8.5"
 criterion = {version = "0.5.1", features = ["html_reports"]}
 crdt-testdata = { path = "reference-tests/crdt-testdata" }
 

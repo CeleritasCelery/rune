@@ -47,17 +47,6 @@ fn real_world(c: &mut Criterion) {
     }
 }
 
-// function to create a random string of length `len`
-fn random_string(len: usize) -> String {
-    use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(len)
-        .map(Into::<char>::into)
-        .collect()
-}
-
 fn resize(c: &mut Criterion) {
     let mut group = c.benchmark_group("resize");
 
@@ -70,7 +59,7 @@ fn resize(c: &mut Criterion) {
         group.bench_function(id, |b| {
             b.iter_batched(
                 || {
-                    let string = random_string(*size);
+                    let string: String = std::iter::repeat('a').take(*size).collect();
                     Buffer::from(string)
                 },
                 |mut buffer| {
@@ -83,19 +72,20 @@ fn resize(c: &mut Criterion) {
     group.finish();
 }
 
-fn move_cursor(c: &mut Criterion) {
-    let mut group = c.benchmark_group("move_cursor");
+fn move_gap(c: &mut Criterion) {
+    let mut group = c.benchmark_group("move_gap");
 
-    for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
-        group.sample_size(*sample);
+    for size in &[8, 9, 10, 11, 12, 13, 14, 15, 16, 17] {
         let size = &usize::pow(2, *size);
         let id = BenchmarkId::from_parameter(size);
         group.bench_function(id, |b| {
+            let string: String = std::iter::repeat('a').take(*size).collect();
             b.iter_batched(
                 || {
-                    let string = random_string(*size);
                     // create from a reference
-                    Buffer::from(&*string)
+                    let mut buffer = Buffer::with_gap(*size);
+                    buffer.insert(&*string);
+                    buffer
                 },
                 |mut buffer| {
                     let len = buffer.len_chars();
