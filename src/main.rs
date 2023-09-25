@@ -68,8 +68,9 @@ mod search;
 mod threads;
 
 use crate::core::{
-    env::{intern, Env},
+    env::{intern, sym, Env},
     gc::{Context, RootSet, Rt},
+    object::{Gc, LispString},
 };
 use std::io::{self, Write};
 
@@ -115,14 +116,10 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
 }
 
 fn load(env: &mut Rt<Env>, cx: &mut Context) {
-    crate::core::env::init_variables(cx, env);
-    crate::data::defalias(intern("not", cx), (crate::core::env::sym::NULL).into(), None)
-        .expect("null should be defined");
     buffer::get_buffer_create(cx.add("*scratch*"), core::object::nil(), cx).unwrap();
-
-    let buffer = String::from(r#"(load "lisp/bootstrap.el")"#);
-
-    match crate::lread::load_internal(&buffer, cx, env) {
+    let bootstrap: Gc<&LispString> = cx.add_as("lisp/bootstrap.el");
+    root!(bootstrap, cx);
+    match crate::lread::load(bootstrap, None, None, cx, env) {
         Ok(val) => println!("{val}"),
         Err(e) => println!("Error: {e}"),
     }
@@ -167,6 +164,9 @@ fn main() {
     // Ensure this is always initalized before anything else. We need this to
     // code to run to properly initialize the symbol table.
     lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+    crate::core::env::init_variables(cx, env);
+    crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
+        .expect("null should be defined");
 
     if args.load {
         load(env, cx);
