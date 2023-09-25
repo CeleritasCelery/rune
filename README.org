@@ -48,7 +48,7 @@ Then we would translate the types to their rust equivalent. If the correct type 
   fn substring(string: &str, from: Option<i64>, to: Option<i64>) -> String {...}
 #+end_src
 
-If you run with ~cargo run -- --load --repo~ that will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. Files that are not bootstrapped are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
+If you run with ~cargo run -- --load --repl~ that will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. Files that are not bootstrapped are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
 
 ** Blog posts
 - [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in rust. It serves as in intro to this project.
