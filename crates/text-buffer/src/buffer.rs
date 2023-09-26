@@ -45,6 +45,7 @@ impl Debug for Buffer {
             .field("cursor", &self.cursor)
             .field("metrics", &self.metrics)
             .field("total_chars", &self.total.chars)
+            .field("default_gap_size", &self.default_gap_size)
             .finish()
     }
 }
@@ -160,13 +161,13 @@ impl PartialEq<str> for Buffer {
 
 impl Buffer {
     #[cfg(not(test))]
-    const GAP_SIZE: usize = 2000;
+    const GAP_SIZE: usize = 2048;
     #[cfg(test)]
     const GAP_SIZE: usize = 5;
 
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self::with_gap(Self::GAP_SIZE)
     }
 
     #[must_use]
