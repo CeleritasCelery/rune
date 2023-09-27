@@ -14,10 +14,10 @@ fn get_test_data(name: &str) -> TestData {
     crdt_testdata::load_testing_data(&path)
 }
 
-fn real_world(c: &mut Criterion) {
+fn realworld(c: &mut Criterion) {
     const DATASETS: &[&str] = &["automerge-paper", "rustcode", "sveltecomponent", "seph-blog1"];
     for name in DATASETS {
-        let mut group = c.benchmark_group("testdata");
+        let mut group = c.benchmark_group("realworld");
         let test_data = get_test_data(name);
 
         let len = test_data
@@ -115,5 +115,5 @@ fn move_cursor(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, real_world, resize, move_cursor, move_gap);
+criterion_group!(benches, realworld, resize, move_cursor, move_gap);
 criterion_main!(benches);
