@@ -57,7 +57,7 @@ impl Display for Buffer {
     }
 }
 
-const METRIC_SIZE: usize = crate::metric::MAX_LEAF / 2;
+const METRIC_SIZE: usize = crate::metric::MAX_LEAF;
 struct MetricBuilder<'a> {
     slice: &'a str,
     start: usize,
@@ -97,33 +97,44 @@ impl<'a> Iterator for MetricBuilder<'a> {
     }
 }
 
+fn calc_start_gap_size(len: usize) -> usize {
+    // div 40 is 2.5% combined with next_power_of_two will be <= 5%
+    // overhead for large buffers
+    let overhead = ((len / 40) + 1).next_power_of_two();
+    cmp::min(cmp::max(overhead, Buffer::GAP_SIZE), 2048)
+}
+
 impl From<String> for Buffer {
     fn from(data: String) -> Self {
-        // reuse the allocation from the string
+        // reuse the allocation from the string. This means we *might* have a
+        // gap of 0
         let builder = MetricBuilder::new(&data);
         let metrics = BufferMetrics::build(builder);
-        let storage = data.into_bytes().into_boxed_slice();
+        let (storage, len) = {
+            let len = data.len();
+            let mut vec = data.into_bytes();
+            vec.resize(vec.capacity(), 0);
+            debug_assert_eq!(vec.capacity(), vec.len());
+            (vec.into_boxed_slice(), len)
+        };
+        let gap_len = storage.len() - len;
+        let total = metrics.len();
         Self {
             data: storage,
-            gap_start: 0,
-            gap_end: 0,
-            gap_chars: 0,
+            gap_start: len,
+            gap_end: len + gap_len,
+            gap_chars: total.chars,
             cursor: Metric::default(),
-            total: metrics.len(),
+            total,
             metrics,
-            new_gap_size: Self::GAP_SIZE,
+            new_gap_size: calc_start_gap_size(len),
         }
     }
 }
 
 impl From<&str> for Buffer {
     fn from(data: &str) -> Self {
-        let new_gap_size = {
-            // div 40 is 2.5% combined with next_power_of_two will be <= 5%
-            // overhead for large buffers
-            let overhead = ((data.len() / 40) + 1).next_power_of_two();
-            cmp::min(cmp::max(overhead, Self::GAP_SIZE), 2048)
-        };
+        let new_gap_size = calc_start_gap_size(data.len());
         let storage = {
             let capacity = data.len() + new_gap_size;
             let mut storage = Vec::with_capacity(capacity);
@@ -653,7 +664,7 @@ mod test {
 
         let string = String::from("hello buffer");
         let buffer = Buffer::from(string);
-        assert_eq!(buffer.gap_start, 0);
+        assert_eq!(buffer, "hello buffer");
     }
 
     #[test]

@@ -60,6 +60,7 @@ proptest! {
 
     #[test]
     fn pt_combo(beg in any::<usize>(), end in any::<usize>(), char_idx in any::<usize>(), ref mut text in "\\PC*", ref ins_text in "\\PC*", ins_first in any::<bool>()) {
+        // specifically test From<String>
         let buffer = &mut Buffer::from(String::from(&**text));
         if ins_first {
             insert(buffer, text, char_idx, ins_text);
