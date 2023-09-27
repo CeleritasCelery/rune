@@ -5,6 +5,7 @@ use crate::metric::{BufferMetrics, Metric};
 use get_size::GetSize;
 use std::{
     borrow::Cow,
+    cmp,
     fmt::{Debug, Display},
     ops::{Bound, Deref, Range, RangeBounds},
 };
@@ -117,10 +118,16 @@ impl From<String> for Buffer {
 
 impl From<&str> for Buffer {
     fn from(data: &str) -> Self {
+        let new_gap_size = {
+            // div 40 is 2.5% combined with next_power_of_two will be <= 5%
+            // overhead for large buffers
+            let overhead = ((data.len() / 40) + 1).next_power_of_two();
+            cmp::min(cmp::max(overhead, Self::GAP_SIZE), 2048)
+        };
         let storage = {
-            let capacity = data.len() + Self::GAP_SIZE;
+            let capacity = data.len() + new_gap_size;
             let mut storage = Vec::with_capacity(capacity);
-            storage.resize(Self::GAP_SIZE, 0);
+            storage.resize(new_gap_size, 0);
             storage.extend_from_slice(data.as_bytes());
             assert_eq!(storage.len(), capacity);
             storage.into_boxed_slice()
@@ -130,11 +137,11 @@ impl From<&str> for Buffer {
         Self {
             data: storage,
             gap_start: 0,
-            gap_end: Self::GAP_SIZE,
+            gap_end: new_gap_size,
             gap_chars: 0,
-            cursor: Metric { bytes: Self::GAP_SIZE, chars: 0 },
+            cursor: Metric { bytes: new_gap_size, chars: 0 },
             total: metrics.len(),
-            new_gap_size: Self::GAP_SIZE,
+            new_gap_size,
             metrics,
         }
     }
@@ -164,6 +171,7 @@ impl Buffer {
     const GAP_SIZE: usize = 64;
     #[cfg(test)]
     const GAP_SIZE: usize = 5;
+    const MAX_GAP: usize = 4096;
 
     #[must_use]
     pub fn new() -> Self {
@@ -172,11 +180,14 @@ impl Buffer {
 
     #[must_use]
     pub fn with_gap(gap: usize) -> Self {
-        // set gap size to what is given but leave the rest of the fields deafult
         Self { new_gap_size: gap, ..Self::default() }
     }
 
     fn grow(&mut self, slice: &str) {
+        // If the string being inserted is large, we want to grow the gap faster
+        if slice.len() >= self.new_gap_size {
+            self.new_gap_size = cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP * 4);
+        }
         let new_capacity = {
             let pre_gap = self.gap_start;
             let post_gap = self.data.len() - self.gap_end;
@@ -203,7 +214,7 @@ impl Buffer {
         self.gap_chars += new.chars;
         self.cursor.chars = self.gap_chars;
         self.total += new;
-        self.new_gap_size = std::cmp::min(self.new_gap_size * 2, Self::GAP_SIZE * 64);
+        self.new_gap_size = cmp::min(self.new_gap_size * 2, Self::MAX_GAP);
     }
 
     pub fn insert_char(&mut self, chr: char) {
