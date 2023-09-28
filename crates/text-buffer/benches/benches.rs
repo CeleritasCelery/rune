@@ -58,10 +58,7 @@ fn resize(c: &mut Criterion) {
         // meaning any insert will resize it
         group.bench_function(id, |b| {
             b.iter_batched(
-                || {
-                    let string: String = std::iter::repeat('a').take(*size).collect();
-                    Buffer::from(string)
-                },
+                || Buffer::from("a".repeat(*size)),
                 |mut buffer| {
                     buffer.insert_char('a');
                 },
@@ -79,12 +76,12 @@ fn move_gap(c: &mut Criterion) {
         let size = &usize::pow(2, *size);
         let id = BenchmarkId::from_parameter(size);
         group.bench_function(id, |b| {
-            let string: String = std::iter::repeat('a').take(*size).collect();
+            let string = "a".repeat(*size);
             b.iter_batched(
                 || {
                     // create from a reference
                     let mut buffer = Buffer::with_gap(*size);
-                    buffer.insert(&*string);
+                    buffer.insert(&string);
                     buffer
                 },
                 |mut buffer| {
@@ -107,7 +104,7 @@ fn move_cursor(c: &mut Criterion) {
         let size = &usize::pow(2, *size);
         let id = BenchmarkId::from_parameter(size);
         group.bench_function(id, |b| {
-            let string: String = std::iter::repeat('a').take(*size).collect();
+            let string = "a".repeat(*size);
             let buffer = &mut Buffer::from(&*string);
             b.iter(|| buffer.benchmark_move_gap());
         });

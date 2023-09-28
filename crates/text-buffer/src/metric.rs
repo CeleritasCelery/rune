@@ -28,7 +28,7 @@ fn smallvec_size_helper<T>(slice: &[T]) -> usize
 where
     T: GetSize,
 {
-    slice.iter().map(|x| x.get_heap_size()).sum::<usize>()
+    slice.iter().map(GetSize::get_heap_size).sum()
 }
 
 impl Internal {
