@@ -6,7 +6,7 @@ use get_size::GetSize;
 use std::{
     borrow::Cow,
     cmp,
-    fmt::{Debug, Display},
+    fmt::{self, Debug, Display},
     ops::{Bound, Deref, Range, RangeBounds},
 };
 use str_indices::chars;
@@ -26,7 +26,7 @@ pub struct Buffer {
     /// The number of characters until the gap
     gap_chars: usize,
     /// The current cursor.
-    cursor: Metric,
+    cursor: GapMetric,
     total: Metric,
     metrics: BufferMetrics,
     new_gap_size: usize,
@@ -97,6 +97,39 @@ impl<'a> Iterator for MetricBuilder<'a> {
     }
 }
 
+/// Metric with gap buffer accounted for
+#[derive(Debug, Default, Copy, Clone, Eq, GetSize)]
+struct GapMetric {
+    bytes: usize,
+    chars: usize,
+}
+
+impl std::ops::Sub for GapMetric {
+    type Output = Metric;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Metric { bytes: self.bytes - rhs.bytes, chars: self.chars - rhs.chars }
+    }
+}
+
+impl Display for GapMetric {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Metric { bytes: self.bytes, chars: self.chars })
+    }
+}
+
+impl PartialEq for GapMetric {
+    fn eq(&self, other: &Self) -> bool {
+        let eq = self.bytes == other.bytes;
+        if eq {
+            debug_assert_eq!(self.chars, other.chars);
+        } else {
+            debug_assert_ne!(self.chars, other.chars);
+        }
+        eq
+    }
+}
+
 fn calc_start_gap_size(len: usize) -> usize {
     // div 40 is 2.5% combined with next_power_of_two will be <= 5%
     // overhead for large buffers
@@ -124,7 +157,7 @@ impl From<String> for Buffer {
             gap_start: len,
             gap_end: len + gap_len,
             gap_chars: total.chars,
-            cursor: Metric::default(),
+            cursor: GapMetric::default(),
             total,
             metrics,
             new_gap_size: calc_start_gap_size(len),
@@ -150,7 +183,7 @@ impl From<&str> for Buffer {
             gap_start: 0,
             gap_end: new_gap_size,
             gap_chars: 0,
-            cursor: Metric { bytes: new_gap_size, chars: 0 },
+            cursor: GapMetric { bytes: new_gap_size, chars: 0 },
             total: metrics.len(),
             new_gap_size,
             metrics,
@@ -273,14 +306,14 @@ impl Buffer {
         let end_bytes = self.char_to_byte(end_chars);
         let beg_bytes = self.char_to_byte(beg_chars);
         if end_bytes != beg_bytes {
-            let beg = Metric { bytes: beg_bytes, chars: beg_chars };
-            let end = Metric { bytes: end_bytes, chars: end_chars };
+            let beg = GapMetric { bytes: beg_bytes, chars: beg_chars };
+            let end = GapMetric { bytes: end_bytes, chars: end_chars };
             self.metrics.delete(self.to_abs_pos(beg), self.to_abs_pos(end));
             self.delete_byte_range(beg, end);
         }
     }
 
-    fn delete_byte_range(&mut self, beg: Metric, end: Metric) {
+    fn delete_byte_range(&mut self, beg: GapMetric, end: GapMetric) {
         // TODO: optimize this so that we count the chars deleted when calculating position
         assert!(beg.bytes <= end.bytes, "beg ({beg}) is greater then end ({end})");
         assert!(end.bytes <= self.data.len(), "end out of bounds");
@@ -365,9 +398,9 @@ impl Buffer {
             //  gap_start             gap_end
 
             // update character count
-            let gap_start = Metric { bytes: self.gap_start, chars: self.gap_chars };
+            let gap_start = GapMetric { bytes: self.gap_start, chars: self.gap_chars };
             let before = gap_start - beg;
-            let gap_end = Metric { bytes: self.gap_end, chars: self.gap_chars };
+            let gap_end = GapMetric { bytes: self.gap_end, chars: self.gap_chars };
             let after = end - gap_end;
             self.gap_chars -= before.chars;
             self.total -= before + after;
@@ -406,9 +439,9 @@ impl Buffer {
         let Range { start, end } = Self::bounds_to_range(range);
 
         let pos = if self.gap_chars - start < end - self.gap_chars {
-            Metric { bytes: self.char_to_byte(start), chars: start }
+            GapMetric { bytes: self.char_to_byte(start), chars: start }
         } else {
-            Metric { bytes: self.char_to_byte(end), chars: end }
+            GapMetric { bytes: self.char_to_byte(end), chars: end }
         };
         self.move_gap(pos);
     }
@@ -432,18 +465,18 @@ impl Buffer {
     #[doc(hidden)]
     pub fn benchmark_move_gap(&mut self) {
         if self.gap_chars == 0 {
-            self.move_gap(Metric { bytes: self.data.len(), chars: self.len_chars() });
+            self.move_gap(GapMetric { bytes: self.data.len(), chars: self.len_chars() });
         } else {
-            self.move_gap(Metric::default());
+            self.move_gap(GapMetric::default());
         }
     }
 
-    fn move_gap(&mut self, pos: Metric) {
+    fn move_gap(&mut self, pos: GapMetric) {
         assert!(pos.bytes <= self.data.len(), "attempt to move gap out of bounds");
         self.assert_char_boundary(pos.bytes);
         if pos.bytes < self.gap_start {
             // move gap backwards
-            let shift = Metric { bytes: self.gap_start, chars: self.gap_chars } - pos;
+            let shift = GapMetric { bytes: self.gap_start, chars: self.gap_chars } - pos;
             self.gap_chars -= shift.chars;
 
             self.data.copy_within(pos.bytes..self.gap_start, self.gap_end - shift.bytes);
@@ -475,10 +508,10 @@ impl Buffer {
     pub fn set_cursor(&mut self, pos: usize) {
         let pos = pos.min(self.total.chars);
         let byte_pos = self.char_to_byte(pos);
-        self.cursor = Metric { bytes: byte_pos, chars: pos };
+        self.cursor = GapMetric { bytes: byte_pos, chars: pos };
     }
 
-    fn to_abs_pos(&self, pos: Metric) -> Metric {
+    fn to_abs_pos(&self, pos: GapMetric) -> Metric {
         let chars = pos.chars;
         let bytes = if pos.bytes < self.gap_start {
             pos.bytes
@@ -490,7 +523,7 @@ impl Buffer {
         Metric { bytes, chars }
     }
 
-    fn to_gapped_pos(&self, pos: Metric) -> Metric {
+    fn to_gapped_pos(&self, pos: Metric) -> GapMetric {
         let chars = pos.chars;
         let bytes = if pos.bytes < self.gap_start {
             pos.bytes
@@ -499,7 +532,7 @@ impl Buffer {
         } else {
             unreachable!()
         };
-        Metric { bytes, chars }
+        GapMetric { bytes, chars }
     }
 
     pub fn len(&self) -> usize {
@@ -729,7 +762,7 @@ mod test {
         assert_eq!(buffer.gap_start, hello.len() - 4);
         buffer.move_gap_out_of(..);
         buffer.move_gap_out_of(..);
-        buffer.move_gap(Metric { bytes: buffer.char_to_byte(7), chars: 7 });
+        buffer.move_gap(GapMetric { bytes: buffer.char_to_byte(7), chars: 7 });
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "heworld");
     }
