@@ -134,7 +134,8 @@ fn calc_start_gap_size(len: usize) -> usize {
     // div 40 is 2.5% combined with next_power_of_two will be <= 5%
     // overhead for large buffers
     let overhead = ((len / 40) + 1).next_power_of_two();
-    cmp::min(cmp::max(overhead, Buffer::GAP_SIZE), 2048)
+    let lower_bound = cmp::max(overhead, Buffer::GAP_SIZE);
+    cmp::min(lower_bound, 2048)
 }
 
 impl From<String> for Buffer {
@@ -227,6 +228,8 @@ impl Buffer {
         Self { new_gap_size: gap, ..Self::default() }
     }
 
+    /// Grow the buffer to accommodate the new slice. Moves the gap to the
+    /// cursor position at the same time.
     fn grow(&mut self, slice: &str) {
         // If the string being inserted is large, we want to grow the gap faster
         if slice.len() >= self.new_gap_size {
@@ -237,26 +240,39 @@ impl Buffer {
             let post_gap = self.data.len() - self.gap_end;
             pre_gap + slice.len() + self.new_gap_size + post_gap
         };
-        let new_storage = {
-            let mut buffer = Vec::with_capacity(new_capacity);
-            // pre-gap
-            buffer.extend_from_slice(&self.data[..self.gap_start]);
-            // new text
-            buffer.extend_from_slice(slice.as_bytes());
-            // gap
-            buffer.resize(buffer.len() + self.new_gap_size, 0);
-            // post-gap
-            buffer.extend_from_slice(&self.data[self.gap_end..]);
-            buffer.into_boxed_slice()
-        };
-        assert_eq!(new_storage.len(), new_capacity);
-        self.data = new_storage;
-        self.gap_start += slice.len();
-        self.gap_end = self.gap_start + self.new_gap_size;
-        self.cursor.bytes = self.gap_end;
+        let mut buffer = Vec::with_capacity(new_capacity);
+        let bytes;
+        #[allow(clippy::comparison_chain)]
+        if self.cursor.chars < self.gap_chars {
+            buffer.extend_from_slice(&self.data[..self.cursor.bytes]); // pre cursor
+            buffer.extend_from_slice(slice.as_bytes()); // new text
+            buffer.resize(buffer.len() + self.new_gap_size, 0); // new gap
+            bytes = buffer.len();
+            buffer.extend_from_slice(&self.data[self.cursor.bytes..self.gap_start]); // cursor to gap
+            buffer.extend_from_slice(&self.data[self.gap_end..]); // post gap
+        } else if self.cursor.chars > self.gap_chars {
+            buffer.extend_from_slice(&self.data[..self.gap_start]); // pre gap
+            buffer.extend_from_slice(&self.data[self.gap_end..self.cursor.bytes]); // gap to cursor
+            buffer.extend_from_slice(slice.as_bytes()); // new text
+            buffer.resize(buffer.len() + self.new_gap_size, 0); // new gap
+            bytes = buffer.len();
+            buffer.extend_from_slice(&self.data[self.cursor.bytes..]); // post cursor
+        } else {
+            // cursor is at gap
+            buffer.extend_from_slice(&self.data[..self.gap_start]); // pre gap
+            buffer.extend_from_slice(slice.as_bytes()); // new text
+            buffer.resize(buffer.len() + self.new_gap_size, 0); // new gap
+            bytes = buffer.len();
+            buffer.extend_from_slice(&self.data[self.gap_end..]); // post gap
+        }
+        self.cursor.bytes = bytes;
+        self.data = buffer.into_boxed_slice();
+        debug_assert_eq!(self.data.len(), new_capacity);
         let new = metrics(slice);
-        self.gap_chars += new.chars;
-        self.cursor.chars = self.gap_chars;
+        self.cursor.chars += new.chars;
+        self.gap_chars = self.cursor.chars;
+        self.gap_end = self.cursor.bytes;
+        self.gap_start = self.gap_end - self.new_gap_size;
         self.total += new;
         self.new_gap_size = cmp::min(self.new_gap_size * 2, Self::MAX_GAP);
     }
@@ -268,15 +284,13 @@ impl Buffer {
 
     pub fn insert(&mut self, slice: &str) {
         self.metrics.insert(self.to_abs_pos(self.cursor), MetricBuilder::new(slice));
-        // if gap is not at cursor, move it there
-        if self.gap_chars != self.cursor.chars {
-            // TODO: we don't need to recalculate the position
-            self.move_gap(self.cursor);
-        }
         if self.gap_len() < slice.len() {
-            // TODO: grow the gap and move the cursor in one go
             self.grow(slice);
         } else {
+            // if gap is not at cursor, move it there
+            if self.gap_chars != self.cursor.chars {
+                self.move_gap(self.cursor);
+            }
             let new_slice = &mut self.data[self.gap_start..(self.gap_start + slice.len())];
             new_slice.copy_from_slice(slice.as_bytes());
             self.gap_start += slice.len();
@@ -594,7 +608,6 @@ impl Buffer {
     }
 
     fn to_str(&self, range: impl std::slice::SliceIndex<[u8], Output = [u8]>) -> &str {
-        // TODO: remove this check once we are confident the code is correct
         if cfg!(debug_assertions) {
             std::str::from_utf8(&self.data[range]).unwrap()
         } else {
