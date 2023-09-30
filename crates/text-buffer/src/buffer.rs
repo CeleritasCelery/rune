@@ -283,6 +283,9 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, slice: &str) {
+        if slice == "" {
+            return;
+        }
         self.metrics.insert(self.to_abs_pos(self.cursor), MetricBuilder::new(slice));
         if self.gap_len() < slice.len() {
             self.grow(slice);
@@ -311,6 +314,9 @@ impl Buffer {
     }
 
     pub fn delete_range(&mut self, beg: usize, end: usize) {
+        if beg == end {
+            return;
+        }
         let (mut beg_chars, mut end_chars) = (beg, end);
         if beg_chars > end_chars {
             (beg_chars, end_chars) = (end_chars, beg_chars);

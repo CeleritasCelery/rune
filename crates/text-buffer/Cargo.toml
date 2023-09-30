@@ -11,7 +11,8 @@ members = ["reference-tests"]
 [dependencies]
 get-size = {git = "https://github.com/CeleritasCelery/get-size.git", branch = "boxed_slice_fix", features = ["derive"]}
 smallvec = {version = "1.11.0", features = ["union"]}
-str_indices = "0.4.1"
+# str_indices = "0.4.1"
+str_indices = {git = "https://github.com/CeleritasCelery/str_indices.git", branch = "optimized"}
 
 [dev-dependencies]
 proptest = "1.0"

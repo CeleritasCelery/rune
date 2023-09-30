@@ -77,33 +77,6 @@ fn resize(c: &mut Criterion) {
 fn move_gap(c: &mut Criterion) {
     let mut group = c.benchmark_group("move_gap");
 
-    for size in &[8, 9, 10, 11, 12, 13, 14, 15, 16, 17] {
-        let size = &usize::pow(2, *size);
-        let id = BenchmarkId::from_parameter(size);
-        group.bench_function(id, |b| {
-            let string = "a".repeat(*size);
-            b.iter_batched(
-                || {
-                    // create from a reference
-                    let mut buffer = Buffer::with_gap(*size);
-                    buffer.insert(&string);
-                    buffer
-                },
-                |mut buffer| {
-                    let len = buffer.len_chars();
-                    buffer.set_cursor(len);
-                    buffer.insert_char('a');
-                },
-                BatchSize::SmallInput,
-            );
-        });
-    }
-    group.finish();
-}
-
-fn move_cursor(c: &mut Criterion) {
-    let mut group = c.benchmark_group("move_cursor");
-
     for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
         group.sample_size(*sample);
         let size = &usize::pow(2, *size);
@@ -117,5 +90,5 @@ fn move_cursor(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, realworld, resize, move_cursor, move_gap);
+criterion_group!(benches, realworld, resize, move_gap);
 criterion_main!(benches);
