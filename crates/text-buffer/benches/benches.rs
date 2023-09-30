@@ -10,12 +10,17 @@ fn get_test_data(name: &str) -> TestData {
         env!("CARGO_MANIFEST_DIR"),
         name
     );
-    println!("loading {}", path);
     crdt_testdata::load_testing_data(&path)
 }
 
 fn realworld(c: &mut Criterion) {
-    const DATASETS: &[&str] = &["automerge-paper", "rustcode", "sveltecomponent", "seph-blog1"];
+    const DATASETS: &[&str] = &[
+        "automerge-paper",
+        "rustcode",
+        "sveltecomponent",
+        "seph-blog1",
+        "friendsforever_flat",
+    ];
     for name in DATASETS {
         let mut group = c.benchmark_group("realworld");
         let test_data = get_test_data(name);

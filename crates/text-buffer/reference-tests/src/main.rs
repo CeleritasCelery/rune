@@ -93,4 +93,9 @@ mod test {
     fn test_svelte() {
         apply_tokens("sveltecomponent");
     }
+
+    #[test]
+    fn test_friendsforever() {
+        apply_tokens("friendsforever_flat");
+    }
 }
