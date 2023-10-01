@@ -139,6 +139,7 @@ fn calc_start_gap_size(len: usize) -> usize {
 }
 
 impl From<String> for Buffer {
+    #[inline]
     fn from(data: String) -> Self {
         // reuse the allocation from the string. This means we *might* have a
         // gap of 0
@@ -146,7 +147,7 @@ impl From<String> for Buffer {
         let metrics = BufferMetrics::build(builder);
         let (storage, len) = {
             let len = data.len();
-            let mut vec = data.into_bytes();
+            let mut vec: Vec<u8> = data.into_bytes();
             vec.resize(vec.capacity(), 0);
             debug_assert_eq!(vec.capacity(), vec.len());
             (vec.into_boxed_slice(), len)
@@ -167,6 +168,7 @@ impl From<String> for Buffer {
 }
 
 impl From<&str> for Buffer {
+    #[inline]
     fn from(data: &str) -> Self {
         let new_gap_size = calc_start_gap_size(data.len());
         let storage = {
@@ -277,11 +279,13 @@ impl Buffer {
         self.new_gap_size = cmp::min(self.new_gap_size * 2, Self::MAX_GAP);
     }
 
+    #[inline]
     pub fn insert_char(&mut self, chr: char) {
         let buf = &mut [0; 4];
         self.insert(chr.encode_utf8(buf));
     }
 
+    #[inline]
     pub fn insert(&mut self, slice: &str) {
         if slice == "" {
             return;
@@ -304,15 +308,18 @@ impl Buffer {
         }
     }
 
+    #[inline]
     pub fn delete_backwards(&mut self, size: usize) {
         let size = size.min(self.cursor.chars);
         self.delete_range(self.cursor.chars - size, self.cursor.chars);
     }
 
+    #[inline]
     pub fn delete_forwards(&mut self, size: usize) {
         self.delete_range(self.cursor.chars, self.cursor.chars + size);
     }
 
+    #[inline]
     pub fn delete_range(&mut self, beg: usize, end: usize) {
         if beg == end {
             return;
@@ -449,6 +456,7 @@ impl Buffer {
         }
     }
 
+    #[inline]
     pub fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
         if !range.contains(&self.gap_chars)
             || range.start_bound() == Bound::Included(&self.gap_chars)
@@ -483,6 +491,7 @@ impl Buffer {
     }
 
     #[doc(hidden)]
+    #[inline]
     pub fn benchmark_move_gap(&mut self) {
         if self.gap_chars == 0 {
             self.move_gap(GapMetric { bytes: self.data.len(), chars: self.len_chars() });
@@ -525,6 +534,7 @@ impl Buffer {
         }
     }
 
+    #[inline]
     pub fn set_cursor(&mut self, pos: usize) {
         let pos = pos.min(self.total.chars);
         let byte_pos = self.char_to_byte(pos);
@@ -555,15 +565,18 @@ impl Buffer {
         GapMetric { bytes, chars }
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         debug_assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
         self.total.bytes
     }
 
+    #[inline]
     pub const fn len_chars(&self) -> usize {
         self.total.chars
     }
 
+    #[inline]
     pub const fn is_empty(&self) -> bool {
         self.total.chars == 0
     }
@@ -621,6 +634,7 @@ impl Buffer {
         }
     }
 
+    #[inline]
     pub fn as_str(&mut self) -> &str {
         self.move_gap_out_of(..);
         let slice = if self.gap_start == 0 {
@@ -632,6 +646,7 @@ impl Buffer {
         slice
     }
 
+    #[inline]
     pub fn read(&self, bounds: impl RangeBounds<usize>) -> Cow<'_, str> {
         // if past gap_start, add gap_len to range
         let mut range = Self::bounds_to_range(bounds);
