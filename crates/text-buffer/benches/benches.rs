@@ -90,5 +90,20 @@ fn move_gap(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, realworld, resize, move_gap);
+fn build_metrics(c: &mut Criterion) {
+    let mut group = c.benchmark_group("build_metrics");
+
+    for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
+        group.sample_size(*sample);
+        let size = &usize::pow(2, *size);
+        let id = BenchmarkId::from_parameter(size);
+        group.bench_function(id, |b| {
+            let string = "a".repeat(*size);
+            b.iter(|| Buffer::benchmark_build_metrics(&string));
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, realworld, resize, move_gap, build_metrics);
 criterion_main!(benches);

@@ -78,14 +78,12 @@ impl<'a> Iterator for MetricBuilder<'a> {
             return None;
         }
         let mut end = self.end;
-        if end != self.slice.len() {
-            while !self.slice.is_char_boundary(end) {
-                end -= 1;
-            }
+        while !self.slice.is_char_boundary(end) {
+            end -= 1;
         }
         let slice = &self.slice[self.start..end];
         self.start = end;
-        self.end += METRIC_SIZE;
+        self.end = cmp::min(self.end + METRIC_SIZE, self.slice.len());
         Some(metrics(slice))
     }
 
@@ -498,6 +496,14 @@ impl Buffer {
         } else {
             self.move_gap(GapMetric::default());
         }
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    pub fn benchmark_build_metrics(string: &str) -> usize {
+        let builder = MetricBuilder::new(&string);
+        let metrics = BufferMetrics::build(builder);
+        metrics.len().bytes
     }
 
     fn move_gap(&mut self, pos: GapMetric) {
