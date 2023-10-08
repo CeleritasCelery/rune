@@ -1,12 +1,6 @@
 * round point to the nearest grapheme
-* benchmark
-- benchmark against rope implementations
-- benchmark the fastest way to convert codepoint to byte index. Maybe use stable indexes
-- see if staticvec can be unrolled
 * line endings
 ** adds line endings to metrics
 ** convert line endings
 Convert \r\n to \n
 * add from_file constructor
-* make metric a public type
-We need to be able to take a reference to point and get offsets from it
