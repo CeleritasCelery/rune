@@ -1,7 +1,6 @@
 use crdt_testdata::{TestData, TestPatch};
-use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
-};
+use criterion::BenchmarkId as id;
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use text_buffer::Buffer;
 
 fn get_test_data(name: &str) -> TestData {
@@ -34,7 +33,7 @@ fn realworld(c: &mut Criterion) {
 
         group.throughput(Throughput::Elements(len as u64));
 
-        group.bench_function(BenchmarkId::new("direct", name), |b| {
+        group.bench_function(id::new("direct", name), |b| {
             b.iter(|| {
                 let mut buffer = Buffer::from(&*test_data.start_content);
                 for txn in test_data.txns.iter() {
@@ -58,17 +57,19 @@ fn resize(c: &mut Criterion) {
     for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
         group.sample_size(*sample);
         let size = &usize::pow(2, *size);
-        let id = BenchmarkId::from_parameter(size);
         // because we create the buffer from a String, the gap size will be 0,
         // meaning any insert will resize it
-        group.bench_function(id, |b| {
-            b.iter_batched(
-                || Buffer::from("a".repeat(*size)),
-                |mut buffer| {
-                    buffer.insert_char('a');
-                },
-                BatchSize::SmallInput,
-            );
+
+        let string = "a".repeat(*size);
+        group.bench_function(id::new("create", size), |b| {
+            b.iter(|| black_box(Buffer::from(string.clone())));
+        });
+        // subtract create from resize to get total cost
+        group.bench_function(id::new("resize", size), |b| {
+            b.iter(|| {
+                let buffer = &mut Buffer::from(string.clone());
+                buffer.insert_char('a');
+            });
         });
     }
     group.finish();
@@ -80,9 +81,9 @@ fn move_gap(c: &mut Criterion) {
     for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
         group.sample_size(*sample);
         let size = &usize::pow(2, *size);
-        let id = BenchmarkId::from_parameter(size);
+        let id = id::from_parameter(size);
+        let string = "a".repeat(*size);
         group.bench_function(id, |b| {
-            let string = "a".repeat(*size);
             let buffer = &mut Buffer::from(&*string);
             b.iter(|| buffer.benchmark_move_gap());
         });
@@ -96,7 +97,7 @@ fn build_metrics(c: &mut Criterion) {
     for (size, sample) in &[(10, 100), (15, 100), (20, 50), (25, 10), (30, 10)] {
         group.sample_size(*sample);
         let size = &usize::pow(2, *size);
-        let id = BenchmarkId::from_parameter(size);
+        let id = id::from_parameter(size);
         group.bench_function(id, |b| {
             let string = "a".repeat(*size);
             b.iter(|| Buffer::benchmark_build_metrics(&string));

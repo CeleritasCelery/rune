@@ -133,7 +133,7 @@ fn calc_start_gap_size(len: usize) -> usize {
     // overhead for large buffers
     let overhead = ((len / 40) + 1).next_power_of_two();
     let lower_bound = cmp::max(overhead, Buffer::GAP_SIZE);
-    cmp::min(lower_bound, 2048)
+    cmp::min(lower_bound, Buffer::MAX_GAP)
 }
 
 impl From<String> for Buffer {
@@ -169,6 +169,7 @@ impl From<&str> for Buffer {
     #[inline]
     fn from(data: &str) -> Self {
         let new_gap_size = calc_start_gap_size(data.len());
+        println!("new_gap_size: {:?}", new_gap_size);
         let storage = {
             let capacity = data.len() + new_gap_size;
             let mut storage = Vec::with_capacity(capacity);
@@ -216,7 +217,7 @@ impl Buffer {
     const GAP_SIZE: usize = 64;
     #[cfg(test)]
     const GAP_SIZE: usize = 5;
-    const MAX_GAP: usize = 4096;
+    const MAX_GAP: usize = 1024*8;
 
     #[must_use]
     pub fn new() -> Self {
@@ -233,7 +234,7 @@ impl Buffer {
     fn grow(&mut self, slice: &str) {
         // If the string being inserted is large, we want to grow the gap faster
         if slice.len() >= self.new_gap_size {
-            self.new_gap_size = cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP * 4);
+            self.new_gap_size = cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP);
         }
         let new_capacity = {
             let pre_gap = self.gap_start;
