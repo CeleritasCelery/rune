@@ -169,7 +169,6 @@ impl From<&str> for Buffer {
     #[inline]
     fn from(data: &str) -> Self {
         let new_gap_size = calc_start_gap_size(data.len());
-        println!("new_gap_size: {:?}", new_gap_size);
         let storage = {
             let capacity = data.len() + new_gap_size;
             let mut storage = Vec::with_capacity(capacity);
