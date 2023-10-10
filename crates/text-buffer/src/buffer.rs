@@ -129,11 +129,8 @@ impl PartialEq for GapMetric {
 }
 
 fn calc_start_gap_size(len: usize) -> usize {
-    // div 40 is 2.5% combined with next_power_of_two will be <= 5%
-    // overhead for large buffers
-    let overhead = ((len / 40) + 1).next_power_of_two();
-    let lower_bound = cmp::max(overhead, Buffer::GAP_SIZE);
-    cmp::min(lower_bound, Buffer::MAX_GAP)
+    // The gap can be up to 5% of the total size, but at least 64 bytes
+    cmp::max(len / 20, Buffer::GAP_SIZE)
 }
 
 impl From<String> for Buffer {
@@ -216,7 +213,7 @@ impl Buffer {
     const GAP_SIZE: usize = 64;
     #[cfg(test)]
     const GAP_SIZE: usize = 5;
-    const MAX_GAP: usize = 1024*8;
+    const MAX_GAP: usize = 1024 * 8;
 
     #[must_use]
     pub fn new() -> Self {
@@ -233,7 +230,9 @@ impl Buffer {
     fn grow(&mut self, slice: &str) {
         // If the string being inserted is large, we want to grow the gap faster
         if slice.len() >= self.new_gap_size {
-            self.new_gap_size = cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP);
+            let len = slice.len() + self.len();
+            self.new_gap_size =
+                cmp::max(len / 20, cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP));
         }
         let new_capacity = {
             let pre_gap = self.gap_start;
@@ -274,7 +273,8 @@ impl Buffer {
         self.gap_end = self.cursor.bytes;
         self.gap_start = self.gap_end - self.new_gap_size;
         self.total += new;
-        self.new_gap_size = cmp::min(self.new_gap_size * 2, Self::MAX_GAP);
+        self.new_gap_size =
+            cmp::max(self.len() / 20, cmp::min(self.new_gap_size * 2, Self::MAX_GAP));
     }
 
     #[inline]
