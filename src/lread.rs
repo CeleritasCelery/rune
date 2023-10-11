@@ -190,7 +190,7 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> 
 defvar!(LEXICAL_BINDING, true);
 defvar!(CURRENT_LOAD_LIST);
 defvar!(LOAD_HISTORY);
-defvar!(LOAD_PATH, list!["lisp"]);
+defvar!(LOAD_PATH, list![format!("{}/lisp", env!("CARGO_MANIFEST_DIR"))]);
 defvar!(LOAD_FILE_NAME);
 defvar!(BYTE_BOOLEAN_VARS);
 
