@@ -233,6 +233,12 @@ pub(crate) fn modulo(x: Gc<Number>, y: Gc<Number>) -> NumberValue {
     x.val() % y.val()
 }
 
+#[defun(name = "%")]
+pub(crate) fn remainder(x: i64, y: i64) -> i64 {
+    // TODO: Handle markers
+    x % y
+}
+
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
     let y = y.val();

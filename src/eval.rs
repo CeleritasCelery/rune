@@ -85,6 +85,42 @@ fn run_hooks<'ob>(
 }
 
 #[defun]
+fn run_hook_with_args<'ob>(
+    hook: &Rt<GcObj>,
+    args: &[Rt<GcObj>],
+    env: &mut Rt<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>> {
+    match hook.get(cx) {
+        Object::Symbol(sym) => {
+            if let Some(val) = env.vars.get(sym) {
+                let val = val.bind(cx);
+                match val.untag() {
+                    Object::Cons(hook_list) => {
+                        rooted_iter!(hooks, hook_list, cx);
+                        while let Some(hook) = hooks.next() {
+                            let func: &Rt<Gc<Function>> = hook.try_into()?;
+                            let args = Rt::bind_slice(args, cx).to_vec();
+                            root!(args, cx);
+                            func.call(args, env, cx, None)?;
+                        }
+                    }
+                    Object::NIL => {}
+                    _ => {
+                        let func: Gc<Function> = val.try_into()?;
+                        root!(func, cx);
+                        root!(args, Vec::new(), cx);
+                        func.call(args, env, cx, None)?;
+                    }
+                }
+            }
+        }
+        x => bail!(TypeError::new(Type::Symbol, x)),
+    }
+    Ok(nil())
+}
+
+#[defun]
 pub(crate) fn autoload_do_load<'ob>(
     fundef: &Rt<GcObj>,
     funname: Option<&Rt<Gc<Symbol>>>,
@@ -102,7 +138,7 @@ pub(crate) fn autoload_do_load<'ob>(
                 elem.next().ok_or_else(|| anyhow!("Malformed autoload"))??.try_into()?;
             ensure!(
                 elem.all(|x| match x {
-                    Ok(x) => x.nil(),
+                    Ok(x) => x.is_nil(),
                     Err(_) => false,
                 }),
                 "autoload arguments are not yet implemented"
@@ -193,7 +229,7 @@ fn internal__define_uninitialized_variable<'ob>(
 
 #[defun]
 fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Result<bool> {
-    if error_symbol.nil() && data.nil() {
+    if error_symbol.is_nil() && data.is_nil() {
         error_symbol = sym::ERROR.into();
     }
     Err(EvalError::signal(error_symbol, data, env).into())
@@ -255,5 +291,6 @@ defsym!(CATCH);
 defsym!(THROW);
 defsym!(ERROR);
 defsym!(DEBUG);
+defsym!(VOID_VARIABLE);
 
 defvar!(DEBUG_ON_ERROR, false);

@@ -86,12 +86,75 @@ pub(crate) fn get_buffer_create<'ob>(
     }
 }
 
+/// Return a string that is the name of no existing buffer based on NAME.
+///
+/// If there is no live buffer named NAME, then return NAME.
+/// Otherwise modify name by appending <NUMBER>, incrementing NUMBER
+/// (starting at 2) until an unused name is found, and then return that name.
+/// Optional second argument IGNORE specifies a name that is okay to use (if
+/// it is in the sequence to be tried) even if a buffer with that name exists.
+///
+/// If NAME begins with a space (i.e., a buffer that is not normally
+/// visible to users), then if buffer NAME already exists a random number
+/// is first appended to NAME, to speed up finding a non-existent buffer.
+#[defun]
+fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
+    // check if the name exists
+    let buffer_list = BUFFERS.lock().unwrap();
+    let valid_name =
+        |name: &str| ignore.is_some_and(|x| x == name) || !buffer_list.contains_key(name);
+
+    let mut new_name = name.to_string();
+    let mut number = 2;
+
+    while !valid_name(&new_name) {
+        if name.starts_with(' ') {
+            // use rand to find uniq names faster
+            let rand = rand::random::<u32>();
+            new_name = format!("{name}-{rand}");
+        } else {
+            new_name = format!("{name}<{number}>");
+            number += 1;
+        }
+    }
+    new_name
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::env::sym;
     use crate::core::gc::RootSet;
+    use crate::core::object::nil;
 
     use super::*;
+
+    #[test]
+    fn test_gen_new_buffer_name() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+
+        let name = "gen_buffer_test";
+        let new_name = generate_new_buffer_name(name, None);
+        assert_eq!(new_name, "gen_buffer_test");
+
+        get_buffer_create(cx.add(name), nil(), cx).unwrap();
+        let new_name = generate_new_buffer_name(name, None);
+        assert_eq!(new_name, "gen_buffer_test<2>");
+
+        get_buffer_create(cx.add("gen_buffer_test<2>"), nil(), cx).unwrap();
+        let new_name = generate_new_buffer_name(name, None);
+        assert_eq!(new_name, "gen_buffer_test<3>");
+
+        let new_name = generate_new_buffer_name(name, Some("gen_buffer_test<2>"));
+        assert_eq!(new_name, "gen_buffer_test<2>");
+
+        let new_name = generate_new_buffer_name(" gen_buffer_test", None);
+        assert_eq!(new_name, " gen_buffer_test");
+
+        get_buffer_create(cx.add(" gen_buffer_test"), nil(), cx).unwrap();
+        let new_name = generate_new_buffer_name(" gen_buffer_test", None);
+        assert!(new_name.starts_with(" gen_buffer_test-"));
+    }
 
     #[test]
     fn test_create_buffer() {

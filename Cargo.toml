@@ -14,14 +14,17 @@ druid = "0.8.3"
 fancy-regex = "0.10.0"
 float-cmp = "0.9.0"
 fn_macros = { version = "0.1.0", path = "fn_macros" }
+hostname = "0.3.1"
 lazy_static = "1.4.0"
 memoffset = "0.8.0"
 num_enum = "0.5.11"
 paste = "1.0.12"
+rand = "0.8.5"
 rustc-hash = "1.1.0"
 sptr = "0.3.2"
 streaming-iterator = "0.1.9"
 text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
+titlecase = "2.2.1"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.2.0"

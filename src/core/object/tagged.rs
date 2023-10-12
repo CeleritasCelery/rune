@@ -830,6 +830,20 @@ impl TagType for i32 {
     }
 }
 
+impl TagType for u32 {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(i64::from(self))
+    }
+}
+
+impl TagType for u64 {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(self as i64)
+    }
+}
+
 impl<'ob> From<i32> for Gc<Object<'ob>> {
     fn from(x: i32) -> Self {
         let ptr = sptr::invalid(x as usize);
@@ -856,7 +870,7 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
     type Error = TypeError;
 
     fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
-        if value.nil() {
+        if value.is_nil() {
             Ok(None)
         } else {
             value.try_into().map(Some)
@@ -929,14 +943,14 @@ impl<'ob> GcObj<'ob> {
     where
         GcObj<'ob>: TryInto<T, Error = E>,
     {
-        if value.nil() {
+        if value.is_nil() {
             Ok(None)
         } else {
             Ok(Some(value.try_into()?))
         }
     }
 
-    pub(crate) fn nil(self) -> bool {
+    pub(crate) fn is_nil(self) -> bool {
         self == sym::NIL
     }
 }
@@ -1058,6 +1072,16 @@ impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
         match self.untag() {
             Object::Int(x) => x == *other,
             _ => false,
+        }
+    }
+}
+
+impl<'ob> PartialEq<bool> for Gc<Object<'ob>> {
+    fn eq(&self, other: &bool) -> bool {
+        if *other {
+            matches!(self.untag(), Object::Symbol(sym::TRUE))
+        } else {
+            matches!(self.untag(), Object::Symbol(sym::NIL))
         }
     }
 }

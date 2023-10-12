@@ -409,7 +409,7 @@ impl<T> Rt<Gc<T>> {
 
 impl From<&Rt<GcObj<'_>>> for Option<()> {
     fn from(value: &Rt<GcObj<'_>>) -> Self {
-        value.inner.nil().then_some(())
+        value.inner.is_nil().then_some(())
     }
 }
 
@@ -418,7 +418,7 @@ impl Rt<GcObj<'static>> {
     where
         GcObj<'static>: TryInto<Gc<T>, Error = E>,
     {
-        if self.inner.nil() {
+        if self.inner.is_nil() {
             Ok(None)
         } else {
             let _: Gc<T> = self.inner.try_into()?;

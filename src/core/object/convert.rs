@@ -73,14 +73,14 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
 impl<'ob> TryFrom<GcObj<'ob>> for bool {
     type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
-        Ok(obj.nil())
+        Ok(obj.is_nil())
     }
 }
 
 impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
     type Error = ArgError;
     fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
-        Ok(obj.nil().then_some(()))
+        Ok(obj.is_nil().then_some(()))
     }
 }
 

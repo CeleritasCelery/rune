@@ -529,7 +529,7 @@ impl Interpreter<'_> {
                     // Check that conditions match
                     let condition = cons.car();
                     match condition.untag() {
-                        Object::Symbol(sym::ERROR) => {}
+                        Object::Symbol(sym::ERROR | sym::VOID_VARIABLE) => {}
                         Object::Cons(cons) => {
                             for x in cons.elements() {
                                 let x = x?;

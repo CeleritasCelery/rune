@@ -51,6 +51,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         }
 
         #[automatically_derived]
+        #[allow(non_upper_case_globals)]
         pub(crate) const #struct_name: crate::core::object::SubrFn = crate::core::object::SubrFn {
             name: #lisp_name,
             subr: #func_name,

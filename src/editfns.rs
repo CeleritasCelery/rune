@@ -88,6 +88,14 @@ fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
     Ok(())
 }
 
+#[defun]
+fn system_name() -> String {
+    hostname::get()
+        .expect("Failed to get hostname")
+        .into_string()
+        .expect("Failed to convert OsString to String")
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::env::sym;

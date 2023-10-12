@@ -49,6 +49,7 @@ mod alloc;
 mod arith;
 mod buffer;
 mod bytecode;
+mod casefiddle;
 mod character;
 mod data;
 mod editfns;
@@ -66,6 +67,7 @@ mod print;
 mod reader;
 mod search;
 mod threads;
+mod timefns;
 
 use crate::core::{
     env::{intern, sym, Env},

@@ -56,7 +56,9 @@ fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
 }
 
 #[defun]
-fn plist_get<'ob>(plist: Gc<List<'ob>>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
+fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
+    let plist: Result<Gc<List>, _> = plist.try_into();
+    let Ok(plist) = plist else { return Ok(nil()) };
     // TODO: this function should never fail. Need to implement safe iterator
     let iter = plist.elements().zip(plist.elements().skip(1));
 
@@ -71,6 +73,12 @@ fn plist_get<'ob>(plist: Gc<List<'ob>>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> 
 #[defun]
 pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String {
     format!("{object}")
+}
+
+#[defun]
+fn string_to_multibyte(string: &LispString) -> &LispString {
+    // TODO: Handle the unibyte case
+    string
 }
 
 #[defun]
@@ -573,14 +581,36 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
 }
 
 #[defun]
-fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> String {
+fn substring(string: &str, from: Option<usize>, to: Option<usize>) -> Result<String> {
+    if from.unwrap_or_default() > string.len() || to.unwrap_or_default() > string.len() {
+        bail!("substring args out of range for {string} : {from:?} {to:?}");
+    }
     let new_string = match (from, to) {
         (None, None) => string,
         (None, Some(t)) => &string[..t],
         (Some(f), None) => &string[f..],
-        (Some(f), Some(t)) => &string[f..t],
+        (Some(f), Some(t)) => {
+            let range = if f > t { t..f } else { f..t };
+            &string[range]
+        }
     };
-    new_string.to_owned()
+    Ok(new_string.to_owned())
+}
+
+defsym!(MD5);
+defsym!(SHA1);
+defsym!(SHA224);
+defsym!(SHA256);
+defsym!(SHA384);
+defsym!(SHA512);
+
+#[defun]
+fn secure_hash_algorithms<'ob>(cx: &'ob Context) -> GcObj<'ob> {
+    // https://crates.io/crates/md-5
+    // https://crates.io/crates/sha1
+    // https://crates.io/crates/sha2
+    // https://crates.io/crates/digest ?
+    list![sym::MD5, sym::SHA1, sym::SHA224, sym::SHA256, sym::SHA384, sym::SHA512; cx]
 }
 
 #[defun]

@@ -6,7 +6,7 @@
 Currently symbol-function of a special form will return nil
 * See how much we can unify the interpters
 * Steps to add a new object type
-- define in gc.rs
+- define in gc/alloc.rs
 - add boxing function
 - define in object
 - impl ~IntoObject~

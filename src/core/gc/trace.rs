@@ -5,6 +5,18 @@ pub(crate) trait Trace {
     fn trace(&self, stack: &mut Vec<RawObj>);
 }
 
+impl Trace for usize {
+    fn trace(&self, _: &mut Vec<RawObj>) {}
+}
+
+impl Trace for u64 {
+    fn trace(&self, _: &mut Vec<RawObj>) {}
+}
+
+impl Trace for i64 {
+    fn trace(&self, _: &mut Vec<RawObj>) {}
+}
+
 impl<T: Trace> Trace for &T {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         (*self).trace(stack);

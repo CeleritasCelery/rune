@@ -12,9 +12,11 @@ fn string_match<'ob>(
     regexp: &str,
     string: &str,
     start: Option<i64>,
+    _inhibit_modify: Option<()>,
     env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
+    // TODO: implement inhibit-modify
     let re = Regex::new(&lisp_regex_to_rust(regexp))?;
 
     let start = start.unwrap_or(0) as usize;

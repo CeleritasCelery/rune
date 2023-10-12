@@ -106,8 +106,8 @@ impl From<std::convert::Infallible> for EvalError {
 
 #[macro_export]
 macro_rules! error {
-    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
-    ($err:expr) => (EvalError::new($err));
+    ($msg:literal $(,)?  $($args:expr),* $(,)?) => ($crate::core::error::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
+    ($err:expr) => ($crate::core::error::EvalError::new($err));
 }
 
 #[macro_export]

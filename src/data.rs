@@ -18,7 +18,7 @@ lazy_static! {
 
 #[defun]
 pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
-    if definition.nil() {
+    if definition.is_nil() {
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
@@ -71,6 +71,22 @@ pub(crate) fn get<'ob>(
 }
 
 #[defun]
+pub(crate) fn local_variable_if_set_p(_sym: Symbol) -> bool {
+    // TODO: Implement buffer locals
+    false
+}
+
+#[defun]
+pub(crate) fn default_value<'ob>(
+    symbol: Symbol,
+    env: &Rt<Env>,
+    cx: &'ob Context,
+) -> Result<GcObj<'ob>> {
+    // TODO: Implement buffer locals
+    symbol_value(symbol, env, cx).ok_or_else(|| anyhow!("Void variable: {symbol}"))
+}
+
+#[defun]
 pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
@@ -94,7 +110,7 @@ pub(crate) fn symbol_name(symbol: Symbol<'_>) -> &str {
 
 #[defun]
 pub(crate) fn null(obj: GcObj) -> bool {
-    obj.nil()
+    obj.is_nil()
 }
 
 #[defun]
@@ -417,6 +433,13 @@ pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>>
 #[defun]
 pub(crate) fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
     crate::cons!(car, cdr; cx)
+}
+
+// Symbol with position
+#[defun]
+fn bare_symbol(sym: Symbol) -> Symbol {
+    // TODO: implement
+    sym
 }
 
 #[cfg(test)]

@@ -708,20 +708,20 @@ impl<'brw, 'ob> Routine<'brw> {
                 op::GotoIfNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.pc.arg2();
-                    if cond.nil() {
+                    if cond.is_nil() {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::GotoIfNonNil => {
                     let cond = self.stack.pop(cx);
                     let offset = self.frame.pc.arg2();
-                    if !cond.nil() {
+                    if !cond.is_nil() {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::GotoIfNilElsePop => {
                     let offset = self.frame.pc.arg2();
-                    if self.stack[0].bind(cx).nil() {
+                    if self.stack[0].bind(cx).is_nil() {
                         self.frame.pc.goto(offset);
                     } else {
                         self.stack.pop(cx);
@@ -729,7 +729,7 @@ impl<'brw, 'ob> Routine<'brw> {
                 }
                 op::GotoIfNonNilElsePop => {
                     let offset = self.frame.pc.arg2();
-                    if self.stack[0].bind(cx).nil() {
+                    if self.stack[0].bind(cx).is_nil() {
                         self.stack.pop(cx);
                     } else {
                         self.frame.pc.goto(offset);
