@@ -1,10 +1,9 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
-use super::object::{Buffer, CloneIn, Function, Gc, GcObj, LispBuffer, WithLifetime};
+use super::object::{CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, WithLifetime};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
 use fn_macros::Trace;
-use std::collections::VecDeque;
 use std::sync::Mutex;
 
 mod symbol;
@@ -20,9 +19,8 @@ pub(crate) struct Env {
     exception_id: u32,
     binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
     pub(crate) match_data: GcObj<'static>,
-    pub(crate) buffer_list: VecDeque<&'static LispBuffer>,
     #[no_trace]
-    pub(crate) current_buffer: Option<Buffer<'static>>,
+    pub(crate) current_buffer: Option<OpenBuffer<'static>>,
 }
 
 impl Rt<Env> {
@@ -92,9 +90,12 @@ impl Rt<Env> {
         Ok(())
     }
 
-    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer, cx: &Context) -> Result<()> {
-        let buffer_list = self.buffer_list.bind_mut(cx);
-        buffer_list.push_front(buffer);
+    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer) -> Result<()> {
+        if let Some(current) = &self.current_buffer {
+            if buffer == current {
+                return Ok(());
+            }
+        }
         // SAFETY: We are not dropping the buffer until we have can trace it
         // with the garbage collector
         let lock = unsafe { buffer.lock()?.with_lifetime() };
@@ -105,10 +106,10 @@ impl Rt<Env> {
     pub(crate) fn with_buffer<T>(
         &mut self,
         buffer: &LispBuffer,
-        func: impl Fn(Option<&mut Buffer>) -> T,
+        func: impl Fn(Option<&mut OpenBuffer>) -> T,
     ) -> T {
-        if let Some(current) = unsafe { self.buffer_list.bind_mut_unchecked().front() } {
-            if *current == buffer && self.current_buffer.is_some() {
+        if let Some(current) = &self.current_buffer {
+            if buffer == current {
                 return func(Some(self.current_buffer.as_mut().unwrap()));
             }
         }

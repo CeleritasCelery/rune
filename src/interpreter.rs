@@ -70,6 +70,7 @@ impl Interpreter<'_> {
                 sym::CATCH => self.catch(forms, cx),
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
+                sym::SAVE_CURRENT_BUFFER => self.save_current_buffer(forms, cx),
                 sym::UNWIND_PROTECT => self.unwind_protect(forms, cx),
                 _ => {
                     root!(sym, cx);
@@ -509,6 +510,20 @@ impl Interpreter<'_> {
                 Err(e)
             }
         }
+    }
+
+    fn save_current_buffer<'ob>(
+        &mut self,
+        form: &Rt<GcObj>,
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
+        let buffer = self.env.current_buffer.as_ref().map(|x| x.lisp_buffer(cx));
+        root!(buffer, cx);
+        let result = rebind!(self.eval_progn(form, cx)?);
+        if let Some(buffer) = buffer.bind(cx) {
+            self.env.set_buffer(buffer)?;
+        }
+        Ok(result)
     }
 
     fn condition_case<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {

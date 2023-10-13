@@ -1,7 +1,7 @@
 use super::{Gc, GcObj, Object, RawObj, TagType, WithLifetime};
 use crate::core::{
     error::{Type, TypeError},
-    gc::{AllocObject, Block, GcManaged, GcMark, Trace},
+    gc::{AllocObject, Block, Context, GcManaged, GcMark, Trace},
 };
 use anyhow::{bail, Result};
 use std::{
@@ -10,29 +10,28 @@ use std::{
 };
 use text_buffer::Buffer as TextBuffer;
 
+/// A Handle to an open buffer. Only one thread can hold this at a time.
 #[derive(Debug)]
-pub(crate) struct Buffer<'a> {
+pub(crate) struct OpenBuffer<'a> {
     data: MutexGuard<'a, Option<BufferData>>,
+    back_ref: &'a LispBuffer,
 }
 
-impl<'a> Buffer<'a> {
-    fn new(data: MutexGuard<'a, Option<BufferData>>) -> Result<Self> {
-        if data.is_none() {
-            bail!("selecting deleted buffer");
-        }
-        Ok(Self { data })
-    }
-
+impl<'a> OpenBuffer<'a> {
     fn get(&self) -> &BufferData {
-        // buffer can never be none because we check it as part of `new`. Could
+        // buffer can never be none because we check it as part of `lock`. Could
         // make this unchecked at some point.
         self.data.as_ref().unwrap()
     }
 
     fn get_mut(&mut self) -> &mut BufferData {
-        // buffer can never be none because we check it as part of `new`. Could
+        // buffer can never be none because we check it as part of `lock`. Could
         // make this unchecked at some point.
         self.data.as_mut().unwrap()
+    }
+
+    pub(crate) fn lisp_buffer<'ob>(&self, cx: &'ob Context) -> &'ob LispBuffer {
+        cx.bind(self.back_ref)
     }
 
     pub(crate) fn insert(&mut self, arg: GcObj) -> Result<()> {
@@ -53,27 +52,30 @@ impl<'a> Buffer<'a> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for Buffer<'old> {
-    type Out = Buffer<'new>;
+impl<'old, 'new> WithLifetime<'new> for OpenBuffer<'old> {
+    type Out = OpenBuffer<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute(self)
     }
 }
 
-impl PartialEq<str> for Buffer<'_> {
+impl PartialEq<str> for OpenBuffer<'_> {
     fn eq(&self, other: &str) -> bool {
         self.get().text == other
     }
 }
 
+/// The actual data of the buffer. Buffer local variables will be stored here
+/// eventually.
 #[derive(Debug)]
-#[allow(dead_code)]
 struct BufferData {
     name: String,
     text: TextBuffer,
 }
 
+/// A lisp handle to a buffer. This is a just a reference type and does not give
+/// access to the contents until it is locked and a `OpenBuffer` is returned.
 #[derive(Debug)]
 pub(crate) struct LispBuffer {
     text_buffer: Mutex<Option<BufferData>>,
@@ -87,15 +89,30 @@ impl LispBuffer {
         unsafe { &*ptr }
     }
 
-    pub(in crate::core) fn lock(&self) -> Result<Buffer<'_>> {
-        let buffer = self.text_buffer.lock().unwrap();
-        Buffer::new(buffer)
+    pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {
+        let guard = self.text_buffer.lock().unwrap();
+        if guard.is_none() {
+            bail!("selecting deleted buffer");
+        }
+        Ok(OpenBuffer { data: guard, back_ref: self })
     }
 }
 
 impl PartialEq for LispBuffer {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
+    }
+}
+
+impl PartialEq<OpenBuffer<'_>> for LispBuffer {
+    fn eq(&self, other: &OpenBuffer) -> bool {
+        other.back_ref == self
+    }
+}
+
+impl PartialEq<LispBuffer> for OpenBuffer<'_> {
+    fn eq(&self, other: &LispBuffer) -> bool {
+        self.back_ref == other
     }
 }
 

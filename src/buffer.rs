@@ -36,7 +36,7 @@ pub(crate) fn set_buffer<'ob>(
         }
         x => bail!(TypeError::new(Type::String, x)),
     };
-    env.set_buffer(buffer, cx)?;
+    env.set_buffer(buffer)?;
     Ok(cx.add(buffer))
 }
 
