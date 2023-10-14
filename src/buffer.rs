@@ -3,7 +3,7 @@ use crate::{
         env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{GcObj, LispBuffer, Object},
+        object::{Gc, GcObj, LispBuffer, Object},
     },
     hashmap::HashMap,
 };
@@ -52,6 +52,19 @@ fn buffer_live_p(buffer: GcObj, env: &mut Rt<Env>) -> bool {
         Object::Buffer(b) => env.with_buffer(b, |b| b.is_some()),
         _ => false,
     }
+}
+
+#[defun]
+fn buffer_name<'ob>(
+    buffer: Option<Gc<&'ob LispBuffer>>,
+    cx: &'ob Context,
+    env: &mut Rt<Env>,
+) -> Option<String> {
+    let buffer = match buffer {
+        Some(buffer) => buffer.untag(),
+        None => env.current_buffer.as_ref()?.lisp_buffer(cx),
+    };
+    env.with_buffer(buffer, |b| b.map(|b| b.name().to_string()))
 }
 
 #[defun]

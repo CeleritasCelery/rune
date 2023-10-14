@@ -19,14 +19,16 @@ pub(crate) struct OpenBuffer<'a> {
 
 impl<'a> OpenBuffer<'a> {
     fn get(&self) -> &BufferData {
-        // buffer can never be none because we check it as part of `lock`. Could
-        // make this unchecked at some point.
+        // buffer can never be none because we check it as part of `lock`.
         self.data.as_ref().unwrap()
     }
 
+    pub(crate) fn name(&self) -> &str {
+        &self.get().name
+    }
+
     fn get_mut(&mut self) -> &mut BufferData {
-        // buffer can never be none because we check it as part of `lock`. Could
-        // make this unchecked at some point.
+        // buffer can never be none because we check it as part of `lock`.
         self.data.as_mut().unwrap()
     }
 
