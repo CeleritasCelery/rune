@@ -42,6 +42,10 @@ pub(crate) fn qtrue<'a>() -> GcObj<'a> {
     sym::TRUE.into()
 }
 
+/// This type has two meanings, it is both a value that is tagged as well as
+/// something that is managed by the GC. It is intended to be pointer sized, and
+/// have a lifetime tied to the context which manages garbage collections. A Gc
+/// can be reinterpreted as any type that shares the same tag.
 #[derive(Copy, Clone)]
 pub(crate) struct Gc<T> {
     ptr: *const u8,
@@ -93,7 +97,7 @@ impl<T> Gc<T> {
         self.ptr == other.ptr
     }
 
-    pub(crate) fn copy_as_obj<'ob>(self) -> Gc<Object<'ob>> {
+    pub(crate) fn copy_as_obj<const C: bool>(self, _: &Block<C>) -> Gc<Object> {
         Gc::new(self.ptr)
     }
 
@@ -118,6 +122,9 @@ impl<T: TaggedPtr> Untag<T> for Gc<T> {
     }
 }
 
+/// A wrapper trait to expose the `tag` method for GC managed references and
+/// immediate values. This is convenient when we don't have access to the
+/// `Context` but want to retag a value. Doesn't currently have a lot of use.
 pub(crate) trait TagType
 where
     Self: Sized,
@@ -139,7 +146,7 @@ unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
 
 impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
     fn from(x: Gc<T>) -> Self {
-        x.copy_as_obj().untag()
+        Gc::new(x.ptr).untag()
     }
 }
 
@@ -168,6 +175,9 @@ impl<'new, 'old, T: GcManaged + 'new> WithLifetime<'new> for &'old T {
     }
 }
 
+/// Trait for types that can be managed by the GC. This trait is implemented for
+/// as many types as possible, even for types that are already Gc managed, Like
+/// Gc<T>. This makes it easier to write generic code for working with Gc types.
 pub(crate) trait IntoObject {
     type Out<'ob>;
 
@@ -182,12 +192,15 @@ impl<T> IntoObject for Gc<T> {
     }
 }
 
-impl<T> IntoObject for Option<Gc<T>> {
+impl<T> IntoObject for Option<T>
+where
+    T: IntoObject,
+{
     type Out<'ob> = Object<'ob>;
 
-    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
-            Some(x) => unsafe { cast_gc(x) },
+            Some(x) => x.into_obj(block).copy_as_obj(block),
             None => nil(),
         }
     }
@@ -332,7 +345,8 @@ mod private {
 
     #[repr(u8)]
     pub(crate) enum Tag {
-        Symbol,
+        // Symbol must be 0 to enable nil to be all zeroes
+        Symbol = 0,
         Int,
         Float,
         Cons,
@@ -345,26 +359,81 @@ mod private {
         Buffer,
     }
 
+    /// Trait for tagged pointers. Anything that can be stored and passed around
+    /// by the lisp machine should implement this trait. There are two "flavors"
+    /// of types that implement this trait. First is "base" types, which are
+    /// pointers to some memory managed by the GC with a unique tag (e.g
+    /// `LispString`, `LispVec`). This may seem stange that we would define a
+    /// tagged pointer when the type is known (i.e. Gc<i64>), but doing so let's
+    /// us reinterpret bits without changing the underlying memory. Base types
+    /// are untagged into a pointer.
+    ///
+    /// The second type of implementor is "sum" types which can represent more
+    /// then 1 base types (e.g `Object`, `List`). Sum types are untagged into an
+    /// enum. this let's us easily match against them to operate on the possible
+    /// value. Multiple sum types are defined (instead of just a single `Object`
+    /// type) to allow the rust code to be more precise in what values are
+    /// allowed.
+    ///
+    /// The tagging scheme uses the bottom byte of the `Gc` to represent the
+    /// tag, meaning that we have 256 possible values. The data is shifted left
+    /// by 8 bits, meaning that are fixnums are limited to 56 bits. This scheme
+    /// has the advantage that it is easy to get the tag (just read the byte)
+    /// and it maps nicely onto rusts enums. This method needs to be benchmarked
+    /// and could change in the future.
+    ///
+    /// Every method has a default implementation, and the doc string
+    /// indicates if it should be reimplemented or left untouched.
     pub(crate) trait TaggedPtr: Copy + for<'a> WithLifetime<'a> {
+        /// The type of object being pointed to. This will be different for all
+        /// implementors.
         type Ptr;
+        /// Tag value. This is only applicable to base values. Use Int for sum
+        /// types.
         const TAG: Tag;
+        /// Given a pointer to `Ptr` return a Tagged pointer.
+        ///
+        /// Base: default
+        /// Sum: implement
         unsafe fn tag_ptr(ptr: *const Self::Ptr) -> Gc<Self> {
             Gc::from_ptr(ptr, Self::TAG)
         }
 
+        /// Remove the tag from the Gc<T> and return the inner type. If it is
+        /// base type then it will only have a single possible value and can be
+        /// untagged without checks, but sum types need to create all values
+        /// they can hold. We use tagged base types to let us reinterpret bits
+        /// without actually modify them.
+        ///
+        /// Base: default
+        /// Sum: implement
         fn untag(val: Gc<Self>) -> Self {
             let (ptr, _) = val.untag_ptr();
             unsafe { Self::from_obj_ptr(ptr) }
         }
 
+        /// Given the type, return a tagged version of it. When using a sum type
+        /// or an immediate value like i64, we override this method to set the
+        /// proper tag.
+        ///
+        /// Base: default
+        /// Sum: implement
         fn tag(self) -> Gc<Self> {
             unsafe { Self::tag_ptr(self.get_ptr()) }
         }
 
+        /// Get the underlying pointer.
+        ///
+        /// Base: implement
+        /// Sum: default
         fn get_ptr(self) -> *const Self::Ptr {
             unimplemented!()
         }
 
+        /// Given an untyped pointer, reinterpret to self.
+        ///
+        /// Base: implement
+        /// Sum: default
         unsafe fn from_obj_ptr(_: *const u8) -> Self {
             unimplemented!()
         }
@@ -498,6 +567,9 @@ impl<'a> TaggedPtr for Number<'a> {
     }
 }
 
+const MAX_FIXNUM: i64 = i64::MAX >> 8;
+const MIN_FIXNUM: i64 = i64::MIN >> 8;
+
 impl TaggedPtr for i64 {
     type Ptr = i64;
     const TAG: Tag = Tag::Int;
@@ -507,7 +579,9 @@ impl TaggedPtr for i64 {
     }
 
     fn get_ptr(self) -> *const Self::Ptr {
-        sptr::invalid(self as usize)
+        // prevent wrapping
+        let value = self.clamp(MIN_FIXNUM, MAX_FIXNUM);
+        sptr::invalid(value as usize)
     }
 }
 
@@ -846,8 +920,7 @@ impl TagType for u64 {
 
 impl<'ob> From<i32> for Gc<Object<'ob>> {
     fn from(x: i32) -> Self {
-        let ptr = sptr::invalid(x as usize);
-        unsafe { i64::tag_ptr(ptr).into() }
+        i64::from(x).into()
     }
 }
 
@@ -995,6 +1068,17 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
         match value.get_tag() {
             Tag::Vec => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispBuffer> {
+    type Error = TypeError;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::Buffer => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::Buffer, value)),
         }
     }
 }
@@ -1195,5 +1279,20 @@ impl<'ob> List<'ob> {
             List::Nil => nil(),
             List::Cons(x) => x.car(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{TagType, MAX_FIXNUM, MIN_FIXNUM};
+
+    #[test]
+    fn test_clamp_fixnum() {
+        assert_eq!(0i64.tag().untag(), 0);
+        assert_eq!((-1_i64).tag().untag(), -1);
+        assert_eq!(i64::MAX.tag().untag(), MAX_FIXNUM);
+        assert_eq!(MAX_FIXNUM.tag().untag(), MAX_FIXNUM);
+        assert_eq!(i64::MIN.tag().untag(), MIN_FIXNUM);
+        assert_eq!(MIN_FIXNUM.tag().untag(), MIN_FIXNUM);
     }
 }

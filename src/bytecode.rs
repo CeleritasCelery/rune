@@ -783,7 +783,7 @@ impl<'brw, 'ob> Routine<'brw> {
                 op::Nthcdr => {
                     let list = self.stack.pop(cx);
                     let top = self.stack.top();
-                    top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj());
+                    top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj(cx));
                 }
                 op::Elt => {
                     let n = self.stack.pop(cx);
