@@ -82,6 +82,12 @@ fn string_to_multibyte(string: &LispString) -> &LispString {
 }
 
 #[defun]
+fn string_search(needle: &str, haystack: &str, start_pos: Option<usize>) -> Option<usize> {
+    let start = start_pos.unwrap_or(0);
+    haystack[start..].find(needle).map(|x| x + start)
+}
+
+#[defun]
 pub(crate) fn mapcar<'ob>(
     function: &Rt<Gc<Function>>,
     sequence: &Rt<GcObj>,
