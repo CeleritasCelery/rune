@@ -24,20 +24,24 @@ pub(crate) fn set_buffer<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
-    let buffer: &LispBuffer = match buffer_or_name.untag() {
-        Object::Buffer(b) => b,
+    let buffer = resolve_buffer(buffer_or_name, cx)?;
+    env.set_buffer(buffer)?;
+    Ok(cx.add(buffer))
+}
+
+fn resolve_buffer<'ob>(buffer_or_name: GcObj, cx: &'ob Context) -> Result<&'ob LispBuffer> {
+    match buffer_or_name.untag() {
+        Object::Buffer(b) => Ok(b),
         Object::String(s) => {
             let name: &str = s.try_into()?;
             let buffer_list = BUFFERS.lock().unwrap();
             let Some(buffer) = buffer_list.get(name) else {
                 bail!("No buffer named {}", name);
             };
-            cx.bind(*buffer)
+            Ok(cx.bind(*buffer))
         }
-        x => bail!(TypeError::new(Type::String, x)),
-    };
-    env.set_buffer(buffer)?;
-    Ok(cx.add(buffer))
+        x => Err(TypeError::new(Type::String, x).into()),
+    }
 }
 
 #[defun]
@@ -49,22 +53,14 @@ fn set_buffer_modified_p(flag: GcObj) -> GcObj {
 #[defun]
 fn buffer_live_p(buffer: GcObj, env: &mut Rt<Env>) -> bool {
     match buffer.untag() {
-        Object::Buffer(b) => env.with_buffer(b, |b| b.is_some()),
+        Object::Buffer(b) => env.with_buffer(Some(b), |_| {}).is_some(),
         _ => false,
     }
 }
 
 #[defun]
-fn buffer_name<'ob>(
-    buffer: Option<Gc<&'ob LispBuffer>>,
-    cx: &'ob Context,
-    env: &mut Rt<Env>,
-) -> Option<String> {
-    let buffer = match buffer {
-        Some(buffer) => buffer.untag(),
-        None => env.current_buffer.as_ref()?.lisp_buffer(cx),
-    };
-    env.with_buffer(buffer, |b| b.map(|b| b.name().to_string()))
+fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &mut Rt<Env>) -> Option<String> {
+    env.with_buffer(buffer.map(Gc::untag), |b| b.name().to_string())
 }
 
 #[defun]
@@ -131,6 +127,19 @@ fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
         }
     }
     new_name
+}
+
+#[defun]
+fn kill_buffer(buffer_or_name: Option<GcObj>, cx: &Context, env: &mut Rt<Env>) -> bool {
+    let buffer = match buffer_or_name {
+        Some(buffer) => match resolve_buffer(buffer, cx) {
+            Ok(b) => Some(b),
+            Err(_) => return false,
+        },
+        None => None,
+    };
+    #[allow(clippy::redundant_closure_for_method_calls)]
+    env.with_buffer(buffer, |b| b.kill()).unwrap_or(false)
 }
 
 #[cfg(test)]

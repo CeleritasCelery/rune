@@ -32,6 +32,12 @@ impl<'a> OpenBuffer<'a> {
         self.data.as_mut().unwrap()
     }
 
+    pub(crate) fn kill(&mut self) -> bool {
+        let killed = self.data.is_some();
+        *self.data = None;
+        killed
+    }
+
     pub(crate) fn lisp_buffer<'ob>(&self, cx: &'ob Context) -> &'ob LispBuffer {
         cx.bind(self.back_ref)
     }
