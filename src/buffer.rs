@@ -51,7 +51,7 @@ fn set_buffer_modified_p(flag: GcObj) -> GcObj {
 }
 
 #[defun]
-fn buffer_live_p(buffer: GcObj, env: &mut Rt<Env>) -> bool {
+fn buffer_live_p(buffer: GcObj, env: &Rt<Env>) -> bool {
     match buffer.untag() {
         Object::Buffer(b) => env.with_buffer(Some(b), |_| {}).is_some(),
         _ => false,
@@ -59,8 +59,8 @@ fn buffer_live_p(buffer: GcObj, env: &mut Rt<Env>) -> bool {
 }
 
 #[defun]
-fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &mut Rt<Env>) -> Option<String> {
-    env.with_buffer(buffer.map(Gc::untag), |b| b.name().to_string())
+fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Option<String> {
+    env.with_buffer(buffer.map(Gc::untag), |b| b.name.to_string())
 }
 
 #[defun]
@@ -138,8 +138,9 @@ fn kill_buffer(buffer_or_name: Option<GcObj>, cx: &Context, env: &mut Rt<Env>) -
         },
         None => None,
     };
+    // todo, we need to select a new buffer
     #[allow(clippy::redundant_closure_for_method_calls)]
-    env.with_buffer(buffer, |b| b.kill()).unwrap_or(false)
+    env.with_buffer_mut(buffer, |b| b.kill()).unwrap_or(false)
 }
 
 #[cfg(test)]

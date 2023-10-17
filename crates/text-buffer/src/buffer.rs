@@ -1,7 +1,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::missing_panics_doc)]
-use crate::metric::{BufferMetrics, Metric};
+use crate::{metric::{BufferMetrics, Metric}, Position};
 use get_size::GetSize;
 use std::{
     borrow::Cow,
@@ -455,6 +455,30 @@ impl Buffer {
     }
 
     #[inline]
+    pub fn cursor(&self) -> Position {
+        Position::new(self.to_abs_pos(self.cursor))
+    }
+
+    #[inline]
+    pub fn char_at(&self, pos: usize) -> Option<char> {
+        if pos == self.len_chars() {
+            return None;
+        }
+        let byte = self.char_to_byte(pos);
+        let mut end = byte + 1;
+        // UTF-8 character can only be 4 bytes long
+        for _ in 0..3 {
+            if self.is_char_boundary(end) {
+                break;
+            } else {
+                end += 1;
+            }
+        }
+        debug_assert!(self.is_char_boundary(end));
+        self.to_str(byte..end).chars().next()
+    }
+
+    #[inline]
     pub fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
         if !range.contains(&self.gap_chars)
             || range.start_bound() == Bound::Included(&self.gap_chars)
@@ -828,6 +852,15 @@ mod test {
         buffer.delete_range(4, 6);
         buffer.move_gap_out_of(..);
         assert_eq!(buffer, "hlo rld");
+    }
+
+    #[test]
+    fn test_char_at() {
+        let buffer = Buffer::from("aµ福");
+        assert_eq!(buffer.char_at(0), Some('a'));
+        assert_eq!(buffer.char_at(1), Some('µ'));
+        assert_eq!(buffer.char_at(2), Some('福'));
+        assert_eq!(buffer.char_at(3), None);
     }
 
     #[test]

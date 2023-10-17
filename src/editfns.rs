@@ -81,11 +81,21 @@ pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
     Ok(())
 }
 
+// TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
     let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
     buffer.delete(start, end);
     Ok(())
+}
+
+#[defun]
+fn bolp(env: &Rt<Env>) -> bool {
+    env.with_buffer(None, |b| {
+        let chars = b.text.cursor().chars();
+        chars == 0 || b.text.char_at(chars - 1).unwrap() == '\n'
+    })
+    .unwrap_or(false)
 }
 
 #[defun]

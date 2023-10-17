@@ -6,6 +6,7 @@ use crate::core::{
 use anyhow::{bail, Result};
 use std::{
     fmt::Display,
+    ops::{Deref, DerefMut},
     sync::{Mutex, MutexGuard},
 };
 use text_buffer::Buffer as TextBuffer;
@@ -23,15 +24,12 @@ impl<'a> OpenBuffer<'a> {
         self.data.as_ref().unwrap()
     }
 
-    pub(crate) fn name(&self) -> &str {
-        &self.get().name
-    }
-
     fn get_mut(&mut self) -> &mut BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_mut().unwrap()
     }
 
+    // TODO: we shouldn't leave it empty
     pub(crate) fn kill(&mut self) -> bool {
         let killed = self.data.is_some();
         *self.data = None;
@@ -74,12 +72,26 @@ impl PartialEq<str> for OpenBuffer<'_> {
     }
 }
 
+impl Deref for OpenBuffer<'_> {
+    type Target = BufferData;
+
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+impl DerefMut for OpenBuffer<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.get_mut()
+    }
+}
+
 /// The actual data of the buffer. Buffer local variables will be stored here
 /// eventually.
 #[derive(Debug)]
-struct BufferData {
-    name: String,
-    text: TextBuffer,
+pub(crate) struct BufferData {
+    pub(crate) name: String,
+    pub(crate) text: TextBuffer,
 }
 
 /// A lisp handle to a buffer. This is a just a reference type and does not give

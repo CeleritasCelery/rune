@@ -104,6 +104,27 @@ impl Rt<Env> {
     }
 
     pub(crate) fn with_buffer<T>(
+        &self,
+        buffer: Option<&LispBuffer>,
+        func: impl Fn(&OpenBuffer) -> T,
+    ) -> Option<T> {
+        match (&self.current_buffer, buffer) {
+            (Some(current), Some(buffer)) if current == buffer => {
+                Some(func(self.current_buffer.as_ref().unwrap()))
+            }
+            (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
+            (_, Some(buffer)) => {
+                if let Ok(buffer) = buffer.lock().as_mut() {
+                    Some(func(buffer))
+                } else {
+                    None
+                }
+            }
+            (None, None) => None,
+        }
+    }
+
+    pub(crate) fn with_buffer_mut<T>(
         &mut self,
         buffer: Option<&LispBuffer>,
         func: impl Fn(&mut OpenBuffer) -> T,
