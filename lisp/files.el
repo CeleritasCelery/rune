@@ -485,44 +485,45 @@ Any other value means that it will not."
   :type 'boolean
   :version "29.1")
 
-(define-minor-mode auto-save-visited-mode
-  "Toggle automatic saving of file-visiting buffers to their files.
+;; RUNE-BOOTSTRAP
+;; (define-minor-mode auto-save-visited-mode
+;;   "Toggle automatic saving of file-visiting buffers to their files.
 
-When this mode is enabled, file-visiting buffers are automatically
-saved to their files.  This is in contrast to `auto-save-mode', which
-auto-saves those buffers to a separate file, leaving the original
-file intact.  See Info node `Saving' for details of the save process.
+;; When this mode is enabled, file-visiting buffers are automatically
+;; saved to their files.  This is in contrast to `auto-save-mode', which
+;; auto-saves those buffers to a separate file, leaving the original
+;; file intact.  See Info node `Saving' for details of the save process.
 
-The user option `auto-save-visited-interval' controls how often to
-auto-save a buffer into its visited file.
+;; The user option `auto-save-visited-interval' controls how often to
+;; auto-save a buffer into its visited file.
 
-You can use `auto-save-visited-predicate' to control which
-buffers are saved.
+;; You can use `auto-save-visited-predicate' to control which
+;; buffers are saved.
 
-You can also set the buffer-local value of the variable
-`auto-save-visited-mode' to nil.  A buffer where the buffer-local
-value of this variable is nil is ignored for the purpose of
-`auto-save-visited-mode', even if `auto-save-visited-mode' is
-enabled.
+;; You can also set the buffer-local value of the variable
+;; `auto-save-visited-mode' to nil.  A buffer where the buffer-local
+;; value of this variable is nil is ignored for the purpose of
+;; `auto-save-visited-mode', even if `auto-save-visited-mode' is
+;; enabled.
 
-For more details, see Info node `(emacs) Auto Save Files'."
-  :group 'auto-save
-  :global t
-  (when auto-save--timer (cancel-timer auto-save--timer))
-  (setq auto-save--timer
-        (when auto-save-visited-mode
-          (run-with-idle-timer
-           auto-save-visited-interval :repeat
-           #'save-some-buffers :no-prompt
-           (lambda ()
-             (and buffer-file-name
-                  auto-save-visited-mode
-                  (not (and buffer-auto-save-file-name
-                            auto-save-visited-file-name))
-                  (or (not (file-remote-p buffer-file-name))
-                      (not remote-file-name-inhibit-auto-save-visited))
-                  (or (not (functionp auto-save-visited-predicate))
-                      (funcall auto-save-visited-predicate))))))))
+;; For more details, see Info node `(emacs) Auto Save Files'."
+;;   :group 'auto-save
+;;   :global t
+;;   (when auto-save--timer (cancel-timer auto-save--timer))
+;;   (setq auto-save--timer
+;;         (when auto-save-visited-mode
+;;           (run-with-idle-timer
+;;            auto-save-visited-interval :repeat
+;;            #'save-some-buffers :no-prompt
+;;            (lambda ()
+;;              (and buffer-file-name
+;;                   auto-save-visited-mode
+;;                   (not (and buffer-auto-save-file-name
+;;                             auto-save-visited-file-name))
+;;                   (or (not (file-remote-p buffer-file-name))
+;;                       (not remote-file-name-inhibit-auto-save-visited))
+;;                   (or (not (functionp auto-save-visited-predicate))
+;;                       (funcall auto-save-visited-predicate))))))))
 
 ;; The 'set' part is so we don't get a warning for using this variable
 ;; above, while still catching code that _sets_ the variable to get

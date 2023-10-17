@@ -71,6 +71,7 @@ impl Interpreter<'_> {
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
                 sym::SAVE_CURRENT_BUFFER => self.save_current_buffer(forms, cx),
+                sym::SAVE_EXCURSION => self.save_excursion(forms, cx),
                 sym::UNWIND_PROTECT => self.unwind_protect(forms, cx),
                 _ => {
                     root!(sym, cx);
@@ -510,6 +511,19 @@ impl Interpreter<'_> {
                 Err(e)
             }
         }
+    }
+
+    fn save_excursion<'ob>(&mut self, form: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
+        let point = self.env.current_buffer.as_ref().map(|b| b.text.cursor());
+        let buffer = self.env.current_buffer.as_ref().map(|b| (b.lisp_buffer(cx)));
+        root!(buffer, cx);
+        let result = rebind!(self.eval_progn(form, cx)?);
+        if let Some(buffer) = buffer.bind(cx) {
+            self.env.set_buffer(buffer)?;
+            let buf = self.env.current_buffer.as_mut().unwrap();
+            buf.text.set_cursor(point.unwrap().chars());
+        }
+        Ok(result)
     }
 
     fn save_current_buffer<'ob>(

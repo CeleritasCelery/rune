@@ -273,6 +273,7 @@ defsym!(LAMBDA);
 defsym!(CLOSURE);
 defsym!(CONDITION_CASE);
 defsym!(UNWIND_PROTECT);
+defsym!(SAVE_EXCURSION);
 defsym!(SAVE_CURRENT_BUFFER);
 defsym!(WHILE);
 defsym!(INLINE);
