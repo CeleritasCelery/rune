@@ -7,6 +7,8 @@ use anyhow::Result;
 use fn_macros::defun;
 use std::path::Path;
 
+defvar!(FILE_NAME_HANDLER_ALIST);
+
 #[defun]
 pub(crate) fn expand_file_name(
     name: &str,
@@ -31,6 +33,16 @@ pub(crate) fn expand_file_name(
             }
             _ => unreachable!("`default-directory' should be a string"),
         }
+    }
+}
+
+#[defun]
+fn file_name_as_directory(filename: &str) -> String {
+    use std::path::MAIN_SEPARATOR as SEPARATOR;
+    if filename.ends_with(SEPARATOR) {
+        filename.to_owned()
+    } else {
+        format!("{filename}{SEPARATOR}")
     }
 }
 
