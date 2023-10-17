@@ -143,6 +143,17 @@ fn kill_buffer(buffer_or_name: Option<GcObj>, cx: &Context, env: &mut Rt<Env>) -
     env.with_buffer_mut(buffer, |b| b.kill()).unwrap_or(false)
 }
 
+// TODO: buffer local
+defvar!(FILL_COLUMN, 70);
+defvar!(INDENT_TABS_MODE);
+defvar!(LEFT_MARGIN, 0);
+defvar!(INHIBIT_COMPACTING_FONT_CACHES);
+defvar!(NO_UPDATE_AUTOLOADS);
+defvar!(TAB_WIDTH, 8);
+defvar!(TRUNCATE_LINES);
+defvar!(WORD_WRAP);
+defvar!(BIDI_DISPLAY_REORDERING);
+
 #[cfg(test)]
 mod test {
     use crate::core::env::sym;

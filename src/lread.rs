@@ -134,8 +134,9 @@ pub(crate) fn load(
         }
     };
 
+    let filename = String::from(file);
     if !nomessage {
-        println!("Loading {file}...");
+        println!("Loading {filename}...");
     }
     let new_load_file = cx.add(final_file.to_string_lossy().to_string());
     let prev_load_file = match env.vars.get_mut(sym::LOAD_FILE_NAME) {
@@ -156,6 +157,10 @@ pub(crate) fn load(
             false => Err(e),
         },
     };
+
+    if !nomessage && result.is_ok() {
+        println!("Loading {filename} Done");
+    }
     env.vars.insert(sym::LOAD_FILE_NAME, &*prev_load_file);
     result
 }
@@ -193,6 +198,7 @@ defvar!(LOAD_HISTORY);
 defvar!(LOAD_PATH, list![format!("{}/lisp", env!("CARGO_MANIFEST_DIR"))]);
 defvar!(LOAD_FILE_NAME);
 defvar!(BYTE_BOOLEAN_VARS);
+defvar!(MACROEXP__DYNVARS);
 
 #[cfg(test)]
 mod test {

@@ -561,10 +561,11 @@ using a transform that puts the lock files on a local file system."
   :version "28.1"
   :type 'boolean)
 
-(define-minor-mode lock-file-mode
-  "Toggle file locking in the current buffer (Lock File mode)."
-  :version "28.1"
-  (setq-local create-lockfiles (and lock-file-mode t)))
+;; RUNE-BOOTSTRAP
+;; (define-minor-mode lock-file-mode
+;;   "Toggle file locking in the current buffer (Lock File mode)."
+;;   :version "28.1"
+;;   (setq-local create-lockfiles (and lock-file-mode t)))
 
 (defcustom find-file-run-dired t
   "Non-nil means allow `find-file' to visit directories.

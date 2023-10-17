@@ -167,32 +167,38 @@
     (load "emacs-lisp/macroexp")))
 
 (load "cus-face")
-(load "faces")  ; after here, `defface' may be used.
+;; RUNE-BOOTSTRAP
+;; (load "faces")  ; after here, `defface' may be used.
 
 
-;; We don't want to store loaddefs.el in the repository because it is
-;; a generated file; but it is required in order to compile the lisp files.
-;; When bootstrapping, we cannot generate loaddefs.el until an
-;; emacs binary has been built.  We therefore compromise and keep
-;; ldefs-boot.el in the repository.  This does not need to be updated
-;; as often as the real loaddefs.el would.  Bootstrap should always
-;; work with ldefs-boot.el.  Therefore, whenever a new autoload cookie
-;; gets added that is necessary during bootstrapping, ldefs-boot.el
-;; should be updated by overwriting it with an up-to-date copy of
-;; loaddefs.el that is not corrupted by local changes.
-;; admin/update_autogen can be used to update ldefs-boot.el periodically.
-(condition-case nil
-    (load "loaddefs")
-  (file-error
-   (load "ldefs-boot.el")))
+;; ;; We don't want to store loaddefs.el in the repository because it is
+;; ;; a generated file; but it is required in order to compile the lisp files.
+;; ;; When bootstrapping, we cannot generate loaddefs.el until an
+;; ;; emacs binary has been built.  We therefore compromise and keep
+;; ;; ldefs-boot.el in the repository.  This does not need to be updated
+;; ;; as often as the real loaddefs.el would.  Bootstrap should always
+;; ;; work with ldefs-boot.el.  Therefore, whenever a new autoload cookie
+;; ;; gets added that is necessary during bootstrapping, ldefs-boot.el
+;; ;; should be updated by overwriting it with an up-to-date copy of
+;; ;; loaddefs.el that is not corrupted by local changes.
+;; ;; admin/update_autogen can be used to update ldefs-boot.el periodically.
+;; (condition-case nil
+;;     (load "loaddefs")
+;;   (file-error
+;;    (load "ldefs-boot.el")))
 
-(let ((new (make-hash-table :test #'equal)))
-  ;; Now that loaddefs has populated definition-prefixes, purify its contents.
-  (maphash (lambda (k v) (puthash (purecopy k) (purecopy v) new))
-           definition-prefixes)
-  (setq definition-prefixes new))
+;; (let ((new (make-hash-table :test #'equal)))
+;;   ;; Now that loaddefs has populated definition-prefixes, purify its contents.
+;;   (maphash (lambda (k v) (puthash (purecopy k) (purecopy v) new))
+;;            definition-prefixes)
+;;   (setq definition-prefixes new))
 
-(load "button")                  ;After loaddefs, because of define-minor-mode!
+;; (load "button")                  ;After loaddefs, because of define-minor-mode!
+
+;; RUNE-BOOTSTRAP - add gv and inline because we don't have autoloads enabled
+;; yet. These autoloads are defined in loaddefs.el
+(load "gv")
+(load "inline")
 (load "emacs-lisp/cl-preloaded")
 (load "emacs-lisp/oclosure")          ;Used by cl-generic
 (load "obarray")        ;abbrev.el is implemented in terms of obarrays.
