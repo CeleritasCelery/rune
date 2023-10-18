@@ -221,6 +221,14 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 }
 
 #[defun]
+fn take<'ob>(n: i64, list: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+    let Ok(n) = usize::try_from(n) else { return Ok(nil()) };
+    // TODO: remove this intermediate vector
+    let result: Result<Vec<_>> = list.elements().take(n).collect();
+    Ok(slice_into_list(&result?, None, cx))
+}
+
+#[defun]
 pub(crate) fn append<'ob>(
     append: GcObj<'ob>,
     sequences: &[GcObj<'ob>],
