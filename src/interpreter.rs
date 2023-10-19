@@ -194,6 +194,28 @@ impl Interpreter<'_> {
                         let env: Vec<_> = self.vars.iter().map(|x| x.bind(cx).into()).collect();
                         crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; cx)), cx)
                     };
+                    // Handle special case of oclosure documentation symbol
+                    if let Some(doc_str) = cons.conses().nth(2) {
+                        let doc_str = doc_str?;
+                        match doc_str.car().untag() {
+                            Object::Cons(c) if c.car() == sym::KW_DOCUMENTATION => {
+                                if let Object::Cons(c) = c.cdr().untag() {
+                                    if let Object::Cons(c) = c.car().untag() {
+                                        if let Some(sym) = c.elements().nth(1) {
+                                            match sym?.untag() {
+                                                Object::Symbol(s) if s != sym::NIL => {
+                                                    let doc = s.get().name();
+                                                    doc_str.set_car(cx.add(doc))?;
+                                                }
+                                                _ => (),
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
                     let end = cons!(env, cons.cdr(); cx);
                     Ok(cons!(sym::CLOSURE, end; cx))
                 } else {

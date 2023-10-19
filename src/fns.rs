@@ -504,6 +504,7 @@ pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
 }
 
 defsym!(KW_TEST);
+defsym!(KW_DOCUMENTATION);
 
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
