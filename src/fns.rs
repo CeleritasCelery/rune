@@ -478,6 +478,15 @@ pub(crate) fn safe_length(sequence: GcObj) -> i64 {
 }
 
 #[defun]
+pub(crate) fn proper_list_p(object: GcObj) -> Option<usize> {
+    // TODO: Handle dotted list and circular
+    match object.untag() {
+        Object::Cons(x) => Some(x.elements().len()),
+        _ => None,
+    }
+}
+
+#[defun]
 pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
     list.elements().nth(n).unwrap_or_else(|| Ok(nil()))
 }
