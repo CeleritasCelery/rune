@@ -760,8 +760,7 @@ cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        let gc: GcObj = sym::NIL.into();
-        unsafe { cast_gc(gc) }
+        unsafe { cast_gc(nil()) }
     }
 }
 

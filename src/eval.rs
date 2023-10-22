@@ -6,7 +6,7 @@ use crate::core::{
     gc::{Context, IntoRoot},
     object::{Function, Gc, GcObj},
 };
-use crate::fns::assq;
+use crate::fns::{assq, eq};
 use crate::{root, rooted_iter};
 use anyhow::{anyhow, bail, ensure, Result};
 use fn_macros::defun;
@@ -181,29 +181,29 @@ pub(crate) fn macroexpand<'ob>(
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
-    if let Object::Cons(form) = form.get(cx) {
-        if let Object::Symbol(sym) = form.car().untag() {
-            // shadow the macro based on ENVIRONMENT
-            let func: Option<Gc<Function>> = match environment {
-                Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.untag() {
-                    Object::Cons(cons) => Some(cons.cdr().try_into()?),
-                    _ => get_macro_func(sym, cx),
-                },
-                _ => get_macro_func(sym, cx),
-            };
-            if let Some(macro_func) = func {
-                let macro_args = form.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
-                root!(args, move(macro_args), cx);
-                root!(macro_func, cx);
-                let name = sym.name().to_owned();
-                let result = macro_func.call(args, env, cx, Some(&name))?;
-                root!(result, cx);
-                // recursively expand the macro's
-                return macroexpand(result, environment, cx, env);
-            }
-        }
+    let Object::Cons(cons) = form.get(cx) else { return Ok(form.bind(cx)) };
+    let Object::Symbol(sym) = cons.car().untag() else { return Ok(form.bind(cx)) };
+    // shadow the macro based on ENVIRONMENT
+    let func = match environment {
+        Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.untag() {
+            Object::Cons(cons) => Some(cons.cdr().try_into()?),
+            _ => get_macro_func(sym, cx),
+        },
+        _ => get_macro_func(sym, cx),
+    };
+    let Some(macro_func) = func else { return Ok(form.bind(cx)) };
+    let macro_args = cons.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
+    root!(args, move(macro_args), cx);
+    root!(macro_func, cx);
+    let name = sym.name().to_owned();
+    let new_form = macro_func.call(args, env, cx, Some(&name))?;
+    root!(new_form, cx); // polonius
+    if eq(new_form.bind(cx), form.bind(cx)) {
+        Ok(form.bind(cx))
+    } else {
+        // recursively expand the macro's
+        macroexpand(new_form, environment, cx, env)
     }
-    Ok(form.bind(cx))
 }
 
 fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
@@ -296,3 +296,4 @@ defsym!(DEBUG);
 defsym!(VOID_VARIABLE);
 
 defvar!(DEBUG_ON_ERROR, false);
+defvar!(INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION);

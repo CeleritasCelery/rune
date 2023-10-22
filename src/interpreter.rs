@@ -65,7 +65,7 @@ impl Interpreter<'_> {
                 sym::PROG2 => self.eval_progx(forms, 2, cx),
                 sym::SETQ => self.setq(forms, cx),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, cx),
-                sym::FUNCTION => self.eval_function(forms.bind(cx), cx),
+                sym::FUNCTION => self.eval_function(forms, cx),
                 sym::INTERACTIVE => Ok(nil()), // TODO: implement
                 sym::CATCH => self.catch(forms, cx),
                 sym::THROW => self.throw(forms.bind(cx), cx),
@@ -178,51 +178,63 @@ impl Interpreter<'_> {
         func.call(args, self.env, cx, Some(&name))
     }
 
-    fn eval_function<'ob>(&mut self, obj: GcObj<'ob>, cx: &'ob Context) -> EvalResult<'ob> {
-        let mut forms = obj.as_list()?;
+    fn eval_function<'ob>(
+        &mut self,
+        obj: &Rt<GcObj<'ob>>,
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
+        let mut forms = obj.bind(cx).as_list()?;
         let len = forms.len() as u16;
         if len != 1 {
             bail_err!(ArgError::new(1, len, "function"))
         }
 
         let form = forms.next().unwrap()?;
-        match form.untag() {
-            Object::Cons(cons) => {
-                if cons.car() == sym::LAMBDA {
-                    let env = {
-                        // TODO: remove temp vector
-                        let env: Vec<_> = self.vars.iter().map(|x| x.bind(cx).into()).collect();
-                        crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; cx)), cx)
-                    };
-                    // Handle special case of oclosure documentation symbol
-                    if let Some(doc_str) = cons.conses().nth(2) {
-                        let doc_str = doc_str?;
-                        match doc_str.car().untag() {
-                            Object::Cons(c) if c.car() == sym::KW_DOCUMENTATION => {
-                                if let Object::Cons(c) = c.cdr().untag() {
-                                    if let Object::Cons(c) = c.car().untag() {
-                                        if let Some(sym) = c.elements().nth(1) {
-                                            match sym?.untag() {
-                                                Object::Symbol(s) if s != sym::NIL => {
-                                                    let doc = s.get().name();
-                                                    doc_str.set_car(cx.add(doc))?;
-                                                }
-                                                _ => (),
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            _ => (),
-                        }
-                    }
-                    let end = cons!(env, cons.cdr(); cx);
-                    Ok(cons!(sym::CLOSURE, end; cx))
-                } else {
-                    Ok(cons.into())
+        root!(form, cx); // Polonius
+        let Object::Cons(cons) = form.bind(cx).untag() else { return Ok(form.bind(cx)) };
+        if cons.car() != sym::LAMBDA {
+            return Ok(form.bind(cx));
+        }
+        let env = {
+            // TODO: remove temp vector
+            let env: Vec<_> = self.vars.iter().map(|x| x.bind(cx).into()).collect();
+            crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; cx)), cx)
+        };
+        Self::replace_doc_symbol(cons, cx)?;
+        if let Some(closure_fn) = self.env.vars.get(sym::INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION)
+        {
+            if closure_fn.bind(cx) != sym::NIL {
+                let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
+                if let Ok(closure_fn) = closure_fn {
+                    root!(closure_fn, cx);
+                    root!(args, Vec::new(), cx);
+                    args.push(form.bind(cx));
+                    args.push(env);
+                    return closure_fn.call(args, self.env, cx, None);
                 }
             }
-            _ => Ok(form),
+        }
+        let end = cons!(env, cons.cdr(); cx);
+        Ok(cons!(sym::CLOSURE, end; cx))
+    }
+
+    /// Handle special case of oclosure documentation symbol
+    fn replace_doc_symbol(cons: &Cons, cx: &Context) -> Result<(), EvalError> {
+        let Some(doc_str) = cons.conses().nth(2) else { return Ok(()) };
+        let doc_str = doc_str?;
+        let Object::Cons(c) = doc_str.car().untag() else { return Ok(()) };
+        if c.car() != sym::KW_DOCUMENTATION {
+            return Ok(());
+        }
+        let Object::Cons(c) = c.cdr().untag() else { return Ok(()) };
+        let Object::Cons(c) = c.car().untag() else { return Ok(()) };
+        let Some(sym) = c.elements().nth(1) else { return Ok(()) };
+        match sym?.untag() {
+            Object::Symbol(s) if s != sym::NIL => {
+                let doc = cx.add(s.get().name());
+                Ok(doc_str.set_car(doc)?)
+            }
+            _ => Ok(()),
         }
     }
 

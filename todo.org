@@ -4,6 +4,8 @@
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
+* add call variants (call1, call2, call3)
+This will let us remove the need for the intermediate vector when trying to call a function. If the underlying type requires a vector (I.e. Interpreted or bytecode) then we can make one, but otherwise we can just pass arguments to a native function.
 * See how much we can unify the interpters
 * Steps to add a new object type
 - define in gc/alloc.rs
