@@ -230,6 +230,11 @@ fn byte_code_function_p(object: GcObj) -> bool {
 }
 
 #[defun]
+fn subr_native_elisp_p(_: GcObj) -> bool {
+    false
+}
+
+#[defun]
 fn bufferp(_object: GcObj) -> bool {
     // TODO: Implement once buffers are added
     false
