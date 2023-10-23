@@ -4,6 +4,7 @@ use super::super::{
 };
 use super::Cons;
 use anyhow::{anyhow, Result};
+use fallible_iterator::FallibleIterator;
 use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
@@ -74,19 +75,20 @@ pub(crate) struct ConsIter<'ob> {
     list: List<'ob>,
 }
 
-impl<'ob> Iterator for ConsIter<'ob> {
-    type Item = Result<&'ob Cons>;
+impl<'ob> FallibleIterator for ConsIter<'ob> {
+    type Item = &'ob Cons;
+    type Error = anyhow::Error;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Result<Option<Self::Item>> {
         match self.list {
-            List::Nil => None,
+            List::Nil => Ok(None),
             List::Cons(cons) => {
                 self.list = match cons.cdr().untag() {
                     Object::Cons(next) => List::Cons(next),
                     Object::NIL => List::Nil,
-                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
+                    _ => return Err(anyhow::anyhow!("Found non-nil cdr at end of list")),
                 };
-                Some(Ok(cons))
+                Ok(Some(cons))
             }
         }
     }
@@ -193,10 +195,9 @@ mod test {
         let cx = &Context::new(roots);
         let cons = list![1, 2, 3, 4; cx];
         let list: Gc<List> = cons.try_into().unwrap();
-        let iter = list.conses();
-        let expects = vec![1, 2, 3, 4];
-        for (act, expect) in iter.zip(expects) {
-            let actual = act.unwrap().car();
+        let mut iter = list.conses();
+        for expect in [1, 2, 3, 4] {
+            let actual = iter.next().unwrap().unwrap().car();
             assert_eq!(actual, expect);
         }
     }

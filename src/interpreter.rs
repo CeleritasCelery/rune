@@ -9,6 +9,7 @@ use crate::{root, rooted_iter};
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
+use fallible_iterator::FallibleIterator;
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -220,8 +221,7 @@ impl Interpreter<'_> {
 
     /// Handle special case of oclosure documentation symbol
     fn replace_doc_symbol(cons: &Cons, cx: &Context) -> Result<(), EvalError> {
-        let Some(doc_str) = cons.conses().nth(2) else { return Ok(()) };
-        let doc_str = doc_str?;
+        let Some(doc_str) = cons.conses().nth(2)? else { return Ok(()) };
         let Object::Cons(c) = doc_str.car().untag() else { return Ok(()) };
         if c.car() != sym::KW_DOCUMENTATION {
             return Ok(());

@@ -14,6 +14,7 @@ use crate::{
 use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
 use bstr::ByteSlice;
+use fallible_iterator::FallibleIterator;
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -176,8 +177,8 @@ fn maphash(
 #[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = nil();
-    for tail in seq.conses() {
-        let tail = tail?;
+    let mut conses = seq.conses();
+    while let Some(tail) = conses.next()? {
         tail.set_cdr(prev)?;
         prev = tail.into();
     }
@@ -200,9 +201,10 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
         if let Some(cons) = tail {
             cons.set_cdr((*list).into())?;
         }
-        if let Some(x) = list.conses().last() {
-            tail = Some(x?);
-        };
+        let last = list.conses().last()?;
+        if last.is_some() {
+            tail = last;
+        }
     }
 
     Ok(match lists.iter().find(|&&x| x != List::empty()) {
@@ -318,8 +320,8 @@ fn delete_from_list<'ob>(
 ) -> Result<GcObj<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
-    for tail in list.conses() {
-        let tail = tail?;
+    let mut conses = list.conses();
+    while let Some(tail) = conses.next()? {
         if eq_fn(tail.car(), elt) {
             if let Some(prev_tail) = &mut prev {
                 prev_tail.set_cdr(tail.cdr())?;
@@ -344,13 +346,9 @@ pub(crate) fn delq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'o
 }
 
 fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> Result<GcObj<'ob>> {
-    let val = list.conses().find(|x| match x {
-        Ok(obj) => eq_fn(obj.car(), elt),
-        Err(_) => true,
-    });
+    let val = list.conses().find(|x| Ok(eq_fn(x.car(), elt)))?;
     match val {
-        Some(Ok(elem)) => Ok(elem.into()),
-        Some(Err(e)) => Err(e),
+        Some(elem) => Ok(elem.into()),
         None => Ok(nil()),
     }
 }
@@ -493,8 +491,8 @@ pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
 
 #[defun]
 pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
-    match list.conses().nth(n) {
-        Some(x) => x.map(Into::into),
+    match list.conses().nth(n)? {
+        Some(x) => Ok(x.into()),
         None => Ok(List::empty()),
     }
 }
@@ -583,8 +581,8 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
             // TODO: remove this temp vector
             let mut elements = Vec::new();
             let mut tail = None;
-            for cons in x.conses() {
-                let cons = cons?;
+            let mut conses = x.conses();
+            while let Some(cons) = conses.next()? {
                 elements.push(cons.car());
                 if !matches!(cons.cdr().untag(), Object::Cons(_)) {
                     tail = Some(cons.cdr());
