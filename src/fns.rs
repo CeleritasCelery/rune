@@ -188,7 +188,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 #[defun]
 pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     let mut tail = nil();
-    for elem in seq.elements() {
+    for elem in seq {
         tail = cons!(elem?, tail; cx);
     }
     Ok(tail)
@@ -214,7 +214,7 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
 
 fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
     if let List::Cons(cons) = seq.untag() {
-        for elt in cons.elements() {
+        for elt in cons {
             list.push(elt?);
         }
     }
@@ -245,7 +245,7 @@ pub(crate) fn append<'ob>(
 
 #[defun]
 pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    for elem in alist.elements() {
+    for elem in alist {
         if let Object::Cons(cons) = elem?.untag() {
             if eq(key, cons.car()) {
                 return Ok(cons.into());
@@ -257,7 +257,7 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'
 
 #[defun]
 fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
-    for elem in alist.elements() {
+    for elem in alist {
         if let Object::Cons(cons) = elem?.untag() {
             if eq(key, cons.cdr()) {
                 return Ok(cons.into());
@@ -274,7 +274,7 @@ pub(crate) fn assoc<'ob>(
     testfn: Option<GcObj>,
 ) -> Result<GcObj<'ob>> {
     ensure!(testfn.is_none(), "test functions for assoc not yet supported");
-    for elem in alist.elements() {
+    for elem in alist {
         if let Object::Cons(cons) = elem?.untag() {
             if equal(key, cons.car()) {
                 return Ok(cons.into());
@@ -435,7 +435,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
                 }
             }
             Object::Cons(cons) => {
-                for x in cons.elements() {
+                for x in cons {
                     concated.push(x?);
                 }
             }
@@ -466,7 +466,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<usize> {
 #[defun]
 pub(crate) fn safe_length(sequence: GcObj) -> usize {
     match sequence.untag() {
-        Object::Cons(x) => x.elements().count(),
+        Object::Cons(x) => x.elements().take_while(Result::is_ok).count(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         _ => 0,

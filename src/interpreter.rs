@@ -593,12 +593,12 @@ impl Interpreter<'_> {
                     let condition = cons.car();
                     match condition.untag() {
                         Object::Symbol(sym::ERROR | sym::VOID_VARIABLE) => {}
-                        Object::Cons(cons) => {
-                            for x in cons.elements() {
-                                let x = x?;
+                        Object::Cons(conditions) => {
+                            for condition in conditions {
+                                let condition = condition?;
                                 // TODO: Handle different error symbols
-                                if x != sym::DEBUG && x != sym::ERROR {
-                                    bail_err!("non-error conditions {x} not yet supported")
+                                if condition != sym::DEBUG && condition != sym::ERROR {
+                                    bail_err!("non-error conditions {condition} not yet supported")
                                 }
                             }
                         }

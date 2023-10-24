@@ -337,12 +337,12 @@ impl<'brw, 'ob> Routine<'brw> {
             while let Some(handler) = self.handlers.bind_mut(cx).pop() {
                 match handler.condition.untag() {
                     Object::Symbol(sym::ERROR) => {}
-                    Object::Cons(cons) => {
-                        for handler in cons.elements() {
-                            let handler = handler?;
+                    Object::Cons(conditions) => {
+                        for condition in conditions {
+                            let condition = condition?;
                             // TODO: Handle different error symbols
-                            if handler != sym::DEBUG && handler != sym::ERROR {
-                                bail_err!("non-error conditions {handler} not yet supported")
+                            if condition != sym::DEBUG && condition != sym::ERROR {
+                                bail_err!("non-error conditions {condition} not yet supported")
                             }
                         }
                     }

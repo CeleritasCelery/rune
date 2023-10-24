@@ -187,6 +187,16 @@ impl Cons {
     }
 }
 
+impl<'ob> IntoIterator for &'ob Cons {
+    type Item = <ElemIter<'ob> as Iterator>::Item;
+
+    type IntoIter = ElemIter<'ob>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements()
+    }
+}
+
 impl<'ob> Gc<List<'ob>> {
     pub(crate) fn elements(self) -> ElemIter<'ob> {
         ElemIter(self.conses())
@@ -197,6 +207,16 @@ impl<'ob> Gc<List<'ob>> {
             List::Nil => ConsIter::new(None),
             List::Cons(cons) => ConsIter::new(Some(cons)),
         }
+    }
+}
+
+impl<'ob> IntoIterator for Gc<List<'ob>> {
+    type Item = <ElemIter<'ob> as Iterator>::Item;
+
+    type IntoIter = ElemIter<'ob>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements()
     }
 }
 
