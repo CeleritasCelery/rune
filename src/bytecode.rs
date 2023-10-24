@@ -338,11 +338,11 @@ impl<'brw, 'ob> Routine<'brw> {
                 match handler.condition.untag() {
                     Object::Symbol(sym::ERROR) => {}
                     Object::Cons(cons) => {
-                        for x in cons.elements() {
-                            let x = x?;
+                        for handler in cons.elements() {
+                            let handler = handler?;
                             // TODO: Handle different error symbols
-                            if x != sym::DEBUG && x != sym::ERROR {
-                                bail_err!("non-error conditions {x} not yet supported")
+                            if handler != sym::DEBUG && handler != sym::ERROR {
+                                bail_err!("non-error conditions {handler} not yet supported")
                             }
                         }
                     }

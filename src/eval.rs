@@ -9,6 +9,7 @@ use crate::core::{
 use crate::fns::{assq, eq};
 use crate::{root, rooted_iter};
 use anyhow::{anyhow, bail, ensure, Result};
+use fallible_iterator::FallibleIterator;
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -132,15 +133,14 @@ pub(crate) fn autoload_do_load<'ob>(
     match fundef.get(cx) {
         Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
             ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
-            let mut elem = cons.elements();
-            elem.next(); // autoload
-            let file: Gc<&LispString> =
-                elem.next().ok_or_else(|| anyhow!("Malformed autoload"))??.try_into()?;
+            let mut iter = cons.elements();
+            iter.next(); // autoload
+            let file: Gc<&LispString> = match iter.next() {
+                Some(x) => x?.try_into()?,
+                None => bail!("Malformed autoload"),
+            };
             ensure!(
-                elem.all(|x| match x {
-                    Ok(x) => x.is_nil(),
-                    Err(_) => false,
-                }),
+                iter.fallible().all(|x| Ok(x.is_nil()))?,
                 "autoload arguments are not yet implemented"
             );
             root!(file, cx);

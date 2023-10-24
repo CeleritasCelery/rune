@@ -68,6 +68,10 @@ impl<'ob> ElemIter<'ob> {
     pub(crate) fn len(&self) -> usize {
         self.clone().count()
     }
+
+    pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {
+        fallible_iterator::convert(self)
+    }
 }
 
 #[derive(Clone)]
