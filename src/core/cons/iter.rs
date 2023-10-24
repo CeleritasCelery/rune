@@ -7,54 +7,25 @@ use anyhow::Result;
 use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
-pub(crate) struct ElemIter<'ob> {
+pub(crate) struct ConsIter<'ob> {
     cons: Option<Result<&'ob Cons, ConsError>>,
     fast: Option<&'ob Cons>,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum ConsError {
-    NonNilCdr,
-    CircularList,
-}
+/// An iterator over cons cells. This iterator will detect circular lists and
+/// non-nil list terminators.
+impl<'ob> ConsIter<'ob> {
+    fn new(cons: Option<&'ob Cons>) -> Self {
+        Self { cons: cons.map(Ok), fast: cons }
+    }
 
-impl std::fmt::Display for ConsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConsError::NonNilCdr => write!(f, "non-nil cdr at end of list"),
-            ConsError::CircularList => write!(f, "Circular list"),
-        }
+    pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {
+        fallible_iterator::convert(self)
     }
 }
 
-impl std::error::Error for ConsError {}
-
-#[allow(clippy::multiple_inherent_impl)]
-impl Cons {
-    pub(crate) fn elements(&self) -> ElemIter {
-        ElemIter::new(Some(self))
-    }
-
-    pub(crate) fn conses(&self) -> ConsIter {
-        ConsIter { list: List::Cons(self) }
-    }
-}
-
-impl<'ob> Gc<List<'ob>> {
-    pub(crate) fn elements(self) -> ElemIter<'ob> {
-        match self.untag() {
-            List::Nil => ElemIter::new(None),
-            List::Cons(cons) => ElemIter::new(Some(cons)),
-        }
-    }
-
-    pub(crate) fn conses(self) -> ConsIter<'ob> {
-        ConsIter { list: self.untag() }
-    }
-}
-
-impl<'ob> Iterator for ElemIter<'ob> {
-    type Item = Result<GcObj<'ob>, ConsError>;
+impl<'ob> Iterator for ConsIter<'ob> {
+    type Item = Result<&'ob Cons, ConsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let cons = match self.cons? {
@@ -75,7 +46,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
                 return Some(Err(ConsError::CircularList));
             }
         }
-        Some(Ok(cons.car()))
+        Some(Ok(cons))
     }
 }
 
@@ -86,21 +57,12 @@ fn advance(cons: Option<&Cons>) -> Option<&Cons> {
     }
 }
 
-impl<'ob> GcObj<'ob> {
-    pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
-        let list: Gc<List> = self.try_into()?;
-        match list.untag() {
-            List::Cons(cons) => Ok(ElemIter::new(Some(cons))),
-            List::Nil => Ok(ElemIter::new(None)),
-        }
-    }
-}
+/// An iterator over the elements (car's) of a list. This iterator will detect circular
+/// lists and non-nil list terminators.
+#[derive(Clone)]
+pub(crate) struct ElemIter<'ob>(ConsIter<'ob>);
 
-impl<'ob> ElemIter<'ob> {
-    fn new(cons: Option<&'ob Cons>) -> Self {
-        Self { cons: cons.map(Ok), fast: cons }
-    }
-
+impl ElemIter<'_> {
     pub(crate) fn len(&self) -> usize {
         self.clone().count()
     }
@@ -110,34 +72,30 @@ impl<'ob> ElemIter<'ob> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct ConsIter<'ob> {
-    list: List<'ob>,
-}
-
-impl<'ob> Iterator for ConsIter<'ob> {
-    type Item = Result<&'ob Cons>;
+impl<'ob> Iterator for ElemIter<'ob> {
+    type Item = Result<GcObj<'ob>, ConsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.list {
-            List::Nil => None,
-            List::Cons(cons) => {
-                self.list = match cons.cdr().untag() {
-                    Object::Cons(next) => List::Cons(next),
-                    Object::NIL => List::Nil,
-                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
-                };
-                Some(Ok(cons))
-            }
+        self.0.next().map(|x| x.map(Cons::car))
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum ConsError {
+    NonNilCdr,
+    CircularList,
+}
+
+impl std::fmt::Display for ConsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConsError::NonNilCdr => write!(f, "non-nil cdr at end of list"),
+            ConsError::CircularList => write!(f, "Circular list"),
         }
     }
 }
 
-impl ConsIter<'_> {
-    pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {
-        fallible_iterator::convert(self)
-    }
-}
+impl std::error::Error for ConsError {}
 
 pub(crate) struct ElemStreamIter<'rt> {
     elem: Option<&'rt mut Rt<GcObj<'static>>>,
@@ -215,6 +173,37 @@ macro_rules! rooted_iter {
             $crate::core::cons::ElemStreamIter::new(None, None)
         };
     };
+}
+
+#[allow(clippy::multiple_inherent_impl)]
+impl Cons {
+    pub(crate) fn elements(&self) -> ElemIter {
+        ElemIter(self.conses())
+    }
+
+    pub(crate) fn conses(&self) -> ConsIter {
+        ConsIter::new(Some(self))
+    }
+}
+
+impl<'ob> Gc<List<'ob>> {
+    pub(crate) fn elements(self) -> ElemIter<'ob> {
+        ElemIter(self.conses())
+    }
+
+    pub(crate) fn conses(self) -> ConsIter<'ob> {
+        match self.untag() {
+            List::Nil => ConsIter::new(None),
+            List::Cons(cons) => ConsIter::new(Some(cons)),
+        }
+    }
+}
+
+impl<'ob> GcObj<'ob> {
+    pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
+        let list: Gc<List> = self.try_into()?;
+        Ok(list.elements())
+    }
 }
 
 #[cfg(test)]
