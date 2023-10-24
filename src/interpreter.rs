@@ -109,7 +109,7 @@ impl Interpreter<'_> {
 
     fn throw<'ob>(&mut self, obj: GcObj, cx: &'ob Context) -> EvalResult<'ob> {
         let mut forms = obj.as_list()?;
-        let len = forms.len() as u16;
+        let len = forms.len()? as u16;
         if len != 2 {
             bail_err!(ArgError::new(2, len, "throw"));
         }
@@ -185,7 +185,7 @@ impl Interpreter<'_> {
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let mut forms = obj.bind(cx).as_list()?;
-        let len = forms.len() as u16;
+        let len = forms.len()? as u16;
         if len != 1 {
             bail_err!(ArgError::new(1, len, "function"))
         }
@@ -407,7 +407,7 @@ impl Interpreter<'_> {
 
     fn quote<'ob>(&self, value: GcObj<'ob>) -> EvalResult<'ob> {
         let mut forms = value.as_list()?;
-        match forms.len() {
+        match forms.len()? {
             1 => Ok(forms.next().unwrap()?),
             x => Err(ArgError::new(1, x as u16, "quote").into()),
         }

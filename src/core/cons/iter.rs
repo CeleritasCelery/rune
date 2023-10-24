@@ -63,8 +63,9 @@ fn advance(cons: Option<&Cons>) -> Option<&Cons> {
 pub(crate) struct ElemIter<'ob>(ConsIter<'ob>);
 
 impl ElemIter<'_> {
-    pub(crate) fn len(&self) -> usize {
-        self.clone().count()
+    pub(crate) fn len(&self) -> Result<usize, ConsError> {
+        use fallible_iterator::FallibleIterator;
+        self.clone().fallible().count()
     }
 
     pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {

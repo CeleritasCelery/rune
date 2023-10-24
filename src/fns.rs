@@ -454,7 +454,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
 #[defun]
 pub(crate) fn length(sequence: GcObj) -> Result<usize> {
     let size = match sequence.untag() {
-        Object::Cons(x) => x.elements().len(),
+        Object::Cons(x) => x.elements().len()?,
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         Object::NIL => 0,
@@ -466,7 +466,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<usize> {
 #[defun]
 pub(crate) fn safe_length(sequence: GcObj) -> usize {
     match sequence.untag() {
-        Object::Cons(x) => x.elements().len(),
+        Object::Cons(x) => x.elements().count(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         _ => 0,
@@ -477,7 +477,7 @@ pub(crate) fn safe_length(sequence: GcObj) -> usize {
 pub(crate) fn proper_list_p(object: GcObj) -> Option<usize> {
     // TODO: Handle dotted list and circular
     match object.untag() {
-        Object::Cons(x) => Some(x.elements().len()),
+        Object::Cons(x) => x.elements().len().ok(),
         _ => None,
     }
 }
