@@ -32,6 +32,20 @@ pub(crate) fn slice_into_list<'ob>(
     from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; cx))
 }
 
+pub(crate) fn build_list<'ob, E>(
+    mut iter: impl Iterator<Item = Result<GcObj<'ob>, E>>,
+    cx: &'ob Context,
+) -> Result<GcObj<'ob>, E> {
+    let Some(first) = iter.next() else { return Ok(nil()) };
+    let mut prev = cons!(first?; cx);
+    for elem in iter {
+        let new = cons!(elem?; cx);
+        prev.as_cons().set_cdr(new).unwrap();
+        prev = new;
+    }
+    Ok(prev)
+}
+
 #[defun]
 pub(crate) fn eq(obj1: GcObj, obj2: GcObj) -> bool {
     obj1.ptr_eq(obj2)
@@ -224,9 +238,7 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 #[defun]
 fn take<'ob>(n: i64, list: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     let Ok(n) = usize::try_from(n) else { return Ok(nil()) };
-    // TODO: remove this intermediate vector
-    let result: Vec<_> = list.elements().fallible().take(n).collect()?;
-    Ok(slice_into_list(&result, None, cx))
+    Ok(build_list(list.elements().take(n), cx)?)
 }
 
 #[defun]

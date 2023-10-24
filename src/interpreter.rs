@@ -197,9 +197,11 @@ impl Interpreter<'_> {
             return Ok(form.bind(cx));
         }
         let env = {
-            // TODO: remove temp vector
-            let env: Vec<_> = self.vars.iter().map(|x| x.bind(cx).into()).collect();
-            crate::fns::slice_into_list(env.as_slice(), Some(cons!(true; cx)), cx)
+            let mut tail = cons!(true; cx);
+            for var in self.vars.iter().rev() {
+                tail = cons!(var.bind(cx), tail; cx);
+            }
+            tail
         };
         Self::replace_doc_symbol(cons, cx)?;
         if let Some(closure_fn) = self.env.vars.get(sym::INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION)
