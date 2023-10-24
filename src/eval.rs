@@ -192,7 +192,7 @@ pub(crate) fn macroexpand<'ob>(
         _ => get_macro_func(sym, cx),
     };
     let Some(macro_func) = func else { return Ok(form.bind(cx)) };
-    let macro_args = cons.cdr().as_list()?.collect::<Result<Vec<_>>>()?;
+    let macro_args: Vec<_> = cons.cdr().as_list()?.fallible().collect()?;
     root!(args, move(macro_args), cx);
     root!(macro_func, cx);
     let name = sym.name().to_owned();

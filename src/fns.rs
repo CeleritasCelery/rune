@@ -65,7 +65,7 @@ fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
 
     for (cur_prop, value) in iter {
         if eq(cur_prop?, prop) {
-            return value;
+            return Ok(value?);
         }
     }
     Ok(nil())
@@ -452,7 +452,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
 }
 
 #[defun]
-pub(crate) fn length(sequence: GcObj) -> Result<i64> {
+pub(crate) fn length(sequence: GcObj) -> Result<usize> {
     let size = match sequence.untag() {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
@@ -460,18 +460,17 @@ pub(crate) fn length(sequence: GcObj) -> Result<i64> {
         Object::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
-    Ok(size.try_into().expect("conversion from usize to isize should never fail"))
+    Ok(size)
 }
 
 #[defun]
-pub(crate) fn safe_length(sequence: GcObj) -> i64 {
-    let size = match sequence.untag() {
+pub(crate) fn safe_length(sequence: GcObj) -> usize {
+    match sequence.untag() {
         Object::Cons(x) => x.elements().len(),
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
         _ => 0,
-    };
-    size.try_into().expect("conversion from usize to isize should never fail")
+    }
 }
 
 #[defun]
@@ -485,7 +484,7 @@ pub(crate) fn proper_list_p(object: GcObj) -> Option<usize> {
 
 #[defun]
 pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
-    list.elements().nth(n).unwrap_or_else(|| Ok(nil()))
+    Ok(list.elements().fallible().nth(n)?.unwrap_or_default())
 }
 
 #[defun]

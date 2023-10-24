@@ -4,6 +4,7 @@ use crate::core::{
     object::{nil, Gc, GcObj, List},
 };
 use anyhow::{ensure, Result};
+use fallible_iterator::FallibleIterator;
 use fancy_regex::Regex;
 use fn_macros::defun;
 
@@ -76,12 +77,14 @@ fn set_match_data<'ob>(list: Gc<List>, _reseat: Option<()>, env: &mut Rt<Env>) -
 
 #[defun]
 fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    env.match_data.bind(cx).as_list()?.nth(subexp).unwrap_or_else(|| Ok(nil()))
+    let list = env.match_data.bind(cx).as_list()?;
+    Ok(list.fallible().nth(subexp)?.unwrap_or_default())
 }
 
 #[defun]
 fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    env.match_data.bind(cx).as_list()?.nth(subexp + 1).unwrap_or_else(|| Ok(nil()))
+    let list = env.match_data.bind(cx).as_list()?;
+    Ok(list.fallible().nth(subexp + 1)?.unwrap_or_default())
 }
 
 #[defun]

@@ -158,7 +158,7 @@ impl Interpreter<'_> {
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
-                let macro_args = args.bind(cx).as_list()?.collect::<AnyResult<Vec<_>>>()?;
+                let macro_args: Vec<_> = args.bind(cx).as_list()?.fallible().collect()?;
                 root!(args, move(macro_args), cx);
                 root!(mcro, cx);
                 let name = sym.bind(cx).name().to_owned();

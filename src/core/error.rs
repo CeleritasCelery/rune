@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use super::{
+    cons::ConsError,
     env::Env,
     gc::Rt,
     object::{display_slice, GcObj},
@@ -71,6 +72,12 @@ impl EvalError {
 impl From<anyhow::Error> for EvalError {
     fn from(e: anyhow::Error) -> Self {
         Self::new_error(e)
+    }
+}
+
+impl From<ConsError> for EvalError {
+    fn from(e: ConsError) -> Self {
+        Self::new_error(anyhow::anyhow!(e))
     }
 }
 

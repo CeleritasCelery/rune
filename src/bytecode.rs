@@ -567,7 +567,7 @@ impl<'brw, 'ob> Routine<'brw> {
                 }
                 op::Length => {
                     let top = self.stack.top();
-                    top.set(fns::length(top.bind(cx))?);
+                    top.set(fns::length(top.bind(cx))? as i64);
                 }
                 op::Aref => {
                     let idx = self.stack.pop(cx);

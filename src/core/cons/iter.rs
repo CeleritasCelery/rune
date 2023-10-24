@@ -3,18 +3,36 @@ use super::super::{
     object::{Gc, GcObj, List, Object},
 };
 use super::Cons;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
 pub(crate) struct ElemIter<'ob> {
-    cons: Option<&'ob Cons>,
+    cons: Option<Result<&'ob Cons, ConsError>>,
+    fast: Option<&'ob Cons>,
 }
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum ConsError {
+    NonNilCdr,
+    CircularList,
+}
+
+impl std::fmt::Display for ConsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConsError::NonNilCdr => write!(f, "non-nil cdr at end of list"),
+            ConsError::CircularList => write!(f, "Circular list"),
+        }
+    }
+}
+
+impl std::error::Error for ConsError {}
 
 #[allow(clippy::multiple_inherent_impl)]
 impl Cons {
     pub(crate) fn elements(&self) -> ElemIter {
-        ElemIter { cons: Some(self) }
+        ElemIter::new(Some(self))
     }
 
     pub(crate) fn conses(&self) -> ConsIter {
@@ -25,8 +43,8 @@ impl Cons {
 impl<'ob> Gc<List<'ob>> {
     pub(crate) fn elements(self) -> ElemIter<'ob> {
         match self.untag() {
-            List::Nil => ElemIter { cons: None },
-            List::Cons(cons) => ElemIter { cons: Some(cons) },
+            List::Nil => ElemIter::new(None),
+            List::Cons(cons) => ElemIter::new(Some(cons)),
         }
     }
 
@@ -36,20 +54,35 @@ impl<'ob> Gc<List<'ob>> {
 }
 
 impl<'ob> Iterator for ElemIter<'ob> {
-    type Item = Result<GcObj<'ob>>;
+    type Item = Result<GcObj<'ob>, ConsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.cons {
-            Some(cons) => {
-                self.cons = match cons.cdr().untag() {
-                    Object::Cons(next) => Some(next),
-                    Object::NIL => None,
-                    _ => return Some(Err(anyhow!("Found non-nil cdr at end of list"))),
-                };
-                Some(Ok(cons.car()))
+        let cons = match self.cons? {
+            Ok(c) => c,
+            Err(e) => return Some(Err(e)),
+        };
+        self.cons = match cons.cdr().untag() {
+            Object::Cons(next) => Some(Ok(next)),
+            Object::NIL => None,
+            _ => Some(Err(ConsError::NonNilCdr)),
+        };
+
+        // Floyds cycle detection algorithm
+        self.fast = advance(advance(self.fast));
+        if let (Some(Ok(slow)), Some(fast)) = (self.cons, self.fast) {
+            if std::ptr::eq(slow, fast) {
+                self.cons = Some(Err(ConsError::CircularList));
+                return Some(Err(ConsError::CircularList));
             }
-            None => None,
         }
+        Some(Ok(cons.car()))
+    }
+}
+
+fn advance(cons: Option<&Cons>) -> Option<&Cons> {
+    match cons?.cdr().untag() {
+        Object::Cons(next) => Some(next),
+        _ => None,
     }
 }
 
@@ -57,13 +90,17 @@ impl<'ob> GcObj<'ob> {
     pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
         let list: Gc<List> = self.try_into()?;
         match list.untag() {
-            List::Cons(cons) => Ok(ElemIter { cons: Some(cons) }),
-            List::Nil => Ok(ElemIter { cons: None }),
+            List::Cons(cons) => Ok(ElemIter::new(Some(cons))),
+            List::Nil => Ok(ElemIter::new(None)),
         }
     }
 }
 
 impl<'ob> ElemIter<'ob> {
+    fn new(cons: Option<&'ob Cons>) -> Self {
+        Self { cons: cons.map(Ok), fast: cons }
+    }
+
     pub(crate) fn len(&self) -> usize {
         self.clone().count()
     }
@@ -182,6 +219,8 @@ macro_rules! rooted_iter {
 
 #[cfg(test)]
 mod test {
+    use fallible_iterator::FallibleIterator;
+
     use super::super::super::gc::{Context, RootSet};
     use crate::list;
 
@@ -193,8 +232,29 @@ mod test {
         let cx = &Context::new(roots);
         let cons = list![1, 2, 3, 4; cx];
         let iter = cons.as_list().unwrap();
-        let vec: Result<Vec<_>> = iter.collect();
-        assert_eq!(vec.unwrap(), vec![1, 2, 3, 4]);
+        let vec: Vec<_> = iter.fallible().collect().unwrap();
+        assert_eq!(vec, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn circular_list() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let cons = list![1; cx];
+        cons.as_cons().set_cdr(cons).unwrap();
+        let mut iter = cons.as_list().unwrap();
+        assert!(iter.next().unwrap().is_err());
+
+        let cons = list![1, 2, 3; cx];
+        cons.as_cons().cdr().as_cons().cdr().as_cons().set_cdr(cons).unwrap();
+        let iter = cons.as_list().unwrap();
+        assert!(iter.fallible().nth(2).is_err());
+
+        let cons = list![1, 2, 3, 4; cx];
+        let middle = cons.as_cons().cdr().as_cons().cdr();
+        middle.as_cons().cdr().as_cons().set_cdr(middle).unwrap();
+        let iter = cons.as_list().unwrap();
+        assert!(iter.fallible().nth(3).is_err());
     }
 
     #[test]
