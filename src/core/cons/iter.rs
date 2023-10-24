@@ -4,7 +4,6 @@ use super::super::{
 };
 use super::Cons;
 use anyhow::{anyhow, Result};
-use fallible_iterator::FallibleIterator;
 use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
@@ -79,22 +78,27 @@ pub(crate) struct ConsIter<'ob> {
     list: List<'ob>,
 }
 
-impl<'ob> FallibleIterator for ConsIter<'ob> {
-    type Item = &'ob Cons;
-    type Error = anyhow::Error;
+impl<'ob> Iterator for ConsIter<'ob> {
+    type Item = Result<&'ob Cons>;
 
-    fn next(&mut self) -> Result<Option<Self::Item>> {
+    fn next(&mut self) -> Option<Self::Item> {
         match self.list {
-            List::Nil => Ok(None),
+            List::Nil => None,
             List::Cons(cons) => {
                 self.list = match cons.cdr().untag() {
                     Object::Cons(next) => List::Cons(next),
                     Object::NIL => List::Nil,
-                    _ => return Err(anyhow::anyhow!("Found non-nil cdr at end of list")),
+                    _ => return Some(Err(anyhow::anyhow!("Found non-nil cdr at end of list"))),
                 };
-                Ok(Some(cons))
+                Some(Ok(cons))
             }
         }
+    }
+}
+
+impl ConsIter<'_> {
+    pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {
+        fallible_iterator::convert(self)
     }
 }
 

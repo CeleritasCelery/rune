@@ -177,8 +177,8 @@ fn maphash(
 #[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = nil();
-    let mut conses = seq.conses();
-    while let Some(tail) = conses.next()? {
+    for tail in seq.conses() {
+        let tail = tail?;
         tail.set_cdr(prev)?;
         prev = tail.into();
     }
@@ -201,9 +201,8 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
         if let Some(cons) = tail {
             cons.set_cdr((*list).into())?;
         }
-        let last = list.conses().last()?;
-        if last.is_some() {
-            tail = last;
+        if let Some(last) = list.conses().last() {
+            tail = Some(last?);
         }
     }
 
@@ -320,8 +319,8 @@ fn delete_from_list<'ob>(
 ) -> Result<GcObj<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
-    let mut conses = list.conses();
-    while let Some(tail) = conses.next()? {
+    for tail in list.conses() {
+        let tail = tail?;
         if eq_fn(tail.car(), elt) {
             if let Some(prev_tail) = &mut prev {
                 prev_tail.set_cdr(tail.cdr())?;
@@ -346,7 +345,7 @@ pub(crate) fn delq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'o
 }
 
 fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> Result<GcObj<'ob>> {
-    let val = list.conses().find(|x| Ok(eq_fn(x.car(), elt)))?;
+    let val = list.conses().fallible().find(|x| Ok(eq_fn(x.car(), elt)))?;
     match val {
         Some(elem) => Ok(elem.into()),
         None => Ok(nil()),
@@ -491,7 +490,7 @@ pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
 
 #[defun]
 pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
-    match list.conses().nth(n)? {
+    match list.conses().fallible().nth(n)? {
         Some(x) => Ok(x.into()),
         None => Ok(List::empty()),
     }
@@ -581,8 +580,8 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
             // TODO: remove this temp vector
             let mut elements = Vec::new();
             let mut tail = None;
-            let mut conses = x.conses();
-            while let Some(cons) = conses.next()? {
+            for cons in x.conses() {
+                let cons = cons?;
                 elements.push(cons.car());
                 if !matches!(cons.cdr().untag(), Object::Cons(_)) {
                     tail = Some(cons.cdr());
