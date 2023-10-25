@@ -156,7 +156,7 @@ mod test {
         let cx = &Context::new(roots);
         let obj0 = cx.add(5);
         // SAFETY: We don't call garbage collect so references are valid
-        let obj1 = unsafe { cx.add(Cons::new(1.into(), 2.into())) };
+        let obj1 = unsafe { cx.add(Cons::new_unchecked(1.into(), 2.into())) };
         let vec = vec![obj0, obj1];
         let res = wrapper(vec.as_slice());
         assert_eq!(6, res.unwrap());

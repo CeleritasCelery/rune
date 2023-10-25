@@ -38,13 +38,13 @@ pub(crate) fn build_list<'ob, E>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>, E> {
     let Some(first) = iter.next() else { return Ok(nil()) };
-    let mut prev = cons!(first?; cx);
+    let mut prev = Cons::new1(first?, cx);
     for elem in iter {
-        let new = cons!(elem?; cx);
-        prev.as_cons().set_cdr(new).unwrap();
+        let new = Cons::new1(elem?, cx);
+        prev.set_cdr(new.into()).unwrap();
         prev = new;
     }
-    Ok(prev)
+    Ok(prev.into())
 }
 
 #[defun]
@@ -302,15 +302,16 @@ fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>>
         List::Nil => Ok(nil()),
         List::Cons(cons) => {
             let first = copy_alist_elem(cons.car(), cx);
-            let head = cons!(first; cx);
-            let mut tail = head.as_cons();
+            let head = Cons::new1(first, cx);
+            let mut tail = head;
 
             for elem in cons.cdr().as_list()? {
-                let copy = copy_alist_elem(elem?, cx);
-                tail.set_cdr(cons!(copy; cx)).unwrap();
-                tail = tail.cdr().as_cons();
+                let elem = copy_alist_elem(elem?, cx);
+                let copy = Cons::new1(elem, cx);
+                tail.set_cdr(copy.into()).unwrap();
+                tail = copy;
             }
-            Ok(head)
+            Ok(head.into())
         }
     }
 }
@@ -757,7 +758,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let element = cons!(5, 6; cx);
-        let list = list![cons!(1, 2; cx), cons!(3, 4; cx), element; cx];
+        let list = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), element; cx];
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list).unwrap();
         assert_eq!(result, element);

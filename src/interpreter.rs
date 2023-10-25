@@ -217,7 +217,7 @@ impl Interpreter<'_> {
                 }
             }
         }
-        let end = cons!(env, cons.cdr(); cx);
+        let end = Cons::new(env, cons.cdr(), cx);
         Ok(cons!(sym::CLOSURE, end; cx))
     }
 
@@ -495,8 +495,7 @@ impl Interpreter<'_> {
             // return 1 if the variable is bound
             1
         } else {
-            let cons = cons!(var, val; cx).as_cons();
-            self.vars.push(cons);
+            self.vars.push(Cons::new(var, val, cx));
             0
         }
     }
@@ -619,7 +618,7 @@ impl Interpreter<'_> {
                         // full errors are implemented
                         cons!(sym::ERROR, format!("{err}"); cx)
                     };
-                    let binding = list!(var, error; cx).as_cons();
+                    let binding = Cons::new(var, Cons::new1(error, cx), cx);
                     self.vars.push(binding);
                     let list: Gc<List> = match cons.cdr().try_into() {
                         Ok(x) => x,
@@ -767,18 +766,18 @@ fn bind_args<'a>(
 
     for name in required {
         let val = arg_values.next().unwrap();
-        vars.push(cons!(name, val; cx).as_cons());
+        vars.push(Cons::new(name, val, cx));
     }
 
     for name in optional {
         let val = arg_values.next().unwrap_or_default();
-        vars.push(cons!(name, val; cx).as_cons());
+        vars.push(Cons::new(name, val, cx));
     }
 
     if let Some(rest_name) = rest {
         let values = arg_values.as_slice();
         let list = crate::fns::slice_into_list(values, None, cx);
-        vars.push(cons!(rest_name, list; cx).as_cons());
+        vars.push(Cons::new(rest_name, list, cx));
     } else {
         // Ensure too many args were not provided
         ensure!(

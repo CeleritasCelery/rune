@@ -1,5 +1,5 @@
-use super::gc::{Block, GcManaged, GcMark, Trace};
-use super::object::{CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
+use super::gc::{Block, Context, GcManaged, GcMark, Trace};
+use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
 use anyhow::{anyhow, Result};
 use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
@@ -26,13 +26,38 @@ impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
     // the stack. Otherwise it could outlive it's objects since it has no
     // lifetimes.
-    pub(crate) unsafe fn new(car: GcObj, cdr: GcObj) -> Self {
+    pub(crate) unsafe fn new_unchecked(car: GcObj, cdr: GcObj) -> Self {
         Self {
             marked: GcMark::default(),
             mutable: true,
             car: Cell::new(car.into_raw()),
             cdr: Cell::new(cdr.into_raw()),
         }
+    }
+
+    /// Create a new cons cell
+    pub(crate) fn new<'ob, T, Tx, U, Ux>(car: T, cdr: U, cx: &'ob Context) -> &'ob Self
+    where
+        T: IntoObject<Out<'ob> = Tx>,
+        Gc<Tx>: Into<GcObj<'ob>>,
+        U: IntoObject<Out<'ob> = Ux>,
+        Gc<Ux>: Into<GcObj<'ob>>,
+    {
+        let car = car.into_obj(cx).into();
+        let cdr = cdr.into_obj(cx).into();
+        let cons = unsafe { Cons::new_unchecked(car, cdr) };
+        cons.into_obj(cx).untag()
+    }
+
+    /// Create a new cons cell with the cdr set to nil
+    pub(crate) fn new1<'ob, T, Tx>(car: T, cx: &'ob Context) -> &'ob Self
+    where
+        T: IntoObject<Out<'ob> = Tx>,
+        Gc<Tx>: Into<GcObj<'ob>>,
+    {
+        let car = car.into_obj(cx).into();
+        let cons = unsafe { Cons::new_unchecked(car, nil()) };
+        cons.into_obj(cx).untag()
     }
 
     pub(in crate::core) fn mark_const(&mut self) {
@@ -68,7 +93,9 @@ impl Cons {
 
 impl<'new> CloneIn<'new, &'new Cons> for Cons {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Cons> {
-        unsafe { Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk)).into_obj(bk) }
+        unsafe {
+            Cons::new_unchecked(self.car().clone_in(bk), self.cdr().clone_in(bk)).into_obj(bk)
+        }
     }
 }
 
@@ -145,13 +172,13 @@ macro_rules! cons {
         $cx.add({
             let car = $cx.add($car);
             let cdr = $cx.add($cdr);
-            unsafe { $crate::core::cons::Cons::new(car, cdr) }
+            unsafe { $crate::core::cons::Cons::new_unchecked(car, cdr) }
         })
     };
     ($car:expr; $cx:expr) => {
         $cx.add({
             let car = $cx.add($car);
-            unsafe { $crate::core::cons::Cons::new(car, $crate::core::object::nil()) }
+            unsafe { $crate::core::cons::Cons::new_unchecked(car, $crate::core::object::nil()) }
         })
     };
 }

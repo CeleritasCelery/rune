@@ -108,18 +108,18 @@ impl Block<false> {
 }
 
 impl<const CONST: bool> Block<CONST> {
-    pub(crate) fn add<'ob, T, U>(&'ob self, obj: T) -> GcObj
+    pub(crate) fn add<'ob, T, Tx>(&'ob self, obj: T) -> GcObj
     where
-        T: IntoObject<Out<'ob> = U>,
-        Gc<U>: Into<GcObj<'ob>>,
+        T: IntoObject<Out<'ob> = Tx>,
+        Gc<Tx>: Into<GcObj<'ob>>,
     {
         obj.into_obj(self).into()
     }
 
-    pub(crate) fn add_as<'ob, T, U, V>(&'ob self, obj: T) -> Gc<V>
+    pub(crate) fn add_as<'ob, T, Tx, V>(&'ob self, obj: T) -> Gc<V>
     where
-        T: IntoObject<Out<'ob> = U>,
-        Gc<U>: Into<Gc<V>>,
+        T: IntoObject<Out<'ob> = Tx>,
+        Gc<Tx>: Into<Gc<V>>,
     {
         obj.into_obj(self).into()
     }
