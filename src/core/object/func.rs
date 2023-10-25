@@ -10,7 +10,6 @@ use crate::core::gc::{GcManaged, GcMark, Rt};
 use anyhow::{bail, ensure, Result};
 use fn_macros::Trace;
 use std::fmt::{self, Debug, Display};
-use streaming_iterator::StreamingIterator;
 
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
@@ -108,35 +107,6 @@ impl Debug for ByteFn {
             .field("op_code", &self.op_codes)
             .field("constants", &self.constants)
             .finish_non_exhaustive()
-    }
-}
-
-pub(crate) struct ByteFnStreamIter<'rt> {
-    vector: &'rt Rt<&'static ByteFn>,
-    elem: Option<Rt<GcObj<'static>>>,
-    idx: usize,
-}
-
-impl<'rt> Rt<&'static ByteFn> {
-    #[allow(clippy::iter_not_returning_iterator)]
-    pub(crate) fn iter(&'rt mut self) -> ByteFnStreamIter<'rt> {
-        ByteFnStreamIter { vector: self, elem: None, idx: 0 }
-    }
-}
-
-impl<'rt> StreamingIterator for ByteFnStreamIter<'rt> {
-    type Item = Rt<GcObj<'static>>;
-
-    fn advance(&mut self) {
-        unsafe {
-            let obj = self.vector.bind_unchecked().index(self.idx);
-            self.elem = obj.map(|x| Rt::new_unchecked(x.with_lifetime()));
-            self.idx += 1;
-        }
-    }
-
-    fn get(&self) -> Option<&Self::Item> {
-        self.elem.as_ref()
     }
 }
 

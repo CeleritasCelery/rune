@@ -318,13 +318,6 @@ impl<T> Rt<T> {
     {
         unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
     }
-
-    /// This functions is very unsafe to call directly. The caller must ensure
-    /// that resulting Rt is only exposed through references and that it is
-    /// properly rooted.
-    pub(crate) unsafe fn new_unchecked(item: T) -> Rt<T> {
-        Rt { inner: item, _aliasable: PhantomPinned }
-    }
 }
 
 impl TryFrom<&Rt<GcObj<'_>>> for usize {

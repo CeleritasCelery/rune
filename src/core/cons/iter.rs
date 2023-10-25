@@ -4,7 +4,6 @@ use super::super::{
 };
 use super::Cons;
 use anyhow::Result;
-use streaming_iterator::StreamingIterator;
 
 #[derive(Clone)]
 pub(crate) struct ConsIter<'ob> {
@@ -100,7 +99,7 @@ impl std::error::Error for ConsError {}
 
 pub(crate) struct ElemStreamIter<'rt> {
     elem: Option<&'rt mut Rt<GcObj<'static>>>,
-    cons: Option<&'rt mut Rt<&'static Cons>>,
+    cons: Option<Result<&'rt mut Rt<&'static Cons>, ConsError>>,
 }
 
 impl<'rt> ElemStreamIter<'rt> {
@@ -108,30 +107,36 @@ impl<'rt> ElemStreamIter<'rt> {
         elem: Option<&'rt mut Rt<GcObj<'static>>>,
         cons: Option<&'rt mut Rt<&'static Cons>>,
     ) -> Self {
-        Self { elem, cons }
+        Self { elem, cons: cons.map(Ok) }
     }
 }
 
-impl<'rt> StreamingIterator for ElemStreamIter<'rt> {
+impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'rt> {
     type Item = Rt<GcObj<'static>>;
+    type Error = ConsError;
 
-    fn advance(&mut self) {
+    fn advance(&mut self) -> Result<(), ConsError> {
         if let Some(cons) = &mut self.cons {
+            let cons = match cons {
+                Ok(x) => x,
+                Err(e) => return Err(*e),
+            };
             let elem = self.elem.as_mut().expect("Element should never be None while Cons is Some");
             let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
             match unsafe { cons.bind_unchecked().cdr().untag() } {
                 Object::Cons(next) => {
+                    // dissociate the borrow of cons from cell
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
                 }
-                _ => {
-                    self.cons = None;
-                }
+                Object::NIL => self.cons = None,
+                _ => self.cons = Some(Err(ConsError::NonNilCdr)),
             }
         } else {
             self.elem = None;
         }
+        Ok(())
     }
 
     fn get(&self) -> Option<&Self::Item> {
@@ -230,6 +235,7 @@ impl<'ob> GcObj<'ob> {
 #[cfg(test)]
 mod test {
     use fallible_iterator::FallibleIterator;
+    use fallible_streaming_iterator::FallibleStreamingIterator;
 
     use super::super::super::gc::{Context, RootSet};
     use crate::list;
@@ -288,7 +294,7 @@ mod test {
             let cons = list![1, 2, 3, 4; cx];
             rooted_iter!(iter, cons, cx);
             for expect in 1..=4 {
-                let actual = iter.next().unwrap().bind(cx);
+                let actual = iter.next().unwrap().unwrap().bind(cx);
                 assert_eq!(actual, expect);
             }
             assert!(iter.is_empty());

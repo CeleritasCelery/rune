@@ -26,6 +26,7 @@ streaming-iterator = "0.1.9"
 text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 titlecase = "2.2.1"
 fallible-iterator = "0.3.0"
+fallible-streaming-iterator = "0.1.9"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"

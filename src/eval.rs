@@ -10,8 +10,8 @@ use crate::fns::{assq, eq};
 use crate::{root, rooted_iter};
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
+use fallible_streaming_iterator::FallibleStreamingIterator;
 use fn_macros::defun;
-use streaming_iterator::StreamingIterator;
 
 #[defun]
 pub(crate) fn apply<'ob>(
@@ -63,7 +63,7 @@ fn run_hooks<'ob>(
                     match val.untag() {
                         Object::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
-                            while let Some(hook) = hooks.next() {
+                            while let Some(hook) = hooks.next()? {
                                 let func: &Rt<Gc<Function>> = hook.try_into()?;
                                 root!(args, Vec::new(), cx);
                                 func.call(args, env, cx, None)?;
@@ -99,7 +99,7 @@ fn run_hook_with_args<'ob>(
                 match val.untag() {
                     Object::Cons(hook_list) => {
                         rooted_iter!(hooks, hook_list, cx);
-                        while let Some(hook) = hooks.next() {
+                        while let Some(hook) = hooks.next()? {
                             let func: &Rt<Gc<Function>> = hook.try_into()?;
                             let args = Rt::bind_slice(args, cx).to_vec();
                             root!(args, cx);

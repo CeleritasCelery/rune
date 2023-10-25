@@ -15,6 +15,7 @@ use crate::{root, rooted_iter};
 use anyhow::{bail, ensure, Result};
 use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
+use fallible_streaming_iterator::FallibleStreamingIterator;
 use fn_macros::defun;
 use streaming_iterator::StreamingIterator;
 
@@ -114,36 +115,33 @@ pub(crate) fn mapcar<'ob>(
         Object::NIL => Ok(nil()),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
-            mapcar_internal(iter, function, env, cx)
+            root!(outputs, Vec::new(), cx);
+            root!(call_arg, Vec::new(), cx);
+            while let Some(obj) = iter.next()? {
+                call_arg.push(obj);
+                let output = function.call(call_arg, env, cx, None)?;
+                outputs.push(output);
+                call_arg.clear();
+            }
+            // TODO: remove this intermediate vector
+            Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
         }
         Object::ByteFn(fun) => {
             root!(fun, cx);
-            mapcar_internal(fun.iter(), function, env, cx)
+            root!(outputs, Vec::new(), cx);
+            root!(call_arg, Vec::new(), cx);
+            for i in 0..=3 {
+                let item = fun.bind(cx).index(i).unwrap();
+                call_arg.push(item);
+                let output = function.call(call_arg, env, cx, None)?;
+                outputs.push(output);
+                call_arg.clear();
+            }
+            // TODO: remove this intermediate vector
+            Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
         }
         _ => Err(TypeError::new(Type::Sequence, sequence).into()),
     }
-}
-
-fn mapcar_internal<'ob, T>(
-    mut iter: T,
-    function: &Rt<Gc<Function>>,
-    env: &mut Rt<Env>,
-    cx: &'ob mut Context,
-) -> Result<GcObj<'ob>>
-where
-    T: StreamingIterator<Item = Rt<GcObj<'static>>>,
-{
-    root!(outputs, Vec::new(), cx);
-    root!(call_arg, Vec::new(), cx);
-    while let Some(x) = iter.next() {
-        let obj = x.bind(cx);
-        call_arg.push(obj);
-        let output = function.call(call_arg, env, cx, None)?;
-        outputs.push(output);
-        call_arg.clear();
-    }
-    // TODO: remove this intermediate vector
-    Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
 }
 
 #[defun]
@@ -158,7 +156,7 @@ pub(crate) fn mapc<'ob>(
         List::Cons(cons) => {
             root!(call_arg, Vec::new(), cx);
             rooted_iter!(elements, cons, cx);
-            while let Some(elem) = elements.next() {
+            while let Some(elem) = elements.next()? {
                 call_arg.push(elem);
                 function.call(call_arg, env, cx, None)?;
                 call_arg.clear();
