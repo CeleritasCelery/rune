@@ -90,6 +90,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 // or we switch to nightly, this can be moved into a const
                 // assertion.
                 #[cfg(test)]
+                #[allow(non_snake_case_types)]
                 mod #test_mod {
                     #[test]
                     #[doc(hidden)]

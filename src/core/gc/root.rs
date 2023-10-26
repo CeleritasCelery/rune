@@ -152,12 +152,12 @@ impl<T> Drop for __StackRoot<'_, T> {
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $cx:ident) => {
-        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
+        $crate::root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
     };
     ($ident:ident, move($value:expr), $cx:ident) => {
         // eval value outside the unsafe block
         let value = $value;
-        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root(value) }, $cx);
+        $crate::root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root(value) }, $cx);
     };
     ($ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;
@@ -294,7 +294,7 @@ impl<T> Rt<T> {
         // SAFETY: We are holding a reference to the context
         #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
-            std::mem::transmute(&self.inner)
+            std::mem::transmute::<&T, &<T as WithLifetime<'ob>>::Out>(&self.inner)
         }
     }
 
