@@ -159,10 +159,10 @@ impl Interpreter<'_> {
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
                 let macro_args: Vec<_> = args.bind(cx).as_list()?.fallible().collect()?;
-                root!(args, move(macro_args), cx);
+                root!(macro_args, cx);
                 root!(mcro, cx);
                 let name = sym.bind(cx).name().to_owned();
-                let value = mcro.call(args, self.env, cx, Some(&name))?;
+                let value = mcro.call(macro_args, self.env, cx, Some(&name))?;
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
@@ -702,7 +702,7 @@ fn call_closure<'ob>(
             // TODO: remove this temp vector
             let args = args.iter().map(|x| x.bind(cx)).collect();
             let vars = bind_variables(&mut forms, args, name, cx)?;
-            root!(vars, move(vars), cx);
+            root!(vars, cx);
             Interpreter { vars, env }.implicit_progn(forms, cx)
         }
         other => Err(TypeError::new(Type::Func, other).into()),

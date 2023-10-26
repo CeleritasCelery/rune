@@ -17,8 +17,11 @@ use std::{
     marker::PhantomPinned,
 };
 
-/// Creates a root for garbage collection. This trait is only safe to implement
-/// for types that managed by the garbage collector.
+/// Helper trait to change the lifetime of an object to `'static` so it can be a
+/// root for garbage collection. Can also be used to simplifying adding certain
+/// types (like automatically unwraping other rooted objects). This trait is
+/// only safe to implement for types that can be traced by the garbage
+/// collector.
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
@@ -149,16 +152,16 @@ impl<T> Drop for __StackRoot<'_, T> {
     }
 }
 
+/// Creates a new root that will be traced during garbage collection. The value
+/// returned by this macro is no longer bound to the `Context` and so can be
+/// used outside of the `Context`'s lifetime. The root is tied to the stack, and
+/// will be unrooted when it goes out of scope.
 #[macro_export]
 macro_rules! root {
     ($ident:ident, $cx:ident) => {
-        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
+        $crate::root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
     };
-    ($ident:ident, move($value:expr), $cx:ident) => {
-        // eval value outside the unsafe block
-        let value = $value;
-        root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root(value) }, $cx);
-    };
+    // When using this form, `value` should be an intializer that does not need `IntoRoot`
     ($ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;
         let mut root =
@@ -294,7 +297,7 @@ impl<T> Rt<T> {
         // SAFETY: We are holding a reference to the context
         #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
-            std::mem::transmute(&self.inner)
+            std::mem::transmute::<&T, &<T as WithLifetime<'ob>>::Out>(&self.inner)
         }
     }
 

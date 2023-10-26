@@ -33,7 +33,7 @@ pub(crate) fn apply<'ob>(
             args
         }
     };
-    root!(args, move(args), cx);
+    root!(args, cx);
     function.call(args, env, cx, None).map_err(Into::into)
 }
 
@@ -193,10 +193,10 @@ pub(crate) fn macroexpand<'ob>(
     };
     let Some(macro_func) = func else { return Ok(form.bind(cx)) };
     let macro_args: Vec<_> = cons.cdr().as_list()?.fallible().collect()?;
-    root!(args, move(macro_args), cx);
+    root!(macro_args, cx);
     root!(macro_func, cx);
     let name = sym.name().to_owned();
-    let new_form = macro_func.call(args, env, cx, Some(&name))?;
+    let new_form = macro_func.call(macro_args, env, cx, Some(&name))?;
     root!(new_form, cx); // polonius
     if eq(new_form.bind(cx), form.bind(cx)) {
         Ok(form.bind(cx))
