@@ -1,4 +1,6 @@
 #![deny(macro_use_extern_crate, keyword_idents)]
+// https://github.com/rust-lang/rust-analyzer/issues/15273
+#![deny(clippy::non_ascii_literal)]
 #![forbid(non_ascii_idents)]
 #![warn(rust_2018_idioms)]
 // This lint makes code more verbose with little benefit

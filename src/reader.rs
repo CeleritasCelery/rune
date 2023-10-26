@@ -528,14 +528,14 @@ mod test {
     }
 
     #[test]
-    #[allow(clippy::non_ascii_literal)]
     fn test_read_char() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         check_reader!(97, "?a", cx);
-        check_reader!(21, "?", cx);
-        check_reader!(225, "?á", cx);
+        check_reader!(21, "?\u{15}", cx);
         check_reader!(97, "?a?a", cx);
+        check_reader!(97, "?a?a", cx);
+        check_reader!(225, "?\u{e1}", cx);
         check_reader!(97, "?a#'foo ?a", cx);
         assert_error("?aa", Error::UnexpectedChar('a', 2), cx);
         assert_error("?", Error::MissingQuotedItem(0), cx);
