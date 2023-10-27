@@ -1,7 +1,7 @@
 //! The main bytecode interpeter.
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
-use crate::core::gc::{Context, IntoRoot, Rt, Trace};
+use crate::core::gc::{Context, Rt, Trace};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
 use crate::root;
 use anyhow::{bail, Result};
@@ -203,16 +203,6 @@ struct Handler<'ob> {
     #[no_trace]
     stack_size: usize,
     condition: GcObj<'ob>,
-}
-
-impl<'ob> IntoRoot<Handler<'static>> for Handler<'ob> {
-    unsafe fn into_root(self) -> Handler<'static> {
-        Handler {
-            jump_code: self.jump_code,
-            stack_size: self.stack_size,
-            condition: self.condition.into_root(),
-        }
-    }
 }
 
 impl<'old, 'new> WithLifetime<'new> for Handler<'old> {

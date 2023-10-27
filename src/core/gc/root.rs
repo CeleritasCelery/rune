@@ -26,19 +26,10 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<T, U> IntoRoot<Gc<U>> for Gc<T>
+impl<T, U> IntoRoot<U> for T
 where
-    Gc<T>: WithLifetime<'static, Out = Gc<U>>,
+    T: WithLifetime<'static, Out = U>,
     U: 'static,
-{
-    unsafe fn into_root(self) -> Gc<U> {
-        self.with_lifetime()
-    }
-}
-
-impl<T, U> IntoRoot<U> for &T
-where
-    for<'a> &'a T: WithLifetime<'static, Out = U>,
 {
     unsafe fn into_root(self) -> U {
         self.with_lifetime()
@@ -63,37 +54,6 @@ impl IntoRoot<GcObj<'static>> for bool {
 impl IntoRoot<GcObj<'static>> for i64 {
     unsafe fn into_root(self) -> GcObj<'static> {
         self.into()
-    }
-}
-
-impl IntoRoot<Symbol<'static>> for Symbol<'_> {
-    unsafe fn into_root(self) -> Symbol<'static> {
-        self.with_lifetime()
-    }
-}
-
-impl<T, Tx> IntoRoot<Option<Tx>> for Option<T>
-where
-    T: IntoRoot<Tx>,
-{
-    unsafe fn into_root(self) -> Option<Tx> {
-        self.map(|x| x.into_root())
-    }
-}
-
-impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
-where
-    T: IntoRoot<Tx>,
-    U: IntoRoot<Ux>,
-{
-    unsafe fn into_root(self) -> (Tx, Ux) {
-        (self.0.into_root(), self.1.into_root())
-    }
-}
-
-impl<T: IntoRoot<U>, U> IntoRoot<Vec<U>> for Vec<T> {
-    unsafe fn into_root(self) -> Vec<U> {
-        self.into_iter().map(|x| x.into_root()).collect()
     }
 }
 
