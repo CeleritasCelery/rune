@@ -312,6 +312,18 @@ impl<T> Rt<T> {
         }
     }
 
+    pub(crate) unsafe fn bind_mut_unchecked<'a, 'ob>(
+        &'a mut self,
+    ) -> &'a mut <T as WithLifetime<'ob>>::Out
+    where
+        T: WithLifetime<'ob>,
+    {
+        #[allow(clippy::transmute_ptr_to_ptr)]
+        unsafe {
+            std::mem::transmute(&mut self.inner)
+        }
+    }
+
     pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Context) -> &'ob [U]
     where
         T: WithLifetime<'ob, Out = U>,

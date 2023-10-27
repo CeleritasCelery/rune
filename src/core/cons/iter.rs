@@ -1,3 +1,5 @@
+use crate::core::object::WithLifetime;
+
 use super::super::{
     gc::Rt,
     object::{Gc, GcObj, List, Object},
@@ -96,6 +98,37 @@ impl std::fmt::Display for ConsError {
 }
 
 impl std::error::Error for ConsError {}
+
+struct WrapperIter<'rt, I> {
+    iter: &'rt mut Rt<I>,
+    item: Option<&'rt mut Rt<GcObj<'static>>>,
+}
+
+impl<'rt, I, Ix, E> fallible_streaming_iterator::FallibleStreamingIterator for WrapperIter<'rt, I>
+where I:  WithLifetime<'rt, Out = Ix>,
+      Ix: Iterator<Item = Result<GcObj<'static>, E>>,
+{
+    type Item = Rt<GcObj<'static>>;
+    type Error = E;
+
+    fn advance(&mut self) -> Result<(), Self::Error> {
+        let iter = unsafe { self.iter.bind_mut_unchecked()};
+        match iter.next() {
+            Some(Ok(v)) => {
+                let elem = self.item.as_mut().unwrap();
+                elem.set(v);
+            },
+            Some(Err(e)) => return Err(e),
+            None => self.item = None,
+
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Option<&Self::Item> {
+        self.item.as_deref()
+    }
+}
 
 pub(crate) struct ElemStreamIter<'rt> {
     elem: Option<&'rt mut Rt<GcObj<'static>>>,

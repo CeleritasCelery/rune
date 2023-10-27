@@ -60,7 +60,6 @@ mod eval;
 mod fileio;
 mod floatfns;
 mod fns;
-mod gui;
 mod hashmap;
 mod interpreter;
 mod keymap;
@@ -178,9 +177,5 @@ fn main() {
 
     if args.repl {
         repl(env, cx);
-    }
-
-    if args.gui {
-        gui::launch();
     }
 }

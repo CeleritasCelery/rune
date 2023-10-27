@@ -24,6 +24,25 @@ pub(crate) struct ByteFn {
     constants: &'static LispVec,
 }
 
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct ByteFnX<'ob> {
+    gc: GcMark,
+    #[no_trace]
+    pub(crate) args: FnArgs,
+    #[no_trace]
+    pub(crate) depth: usize,
+    op_codes: &'ob LispString,
+    constants: &'ob LispVec,
+}
+
+fn dummy(x: &ByteFnX, cx: &Context) {
+    // let root = unsafe { IntoRoot::into_root(x)};
+    // let root = unsafe { x.into_root(cx) };
+    // let root = unsafe { x.into_root(cx) };
+    // crate::root!(root, cx);
+    // crate::root!(x, cx);
+}
+
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {

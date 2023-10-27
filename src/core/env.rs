@@ -23,6 +23,147 @@ pub(crate) struct Env {
     pub(crate) current_buffer: Option<OpenBuffer<'static>>,
 }
 
+#[derive(Debug, Default, Trace)]
+pub(crate) struct EnvX<'ob> {
+    pub(crate) vars: HashMap<Symbol<'ob>, GcObj<'ob>>,
+    pub(crate) props: HashMap<Symbol<'ob>, Vec<(Symbol<'ob>, GcObj<'ob>)>>,
+    pub(crate) catch_stack: Vec<GcObj<'ob>>,
+    exception: (GcObj<'ob>, GcObj<'ob>),
+    #[no_trace]
+    exception_id: u32,
+    binding_stack: Vec<(Symbol<'ob>, Option<GcObj<'ob>>)>,
+    pub(crate) match_data: GcObj<'ob>,
+    #[no_trace]
+    pub(crate) current_buffer: Option<OpenBuffer<'ob>>,
+}
+
+fn dummy(cx: &Context) {
+    // crate::root!(env, EnvX::default(), cx);
+}
+
+impl Rt<EnvX<'static>> {
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
+        if sym.is_const() {
+            Err(anyhow!("Attempt to set a constant symbol: {sym}"))
+        } else {
+            self.vars.insert(sym, value);
+            Ok(())
+        }
+    }
+
+    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
+        match self.props.get_mut(symbol) {
+            Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
+                Some(x) => x.1.set(value),
+                None => plist.push((propname, value)),
+            },
+            None => {
+                self.props.insert(symbol, vec![(propname, value)]);
+            }
+        }
+    }
+
+    pub(in crate::core) fn set_exception(&mut self, tag: GcObj, data: GcObj) -> u32 {
+        self.exception.0.set(tag);
+        self.exception.1.set(data);
+        self.exception_id += 1;
+        self.exception_id
+    }
+
+    pub(crate) fn get_exception(
+        &self,
+        id: u32,
+    ) -> Option<(&Rt<GcObj<'static>>, &Rt<GcObj<'static>>)> {
+        (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
+    }
+
+    pub(crate) fn varbind(&mut self, var: Symbol, value: GcObj, cx: &Context) {
+        let prev_value = self.vars.get(var).map(|x| x.bind(cx));
+        self.binding_stack.push((var, prev_value));
+        self.vars.insert(var, value);
+    }
+
+    pub(crate) fn unbind(&mut self, count: u16, cx: &Context) {
+        for _ in 0..count {
+            match self.binding_stack.bind_mut(cx).pop() {
+                Some((sym, val)) => match val {
+                    Some(val) => self.vars.insert(sym, val),
+                    None => self.vars.remove(sym),
+                },
+                None => panic!("Binding stack was empty"),
+            }
+        }
+    }
+
+    pub(crate) fn defvar(&mut self, var: Symbol, value: GcObj) -> Result<()> {
+        self.set_var(var, value)?;
+        var.make_special();
+        // If this variable was unbound previously in the binding stack,
+        // we will bind it to the new value
+        for binding in &mut *self.binding_stack {
+            if binding.0 == var && binding.1.is_none() {
+                binding.1.set(value);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer) -> Result<()> {
+        if let Some(current) = &self.current_buffer {
+            if buffer == current {
+                return Ok(());
+            }
+        }
+        // SAFETY: We are not dropping the buffer until we have can trace it
+        // with the garbage collector
+        let lock = unsafe { buffer.lock()?.with_lifetime() };
+        self.current_buffer = Some(lock);
+        Ok(())
+    }
+
+    pub(crate) fn with_buffer<T>(
+        &self,
+        buffer: Option<&LispBuffer>,
+        func: impl Fn(&OpenBuffer) -> T,
+    ) -> Option<T> {
+        match (&self.current_buffer, buffer) {
+            (Some(current), Some(buffer)) if current == buffer => {
+                Some(func(self.current_buffer.as_ref().unwrap()))
+            }
+            (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
+            (_, Some(buffer)) => {
+                if let Ok(buffer) = buffer.lock().as_mut() {
+                    Some(func(buffer))
+                } else {
+                    None
+                }
+            }
+            (None, None) => None,
+        }
+    }
+
+    pub(crate) fn with_buffer_mut<T>(
+        &mut self,
+        buffer: Option<&LispBuffer>,
+        func: impl Fn(&mut OpenBuffer) -> T,
+    ) -> Option<T> {
+        match (&self.current_buffer, buffer) {
+            (Some(current), Some(buffer)) if current == buffer => {
+                Some(func(self.current_buffer.as_mut().unwrap()))
+            }
+            (Some(_), None) => Some(func(self.current_buffer.as_mut().unwrap())),
+            (_, Some(buffer)) => {
+                if let Ok(buffer) = buffer.lock().as_mut() {
+                    Some(func(buffer))
+                } else {
+                    None
+                }
+            }
+            (None, None) => None,
+        }
+    }
+}
+
 impl Rt<Env> {
     pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
         if sym.is_const() {
