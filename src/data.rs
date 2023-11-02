@@ -447,6 +447,12 @@ fn bare_symbol(sym: Symbol) -> Symbol {
     sym
 }
 
+#[defun]
+fn symbol_with_pos_p(_sym: GcObj) -> bool {
+    // TODO: implement
+    false
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
