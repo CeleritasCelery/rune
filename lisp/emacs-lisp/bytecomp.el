@@ -124,7 +124,8 @@
 (require 'backquote)
 (require 'macroexp)
 (require 'cconv)
-(eval-when-compile (require 'compile))
+;; RUNE-BOOTSTRAP
+;; (eval-when-compile (require 'compile))
 ;; Refrain from using cl-lib at run-time here, since it otherwise prevents
 ;; us from emitting warnings when compiling files which use cl-lib without
 ;; requiring it! (bug#30635)
@@ -1121,14 +1122,16 @@ message buffer `default-directory'."
   :type '(repeat (choice (const :tag "Default" nil)
 			 (string :tag "Directory"))))
 
-(defvar-keymap emacs-lisp-compilation-mode-map
-  "g" #'emacs-lisp-compilation-recompile)
+;; RUNE-BOOTSTRAP
+;; (defvar-keymap emacs-lisp-compilation-mode-map
+;;   "g" #'emacs-lisp-compilation-recompile)
 
 (defvar emacs-lisp-compilation--current-file nil)
 
-(define-compilation-mode emacs-lisp-compilation-mode "elisp-compile"
-  "The variant of `compilation-mode' used for emacs-lisp compilation buffers."
-  (setq-local emacs-lisp-compilation--current-file nil))
+;; RUNE-BOOTSTRAP
+;; (define-compilation-mode emacs-lisp-compilation-mode "elisp-compile"
+;;   "The variant of `compilation-mode' used for emacs-lisp compilation buffers."
+;;   (setq-local emacs-lisp-compilation--current-file nil))
 
 (defun emacs-lisp-compilation-recompile ()
   "Recompile the previously byte-compiled file."

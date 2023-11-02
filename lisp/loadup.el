@@ -202,191 +202,192 @@
 (load "emacs-lisp/cl-preloaded")
 (load "emacs-lisp/oclosure")          ;Used by cl-generic
 (load "obarray")        ;abbrev.el is implemented in terms of obarrays.
-(load "abbrev")         ;lisp-mode.el and simple.el use define-abbrev-table.
+;; RUNE-BOOTSTRAP
+;; (load "abbrev")         ;lisp-mode.el and simple.el use define-abbrev-table.
 
-(load "help")
+;; (load "help")
 
-(load "jka-cmpr-hook")
-(load "epa-hook")
-;; Any Emacs Lisp source file (*.el) loaded here after can contain
-;; multilingual text.
-(load "international/mule-cmds")
-(load "case-table")
-;; This file doesn't exist when building a development version of Emacs
-;; from the repository.  It is generated just after temacs is built.
-(load "international/charprop.el" t)
-(if (featurep 'charprop)
-    (setq redisplay--inhibit-bidi nil))
-(load "international/characters")
-(load "composite")
+;; (load "jka-cmpr-hook")
+;; (load "epa-hook")
+;; ;; Any Emacs Lisp source file (*.el) loaded here after can contain
+;; ;; multilingual text.
+;; (load "international/mule-cmds")
+;; (load "case-table")
+;; ;; This file doesn't exist when building a development version of Emacs
+;; ;; from the repository.  It is generated just after temacs is built.
+;; (load "international/charprop.el" t)
+;; (if (featurep 'charprop)
+;;     (setq redisplay--inhibit-bidi nil))
+;; (load "international/characters")
+;; (load "composite")
 
-;; Load language-specific files.
-(load "language/chinese")
-(load "language/cyrillic")
-(load "language/indian")
-(load "language/sinhala")
-(load "language/english")
-(load "language/ethiopic")
-(load "language/european")
-(load "language/czech")
-(load "language/slovak")
-(load "language/romanian")
-(load "language/greek")
-(load "language/hebrew")
-(load "international/cp51932")
-(load "international/eucjp-ms")
-(load "language/japanese")
-(load "language/korean")
-(load "language/lao")
-(load "language/tai-viet")
-(load "language/thai")
-(load "language/tibetan")
-(load "language/vietnamese")
-(load "language/misc-lang")
-(load "language/utf-8-lang")
-(load "language/georgian")
-(load "language/khmer")
-(load "language/burmese")
-(load "language/cham")
-(load "language/philippine")
-(load "language/indonesian")
+;; ;; Load language-specific files.
+;; (load "language/chinese")
+;; (load "language/cyrillic")
+;; (load "language/indian")
+;; (load "language/sinhala")
+;; (load "language/english")
+;; (load "language/ethiopic")
+;; (load "language/european")
+;; (load "language/czech")
+;; (load "language/slovak")
+;; (load "language/romanian")
+;; (load "language/greek")
+;; (load "language/hebrew")
+;; (load "international/cp51932")
+;; (load "international/eucjp-ms")
+;; (load "language/japanese")
+;; (load "language/korean")
+;; (load "language/lao")
+;; (load "language/tai-viet")
+;; (load "language/thai")
+;; (load "language/tibetan")
+;; (load "language/vietnamese")
+;; (load "language/misc-lang")
+;; (load "language/utf-8-lang")
+;; (load "language/georgian")
+;; (load "language/khmer")
+;; (load "language/burmese")
+;; (load "language/cham")
+;; (load "language/philippine")
+;; (load "language/indonesian")
 
-(load "indent")
-(load "emacs-lisp/cl-generic")
-(load "simple")
-(load "emacs-lisp/seq")
-(load "emacs-lisp/nadvice")
-(load "minibuffer") ;Needs cl-generic (and define-minor-mode).
-(load "frame")
-(load "startup")
-(load "term/tty-colors")
-(load "font-core")
-(load "emacs-lisp/syntax")
-(load "font-lock")
-(load "jit-lock")
+;; (load "indent")
+;; (load "emacs-lisp/cl-generic")
+;; (load "simple")
+;; (load "emacs-lisp/seq")
+;; (load "emacs-lisp/nadvice")
+;; (load "minibuffer") ;Needs cl-generic (and define-minor-mode).
+;; (load "frame")
+;; (load "startup")
+;; (load "term/tty-colors")
+;; (load "font-core")
+;; (load "emacs-lisp/syntax")
+;; (load "font-lock")
+;; (load "jit-lock")
 
-(load "mouse")
-(if (boundp 'x-toolkit-scroll-bars)
-    (load "scroll-bar"))
-(load "select")
-(load "emacs-lisp/timer")
-(load "emacs-lisp/easymenu")
-(load "isearch")
-(load "rfn-eshadow")
+;; (load "mouse")
+;; (if (boundp 'x-toolkit-scroll-bars)
+;;     (load "scroll-bar"))
+;; (load "select")
+;; (load "emacs-lisp/timer")
+;; (load "emacs-lisp/easymenu")
+;; (load "isearch")
+;; (load "rfn-eshadow")
 
-(load "menu-bar")
-(load "tab-bar")
-(load "emacs-lisp/lisp")
-(load "textmodes/page")
-(load "register")
-(load "textmodes/paragraphs")
-(load "progmodes/prog-mode")
-(load "emacs-lisp/lisp-mode")
-(load "textmodes/text-mode")
-(load "textmodes/fill")
-(load "newcomment")
+;; (load "menu-bar")
+;; (load "tab-bar")
+;; (load "emacs-lisp/lisp")
+;; (load "textmodes/page")
+;; (load "register")
+;; (load "textmodes/paragraphs")
+;; (load "progmodes/prog-mode")
+;; (load "emacs-lisp/lisp-mode")
+;; (load "textmodes/text-mode")
+;; (load "textmodes/fill")
+;; (load "newcomment")
 
-(load "replace")
-(load "emacs-lisp/tabulated-list")
-(load "buff-menu")
+;; (load "replace")
+;; (load "emacs-lisp/tabulated-list")
+;; (load "buff-menu")
 
-(if (fboundp 'x-create-frame)
-    (progn
-      (load "fringe")
-      ;; Needed by `imagemagick-register-types'
-      (load "emacs-lisp/regexp-opt")
-      (load "image")
-      (load "international/fontset")
-      (load "dnd")
-      (load "tool-bar")))
+;; (if (fboundp 'x-create-frame)
+;;     (progn
+;;       (load "fringe")
+;;       ;; Needed by `imagemagick-register-types'
+;;       (load "emacs-lisp/regexp-opt")
+;;       (load "image")
+;;       (load "international/fontset")
+;;       (load "dnd")
+;;       (load "tool-bar")))
 
-(if (featurep 'dynamic-setting)
-    (load "dynamic-setting"))
+;; (if (featurep 'dynamic-setting)
+;;     (load "dynamic-setting"))
 
-(if (featurep 'x)
-    (progn
-      (load "x-dnd")
-      (load "term/common-win")
-      (load "term/x-win")))
+;; (if (featurep 'x)
+;;     (progn
+;;       (load "x-dnd")
+;;       (load "term/common-win")
+;;       (load "term/x-win")))
 
-(if (featurep 'haiku)
-    (progn
-      (load "term/common-win")
-      (load "term/haiku-win")))
+;; (if (featurep 'haiku)
+;;     (progn
+;;       (load "term/common-win")
+;;       (load "term/haiku-win")))
 
-(if (or (eq system-type 'windows-nt)
-        (featurep 'w32))
-    (progn
-      (load "term/common-win")
-      (load "w32-vars")
-      (load "term/w32-win")
-      (load "disp-table")
-      (when (eq system-type 'windows-nt)
-        (load "w32-fns")
-        (load "ls-lisp")
-        (load "dos-w32"))))
-(if (eq system-type 'ms-dos)
-    (progn
-      (load "dos-w32")
-      (load "dos-fns")
-      (load "dos-vars")
-      ;; Don't load term/common-win: it isn't appropriate for the `pc'
-      ;; ``window system'', which generally behaves like a terminal.
-      (load "term/internal")
-      (load "term/pc-win")
-      (load "ls-lisp")
-      (load "disp-table"))) ; needed to setup ibm-pc char set, see internal.el
-(if (featurep 'ns)
-    (progn
-      (load "term/common-win")
-      ;; Don't load ucs-normalize.el unless uni-*.el files were
-      ;; already produced, because it needs uni-*.el files that might
-      ;; not be built early enough during bootstrap.
-      (when (featurep 'charprop)
-        (load "international/mule-util")
-        (load "international/ucs-normalize")
-        (load "term/ns-win"))))
-(if (featurep 'pgtk)
-    (progn
-      (load "pgtk-dnd")
-      (load "term/common-win")
-      (load "term/pgtk-win")))
-(if (fboundp 'x-create-frame)
-    ;; Do it after loading term/foo-win.el since the value of the
-    ;; mouse-wheel-*-event vars depends on those files being loaded or not.
-    (load "mwheel"))
+;; (if (or (eq system-type 'windows-nt)
+;;         (featurep 'w32))
+;;     (progn
+;;       (load "term/common-win")
+;;       (load "w32-vars")
+;;       (load "term/w32-win")
+;;       (load "disp-table")
+;;       (when (eq system-type 'windows-nt)
+;;         (load "w32-fns")
+;;         (load "ls-lisp")
+;;         (load "dos-w32"))))
+;; (if (eq system-type 'ms-dos)
+;;     (progn
+;;       (load "dos-w32")
+;;       (load "dos-fns")
+;;       (load "dos-vars")
+;;       ;; Don't load term/common-win: it isn't appropriate for the `pc'
+;;       ;; ``window system'', which generally behaves like a terminal.
+;;       (load "term/internal")
+;;       (load "term/pc-win")
+;;       (load "ls-lisp")
+;;       (load "disp-table"))) ; needed to setup ibm-pc char set, see internal.el
+;; (if (featurep 'ns)
+;;     (progn
+;;       (load "term/common-win")
+;;       ;; Don't load ucs-normalize.el unless uni-*.el files were
+;;       ;; already produced, because it needs uni-*.el files that might
+;;       ;; not be built early enough during bootstrap.
+;;       (when (featurep 'charprop)
+;;         (load "international/mule-util")
+;;         (load "international/ucs-normalize")
+;;         (load "term/ns-win"))))
+;; (if (featurep 'pgtk)
+;;     (progn
+;;       (load "pgtk-dnd")
+;;       (load "term/common-win")
+;;       (load "term/pgtk-win")))
+;; (if (fboundp 'x-create-frame)
+;;     ;; Do it after loading term/foo-win.el since the value of the
+;;     ;; mouse-wheel-*-event vars depends on those files being loaded or not.
+;;     (load "mwheel"))
 
-;; progmodes/elisp-mode.el must be after w32-fns.el, to avoid this:
-;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
-;; which happens while processing 'elisp-flymake-byte-compile', when
-;; elisp-mode.elc is outdated.
-(load "progmodes/elisp-mode")
+;; ;; progmodes/elisp-mode.el must be after w32-fns.el, to avoid this:
+;; ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
+;; ;; which happens while processing 'elisp-flymake-byte-compile', when
+;; ;; elisp-mode.elc is outdated.
+;; (load "progmodes/elisp-mode")
 
-;; Preload some constants and floating point functions.
-(load "emacs-lisp/float-sup")
+;; ;; Preload some constants and floating point functions.
+;; (load "emacs-lisp/float-sup")
 
-(load "vc/vc-hooks")
-(load "vc/ediff-hook")
-(load "uniquify")
-(load "electric")
-(load "paren")
+;; (load "vc/vc-hooks")
+;; (load "vc/ediff-hook")
+;; (load "uniquify")
+;; (load "electric")
+;; (load "paren")
 
-(load "emacs-lisp/shorthands")
+;; (load "emacs-lisp/shorthands")
 
-(load "emacs-lisp/eldoc")
-(load "emacs-lisp/cconv")
-(when (and (compiled-function-p (symbol-function 'cconv-fv))
-           (compiled-function-p (symbol-function 'macroexpand-all)))
-  (setq internal-make-interpreted-closure-function
-        #'cconv-make-interpreted-closure))
-(load "cus-start") ;Late to reduce customize-rogue (needs loaddefs.el anyway)
-(if (not (eq system-type 'ms-dos))
-    (load "tooltip"))
-(load "international/iso-transl") ; Binds Alt-[ and friends.
+;; (load "emacs-lisp/eldoc")
+;; (load "emacs-lisp/cconv")
+;; (when (and (compiled-function-p (symbol-function 'cconv-fv))
+;;            (compiled-function-p (symbol-function 'macroexpand-all)))
+;;   (setq internal-make-interpreted-closure-function
+;;         #'cconv-make-interpreted-closure))
+;; (load "cus-start") ;Late to reduce customize-rogue (needs loaddefs.el anyway)
+;; (if (not (eq system-type 'ms-dos))
+;;     (load "tooltip"))
+;; (load "international/iso-transl") ; Binds Alt-[ and friends.
 
-;; This file doesn't exist when building a development version of Emacs
-;; from the repository.  It is generated just after temacs is built.
-(load "leim/leim-list.el" t)
+;; ;; This file doesn't exist when building a development version of Emacs
+;; ;; from the repository.  It is generated just after temacs is built.
+;; (load "leim/leim-list.el" t)
 
 ;; If you want additional libraries to be preloaded and their
 ;; doc strings kept in the DOC file rather than in core,
@@ -469,7 +470,8 @@ lost after dumping")))
 
 (set-buffer-modified-p nil)
 
-(remove-hook 'after-load-functions (lambda (_) (garbage-collect)))
+;; RUNE-BOOTSTRAP
+;; (remove-hook 'after-load-functions (lambda (_) (garbage-collect)))
 
 (if (boundp 'load--prefer-newer)
     (progn
@@ -478,11 +480,12 @@ lost after dumping")))
       (makunbound 'load--prefer-newer)))
 
 (setq inhibit-load-charset-map nil)
-(clear-charset-maps)
-(garbage-collect)
-
-;; At this point, we're ready to resume undo recording for scratch.
-(buffer-enable-undo "*scratch*")
+;; RUNE-BOOTSTRAP
+;; (clear-charset-maps)
+;; (garbage-collect)
+;;
+;; ;; At this point, we're ready to resume undo recording for scratch.
+;; (buffer-enable-undo "*scratch*")
 
 (defvar comp-subr-arities-h)
 (when (featurep 'native-compile)
@@ -546,8 +549,9 @@ lost after dumping")))
 ;; hash-consing hash table is GC'd.
 (setq purify-flag nil)
 
-(if (null (garbage-collect))
-    (setq pure-space-overflow t))
+;; RUNE-BOOTSTRAP
+;; (if (null (garbage-collect))
+;;     (setq pure-space-overflow t))
 
 ;; Make sure we will attempt bidi reordering henceforth.
 (setq redisplay--inhibit-bidi nil)
@@ -627,7 +631,8 @@ lost after dumping")))
 ;; (or load-file-name byte-compile-current-file).
 (setq load-true-file-name nil)
 (setq load-file-name nil)
-(eval top-level t)
+;; RUNE-BOOTSTRAP
+;; (eval top-level t)
 
 
 ;; Local Variables:
