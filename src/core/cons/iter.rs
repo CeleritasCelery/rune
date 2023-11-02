@@ -42,7 +42,6 @@ impl<'ob> Iterator for ConsIter<'ob> {
         if let (Some(Ok(slow)), Some(fast)) = (self.cons, self.fast) {
             if std::ptr::eq(slow, fast) {
                 self.cons = Some(Err(ConsError::CircularList));
-                return Some(Err(ConsError::CircularList));
             }
         }
         Some(Ok(cons))
@@ -259,12 +258,13 @@ mod test {
         let cons = list![1; cx];
         cons.as_cons().set_cdr(cons).unwrap();
         let mut iter = cons.as_list().unwrap();
+        assert!(iter.next().unwrap().is_ok());
         assert!(iter.next().unwrap().is_err());
 
         let cons = list![1, 2, 3; cx];
         cons.as_cons().cdr().as_cons().cdr().as_cons().set_cdr(cons).unwrap();
         let iter = cons.as_list().unwrap();
-        assert!(iter.fallible().nth(2).is_err());
+        assert!(iter.fallible().nth(3).is_err());
 
         let cons = list![1, 2, 3, 4; cx];
         let middle = cons.as_cons().cdr().as_cons().cdr();

@@ -1,7 +1,14 @@
-use super::{display_slice, CloneIn, Gc, GcObj, IntoObject, WithLifetime};
-use crate::core::gc::{Block, GcManaged, GcMark, Trace};
+use super::{CloneIn, Gc, GcObj, IntoObject, WithLifetime};
+use crate::{
+    core::gc::{Block, GcManaged, GcMark, Trace},
+    hashmap::HashSet,
+};
 use anyhow::{anyhow, Result};
-use std::{cell::Cell, fmt::Debug, fmt::Display, ops::Deref};
+use std::{
+    cell::Cell,
+    fmt::{self, Debug, Display, Write},
+    ops::Deref,
+};
 
 /// A lisp vector. Unlike vectors in other languages this is not resizeable.
 /// This type is represented as slice of [`ObjCell`] which is immutable by
@@ -40,13 +47,13 @@ impl ObjCell {
 }
 
 impl Display for ObjCell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.0.get(), f)
     }
 }
 
 impl Debug for ObjCell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
     }
 }
@@ -55,7 +62,7 @@ impl Debug for ObjCell {
 /// detailed explanation. Holding this type means that we confirmed that the
 /// data stucture is mutable, and we can use the [`set`] method update this
 /// cell.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 #[repr(transparent)]
 pub(crate) struct MutObjCell(ObjCell);
 
@@ -136,14 +143,37 @@ impl Trace for LispVec {
 }
 
 impl Display for LispVec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&display_slice(self))
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
     }
 }
 
 impl Debug for LispVec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl LispVec {
+    pub(super) fn display_walk(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        seen: &mut HashSet<*const u8>,
+    ) -> fmt::Result {
+        let ptr = (self as *const Self).cast();
+        if seen.contains(&ptr) {
+            return write!(f, "#0");
+        }
+        seen.insert(ptr);
+
+        f.write_char('[')?;
+        for (i, x) in self.iter().enumerate() {
+            if i != 0 {
+                f.write_char(' ')?;
+            }
+            x.0.get().untag().display_walk(f, seen)?;
+        }
+        f.write_char(']')
     }
 }
 
@@ -176,8 +206,29 @@ impl GcManaged for Record {
 }
 
 impl Display for Record {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#s")?;
-        f.write_str(&display_slice(self))
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl Record {
+    pub(super) fn display_walk(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        seen: &mut HashSet<*const u8>,
+    ) -> fmt::Result {
+        let ptr = (self as *const Self).cast();
+        if seen.contains(&ptr) {
+            return write!(f, "#0");
+        }
+        seen.insert(ptr);
+        write!(f, "#s(")?;
+        for (i, x) in self.iter().enumerate() {
+            if i != 0 {
+                f.write_char(' ')?;
+            }
+            x.get().untag().display_walk(f, seen)?;
+        }
+        f.write_char(')')
     }
 }

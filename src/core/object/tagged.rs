@@ -11,8 +11,8 @@ use super::{
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
-use crate::core::env::sym;
 use crate::core::gc::{GcManaged, Trace};
+use crate::{core::env::sym, hashmap::HashSet};
 use private::{Tag, TaggedPtr};
 use sptr::Strict;
 use std::fmt;
@@ -750,7 +750,7 @@ impl<'old, 'new> WithLifetime<'new> for Number<'old> {
 }
 
 // List
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 #[repr(u8)]
 pub(crate) enum List<'ob> {
     Nil = 0,
@@ -824,7 +824,7 @@ impl<'ob> Function<'ob> {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 /// The Object defintion that contains all other possible lisp objects. This
 /// type must remain covariant over 'ob. This is just an expanded form of our
@@ -1187,17 +1187,15 @@ impl Default for Gc<List<'_>> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Gc<T> {
+impl<T> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let obj = self.as_obj().untag();
-        write!(f, "{obj}")
+        write!(f, "{}", self.as_obj().untag())
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Gc<T> {
+impl<T> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let obj = self.as_obj().untag();
-        write!(f, "{obj:?}")
+        write!(f, "{self}")
     }
 }
 
@@ -1218,13 +1216,29 @@ impl<T> Hash for Gc<T> {
 
 impl fmt::Display for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl fmt::Debug for Object<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl Object<'_> {
+    pub(crate) fn display_walk(
+        &self,
+        f: &mut fmt::Formatter,
+        seen: &mut HashSet<*const u8>,
+    ) -> fmt::Result {
         use fmt::Display as D;
         match self {
             Object::Int(x) => D::fmt(x, f),
-            Object::Cons(x) => D::fmt(x, f),
-            Object::Vec(x) => D::fmt(x, f),
-            Object::Record(x) => D::fmt(x, f),
-            Object::HashTable(x) => D::fmt(x, f),
+            Object::Cons(x) => x.display_walk(f, seen),
+            Object::Vec(x) => x.display_walk(f, seen),
+            Object::Record(x) => x.display_walk(f, seen),
+            Object::HashTable(x) => x.display_walk(f, seen),
             Object::String(x) => D::fmt(x, f),
             Object::Symbol(x) => D::fmt(x, f),
             Object::ByteFn(x) => D::fmt(x, f),
@@ -1284,6 +1298,7 @@ impl<'ob> List<'ob> {
 #[cfg(test)]
 mod test {
     use super::{TagType, MAX_FIXNUM, MIN_FIXNUM};
+    use crate::core::gc::{Context, RootSet};
 
     #[test]
     fn test_clamp_fixnum() {
@@ -1293,5 +1308,17 @@ mod test {
         assert_eq!(MAX_FIXNUM.tag().untag(), MAX_FIXNUM);
         assert_eq!(i64::MIN.tag().untag(), MIN_FIXNUM);
         assert_eq!(MIN_FIXNUM.tag().untag(), MIN_FIXNUM);
+    }
+
+    #[test]
+    fn test_print_circle() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let cons = list![1; cx];
+        cons.as_cons().set_cdr(cons).unwrap();
+        assert_eq!(format!("{cons}"), "(1 . #0)");
+
+        cons.as_cons().set_car(cons).unwrap();
+        assert_eq!(format!("{cons}"), "(#0 . #0)");
     }
 }

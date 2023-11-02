@@ -6838,9 +6838,10 @@ which would presumably appear in this table under another prefix such as
 ;; The following statement ought to be in print.c, but `provide' can't
 ;; be used there.
 ;; https://lists.gnu.org/r/emacs-devel/2009-08/msg00236.html
-(when (hash-table-p (car (read-from-string
-			  (prin1-to-string (make-hash-table)))))
-  (provide 'hashtable-print-readable))
+;; RUNE-BOOTSTRAP
+;; (when (hash-table-p (car (read-from-string
+;; 			  (prin1-to-string (make-hash-table)))))
+;;   (provide 'hashtable-print-readable))
 
 ;; This is used in lisp/Makefile.in and in leim/Makefile.in to
 ;; generate file names for autoloads, custom-deps, and finder-data.

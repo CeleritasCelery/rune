@@ -1,17 +1,18 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
 use crate::core::gc::{Context, Rt};
+use crate::hashmap::HashSet;
 use crate::{
     core::gc::{GcManaged, GcMark, Trace},
     hashmap::HashMap,
 };
 use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
 use std::collections::hash_map::Iter as HashIter;
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display, Write};
 use streaming_iterator::StreamingIterator;
 
 pub(crate) type HashTable<'ob> = HashMap<GcObj<'ob>, GcObj<'ob>>;
 pub(crate) type HashTableView<'ob, T> = HashMap<GcObj<'ob>, T>;
-#[derive(Debug, Eq)]
+#[derive(Eq)]
 pub(crate) struct LispHashTable {
     gc: GcMark,
     is_const: bool,
@@ -166,8 +167,39 @@ impl<'rt> StreamingIterator for HashTableStreamIter<'rt> {
     }
 }
 
+impl Debug for LispHashTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
 impl Display for LispHashTable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl LispHashTable {
+    pub(super) fn display_walk(
+        &self,
+        f: &mut fmt::Formatter,
+        seen: &mut HashSet<*const u8>,
+    ) -> fmt::Result {
+        let ptr = (self as *const Self).cast();
+        if seen.contains(&ptr) {
+            return write!(f, "#0");
+        }
+        seen.insert(ptr);
+
+        write!(f, "#s(hash-table (")?;
+        for (i, (k, v)) in self.borrow().iter().enumerate() {
+            if i != 0 {
+                f.write_char(' ')?;
+            }
+            k.untag().display_walk(f, seen)?;
+            f.write_char(' ')?;
+            v.get().untag().display_walk(f, seen)?;
+        }
+        write!(f, "))")
     }
 }

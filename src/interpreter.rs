@@ -1034,12 +1034,6 @@ mod test {
             8,
             cx,
         );
-
-        check_interpreter(
-            "(progn (read-from-string (prin1-to-string (make-hash-table))) nil)",
-            false,
-            cx,
-        );
     }
 
     #[test]

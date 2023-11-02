@@ -1,3 +1,5 @@
+use crate::hashmap::HashSet;
+
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
 use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
 use anyhow::{anyhow, Result};
@@ -121,11 +123,31 @@ impl Trace for Cons {
 
 impl Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl Debug for Cons {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl Cons {
+    pub(super) fn display_walk(
+        &self,
+        f: &mut fmt::Formatter,
+        seen: &mut HashSet<*const u8>,
+    ) -> fmt::Result {
+        if self.is_backref(seen) {
+            return f.write_str("#0");
+        }
+
         f.write_char('(')?;
         let mut cons = self;
 
         loop {
-            write!(f, "{}", cons.car())?;
+            cons.car().untag().display_walk(f, seen)?;
             match cons.cdr().untag() {
                 Object::Cons(tail) => {
                     cons = tail;
@@ -133,34 +155,27 @@ impl Display for Cons {
                 }
                 Object::NIL => break,
                 x => {
-                    write!(f, " . {x}")?;
+                    write!(f, " . ")?;
+                    x.display_walk(f, seen)?;
                     break;
                 }
+            }
+            if cons.is_backref(seen) {
+                f.write_str(". #0")?;
+                break;
             }
         }
         f.write_char(')')
     }
-}
 
-impl Debug for Cons {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_char('(')?;
-        let mut cons = self;
-        loop {
-            write!(f, "{:?}", cons.car())?;
-            match cons.cdr().untag() {
-                Object::Cons(tail) => {
-                    cons = tail;
-                    f.write_char(' ')?;
-                }
-                Object::NIL => break,
-                end => {
-                    write!(f, " . {end:?}")?;
-                    break;
-                }
-            }
+    fn is_backref(&self, seen: &mut HashSet<*const u8>) -> bool {
+        let ptr = (self as *const Self).cast();
+        if seen.contains(&ptr) {
+            true
+        } else {
+            seen.insert(ptr);
+            false
         }
-        f.write_char(')')
     }
 }
 
