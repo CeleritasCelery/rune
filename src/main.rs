@@ -71,6 +71,7 @@ mod timefns;
 
 use crate::core::{
     env::{intern, sym, Env},
+    error::EvalError,
     gc::{Context, RootSet, Rt},
     object::{Gc, LispString},
 };
@@ -111,7 +112,12 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
         root!(obj, cx);
         match interpreter::eval(obj, None, env, cx) {
             Ok(val) => println!("{val}"),
-            Err(e) => println!("Error: {e}"),
+            Err(e) => {
+                print!("Error: {e}");
+                if let Ok(e) = e.downcast::<EvalError>() {
+                    e.print_backtrace();
+                }
+            }
         }
         buffer.clear();
     }
@@ -122,8 +128,13 @@ fn load(env: &mut Rt<Env>, cx: &mut Context) {
     let bootstrap: Gc<&LispString> = cx.add_as("lisp/bootstrap.el");
     root!(bootstrap, cx);
     match crate::lread::load(bootstrap, None, None, cx, env) {
-        Ok(val) => println!("{val}"),
-        Err(e) => println!("Error: {e}"),
+        Ok(val) => print!("{val}"),
+        Err(e) => {
+            print!("Error: {e}");
+            if let Ok(e) = e.downcast::<EvalError>() {
+                e.print_backtrace();
+            }
+        }
     }
 }
 

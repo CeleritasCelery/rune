@@ -29,10 +29,6 @@ impl Display for EvalError {
             ErrorType::Throw(_) => writeln!(f, "No catch for throw")?,
             ErrorType::Signal(_) => writeln!(f, "Signal")?,
         }
-        for x in &self.backtrace {
-            writeln!(f, "{x}")?;
-        }
-        writeln!(f, "END_BACKTRACE")?;
         Ok(())
     }
 }
@@ -66,6 +62,14 @@ impl EvalError {
         let display = display_slice(args);
         self.backtrace.push(format!("{name} {display}"));
         self
+    }
+
+    pub(crate) fn print_backtrace(&self) {
+        println!("BEGIN_BACKTRACE");
+        for (i, x) in self.backtrace.iter().enumerate() {
+            println!("{i}: {x}");
+        }
+        println!("END_BACKTRACE");
     }
 }
 
