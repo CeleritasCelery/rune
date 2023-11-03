@@ -99,6 +99,11 @@ fn bolp(env: &Rt<Env>) -> bool {
 }
 
 #[defun]
+fn point(env: &Rt<Env>) -> usize {
+    env.with_buffer(None, |b| b.text.cursor().chars()).unwrap_or(0)
+}
+
+#[defun]
 fn system_name() -> String {
     hostname::get()
         .expect("Failed to get hostname")
