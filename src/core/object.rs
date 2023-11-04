@@ -10,6 +10,7 @@
 //! of the vm.
 
 mod buffer;
+mod cell;
 mod convert;
 mod float;
 mod func;
@@ -20,6 +21,7 @@ mod vector;
 
 #[allow(unused_imports)]
 pub(crate) use buffer::*;
+pub(super) use cell::*;
 pub(crate) use convert::*;
 pub(crate) use float::*;
 pub(crate) use func::*;

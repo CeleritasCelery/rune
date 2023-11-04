@@ -26,7 +26,7 @@ pub(crate) fn make_closure<'ob>(
     let const_len = prototype.constants().len();
     let vars = closure_vars.len();
     ensure!(vars <= const_len, "Closure vars do not fit in const vec");
-    let mut constants = prototype.constants().clone_vec();
+    let mut constants = prototype.constants().to_vec();
     let zipped = constants.iter_mut().zip(closure_vars.iter());
     for (cnst, var) in zipped {
         *cnst = *var;

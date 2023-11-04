@@ -1,9 +1,8 @@
 use crate::hashmap::HashSet;
 
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
-use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, Object, RawObj};
+use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj};
 use anyhow::{anyhow, Result};
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
 
 mod iter;
@@ -14,8 +13,8 @@ pub(crate) use iter::*;
 pub(crate) struct Cons {
     marked: GcMark,
     mutable: bool,
-    car: Cell<RawObj>,
-    cdr: Cell<RawObj>,
+    car: ObjCell,
+    cdr: ObjCell,
 }
 
 impl PartialEq for Cons {
@@ -32,8 +31,8 @@ impl Cons {
         Self {
             marked: GcMark::default(),
             mutable: true,
-            car: Cell::new(car.into_raw()),
-            cdr: Cell::new(cdr.into_raw()),
+            car: ObjCell::new(car),
+            cdr: ObjCell::new(cdr),
         }
     }
 
@@ -67,16 +66,16 @@ impl Cons {
     }
 
     pub(crate) fn car(&self) -> GcObj {
-        unsafe { GcObj::from_raw(self.car.get()) }
+        self.car.get()
     }
 
     pub(crate) fn cdr(&self) -> GcObj {
-        unsafe { GcObj::from_raw(self.cdr.get()) }
+        self.cdr.get()
     }
 
     pub(crate) fn set_car(&self, new_car: GcObj) -> Result<()> {
         if self.mutable {
-            self.car.set(new_car.into_raw());
+            unsafe { self.car.as_mut().set(new_car) }
             Ok(())
         } else {
             Err(anyhow!("Attempt to call set-car on immutable cons cell"))
@@ -85,7 +84,7 @@ impl Cons {
 
     pub(crate) fn set_cdr(&self, new_cdr: GcObj) -> Result<()> {
         if self.mutable {
-            self.cdr.set(new_cdr.into_raw());
+            unsafe { self.cdr.as_mut().set(new_cdr) }
             Ok(())
         } else {
             Err(anyhow!("Attempt to call set-cdr on immutable cons cell"))

@@ -6,7 +6,7 @@ use crate::{
         gc::{Context, IntoRoot, Rt},
         object::{
             nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec,
-            List, ObjCell, Object,
+            List, Object,
         },
     },
     data::aref,
@@ -582,10 +582,7 @@ pub(crate) fn gethash<'ob>(
 #[defun]
 fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match arg.untag() {
-        Object::Vec(x) => {
-            let copy: Vec<_> = x.iter().map(ObjCell::get).collect();
-            Ok(cx.add(copy))
-        }
+        Object::Vec(x) => Ok(cx.add(x.to_vec())),
         Object::Cons(x) => {
             // TODO: remove this temp vector
             let mut elements = Vec::new();
