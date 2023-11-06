@@ -3,7 +3,7 @@ use crate::{
         env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{Gc, GcObj, LispBuffer, Object},
+        object::{nil, Gc, GcObj, LispBuffer, Object},
     },
     hashmap::HashMap,
 };
@@ -66,7 +66,7 @@ fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Option<String>
 #[defun]
 pub(crate) fn get_buffer_create<'ob>(
     buffer_or_name: GcObj<'ob>,
-    _inhibit_buffer_hooks: GcObj,
+    _inhibit_buffer_hooks: Option<GcObj>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     match buffer_or_name.untag() {
@@ -91,7 +91,23 @@ pub(crate) fn get_buffer_create<'ob>(
             }
         }
         Object::Buffer(_) => Ok(buffer_or_name),
-        other => Err(TypeError::new(Type::String, other).into()),
+        other => Err(TypeError::new(Type::BufferOrName, other).into()),
+    }
+}
+
+#[defun]
+pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+    match buffer_or_name.untag() {
+        Object::String(x) => {
+            let name: &str = x.try_into()?;
+            let buffer_list = BUFFERS.lock().unwrap();
+            match buffer_list.get(name) {
+                Some(b) => Ok(cx.add(*b)),
+                None => Ok(nil()),
+            }
+        }
+        Object::Buffer(_) => Ok(buffer_or_name),
+        other => Err(TypeError::new(Type::BufferOrName, other).into()),
     }
 }
 
@@ -156,7 +172,6 @@ defvar!(BIDI_DISPLAY_REORDERING);
 
 #[cfg(test)]
 mod test {
-    use crate::core::env::sym;
     use crate::core::gc::RootSet;
     use crate::core::object::nil;
 
@@ -171,11 +186,11 @@ mod test {
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test");
 
-        get_buffer_create(cx.add(name), nil(), cx).unwrap();
+        get_buffer_create(cx.add(name), Some(nil()), cx).unwrap();
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test<2>");
 
-        get_buffer_create(cx.add("gen_buffer_test<2>"), nil(), cx).unwrap();
+        get_buffer_create(cx.add("gen_buffer_test<2>"), Some(nil()), cx).unwrap();
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test<3>");
 
@@ -185,7 +200,7 @@ mod test {
         let new_name = generate_new_buffer_name(" gen_buffer_test", None);
         assert_eq!(new_name, " gen_buffer_test");
 
-        get_buffer_create(cx.add(" gen_buffer_test"), nil(), cx).unwrap();
+        get_buffer_create(cx.add(" gen_buffer_test"), Some(nil()), cx).unwrap();
         let new_name = generate_new_buffer_name(" gen_buffer_test", None);
         assert!(new_name.starts_with(" gen_buffer_test-"));
     }
@@ -194,7 +209,7 @@ mod test {
     fn test_create_buffer() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        let buffer = get_buffer_create(cx.add("test_create_buffer"), sym::NIL.into(), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_create_buffer"), Some(nil()), cx).unwrap();
         assert!(matches!(buffer.untag(), Object::Buffer(_)));
     }
 }

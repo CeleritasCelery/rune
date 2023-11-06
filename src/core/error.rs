@@ -159,6 +159,7 @@ pub(crate) enum Type {
     Record,
     HashTable,
     Sequence,
+    BufferOrName,
     String,
     Symbol,
     Float,

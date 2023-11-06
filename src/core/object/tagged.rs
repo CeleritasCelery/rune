@@ -38,6 +38,7 @@ pub(crate) fn nil<'a>() -> GcObj<'a> {
     sym::NIL.into()
 }
 
+#[inline(always)]
 pub(crate) fn qtrue<'a>() -> GcObj<'a> {
     sym::TRUE.into()
 }

@@ -71,6 +71,7 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
         .collect())
 }
 
+// TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
     let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
@@ -79,6 +80,30 @@ pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
     }
 
     Ok(())
+}
+
+// TODO: this should not throw and error. Buffer will always be present.
+#[defun]
+pub(crate) fn goto_char(position: usize, env: &mut Rt<Env>) -> Result<()> {
+    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    buffer.text.set_cursor(position);
+    Ok(())
+}
+
+// TODO: this should not throw and error. Buffer will always be present.
+#[defun]
+pub(crate) fn point_max(env: &mut Rt<Env>) -> Result<usize> {
+    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    // TODO: Handle narrowing
+    Ok(buffer.text.len_chars() + 1)
+}
+
+// TODO: this should not throw and error. Buffer will always be present.
+#[defun]
+pub(crate) fn point_marker(env: &mut Rt<Env>) -> Result<usize> {
+    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    // TODO: Implement marker objects
+    Ok(buffer.text.cursor().chars())
 }
 
 // TODO: this should not throw and error. Buffer will always be present.
@@ -113,7 +138,7 @@ fn system_name() -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::core::env::sym;
+    use crate::core::object::nil;
     use crate::{
         buffer::{get_buffer_create, set_buffer},
         core::gc::{Context, RootSet},
@@ -143,7 +168,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(env, Env::default(), cx);
-        let buffer = get_buffer_create(cx.add("test_insert"), sym::NIL.into(), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_insert"), Some(nil()), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
         insert(&[104.into(), 101.into(), 108.into(), 108.into(), 111.into()], env).unwrap();
@@ -155,7 +180,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(env, Env::default(), cx);
-        let buffer = get_buffer_create(cx.add("test_delete_region"), sym::NIL.into(), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_delete_region"), Some(nil()), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
         insert(&[cx.add("hello"), cx.add(" world")], env).unwrap();

@@ -22,7 +22,7 @@ https://github.com/emacs-mirror/emacs/tree/emacs-29.1/lisp
 Any modification for bootstrapping contain the tag ~RUNE-BOOTSTRAP~.
 
 ** Running
-The easiest way to run the interpreter is with ~cargo run~. Running with the load argument (~cargo run -- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~cargo run -- --repl~) will open an elisp repl. Running with both arguments (~cargo run -- --load --repl~) will load the elisp and then open the repl. Running with no arguments is equivalent to ~cargo run -- --load~.
+The easiest way to run the interpreter is with ~cargo run --profile=fast-debug~. Running with the load argument (~-- --load~) will load the bootstrapped elisp and then exit. Running with the repl argument (~-- --repl~) will open an elisp repl. Running with both arguments (~-- --load --repl~) will load the elisp and then open the repl. Running with no arguments is equivalent to ~--load~.
 
 *** MIRI
 Run the test suite with MIRI
