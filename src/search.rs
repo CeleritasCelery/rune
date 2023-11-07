@@ -37,20 +37,20 @@ fn string_match<'ob>(
     }
 }
 
-// Invert the escaping of parens. i.e. \( => ( and ( => \(
 fn lisp_regex_to_rust(regexp: &str) -> String {
     let mut norm_regex = String::new();
     let mut chars = regexp.chars();
     while let Some(ch) = chars.next() {
         match ch {
+            // Invert the escaping of parens. i.e. \( => ( and ( => \(
             c @ '('..=')' => {
                 norm_regex.push('\\');
                 norm_regex.push(c);
             }
             '\\' => match chars.next() {
                 Some(c @ '('..=')') => norm_regex.push(c),
-                // TODO: need to handle end of string differently then end of line
-                Some('\'') => norm_regex.push('$'),
+                Some('`') => norm_regex += "\\A",
+                Some('\'') => norm_regex += "\\z",
                 Some(c) => {
                     norm_regex.push('\\');
                     norm_regex.push(c);

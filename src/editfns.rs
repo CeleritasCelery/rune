@@ -37,7 +37,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
         }
     };
     while let Some(start) = remaining.find(&mut is_format_char) {
-        result.push_str(&remaining[..start]);
+        result += &remaining[..start];
         let Some(specifier) = remaining.as_bytes().get(start + 1) else {
             bail!("Format string ends in middle of format specifier")
         };
@@ -50,13 +50,13 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
                 bail!("Not enough arguments for format string")
             };
             match val.untag() {
-                Object::String(s) => result.push_str(s.try_into().unwrap()),
+                Object::String(s) => result += s.try_into().unwrap(),
                 obj => write!(result, "{obj}")?,
             }
         }
         remaining = &remaining[start + 2..];
     }
-    result.push_str(remaining);
+    result += remaining;
     ensure!(arguments.next().is_none(), "Too many arguments for format string");
     Ok(result)
 }

@@ -710,8 +710,8 @@ impl Buffer {
         // the range straddles the gap, so we need to copy the two halves
         if range.start < self.gap_start && self.gap_start < range.end {
             let mut string = String::with_capacity(range.len());
-            string.push_str(self.to_str(range.start..self.gap_start));
-            string.push_str(self.to_str(self.gap_end..range.end));
+            string += self.to_str(range.start..self.gap_start);
+            string += self.to_str(self.gap_end..range.end);
             assert_eq!(string.len(), orig_len);
             Cow::Owned(string)
         } else {
