@@ -199,6 +199,7 @@ defvar!(LOAD_PATH, list![format!("{}/lisp", env!("CARGO_MANIFEST_DIR"))]);
 defvar!(LOAD_FILE_NAME);
 defvar!(BYTE_BOOLEAN_VARS);
 defvar!(MACROEXP__DYNVARS);
+defvar!(AFTER_LOAD_ALIST);
 
 #[cfg(test)]
 mod test {

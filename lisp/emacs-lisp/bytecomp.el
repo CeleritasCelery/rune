@@ -1325,6 +1325,12 @@ STRING, FILL and LEVEL are as described in
            fill
            level))
 
+;; RUNE-BOOTSTRAP
+(defun rune-boostrap-log-warning (string _position &optional fill level)
+  "Bootstrap method to log byte compiling warnings"
+  (message "BYTE COMPILE WARNING: %s %s %s" string fill level))
+(setq byte-compile-log-warning-function #'rune-boostrap-log-warning)
+
 (defun byte-compile--log-warning-for-byte-compile (string _position
                                                           &optional
                                                           fill
@@ -1336,8 +1342,8 @@ is the warning level (`:warning' or `:error').  Do not call this
 function directly; use `byte-compile-warn' or
 `byte-compile-report-error' instead."
   (let ((warning-prefix-function 'byte-compile-warning-prefix)
-	(warning-type-format "")
-	(warning-fill-prefix (if fill "    ")))
+	    (warning-type-format "")
+	    (warning-fill-prefix (if fill "    ")))
     (display-warning 'bytecomp string level byte-compile-log-buffer)))
 
 (defun byte-compile-warn (format &rest args)
@@ -2961,15 +2967,16 @@ FUN should be either a `lambda' value or a `closure' value."
 (defun byte-compile (form)
   "If FORM is a symbol, byte-compile its function definition.
 If FORM is a lambda or a macro, byte-compile it as a function."
+  (message "byte-compile: %s" form)
   (displaying-byte-compile-warnings
    (byte-compile-close-variables
     (let* ((lexical-binding lexical-binding)
            (fun (if (symbolp form)
-		    (symbol-function form)
-		  form))
-	   (macro (eq (car-safe fun) 'macro)))
+		            (symbol-function form)
+		          form))
+           (macro (eq (car-safe fun) 'macro)))
       (if macro
-	  (setq fun (cdr fun)))
+	      (setq fun (cdr fun)))
       (prog1
           (cond
            ;; Up until Emacs-24.1, byte-compile silently did nothing
@@ -3239,16 +3246,16 @@ lambda-expression."
   ;;	'file		-> used at file-level.
   (let ((byte-compile--for-effect for-effect)
         (byte-compile-constants nil)
-	(byte-compile-variables nil)
-	(byte-compile-tag-number 0)
-	(byte-compile-depth 0)
-	(byte-compile-maxdepth 0)
+	    (byte-compile-variables nil)
+	    (byte-compile-tag-number 0)
+	    (byte-compile-depth 0)
+	    (byte-compile-maxdepth 0)
         (byte-compile--lexical-environment lexenv)
         (byte-compile-reserved-constants (or reserved-csts 0))
-	(byte-compile-output nil)
+	    (byte-compile-output nil)
         (byte-compile-jump-tables nil))
     (if (memq byte-optimize '(t source))
-	(setq form (byte-optimize-one-form form byte-compile--for-effect)))
+        (setq form (byte-optimize-one-form form byte-compile--for-effect)))
     (while (and (eq (car-safe form) 'progn) (null (cdr (cdr form))))
       (setq form (nth 1 form)))
     ;; Set up things for a lexically-bound function.

@@ -16,3 +16,10 @@
 (defun help--docstring-quote (string)
   "stub of function for bootstrapping"
   string)
+
+(defun help-add-fundoc-usage (docstring arglist)
+  "stub of function for bootstrapping"
+  docstring)
+
+(defun advice--cd*r (f)
+  f)
