@@ -3,7 +3,7 @@ use crate::core::{
     gc::{Context, Rt},
     object::{nil, Gc, GcObj, List},
 };
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fancy_regex::Regex;
 use fn_macros::defun;
@@ -23,8 +23,9 @@ fn string_match<'ob>(
     let start = start.unwrap_or(0) as usize;
     if let Some(matches) = re.captures_iter(&string[start..]).next() {
         let mut all: Vec<GcObj> = Vec::new();
-        let all_matches = matches?;
-        let mut groups = all_matches.iter();
+        let matches = matches?;
+        let mut groups = matches.iter();
+        // TODO: match data should be char position, not byte
         while let Some(Some(group)) = groups.next() {
             all.push(group.start().into());
             all.push(group.end().into());
@@ -35,6 +36,40 @@ fn string_match<'ob>(
     } else {
         Ok(nil())
     }
+}
+
+#[defun]
+fn replace_match(
+    newtext: &str,
+    fixedcase: Option<()>,
+    literal: Option<()>,
+    string: Option<&str>,
+    subexp: Option<usize>,
+    env: &Rt<Env>,
+    cx: &Context,
+) -> Result<String> {
+    ensure!(literal.is_none(), "replace-match literal field is not implemented");
+    ensure!(fixedcase.is_none(), "replace-match fixedcase field is not implemented");
+    let Some(string) = string else { bail!("replace-match for buffers not yet implemented") };
+    let mut match_data = env.match_data.bind(cx).as_list()?.fallible();
+    let subexp = subexp.unwrap_or(0);
+    let sub_err = || format!("replace-match subexpression {subexp} does not exist");
+    for _ in 0..(subexp * 2) {
+        ensure!(match_data.next()?.is_some(), sub_err());
+    }
+    let Some(beg) = match_data.next()? else { bail!(sub_err()) };
+    let Some(end) = match_data.next()? else { bail!(sub_err()) };
+
+    // TODO: match data should be char position, not byte
+    let beg: usize = beg.try_into()?;
+    let end: usize = end.try_into()?;
+
+    // replace the range beg..end in string with newtext
+    let mut new_string = String::new();
+    new_string.push_str(&string[..beg]);
+    new_string.push_str(newtext);
+    new_string.push_str(&string[end..]);
+    Ok(new_string)
 }
 
 fn lisp_regex_to_rust(regexp: &str) -> String {
@@ -103,6 +138,8 @@ fn string_equal(s1: &str, s2: &str) -> bool {
 
 #[cfg(test)]
 mod test {
+    use crate::{core::gc::RootSet, root};
+
     use super::*;
 
     #[test]
@@ -111,5 +148,19 @@ mod test {
         assert_eq!(lisp_regex_to_rust("\\foo"), "\\foo");
         assert_eq!(lisp_regex_to_rust("\\(foo\\)"), "(foo)");
         assert_eq!(lisp_regex_to_rust("(foo)"), "\\(foo\\)");
+        assert_eq!(lisp_regex_to_rust("\\`"), "\\A");
+        assert_eq!(lisp_regex_to_rust("\\'"), "\\z");
+    }
+
+    #[test]
+    fn test_replace_match() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, Env::default(), cx);
+        let string = "foo bar baz";
+        let newtext = "quux";
+        string_match("bar", string, None, None, env, cx).unwrap();
+        let result = replace_match(newtext, None, None, Some(string), None, env, cx).unwrap();
+        assert_eq!(result, "foo quux baz");
     }
 }
