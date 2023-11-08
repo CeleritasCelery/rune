@@ -12,7 +12,7 @@ use crate::{
     data::aref,
 };
 use crate::{root, rooted_iter};
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
@@ -279,18 +279,43 @@ fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
 
 #[defun]
 pub(crate) fn assoc<'ob>(
-    key: GcObj<'ob>,
-    alist: Gc<List<'ob>>,
-    testfn: Option<GcObj>,
+    key: &Rt<GcObj<'ob>>,
+    alist: &Rt<Gc<List<'ob>>>,
+    testfn: Option<&Rt<GcObj>>,
+    cx: &'ob mut Context,
+    env: &mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
-    ensure!(testfn.is_none(), "test functions for assoc not yet supported");
-    for elem in alist {
-        if let Object::Cons(cons) = elem?.untag() {
-            if equal(key, cons.car()) {
-                return Ok(cons.into());
+    match testfn {
+        Some(x) => {
+            let func: Gc<Function> = x.bind(cx).try_into()?;
+            root!(func, cx);
+            rooted_iter!(iter, alist, cx);
+            while let Some(elem) = iter.next()? {
+                if let Object::Cons(cons) = elem.bind(cx).untag() {
+                    root!(cons, cx);
+                    root!(call_arg, Vec::new(), cx);
+                    call_arg.push(key);
+                    call_arg.push(cons.car(cx));
+                    let result = func.call(call_arg, env, cx, None)?;
+                    if result != nil() {
+                        return Ok(cons.bind(cx).into());
+                    }
+                    call_arg.clear();
+                }
             }
         }
-    }
+        None => {
+            let alist = alist.bind(cx);
+            let key = key.bind(cx);
+            for elem in alist {
+                if let Object::Cons(cons) = elem?.untag() {
+                    if equal(key, cons.car()) {
+                        return Ok(cons.into());
+                    }
+                }
+            }
+        }
+    };
     Ok(nil())
 }
 
