@@ -38,13 +38,14 @@ pub(crate) fn build_list<'ob, E>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>, E> {
     let Some(first) = iter.next() else { return Ok(nil()) };
-    let mut prev = Cons::new1(first?, cx);
+    let head = Cons::new1(first?, cx);
+    let mut prev = head;
     for elem in iter {
         let new = Cons::new1(elem?, cx);
         prev.set_cdr(new.into()).unwrap();
         prev = new;
     }
-    Ok(prev.into())
+    Ok(head.into())
 }
 
 #[defun]
@@ -688,6 +689,15 @@ mod test {
     use crate::core::{gc::RootSet, object::qtrue};
 
     use super::*;
+
+    #[test]
+    fn test_take() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let list = list![1, 2, 3, 4; cx];
+        let res = take(2, list.try_into().unwrap(), cx).unwrap();
+        assert_eq!(res, list![1, 2; cx]);
+    }
 
     #[test]
     fn test_delq() {
