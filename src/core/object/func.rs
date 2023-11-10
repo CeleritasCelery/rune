@@ -59,6 +59,10 @@ impl ByteFn {
             _ => None,
         }
     }
+
+    pub(crate) const fn len(&self) -> usize {
+        4
+    }
 }
 
 impl<'new> CloneIn<'new, &'new Self> for ByteFn {

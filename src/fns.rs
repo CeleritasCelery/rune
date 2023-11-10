@@ -128,10 +128,11 @@ pub(crate) fn mapcar<'ob>(
             Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
         }
         Object::ByteFn(fun) => {
+            let len = fun.len();
             root!(fun, cx);
             root!(outputs, Vec::new(), cx);
             root!(call_arg, Vec::new(), cx);
-            for i in 0..=3 {
+            for i in 0..len {
                 let item = fun.bind(cx).index(i).unwrap();
                 call_arg.push(item);
                 let output = function.call(call_arg, env, cx, None)?;
@@ -494,6 +495,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<usize> {
         Object::Cons(x) => x.elements().len()?,
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
+        Object::ByteFn(x) => x.len(),
         Object::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
@@ -502,12 +504,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<usize> {
 
 #[defun]
 pub(crate) fn safe_length(sequence: GcObj) -> usize {
-    match sequence.untag() {
-        Object::Cons(x) => x.elements().take_while(Result::is_ok).count(),
-        Object::Vec(x) => x.len(),
-        Object::String(x) => x.len(),
-        _ => 0,
-    }
+    length(sequence).unwrap_or(0)
 }
 
 #[defun]
