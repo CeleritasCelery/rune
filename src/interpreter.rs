@@ -788,7 +788,9 @@ fn bind_args<'a>(
     Ok(())
 }
 
-fn parse_arg_list(bindings: GcObj) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
+pub(crate) fn parse_arg_list(
+    bindings: GcObj,
+) -> AnyResult<(Vec<Symbol>, Vec<Symbol>, Option<Symbol>)> {
     let mut required = Vec::new();
     let mut optional = Vec::new();
     let mut rest = None;

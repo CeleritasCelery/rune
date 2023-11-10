@@ -1,7 +1,8 @@
+use crate::core::cons::Cons;
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{EvalError, Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::{nil, LispString, Object};
+use crate::core::object::{nil, FnArgs, LispString, Object};
 use crate::core::{
     gc::{Context, IntoRoot},
     object::{Function, Gc, GcObj},
@@ -215,6 +216,43 @@ fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob
         }
     }
     None
+}
+
+#[defun]
+fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons> {
+    let from_args = |args: FnArgs| {
+        let min = args.required;
+        if args.rest {
+            // TODO: Handle unevalled
+            Cons::new(min, sym::MANY, cx)
+        } else {
+            Cons::new(min, args.optional + min, cx)
+        }
+    };
+    match function.untag() {
+        Function::ByteFn(func) => Ok(from_args(func.args)),
+        Function::SubrFn(func) => Ok(from_args(func.args)),
+        Function::Cons(func) => {
+            if func.car() != sym::CLOSURE {
+                return Err(TypeError::new(Type::Func, func.car()).into());
+            }
+            let Some(args) = func.elements().fallible().nth(2)? else {
+                bail!("Invalid function: {func}")
+            };
+            let (req, opt, rest) = crate::interpreter::parse_arg_list(args)?;
+            let args = FnArgs {
+                required: req.len() as u16,
+                optional: opt.len() as u16,
+                rest: rest.is_some(),
+                ..FnArgs::default()
+            };
+            Ok(from_args(args))
+        }
+        Function::Symbol(sym) => {
+            let Some(func) = sym.follow_indirect(cx) else { bail!("Void Function: {sym}") };
+            func_arity(func, cx)
+        }
+    }
 }
 
 #[defun]

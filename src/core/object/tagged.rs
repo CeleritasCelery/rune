@@ -918,6 +918,13 @@ impl TagType for u64 {
     }
 }
 
+impl TagType for u16 {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(i64::from(self))
+    }
+}
+
 impl<'ob> From<i32> for Gc<Object<'ob>> {
     fn from(x: i32) -> Self {
         i64::from(x).into()

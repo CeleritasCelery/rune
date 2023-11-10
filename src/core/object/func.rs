@@ -111,7 +111,7 @@ impl Debug for ByteFn {
 }
 
 /// Argument requirments to a function.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) struct FnArgs {
     /// a &rest argument.
     pub(crate) rest: bool,
