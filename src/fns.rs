@@ -5,8 +5,8 @@ use crate::{
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
-            nil, Function, Gc, GcObj, HashTable, IntoObject, LispHashTable, LispString, LispVec,
-            List, Object,
+            nil, Function, Gc, GcObj, HashTable, HashTableView, IntoObject, LispHashTable,
+            LispString, LispVec, List, Object,
         },
     },
     data::aref,
@@ -17,7 +17,6 @@ use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use fn_macros::defun;
-use streaming_iterator::StreamingIterator;
 
 #[defun]
 fn identity(arg: GcObj) -> GcObj {
@@ -166,26 +165,6 @@ pub(crate) fn mapc<'ob>(
             Ok(sequence.bind(cx).into())
         }
     }
-}
-
-#[defun]
-fn maphash(
-    function: &Rt<Gc<Function>>,
-    table: &Rt<Gc<&'static LispHashTable>>,
-    env: &mut Rt<Env>,
-    cx: &mut Context,
-) -> Result<bool> {
-    root!(cell, (nil(), nil()), cx);
-    let mut iter = LispHashTable::iter(table, cell, cx);
-
-    root!(call_arg, Vec::new(), cx);
-    while let Some((key, val)) = iter.next() {
-        call_arg.push(key);
-        call_arg.push(val);
-        function.call(call_arg, env, cx, None)?;
-        call_arg.clear();
-    }
-    Ok(false)
 }
 
 #[defun]
@@ -542,6 +521,10 @@ pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
     }
 }
 
+///////////////
+// HashTable //
+///////////////
+
 defsym!(KW_TEST);
 defsym!(KW_DOCUMENTATION);
 
@@ -571,25 +554,6 @@ pub(crate) fn hash_table_p(obj: GcObj) -> bool {
 }
 
 #[defun]
-pub(crate) fn puthash<'ob>(
-    key: GcObj<'ob>,
-    value: GcObj<'ob>,
-    table: &'ob LispHashTable,
-) -> Result<GcObj<'ob>> {
-    // Don't attempt to take the mutable borrow flag if we can avoid it
-    let hashtable = table.try_borrow_shared_mut()?;
-    if let Some(val) = hashtable.get(&key) {
-        val.set(value);
-    } else {
-        // If the key is not already inserted, we will have to attempt a mutable
-        // borrow
-        drop(hashtable);
-        table.try_borrow_mut()?.insert(key, value);
-    }
-    Ok(value)
-}
-
-#[defun]
 pub(crate) fn gethash<'ob>(
     key: GcObj<'ob>,
     table: &'ob LispHashTable,
@@ -600,6 +564,67 @@ pub(crate) fn gethash<'ob>(
         Some(x) => Some(cx.bind(x.get())),
         None => dflt,
     }
+}
+
+#[defun]
+pub(crate) fn puthash<'ob>(
+    key: GcObj<'ob>,
+    value: GcObj<'ob>,
+    table: &'ob LispHashTable,
+) -> Result<GcObj<'ob>> {
+    table.try_borrow_mut()?.insert(key, value);
+    Ok(value)
+}
+
+#[defun]
+fn remhash(key: GcObj, table: &LispHashTable) -> Result<()> {
+    let mut table = table.try_borrow_mut()?;
+    let Some(idx) = table.get_index_of(&key) else { return Ok(()) };
+    // If the removed element is before our iterator, then we need to shift the
+    // iterator back one because the whole map get's shifted when something is
+    // removed.
+    if idx < table.iter_next {
+        table.iter_next -= 1;
+    }
+    table.shift_remove(&key);
+    Ok(())
+}
+
+#[defun]
+fn maphash(
+    function: &Rt<Gc<Function>>,
+    table: &Rt<Gc<&'static LispHashTable>>,
+    env: &mut Rt<Env>,
+    cx: &mut Context,
+) -> Result<bool> {
+    let get_idx = |table: &mut HashTableView<'_, GcObj>| {
+        let end = table.len();
+        let idx = table.iter_next;
+        table.iter_next += 1;
+        if idx >= end {
+            None
+        } else {
+            Some(idx)
+        }
+    };
+
+    root!(call_arg, Vec::new(), cx);
+    loop {
+        {
+            let mut view = table.bind(cx).untag().try_borrow_mut()?;
+            let Some(idx) = get_idx(&mut view) else { break };
+            let (key, val) = view.get_index(idx).unwrap();
+            call_arg.push(*key);
+            call_arg.push(*val);
+        }
+        if let Err(e) = function.call(call_arg, env, cx, None) {
+            table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
+            return Err(e.into());
+        }
+        call_arg.clear();
+    }
+    table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
+    Ok(false)
 }
 
 #[defun]
