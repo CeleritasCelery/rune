@@ -153,7 +153,8 @@ impl Interpreter<'_> {
 
         match func.get(cx) {
             Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-                crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)?;
+                crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)
+                    .map_err(|e| add_trace(e, "autoload", &[]))?;
                 func.set(sym.bind(cx).follow_indirect(cx).unwrap());
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
@@ -655,10 +656,7 @@ impl Rt<Gc<Function<'_>>> {
                     .map_err(|e| e.add_trace(name, &args[..arg_cnt]))
             }
             Function::SubrFn(f) => {
-                (*f).call(args, env, cx).map_err(|e| match e.downcast::<EvalError>() {
-                    Ok(err) => err.add_trace(name, &args[..arg_cnt]),
-                    Err(e) => EvalError::with_trace(e, name, &args[..arg_cnt]),
-                })
+                (*f).call(args, env, cx).map_err(|e| add_trace(e, name, &args[..arg_cnt]))
             }
             Function::Cons(_) => call_closure(self.try_into().unwrap(), args, name, env, cx)
                 .map_err(|e| e.add_trace(name, args)),
@@ -668,7 +666,8 @@ impl Rt<Gc<Function<'_>>> {
                     Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
-                        crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)?;
+                        crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)
+                            .map_err(|e| add_trace(e, name, &args[..arg_cnt]))?;
                         let Some(func) = sym.bind(cx).follow_indirect(cx) else {
                             bail_err!("autoload for {sym} failed to define function")
                         };
@@ -684,6 +683,13 @@ impl Rt<Gc<Function<'_>>> {
                 }
             }
         }
+    }
+}
+
+fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> EvalError {
+    match err.downcast::<EvalError>() {
+        Ok(err) => err.add_trace(name, args),
+        Err(e) => EvalError::with_trace(e, name, args),
     }
 }
 

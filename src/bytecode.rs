@@ -957,7 +957,7 @@ pub(crate) fn call<'ob>(
     let mut rout =
         Routine { stack, call_frames: vec![], frame: CallFrame::new(func, 0, cx), handlers };
     rout.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
-    rout.run(env, cx)
+    rout.run(env, cx).map_err(|e| e.add_trace(name, args))
 }
 
 #[allow(clippy::enum_glob_use)]
