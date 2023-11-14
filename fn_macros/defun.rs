@@ -294,9 +294,7 @@ fn return_type_is_result(output: &syn::ReturnType) -> Result<bool, Error> {
             syn::Type::Path(path) => Ok(get_path_ident_name(path) == "Result"),
             _ => Ok(false),
         },
-        syn::ReturnType::Default => {
-            Err(Error::new_spanned(output, "Lisp Function must return a value"))
-        }
+        syn::ReturnType::Default => Ok(false),
     }
 }
 

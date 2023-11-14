@@ -395,10 +395,8 @@ pub(crate) fn defvaralias<'ob>(
 }
 
 #[defun]
-pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) -> bool {
-    // TODO: implement
-    false
-}
+// TODO: implement
+pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) {}
 
 #[defun]
 fn require<'ob>(

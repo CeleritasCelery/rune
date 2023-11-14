@@ -10,9 +10,8 @@ use fn_macros::defun;
 use std::thread::{self, JoinHandle};
 
 #[defun]
-fn go(obj: GcObj) -> bool {
+fn go(obj: GcObj) {
     go_internal(obj);
-    false
 }
 
 fn go_internal(obj: GcObj) -> JoinHandle<()> {

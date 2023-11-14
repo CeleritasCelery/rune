@@ -1,9 +1,7 @@
 use fn_macros::defun;
 
 #[defun]
-fn kill_emacs() -> bool {
-    false
-}
+fn kill_emacs() {}
 
 defvar!(EMACS_VERSION, "27.1");
 defvar!(SYSTEM_TYPE, "darwin");
