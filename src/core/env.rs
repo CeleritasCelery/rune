@@ -78,8 +78,13 @@ impl Rt<Env> {
     }
 
     pub(crate) fn defvar(&mut self, var: Symbol, value: GcObj) -> Result<()> {
-        self.set_var(var, value)?;
-        var.make_special();
+        // TOOD: Handle `eval-sexp` on defvar, which should always update the
+        // value
+        if self.vars.get(var).is_none() {
+            self.set_var(var, value)?;
+            var.make_special();
+        }
+
         // If this variable was unbound previously in the binding stack,
         // we will bind it to the new value
         for binding in &mut *self.binding_stack {
