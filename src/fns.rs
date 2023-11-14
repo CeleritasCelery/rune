@@ -168,6 +168,21 @@ pub(crate) fn mapc<'ob>(
 }
 
 #[defun]
+pub(crate) fn mapcan<'ob>(
+    function: &Rt<Gc<Function>>,
+    sequence: &Rt<GcObj>,
+    env: &mut Rt<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>> {
+    let mapped = mapcar(function, sequence, env, cx)?;
+    let mut lists = Vec::new();
+    for list in mapped.as_list()? {
+        lists.push(list?.try_into()?);
+    }
+    nconc(&lists)
+}
+
+#[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = nil();
     for tail in seq.conses() {
