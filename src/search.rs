@@ -72,6 +72,18 @@ fn replace_match(
     Ok(new_string)
 }
 
+#[defun]
+fn regexp_quote(string: &str) -> String {
+    let mut quoted = String::new();
+    for ch in string.chars() {
+        if let '[' | '*' | '.' | '\\' | '?' | '+' | '^' | '$' = ch {
+            quoted.push('\\');
+        }
+        quoted.push(ch);
+    }
+    quoted
+}
+
 fn lisp_regex_to_rust(regexp: &str) -> String {
     let mut norm_regex = String::new();
     let mut chars = regexp.chars();
