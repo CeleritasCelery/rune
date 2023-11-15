@@ -24,6 +24,7 @@ pub(crate) enum Error {
     UnexpectedChar(char, usize),
     UnknownMacroCharacter(char, usize),
     ParseInt(u8, usize),
+    MalformedUnicdoe(usize),
     EmptyStream,
 }
 
@@ -36,6 +37,7 @@ impl Display for Error {
             Error::ExtraCloseParen(i) => write!(f, "Extra Closing paren: at {i}"),
             Error::ExtraCloseBracket(i) => write!(f, "Extra Closing brace: at {i}"),
             Error::UnexpectedChar(chr, i) => write!(f, "Unexpected character {chr}: at {i}"),
+            Error::MalformedUnicdoe(i) => write!(f, "Malformed unicode: at {i}"),
             Error::EmptyStream => write!(f, "Empty Stream"),
             Error::ExtraItemInCdr(i) => write!(f, "Extra item in cdr: at {i}"),
             Error::MissingQuotedItem(i) => write!(f, "Missing element after quote: at {i}"),
@@ -62,6 +64,7 @@ impl Error {
             | Error::ExtraCloseBracket(x)
             | Error::ExtraItemInCdr(x)
             | Error::UnexpectedChar(_, x)
+            | Error::MalformedUnicdoe(x)
             | Error::ParseInt(_, x)
             | Error::UnknownMacroCharacter(_, x) => *x,
             Error::EmptyStream => 0,
@@ -74,6 +77,7 @@ impl Error {
             | Error::MissingCloseBracket(i)
             | Error::MissingStringDel(i)
             | Error::UnexpectedChar(_, i)
+            | Error::MalformedUnicdoe(i)
             | Error::ExtraItemInCdr(i)
             | Error::ExtraCloseParen(i)
             | Error::ExtraCloseBracket(i)
@@ -227,17 +231,42 @@ impl<'a> Tokenizer<'a> {
         match self.iter.next() {
             Some((start, item)) => {
                 if item == '\\' {
-                    // TODO implement keycode parsing
-                    self.get_symbol(start, item);
-                    Token::QuestionMark(start, '\0')
+                    let Token::Ident(tok) = self.get_symbol(start, item) else { unreachable!() };
+                    let Some(chr) = tok.chars().nth(1) else {
+                        return Token::Error(Error::MissingQuotedItem(start));
+                    };
+                    if chr == 'u' || chr == 'x' {
+                        match u32::from_str_radix(&tok[2..], 16) {
+                            Ok(digits) => match char::from_u32(digits) {
+                                Some(c) => Token::QuestionMark(start, c),
+                                None => Token::Error(Error::MalformedUnicdoe(start)),
+                            },
+                            Err(_) => Token::Error(Error::MalformedUnicdoe(start)),
+                        }
+                    } else if tok.chars().count() == 2 {
+                        let new = match chr {
+                            'a' => '\u{07}',
+                            'b' => '\u{08}',
+                            'e' => '\u{1B}',
+                            'f' => '\u{0C}',
+                            'n' => '\n',
+                            'r' => '\r',
+                            's' => ' ',
+                            't' => '\t',
+                            'v' => '\u{0B}',
+                            c => c,
+                        };
+                        Token::QuestionMark(start, new)
+                    } else {
+                        // TODO implement keycode parsing
+                        Token::QuestionMark(start, '\0')
+                    }
                 } else {
                     match self.iter.peek() {
-                        // ?aa
                         Some((i, chr)) if symbol_char(*chr) && *chr != '?' => {
-                            Token::Error(Error::UnexpectedChar(*chr, *i))
+                            Token::Error(Error::UnexpectedChar(*chr, *i)) // ?aa
                         }
-                        // ?a
-                        _ => Token::QuestionMark(idx, item),
+                        _ => Token::QuestionMark(idx, item), // ?a
                     }
                 }
             }
@@ -606,6 +635,11 @@ baz""#,
         check_reader!(list!(quote, sym::IF; cx), "(quote if)", cx);
         check_reader!(list!(quote, sym::IF; cx), "'if", cx);
         check_reader!(list!(quote, list!(1, 2, 3; cx); cx), "'(1 2 3)", cx);
+        check_reader!(u32::from('a'), "?a", cx);
+        check_reader!(u32::from(' '), "?\\s", cx);
+        check_reader!(u32::from('\t'), "?\\t", cx);
+        check_reader!(u32::from('\u{AFD}'), "?\\uafd", cx);
+        check_reader!(0xabc_u32, "?\\xabc", cx);
     }
 
     #[test]
