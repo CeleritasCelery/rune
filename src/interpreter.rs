@@ -163,7 +163,7 @@ impl Interpreter<'_> {
                 root!(macro_args, cx);
                 root!(mcro, cx);
                 let name = sym.bind(cx).name().to_owned();
-                let value = mcro.call(macro_args, self.env, cx, Some(&name))?;
+                let value = mcro.call(macro_args, Some(&name), self.env, cx)?;
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
@@ -177,7 +177,7 @@ impl Interpreter<'_> {
             args.push(result);
         }
         let name = sym.bind(cx).name().to_owned();
-        func.call(args, self.env, cx, Some(&name))
+        func.call(args, Some(&name), self.env, cx)
     }
 
     fn eval_function<'ob>(
@@ -214,7 +214,7 @@ impl Interpreter<'_> {
                     root!(args, Vec::new(), cx);
                     args.push(form.bind(cx));
                     args.push(env);
-                    return closure_fn.call(args, self.env, cx, None);
+                    return closure_fn.call(args, None, self.env, cx);
                 }
             }
         }
@@ -642,9 +642,9 @@ impl Rt<Gc<Function<'_>>> {
     pub(crate) fn call<'ob>(
         &self,
         args: &mut Rt<Vec<GcObj<'static>>>,
+        name: Option<&str>,
         env: &mut Rt<Env>,
         cx: &'ob mut Context,
-        name: Option<&str>,
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
         let arg_cnt = args.len();
@@ -673,12 +673,12 @@ impl Rt<Gc<Function<'_>>> {
                         };
                         root!(func, cx);
                         let name = sym.bind(cx).name().to_owned();
-                        func.call(args, env, cx, Some(&name))
+                        func.call(args, Some(&name), env, cx)
                     }
                     _ => {
                         root!(func, cx);
                         let name = sym.name().to_owned();
-                        func.call(args, env, cx, Some(&name))
+                        func.call(args, Some(&name), env, cx)
                     }
                 }
             }

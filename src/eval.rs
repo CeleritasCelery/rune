@@ -35,7 +35,7 @@ pub(crate) fn apply<'ob>(
         }
     };
     root!(args, cx);
-    function.call(args, env, cx, None).map_err(Into::into)
+    function.call(args, None, env, cx).map_err(Into::into)
 }
 
 #[defun]
@@ -47,7 +47,7 @@ pub(crate) fn funcall<'ob>(
 ) -> Result<GcObj<'ob>> {
     let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
     root!(arg_list, arguments, cx);
-    function.call(arg_list, env, cx, None).map_err(Into::into)
+    function.call(arg_list, None, env, cx).map_err(Into::into)
 }
 
 #[defun]
@@ -67,7 +67,7 @@ fn run_hooks<'ob>(
                             while let Some(hook) = hooks.next()? {
                                 let func: &Rt<Gc<Function>> = hook.try_into()?;
                                 root!(args, Vec::new(), cx);
-                                func.call(args, env, cx, None)?;
+                                func.call(args, None, env, cx)?;
                             }
                         }
                         Object::NIL => {}
@@ -75,7 +75,7 @@ fn run_hooks<'ob>(
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
                             root!(args, Vec::new(), cx);
-                            func.call(args, env, cx, None)?;
+                            func.call(args, None, env, cx)?;
                         }
                     }
                 }
@@ -104,7 +104,7 @@ fn run_hook_with_args<'ob>(
                             let func: &Rt<Gc<Function>> = hook.try_into()?;
                             let args = Rt::bind_slice(args, cx).to_vec();
                             root!(args, cx);
-                            func.call(args, env, cx, None)?;
+                            func.call(args, None, env, cx)?;
                         }
                     }
                     Object::NIL => {}
@@ -112,7 +112,7 @@ fn run_hook_with_args<'ob>(
                         let func: Gc<Function> = val.try_into()?;
                         root!(func, cx);
                         root!(args, Vec::new(), cx);
-                        func.call(args, env, cx, None)?;
+                        func.call(args, None, env, cx)?;
                     }
                 }
             }
@@ -197,7 +197,7 @@ pub(crate) fn macroexpand<'ob>(
     root!(macro_args, cx);
     root!(macro_func, cx);
     let name = sym.name().to_owned();
-    let new_form = macro_func.call(macro_args, env, cx, Some(&name))?;
+    let new_form = macro_func.call(macro_args, Some(&name), env, cx)?;
     root!(new_form, cx); // polonius
     if eq(new_form.bind(cx), form.bind(cx)) {
         Ok(form.bind(cx))

@@ -119,7 +119,7 @@ pub(crate) fn mapcar<'ob>(
             root!(call_arg, Vec::new(), cx);
             while let Some(obj) = iter.next()? {
                 call_arg.push(obj);
-                let output = function.call(call_arg, env, cx, None)?;
+                let output = function.call(call_arg, None, env, cx)?;
                 outputs.push(output);
                 call_arg.clear();
             }
@@ -134,7 +134,7 @@ pub(crate) fn mapcar<'ob>(
             for i in 0..len {
                 let item = fun.bind(cx).index(i).unwrap();
                 call_arg.push(item);
-                let output = function.call(call_arg, env, cx, None)?;
+                let output = function.call(call_arg, None, env, cx)?;
                 outputs.push(output);
                 call_arg.clear();
             }
@@ -159,7 +159,7 @@ pub(crate) fn mapc<'ob>(
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
                 call_arg.push(elem);
-                function.call(call_arg, env, cx, None)?;
+                function.call(call_arg, None, env, cx)?;
                 call_arg.clear();
             }
             Ok(sequence.bind(cx).into())
@@ -319,7 +319,7 @@ pub(crate) fn assoc<'ob>(
                     root!(call_arg, Vec::new(), cx);
                     call_arg.push(key);
                     call_arg.push(cons.car(cx));
-                    let result = func.call(call_arg, env, cx, None)?;
+                    let result = func.call(call_arg, None, env, cx)?;
                     if result != nil() {
                         return Ok(cons.bind(cx).into());
                     }
@@ -658,7 +658,7 @@ fn maphash(
             call_arg.push(*key);
             call_arg.push(*val);
         }
-        if let Err(e) = function.call(call_arg, env, cx, None) {
+        if let Err(e) = function.call(call_arg, None, env, cx) {
             table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
             return Err(e.into());
         }
