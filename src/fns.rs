@@ -183,6 +183,33 @@ pub(crate) fn mapcan<'ob>(
 }
 
 #[defun]
+pub(crate) fn mapconcat(
+    function: &Rt<Gc<Function>>,
+    sequence: &Rt<GcObj>,
+    seperator: Option<&Rt<Gc<&LispString>>>,
+    env: &mut Rt<Env>,
+    cx: &mut Context,
+) -> Result<String> {
+    let mapped = rebind!(mapcar(function, sequence, env, cx)?);
+    let sep = match seperator {
+        Some(sep) => sep.bind(cx).untag().try_into()?,
+        _ => "",
+    };
+    let mut string = String::new();
+    let mut first = true;
+    for element in mapped.as_list()? {
+        if first {
+            first = false;
+        } else {
+            string.push_str(sep);
+        }
+        let element: &str = element?.try_into()?;
+        string.push_str(element);
+    }
+    Ok(string)
+}
+
+#[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
     let mut prev = nil();
     for tail in seq.conses() {
