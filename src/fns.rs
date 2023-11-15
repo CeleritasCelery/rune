@@ -447,6 +447,7 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
     for elt in sequences {
         match elt.untag() {
             Object::String(string) => concat += string.try_into()?,
+            Object::NIL => continue,
             _ => bail!("Currently only concatenating strings are supported"),
         }
     }
