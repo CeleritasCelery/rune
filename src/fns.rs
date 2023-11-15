@@ -426,6 +426,52 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
     member_of_list(elt, list, equal)
 }
 
+// TODO: Handle sorting vectors
+#[defun]
+fn sort<'ob>(
+    seq: &Rt<Gc<List>>,
+    predicate: &Rt<Gc<Function>>,
+    env: &mut Rt<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>> {
+    let vec: Vec<_> = seq.bind(cx).elements().fallible().collect()?;
+    let len = vec.len();
+    if len <= 1 {
+        return Ok(seq.bind(cx).into());
+    }
+
+    root!(tmp, nil(), cx);
+    root!(vec, cx);
+    root!(call_args, Vec::new(), cx);
+    // A simple insertion sort
+    // TODO: use a better sort like tim sort
+    for i in 1..len {
+        tmp.set(&vec[i]);
+        let mut j = i;
+        while j > 0 {
+            call_args.clear();
+            call_args.push(&vec[j - 1]);
+            call_args.push(&*tmp);
+            match predicate.call(call_args, None, env, cx) {
+                Ok(cmp) => {
+                    if cmp != nil() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    vec[j].set(&*tmp);
+                    return Err(e.into());
+                }
+            }
+            let left = vec[j - 1].bind(cx);
+            vec[j].set(left);
+            j -= 1;
+        }
+        vec[j].set(&*tmp);
+    }
+    Ok(slice_into_list(vec.bind_ref(cx), None, cx))
+}
+
 #[defun]
 pub(crate) fn defvaralias<'ob>(
     new_alias: Symbol<'ob>,
@@ -875,6 +921,60 @@ mod test {
         // This test does not assert anything, but allows this to be checked by
         // miri
         maphash(func, table, env, cx).unwrap();
+    }
+
+    #[test]
+    #[allow(clippy::needless_borrow)]
+    fn test_sort() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, Env::default(), cx);
+        let func = sym::LESS_THAN.func(cx).unwrap();
+        root!(func, cx);
+        {
+            root!(list, List::empty(), cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, nil());
+        }
+        {
+            let list: Gc<List> = list![1; cx].try_into().unwrap();
+            root!(list, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![1; cx]);
+        }
+        {
+            let list: Gc<List> = list![2, 1; cx].try_into().unwrap();
+            root!(list, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![1, 2; cx]);
+        }
+        {
+            let list: Gc<List> = list![1, 2, 3; cx].try_into().unwrap();
+            root!(list, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![1, 2, 3; cx]);
+        }
+        {
+            let list: Gc<List> = list![3, 2, 1; cx].try_into().unwrap();
+            root!(list, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![1, 2, 3; cx]);
+        }
+
+        {
+            let list: Gc<List> = list![3, 1, 2; cx].try_into().unwrap();
+            root!(list, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![1, 2, 3; cx]);
+        }
+        {
+            let func = sym::GREATER_THAN.func(cx).unwrap();
+            let list: Gc<List> = list![1, 2, 3, 4, 5; cx].try_into().unwrap();
+            root!(list, cx);
+            root!(func, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(res, list![5, 4, 3, 2, 1; cx]);
+        }
     }
 
     #[test]
