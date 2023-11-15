@@ -911,6 +911,13 @@ impl TagType for u32 {
     }
 }
 
+impl TagType for char {
+    type Out = i64;
+    fn tag(self) -> Gc<Self::Out> {
+        TagType::tag(i64::from(self as u32))
+    }
+}
+
 impl TagType for u64 {
     type Out = i64;
     fn tag(self) -> Gc<Self::Out> {

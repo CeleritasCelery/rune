@@ -71,6 +71,19 @@ fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
         .collect())
 }
 
+#[defun]
+fn string_to_char(string: &str) -> char {
+    string.chars().next().unwrap_or('\0')
+}
+
+#[defun]
+fn char_to_string(chr: u64) -> Result<String> {
+    let Some(chr) = std::char::from_u32(u32::try_from(chr)?) else {
+        bail!("Invalid character")
+    };
+    Ok(format!("{chr}"))
+}
+
 // TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
