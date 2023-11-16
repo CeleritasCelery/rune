@@ -1,7 +1,10 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::must_use_candidate)]
 #![allow(clippy::missing_panics_doc)]
-use crate::{metric::{BufferMetrics, Metric}, Position};
+use crate::{
+    metric::{BufferMetrics, Metric},
+    Position,
+};
 use get_size::GetSize;
 use std::{
     borrow::Cow,
@@ -285,7 +288,7 @@ impl Buffer {
 
     #[inline]
     pub fn insert(&mut self, slice: &str) {
-        if slice == "" {
+        if slice.is_empty() {
             return;
         }
         self.metrics.insert(self.to_abs_pos(self.cursor), MetricBuilder::new(slice));
@@ -470,9 +473,8 @@ impl Buffer {
         for _ in 0..3 {
             if self.is_char_boundary(end) {
                 break;
-            } else {
-                end += 1;
             }
+            end += 1;
         }
         debug_assert!(self.is_char_boundary(end));
         self.to_str(byte..end).chars().next()
@@ -525,7 +527,7 @@ impl Buffer {
     #[doc(hidden)]
     #[inline]
     pub fn benchmark_build_metrics(string: &str) -> usize {
-        let builder = MetricBuilder::new(&string);
+        let builder = MetricBuilder::new(string);
         let metrics = BufferMetrics::build(builder);
         metrics.len().bytes
     }

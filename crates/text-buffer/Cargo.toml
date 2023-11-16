@@ -3,9 +3,6 @@ name = "text-buffer"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = ["reference-tests"]
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -19,10 +16,9 @@ proptest = "1.0"
 criterion = {version = "0.5.1", features = ["html_reports"]}
 crdt-testdata = { path = "reference-tests/crdt-testdata" }
 
-[profile.fast-debug]
-inherits = "release"
-debug = true
-
 [[bench]]
 name = "benches"
 harness = false
+
+[lints]
+workspace = true
