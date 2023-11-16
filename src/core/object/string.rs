@@ -45,6 +45,10 @@ impl LispString {
     pub(crate) unsafe fn from_bstring(value: Vec<u8>) -> Self {
         Self { gc: GcMark::default(), string: StrType::BString(BString::from(value)) }
     }
+
+    pub(crate) fn is_valid_unicode(&self) -> bool {
+        matches!(&self.string, StrType::String(_))
+    }
 }
 
 impl<'new> CloneIn<'new, &'new Self> for LispString {

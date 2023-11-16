@@ -241,6 +241,15 @@ fn bufferp(_object: GcObj) -> bool {
 }
 
 #[defun]
+pub(crate) fn multibyte_string_p(object: GcObj) -> bool {
+    match object.untag() {
+        Object::String(string) => string.is_valid_unicode(),
+        _ => false,
+
+    }
+}
+
+#[defun]
 fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> Gc<Number<'ob>> {
     // TODO: Handle trailing characters, which should be ignored
     let base = base.unwrap_or(10);
@@ -362,7 +371,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::Symbol(_) => sym::SYMBOL.into(),
         Object::Cons(_) => sym::CONS.into(),
         Object::Vec(_) => sym::VECTOR.into(),
-        Object::Record(x) => x.get(0).expect("record was missing type").get(),
+        Object::Record(x) => x.first().expect("record was missing type").get(),
         Object::ByteFn(_) => sym::COMPILED_FUNCTION.into(),
         Object::HashTable(_) => sym::HASH_TABLE.into(),
         Object::String(_) => sym::STRING.into(),
