@@ -35,6 +35,9 @@ fxhash = "0.2.1"
 [profile.dev.build-override]
 opt-level = 3
 
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.fast-debug]
 inherits = "release"
 debug = true
