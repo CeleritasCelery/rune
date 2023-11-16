@@ -475,16 +475,14 @@ impl<T> Deref for Rt<Vec<T>> {
     type Target = [Rt<T>];
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        let vec = unsafe { &*(self as *const Self).cast::<Vec<Rt<T>>>() };
-        vec
+        unsafe { &*(self as *const Self).cast::<Vec<Rt<T>>>() }
     }
 }
 
 impl<T> DerefMut for Rt<Vec<T>> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        let vec = unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<T>>>() };
-        vec
+        unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<T>>>() }
     }
 }
 

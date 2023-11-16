@@ -6,10 +6,11 @@ use std::{
 };
 
 // take an input str and parse it with syn::ExprCall and return the args as strings
+#[must_use]
 pub fn parse_args(input: &str) -> Vec<String> {
+    use quote::ToTokens;
     let pseudo_fn = format!("X{input}");
     let expr = syn::parse_str::<syn::ExprCall>(&pseudo_fn).unwrap();
-    use quote::ToTokens;
     expr.args.into_iter().map(|e| e.to_token_stream().to_string()).collect()
 }
 
@@ -53,6 +54,7 @@ enum DefvarType {
     Other,
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() {
     let mut all_defun = Vec::new();
     let mut all_defvar = Vec::new();
@@ -138,7 +140,7 @@ fn main() {
     }
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    println!("cargo:warning={out_dir}/sym.rs");
+    // println!("cargo:warning={out_dir}/sym.rs");
     let dest_path = Path::new(&out_dir).join("sym.rs");
     let mut f = File::create(dest_path).unwrap();
 

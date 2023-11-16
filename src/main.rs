@@ -1,44 +1,3 @@
-#![deny(macro_use_extern_crate, keyword_idents)]
-#![forbid(non_ascii_idents)]
-#![warn(rust_2018_idioms)]
-// This lint makes code more verbose with little benefit
-#![allow(elided_lifetimes_in_paths)]
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    clippy::as_ptr_cast_mut,
-    clippy::equatable_if_let,
-    clippy::nonstandard_macro_braces,
-    clippy::or_fun_call,
-    clippy::manual_let_else,
-    unused_qualifications,
-    meta_variable_misuse,
-    explicit_outlives_requirements,
-    missing_copy_implementations,
-    noop_method_call,
-    semicolon_in_expressions_from_macros,
-    trivial_numeric_casts,
-    unreachable_pub,
-    unused_lifetimes
-)]
-// Will enable this lint in the future
-// #![warn(clippy::undocumented_unsafe_blocks)]
-#![allow(
-    clippy::unused_self,
-    clippy::similar_names,
-    clippy::module_name_repetitions,
-    clippy::needless_pass_by_value,
-    clippy::let_and_return,
-    clippy::inline_always,
-    clippy::match_bool,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss,
-    clippy::cast_ptr_alignment,
-    clippy::single_match_else
-)]
-
 #[macro_use]
 mod macros;
 #[macro_use]
@@ -76,6 +35,33 @@ use crate::core::{
     object::{nil, Gc, LispString},
 };
 use std::io::{self, Write};
+
+fn main() {
+    let roots = &RootSet::default();
+    let cx = &mut Context::new(roots);
+    root!(env, Env::default(), cx);
+
+    let args = Args::parse();
+
+    // Ensure this is always initalized before anything else. We need this to
+    // code to run to properly initialize the symbol table.
+    lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
+    crate::core::env::init_variables(cx, env);
+    crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
+        .expect("null should be defined");
+
+    if args.load {
+        load(env, cx);
+    }
+
+    if args.repl {
+        repl(env, cx);
+    }
+
+    if args.gui {
+        gui::launch();
+    }
+}
 
 fn parens_closed(buffer: &str) -> bool {
     let open = buffer.chars().filter(|&x| x == '(').count();
@@ -164,32 +150,5 @@ impl Args {
             args.load = true;
         }
         args
-    }
-}
-
-fn main() {
-    let roots = &RootSet::default();
-    let cx = &mut Context::new(roots);
-    root!(env, Env::default(), cx);
-
-    let args = Args::parse();
-
-    // Ensure this is always initalized before anything else. We need this to
-    // code to run to properly initialize the symbol table.
-    lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
-    crate::core::env::init_variables(cx, env);
-    crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
-        .expect("null should be defined");
-
-    if args.load {
-        load(env, cx);
-    }
-
-    if args.repl {
-        repl(env, cx);
-    }
-
-    if args.gui {
-        gui::launch();
     }
 }

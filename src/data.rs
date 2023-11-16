@@ -245,7 +245,6 @@ pub(crate) fn multibyte_string_p(object: GcObj) -> bool {
     match object.untag() {
         Object::String(string) => string.is_valid_unicode(),
         _ => false,
-
     }
 }
 

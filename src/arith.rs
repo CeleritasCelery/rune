@@ -242,15 +242,21 @@ pub(crate) fn remainder(x: i64, y: i64) -> i64 {
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
     let y = y.val();
-    let ret = if x > y { x } else { y };
-    ret
+    if x > y {
+        x
+    } else {
+        y
+    }
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
     let y = y.val();
-    let ret = if x < y { x } else { y };
-    ret
+    if x < y {
+        x
+    } else {
+        y
+    }
 }
 
 #[defun]
