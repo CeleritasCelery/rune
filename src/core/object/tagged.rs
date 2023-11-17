@@ -586,6 +586,17 @@ impl TaggedPtr for i64 {
     }
 }
 
+pub(crate) fn int_to_char(int: i64) -> Result<char, TypeError> {
+    let err = TypeError::new(Type::Char, TagType::tag(int));
+    match u32::try_from(int) {
+        Ok(x) => match char::from_u32(x) {
+            Some(c) => Ok(c),
+            None => Err(err),
+        },
+        Err(_) => Err(err),
+    }
+}
+
 impl TaggedPtr for &LispFloat {
     type Ptr = LispFloat;
     const TAG: Tag = Tag::Float;

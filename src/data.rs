@@ -481,5 +481,4 @@ defsym!(SYMBOL);
 defsym!(COMPILED_FUNCTION);
 defsym!(HASH_TABLE);
 defsym!(BUFFER);
-defsym!(STRING);
 defsym!(SUBR);

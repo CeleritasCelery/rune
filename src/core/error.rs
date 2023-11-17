@@ -154,6 +154,7 @@ impl ArgError {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Type {
     Int,
+    Char,
     Cons,
     Vec,
     Record,
