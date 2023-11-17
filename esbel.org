@@ -1,0 +1,12 @@
+* Emacs Should be Emacs Lisp
+Emacs should be Emacs Lisp (esbel) is the [[https://archive.fosdem.org/2020/schedule/event/emacsthoughts/][idea]] that we should move as much as reasonable out of the C/Rust core and into lisp. This makes it easier inspect and modify the runtime. The only reason something should be in core is either
+
+1. Low level access - the core needs access to memory layout, sys calls, and other details that should not be exposed to lisp.
+2. Abstraction level - the details in function could be exposed in lisp, but doing so would break an abstraction boundary and make it difficult to change the implementation later
+3. Performance - sometimes functions just need to be written in a low level language. Just because something runs faster in the core doesn't automatically justify putting it there. The performance of the function must be bottleneck.
+
+
+** Functions that could be moved to lisp
+- car-less-than-car
+- regexp-quote
+- mapcan
