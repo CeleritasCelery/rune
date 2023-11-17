@@ -197,10 +197,11 @@
 
 ;; (load "button")                  ;After loaddefs, because of define-minor-mode!
 
-;; RUNE-BOOTSTRAP - add gv and inline because we don't have autoloads enabled
+;; RUNE-BOOTSTRAP - add gv, inline, and rx because we don't have autoloads enabled
 ;; yet. These autoloads are defined in loaddefs.el
 (load "gv")
 (load "inline")
+(load "rx")
 (load "emacs-lisp/cl-preloaded")
 (load "emacs-lisp/oclosure")          ;Used by cl-generic
 (load "obarray")        ;abbrev.el is implemented in terms of obarrays.
