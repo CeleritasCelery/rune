@@ -1,7 +1,8 @@
 use crate::core::{
+    cons::Cons,
     env::{sym, Env},
     gc::{Context, Rt},
-    object::Object,
+    object::{Gc, Number, Object},
 };
 use anyhow::Result;
 use fn_macros::defun;
@@ -34,6 +35,13 @@ pub(crate) fn expand_file_name(
             _ => unreachable!("`default-directory' should be a string"),
         }
     }
+}
+
+#[defun]
+fn car_less_than_car(a: &Cons, b: &Cons) -> Result<bool> {
+    let a: Gc<Number> = a.car().try_into()?;
+    let b: Gc<Number> = b.car().try_into()?;
+    Ok(a.val() < b.val())
 }
 
 #[defun]
