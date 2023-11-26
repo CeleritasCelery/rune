@@ -9,19 +9,12 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use fn_macros::defun;
+use std::sync::LazyLock;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 
 // static hashmap containing all the buffers
-static BUFFERS: OnceLock<Mutex<HashMap<String, &'static LispBuffer>>> = OnceLock::new();
-
-/// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
-///
-/// TODO: Once [`LazyLock`] is stabilized, this can be changed to initializing on the LazyLock::new() method.
-/// Stabilization tracker: https://github.com/rust-lang/rust/issues/109736
-fn buffers() -> &'static Mutex<HashMap<String, &'static LispBuffer>> {
-    BUFFERS.get_or_init(|| Mutex::new(HashMap::default()))
-}
+static BUFFERS: LazyLock<Mutex<HashMap<String, &'static LispBuffer>>> =
+    LazyLock::new(|| Mutex::new(HashMap::default()));
 
 #[defun]
 pub(crate) fn set_buffer<'ob>(
@@ -39,7 +32,7 @@ fn resolve_buffer<'ob>(buffer_or_name: GcObj, cx: &'ob Context) -> Result<&'ob L
         Object::Buffer(b) => Ok(b),
         Object::String(s) => {
             let name: &str = s.try_into()?;
-            let buffer_list = buffers().lock().unwrap();
+            let buffer_list = BUFFERS.lock().unwrap();
             let Some(buffer) = buffer_list.get(name) else {
                 bail!("No buffer named {}", name);
             };
@@ -77,7 +70,7 @@ pub(crate) fn get_buffer_create<'ob>(
     match buffer_or_name.untag() {
         Object::String(x) => {
             let name = x.try_into()?;
-            let mut buffer_list = buffers().lock().unwrap();
+            let mut buffer_list = BUFFERS.lock().unwrap();
             match buffer_list.get(name) {
                 Some(b) => Ok(cx.add(*b)),
                 None => {
@@ -105,7 +98,7 @@ pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> R
     match buffer_or_name.untag() {
         Object::String(x) => {
             let name: &str = x.try_into()?;
-            let buffer_list = buffers().lock().unwrap();
+            let buffer_list = BUFFERS.lock().unwrap();
             match buffer_list.get(name) {
                 Some(b) => Ok(cx.add(*b)),
                 None => Ok(nil()),
@@ -130,7 +123,7 @@ pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> R
 #[defun]
 fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
     // check if the name exists
-    let buffer_list = buffers().lock().unwrap();
+    let buffer_list = BUFFERS.lock().unwrap();
     let valid_name =
         |name: &str| ignore.is_some_and(|x| x == name) || !buffer_list.contains_key(name);
 

@@ -228,17 +228,16 @@ pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
     writeln!(
         f,
         "
-lazy_static::lazy_static! {{
-    pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({{
-        let size: usize = {symbol_len};
-        let mut map = SymbolMap::with_capacity(size);
-        sym::init_symbols(&mut map);
-        ObjectMap {{
-            map,
-            block: Block::new_global(),
-        }}
-    }});
-}}
+use std::sync::LazyLock;
+pub(crate) static INTERNED_SYMBOLS: LazyLock<Mutex<ObjectMap>> = LazyLock::new(|| Mutex::new({{
+    let size: usize = {symbol_len};
+    let mut map = SymbolMap::with_capacity(size);
+    sym::init_symbols(&mut map);
+    ObjectMap {{
+        map,
+        block: Block::new_global(),
+    }}
+}}));
 "
     )
     .unwrap();

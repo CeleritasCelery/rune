@@ -8,18 +8,13 @@ use crate::core::{
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
+use std::sync::LazyLock;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 
-static FEATURES: OnceLock<Mutex<HashSet<Symbol<'static>>>> = OnceLock::new();
-
-/// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
-///
-/// TODO: Once [`LazyLock`] is stabilized, this can be changed to initializing on the LazyLock::new() method.
-/// Stabilization tracker: https://github.com/rust-lang/rust/issues/109736
-pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
-    FEATURES.get_or_init(|| Mutex::new(HashSet::default()))
-}
+/// Rust translation of the `features` variable: A list of symbols are the features
+/// of the executing Emacs. Used by [`featurep`] and [`require`], altered by [`provide`].
+pub(crate) static FEATURES: LazyLock<Mutex<HashSet<Symbol<'static>>>> =
+    LazyLock::new(|| Mutex::new(HashSet::default()));
 
 #[defun]
 pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
@@ -397,7 +392,7 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
 
 #[defun]
 pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
-    let mut features = features().lock().unwrap();
+    let mut features = FEATURES.lock().unwrap();
     // TODO: SYMBOL - need to trace this
     let feat = unsafe { feature.into_root() };
     features.insert(feat);
