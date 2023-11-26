@@ -305,7 +305,6 @@ mod test {
     fn symbol_func() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        lazy_static::initialize(&INTERNED_SYMBOLS);
         let inner = SymbolCell::new("foo");
         let sym = unsafe { fix_lifetime(Symbol::new(&inner)) };
         assert_eq!("foo", sym.name());

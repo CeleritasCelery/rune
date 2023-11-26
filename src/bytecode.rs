@@ -1081,7 +1081,6 @@ mod test {
         use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
         // (lambda (x) (symbol-name x))
         make_bytecode!(
             bytecode,
@@ -1124,7 +1123,6 @@ mod test {
         use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
 
         // (lambda () (let ((load-path 5)) load-path))
         make_bytecode!(
@@ -1207,7 +1205,6 @@ mod test {
     #[test]
     fn test_handlers() {
         use OpCode::*;
-        lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
 
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
