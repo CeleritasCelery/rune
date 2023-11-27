@@ -233,10 +233,12 @@ fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons
         Function::ByteFn(func) => Ok(from_args(func.args)),
         Function::SubrFn(func) => Ok(from_args(func.args)),
         Function::Cons(func) => {
-            if func.car() != sym::CLOSURE {
-                return Err(TypeError::new(Type::Func, func.car()).into());
-            }
-            let Some(args) = func.elements().fallible().nth(2)? else {
+            let arg_pos = match func.car().untag() {
+                Object::Symbol(sym::CLOSURE) => 2,
+                Object::Symbol(sym::LAMBDA) => 1,
+                other => bail!(TypeError::new(Type::Func, other)),
+            };
+            let Some(args) = func.elements().fallible().nth(arg_pos)? else {
                 bail!("Invalid function: {func}")
             };
             let (req, opt, rest) = crate::interpreter::parse_arg_list(args)?;
