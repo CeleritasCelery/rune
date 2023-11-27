@@ -1086,6 +1086,7 @@ mod test {
         use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
+        sym::init_symbols();
         // (lambda (x) (symbol-name x))
         make_bytecode!(
             bytecode,
@@ -1128,6 +1129,7 @@ mod test {
         use OpCode::*;
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
+        sym::init_symbols();
 
         // (lambda () (let ((load-path 5)) load-path))
         make_bytecode!(
@@ -1213,6 +1215,7 @@ mod test {
 
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
+        sym::init_symbols();
         let err = cons!(sym::ERROR; cx);
 
         // (lambda (y) (condition-case nil

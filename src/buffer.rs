@@ -19,7 +19,7 @@ static BUFFERS: OnceLock<Mutex<HashMap<String, &'static LispBuffer>>> = OnceLock
 ///
 /// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
 fn buffers() -> &'static Mutex<HashMap<String, &'static LispBuffer>> {
-    BUFFERS.get_or_init(|| Mutex::new(HashMap::default()))
+    BUFFERS.get_or_init(Mutex::default)
 }
 
 #[defun]

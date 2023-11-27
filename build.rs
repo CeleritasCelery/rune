@@ -210,13 +210,9 @@ pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
     writeln!(
         f,
         "
-pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
-    for sym in &BUILTIN_SYMBOLS[..{defun_start}] {{
-        map.pre_init(Symbol::new(sym));
-    }}
+pub(crate) fn init_symbols() {{
     for (sym, func) in BUILTIN_SYMBOLS[{defun_start}..].iter().zip(SUBR_DEFS.iter()) {{
         unsafe {{ sym.set_func((*func).into()).unwrap(); }}
-        map.pre_init(Symbol::new(sym));
     }}
 }}
 "
@@ -230,13 +226,15 @@ pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
         "
 /// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
 use std::sync::OnceLock;
-static INTERNED_SYMBOLS: OnceLock<Mutex<ObjectMap>> = OnceLock::new(); 
+static INTERNED_SYMBOLS: OnceLock<Mutex<ObjectMap>> = OnceLock::new();
 
 pub(crate) fn interned_symbols() -> &'static Mutex<ObjectMap> {{
     INTERNED_SYMBOLS.get_or_init(|| Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
-        sym::init_symbols(&mut map);
+        for sym in &sym::BUILTIN_SYMBOLS {{
+            map.pre_init(Symbol::new(sym));
+        }}
         ObjectMap {{
             map,
             block: Block::new_global(),

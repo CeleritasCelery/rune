@@ -20,7 +20,7 @@ static FEATURES: OnceLock<Mutex<HashSet<Symbol<'static>>>> = OnceLock::new();
 ///
 /// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
 pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
-    FEATURES.get_or_init(|| Mutex::new(HashSet::default()))
+    FEATURES.get_or_init(Mutex::default)
 }
 
 #[defun]

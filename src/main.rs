@@ -43,6 +43,7 @@ fn main() {
 
     let args = Args::parse();
 
+    sym::init_symbols();
     crate::core::env::init_variables(cx, env);
     crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
         .expect("null should be defined");
