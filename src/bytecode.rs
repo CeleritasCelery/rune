@@ -944,6 +944,11 @@ fn byte_code<'ob>(
     Ok(call(fun, args, "unnamed", env, cx)?)
 }
 
+#[defun]
+fn fetch_bytecode(_object: GcObj) {
+    // TODO: Implement
+}
+
 pub(crate) fn call<'ob>(
     func: &Rt<&'static ByteFn>,
     args: &mut Rt<Vec<GcObj<'static>>>,
