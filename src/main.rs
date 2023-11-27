@@ -43,9 +43,6 @@ fn main() {
 
     let args = Args::parse();
 
-    // Ensure this is always initalized before anything else. We need this to
-    // code to run to properly initialize the symbol table.
-    lazy_static::initialize(&crate::core::env::INTERNED_SYMBOLS);
     crate::core::env::init_variables(cx, env);
     crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
         .expect("null should be defined");

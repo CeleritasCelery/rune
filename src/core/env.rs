@@ -276,7 +276,7 @@ include!(concat!(env!("OUT_DIR"), "/sym.rs"));
 
 /// Intern a new symbol based on `name`
 pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
-    INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
+    interned_symbols().lock().unwrap().intern(name, cx)
 }
 
 #[cfg(test)]
@@ -309,7 +309,6 @@ mod test {
     fn symbol_func() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        lazy_static::initialize(&INTERNED_SYMBOLS);
         let inner = SymbolCell::new("foo");
         let sym = unsafe { fix_lifetime(Symbol::new(&inner)) };
         assert_eq!("foo", sym.name());

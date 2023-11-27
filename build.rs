@@ -228,8 +228,12 @@ pub(super) fn init_symbols(map: &mut super::SymbolMap) {{
     writeln!(
         f,
         "
-lazy_static::lazy_static! {{
-    pub(crate) static ref INTERNED_SYMBOLS: Mutex<ObjectMap> = Mutex::new({{
+/// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
+use std::sync::OnceLock;
+static INTERNED_SYMBOLS: OnceLock<Mutex<ObjectMap>> = OnceLock::new(); 
+
+pub(crate) fn interned_symbols() -> &'static Mutex<ObjectMap> {{
+    INTERNED_SYMBOLS.get_or_init(|| Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
         sym::init_symbols(&mut map);
@@ -237,7 +241,7 @@ lazy_static::lazy_static! {{
             map,
             block: Block::new_global(),
         }}
-    }});
+    }}))
 }}
 "
     )
