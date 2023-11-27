@@ -496,7 +496,7 @@ fn require<'ob>(
 ) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.get(cx).into_root() };
-    if crate::data::FEATURES.lock().unwrap().contains(&feat) {
+    if crate::data::features().lock().unwrap().contains(&feat) {
         return Ok(feature.get(cx));
     }
     let file = match filename {

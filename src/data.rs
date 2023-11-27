@@ -1,6 +1,6 @@
 use crate::core::{
     cons::Cons,
-    env::{sym, Env, Symbol, INTERNED_SYMBOLS},
+    env::{interned_symbols, sym, Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Rt},
     object::{nil, Gc, GcObj, List, Number, Object, SubrFn},
@@ -8,13 +8,20 @@ use crate::core::{
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
 use fn_macros::defun;
-use std::sync::LazyLock;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+
+static FEATURES: OnceLock<Mutex<HashSet<Symbol<'static>>>> = OnceLock::new();
 
 /// Rust translation of the `features` variable: A list of symbols are the features
 /// of the executing Emacs. Used by [`featurep`] and [`require`], altered by [`provide`].
-pub(crate) static FEATURES: LazyLock<Mutex<HashSet<Symbol<'static>>>> =
-    LazyLock::new(|| Mutex::new(HashSet::default()));
+/// Vended through a helper function to avoid calling `get_or_init` on each of the calls
+/// to `lock()` on the Mutex.
+///
+/// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
+pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
+    FEATURES.get_or_init(|| Mutex::new(HashSet::default()))
+}
 
 #[defun]
 pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
@@ -22,7 +29,7 @@ pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
-        let map = INTERNED_SYMBOLS.lock().unwrap();
+        let map = interned_symbols().lock().unwrap();
         map.set_func(symbol, func)?;
     }
     Ok(symbol)
@@ -392,7 +399,7 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
 
 #[defun]
 pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
-    let mut features = FEATURES.lock().unwrap();
+    let mut features = features().lock().unwrap();
     // TODO: SYMBOL - need to trace this
     let feat = unsafe { feature.into_root() };
     features.insert(feat);

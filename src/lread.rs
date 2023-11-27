@@ -182,7 +182,7 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> 
             }
         }
         Object::String(string) => {
-            let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
+            let map = crate::core::env::interned_symbols().lock().unwrap();
             match map.get(string.try_into()?) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),
                 None => Ok(sym::NIL),

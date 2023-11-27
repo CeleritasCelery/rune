@@ -1,4 +1,3 @@
-#![feature(lazy_cell)]
 #[macro_use]
 mod macros;
 #[macro_use]
