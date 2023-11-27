@@ -1556,27 +1556,8 @@ Applies if head of FORM is a symbol with non-nil property
 `byte-compile-format-like' and first arg is a constant string.
 Then check the number of format fields matches the number of
 extra args."
-  (when (and (symbolp (car form))
-	     (stringp (nth 1 form))
-	     (get (car form) 'byte-compile-format-like))
-    (let ((nfields (with-temp-buffer
-		     (insert (nth 1 form))
-		     (goto-char (point-min))
-		     (let ((i 0) (n 0))
-		       (while (re-search-forward "%." nil t)
-                         (backward-char)
-			 (unless (eq ?% (char-after))
-                           (setq i (if (looking-at "\\([0-9]+\\)\\$")
-                                       (string-to-number (match-string 1) 10)
-                                     (1+ i))
-                                 n (max n i)))
-                         (forward-char))
-		       n)))
-	  (nargs (- (length form) 2)))
-      (unless (= nargs nfields)
-	(byte-compile-warn-x (car form)
-	 "`%s' called with %d args to fill %d format field(s)" (car form)
-	 nargs nfields)))))
+  ;; RUNE-BOOSTRAP
+  nil)
 
 (dolist (elt '(format message error))
   (put elt 'byte-compile-format-like t))
@@ -1695,41 +1676,8 @@ Ignore all `substitute-command-keys' substitutions, except for
 the `\\\\=[command]' ones that are assumed to be of length
 `byte-compile--wide-docstring-substitution-len'.  Also ignore
 URLs."
-  (string-match
-   (format "^.\\{%d,\\}$" (min (1+ col) #xffff)) ; Heed RE_DUP_MAX.
-   (replace-regexp-in-string
-    (rx (or
-         ;; Ignore some URLs.
-         (seq "http" (? "s") "://" (* nonl))
-         ;; Ignore these `substitute-command-keys' substitutions.
-         (seq "\\" (or "="
-                       (seq "<" (* (not ">")) ">")
-                       (seq "{" (* (not "}")) "}")))
-         ;; Ignore the function signature that's stashed at the end of
-         ;; the doc string (in some circumstances).
-         (seq bol "(" (+ (any word "-/:[]&"))
-              ;; One or more arguments.
-              (+ " " (or
-                      ;; Arguments.
-                      (+ (or (syntax symbol)
-                             (any word "-/:[]&=()<>.,?^\\#*'\"")))
-                      ;; Argument that is a list.
-                      (seq "(" (* (not ")")) ")")))
-              ")")))
-    ""
-    ;; Heuristic: We can't reliably do `substitute-command-keys'
-    ;; substitutions, since the value of a keymap in general can't be
-    ;; known at compile time.  So instead, we assume that these
-    ;; substitutions are of some length N.
-    (replace-regexp-in-string
-     (rx "\\[" (* (not "]")) "]")
-     (make-string byte-compile--wide-docstring-substitution-len ?x)
-     ;; For literal key sequence substitutions (e.g. "\\`C-h'"), just
-     ;; remove the markup as `substitute-command-keys' would.
-     (replace-regexp-in-string
-      (rx "\\`" (group (* (not "'"))) "'")
-      "\\1"
-      docstring)))))
+  ;; RUNE-BOOTSTRAP
+  nil)
 
 (defcustom byte-compile-docstring-max-column 80
   "Recommended maximum width of doc string lines.
