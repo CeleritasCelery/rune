@@ -86,29 +86,39 @@ fn regexp_quote(string: &str) -> String {
 
 fn lisp_regex_to_rust(regexp: &str) -> String {
     let mut norm_regex = String::new();
-    let mut chars = regexp.chars();
-    while let Some(ch) = chars.next() {
+    let mut chars = regexp.char_indices();
+    while let Some((idx, ch)) = chars.next() {
         match ch {
             // Invert the escaping of parens. i.e. \( => ( and ( => \(
-            c @ '('..=')' => {
+            '(' | ')' | '{' | '}' => {
                 norm_regex.push('\\');
-                norm_regex.push(c);
+                norm_regex.push(ch);
             }
             '\\' => match chars.next() {
-                Some(c @ '('..=')') => norm_regex.push(c),
-                Some('`') => norm_regex += "\\A",
-                Some('\'') => norm_regex += "\\z",
-                Some(c) => {
+                Some((_, c @ '('..=')' | c @ '{' | c @ '}')) => norm_regex.push(c),
+                Some((_, '`')) => norm_regex += "\\A",
+                Some((_, '\'')) => norm_regex += "\\z",
+                Some((_, c)) => {
                     norm_regex.push('\\');
                     norm_regex.push(c);
                 }
                 None => norm_regex.push('\\'),
             },
+            '[' => {
+                let word = "[:word:]";
+                if regexp[idx..].starts_with(word) {
+                    chars.nth(word.len() - 2);
+                    norm_regex.push_str("a-zA-Z");
+                } else {
+                    norm_regex.push('[');
+                }
+            }
             c => norm_regex.push(c),
         }
     }
     norm_regex
 }
+
 #[defun]
 fn match_data<'ob>(
     integer: Option<()>,
@@ -162,6 +172,8 @@ mod test {
         assert_eq!(lisp_regex_to_rust("(foo)"), "\\(foo\\)");
         assert_eq!(lisp_regex_to_rust("\\`"), "\\A");
         assert_eq!(lisp_regex_to_rust("\\'"), "\\z");
+        assert_eq!(lisp_regex_to_rust("[[:word:]]"), "[a-zA-Z]");
+        assert_eq!(lisp_regex_to_rust("[[:word:]_]"), "[a-zA-Z_]");
     }
 
     #[test]
