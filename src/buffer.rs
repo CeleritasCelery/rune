@@ -156,7 +156,9 @@ fn kill_buffer(buffer_or_name: Option<GcObj>, cx: &Context, env: &mut Rt<Env>) -
     };
     // todo, we need to select a new buffer
     #[allow(clippy::redundant_closure_for_method_calls)]
-    env.with_buffer_mut(buffer, |b| b.kill()).unwrap_or(false)
+    let state = env.with_buffer_mut(buffer, |b| b.kill()).unwrap_or(false);
+    env.current_buffer = None;
+    state
 }
 
 // TODO: buffer local
