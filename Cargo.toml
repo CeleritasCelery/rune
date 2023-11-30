@@ -30,14 +30,13 @@ fallible-iterator = "0.3.0"
 fallible-streaming-iterator = "0.1.9"
 indexmap = "2.1.0"
 fxhash = "0.2.1"
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"
 
 [profile.dev.build-override]
-opt-level = 3
-
-[profile.dev.package."*"]
 opt-level = 3
 
 [profile.fast-debug]
