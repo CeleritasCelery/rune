@@ -78,12 +78,12 @@ jobs:
         run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Install nightly for -Zminimal-versions
+      - name: Install nightly for -Zdirected-minimal-versions
         uses: dtolnay/rust-toolchain@nightly
       - name: rustup default stable
         run: rustup default stable
-      - name: cargo update -Zminimal-versions
-        run: cargo +nightly update -Zminimal-versions
+      - name: cargo update -Zdirected-minimal-versions
+        run: cargo +nightly update -Zdirected-minimal-versions
       - name: cargo test
         run: cargo test --locked --all-features --all-targets
   os-check:
