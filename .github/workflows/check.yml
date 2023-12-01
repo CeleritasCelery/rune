@@ -71,7 +71,7 @@ jobs:
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: cargo doc
-        run: cargo doc --no-deps --all-features
+        run: cargo +nightly doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: --cfg docsrs
   msrv:
