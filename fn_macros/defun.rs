@@ -181,18 +181,18 @@ enum ArgType {
 
 impl ArgType {
     fn is_required_arg(self) -> bool {
-        use ArgType::*;
-        matches!(self, Rt(_) | Gc(_) | Other)
+        use ArgType as A;
+        matches!(self, A::Rt(_) | A::Gc(_) | A::Other)
     }
 
     fn is_positional_arg(self) -> bool {
-        use ArgType::*;
-        matches!(self, Rt(_) | Gc(_) | Other | Option | OptionRt)
+        use ArgType as A;
+        matches!(self, A::Rt(_) | A::Gc(_) | A::Other | A::Option | A::OptionRt)
     }
 
     fn is_rest_arg(self) -> bool {
-        use ArgType::*;
-        matches!(self, SliceRt(_) | Slice(_))
+        use ArgType as A;
+        matches!(self, A::SliceRt(_) | A::Slice(_))
     }
 }
 
@@ -218,7 +218,7 @@ fn parse_fn(item: syn::Item) -> Result<Function, Error> {
             } else {
                 let args = parse_signature(sig)?;
                 check_invariants(&args, sig)?;
-                let fallible = return_type_is_result(&sig.output)?;
+                let fallible = return_type_is_result(&sig.output);
                 Ok(Function { name: sig.ident.clone(), body: item, args, fallible })
             }
         }
@@ -288,13 +288,13 @@ fn parse_signature(sig: &syn::Signature) -> Result<Vec<ArgType>, Error> {
     Ok(args)
 }
 
-fn return_type_is_result(output: &syn::ReturnType) -> Result<bool, Error> {
+fn return_type_is_result(output: &syn::ReturnType) -> bool {
     match output {
         syn::ReturnType::Type(_, ty) => match ty.as_ref() {
-            syn::Type::Path(path) => Ok(get_path_ident_name(path) == "Result"),
-            _ => Ok(false),
+            syn::Type::Path(path) => get_path_ident_name(path) == "Result",
+            _ => false,
         },
-        syn::ReturnType::Default => Ok(false),
+        syn::ReturnType::Default => false,
     }
 }
 

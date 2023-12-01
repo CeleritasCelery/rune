@@ -2,6 +2,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{punctuated::Punctuated, Token};
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     let rt = quote!(crate::core::gc::Rt);
     let vis = &orig.vis;
