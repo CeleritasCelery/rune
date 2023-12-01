@@ -29,6 +29,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@master
         with:
@@ -72,6 +74,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
       - name: Install nightly for -Zminimal-versions
@@ -100,6 +104,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
       - name: cargo generate-lockfile
@@ -116,6 +122,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
         with:

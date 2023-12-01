@@ -22,6 +22,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
       - run: |
@@ -58,6 +60,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - run: |
           echo "NIGHTLY=nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)" >> $GITHUB_ENV
       - name: Install ${{ env.NIGHTLY }}
@@ -72,6 +76,8 @@ jobs:
   loom:
     runs-on: ubuntu-latest
     steps:
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - uses: actions/checkout@v4
         with:
           submodules: true
