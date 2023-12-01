@@ -25,20 +25,20 @@ jobs:
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
       - run: |
-            # to get the symbolizer for debug symbol resolution
-            sudo apt install llvm
-            # to fix buggy leak analyzer:
-            # https://github.com/japaric/rust-san#unrealiable-leaksanitizer
-            # ensure there's a profile.dev section
-            if ! grep -qE '^[ \t]*[profile.dev]' Cargo.toml; then
-                echo >> Cargo.toml
-                echo '[profile.dev]' >> Cargo.toml
-            fi
-            # remove pre-existing opt-levels in profile.dev
-            sed -i '/^\s*\[profile.dev\]/,/^\s*\[/ {/^\s*opt-level/d}' Cargo.toml
-            # now set opt-level to 1
-            sed -i '/^\s*\[profile.dev\]/a opt-level = 1' Cargo.toml
-            cat Cargo.toml
+          # to get the symbolizer for debug symbol resolution
+          sudo apt install llvm
+          # to fix buggy leak analyzer:
+          # https://github.com/japaric/rust-san#unrealiable-leaksanitizer
+          # ensure there's a profile.dev section
+          if ! grep -qE '^[ \t]*[profile.dev]' Cargo.toml; then
+              echo >> Cargo.toml
+              echo '[profile.dev]' >> Cargo.toml
+          fi
+          # remove pre-existing opt-levels in profile.dev
+          sed -i '/^\s*\[profile.dev\]/,/^\s*\[/ {/^\s*opt-level/d}' Cargo.toml
+          # now set opt-level to 1
+          sed -i '/^\s*\[profile.dev\]/a opt-level = 1' Cargo.toml
+          cat Cargo.toml
         name: Enable debug symbols
       - name: cargo test -Zsanitizer=address
         # only --lib --tests b/c of https://github.com/rust-lang/rust/issues/53945
@@ -68,7 +68,7 @@ jobs:
       - name: cargo miri test
         run: cargo miri test
         env:
-          MIRIFLAGS: ""
+          MIRIFLAGS: "-Zmiri-strict-provenance"
   loom:
     runs-on: ubuntu-latest
     steps:
