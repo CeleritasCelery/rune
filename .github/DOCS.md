@@ -30,3 +30,10 @@ As we don't run on nightly, we don't really need to check whether nightly breaks
 [source](https://crates.io/crates/loom)
 
 Loom is great and it's backed by Tokio, but it would mean a bigger investment in making the threads we use be loom specific. Definitely something to iterate on, as we get onto Async Emacs.
+
+### codecov.io
+> Enhance Your Testing the Codecov Way: Codecov is the all-in-one code coverage reporting solution for any test suite — giving developers actionable insights to deploy reliable code with confidence.
+
+[source](https://about.codecov.io), [repo of Github Action](https://github.com/codecov/codecov-action)
+
+If we want to add a badge or have nice reports on coverage, we could investigate CodeCov. It requires a token that should be added to the secrets of the repository: `CODECOV_TOKEN`.
