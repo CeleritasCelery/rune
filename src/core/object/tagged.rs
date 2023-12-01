@@ -1265,7 +1265,7 @@ impl Object<'_> {
             Object::Vec(x) => x.display_walk(f, seen),
             Object::Record(x) => x.display_walk(f, seen),
             Object::HashTable(x) => x.display_walk(f, seen),
-            Object::String(x) => D::fmt(x, f),
+            Object::String(x) => write!(f, "\"{x}\""),
             Object::Symbol(x) => D::fmt(x, f),
             Object::ByteFn(x) => D::fmt(x, f),
             Object::SubrFn(x) => D::fmt(x, f),

@@ -50,7 +50,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
                 bail!("Not enough arguments for format string")
             };
             match val.untag() {
-                Object::String(s) => result += s.try_into().unwrap(),
+                Object::String(string) => write!(result, "{string}")?,
                 obj => write!(result, "{obj}")?,
             }
         }
