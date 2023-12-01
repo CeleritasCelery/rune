@@ -5,10 +5,10 @@ permissions:
   contents: read
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   schedule:
-    - cron:  '7 7 * * *'
+    - cron: "7 7 * * *"
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
