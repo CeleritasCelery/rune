@@ -97,10 +97,11 @@ impl GcManaged for ByteFn {
 
 impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let args = &self.args;
+        let spec = self.args.into_arg_spec();
         let code = display_slice(self.op_codes);
         let consts = display_slice(self.constants);
-        write!(f, "#[{args:?} {code} [{consts}]]")
+        let depth = self.depth;
+        write!(f, "#[{spec} {code} {consts} {depth}]")
     }
 }
 
