@@ -50,7 +50,7 @@ jobs:
         with:
           submodules: true
       - name: Install the pango library
-        run: sudo apt-get -y install libpango1.0-dev libgdk3.0-dev
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@master
         with:
