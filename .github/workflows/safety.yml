@@ -3,7 +3,6 @@
 # - miri - detects undefined behavior and memory leaks
 # - address santizer - detects memory errors
 # - leak sanitizer - detects memory leaks
-# - loom - Permutation testing for concurrent code https://crates.io/crates/loom
 # See check.yml for information about how the concurrency cancelation and workflow triggering works
 permissions:
   contents: read
@@ -73,18 +72,3 @@ jobs:
         run: cargo miri test
         env:
           MIRIFLAGS: "-Zmiri-strict-provenance"
-  loom:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Install stable
-        uses: dtolnay/rust-toolchain@stable
-      - name: cargo test --test loom
-        run: cargo test --release --test loom
-        env:
-          LOOM_MAX_PREEMPTIONS: 2
-          RUSTFLAGS: "--cfg loom"

@@ -23,3 +23,10 @@ As we don't currently have any meaningful feature gates.
 [source](https://github.com/jonhoo/rust-ci-conf/blob/main/.github/workflows/scheduled.yml#L1)
 
 As we don't run on nightly, we don't really need to check whether nightly breaks our builds. A potential argument for adding this could be that we are running nightly for the CI, and we could break the CI from nightly builds. I propose revisiting adding the `scheduled.yml` linked above if that's the case.
+
+### loom
+> Loom is a testing tool for concurrent Rust code. It runs a test many times, permuting the possible concurrent executions of that test under the C11 memory model. It uses state reduction techniques to avoid combinatorial explosion.
+
+[source](https://crates.io/crates/loom)
+
+Loom is great and it's backed by Tokio, but it would mean a bigger investment in making the threads we use be loom specific. Definitely something to iterate on, as we get onto Async Emacs.
