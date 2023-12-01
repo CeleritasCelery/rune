@@ -1,4 +1,4 @@
-# This is the main CI workflow that runs the test suite on all pushes to main and all pull requests.
+# This is the main CI workflow that runs the test suite on all pushes to `master` and all pull requests.
 # It runs the following jobs:
 # - required: runs the test suite on ubuntu with stable and beta rust toolchains
 # - minimal: runs the test suite with the minimal versions of the dependencies that satisfy the
@@ -57,8 +57,8 @@ jobs:
     # dependencies. Alternatively, you can add a line in your Cargo.toml to artificially increase
     # the minimal dependency, which you do with e.g.:
     # ```toml
-    # # for minimal-versions  
-    # [target.'cfg(any())'.dependencies]  
+    # # for minimal-versions
+    # [target.'cfg(any())'.dependencies]
     # openssl = { version = "0.10.55", optional = true } # needed to allow foo to build with -Zminimal-versions
     # ```
     # The optional = true is necessary in case that dependency isn't otherwise transitively required
