@@ -24,17 +24,17 @@ enum StrType {
 }
 
 impl LispString {
-    pub(crate) fn get_char_at(&self, idx: usize) -> Option<char> {
+    pub(crate) fn get_char_at(&self, idx: usize) -> Option<u32> {
         match &self.string {
-            StrType::String(s) => s.chars().nth(idx),
-            StrType::BString(s) => s.chars().nth(idx),
+            StrType::String(s) => s.chars().nth(idx).map(|c| c.into()),
+            StrType::BString(s) => s.iter().nth(idx).map(|b| (*b).into()),
         }
     }
 
     pub(crate) fn len(&self) -> usize {
         match &self.string {
             StrType::String(s) => s.chars().count(),
-            StrType::BString(s) => s.chars().count(),
+            StrType::BString(s) => s.len(),
         }
     }
 

@@ -248,10 +248,6 @@ impl ObjectMap {
     }
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: Gc<Function>) -> Result<()> {
-        // to actually run with byte-code functions, comment out this
-        if matches!(func.untag(), Function::ByteFn(_)) {
-            return Ok(());
-        }
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]

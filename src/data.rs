@@ -355,7 +355,7 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
             }
         },
         Object::String(string) => match string.get_char_at(idx) {
-            Some(x) => Ok((x as i64).into()),
+            Some(x) => Ok((i64::from(x)).into()),
             None => {
                 let len = string.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
