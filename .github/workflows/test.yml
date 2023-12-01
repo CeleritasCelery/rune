@@ -104,8 +104,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
       - name: cargo generate-lockfile
