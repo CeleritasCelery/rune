@@ -51,9 +51,9 @@ default = []
 debug_bytecode = []
 
 [build-dependencies]
-syn = "2.0" 
-quote = "1.0"
-proc-macro2 = "1.0"
+syn = "2.0.15"
+quote = "1.0.26"
+proc-macro2 = "1.0.60"
 
 [workspace.lints.rust]
 macro_use_extern_crate = "deny"

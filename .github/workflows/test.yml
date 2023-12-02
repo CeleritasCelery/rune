@@ -65,8 +65,6 @@ jobs:
     # Cargo build order. See also
     # https://github.com/jonhoo/fantoccini/blob/fde336472b712bc7ebf5b4e772023a7ba71b2262/Cargo.toml#L47-L49.
     # This action is run on ubuntu with the stable toolchain, as it is not expected to fail
-    # disable this job until we can fix it.
-    if: false
     runs-on: ubuntu-latest
     name: ubuntu / stable / minimal-versions
     steps:
@@ -77,14 +75,14 @@ jobs:
         run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Install nightly for -Zminimal-versions
+      - name: Install nightly for -Zdirected-minimal-versions
         uses: dtolnay/rust-toolchain@nightly
       - name: rustup default stable
         run: rustup default stable
-      - name: cargo update -Zminimal-versions
-        run: cargo +nightly update -Zminimal-versions
-      - name: cargo test
-        run: cargo test --workspace --locked --all-features
+      - uses: taiki-e/install-action@cargo-hack
+      - uses: taiki-e/install-action@cargo-minimal-versions
+      - name: Check directed-minimal-versions
+        run: cargo minimal-versions check --direct
   os-check:
     # run cargo test on mac and windows
     runs-on: ${{ matrix.os }}
