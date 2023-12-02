@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::io::Write as _;
+use std::path::MAIN_SEPARATOR;
 use std::{
     fs::{self, File},
     path::Path,
@@ -86,9 +87,8 @@ fn main() {
                 };
                 // convert the path name to a hierarchy name with slashes replaced with colons
                 let struct_name = {
-                    let path_name = path.to_str().unwrap();
-                    let basename = path_name.strip_prefix("src/").unwrap().strip_suffix(".rs");
-                    let import_path = basename.unwrap().replace('/', ":");
+                    let basename = path.strip_prefix("src/").unwrap().file_stem().unwrap();
+                    let import_path = basename.to_str().unwrap().replace(MAIN_SEPARATOR, ":");
                     format!("crate::{import_path}::__subr_{name}")
                 };
                 all_defun.push((struct_name, name.to_string(), lisp_name));
