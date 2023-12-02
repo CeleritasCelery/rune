@@ -15,7 +15,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
             match generic {
                 syn::GenericParam::Lifetime(_) => {
                     let lt = syn::Lifetime::new("'static", proc_macro2::Span::call_site());
-                    params.push(syn::GenericParam::Lifetime(syn::LifetimeDef::new(lt)));
+                    params.push(syn::GenericParam::Lifetime(syn::LifetimeParam::new(lt)));
                 }
                 x => params.push(x.clone()),
             }
@@ -124,8 +124,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
 
 fn no_trace(attrs: &[syn::Attribute]) -> bool {
     for attr in attrs {
-        if let Ok(syn::Meta::Path(meta)) = attr.parse_meta() {
-            if meta.is_ident("no_trace") {
+        if let syn::Meta::Path(path) = &attr.meta {
+            if path.is_ident("no_trace") {
                 return true;
             }
         }
@@ -141,6 +141,17 @@ mod test {
     fn test_expand() {
         let stream = quote!(
             struct LispStack(Vec<GcObj<'static>>);
+        );
+        let input: syn::DeriveInput = syn::parse2(stream).unwrap();
+        let result = expand(&input);
+        println!("{result}");
+
+        let stream = quote!(
+            struct Foo{
+                a: A,
+                #[no_trace]
+                b: B,
+            }
         );
         let input: syn::DeriveInput = syn::parse2(stream).unwrap();
         let result = expand(&input);

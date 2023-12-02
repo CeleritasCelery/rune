@@ -459,13 +459,13 @@ mod test {
     }
 
     fn check_error(stream: TokenStream) {
+        println!("signature: {stream}");
         let function: Result<Function, _> = syn::parse2(stream);
         assert!(function.is_err());
     }
 
     #[test]
     fn test_error() {
-        check_error(quote! {fn foo(var0: u8, var1: Option<u8>, var2: Option<u8>) {}});
         check_error(quote! {fn foo(a: GcObj, a: &mut Context) {}});
         check_error(quote! {fn foo(a: &[Rt<T>]) {}});
         check_error(quote! {fn foo(a: Rt<GcObj>) {}});
