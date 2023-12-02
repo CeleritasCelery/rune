@@ -45,3 +45,16 @@ matrix:
 ```
 
 As of today, we don't support Windows, or at least the tests are failing. We can iterate on this and if we feel Windows should be supported in the near feature, we can add `windows-latest` to run CI on it.
+
+### Doctests on --bin crates
+
+As suggested by [issue](https://github.com/rust-lang/rust/issues/50784), doctests won't currently run on Binary creates. I don't see anything particularly wrong with running doctests on binary crates. Some of the argumenst include that "Why would a binary be documented?". Documentation is not only useful for consumers of the library, but rather also internal developers that are maintaining it, looking for better understanding of the binary crate. It's key that developers onboarding into the project have the material to have a swift ramp-up process, to move the project forward. 
+
+Once the issue above is stabilized, we can add the following to the test.yml fire:
+
+```yaml
+# https://github.com/rust-lang/cargo/issues/6669
+- name: cargo test --doc
+  run: cargo test --locked --all-features --doc
+```
+
