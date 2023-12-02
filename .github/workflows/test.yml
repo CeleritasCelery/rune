@@ -90,7 +90,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest] # REVIEW: We could add windows-latest here.
+        os: [macos-latest, windows-latest]
     steps:
       # if your project needs OpenSSL, uncommment this to fix Windows builds.
       # it's commented out by default as tthe install command takes 5-10m.
