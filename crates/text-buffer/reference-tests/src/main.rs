@@ -37,7 +37,7 @@ fn main() -> Result<(), usize> {
                 return Ok(());
             } else if i == step - 1 {
                 debug_txn = format!("{txn:?}");
-                debug_buffer = format!("{}", buffer.to_string());
+                debug_buffer = format!("{buffer}");
                 debug_internals = format!("{buffer:?}");
             }
         }
@@ -64,7 +64,7 @@ mod test {
         let path = format!("{}/crdt-testdata/data/{}.json.gz", env!("CARGO_MANIFEST_DIR"), name);
         let test_data = crdt_testdata::load_testing_data(&path);
         let mut buffer = Buffer::from(test_data.start_content.as_str());
-        for txn in test_data.txns.iter() {
+        for txn in &test_data.txns {
             for TestPatch(pos, del, ins) in &txn.patches {
                 buffer.set_cursor(*pos);
                 buffer.delete_forwards(*del);

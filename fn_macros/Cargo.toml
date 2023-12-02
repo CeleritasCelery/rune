@@ -2,17 +2,17 @@
 name = "fn_macros"
 version = "0.1.0"
 description = "Procedural macro used to generate definitions for lisp functions."
-edition = "2021"
+edition.workspace = true
 
 [lib]
 path = "lib.rs"
 proc-macro = true
 
 [dependencies]
-quote = "1.0.23"
-darling = "0.14.2"
-syn = { version = "1.0.107"}
-proc-macro2 = "1.0.49"
+quote = "1.0"
+darling = "0.20"
+syn = { version = "2.0", features = ["full"]}
+proc-macro2 = "1.0"
 
 [lints]
 workspace = true
