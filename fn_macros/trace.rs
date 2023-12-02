@@ -147,7 +147,7 @@ mod test {
         println!("{result}");
 
         let stream = quote!(
-            struct Foo{
+            struct Foo {
                 a: A,
                 #[no_trace]
                 b: B,

@@ -1,7 +1,7 @@
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(miri)))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
