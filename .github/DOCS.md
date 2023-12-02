@@ -37,3 +37,11 @@ Loom is great and it's backed by Tokio, but it would mean a bigger investment in
 [source](https://about.codecov.io), [repo of Github Action](https://github.com/codecov/codecov-action)
 
 If we want to add a badge or have nice reports on coverage, we could investigate CodeCov. It requires a token that should be added to the secrets of the repository: `CODECOV_TOKEN`.
+
+### Windows tests
+```yaml
+matrix:
+    os: [macos-latest] # REVIEW: We could add windows-latest here.
+```
+
+As of today, we don't support Windows, or at least the tests are failing. We can iterate on this and if we feel Windows should be supported in the near feature, we can add `windows-latest` to run CI on it.
