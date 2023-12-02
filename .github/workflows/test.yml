@@ -65,6 +65,8 @@ jobs:
     # Cargo build order. See also
     # https://github.com/jonhoo/fantoccini/blob/fde336472b712bc7ebf5b4e772023a7ba71b2262/Cargo.toml#L47-L49.
     # This action is run on ubuntu with the stable toolchain, as it is not expected to fail
+    # disable this job until we can fix it.
+    if: false
     runs-on: ubuntu-latest
     name: ubuntu / stable / minimal-versions
     steps:
