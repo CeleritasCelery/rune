@@ -8,7 +8,7 @@ use super::{
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt};
 use anyhow::{bail, ensure, Result};
-use fn_macros::Trace;
+use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
 /// A function implemented in lisp. Note that all functions are byte compiled,

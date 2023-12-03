@@ -12,7 +12,7 @@ use crate::{root, rooted_iter};
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 pub(crate) fn apply<'ob>(

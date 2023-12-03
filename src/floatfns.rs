@@ -5,7 +5,7 @@ use crate::{
         object::{Gc, Number},
     },
 };
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn floor(arg: Gc<Number>, divisor: Option<Gc<Number>>) -> i64 {

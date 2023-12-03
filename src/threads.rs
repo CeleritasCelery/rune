@@ -6,7 +6,7 @@ use crate::{
     },
     root,
 };
-use fn_macros::defun;
+use rune_macros::defun;
 use std::thread::{self, JoinHandle};
 
 #[defun]

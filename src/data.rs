@@ -7,7 +7,7 @@ use crate::core::{
 };
 use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
-use fn_macros::defun;
+use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 

@@ -1,5 +1,5 @@
 use crate::core::object::GcObj;
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn error_message_string(obj: GcObj) -> String {

@@ -8,7 +8,7 @@ use crate::{
     hashmap::HashMap,
 };
 use anyhow::{bail, Result};
-use fn_macros::defun;
+use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 

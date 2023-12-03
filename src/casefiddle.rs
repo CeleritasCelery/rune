@@ -1,4 +1,4 @@
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn capitalize(s: &str) -> String {

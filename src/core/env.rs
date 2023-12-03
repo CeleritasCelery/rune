@@ -3,7 +3,7 @@ use super::gc::{Block, Context, Rt};
 use super::object::{CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, WithLifetime};
 use crate::hashmap::HashMap;
 use anyhow::{anyhow, Result};
-use fn_macros::Trace;
+use rune_macros::Trace;
 use std::sync::Mutex;
 
 mod symbol;

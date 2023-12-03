@@ -16,7 +16,7 @@ use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn identity(arg: GcObj) -> GcObj {

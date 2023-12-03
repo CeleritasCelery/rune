@@ -1,4 +1,4 @@
 /target
 /stash
-/fn_macros/target/
+/crates/**/target/
 Cargo.lock
