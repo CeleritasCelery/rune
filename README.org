@@ -30,7 +30,8 @@ Run the test suite with MIRI
 MIRIFLAGS=-Zmiri-strict-provenance cargo +nightly miri test
 #+end_src
 ** Exploring this repo
-This project contains one library of derived macros in ~fn_macros/~. This defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
+The project is defined by a main package =rune=, which depends on the crates included in the =crates= directory. One of those is the =rune-macros= crate, which defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.
+
 - [[file:src/core/object/][objects]] :: The basic objects used in the interpreter. These are modeled after Emacs objects using tagged pointers with inline fixnums. Conversion between different primitives and object types is also found here.
 - [[file:src/reader.rs][reader]] :: The emacs lisp reader that translates a string to a cons cell. Due to the simple nature of lisp syntax, the reader is hand rolled and does not rely on any parsing libraries.
 - [[file:src/core/env.rs][env]] :: The global obarray. Currently, function bindings are global and immutable and value bindings are thread-local and mutable. When the ability is added to share data between threads, this will enable new threads to safely run functions without the need to copy them.
@@ -42,7 +43,7 @@ This project contains one library of derived macros in ~fn_macros/~. This define
 ** Contributing
 This project is moved forward by trying to load new elisp files and seeing what breaks. The best way to do that is with ~cargo run~, which will load the currently bootstrapped files. The bootstrapped files are located in [[file:src/main.rs][main.rs]] as part of the ~load~ function.
 
-Usually what is needed is to implement more primitive functions. This is done with the [[file:fn_macros/lib.rs][defun]] macro. For example, if we wanted to implement the  ~substring~ function, we would first look at the lisp signature.
+Usually what is needed is to implement more primitive functions. This is done with the [[file:rune-macros/lib.rs][defun]] macro. For example, if we wanted to implement the  ~substring~ function, we would first look at the lisp signature.
 
 #+begin_src lisp
 (substring STRING &optional FROM TO)

@@ -6,7 +6,7 @@ use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, W
 use crate::root;
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
-use fn_macros::{defun, Trace};
+use rune_macros::{defun, Trace};
 use std::ops::{DerefMut, Index, IndexMut, RangeTo};
 
 mod opcode;

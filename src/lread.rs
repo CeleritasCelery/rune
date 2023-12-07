@@ -8,7 +8,7 @@ use crate::reader;
 use crate::{interpreter, root};
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
-use fn_macros::defun;
+use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
 

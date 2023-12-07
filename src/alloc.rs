@@ -4,7 +4,7 @@ use crate::core::object::{
     nil, ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder,
 };
 use anyhow::{ensure, Result};
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> {

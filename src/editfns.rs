@@ -4,7 +4,7 @@ use crate::core::{
     object::{GcObj, Object},
 };
 use anyhow::{bail, ensure, Result};
-use fn_macros::defun;
+use rune_macros::defun;
 use std::{fmt::Write as _, io::Write};
 
 #[defun]

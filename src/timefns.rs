@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use fn_macros::defun;
+use rune_macros::defun;
 
 use crate::core::{
     env::{sym, Env},

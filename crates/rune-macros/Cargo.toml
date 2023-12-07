@@ -1,5 +1,5 @@
 [package]
-name = "fn_macros"
+name = "rune-macros"
 version = "0.1.0"
 description = "Procedural macro used to generate definitions for lisp functions."
 edition.workspace = true
@@ -9,9 +9,9 @@ path = "lib.rs"
 proc-macro = true
 
 [dependencies]
-quote = "1.0.26"
-darling = "0.20"
-syn = { version = "2.0.15", features = ["full"]}
+quote = { workspace = true}
+syn = { workspace = true }
+darling = "0.20.3"
 proc-macro2 = "1.0.60"
 
 [lints]

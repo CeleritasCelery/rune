@@ -1,6 +1,6 @@
 use crate::core::object::{Gc, IntoObject, Number, Object};
 use float_cmp::ApproxEq;
-use fn_macros::defun;
+use rune_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 

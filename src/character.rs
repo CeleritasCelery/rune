@@ -3,7 +3,7 @@ use crate::core::{
     object::{int_to_char, Gc, GcObj, IntoObject, LispString, Object},
 };
 use anyhow::Result;
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn unibyte_string(bytes: &[Gc<i64>]) -> Result<Vec<u8>> {

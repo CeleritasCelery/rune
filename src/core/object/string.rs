@@ -2,7 +2,7 @@ use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcManaged, GcMark};
 use anyhow::Result;
 use bstr::{BStr, BString, ByteSlice};
-use fn_macros::Trace;
+use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
     ops::Deref,

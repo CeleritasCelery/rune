@@ -11,7 +11,7 @@ use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use fn_macros::defun;
+use rune_macros::defun;
 
 struct Interpreter<'brw> {
     vars: &'brw mut Rt<Vec<&'static Cons>>,

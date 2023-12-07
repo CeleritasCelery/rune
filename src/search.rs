@@ -6,7 +6,7 @@ use crate::core::{
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fancy_regex::Regex;
-use fn_macros::defun;
+use rune_macros::defun;
 
 #[defun]
 fn string_match<'ob>(

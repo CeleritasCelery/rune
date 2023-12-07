@@ -5,7 +5,7 @@ use crate::core::{
     object::{Gc, Number, Object},
 };
 use anyhow::Result;
-use fn_macros::defun;
+use rune_macros::defun;
 use std::path::Path;
 
 defvar!(FILE_NAME_HANDLER_ALIST);
