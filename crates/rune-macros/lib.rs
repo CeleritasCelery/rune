@@ -29,7 +29,7 @@ mod trace;
 ///
 /// Its corresponding `rune` `#[defun]` signature would be:
 ///
-/// ```no_run
+/// ```ignore
 /// #[defun]
 /// fn make_vector(length: usize, init: GcObj) -> Vec<GcObj> {}
 /// ```
