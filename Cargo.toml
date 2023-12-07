@@ -31,18 +31,18 @@ memoffset = "0.9.0"
 num_enum = "0.7.1"
 paste = "1.0.12"
 rand = "0.8.5"
+rune-macros = { version = "0.1.0", path = "crates/rune-macros" }
 sptr = "0.3.2"
 streaming-iterator = "0.1.9"
+text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 titlecase = "2.2.1"
 fallible-iterator = "0.3.0"
 fallible-streaming-iterator = "0.1.9"
 indexmap = "2.1.0"
 fxhash = "0.2.1"
+
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"
-
-text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
-rune-macros = { version = "0.1.0", path = "crates/rune-macros" }
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"
