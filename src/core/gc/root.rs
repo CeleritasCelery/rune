@@ -130,12 +130,42 @@ macro_rules! root {
     };
 }
 
+/// Trait created to overpass the orphan rule when deriving the
+/// [Trace](`rune_macros::Trace`) derive macro. The derive
+/// macro contains a blanket `Deref` (and `DerefMut`) like this:
+///
+/// ```ignore
+/// unsafe { &*(rt as *const Rt<Self>).cast::<Self::Target>() }
+/// ```
+///
+/// By creating a trait that the functions defined in the main crate
+/// can define, we avoid the orphan rule by implementing `Deref`
+/// on the rooted version of the types: [Rt\<T\>](`self::Rt`).
+pub trait RootedDeref {
+    type Target;
+    fn rooted_deref(rooted: &Rt<Self>) -> &Self::Target;
+    fn rooted_derefmut(rooted: &mut Rt<Self>) -> &mut Self::Target;
+}
+
+impl<T: RootedDeref> Deref for Rt<T> {
+    type Target = <T as RootedDeref>::Target;
+    fn deref(&self) -> &Self::Target {
+        RootedDeref::rooted_deref(self)
+    }
+}
+
+impl<T: RootedDeref> DerefMut for Rt<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        RootedDeref::rooted_derefmut(self)
+    }
+}
+
 /// A Rooted type. If a type is wrapped in Rt, it is known to be rooted and hold
 /// items past garbage collection. This type is never used as an owned type,
 /// only a reference. This ensures that underlying data does not move. In order
 /// to access the inner data, the [`Rt::bind`] method must be used.
 #[repr(transparent)]
-pub(crate) struct Rt<T: ?Sized> {
+pub struct Rt<T: ?Sized> {
     _aliasable: PhantomPinned,
     inner: T,
 }

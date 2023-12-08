@@ -107,16 +107,14 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     quote! {
         #derive
 
-        impl std::ops::Deref for #rt<#orig_name #static_generics> {
+        impl crate::core::gc::RootedDeref for #orig_name #static_generics {
             type Target = #rooted_name #static_generics;
-            fn deref(&self) -> &Self::Target {
-                unsafe { &*(self as *const Self).cast::<Self::Target>() }
-            }
-        }
 
-        impl std::ops::DerefMut for #rt<#orig_name #static_generics> {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
+            fn rooted_deref(rooted: &crate::core::gc::Rt<Self>) -> &Self::Target {
+                unsafe { &*(rooted as *const crate::core::gc::Rt<Self>).cast::<Self::Target>() }            }
+
+            fn rooted_derefmut(rooted: &mut crate::core::gc::Rt<Self>) -> &mut Self::Target {
+                unsafe { &mut *(rooted as *mut crate::core::gc::Rt<Self>).cast::<Self::Target>() }
             }
         }
     }
