@@ -444,16 +444,13 @@ impl<T, U> DerefMut for Rt<(T, U)> {
     }
 }
 
+// Can't implement [`DerefMut`] because it would allow you to call
+// [`Option::take`] which would return an owned Rt and break the chain of
+// traceability
 impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
     fn deref(&self) -> &Self::Target {
         unsafe { &*(self as *const Self).cast::<Self::Target>() }
-    }
-}
-
-impl<T> DerefMut for Rt<Option<T>> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
     }
 }
 
