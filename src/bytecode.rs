@@ -1,7 +1,7 @@
 //! The main bytecode interpeter.
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
-use crate::core::gc::{Context, Rt, Trace};
+use crate::core::gc::{Context, Rt};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
 use crate::root;
 use anyhow::{bail, Result};
@@ -92,50 +92,48 @@ impl<'brw> CallFrame<'brw> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[repr(transparent)]
-struct LispStack(Vec<GcObj<'static>>);
+struct LispStack(Rt<Vec<GcObj<'static>>>);
 
-impl std::ops::Deref for Rt<LispStack> {
+impl std::ops::Deref for LispStack {
     type Target = Rt<Vec<GcObj<'static>>>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+        &self.0
     }
 }
 
-impl DerefMut for Rt<LispStack> {
+impl DerefMut for LispStack {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self as *mut Self).cast::<Self::Target>() }
+        &mut self.0
     }
 }
 
 // To make this simpler we implement indexing from the top of the stack (end of
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
-impl Index<usize> for Rt<LispStack> {
+impl Index<usize> for LispStack {
     type Output = Rt<GcObj<'static>>;
 
     fn index(&self, index: usize) -> &Self::Output {
         let index = self.offset_end(index);
-        let vec: &[Rt<GcObj>] = self;
-        &vec[index]
+        &self.0[index]
     }
 }
 
 // This impl is specifically for the Stack. It takes the index from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl IndexMut<usize> for Rt<LispStack> {
+impl IndexMut<usize> for LispStack {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let index = self.offset_end(index);
-        let vec = unsafe { &mut *(self as *mut Self).cast::<Vec<Rt<GcObj>>>() };
-        &mut vec[index]
+        &mut self.0[index]
     }
 }
 
 // This impl is specifically for the Stack. It takes the range from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl Index<RangeTo<usize>> for Rt<LispStack> {
+impl Index<RangeTo<usize>> for LispStack {
     type Output = [Rt<GcObj<'static>>];
 
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
@@ -147,18 +145,13 @@ impl Index<RangeTo<usize>> for Rt<LispStack> {
 }
 
 impl LispStack {
-    fn from_root<'brw>(value: &'brw mut Rt<Vec<GcObj>>) -> &'brw mut Rt<LispStack> {
-        unsafe { &mut *((value as *mut Rt<Vec<GcObj>>).cast::<Rt<LispStack>>()) }
+    fn from_root<'a>(value: &'a mut Rt<Vec<GcObj>>) -> &'a mut Self {
+        // SAFETY: LispStack is repr(transparent) over Rt<Vec<GcObj>>
+        unsafe { &mut *((value as *mut Rt<Vec<GcObj>>).cast::<LispStack>()) }
     }
 }
 
-impl Trace for LispStack {
-    fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
-        self.0.trace(stack);
-    }
-}
-
-impl Rt<LispStack> {
+impl LispStack {
     fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
         self.bind_mut(cx).pop().unwrap()
     }
@@ -168,7 +161,7 @@ impl Rt<LispStack> {
     }
 }
 
-impl Rt<LispStack> {
+impl LispStack {
     fn offset_end(&self, i: usize) -> usize {
         debug_assert!(i < self.len());
         self.len() - (i + 1)
@@ -216,7 +209,7 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// An execution routine. This holds all the state of the current interpreter,
 /// and could be used to support coroutines.
 struct Routine<'brw> {
-    stack: &'brw mut Rt<LispStack>,
+    stack: &'brw mut LispStack,
     /// Previous call frames
     call_frames: Vec<CallFrame<'brw>>,
     /// The current call frame.
