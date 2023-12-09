@@ -10,7 +10,8 @@ edition = "2021"
 members = [
   "crates/text-buffer",
   "crates/rune-macros",
-  "crates/rune-core"
+  "crates/rune-core",
+  "xtask",
 ]
 
 [workspace.package]
