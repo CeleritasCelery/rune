@@ -56,8 +56,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                         let syn::Field { vis, ty, attrs, .. } = &x;
                         let idx = syn::Index::from(i);
                         test_fields.extend(quote! {
-                            assert_eq!(memoffset::offset_of_tuple!(super::#orig_name, #idx),
-                                       memoffset::offset_of_tuple!(super::#rooted_name, #idx));
+                            assert_eq!(memoffset::offset_of!(super::#orig_name, #idx),
+                                       memoffset::offset_of!(super::#rooted_name, #idx));
                         });
                         if no_trace(attrs) {
                             new_fields.extend(quote! {#vis #ty,});
