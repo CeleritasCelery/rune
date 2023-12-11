@@ -23,7 +23,8 @@ pub(crate) struct Env {
     pub(crate) current_buffer: Option<OpenBuffer<'static>>,
 }
 
-impl Rt<Env> {
+// RootedEnv created by #[derive(Trace)]
+impl RootedEnv {
     pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))

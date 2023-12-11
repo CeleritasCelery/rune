@@ -7,7 +7,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     let rt = quote!(crate::core::gc::Rt);
     let vis = &orig.vis;
     let orig_name = &orig.ident;
-    let rooted_name = format_ident!("__Rooted_{orig_name}");
+    let rooted_name = format_ident!("Rooted{orig_name}");
     let orig_generics = &orig.generics;
     let static_generics = {
         let mut params: Punctuated<_, Token![,]> = Punctuated::new();

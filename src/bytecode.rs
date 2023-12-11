@@ -7,7 +7,7 @@ use crate::root;
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use rune_macros::{defun, Trace};
-use std::ops::{DerefMut, Index, IndexMut, RangeTo};
+use std::ops::{Index, IndexMut, RangeTo};
 
 mod opcode;
 
@@ -92,11 +92,12 @@ impl<'brw> CallFrame<'brw> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Trace)]
 #[repr(transparent)]
-struct LispStack(Rt<Vec<GcObj<'static>>>);
+struct LispStack(Vec<GcObj<'static>>);
 
-impl std::ops::Deref for LispStack {
+// RootedLispStack is created by #[derive(Trace)]
+impl std::ops::Deref for RootedLispStack {
     type Target = Rt<Vec<GcObj<'static>>>;
 
     fn deref(&self) -> &Self::Target {
@@ -104,7 +105,7 @@ impl std::ops::Deref for LispStack {
     }
 }
 
-impl DerefMut for LispStack {
+impl std::ops::DerefMut for RootedLispStack {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -113,7 +114,7 @@ impl DerefMut for LispStack {
 // To make this simpler we implement indexing from the top of the stack (end of
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
-impl Index<usize> for LispStack {
+impl Index<usize> for RootedLispStack {
     type Output = Rt<GcObj<'static>>;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -124,7 +125,7 @@ impl Index<usize> for LispStack {
 
 // This impl is specifically for the Stack. It takes the index from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl IndexMut<usize> for LispStack {
+impl IndexMut<usize> for RootedLispStack {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let index = self.offset_end(index);
         &mut self.0[index]
@@ -133,7 +134,7 @@ impl IndexMut<usize> for LispStack {
 
 // This impl is specifically for the Stack. It takes the range from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl Index<RangeTo<usize>> for LispStack {
+impl Index<RangeTo<usize>> for RootedLispStack {
     type Output = [Rt<GcObj<'static>>];
 
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
@@ -145,13 +146,13 @@ impl Index<RangeTo<usize>> for LispStack {
 }
 
 impl LispStack {
-    fn from_root<'a>(value: &'a mut Rt<Vec<GcObj>>) -> &'a mut Self {
-        // SAFETY: LispStack is repr(transparent) over Rt<Vec<GcObj>>
-        unsafe { &mut *((value as *mut Rt<Vec<GcObj>>).cast::<LispStack>()) }
+    fn from_root<'a>(value: &'a mut Rt<Vec<GcObj>>) -> &'a mut Rt<Self> {
+        // SAFETY: LispStack is repr(transparent) over Vec<GcObj>
+        unsafe { &mut *((value as *mut Rt<Vec<GcObj>>).cast::<Rt<LispStack>>()) }
     }
 }
 
-impl LispStack {
+impl RootedLispStack {
     fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
         self.bind_mut(cx).pop().unwrap()
     }
@@ -159,9 +160,7 @@ impl LispStack {
     fn top(&mut self) -> &mut Rt<GcObj<'static>> {
         self.last_mut().unwrap()
     }
-}
 
-impl LispStack {
     fn offset_end(&self, i: usize) -> usize {
         debug_assert!(i < self.len());
         self.len() - (i + 1)
@@ -209,7 +208,7 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// An execution routine. This holds all the state of the current interpreter,
 /// and could be used to support coroutines.
 struct Routine<'brw> {
-    stack: &'brw mut LispStack,
+    stack: &'brw mut Rt<LispStack>,
     /// Previous call frames
     call_frames: Vec<CallFrame<'brw>>,
     /// The current call frame.
