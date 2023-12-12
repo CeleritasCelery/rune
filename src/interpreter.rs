@@ -234,7 +234,7 @@ impl Interpreter<'_> {
         let Some(sym) = c.elements().nth(1) else { return Ok(()) };
         match sym?.untag() {
             Object::Symbol(s) if s != sym::NIL => {
-                let doc = cx.add(s.get().name());
+                let doc = cx.add(s.name());
                 Ok(doc_str.set_car(doc)?)
             }
             _ => Ok(()),

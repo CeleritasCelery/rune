@@ -115,10 +115,10 @@ impl RootedEnv {
         func: impl Fn(&OpenBuffer) -> T,
     ) -> Option<T> {
         match (&self.current_buffer, buffer) {
+            (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
             (Some(current), Some(buffer)) if current == buffer => {
                 Some(func(self.current_buffer.as_ref().unwrap()))
             }
-            (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
             (_, Some(buffer)) => {
                 if let Ok(buffer) = buffer.lock().as_mut() {
                     Some(func(buffer))

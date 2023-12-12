@@ -9,7 +9,7 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) struct EvalError {
-    backtrace: Vec<String>,
+    backtrace: Vec<Box<str>>,
     pub(crate) error: ErrorType,
 }
 
@@ -55,12 +55,13 @@ impl EvalError {
 
     pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
         let display = display_slice(args);
-        Self { backtrace: vec![format!("{name} {display}")], error: ErrorType::Err(error) }
+        let trace = format!("{name} {display}").into_boxed_str();
+        Self { backtrace: vec![trace], error: ErrorType::Err(error) }
     }
 
     pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
         let display = display_slice(args);
-        self.backtrace.push(format!("{name} {display}"));
+        self.backtrace.push(format!("{name} {display}").into_boxed_str());
         self
     }
 
