@@ -8,21 +8,24 @@ use crate::core::{
 };
 
 #[derive(Debug, Default, Trace)]
-#[repr(transparent)]
-pub(crate) struct LispStack(Vec<GcObj<'static>>);
+pub(crate) struct LispStack {
+    vec: Vec<GcObj<'static>>,
+    #[no_trace]
+    pub(crate) frame_starts: Vec<usize>,
+}
 
 // RootedLispStack is created by #[derive(Trace)]
 impl std::ops::Deref for RootedLispStack {
     type Target = Rt<Vec<GcObj<'static>>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.vec
     }
 }
 
 impl std::ops::DerefMut for RootedLispStack {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.vec
     }
 }
 
@@ -34,7 +37,7 @@ impl Index<usize> for RootedLispStack {
 
     fn index(&self, index: usize) -> &Self::Output {
         let index = self.offset_end(index);
-        &self.0[index]
+        &self.vec[index]
     }
 }
 
@@ -43,7 +46,7 @@ impl Index<usize> for RootedLispStack {
 impl IndexMut<usize> for RootedLispStack {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let index = self.offset_end(index);
-        &mut self.0[index]
+        &mut self.vec[index]
     }
 }
 
@@ -61,6 +64,17 @@ impl Index<RangeTo<usize>> for RootedLispStack {
 }
 
 impl RootedLispStack {
+    pub(crate) fn push_frame(&mut self, start: usize) {
+        assert!(start <= self.len());
+        assert!(self.frame_starts.iter().all(|&s| s <= start));
+        self.frame_starts.push(start);
+    }
+
+    pub(crate) fn pop_frame(&mut self) {
+        let len = self.frame_starts.pop().unwrap();
+        self.vec.truncate(len);
+    }
+
     pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
         self.bind_mut(cx).pop().unwrap()
     }
@@ -71,7 +85,9 @@ impl RootedLispStack {
 
     pub(crate) fn offset_end(&self, i: usize) -> usize {
         assert!(i < self.len());
-        self.len() - (i + 1)
+        let from_end = self.len() - (i + 1);
+        assert!(*self.frame_starts.last().unwrap() <= from_end);
+        from_end
     }
 
     pub(crate) fn push_ref(&mut self, i: impl Into<i32>, cx: &Context) {

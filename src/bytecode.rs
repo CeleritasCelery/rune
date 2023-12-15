@@ -628,17 +628,14 @@ impl<'brw, 'ob> VM<'brw> {
                     }
                 }
                 op::Return => {
+                    let Some(frame) = self.call_frames.pop() else {
+                        return Ok(env.stack.pop(cx));
+                    };
                     let start = self.frame.start;
-                    if let Some(frame) = self.call_frames.pop() {
-                        self.frame = frame;
-                        let var = env.stack.pop(cx);
-                        env.stack.truncate(start + 1);
-                        env.stack.top().set(var);
-                    } else {
-                        let var = env.stack.pop(cx);
-                        env.stack.truncate(start);
-                        return Ok(var);
-                    }
+                    let var = env.stack.pop(cx);
+                    env.stack.truncate(start + 1);
+                    env.stack.top().set(var);
+                    self.frame = frame;
                 }
                 op::Discard => {
                     env.stack.pop(cx);
@@ -940,8 +937,10 @@ mod test {
         cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
+        env.stack.push_frame(0);
         let val = rebind!(call(bytecode, args, "test", env, cx).unwrap());
         let expect = expect.bind(cx);
+        env.stack.pop_frame();
         assert_eq!(val, expect);
     }
 

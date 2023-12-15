@@ -652,8 +652,12 @@ impl Rt<Gc<Function<'_>>> {
         match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                crate::bytecode::call(f, args, name, env, cx)
-                    .map_err(|e| e.add_trace(name, &args[..arg_cnt]))
+                let len = env.stack.len();
+                env.stack.push_frame(len);
+                let res = crate::bytecode::call(f, args, name, env, cx)
+                    .map_err(|e| e.add_trace(name, &args[..arg_cnt]));
+                env.stack.pop_frame();
+                res
             }
             Function::SubrFn(f) => {
                 (*f).call(args, env, cx).map_err(|e| add_trace(e, name, &args[..arg_cnt]))
