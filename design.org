@@ -150,6 +150,10 @@ Reader macros are controversial. They enable some pretty amazing super powers (j
 ** stack
 Traditional emacs uses recursion to implement calls, meaning that every function call will also push on the C stack. Meaning that having lisp eval depth go too far and you will crash emacs. That is why they limit it to 800 by default. It makes the implementation very simple because you can use the recursion to keep track of your stack frame. And you can just unwind your stack to unwind the lisp stack. However this also means you have to be careful to not stack overflow and it makes it hard to implement things like stackful coroutines. If you are using those (or elisp threads) you need to unwind the stack.
 
+In Emacs when you enter the debugger in the middle of execution it will not unwind but keep the stack frames there so they can be resumed. Anything you run after that will be on top of the current stack. Emacs keeps information about the stack in a separate "specpdl" array so that it doesn't have to unwind to display backtraces.
+
+An alternate is to not use the C stack and explicitly store the frames and variables in an array. This makes it easier to enter and resume the debugger, but is complicated by builtin functions that call elisp, like mapcar. In mapcar, it always has to go through the C stack since it is defined in C. You would have to have some mechanism to save the state of these types of functions so that they can be resumed later. This is not a problem is you just use the C stack.
+
 ** Storing data
 *** Buffer representation
 Emacs has traditionally used the gap buffer to store data, but most modern editors will use something like a [[https://en.wikipedia.org/wiki/Rope_(data_structure)][rope]] to store the text state. I was really looking at the crate [[https://docs.rs/xi-rope/0.3.0/xi_rope/][xi-rope]] for doing the basic buffer implementation. The nice thing about ropes is that insertion at an arbitrary point is very cheap and they have ~log n~ worst case behavior. However this comes with some trade offs.
