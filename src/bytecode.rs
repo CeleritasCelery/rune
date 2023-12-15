@@ -7,7 +7,6 @@ use crate::root;
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use rune_macros::{defun, Trace};
-use std::ops::{Index, IndexMut, RangeTo};
 
 mod opcode;
 
@@ -93,102 +92,8 @@ impl<'brw> CallFrame<'brw> {
 }
 
 #[derive(Debug, Trace)]
-#[repr(transparent)]
-struct LispStack(Vec<GcObj<'static>>);
-
-// RootedLispStack is created by #[derive(Trace)]
-impl std::ops::Deref for RootedLispStack {
-    type Target = Rt<Vec<GcObj<'static>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for RootedLispStack {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-// To make this simpler we implement indexing from the top of the stack (end of
-// the vec) instead of the bottom. This is the convention that all the bytecode
-// functions use.
-impl Index<usize> for RootedLispStack {
-    type Output = Rt<GcObj<'static>>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        let index = self.offset_end(index);
-        &self.0[index]
-    }
-}
-
-// This impl is specifically for the Stack. It takes the index from the end of
-// the vector instead of the start. This matches how the lisp stack behaves.
-impl IndexMut<usize> for RootedLispStack {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let index = self.offset_end(index);
-        &mut self.0[index]
-    }
-}
-
-// This impl is specifically for the Stack. It takes the range from the end of
-// the vector instead of the start. This matches how the lisp stack behaves.
-impl Index<RangeTo<usize>> for RootedLispStack {
-    type Output = [Rt<GcObj<'static>>];
-
-    fn index(&self, index: RangeTo<usize>) -> &Self::Output {
-        debug_assert!(index.end <= self.len());
-        let end = self.len() - index.end;
-        let vec: &[Rt<GcObj>] = self;
-        &vec[end..]
-    }
-}
-
-impl LispStack {
-    fn from_root<'a>(value: &'a mut Rt<Vec<GcObj>>) -> &'a mut Rt<Self> {
-        // SAFETY: LispStack is repr(transparent) over Vec<GcObj>
-        unsafe { &mut *((value as *mut Rt<Vec<GcObj>>).cast::<Rt<LispStack>>()) }
-    }
-}
-
-impl RootedLispStack {
-    fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
-        self.bind_mut(cx).pop().unwrap()
-    }
-
-    fn top(&mut self) -> &mut Rt<GcObj<'static>> {
-        self.last_mut().unwrap()
-    }
-
-    fn offset_end(&self, i: usize) -> usize {
-        debug_assert!(i < self.len());
-        self.len() - (i + 1)
-    }
-
-    fn push_ref(&mut self, i: impl Into<i32>, cx: &Context) {
-        let obj = self[i.into() as usize].bind(cx);
-        self.push(obj);
-    }
-
-    fn set_ref(&mut self, i: impl Into<usize>) {
-        let index = self.offset_end(i.into());
-        self.swap_remove(index);
-    }
-
-    fn fill_extra_args(&mut self, fill_args: u16) {
-        for _ in 0..fill_args {
-            self.push(nil());
-        }
-    }
-
-    fn remove_top(&mut self, i: impl Into<usize>) {
-        let offset = self.offset_end(i.into());
-        self.truncate(offset + 1);
-    }
-}
-
-#[derive(Debug, Trace)]
+/// A handler for a condition-case. These are stored in a vector in the VM and
+/// added/removed via bytecodes.
 struct Handler<'ob> {
     #[no_trace]
     jump_code: u16,
@@ -205,23 +110,24 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
     }
 }
 
-/// An execution routine. This holds all the state of the current interpreter,
-/// and could be used to support coroutines.
-struct Routine<'brw> {
-    stack: &'brw mut Rt<LispStack>,
+/// The bytecode VM. This hold all the current call frames and handlers. The
+/// execution stack is part of the Environment.
+struct VM<'brw> {
     /// Previous call frames
     call_frames: Vec<CallFrame<'brw>>,
     /// The current call frame.
     frame: CallFrame<'brw>,
+    /// All currently active condition-case handlers
     handlers: &'brw mut Rt<Vec<Handler<'static>>>,
 }
 
-impl<'brw, 'ob> Routine<'brw> {
-    fn varref(&mut self, idx: u16, env: &Rt<Env>, cx: &'ob Context) -> Result<()> {
+impl<'brw, 'ob> VM<'brw> {
+    fn varref(&mut self, idx: u16, env: &mut Rt<Env>, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
             let Some(var) = env.vars.get(sym) else { bail!("Void Variable: {sym}") };
-            self.stack.push(var.bind(cx));
+            let var = var.bind(cx);
+            env.stack.push(var);
             Ok(())
         } else {
             unreachable!("Varref was not a symbol: {:?}", symbol);
@@ -231,13 +137,13 @@ impl<'brw, 'ob> Routine<'brw> {
     fn varset(&mut self, idx: usize, env: &mut Rt<Env>, cx: &Context) -> Result<()> {
         let obj = self.frame.get_const(idx, cx);
         let symbol: Symbol = obj.try_into()?;
-        let value = self.stack.pop(cx);
+        let value = env.stack.pop(cx);
         crate::data::set(symbol, value, env)?;
         Ok(())
     }
 
     fn varbind(&mut self, idx: u16, env: &mut Rt<Env>, cx: &'ob Context) {
-        let value = self.stack.pop(cx);
+        let value = env.stack.pop(cx);
         let symbol = self.frame.get_const(idx as usize, cx);
         let Object::Symbol(sym) = symbol.untag() else {
             unreachable!("Varbind was not a symbol: {:?}", symbol)
@@ -262,20 +168,21 @@ impl<'brw, 'ob> Routine<'brw> {
         func: &ByteFn,
         arg_cnt: u16,
         name: &str,
+        env: &mut Rt<Env>,
         cx: &'ob Context,
     ) -> Result<u16> {
         let fill_args = func.args.num_of_fill_args(arg_cnt, name)?;
-        self.stack.fill_extra_args(fill_args);
+        env.stack.fill_extra_args(fill_args);
         let total_args = arg_cnt + fill_args;
         let rest_size = total_args - (func.args.required + func.args.optional);
         if rest_size > 0 {
-            let slice = &self.stack[..rest_size as usize];
+            let slice = &env.stack[..rest_size as usize];
             let list = crate::fns::slice_into_list(Rt::bind_slice(slice, cx), None, cx);
-            self.stack.remove_top(rest_size - 1);
-            self.stack[0].set(list);
+            env.stack.remove_top(rest_size - 1);
+            env.stack[0].set(list);
             Ok(total_args - rest_size + 1)
         } else if func.args.rest {
-            self.stack.push(nil());
+            env.stack.push(nil());
             Ok(total_args + 1)
         } else {
             Ok(total_args)
@@ -289,20 +196,20 @@ impl<'brw, 'ob> Routine<'brw> {
         cx: &'ob mut Context,
     ) -> Result<(), EvalError> {
         let arg_cnt = arg_cnt as usize;
-        let sym = match self.stack[arg_cnt].get(cx) {
+        let sym = match env.stack[arg_cnt].get(cx) {
             Object::Symbol(x) => x,
             x => unreachable!("Expected symbol for call found {:?}", x),
         };
 
         let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
-        let slice = &self.stack[..arg_cnt];
+        let slice = &env.stack[..arg_cnt];
         let args = Rt::bind_slice(slice, cx).to_vec();
         let name = sym.name().to_owned();
         root!(args, cx);
         root!(func, cx);
         let result = func.call(args, Some(&name), env, cx)?;
-        self.stack.remove_top(arg_cnt);
-        self.stack[0].set(result);
+        env.stack.remove_top(arg_cnt);
+        env.stack[0].set(result);
         cx.garbage_collect(false);
         Ok(())
     }
@@ -341,8 +248,8 @@ impl<'brw, 'ob> Routine<'brw> {
                     // full errors are implemented
                     cons!(sym::ERROR, format!("{err}"); cx)
                 };
-                self.stack.truncate(handler.stack_size);
-                self.stack.push(error);
+                env.stack.truncate(handler.stack_size);
+                env.stack.push(error);
                 self.frame.pc.goto(handler.jump_code);
                 continue 'main;
             }
@@ -363,7 +270,7 @@ impl<'brw, 'ob> Routine<'brw> {
 
             if Self::debug_enabled() {
                 println!("[");
-                for (idx, x) in self.stack.iter().rev().enumerate() {
+                for (idx, x) in env.stack.iter().rev().enumerate() {
                     println!("    {idx}: {x},");
                 }
                 println!("]");
@@ -371,27 +278,27 @@ impl<'brw, 'ob> Routine<'brw> {
                 println!("op :{byte_offset}: {op:?}");
             }
             match op {
-                op::StackRef0 => self.stack.push_ref(0, cx),
-                op::StackRef1 => self.stack.push_ref(1, cx),
-                op::StackRef2 => self.stack.push_ref(2, cx),
-                op::StackRef3 => self.stack.push_ref(3, cx),
-                op::StackRef4 => self.stack.push_ref(4, cx),
-                op::StackRef5 => self.stack.push_ref(5, cx),
+                op::StackRef0 => env.stack.push_ref(0, cx),
+                op::StackRef1 => env.stack.push_ref(1, cx),
+                op::StackRef2 => env.stack.push_ref(2, cx),
+                op::StackRef3 => env.stack.push_ref(3, cx),
+                op::StackRef4 => env.stack.push_ref(4, cx),
+                op::StackRef5 => env.stack.push_ref(5, cx),
                 op::StackRefN => {
                     let idx = self.frame.pc.arg1();
-                    self.stack.push_ref(idx, cx);
+                    env.stack.push_ref(idx, cx);
                 }
                 op::StackRefN2 => {
                     let idx = self.frame.pc.arg2();
-                    self.stack.push_ref(idx, cx);
+                    env.stack.push_ref(idx, cx);
                 }
                 op::StackSetN => {
                     let idx = self.frame.pc.arg1();
-                    self.stack.set_ref(idx);
+                    env.stack.set_ref(idx);
                 }
                 op::StackSetN2 => {
                     let idx = self.frame.pc.arg2();
-                    self.stack.set_ref(idx);
+                    env.stack.set_ref(idx);
                 }
                 op::VarRef0 => self.varref(0, env, cx)?,
                 op::VarRef1 => self.varref(1, env, cx)?,
@@ -468,186 +375,189 @@ impl<'brw, 'ob> Routine<'brw> {
                 }
                 op::PushCondtionCase => {
                     // pop before getting stack size
-                    let condition = self.stack.pop(cx);
+                    let condition = env.stack.pop(cx);
                     let handler = Handler {
                         jump_code: self.frame.pc.arg2(),
-                        stack_size: self.stack.len(),
+                        stack_size: env.stack.len(),
                         condition,
                     };
                     self.handlers.push(handler);
                 }
                 op::PushCatch => todo!("PushCatch bytecode"),
                 op::Nth => {
-                    let list = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let list = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::nth(top.bind_as(cx)?, list.try_into()?)?);
                 }
                 op::Symbolp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::symbolp(top.bind(cx)));
                 }
                 op::Consp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::consp(top.bind(cx)));
                 }
                 op::Stringp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::stringp(top.bind(cx)));
                 }
                 op::Listp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::listp(top.bind(cx)));
                 }
                 op::Eq => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let v1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::eq(top.bind(cx), v1));
                 }
                 op::Memq => {
-                    let list = self.stack.pop(cx);
-                    let elt = self.stack.top();
+                    let list = env.stack.pop(cx);
+                    let elt = env.stack.top();
                     elt.set(fns::memq(elt.bind(cx), list.try_into()?)?);
                 }
                 op::Not => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::null(top.bind(cx)));
                 }
                 op::Car => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::car(top.bind_as(cx)?));
                 }
                 op::Cdr => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::cdr(top.bind_as(cx)?));
                 }
                 op::Cons => {
-                    let cdr = self.stack.pop(cx);
-                    let car = self.stack.top();
+                    let cdr = env.stack.pop(cx);
+                    let car = env.stack.top();
                     car.set(data::cons(car.bind(cx), cdr, cx));
                 }
                 op::List1 => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(alloc::list(&[top.bind(cx)], cx));
                 }
                 op::List2 => {
-                    let a2 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let a2 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(alloc::list(&[top.bind(cx), a2], cx));
                 }
                 op::List3 => {
-                    let a3 = self.stack.pop(cx);
-                    let a2 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let a3 = env.stack.pop(cx);
+                    let a2 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(alloc::list(&[top.bind(cx), a2, a3], cx));
                 }
                 op::List4 => {
-                    let a4 = self.stack.pop(cx);
-                    let a3 = self.stack.pop(cx);
-                    let a2 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let a4 = env.stack.pop(cx);
+                    let a3 = env.stack.pop(cx);
+                    let a2 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(alloc::list(&[top.bind(cx), a2, a3, a4], cx));
                 }
                 op::Length => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(fns::length(top.bind(cx))? as i64);
                 }
                 op::Aref => {
-                    let idx = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let idx = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(data::aref(top.bind(cx), idx.try_into()?)?);
                 }
                 op::Aset => {
-                    let newlet = self.stack.pop(cx);
-                    let idx = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let newlet = env.stack.pop(cx);
+                    let idx = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(data::aset(top.bind(cx), idx.try_into()?, newlet)?);
                 }
                 op::SymbolValue => {
-                    let top = self.stack.top();
-                    top.set(data::symbol_value(top.bind_as(cx)?, env, cx).unwrap_or_default());
+                    let top = env.stack.top().bind_as(cx)?;
+                    let value = data::symbol_value(top, env, cx).unwrap_or_default();
+                    env.stack.top().set(value);
                 }
                 op::SymbolFunction => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::symbol_function(top.bind_as(cx)?, cx));
                 }
                 op::Set => {
-                    let newlet = self.stack.pop(cx);
-                    let top = self.stack.top();
-                    top.set(data::set(top.bind_as(cx)?, newlet, env)?);
+                    let newlet = env.stack.pop(cx);
+                    let top = env.stack.top().bind_as(cx)?;
+                    let value = data::set(top, newlet, env)?;
+                    env.stack.top().set(value);
                 }
                 op::Fset => {
-                    let def = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let def = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set::<GcObj>(data::fset(top.bind_as(cx)?, def)?.into());
                 }
                 op::Get => {
-                    let prop = self.stack.pop(cx);
-                    let top = self.stack.top();
-                    top.set(data::get(top.bind_as(cx)?, prop.try_into()?, env, cx));
+                    let prop = env.stack.pop(cx).try_into()?;
+                    let top = env.stack.top().bind_as(cx)?;
+                    let value = data::get(top, prop, env, cx);
+                    env.stack.top().set(value);
                 }
                 op::Substring => todo!("Substring bytecode"),
                 op::Concat2 => todo!("Concat2 bytecode"),
                 op::Concat3 => todo!("Concat3 bytecode"),
                 op::Concat4 => todo!("Concat4 bytecode"),
                 op::Sub1 => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(cx.add(arith::sub_one(top.bind_as(cx)?)));
                 }
                 op::Add1 => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(cx.add(arith::add_one(top.bind_as(cx)?)));
                 }
                 op::EqlSign => {
-                    let rhs = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let rhs = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set::<GcObj>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
                 }
                 op::GreaterThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let v1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(arith::greater_than(top.bind_as(cx)?, &[v1.try_into()?]));
                 }
                 op::LessThan => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let v1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(arith::less_than(top.bind_as(cx)?, &[v1.try_into()?]));
                 }
                 op::LessThanOrEqual => {
-                    let v1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let v1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(arith::less_than_or_eq(top.bind_as(cx)?, &[v1.try_into()?]));
                 }
                 op::GreaterThanOrEqual => {
-                    let v1 = &[self.stack.pop(cx).try_into()?];
-                    let top = self.stack.top();
+                    let v1 = &[env.stack.pop(cx).try_into()?];
+                    let top = env.stack.top();
                     top.set(arith::greater_than_or_eq(top.bind_as(cx)?, v1));
                 }
                 op::Diff => todo!("Diff bytecode"),
                 op::Negate => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(cx.add(arith::sub(top.bind_as(cx)?, &[])));
                 }
                 op::Plus => {
-                    let arg1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let arg1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     let args = &[top.bind_as(cx)?, arg1.try_into()?];
                     top.set(cx.add(arith::add(args)));
                 }
                 op::Max => {
-                    let arg1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let arg1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     let args = &[arg1.try_into()?];
                     top.set(cx.add(arith::max(top.bind_as(cx)?, args)));
                 }
                 op::Min => {
-                    let arg1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let arg1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     let args = &[arg1.try_into()?];
                     top.set(cx.add(arith::min(top.bind_as(cx)?, args)));
                 }
                 op::Multiply => {
-                    let arg1 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let arg1 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     let args = &[top.bind_as(cx)?, arg1.try_into()?];
                     top.set(cx.add(arith::mul(args)));
                 }
@@ -681,21 +591,21 @@ impl<'brw, 'ob> Routine<'brw> {
                 op::EndOfLine => todo!("EndOfLine bytecode"),
                 op::ConstantN2 => {
                     let idx = self.frame.pc.arg2();
-                    self.stack.push(self.frame.get_const(idx.into(), cx));
+                    env.stack.push(self.frame.get_const(idx.into(), cx));
                 }
                 op::Goto => {
                     let offset = self.frame.pc.arg2();
                     self.frame.pc.goto(offset);
                 }
                 op::GotoIfNil => {
-                    let cond = self.stack.pop(cx);
+                    let cond = env.stack.pop(cx);
                     let offset = self.frame.pc.arg2();
                     if cond.is_nil() {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::GotoIfNonNil => {
-                    let cond = self.stack.pop(cx);
+                    let cond = env.stack.pop(cx);
                     let offset = self.frame.pc.arg2();
                     if !cond.is_nil() {
                         self.frame.pc.goto(offset);
@@ -703,49 +613,52 @@ impl<'brw, 'ob> Routine<'brw> {
                 }
                 op::GotoIfNilElsePop => {
                     let offset = self.frame.pc.arg2();
-                    if self.stack[0].bind(cx).is_nil() {
+                    if env.stack[0].bind(cx).is_nil() {
                         self.frame.pc.goto(offset);
                     } else {
-                        self.stack.pop(cx);
+                        env.stack.pop(cx);
                     }
                 }
                 op::GotoIfNonNilElsePop => {
                     let offset = self.frame.pc.arg2();
-                    if self.stack[0].bind(cx).is_nil() {
-                        self.stack.pop(cx);
+                    if env.stack[0].bind(cx).is_nil() {
+                        env.stack.pop(cx);
                     } else {
                         self.frame.pc.goto(offset);
                     }
                 }
                 op::Return => {
-                    if self.call_frames.is_empty() {
-                        return Ok(self.stack.pop(cx));
-                    }
-                    let var = self.stack.pop(cx);
                     let start = self.frame.start;
-                    self.stack.truncate(start + 1);
-                    self.stack.top().set(var);
-                    self.frame = self.call_frames.pop().unwrap();
+                    if let Some(frame) = self.call_frames.pop() {
+                        self.frame = frame;
+                        let var = env.stack.pop(cx);
+                        env.stack.truncate(start + 1);
+                        env.stack.top().set(var);
+                    } else {
+                        let var = env.stack.pop(cx);
+                        env.stack.truncate(start);
+                        return Ok(var);
+                    }
                 }
                 op::Discard => {
-                    self.stack.pop(cx);
+                    env.stack.pop(cx);
                 }
                 op::DiscardN => {
                     let arg = self.frame.pc.arg1();
-                    let cur_len = self.stack.len();
+                    let cur_len = env.stack.len();
                     let keep_tos = (arg & 0x80) != 0;
                     let count = (arg & 0x7F) as usize;
                     if keep_tos {
-                        let top = self.stack.top().bind(cx);
-                        self.stack.truncate(cur_len - count);
-                        self.stack.top().set(top);
+                        let top = env.stack.top().bind(cx);
+                        env.stack.truncate(cur_len - count);
+                        env.stack.top().set(top);
                     } else {
-                        self.stack.truncate(cur_len - count);
+                        env.stack.truncate(cur_len - count);
                     }
                 }
                 op::Duplicate => {
-                    let top = self.stack[0].bind(cx);
-                    self.stack.push(top);
+                    let top = env.stack[0].bind(cx);
+                    env.stack.push(top);
                 }
                 op::SaveExcursion => todo!("SaveExcursion bytecode"),
                 op::SaveRestriction => todo!("SaveRestriction bytecode"),
@@ -758,82 +671,82 @@ impl<'brw, 'ob> Routine<'brw> {
                 op::StringEqlSign => todo!("StringEqlSign bytecode"),
                 op::StringLessThan => todo!("StringLessThan bytecode"),
                 op::Equal => {
-                    let rhs = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let rhs = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::equal(top.bind(cx), rhs));
                 }
                 op::Nthcdr => {
-                    let list = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let list = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj(cx));
                 }
                 op::Elt => {
-                    let n = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let n = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::elt(top.bind(cx), n.try_into()?)?);
                 }
                 op::Member => {
-                    let list = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let list = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::member(top.bind(cx), list.try_into()?)?);
                 }
                 op::Assq => {
-                    let alist = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let alist = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::assq(top.bind(cx), alist.try_into()?)?);
                 }
                 op::Nreverse => {
-                    let elt = self.stack.top();
+                    let elt = env.stack.top();
                     elt.set(fns::nreverse(elt.bind_as(cx)?)?);
                 }
                 op::Setcar => {
-                    let newcar = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let newcar = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(data::setcar(top.bind_as(cx)?, newcar)?);
                 }
                 op::Setcdr => {
-                    let newcdr = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let newcdr = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(data::setcdr(top.bind_as(cx)?, newcdr)?);
                 }
                 op::CarSafe => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::car_safe(top.bind(cx)));
                 }
                 op::CdrSafe => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::cdr_safe(top.bind(cx)));
                 }
                 op::Nconc => {
-                    let list2 = self.stack.pop(cx);
-                    let top = self.stack.top();
+                    let list2 = env.stack.pop(cx);
+                    let top = env.stack.top();
                     top.set(fns::nconc(&[top.bind_as(cx)?, list2.try_into()?])?);
                 }
                 op::Quo => todo!("Quo bytecode"),
                 op::Rem => todo!("Rem bytecode"),
                 op::Numberp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::numberp(top.bind(cx)));
                 }
                 op::Integerp => {
-                    let top = self.stack.top();
+                    let top = env.stack.top();
                     top.set(data::integerp(top.bind(cx)));
                 }
                 op::ListN => {
                     let size = self.frame.pc.arg1() as usize;
-                    let slice = Rt::bind_slice(&self.stack[..size], cx);
+                    let slice = Rt::bind_slice(&env.stack[..size], cx);
                     let list = alloc::list(slice, cx);
-                    let len = self.stack.len();
-                    self.stack.truncate(len - (size - 1));
-                    self.stack.top().set(list);
+                    let len = env.stack.len();
+                    env.stack.truncate(len - (size - 1));
+                    env.stack.top().set(list);
                 }
                 op::ConcatN => todo!("ConcatN bytecode"),
                 op::InsertN => todo!("InsertN bytecode"),
                 op::Switch => {
-                    let Object::HashTable(table) = self.stack.pop(cx).untag() else {
+                    let Object::HashTable(table) = env.stack.pop(cx).untag() else {
                         unreachable!("switch table was not a hash table")
                     };
-                    let cond = self.stack.pop(cx);
+                    let cond = env.stack.pop(cx);
                     if let Some(offset) = table.borrow().get(&cond) {
                         let Object::Int(offset) = offset.get().untag() else {
                             unreachable!("switch value was not a int")
@@ -906,7 +819,7 @@ impl<'brw, 'ob> Routine<'brw> {
                 | op::Constant62
                 | op::Constant63 => {
                     let idx = (op as u8) - (op::Constant0 as u8);
-                    self.stack.push(self.frame.get_const(idx as usize, cx));
+                    env.stack.push(self.frame.get_const(idx as usize, cx));
                 }
             }
         }
@@ -949,12 +862,15 @@ pub(crate) fn call<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     let arg_cnt = args.len() as u16;
-    let stack = LispStack::from_root(args);
+    let len = env.stack.len();
+    for arg in args.bind_ref(cx).iter() {
+        env.stack.push(*arg);
+    }
     root!(handlers, Vec::new(), cx);
-    let mut rout =
-        Routine { stack, call_frames: vec![], frame: CallFrame::new(func, 0, cx), handlers };
-    rout.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
-    rout.run(env, cx).map_err(|e| e.add_trace(name, args))
+    let mut vm = VM { call_frames: vec![], frame: CallFrame::new(func, len, cx), handlers };
+    vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, env, cx)?;
+    let res = vm.run(env, cx).map_err(|e| e.add_trace(name, args));
+    res
 }
 
 #[allow(clippy::enum_glob_use)]

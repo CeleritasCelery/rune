@@ -6,7 +6,9 @@ use anyhow::{anyhow, Result};
 use rune_macros::Trace;
 use std::sync::Mutex;
 
+mod stack;
 mod symbol;
+use stack::LispStack;
 pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
@@ -21,6 +23,7 @@ pub(crate) struct Env {
     pub(crate) match_data: GcObj<'static>,
     #[no_trace]
     pub(crate) current_buffer: Option<OpenBuffer<'static>>,
+    pub(crate) stack: LispStack,
 }
 
 // RootedEnv created by #[derive(Trace)]
