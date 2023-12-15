@@ -47,6 +47,9 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
+            if args.len() < #required as usize {
+                return Err(crate::core::error::ArgError::new(#required, args.len() as u16, #lisp_name).into());
+            }
             #subr_call
         }
 
