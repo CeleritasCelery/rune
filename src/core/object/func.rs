@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context},
     },
-    display_slice, nil, CloneIn, IntoObject, LispString, LispVec,
+    display_slice, CloneIn, IntoObject, LispString, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::gc::{GcManaged, GcMark, Rt};
@@ -187,17 +187,10 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'ob>(
         &self,
-        args: &mut Rt<Vec<GcObj<'static>>>,
+        args: &[Rt<GcObj<'static>>],
         env: &mut Rt<crate::core::env::Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
-        {
-            let arg_cnt = args.len() as u16;
-            let fill_args = self.args.num_of_fill_args(arg_cnt, self.name)?;
-            for _ in 0..fill_args {
-                args.push(nil());
-            }
-        }
         (self.subr)(args, env, cx)
     }
 }

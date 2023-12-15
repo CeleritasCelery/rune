@@ -92,7 +92,7 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
             }
             // &[Gc<..>]
             ArgType::Slice(gc) => {
-                let bind = quote! {crate::core::gc::Rt::bind_slice(&args[#idx..], cx)};
+                let bind = quote! {crate::core::gc::Rt::bind_slice(&args[(#idx).min(args.len())..], cx)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! {crate::core::object::try_from_slice(#bind)?},
@@ -100,17 +100,27 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
             }
             // &[Rt<Gc<..>>]
             ArgType::SliceRt(gc) => match gc {
-                Gc::Obj => quote! {&args[#idx..]},
+                Gc::Obj => quote! {&args[(#idx).min(args.len())..]},
                 Gc::Other => unreachable!(),
             },
             // Option<Rt<Gc<..>>>
             ArgType::OptionRt => {
-                quote! { crate::core::gc::Rt::try_as_option(&args[#idx])? }
+                quote! {
+                    match args.get(#idx) {
+                        Some(x) => crate::core::gc::Rt::try_as_option(x)?,
+                        None => None,
+                    }
+                }
             }
             // Option<T>
             ArgType::Option => {
-                let bind = quote! {crate::core::gc::Rt::bind(&args[#idx], cx)};
-                quote! { crate::core::object::Gc::try_from_option(#bind)? }
+                let bind = quote! {crate::core::gc::Rt::bind(x, cx)};
+                quote! {
+                    match args.get(#idx) {
+                        Some(x) => crate::core::object::Gc::try_from_option(#bind)?,
+                        None => None,
+                    }
+                }
             }
             ArgType::Other => {
                 if is_mut {
