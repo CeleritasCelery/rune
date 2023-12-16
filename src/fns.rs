@@ -487,7 +487,7 @@ pub(crate) fn defvaralias<'ob>(
 pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) {}
 
 #[defun]
-fn require<'ob>(
+pub(crate) fn require<'ob>(
     feature: &Rt<Gc<Symbol>>,
     filename: Option<&Rt<Gc<&LispString>>>,
     noerror: Option<()>,

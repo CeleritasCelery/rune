@@ -14,11 +14,11 @@ use std::sync::OnceLock;
 static FEATURES: OnceLock<Mutex<HashSet<Symbol<'static>>>> = OnceLock::new();
 
 /// Rust translation of the `features` variable: A list of symbols are the features
-/// of the executing Emacs. Used by [`featurep`] and [`require`], altered by [`provide`].
-/// Vended through a helper function to avoid calling `get_or_init` on each of the calls
+/// of the executing Emacs. Used by [`featurep`](`crate::fns::featurep`) and [`require`](`crate::fns::require`),
+/// altered by [`provide`]. Vended through a helper function to avoid calling `get_or_init` on each of the calls
 /// to `lock()` on the Mutex.
 ///
-/// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
+/// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
 pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
     FEATURES.get_or_init(Mutex::default)
 }

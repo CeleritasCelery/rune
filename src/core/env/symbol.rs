@@ -17,7 +17,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// will be the same location no matter which thread
 /// interned it. Functions are safe to share between
 /// threads because they are marked immutable by
-/// [`ObjectMap::set_func`] and they can only be replaced atomically.
+/// [`ObjectMap::set_func`](`crate::core::env::ObjectMap::set_func`)
+/// and they can only be replaced atomically.
 /// In order to garbage collect the function we need to
 /// halt all running threads. This has not been implemented
 /// yet.

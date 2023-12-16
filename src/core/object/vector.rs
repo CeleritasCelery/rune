@@ -13,7 +13,7 @@ use std::{
 
 /// A lisp vector. Unlike vectors in other languages this is not resizeable.
 /// This type is represented as slice of [`ObjCell`] which is immutable by
-/// default. However with the [`try_mut`] method, you can obtain a mutable view
+/// default. However with the [`LispVec::try_mut`] method, you can obtain a mutable view
 /// into this slice.
 #[derive(Eq)]
 pub(crate) struct LispVec {

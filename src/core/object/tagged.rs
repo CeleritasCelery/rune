@@ -178,7 +178,7 @@ impl<'new, 'old, T: GcManaged + 'new> WithLifetime<'new> for &'old T {
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
-/// Gc<T>. This makes it easier to write generic code for working with Gc types.
+/// `Gc<T>`. This makes it easier to write generic code for working with Gc types.
 pub(crate) trait IntoObject {
     type Out<'ob>;
 
@@ -365,7 +365,7 @@ mod private {
     /// of types that implement this trait. First is "base" types, which are
     /// pointers to some memory managed by the GC with a unique tag (e.g
     /// `LispString`, `LispVec`). This may seem stange that we would define a
-    /// tagged pointer when the type is known (i.e. Gc<i64>), but doing so let's
+    /// tagged pointer when the type is known (i.e. `Gc<i64>`), but doing so let's
     /// us reinterpret bits without changing the underlying memory. Base types
     /// are untagged into a pointer.
     ///
@@ -400,7 +400,7 @@ mod private {
             Gc::from_ptr(ptr, Self::TAG)
         }
 
-        /// Remove the tag from the Gc<T> and return the inner type. If it is
+        /// Remove the tag from the `Gc<T>` and return the inner type. If it is
         /// base type then it will only have a single possible value and can be
         /// untagged without checks, but sum types need to create all values
         /// they can hold. We use tagged base types to let us reinterpret bits
