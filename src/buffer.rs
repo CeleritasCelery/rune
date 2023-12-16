@@ -17,7 +17,7 @@ static BUFFERS: OnceLock<Mutex<HashMap<String, &'static LispBuffer>>> = OnceLock
 
 /// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
 ///
-/// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
+/// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
 fn buffers() -> &'static Mutex<HashMap<String, &'static LispBuffer>> {
     BUFFERS.get_or_init(Mutex::default)
 }

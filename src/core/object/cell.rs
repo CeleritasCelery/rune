@@ -44,7 +44,7 @@ impl fmt::Debug for ObjCell {
 
 /// This represents a mutable view into an Object. See [`ObjCell`] for a more
 /// detailed explanation. Holding this type means that we confirmed that the
-/// data stucture is mutable, and we can use the [`set`] method update this
+/// data stucture is mutable, and we can use the [`MutObjCell::set`] method update this
 /// cell.
 #[derive(PartialEq)]
 #[repr(transparent)]

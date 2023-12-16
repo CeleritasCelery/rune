@@ -1,0 +1,37 @@
+name: build and deploy to netlify
+on:
+  push:
+    branches: [master]
+jobs:
+  publish-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install the required system libraries
+        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
+      # run docs generation on nightly rather than stable. This enables features like
+      # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
+      # API be documented as only available in some specific platforms.
+      - name: Install nightly
+        uses: dtolnay/rust-toolchain@nightly
+      - name: cargo doc
+        run: cargo +nightly doc --no-deps --all-features --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v2.0
+        with:
+          publish-dir: "./target/doc"
+          production-branch: master
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions"
+          enable-pull-request-comment: false
+          enable-commit-comment: true
+          overwrites-pull-request-comment: true
+          netlify-config-path: "./netlify.toml"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 1
