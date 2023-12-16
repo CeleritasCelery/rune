@@ -92,7 +92,8 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
             }
             // &[Gc<..>]
             ArgType::Slice(gc) => {
-                let bind = quote! {crate::core::gc::Rt::bind_slice(&args[(#idx).min(args.len())..], cx)};
+                let bind =
+                    quote! {crate::core::gc::Rt::bind_slice(&args[(#idx).min(args.len())..], cx)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! {crate::core::object::try_from_slice(#bind)?},

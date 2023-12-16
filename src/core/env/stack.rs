@@ -1,11 +1,9 @@
-use std::ops::{Index, IndexMut, RangeTo};
-
-use rune_macros::Trace;
-
 use crate::core::{
     gc::{Context, Rt},
     object::{nil, GcObj},
 };
+use rune_macros::Trace;
+use std::ops::{Index, IndexMut, RangeTo};
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct LispStack {
