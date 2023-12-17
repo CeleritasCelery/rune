@@ -1,6 +1,6 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, ObjCell};
 use crate::core::gc::{GcManaged, GcMark, Trace};
-use crate::hashmap::{HashSet, IndexMap};
+use rune_core::hashmap::{HashSet, IndexMap};
 use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
 use std::fmt::{self, Debug, Display, Write};
 

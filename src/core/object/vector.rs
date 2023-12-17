@@ -1,9 +1,7 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
-use crate::{
-    core::gc::{Block, GcManaged, GcMark, Trace},
-    hashmap::HashSet,
-};
+use crate::core::gc::{Block, GcManaged, GcMark, Trace};
 use anyhow::{anyhow, Result};
+use rune_core::hashmap::HashSet;
 use std::{
     fmt::{self, Write},
     mem,

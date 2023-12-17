@@ -1,14 +1,12 @@
 //! Buffer operations.
-use crate::{
-    core::{
-        env::{interned_symbols, Env},
-        error::{Type, TypeError},
-        gc::{Context, Rt},
-        object::{nil, Gc, GcObj, LispBuffer, Object},
-    },
-    hashmap::HashMap,
+use crate::core::{
+    env::{interned_symbols, Env},
+    error::{Type, TypeError},
+    gc::{Context, Rt},
+    object::{nil, Gc, GcObj, LispBuffer, Object},
 };
 use anyhow::{bail, Result};
+use rune_core::hashmap::HashMap;
 use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;

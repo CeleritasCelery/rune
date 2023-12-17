@@ -11,9 +11,10 @@ use super::{
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
 };
+use crate::core::env::sym;
 use crate::core::gc::{GcManaged, Trace};
-use crate::{core::env::sym, hashmap::HashSet};
 use private::{Tag, TaggedPtr};
+use rune_core::hashmap::HashSet;
 use sptr::Strict;
 use std::fmt;
 use std::marker::PhantomData;

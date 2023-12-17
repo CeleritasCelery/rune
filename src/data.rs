@@ -6,8 +6,8 @@ use crate::core::{
     gc::{Context, IntoRoot, Rt},
     object::{nil, Gc, GcObj, List, Number, Object, SubrFn},
 };
-use crate::hashmap::HashSet;
 use anyhow::{anyhow, Result};
+use rune_core::hashmap::HashSet;
 use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;
