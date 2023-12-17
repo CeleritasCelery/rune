@@ -1326,6 +1326,7 @@ impl<'ob> List<'ob> {
 mod test {
     use super::{TagType, MAX_FIXNUM, MIN_FIXNUM};
     use crate::core::gc::{Context, RootSet};
+    use rune_core::macros::list;
 
     #[test]
     fn test_clamp_fixnum() {

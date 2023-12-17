@@ -12,11 +12,11 @@ use crate::{
     },
     data::aref,
 };
-use crate::{root, rooted_iter};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
+use rune_core::macros::{cons, list, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]
@@ -797,6 +797,7 @@ fn disable_debug() -> bool {
 #[cfg(test)]
 mod test {
     use crate::core::{gc::RootSet, object::qtrue};
+    use rune_core::macros::root;
 
     use super::*;
 

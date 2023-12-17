@@ -85,7 +85,7 @@ impl<T: Trace> Trace for Option<T> {
 mod test {
     use super::super::super::gc::{Context, RootSet};
     use super::*;
-    use crate::root;
+    use rune_core::macros::root;
 
     struct Foo(u64);
     impl Trace for Foo {

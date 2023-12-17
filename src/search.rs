@@ -161,7 +161,8 @@ fn string_equal(s1: &str, s2: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{core::gc::RootSet, root};
+    use crate::core::gc::RootSet;
+    use rune_core::macros::root;
 
     use super::*;
 

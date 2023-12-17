@@ -6,12 +6,12 @@ use crate::core::{
     gc::{Context, Rt},
     object::{nil, qtrue, Function, Gc, GcObj, List, Object},
 };
-use crate::{root, rooted_iter};
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
+use rune_core::macros::{bail_err, cons, error, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 struct Interpreter<'brw> {
@@ -828,6 +828,7 @@ pub(crate) fn parse_arg_list(
 #[cfg(test)]
 mod test {
     use crate::core::{env::intern, gc::RootSet, object::IntoObject};
+    use rune_core::macros::list;
 
     use super::*;
 

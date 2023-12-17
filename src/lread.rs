@@ -5,10 +5,11 @@ use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
 use crate::core::object::{nil, Gc, GcObj, LispString, Object, WithLifetime};
+use crate::interpreter;
 use crate::reader;
-use crate::{interpreter, root};
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
+use rune_core::macros::{cons, root};
 use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -207,7 +208,7 @@ mod test {
 
     use super::*;
     use crate::core::gc::RootSet;
-    use crate::root;
+    use rune_core::macros::root;
 
     #[test]
     #[allow(clippy::float_cmp)] // Bug in Clippy

@@ -180,32 +180,10 @@ impl Cons {
 
 define_unbox!(Cons, &'ob Cons);
 
-#[macro_export]
-macro_rules! cons {
-    ($car:expr, $cdr:expr; $cx:expr) => {
-        $cx.add({
-            let car = $cx.add($car);
-            let cdr = $cx.add($cdr);
-            unsafe { $crate::core::cons::Cons::new_unchecked(car, cdr) }
-        })
-    };
-    ($car:expr; $cx:expr) => {
-        $cx.add({
-            let car = $cx.add($car);
-            unsafe { $crate::core::cons::Cons::new_unchecked(car, $crate::core::object::nil()) }
-        })
-    };
-}
-
-#[macro_export]
-macro_rules! list {
-    ($x:expr; $cx:expr) => ($crate::cons!($x; $cx));
-    ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => ($crate::cons!($x, list!($($y),+ ; $cx) ; $cx));
-}
-
 #[cfg(test)]
 mod test {
     use crate::core::gc::Context;
+    use rune_core::macros::{cons, list};
 
     use super::super::gc::RootSet;
     use super::*;

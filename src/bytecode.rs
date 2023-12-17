@@ -3,9 +3,9 @@ use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, Rt};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
-use crate::root;
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
+use rune_core::macros::{bail_err, cons, rebind, root};
 use rune_macros::{defun, Trace};
 
 mod opcode;
@@ -874,6 +874,7 @@ mod test {
         gc::RootSet,
         object::{HashTable, IntoObject, LispVec},
     };
+    use rune_core::macros::{cons, list, rebind, root};
 
     use super::{opcode::OpCode, *};
 

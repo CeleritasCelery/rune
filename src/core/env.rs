@@ -3,6 +3,7 @@ use super::gc::{Block, Context, Rt};
 use super::object::{CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, WithLifetime};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;
+use rune_core::macros::list;
 use rune_macros::Trace;
 use std::sync::Mutex;
 
@@ -281,7 +282,7 @@ pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 
 #[cfg(test)]
 mod test {
-    use crate::root;
+    use rune_core::macros::{cons, list, root};
 
     use super::*;
 
