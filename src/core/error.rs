@@ -116,17 +116,6 @@ impl From<std::convert::Infallible> for EvalError {
     }
 }
 
-#[macro_export]
-macro_rules! error {
-    ($msg:literal $(,)?  $($args:expr),* $(,)?) => ($crate::core::error::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
-    ($err:expr) => ($crate::core::error::EvalError::new($err));
-}
-
-#[macro_export]
-macro_rules! bail_err {
-    ($($args:expr),* $(,)?) => (return Err(error!($($args),*)));
-}
-
 pub(crate) type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
 
 /// The function or form has the wrong number of arguments.

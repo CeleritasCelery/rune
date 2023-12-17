@@ -5,6 +5,7 @@ use crate::core::{
     object::GcObj,
 };
 use crate::fns;
+use rune_core::macros::list;
 use std::fmt::Display;
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
@@ -511,6 +512,7 @@ pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(GcObj<'ob>, us
 #[cfg(test)]
 mod test {
     use crate::core::gc::RootSet;
+    use rune_core::macros::cons;
 
     use super::*;
 

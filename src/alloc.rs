@@ -5,6 +5,7 @@ use crate::core::object::{
     nil, ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder,
 };
 use anyhow::{ensure, Result};
+use rune_core::macros::cons;
 use rune_macros::defun;
 
 #[defun]

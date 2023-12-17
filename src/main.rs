@@ -41,6 +41,7 @@ use crate::core::{
     gc::{Context, RootSet, Rt},
     object::{nil, Gc, LispString},
 };
+use rune_core::macros::root;
 use std::io::{self, Write};
 
 fn main() {

@@ -4,6 +4,7 @@ use crate::core::{
     gc::{Context, Rt},
     object::GcObj,
 };
+use rune_core::macros::list;
 use rune_macros::defun;
 use std::time::SystemTime;
 

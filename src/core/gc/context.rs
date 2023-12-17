@@ -240,51 +240,9 @@ impl<const CONST: bool> Drop for Block<CONST> {
     }
 }
 
-// helper macro for the `rebind!` macro
-macro_rules! last {
-    ($arg:expr) => { $arg };
-    ($head:expr, $($rest:expr),+) => {
-        last!($($rest),+)
-    };
-}
-
-/// Rebinds an object so that it is bound to an immutable borrow of [Context]
-/// instead of a mutable borrow. This can release the mutable borrow and allow
-/// Context to be used for other things.
-///
-/// # Examples
-///
-/// ```
-/// let object = rebind!(func1(&mut cx));
-/// func2(&mut cx);
-/// let object2 = object;
-/// ```
-///
-/// wthout this macro the above code would not compile because `object` can't
-/// outlive the call to func2.
-#[macro_export]
-macro_rules! rebind {
-    // rebind!(func(x, cx)?)
-    ($($path:ident).*($($arg:expr),+)$($x:tt)?) => {{
-        rebind!($($path).*($($arg),+)$($x)?, last!($($arg),+))
-    }};
-    // rebind!(func(x, cx).unwrap())
-    ($($path:ident).*($($arg:expr),+).unwrap()) => {{
-        rebind!($($path).*($($arg),+).unwrap(), last!($($arg),+))
-    }};
-    // rebind!(x, cx)
-    ($value:expr, $cx:expr) => {{
-        // Eval value outside the unsafe block
-        let unbound = match $value {
-            v => unsafe { $crate::core::object::WithLifetime::<'static>::with_lifetime(v) }
-        };
-        $cx.bind(unbound)
-    }};
-}
-
 #[cfg(test)]
 mod test {
-    use crate::root;
+    use rune_core::macros::{list, rebind, root};
 
     use super::*;
     fn bind_to_mut<'ob>(cx: &'ob mut Context) -> GcObj<'ob> {

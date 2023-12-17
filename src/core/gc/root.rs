@@ -112,24 +112,6 @@ impl<T> Drop for __StackRoot<'_, T> {
     }
 }
 
-/// Creates a new root that will be traced during garbage collection. The value
-/// returned by this macro is no longer bound to the `Context` and so can be
-/// used outside of the `Context`'s lifetime. The root is tied to the stack, and
-/// will be unrooted when it goes out of scope.
-#[macro_export]
-macro_rules! root {
-    ($ident:ident, $cx:ident) => {
-        $crate::root!($ident, unsafe { $crate::core::gc::IntoRoot::into_root($ident) }, $cx);
-    };
-    // When using this form, `value` should be an intializer that does not need `IntoRoot`
-    ($ident:ident, $value:expr, $cx:ident) => {
-        let mut rooted = $value;
-        let mut root =
-            unsafe { $crate::core::gc::__StackRoot::new(&mut rooted, $cx.get_root_set()) };
-        let $ident = root.as_mut();
-    };
-}
-
 /// Trait created to overpass the orphan rule when deriving the
 /// [Trace](`rune_macros::Trace`) derive macro. The derive
 /// macro contains a blanket `Deref` (and `DerefMut`) like this:
@@ -572,6 +554,7 @@ impl<T> Deref for Rt<HashSet<T>> {
 #[cfg(test)]
 mod test {
     use crate::core::object::nil;
+    use rune_core::macros::root;
 
     use super::super::RootSet;
     use super::*;

@@ -9,10 +9,10 @@ use crate::core::{
     object::{Function, Gc, GcObj},
 };
 use crate::fns::{assq, eq};
-use crate::{root, rooted_iter};
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
+use rune_core::macros::{list, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]

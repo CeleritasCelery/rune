@@ -149,37 +149,6 @@ impl<'rt> ElemStreamIter<'rt> {
     }
 }
 
-#[macro_export]
-macro_rules! rooted_iter {
-    ($ident:ident, $value:expr, $cx:ident) => {
-        // Create roots, but don't initialize them
-        let mut elem;
-        let mut cons;
-        let mut root_elem;
-        let mut root_cons;
-        // use match to ensure that $value is not evaled inside the unsafe block
-        let list: $crate::core::object::Gc<$crate::core::object::List> = match $value {
-            // Convert the value into a list
-            value => unsafe { $crate::core::gc::IntoRoot::into_root(value).try_into()? },
-        };
-        #[allow(unused_qualifications, unused_mut)]
-        let mut $ident = if let $crate::core::object::List::Cons(head) = list.untag() {
-            use $crate::core::{cons, gc, object};
-            // If the list is not empty, then initialize the roots and put them
-            // in the stack space reserved
-            unsafe {
-                elem = object::nil();
-                cons = object::WithLifetime::with_lifetime(head);
-                root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
-                root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
-                cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))
-            }
-        } else {
-            $crate::core::cons::ElemStreamIter::new(None, None)
-        };
-    };
-}
-
 #[allow(clippy::multiple_inherent_impl)]
 impl Cons {
     pub(crate) fn elements(&self) -> ElemIter {
@@ -237,7 +206,7 @@ mod test {
     use fallible_streaming_iterator::FallibleStreamingIterator;
 
     use super::super::super::gc::{Context, RootSet};
-    use crate::list;
+    use rune_core::macros::{list, rooted_iter};
 
     use super::*;
 
