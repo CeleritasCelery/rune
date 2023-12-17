@@ -5,7 +5,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::env::Symbol;
 use crate::core::object::{Gc, IntoObject, LispString, Object, Untag, WithLifetime};
-use crate::hashmap::{HashMap, HashSet};
+use rune_core::hashmap::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
 use std::{

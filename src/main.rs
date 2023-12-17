@@ -26,7 +26,6 @@ mod fileio;
 mod floatfns;
 mod fns;
 mod gui;
-mod hashmap;
 mod interpreter;
 mod keymap;
 mod lread;

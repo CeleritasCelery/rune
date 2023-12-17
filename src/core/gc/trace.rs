@@ -1,5 +1,5 @@
 use super::super::object::RawObj;
-use crate::hashmap::{HashMap, HashSet};
+use rune_core::hashmap::{HashMap, HashSet};
 
 pub(crate) trait Trace {
     fn trace(&self, stack: &mut Vec<RawObj>);

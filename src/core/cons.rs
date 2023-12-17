@@ -1,4 +1,4 @@
-use crate::hashmap::HashSet;
+use rune_core::hashmap::HashSet;
 
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
 use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj};

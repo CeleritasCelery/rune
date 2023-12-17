@@ -1,0 +1,24 @@
+[package]
+name = "rune-core"
+version = "0.1.0"
+description = "Core functionality of the Rune Emacs Runtime."
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+bstr = { workspace = true }
+sptr = { workspace = true }
+fallible-iterator = { workspace = true }
+fallible-streaming-iterator = { workspace = true }
+float-cmp = { workspace = true }
+fxhash = { workspace = true }
+indexmap = { workspace = true }
+memoffset = { workspace = true }
+
+rune-macros = { workspace = true }
+text-buffer = { workspace = true }
+
+[lints]
+workspace = true
