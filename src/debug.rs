@@ -1,3 +1,4 @@
+//! Debugging utilities.
 #![allow(dead_code)]
 use std::sync::atomic::{AtomicBool, Ordering};
 

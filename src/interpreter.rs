@@ -1,3 +1,4 @@
+//! The basic elisp interpreter.
 use crate::core::{
     cons::{Cons, ElemStreamIter},
     env::{sym, Env, Symbol},

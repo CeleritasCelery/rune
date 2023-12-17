@@ -1,3 +1,4 @@
+//! Buffer operations.
 use crate::{
     core::{
         env::{interned_symbols, Env},

@@ -1,3 +1,4 @@
+//! Lisp evaluation primitives.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{EvalError, Type, TypeError};

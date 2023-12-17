@@ -1,3 +1,4 @@
+//! Arithmetic operators.
 use crate::core::object::{Gc, IntoObject, Number, Object};
 use float_cmp::ApproxEq;
 use rune_macros::defun;

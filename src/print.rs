@@ -1,3 +1,4 @@
+//! Printing utilities.
 use crate::core::object::GcObj;
 use rune_macros::defun;
 

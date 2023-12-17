@@ -1,3 +1,4 @@
+//! Multi-threaded elisp support.
 use crate::{
     core::{
         env::Env,

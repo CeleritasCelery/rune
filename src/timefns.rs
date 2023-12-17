@@ -1,12 +1,11 @@
-use std::time::SystemTime;
-
-use rune_macros::defun;
-
+//! Time analysis
 use crate::core::{
     env::{sym, Env},
     gc::{Context, Rt},
     object::GcObj,
 };
+use rune_macros::defun;
+use std::time::SystemTime;
 
 defvar!(CURRENT_TIME_LIST, true);
 

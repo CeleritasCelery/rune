@@ -1,3 +1,4 @@
+//! Buffer editing utilities.
 use crate::core::{
     env::Env,
     gc::Rt,

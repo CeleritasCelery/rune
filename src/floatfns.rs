@@ -1,3 +1,4 @@
+//! Operations on floats.
 use crate::{
     arith::NumberValue,
     core::{

@@ -1,3 +1,4 @@
+//! builtin lisp data structures.
 use crate::core::env::{Symbol, SymbolCell};
 use crate::core::gc::Context;
 use crate::core::object::{

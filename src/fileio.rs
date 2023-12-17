@@ -1,3 +1,4 @@
+//! File I/O.
 use crate::core::{
     cons::Cons,
     env::{sym, Env},

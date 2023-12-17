@@ -1,3 +1,4 @@
+//! Keymap handling.
 use crate::core::object::GcObj;
 use rune_macros::defun;
 

@@ -1,3 +1,4 @@
+//! Utilities for variables and values.
 use crate::core::{
     cons::Cons,
     env::{interned_symbols, sym, Env, Symbol},

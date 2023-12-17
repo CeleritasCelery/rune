@@ -1,3 +1,4 @@
+//! String and character case conversion.
 use rune_macros::defun;
 
 #[defun]

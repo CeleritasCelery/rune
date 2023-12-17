@@ -1,3 +1,4 @@
+//! Loading elisp from files and strings.
 use crate::core::env::Symbol;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};

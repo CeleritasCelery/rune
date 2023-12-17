@@ -1,3 +1,4 @@
+//! Character and string utilities.
 use crate::core::{
     gc::Context,
     object::{int_to_char, Gc, GcObj, IntoObject, LispString, Object},

@@ -1,3 +1,4 @@
+//! General purpose lisp functions
 use crate::{
     core::{
         cons::Cons,

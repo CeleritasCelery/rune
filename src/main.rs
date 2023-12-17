@@ -3,6 +3,7 @@ use tikv_jemallocator::Jemalloc;
 
 #[cfg(all(not(target_env = "msvc"), not(miri)))]
 #[global_allocator]
+#[doc(hidden)]
 static GLOBAL: Jemalloc = Jemalloc;
 
 #[macro_use]

@@ -1,3 +1,4 @@
+//! Hashmap types used in the crate.
 use fxhash::FxBuildHasher;
 
 pub(crate) type HashMap<K, V> = std::collections::HashMap<K, V, FxBuildHasher>;

@@ -1,3 +1,4 @@
+//! Implementations of macros
 macro_rules! define_unbox {
     ($ident:ident, $ty:ty) => {
         define_unbox!($ident, $ident, $ty);

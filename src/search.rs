@@ -1,3 +1,4 @@
+//! Search utilities.
 use crate::core::{
     env::Env,
     gc::{Context, Rt},
