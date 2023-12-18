@@ -293,6 +293,12 @@ impl<T> Rt<T> {
     {
         unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
     }
+
+    pub(crate) fn set<U: IntoRoot<T>>(&mut self, item: U) {
+        // SAFETY: we drop the old type so it never exposed and take the new
+        // rooted type and replace it.
+        unsafe { self.inner = item.into_root() }
+    }
 }
 
 impl TryFrom<&Rt<GcObj<'_>>> for usize {
@@ -351,15 +357,6 @@ impl<T> Rt<Gc<T>> {
         let gc: Gc<U> = self.bind(cx);
         gc.untag_erased()
     }
-
-    pub(crate) fn set<U>(&mut self, item: U)
-    where
-        U: IntoRoot<Gc<T>>,
-    {
-        unsafe {
-            self.inner = item.into_root();
-        }
-    }
 }
 
 impl From<&Rt<GcObj<'_>>> for Option<()> {
@@ -399,10 +396,6 @@ impl IntoObject for &mut Rt<GcObj<'static>> {
 }
 
 impl Rt<&Cons> {
-    pub(crate) fn set(&mut self, item: &Cons) {
-        self.inner = unsafe { std::mem::transmute(item) }
-    }
-
     pub(crate) fn car<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
         self.bind(cx).car()
     }
@@ -437,12 +430,6 @@ impl<T> Deref for Rt<Option<T>> {
 }
 
 impl<T> Rt<Option<T>> {
-    pub(crate) fn set<U: IntoRoot<T>>(&mut self, obj: U) {
-        unsafe {
-            self.inner = Some(obj.into_root());
-        }
-    }
-
     // This is not really dead code, but the static analysis fails to find it
     #[allow(dead_code)]
     pub(crate) fn as_ref(&self) -> Option<&Rt<T>> {

@@ -255,7 +255,7 @@ impl Interpreter<'_> {
             let value = self.eval_form(form, cx)?;
             count += 1;
             if prog_num == count {
-                returned_form.set(value);
+                returned_form.set(Some(value));
             }
         }
         match &**returned_form {

@@ -94,7 +94,7 @@ impl RootedEnv {
         // we will bind it to the new value
         for binding in &mut *self.binding_stack {
             if binding.0 == var && binding.1.is_none() {
-                binding.1.set(value);
+                binding.1.set(Some(value));
             }
         }
         Ok(())
