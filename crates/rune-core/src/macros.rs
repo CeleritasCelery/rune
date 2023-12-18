@@ -1,3 +1,4 @@
+#![allow(clippy::crate_in_macro_def)]
 //! Redefinition of the `macro_exported` macros to avoid namespace
 //! colision when the macros have the same name as modules.
 //!
