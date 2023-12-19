@@ -94,9 +94,14 @@ impl<T: Display> Display for __StackRoot<'_, T> {
 // SAFETY: An owned StackRoot must never be exposed to the rest of the program.
 // That could result in calling `mem::forget` on the root, which would
 // invalidate the stack property of the root set.
-impl<'rt, T: Trace + 'static> __StackRoot<'rt, T> {
+impl<'rt, T: Trace> __StackRoot<'rt, T> {
     pub(crate) unsafe fn new(data: &'rt mut T, root_set: &'rt RootSet) -> __StackRoot<'rt, T> {
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
+        // We are using this transmute to dissociate the `dyn Trace` from the T.
+        // Otherwise rust tries to require us to add a 'static bound. We don't
+        // need this because stackroot can't outlive data (due to the 'rt
+        // lifetime), and therefore it can't outlive T.
+        let dyn_ptr = std::mem::transmute::<*mut dyn Trace, *mut dyn Trace>(dyn_ptr);
         let data = &mut *(dyn_ptr.cast::<Rt<T>>());
         let root = Self { data, root_set };
         root_set.roots.borrow_mut().push(dyn_ptr);

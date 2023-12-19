@@ -117,24 +117,25 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// The bytecode VM. This hold all the current call frames and handlers. The
 /// execution stack is part of the Environment.
 #[derive(Trace)]
-struct VM<'a> {
+struct VM<'brw, 'rt> {
     /// Previous call frames
-    call_frames: Vec<CallFrame<'a>>,
+    call_frames: Vec<CallFrame<'rt>>,
     /// The current call frame.
-    frame: CallFrame<'a>,
+    frame: CallFrame<'rt>,
     /// All currently active condition-case handlers
-    handlers: Vec<Handler<'a>>,
+    handlers: Vec<Handler<'rt>>,
     /// The runtime environment
-    env: Env,
+    #[no_trace]
+    env: &'brw mut Rt<Env>,
 }
 
-impl IntoRoot<VM<'static>> for VM<'_> {
-    unsafe fn into_root(self) -> VM<'static> {
+impl<'brw> IntoRoot<VM<'brw, 'static>> for VM<'brw, '_> {
+    unsafe fn into_root(self) -> VM<'brw, 'static> {
         std::mem::transmute(self)
     }
 }
 
-impl<'ob> RootedVM<'static> {
+impl<'ob> RootedVM<'_, 'static> {
     fn varref(&mut self, idx: u16, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
@@ -151,7 +152,7 @@ impl<'ob> RootedVM<'static> {
         let obj = self.frame.get_const(idx, cx);
         let symbol: Symbol = obj.try_into()?;
         let value = self.env.stack.pop(cx);
-        crate::data::set(symbol, value, &mut self.env)?;
+        crate::data::set(symbol, value, self.env)?;
         Ok(())
     }
 
@@ -214,7 +215,7 @@ impl<'ob> RootedVM<'static> {
         let name = sym.name().to_owned();
         root!(args, cx);
         root!(func, cx);
-        let result = func.call(args, Some(&name), &mut self.env, cx)?;
+        let result = func.call(args, Some(&name), self.env, cx)?;
         self.env.stack.remove_top(arg_cnt);
         self.env.stack[0].set(result);
         cx.garbage_collect(false);
@@ -478,7 +479,7 @@ impl<'ob> RootedVM<'static> {
                 }
                 op::SymbolValue => {
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::symbol_value(top, &self.env, cx).unwrap_or_default();
+                    let value = data::symbol_value(top, self.env, cx).unwrap_or_default();
                     self.env.stack.top().set(value);
                 }
                 op::SymbolFunction => {
@@ -488,7 +489,7 @@ impl<'ob> RootedVM<'static> {
                 op::Set => {
                     let newlet = self.env.stack.pop(cx);
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::set(top, newlet, &mut self.env)?;
+                    let value = data::set(top, newlet, self.env)?;
                     self.env.stack.top().set(value);
                 }
                 op::Fset => {
@@ -499,7 +500,7 @@ impl<'ob> RootedVM<'static> {
                 op::Get => {
                     let prop = self.env.stack.pop(cx).try_into()?;
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::get(top, prop, &self.env, cx);
+                    let value = data::get(top, prop, self.env, cx);
                     self.env.stack.top().set(value);
                 }
                 op::Substring => todo!("Substring bytecode"),
@@ -874,15 +875,10 @@ pub(crate) fn call<'ob>(
         env.stack.push(*arg);
     }
     let frame = CallFrame::new(func.bind(cx), len);
-    let vm = VM { call_frames: vec![], frame, env: Env::default(), handlers: Vec::new() };
+    let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
     root!(vm, cx);
-    // swap in the populated env
-    std::mem::swap(&mut vm.env, env);
-
     vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     let res = vm.run(cx).map_err(|e| e.add_trace(name, args));
-    // swap the env back
-    std::mem::swap(&mut vm.env, env);
     res
 }
 
