@@ -46,7 +46,7 @@ impl ByteFn {
         unsafe { std::mem::transmute::<&'static LispString, &'a LispString>(self.op_codes) }
     }
 
-    pub(crate) fn constants<'a>(&'a self) -> &'a LispVec {
+    pub(crate) fn consts<'a>(&'a self) -> &'a LispVec {
         unsafe { std::mem::transmute::<&'static LispVec, &'a LispVec>(self.constants) }
     }
 
@@ -54,7 +54,7 @@ impl ByteFn {
         match index {
             0 => Some((self.args.into_arg_spec() as i64).into()),
             1 => Some(self.codes().into()),
-            2 => Some(self.constants().into()),
+            2 => Some(self.consts().into()),
             3 => Some(self.depth.into()),
             _ => None,
         }
@@ -76,16 +76,6 @@ impl<'new> CloneIn<'new, &'new Self> for ByteFn {
             )
         };
         byte_fn.into_obj(bk)
-    }
-}
-
-impl Rt<&'static ByteFn> {
-    pub(crate) fn code(&self) -> &Rt<&'static LispString> {
-        unsafe { &*std::ptr::addr_of!(self.bind_unchecked().op_codes).cast() }
-    }
-
-    pub(crate) fn consts(&self) -> &Rt<&'static LispVec> {
-        unsafe { &*std::ptr::addr_of!(self.bind_unchecked().constants).cast() }
     }
 }
 

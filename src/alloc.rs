@@ -25,10 +25,10 @@ pub(crate) fn make_closure<'ob>(
     closure_vars: &[GcObj<'ob>],
     cx: &'ob Context,
 ) -> Result<ByteFn> {
-    let const_len = prototype.constants().len();
+    let const_len = prototype.consts().len();
     let vars = closure_vars.len();
     ensure!(vars <= const_len, "Closure vars do not fit in const vec");
-    let mut constants = prototype.constants().to_vec();
+    let mut constants = prototype.consts().to_vec();
     let zipped = constants.iter_mut().zip(closure_vars.iter());
     for (cnst, var) in zipped {
         *cnst = *var;

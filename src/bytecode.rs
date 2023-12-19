@@ -1,7 +1,7 @@
 //! The main bytecode interpeter.
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
-use crate::core::gc::{Context, Rt};
+use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
@@ -68,24 +68,28 @@ impl ProgramCounter {
 
 /// A function call frame. This represents the state of the current executing
 /// function as well as all it's associated constants.
-#[derive(Clone)]
-struct CallFrame<'brw> {
+#[derive(Clone, Trace)]
+struct CallFrame<'a> {
+    #[no_trace]
     pc: ProgramCounter,
-    consts: &'brw Rt<&'static LispVec>,
+    consts: &'a LispVec,
     /// The index where this call frame starts on the stack. The interpreter
     /// should not access elements beyond this index.
+    #[no_trace]
     start: usize,
 }
 
-impl<'brw> CallFrame<'brw> {
-    fn new(func: &'brw Rt<&'static ByteFn>, frame_start: usize, cx: &Context) -> CallFrame<'brw> {
+impl CallFrame<'_> {
+    fn new(func: &ByteFn, frame_start: usize) -> CallFrame<'_> {
         CallFrame {
-            pc: ProgramCounter::new(func.code().bind(cx).as_bytes()),
+            pc: ProgramCounter::new(func.codes().as_bytes()),
             consts: func.consts(),
             start: frame_start,
         }
     }
+}
 
+impl RootedCallFrame<'_> {
     fn get_const<'ob>(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
         self.consts.bind(cx).get(i).expect("constant had invalid index").get()
     }
@@ -112,18 +116,25 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 
 /// The bytecode VM. This hold all the current call frames and handlers. The
 /// execution stack is part of the Environment.
-struct VM<'brw> {
+#[derive(Trace)]
+struct VM<'a> {
     /// Previous call frames
-    call_frames: Vec<CallFrame<'brw>>,
+    call_frames: Vec<CallFrame<'a>>,
     /// The current call frame.
-    frame: CallFrame<'brw>,
+    frame: CallFrame<'a>,
     /// All currently active condition-case handlers
-    handlers: &'brw mut Rt<Vec<Handler<'static>>>,
+    handlers: Vec<Handler<'a>>,
     /// The runtime environment
-    env: &'brw mut Rt<Env>,
+    env: Env,
 }
 
-impl<'brw, 'ob> VM<'brw> {
+impl IntoRoot<VM<'static>> for VM<'_> {
+    unsafe fn into_root(self) -> VM<'static> {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'ob> RootedVM<'static> {
     fn varref(&mut self, idx: u16, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
@@ -140,7 +151,7 @@ impl<'brw, 'ob> VM<'brw> {
         let obj = self.frame.get_const(idx, cx);
         let symbol: Symbol = obj.try_into()?;
         let value = self.env.stack.pop(cx);
-        crate::data::set(symbol, value, self.env)?;
+        crate::data::set(symbol, value, &mut self.env)?;
         Ok(())
     }
 
@@ -203,7 +214,7 @@ impl<'brw, 'ob> VM<'brw> {
         let name = sym.name().to_owned();
         root!(args, cx);
         root!(func, cx);
-        let result = func.call(args, Some(&name), self.env, cx)?;
+        let result = func.call(args, Some(&name), &mut self.env, cx)?;
         self.env.stack.remove_top(arg_cnt);
         self.env.stack[0].set(result);
         cx.garbage_collect(false);
@@ -467,7 +478,7 @@ impl<'brw, 'ob> VM<'brw> {
                 }
                 op::SymbolValue => {
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::symbol_value(top, self.env, cx).unwrap_or_default();
+                    let value = data::symbol_value(top, &self.env, cx).unwrap_or_default();
                     self.env.stack.top().set(value);
                 }
                 op::SymbolFunction => {
@@ -477,7 +488,7 @@ impl<'brw, 'ob> VM<'brw> {
                 op::Set => {
                     let newlet = self.env.stack.pop(cx);
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::set(top, newlet, self.env)?;
+                    let value = data::set(top, newlet, &mut self.env)?;
                     self.env.stack.top().set(value);
                 }
                 op::Fset => {
@@ -488,7 +499,7 @@ impl<'brw, 'ob> VM<'brw> {
                 op::Get => {
                     let prop = self.env.stack.pop(cx).try_into()?;
                     let top = self.env.stack.top().bind_as(cx)?;
-                    let value = data::get(top, prop, self.env, cx);
+                    let value = data::get(top, prop, &self.env, cx);
                     self.env.stack.top().set(value);
                 }
                 op::Substring => todo!("Substring bytecode"),
@@ -624,14 +635,17 @@ impl<'brw, 'ob> VM<'brw> {
                     }
                 }
                 op::Return => {
-                    let Some(frame) = self.call_frames.pop() else {
+                    if self.call_frames.is_empty() {
                         return Ok(self.env.stack.pop(cx));
-                    };
+                    }
                     let start = self.frame.start;
                     let var = self.env.stack.pop(cx);
                     self.env.stack.truncate(start + 1);
                     self.env.stack.top().set(var);
-                    self.frame = frame;
+                    // swap the last call frame for the current one and then
+                    // drop the current one
+                    std::mem::swap(self.call_frames.last_mut().unwrap(), &mut self.frame);
+                    self.call_frames.pop();
                 }
                 op::Discard => {
                     self.env.stack.pop(cx);
@@ -859,10 +873,16 @@ pub(crate) fn call<'ob>(
     for arg in args.bind_ref(cx).iter() {
         env.stack.push(*arg);
     }
-    root!(handlers, Vec::new(), cx);
-    let mut vm = VM { call_frames: vec![], frame: CallFrame::new(func, len, cx), env, handlers };
+    let frame = CallFrame::new(func.bind(cx), len);
+    let vm = VM { call_frames: vec![], frame, env: Env::default(), handlers: Vec::new() };
+    root!(vm, cx);
+    // swap in the populated env
+    std::mem::swap(&mut vm.env, env);
+
     vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     let res = vm.run(cx).map_err(|e| e.add_trace(name, args));
+    // swap the env back
+    std::mem::swap(&mut vm.env, env);
     res
 }
 
