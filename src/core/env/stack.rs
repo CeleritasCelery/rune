@@ -12,21 +12,6 @@ pub(crate) struct LispStack {
     pub(crate) frame_starts: Vec<usize>,
 }
 
-// RootedLispStack is created by #[derive(Trace)]
-impl std::ops::Deref for RootedLispStack {
-    type Target = Rt<Vec<GcObj<'static>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.vec
-    }
-}
-
-impl std::ops::DerefMut for RootedLispStack {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.vec
-    }
-}
-
 // To make this simpler we implement indexing from the top of the stack (end of
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
@@ -56,12 +41,16 @@ impl Index<RangeTo<usize>> for RootedLispStack {
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
         assert!(index.end <= self.len());
         let end = self.len() - index.end;
-        let vec: &[Rt<GcObj>] = self;
+        let vec: &[Rt<GcObj>] = &self.vec;
         &vec[end..]
     }
 }
 
 impl RootedLispStack {
+    pub(crate) fn len(&self) -> usize {
+        self.vec.len()
+    }
+
     pub(crate) fn push_frame(&mut self, start: usize) {
         assert!(start <= self.len());
         assert!(self.frame_starts.iter().all(|&s| s <= start));
@@ -73,12 +62,16 @@ impl RootedLispStack {
         self.vec.truncate(len);
     }
 
+    pub(crate) fn push(&mut self, value: GcObj) {
+        self.vec.push(value);
+    }
+
     pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
-        self.bind_mut(cx).pop().unwrap()
+        self.vec.bind_mut(cx).pop().unwrap()
     }
 
     pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'static>> {
-        self.last_mut().unwrap()
+        self.vec.last_mut().unwrap()
     }
 
     pub(crate) fn offset_end(&self, i: usize) -> usize {
@@ -95,7 +88,7 @@ impl RootedLispStack {
 
     pub(crate) fn set_ref(&mut self, i: impl Into<usize>) {
         let index = self.offset_end(i.into());
-        self.swap_remove(index);
+        self.vec.swap_remove(index);
     }
 
     pub(crate) fn fill_extra_args(&mut self, fill_args: u16) {
@@ -108,5 +101,13 @@ impl RootedLispStack {
         let i = i.into();
         let offset = self.offset_end(i);
         self.truncate(offset + 1);
+    }
+
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.vec.truncate(len);
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
+        self.vec.iter().rev()
     }
 }
