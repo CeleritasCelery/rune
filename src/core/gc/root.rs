@@ -97,8 +97,6 @@ impl<T: Display> Display for __StackRoot<'_, T> {
 impl<'rt, T: Trace + 'static> __StackRoot<'rt, T> {
     pub(crate) unsafe fn new(data: &'rt mut T, root_set: &'rt RootSet) -> __StackRoot<'rt, T> {
         let dyn_ptr = data as &mut dyn Trace as *mut dyn Trace;
-        // TODO: See if there is a safer way to do this. We are relying on the
-        // layout of `dyn Trace`, which is not guaranteed.
         let data = &mut *(dyn_ptr.cast::<Rt<T>>());
         let root = Self { data, root_set };
         root_set.roots.borrow_mut().push(dyn_ptr);

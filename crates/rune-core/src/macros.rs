@@ -55,22 +55,22 @@ macro_rules! __cons {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __list {
-        ($x:expr; $cx:expr) => ($crate::macros::cons!($x; $cx));
-        ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => ($crate::macros::cons!($x, list!($($y),+ ; $cx) ; $cx));
-    }
+    ($x:expr; $cx:expr) => ($crate::macros::cons!($x; $cx));
+    ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => ($crate::macros::cons!($x, list!($($y),+ ; $cx) ; $cx));
+}
 
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __error {
-        ($msg:literal $(,)?  $($args:expr),* $(,)?) => (crate::core::error::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
-        ($err:expr) => (crate::core::error::EvalError::new($err));
-    }
+    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (crate::core::error::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
+    ($err:expr) => (crate::core::error::EvalError::new($err));
+}
 
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __bail_err {
-        ($($args:expr),* $(,)?) => (return Err($crate::macros::error!($($args),*)));
-    }
+    ($($args:expr),* $(,)?) => (return Err($crate::macros::error!($($args),*)));
+}
 
 #[macro_export]
 #[doc(hidden)]
