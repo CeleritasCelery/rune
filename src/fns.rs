@@ -681,7 +681,7 @@ fn remhash(key: GcObj, table: &LispHashTable) -> Result<()> {
 #[defun]
 fn maphash(
     function: &Rt<Gc<Function>>,
-    table: &Rt<Gc<&'static LispHashTable>>,
+    table: &Rt<Gc<&LispHashTable>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {

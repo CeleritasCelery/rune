@@ -117,7 +117,7 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// The bytecode VM. This hold all the current call frames and handlers. The
 /// execution stack is part of the Environment.
 #[derive(Trace)]
-struct VM<'brw, 'rt> {
+struct VM<'brw, 'env, 'rt> {
     /// Previous call frames
     call_frames: Vec<CallFrame<'rt>>,
     /// The current call frame.
@@ -126,16 +126,16 @@ struct VM<'brw, 'rt> {
     handlers: Vec<Handler<'rt>>,
     /// The runtime environment
     #[no_trace]
-    env: &'brw mut Rt<Env>,
+    env: &'brw mut Rt<Env<'env>>,
 }
 
-impl<'brw> IntoRoot<VM<'brw, 'static>> for VM<'brw, '_> {
-    unsafe fn into_root(self) -> VM<'brw, 'static> {
+impl<'brw, 'env> IntoRoot<VM<'brw, 'env, 'static>> for VM<'brw, 'env, '_> {
+    unsafe fn into_root(self) -> VM<'brw, 'env, 'static> {
         std::mem::transmute(self)
     }
 }
 
-impl<'ob> RootedVM<'_, 'static> {
+impl<'ob> RootedVM<'_, '_, '_> {
     fn varref(&mut self, idx: u16, cx: &'ob Context) -> Result<()> {
         let symbol = self.frame.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
@@ -863,8 +863,8 @@ fn fetch_bytecode(_object: GcObj) {
 }
 
 pub(crate) fn call<'ob>(
-    func: &Rt<&'static ByteFn>,
-    args: &mut Rt<Vec<GcObj<'static>>>,
+    func: &Rt<&ByteFn>,
+    args: &mut Rt<Vec<GcObj>>,
     name: &str,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -944,8 +944,8 @@ mod test {
     }
 
     fn check_bytecode_internal(
-        args: &mut Rt<Vec<GcObj<'static>>>,
-        bytecode: &Rt<&'static ByteFn>,
+        args: &mut Rt<Vec<GcObj>>,
+        bytecode: &Rt<&ByteFn>,
         expect: &Rt<GcObj>,
         cx: &mut Context,
     ) {

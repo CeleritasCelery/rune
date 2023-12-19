@@ -14,9 +14,9 @@ use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{bail_err, cons, error, rebind, root, rooted_iter};
 use rune_macros::defun;
 
-struct Interpreter<'brw> {
-    vars: &'brw mut Rt<Vec<&'static Cons>>,
-    env: &'brw mut Rt<Env>,
+struct Interpreter<'brw, 'rt> {
+    vars: &'brw mut Rt<Vec<&'rt Cons>>,
+    env: &'brw mut Rt<Env<'rt>>,
 }
 
 #[defun]
@@ -32,7 +32,7 @@ pub(crate) fn eval<'ob>(
     interpreter.eval_form(form, cx).map_err(Into::into)
 }
 
-impl Interpreter<'_> {
+impl Interpreter<'_, '_> {
     fn eval_form<'ob>(&mut self, rt: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         match rt.get(cx) {
             Object::Symbol(sym) => self.var_ref(sym, cx),

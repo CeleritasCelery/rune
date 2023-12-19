@@ -13,22 +13,22 @@ use stack::LispStack;
 pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
-pub(crate) struct Env {
-    pub(crate) vars: HashMap<Symbol<'static>, GcObj<'static>>,
-    pub(crate) props: HashMap<Symbol<'static>, Vec<(Symbol<'static>, GcObj<'static>)>>,
-    pub(crate) catch_stack: Vec<GcObj<'static>>,
-    exception: (GcObj<'static>, GcObj<'static>),
+pub(crate) struct Env<'a> {
+    pub(crate) vars: HashMap<Symbol<'a>, GcObj<'a>>,
+    pub(crate) props: HashMap<Symbol<'a>, Vec<(Symbol<'a>, GcObj<'a>)>>,
+    pub(crate) catch_stack: Vec<GcObj<'a>>,
+    exception: (GcObj<'a>, GcObj<'a>),
     #[no_trace]
     exception_id: u32,
-    binding_stack: Vec<(Symbol<'static>, Option<GcObj<'static>>)>,
-    pub(crate) match_data: GcObj<'static>,
+    binding_stack: Vec<(Symbol<'a>, Option<GcObj<'a>>)>,
+    pub(crate) match_data: GcObj<'a>,
     #[no_trace]
-    pub(crate) current_buffer: Option<OpenBuffer<'static>>,
+    pub(crate) current_buffer: Option<OpenBuffer<'a>>,
     pub(crate) stack: LispStack,
 }
 
 // RootedEnv created by #[derive(Trace)]
-impl RootedEnv {
+impl<'a> RootedEnv<'a> {
     pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))
@@ -57,10 +57,7 @@ impl RootedEnv {
         self.exception_id
     }
 
-    pub(crate) fn get_exception(
-        &self,
-        id: u32,
-    ) -> Option<(&Rt<GcObj<'static>>, &Rt<GcObj<'static>>)> {
+    pub(crate) fn get_exception(&self, id: u32) -> Option<(&Rt<GcObj<'a>>, &Rt<GcObj<'a>>)> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 

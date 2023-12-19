@@ -17,28 +17,36 @@ use std::{
     marker::PhantomPinned,
 };
 
-/// Helper trait to change the lifetime of an object to `'static` so it can be a
-/// root for garbage collection. Can also be used to simplifying adding certain
-/// types (like automatically unwraping other rooted objects). This trait is
-/// only safe to implement for types that can be traced by the garbage
-/// collector.
+/// Helper trait to break the dependency between an object and the lifetimes of
+/// it's [traceable](Trace) children. If This trait is implemented, than the
+/// object can be traced by the garbage collector. Once it becomes rooted, it as
+/// well as all of it's tracable children will be live until it is unrooted.
+/// This essentially makes any lifetimes of a tracable objects meaningless. They
+/// can be anything, including 'static. When an object is removed from a root it
+/// will be given the proper lifetime again. Care must be taken to ensure that
+/// any lifetimes that are changed only belong to traceable objects. Object can
+/// contain lifetimes parameters for both traceable and untracable children, and
+/// only the traceable children's lifetimes can be changed.
+///
+/// On top of scrubbing the lifetimes, this trait can also do a transformation
+/// of the underlying type for convenience, similar to calling `Into::into`.
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<T, U> IntoRoot<U> for T
+impl<'a, T, U> IntoRoot<U> for T
 where
-    T: WithLifetime<'static, Out = U>,
-    U: 'static,
+    T: WithLifetime<'a, Out = U>,
+    U: 'a,
 {
     unsafe fn into_root(self) -> U {
         self.with_lifetime()
     }
 }
 
-impl<T, U> IntoRoot<U> for &Rt<T>
+impl<'a, T, U> IntoRoot<U> for &Rt<T>
 where
-    T: WithLifetime<'static, Out = U> + Copy,
+    T: WithLifetime<'a, Out = U> + Copy,
 {
     unsafe fn into_root(self) -> U {
         self.inner.with_lifetime()
