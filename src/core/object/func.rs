@@ -42,12 +42,12 @@ impl ByteFn {
         }
     }
 
-    pub(crate) fn codes<'a>(&'a self) -> &'a LispString {
-        unsafe { std::mem::transmute::<&'static LispString, &'a LispString>(self.op_codes) }
+    pub(crate) fn codes(&self) -> &LispString {
+        unsafe { self.op_codes.with_lifetime() }
     }
 
-    pub(crate) fn consts<'a>(&'a self) -> &'a LispVec {
-        unsafe { std::mem::transmute::<&'static LispVec, &'a LispVec>(self.constants) }
+    pub(crate) fn consts(&self) -> &LispVec {
+        unsafe { self.constants.with_lifetime() }
     }
 
     pub(crate) fn index(&self, index: usize) -> Option<GcObj> {

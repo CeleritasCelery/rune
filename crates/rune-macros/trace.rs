@@ -1,6 +1,5 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{punctuated::Punctuated, Token};
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
@@ -8,20 +7,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     let vis = &orig.vis;
     let orig_name = &orig.ident;
     let rooted_name = format_ident!("Rooted{orig_name}");
-    let orig_generics = &orig.generics;
-    let static_generics = {
-        let mut params: Punctuated<_, Token![,]> = Punctuated::new();
-        for generic in &orig.generics.params {
-            match generic {
-                syn::GenericParam::Lifetime(_) => {
-                    let lt = syn::Lifetime::new("'static", proc_macro2::Span::call_site());
-                    params.push(syn::GenericParam::Lifetime(syn::LifetimeParam::new(lt)));
-                }
-                x => params.push(x.clone()),
-            }
-        }
-        syn::Generics { params, ..Default::default() }
-    };
+    let generic_params = &orig.generics;
 
     let derive = match &orig.data {
         syn::Data::Struct(strct) => {
@@ -75,7 +61,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
             }
             let test_mod = format_ident!("derive_trace_{orig_name}");
             quote! {
-                impl crate::core::gc::Trace for #orig_name #static_generics {
+                impl #generic_params crate::core::gc::Trace for #orig_name #generic_params {
                     fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
                         #mark_fields
                     }
@@ -83,7 +69,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
 
                 #[automatically_derived]
                 #[allow(non_camel_case_types)]
-                #vis struct #rooted_name #orig_generics #new_fields
+                #vis struct #rooted_name #generic_params #new_fields
 
                 // This makes sure that the offsets of the fields are the same
                 // between the derived and orignal structs. Once
@@ -107,8 +93,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     quote! {
         #derive
 
-        impl crate::core::gc::RootedDeref for #orig_name #static_generics {
-            type Target = #rooted_name #static_generics;
+        impl #generic_params crate::core::gc::RootedDeref for #orig_name #generic_params {
+            type Target = #rooted_name #generic_params;
 
             fn rooted_deref(rooted: &crate::core::gc::Rt<Self>) -> &Self::Target {
                 unsafe { &*(rooted as *const crate::core::gc::Rt<Self>).cast::<Self::Target>() }            }

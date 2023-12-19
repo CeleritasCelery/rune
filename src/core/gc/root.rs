@@ -267,10 +267,7 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        unsafe {
-            std::mem::transmute::<&T, &<T as WithLifetime<'ob>>::Out>(&self.inner)
-        }
+        unsafe { std::mem::transmute::<&'a T, &'a <T as WithLifetime<'ob>>::Out>(&self.inner) }
     }
 
     pub(crate) fn bind_mut<'a, 'ob>(
@@ -281,9 +278,8 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
-            std::mem::transmute(&mut self.inner)
+            std::mem::transmute::<&'a mut T, &'a mut <T as WithLifetime<'ob>>::Out>(&mut self.inner)
         }
     }
 
@@ -365,10 +361,10 @@ impl From<&Rt<GcObj<'_>>> for Option<()> {
     }
 }
 
-impl Rt<GcObj<'static>> {
+impl<'a> Rt<GcObj<'a>> {
     pub(crate) fn try_as_option<T, E>(&self) -> Result<Option<&Rt<Gc<T>>>, E>
     where
-        GcObj<'static>: TryInto<Gc<T>, Error = E>,
+        GcObj<'a>: TryInto<Gc<T>, Error = E>,
     {
         if self.inner.is_nil() {
             Ok(None)
@@ -379,7 +375,7 @@ impl Rt<GcObj<'static>> {
     }
 }
 
-impl IntoObject for &Rt<GcObj<'static>> {
+impl IntoObject for &Rt<GcObj<'_>> {
     type Out<'ob> = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -387,7 +383,7 @@ impl IntoObject for &Rt<GcObj<'static>> {
     }
 }
 
-impl IntoObject for &mut Rt<GcObj<'static>> {
+impl IntoObject for &mut Rt<GcObj<'_>> {
     type Out<'ob> = Object<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -565,7 +561,7 @@ mod test {
     fn indexing() {
         let root = &RootSet::default();
         let cx = &Context::new(root);
-        let mut vec: Rt<Vec<GcObj<'static>>> = Rt { inner: vec![], _aliasable: PhantomPinned };
+        let mut vec = Rt { inner: vec![], _aliasable: PhantomPinned };
 
         vec.push(nil());
         assert_eq!(vec[0], nil());
