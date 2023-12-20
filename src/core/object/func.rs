@@ -6,7 +6,10 @@ use super::{
     display_slice, CloneIn, IntoObject, LispString, LispVec,
 };
 use super::{GcObj, WithLifetime};
-use crate::core::gc::{GcManaged, GcMark, Rt};
+use crate::core::{
+    env::Env,
+    gc::{GcManaged, GcMark, Rt},
+};
 use anyhow::{bail, ensure, Result};
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
@@ -160,11 +163,8 @@ impl FnArgs {
     }
 }
 
-pub(crate) type BuiltInFn = for<'ob> fn(
-    &[Rt<GcObj<'static>>],
-    &mut Rt<crate::core::env::Env>,
-    &'ob mut Context,
-) -> Result<GcObj<'ob>>;
+pub(crate) type BuiltInFn =
+    for<'ob> fn(&[Rt<GcObj>], &mut Rt<Env>, &'ob mut Context) -> Result<GcObj<'ob>>;
 
 #[derive(Eq)]
 pub(crate) struct SubrFn {
@@ -177,8 +177,8 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'ob>(
         &self,
-        args: &[Rt<GcObj<'static>>],
-        env: &mut Rt<crate::core::env::Env>,
+        args: &[Rt<GcObj>],
+        env: &mut Rt<Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
         (self.subr)(args, env, cx)

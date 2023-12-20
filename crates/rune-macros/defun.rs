@@ -43,8 +43,8 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     quote! {
         #[automatically_derived]
         #[doc(hidden)]
-        fn #func_name<'ob, 'id>(
-            args: &[crate::core::gc::Rt<crate::core::object::GcObj<'static>>],
+        fn #func_name<'ob>(
+            args: &[crate::core::gc::Rt<crate::core::object::GcObj>],
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
