@@ -17,7 +17,9 @@ use std::ops::{Index, IndexMut, RangeTo};
 pub(crate) struct LispStack<'a> {
     vec: Vec<GcObj<'a>>,
     #[no_trace]
-    pub(crate) frame_starts: Vec<usize>,
+    start: usize,
+    #[no_trace]
+    frame_starts: Vec<usize>,
 }
 
 // To make this simpler we implement indexing from the top of the stack (end of
@@ -55,25 +57,22 @@ impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
 }
 
 impl<'a> RootedLispStack<'a> {
-    fn frame_start(&self) -> usize {
-        self.frame_starts.last().copied().unwrap_or(0)
-    }
-
     pub(crate) fn push_frame(&mut self, start: usize) {
         assert!(start <= self.len());
-        assert!(self.frame_starts.iter().all(|&s| s <= start));
-        self.frame_starts.push(start);
+        assert!(self.start <= start);
+        self.frame_starts.push(self.start);
+        self.start = start;
     }
 
     pub(crate) fn pop_frame(&mut self) {
-        let len = self.frame_starts.pop().unwrap();
-        self.vec.truncate(len);
+        self.vec.truncate(self.start);
+        self.start = self.frame_starts.pop().unwrap();
     }
 
     pub(crate) fn return_frame(&mut self) {
-        let start = self.frame_starts.pop().unwrap();
-        self.vec.swap_remove(start);
-        self.vec.truncate(start + 1);
+        self.vec.swap_remove(self.start);
+        self.vec.truncate(self.start + 1);
+        self.start = self.frame_starts.pop().unwrap();
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -81,11 +80,11 @@ impl<'a> RootedLispStack<'a> {
     }
 
     pub(crate) fn unwind_frames(&mut self, frame: usize) {
-        assert!(frame <= self.current_frame());
-        let Some(len) = self.frame_starts.get(frame) else {
+        if frame == self.current_frame() {
             return; /* no frames to unwind */
-        };
-        self.vec.truncate(*len);
+        }
+        assert!(frame < self.current_frame());
+        self.start = self.frame_starts[frame];
         self.frame_starts.truncate(frame);
     }
 
@@ -98,17 +97,19 @@ impl<'a> RootedLispStack<'a> {
     }
 
     pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
+        assert!(self.len() > self.start);
         self.vec.bind_mut(cx).pop().unwrap()
     }
 
     pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'a>> {
+        assert!(self.len() > self.start);
         self.vec.last_mut().unwrap()
     }
 
     pub(crate) fn offset_end(&self, i: usize) -> usize {
         assert!(i < self.len());
         let from_end = self.len() - (i + 1);
-        assert!(*self.frame_starts.last().unwrap() <= from_end);
+        assert!(self.start <= from_end);
         from_end
     }
 
@@ -139,6 +140,6 @@ impl<'a> RootedLispStack<'a> {
     }
 
     pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
-        self.vec[self.frame_start()..].iter().rev()
+        self.vec[self.start..].iter().rev()
     }
 }
