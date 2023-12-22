@@ -215,11 +215,9 @@ impl Interpreter<'_, '_> {
                 let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
-                    // TODO: use array
-                    root!(args, Vec::new(), cx);
-                    args.push(form.bind(cx));
-                    args.push(env);
-                    return closure_fn.call(args, None, self.env, cx);
+                    let args = [form.bind(cx), env];
+                    root!(args, cx);
+                    return closure_fn.call(&args[..], None, self.env, cx);
                 }
             }
         }

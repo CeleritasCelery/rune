@@ -38,6 +38,14 @@ impl<T: Trace> Trace for [T] {
     }
 }
 
+impl<T: Trace, const N: usize> Trace for [T; N] {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        for x in self {
+            x.trace(stack);
+        }
+    }
+}
+
 impl<T: Trace> Trace for Vec<T> {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         for x in self {

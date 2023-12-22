@@ -212,6 +212,20 @@ where
     }
 }
 
+impl<'new, T, const N: usize> WithLifetime<'new> for [T; N]
+where
+    T: WithLifetime<'new>,
+{
+    type Out = [<T as WithLifetime<'new>>::Out; N];
+    unsafe fn with_lifetime(self) -> Self::Out {
+        // work around since we can't transmute arrays
+        let ptr = &self as *const [T; N] as *const Self::Out;
+        let value = unsafe { ptr.read() };
+        std::mem::forget(self);
+        value
+    }
+}
+
 impl<'new, T> WithLifetime<'new> for Vec<T>
 where
     T: WithLifetime<'new>,
@@ -445,6 +459,34 @@ impl<T> Rt<Option<T>> {
     }
 }
 
+impl<T, I, const N: usize> Index<I> for Rt<[T; N]>
+where
+    [Rt<T>]: Index<I>,
+{
+    type Output = <[Rt<T>] as Index<I>>::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        let slice = unsafe { std::mem::transmute::<&[T], &[Rt<T>]>(&self.inner) };
+        Index::index(slice, index)
+    }
+}
+
+impl<T, I, const N: usize> IndexMut<I> for Rt<[T; N]>
+where
+    [Rt<T>]: IndexMut<I>,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        let slice = unsafe { std::mem::transmute::<&mut [T], &mut [Rt<T>]>(&mut self.inner) };
+        IndexMut::index_mut(slice, index)
+    }
+}
+
+impl<T, const N: usize> AsRef<[Rt<T>]> for Rt<[T; N]> {
+    fn as_ref(&self) -> &[Rt<T>] {
+        unsafe { std::mem::transmute::<&[T], &[Rt<T>]>(&self.inner) }
+    }
+}
+
 impl<T> Rt<Vec<T>> {
     // This is not safe to expose pub(crate) because you could call pop and get
     // an owned Rt
@@ -463,10 +505,6 @@ impl<T> Rt<Vec<T>> {
 
     pub(crate) fn pop(&mut self) {
         self.as_mut_ref().pop();
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.as_mut_ref().clear();
     }
 
     pub(crate) fn swap_remove(&mut self, index: usize) {

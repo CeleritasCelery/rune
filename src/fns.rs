@@ -436,18 +436,16 @@ fn sort<'ob>(
 
     root!(tmp, nil(), cx);
     root!(vec, cx);
-    // TODO: Use an array
-    root!(args, Vec::new(), cx);
+    root!(args, [nil(), nil()], cx);
     // A simple insertion sort
     // TODO: use a better sort like tim sort
     for i in 1..len {
         tmp.set(&vec[i]);
         let mut j = i;
         while j > 0 {
-            args.clear();
-            args.push(&vec[j - 1]);
-            args.push(&*tmp);
-            match predicate.call(args, None, env, cx) {
+            args[0].set(&vec[j - 1]);
+            args[1].set(&*tmp);
+            match predicate.call(&args[..], None, env, cx) {
                 Ok(cmp) => {
                     if cmp != nil() {
                         break;
@@ -690,21 +688,19 @@ fn maphash(
         }
     };
 
-    // TODO: Use array
-    root!(args, Vec::new(), cx);
+    root!(args, [nil(), nil()], cx);
     loop {
         {
             let mut view = table.bind(cx).untag().try_borrow_mut()?;
             let Some(idx) = get_idx(&mut view) else { break };
             let (key, val) = view.get_index(idx).unwrap();
-            args.push(*key);
-            args.push(*val);
+            args[0].set(*key);
+            args[1].set(*val);
         }
-        if let Err(e) = function.call(args, None, env, cx) {
+        if let Err(e) = function.call(&args[..], None, env, cx) {
             table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
             return Err(e.into());
         }
-        args.clear();
     }
     table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
     Ok(false)
