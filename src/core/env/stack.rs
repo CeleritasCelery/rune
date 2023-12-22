@@ -10,8 +10,9 @@ use std::ops::{Index, IndexMut, RangeTo};
 /// functions operate from top to bottom. The stack is partitioned into frames.
 /// Each frame represents a function call and it's arguments. The API is
 /// designed so that code cannot access elements outside of their frame (doing
-/// so results in a panic). Frames are added and removed with [push_frame] and
-/// [pop_frame] respectively.
+/// so results in a panic). Frames are added and removed with
+/// [push_frame](RootedLispStack::push_frame) and
+/// [pop_frame](RootedLispStack::pop_frame) respectively.
 #[derive(Debug, Default, Trace)]
 pub(crate) struct LispStack {
     vec: Vec<GcObj<'static>>,
