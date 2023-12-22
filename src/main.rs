@@ -39,7 +39,7 @@ use crate::core::{
     env::{intern, sym, Env},
     error::EvalError,
     gc::{Context, RootSet, Rt},
-    object::{nil, Gc, LispString},
+    object::{Gc, LispString, NIL},
 };
 use rune_core::macros::root;
 use std::io::{self, Write};
@@ -116,7 +116,7 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
 }
 
 fn load(env: &mut Rt<Env>, cx: &mut Context) {
-    buffer::get_buffer_create(cx.add("*scratch*"), Some(nil()), cx).unwrap();
+    buffer::get_buffer_create(cx.add("*scratch*"), Some(NIL), cx).unwrap();
     let bootstrap: Gc<&LispString> = cx.add_as("lisp/bootstrap.el");
     root!(bootstrap, cx);
     match crate::lread::load(bootstrap, None, None, cx, env) {

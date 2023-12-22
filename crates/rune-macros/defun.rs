@@ -495,7 +495,7 @@ mod test {
             fn car<'ob>(list: Gc<List>, cx: &'ob Context) -> GcObj<'ob> {
                 match list.get() {
                     List::Cons(cons) => cons.car(),
-                    List::Nil => nil(),
+                    List::Nil => NIL,
                 }
             }
         };

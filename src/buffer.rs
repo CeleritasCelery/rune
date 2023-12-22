@@ -3,7 +3,7 @@ use crate::core::{
     env::{interned_symbols, Env},
     error::{Type, TypeError},
     gc::{Context, Rt},
-    object::{nil, Gc, GcObj, LispBuffer, Object},
+    object::{Gc, GcObj, LispBuffer, Object, NIL},
 };
 use anyhow::{bail, Result};
 use rune_core::hashmap::HashMap;
@@ -106,7 +106,7 @@ pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> R
             let buffer_list = buffers().lock().unwrap();
             match buffer_list.get(name) {
                 Some(b) => Ok(cx.add(*b)),
-                None => Ok(nil()),
+                None => Ok(NIL),
             }
         }
         Object::Buffer(_) => Ok(buffer_or_name),
@@ -177,10 +177,8 @@ defvar!(BIDI_DISPLAY_REORDERING);
 
 #[cfg(test)]
 mod test {
-    use crate::core::gc::RootSet;
-    use crate::core::object::nil;
-
     use super::*;
+    use crate::core::gc::RootSet;
 
     #[test]
     fn test_gen_new_buffer_name() {
@@ -191,11 +189,11 @@ mod test {
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test");
 
-        get_buffer_create(cx.add(name), Some(nil()), cx).unwrap();
+        get_buffer_create(cx.add(name), Some(NIL), cx).unwrap();
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test<2>");
 
-        get_buffer_create(cx.add("gen_buffer_test<2>"), Some(nil()), cx).unwrap();
+        get_buffer_create(cx.add("gen_buffer_test<2>"), Some(NIL), cx).unwrap();
         let new_name = generate_new_buffer_name(name, None);
         assert_eq!(new_name, "gen_buffer_test<3>");
 
@@ -205,7 +203,7 @@ mod test {
         let new_name = generate_new_buffer_name(" gen_buffer_test", None);
         assert_eq!(new_name, " gen_buffer_test");
 
-        get_buffer_create(cx.add(" gen_buffer_test"), Some(nil()), cx).unwrap();
+        get_buffer_create(cx.add(" gen_buffer_test"), Some(NIL), cx).unwrap();
         let new_name = generate_new_buffer_name(" gen_buffer_test", None);
         assert!(new_name.starts_with(" gen_buffer_test-"));
     }
@@ -214,7 +212,7 @@ mod test {
     fn test_create_buffer() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        let buffer = get_buffer_create(cx.add("test_create_buffer"), Some(nil()), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_create_buffer"), Some(NIL), cx).unwrap();
         assert!(matches!(buffer.untag(), Object::Buffer(_)));
     }
 }

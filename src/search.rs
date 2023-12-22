@@ -2,7 +2,7 @@
 use crate::core::{
     env::Env,
     gc::{Context, Rt},
-    object::{nil, Gc, GcObj, List},
+    object::{Gc, GcObj, List, NIL},
 };
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
@@ -35,7 +35,7 @@ fn string_match<'ob>(
         env.match_data.set(match_data);
         Ok(match_data.as_cons().car())
     } else {
-        Ok(nil())
+        Ok(NIL)
     }
 }
 
@@ -139,7 +139,7 @@ fn set_match_data<'ob>(list: Gc<List>, _reseat: Option<()>, env: &mut Rt<Env>) -
     // TODO: add reseat when markers implemented
     let obj: GcObj = list.into();
     env.match_data.set(obj);
-    nil()
+    NIL
 }
 
 #[defun]

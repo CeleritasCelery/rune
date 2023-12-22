@@ -5,7 +5,7 @@ use crate::{
         env::{sym, Env, Symbol},
         error::{ArgError, ErrorType, EvalError, EvalResult, Type, TypeError},
         gc::{Context, Rt},
-        object::{nil, qtrue, Function, Gc, GcObj, List, Object},
+        object::{Function, Gc, GcObj, List, Object, NIL, TRUE},
     },
     eval::add_trace,
 };
@@ -71,7 +71,7 @@ impl Interpreter<'_, '_> {
                 sym::SETQ => self.setq(forms, cx),
                 sym::DEFVAR | sym::DEFCONST => self.defvar(forms, cx),
                 sym::FUNCTION => self.eval_function(forms, cx),
-                sym::INTERACTIVE => Ok(nil()), // TODO: implement
+                sym::INTERACTIVE => Ok(NIL), // TODO: implement
                 sym::CATCH => self.catch(forms, cx),
                 sym::THROW => self.throw(forms.bind(cx), cx),
                 sym::CONDITION_CASE => self.condition_case(forms, cx),
@@ -138,7 +138,7 @@ impl Interpreter<'_, '_> {
             // (defvar x y)
             Some(value) => rebind!(self.eval_form(value, cx)?),
             // (defvar x)
-            None => nil(),
+            None => NIL,
         };
         self.env.defvar(name.bind(cx), value)?;
         Ok(value)
@@ -288,11 +288,11 @@ impl Interpreter<'_, '_> {
         };
         root!(condition, cx);
         root!(body, cx);
-        while self.eval_form(condition, cx)? != nil() {
+        while self.eval_form(condition, cx)? != NIL {
             rooted_iter!(forms, &*body, cx);
             self.implicit_progn(forms, cx)?;
         }
-        Ok(nil())
+        Ok(NIL)
     }
 
     fn eval_cond<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
@@ -301,7 +301,7 @@ impl Interpreter<'_, '_> {
             rooted_iter!(clause, form, cx);
             if let Some(first) = clause.next()? {
                 let condition = self.eval_form(first, cx)?;
-                if condition != nil() {
+                if condition != NIL {
                     return if clause.is_empty() {
                         Ok(rebind!(condition, cx))
                     } else {
@@ -310,16 +310,16 @@ impl Interpreter<'_, '_> {
                 }
             }
         }
-        Ok(nil())
+        Ok(NIL)
     }
 
     fn eval_and<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        root!(last, qtrue(), cx);
+        root!(last, TRUE, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
             let result = self.eval_form(form, cx)?;
-            if result == nil() {
-                return Ok(nil());
+            if result == NIL {
+                return Ok(NIL);
             }
             last.set(result);
         }
@@ -330,11 +330,11 @@ impl Interpreter<'_, '_> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
             let result = self.eval_form(form, cx)?;
-            if result != nil() {
+            if result != NIL {
                 return Ok(rebind!(result, cx));
             }
         }
-        Ok(nil())
+        Ok(NIL)
     }
 
     fn eval_if<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
@@ -344,7 +344,7 @@ impl Interpreter<'_, '_> {
         let Some(true_branch) = forms.next()? else { bail_err!(ArgError::new(2, 1, "if")) };
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
-        if self.eval_form(condition, cx)? != nil() {
+        if self.eval_form(condition, cx)? != NIL {
             self.eval_form(true_branch, cx)
         } else {
             self.implicit_progn(forms, cx)
@@ -354,7 +354,7 @@ impl Interpreter<'_, '_> {
     fn setq<'ob>(&mut self, obj: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
-        root!(last_value, nil(), cx);
+        root!(last_value, NIL, cx);
         while let Some((var, val)) = Self::pairs(&mut forms, cx)? {
             match (var.untag(), val) {
                 (Object::Symbol(var), Some(val)) => {
@@ -456,7 +456,7 @@ impl Interpreter<'_, '_> {
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    varbind_count += self.create_let_binding(sym, nil(), cx);
+                    varbind_count += self.create_let_binding(sym, NIL, cx);
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
@@ -480,7 +480,7 @@ impl Interpreter<'_, '_> {
                 }
                 // (let (x))
                 Object::Symbol(sym) => {
-                    let_bindings.push((sym, nil()));
+                    let_bindings.push((sym, NIL));
                 }
                 // (let (1))
                 x => bail_err!(TypeError::new(Type::Cons, x)),
@@ -514,7 +514,7 @@ impl Interpreter<'_, '_> {
             // (let ((x y)))
             Some(x) => self.eval_form(x, cx)?,
             // (let ((x)))
-            None => nil(),
+            None => NIL,
         };
         // (let ((x y z ..)))
         if !iter.is_empty() {
@@ -528,7 +528,7 @@ impl Interpreter<'_, '_> {
         mut forms: ElemStreamIter<'_>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        root!(last, nil(), cx);
+        root!(last, NIL, cx);
         while let Some(form) = forms.next()? {
             let value = self.eval_form(form, cx)?;
             last.set(value);
@@ -626,7 +626,7 @@ impl Interpreter<'_, '_> {
                     self.vars.push(binding);
                     let list: Gc<List> = match cons.cdr().try_into() {
                         Ok(x) => x,
-                        Err(_) => return Ok(nil()),
+                        Err(_) => return Ok(NIL),
                     };
                     rooted_iter!(handlers, list, cx);
                     let result = self.implicit_progn(handlers, cx)?;

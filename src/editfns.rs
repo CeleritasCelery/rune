@@ -152,7 +152,7 @@ fn system_name() -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::core::object::nil;
+    use crate::core::object::NIL;
     use crate::{
         buffer::{get_buffer_create, set_buffer},
         core::gc::{Context, RootSet},
@@ -182,7 +182,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(env, Env::default(), cx);
-        let buffer = get_buffer_create(cx.add("test_insert"), Some(nil()), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_insert"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
         insert(&[104.into(), 101.into(), 108.into(), 108.into(), 111.into()], env).unwrap();
@@ -194,7 +194,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(env, Env::default(), cx);
-        let buffer = get_buffer_create(cx.add("test_delete_region"), Some(nil()), cx).unwrap();
+        let buffer = get_buffer_create(cx.add("test_delete_region"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
         insert(&[cx.add("hello"), cx.add(" world")], env).unwrap();

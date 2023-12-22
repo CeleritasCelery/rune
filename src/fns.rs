@@ -6,8 +6,8 @@ use crate::{
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
-            nil, Function, Gc, GcObj, HashTable, HashTableView, IntoObject, LispHashTable,
-            LispString, LispVec, List, Object,
+            Function, Gc, GcObj, HashTable, HashTableView, IntoObject, LispHashTable, LispString,
+            LispVec, List, Object, NIL,
         },
     },
     data::aref,
@@ -37,7 +37,7 @@ pub(crate) fn build_list<'ob, E>(
     mut iter: impl Iterator<Item = Result<GcObj<'ob>, E>>,
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>, E> {
-    let Some(first) = iter.next() else { return Ok(nil()) };
+    let Some(first) = iter.next() else { return Ok(NIL) };
     let head = Cons::new1(first?, cx);
     let mut prev = head;
     for elem in iter {
@@ -75,7 +75,7 @@ fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
 #[defun]
 fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
     let plist: Result<Gc<List>, _> = plist.try_into();
-    let Ok(plist) = plist else { return Ok(nil()) };
+    let Ok(plist) = plist else { return Ok(NIL) };
     // TODO: this function should never fail. Need to implement safe iterator
     let iter = plist.elements().zip(plist.elements().skip(1));
 
@@ -84,7 +84,7 @@ fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
             return Ok(value?);
         }
     }
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]
@@ -113,7 +113,7 @@ pub(crate) fn mapcar<'ob>(
 ) -> Result<GcObj<'ob>> {
     let sequence = sequence.bind(cx);
     match sequence.untag() {
-        Object::NIL => Ok(nil()),
+        Object::NIL => Ok(NIL),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
             root!(outputs, Vec::new(), cx);
@@ -128,7 +128,7 @@ pub(crate) fn mapcar<'ob>(
             let len = fun.len();
             root!(fun, cx);
             root!(outputs, Vec::new(), cx);
-            root!(arg, nil(), cx);
+            root!(arg, NIL, cx);
             for i in 0..len {
                 arg.set(fun.bind(cx).index(i).unwrap());
                 let output = function.call1(arg, None, env, cx)?;
@@ -149,7 +149,7 @@ pub(crate) fn mapc<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     match sequence.get(cx) {
-        List::Nil => Ok(nil()),
+        List::Nil => Ok(NIL),
         List::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
@@ -204,7 +204,7 @@ pub(crate) fn mapconcat(
 
 #[defun]
 pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
-    let mut prev = nil();
+    let mut prev = NIL;
     for tail in seq.conses() {
         let tail = tail?;
         tail.set_cdr(prev)?;
@@ -215,7 +215,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 
 #[defun]
 pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    let mut tail = nil();
+    let mut tail = NIL;
     for elem in seq {
         tail = cons!(elem?, tail; cx);
     }
@@ -236,7 +236,7 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
 
     Ok(match lists.iter().find(|&&x| x != List::empty()) {
         Some(x) => (*x).into(),
-        None => nil(),
+        None => NIL,
     })
 }
 
@@ -251,7 +251,7 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 
 #[defun]
 fn take<'ob>(n: i64, list: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
-    let Ok(n) = usize::try_from(n) else { return Ok(nil()) };
+    let Ok(n) = usize::try_from(n) else { return Ok(NIL) };
     Ok(build_list(list.elements().take(n), cx)?)
 }
 
@@ -278,7 +278,7 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'
             }
         }
     }
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]
@@ -290,7 +290,7 @@ fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
             }
         }
     }
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]
@@ -314,7 +314,7 @@ pub(crate) fn assoc<'ob>(
                     root!(cons, cx);
                     args.push(cons.car(cx));
                     let result = func.call(args, None, env, cx)?;
-                    if result != nil() {
+                    if result != NIL {
                         return Ok(cons.bind(cx).into());
                     }
                     args.pop();
@@ -333,7 +333,7 @@ pub(crate) fn assoc<'ob>(
             }
         }
     };
-    Ok(nil())
+    Ok(NIL)
 }
 
 type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
@@ -341,7 +341,7 @@ type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
 #[defun]
 fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match alist.untag() {
-        List::Nil => Ok(nil()),
+        List::Nil => Ok(NIL),
         List::Cons(cons) => {
             let first = copy_alist_elem(cons.car(), cx);
             let head = Cons::new1(first, cx);
@@ -401,7 +401,7 @@ fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> R
     let val = list.conses().fallible().find(|x| Ok(eq_fn(x.car(), elt)))?;
     match val {
         Some(elem) => Ok(elem.into()),
-        None => Ok(nil()),
+        None => Ok(NIL),
     }
 }
 
@@ -434,9 +434,9 @@ fn sort<'ob>(
         return Ok(seq.bind(cx).into());
     }
 
-    root!(tmp, nil(), cx);
+    root!(tmp, NIL, cx);
     root!(vec, cx);
-    root!(args, [nil(), nil()], cx);
+    root!(args, [NIL, NIL], cx);
     // A simple insertion sort
     // TODO: use a better sort like tim sort
     for i in 1..len {
@@ -447,7 +447,7 @@ fn sort<'ob>(
             args[1].set(&*tmp);
             match predicate.call(&args[..], None, env, cx) {
                 Ok(cmp) => {
-                    if cmp != nil() {
+                    if cmp != NIL {
                         break;
                     }
                 }
@@ -592,7 +592,7 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
     match sequence.untag() {
         Object::Cons(x) => nth(n, x.into()),
-        Object::NIL => Ok(nil()),
+        Object::NIL => Ok(NIL),
         Object::Vec(x) => aref(x.into(), n),
         Object::Record(x) => aref(x.into(), n),
         Object::String(x) => aref(x.into(), n),
@@ -688,7 +688,7 @@ fn maphash(
         }
     };
 
-    root!(args, [nil(), nil()], cx);
+    root!(args, [NIL, NIL], cx);
     loop {
         {
             let mut view = table.bind(cx).untag().try_borrow_mut()?;
@@ -730,7 +730,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
                 Err(_) => Ok(cx.add(x.to_vec())),
             }
         }
-        Object::NIL => Ok(nil()),
+        Object::NIL => Ok(NIL),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }
@@ -787,7 +787,7 @@ fn disable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{gc::RootSet, object::qtrue};
+    use crate::core::{gc::RootSet, object::TRUE};
     use rune_core::macros::root;
 
     use super::*;
@@ -812,8 +812,8 @@ mod test {
         }
         {
             let list = list![true, true, true; cx];
-            let res = delq(qtrue(), list.try_into().unwrap()).unwrap();
-            assert_eq!(res, nil());
+            let res = delq(TRUE, list.try_into().unwrap()).unwrap();
+            assert_eq!(res, NIL);
         }
     }
 
@@ -853,7 +853,7 @@ mod test {
         let cx = &Context::new(roots);
         {
             let res = nconc(&[List::empty()]).unwrap();
-            assert!(res == nil());
+            assert!(res == NIL);
         }
         {
             let list: Gc<List> = list![1, 2; cx].try_into().unwrap();
@@ -874,14 +874,14 @@ mod test {
             assert_eq!(res, list![1, 2, 3, 4, 5, 6; cx]);
         }
         {
-            let list1: Gc<List> = nil().try_into().unwrap();
+            let list1: Gc<List> = NIL.try_into().unwrap();
             let list2: Gc<List> = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
         {
             let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
-            let list2: Gc<List> = nil().try_into().unwrap();
+            let list2: Gc<List> = NIL.try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
@@ -927,7 +927,7 @@ mod test {
         {
             root!(list, List::empty(), cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, nil());
+            assert_eq!(res, NIL);
         }
         {
             let list: Gc<List> = list![1; cx].try_into().unwrap();

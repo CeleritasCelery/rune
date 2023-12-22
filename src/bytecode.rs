@@ -3,7 +3,7 @@ use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
-    nil, ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, WithLifetime,
+    ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, WithLifetime, NIL,
 };
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
@@ -210,7 +210,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
             self.env.stack[0].set(list);
             Ok(total_args - rest_size + 1)
         } else if func.args.rest {
-            self.env.stack.push(nil());
+            self.env.stack.push(NIL);
             Ok(total_args + 1)
         } else {
             Ok(total_args)

@@ -47,7 +47,7 @@ macro_rules! __cons {
     ($car:expr; $cx:expr) => {
         $cx.add({
             let car = $cx.add($car);
-            unsafe { crate::core::cons::Cons::new_unchecked(car, crate::core::object::nil()) }
+            unsafe { crate::core::cons::Cons::new_unchecked(car, crate::core::object::NIL) }
         })
     };
 }
@@ -111,7 +111,7 @@ macro_rules! __rooted_iter {
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {
-                elem = object::nil();
+                elem = object::NIL;
                 cons = object::WithLifetime::with_lifetime(head);
                 root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
                 root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());

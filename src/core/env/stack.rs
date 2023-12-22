@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Context, Rt},
-    object::{nil, GcObj},
+    object::{GcObj, NIL},
 };
 use rune_macros::Trace;
 use std::ops::{Index, IndexMut, RangeTo};
@@ -123,7 +123,7 @@ impl RootedLispStack {
 
     pub(crate) fn fill_extra_args(&mut self, fill_args: u16) {
         for _ in 0..fill_args {
-            self.push(nil());
+            self.push(NIL);
         }
     }
 

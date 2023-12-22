@@ -30,19 +30,24 @@ unsafe impl Send for RawObj {}
 
 impl Default for RawObj {
     fn default() -> Self {
-        Self { ptr: nil().ptr }
+        Self { ptr: NIL.ptr }
     }
 }
 
-#[inline(always)]
-pub(crate) fn nil<'a>() -> GcObj<'a> {
-    sym::NIL.into()
-}
+/// A `nil` object.
+///
+/// The build.rs file guarantees that that `nil` is the first symbol in
+/// `BUILTIN_SYMBOLS`, so we know it will always be 0.
+pub(crate) const NIL: Gc<Object<'static>> = unsafe { std::mem::transmute(0u64) };
 
-#[inline(always)]
-pub(crate) fn qtrue<'a>() -> GcObj<'a> {
-    sym::TRUE.into()
-}
+/// A `t` object.
+///
+/// The build.rs file guarantees that that `t` is the second symbol in
+/// `BUILTIN_SYMBOLS`, so we can rely on its value being constant.
+pub(crate) const TRUE: Gc<Object<'static>> =
+    // offset from 0 by size of SymbolCell and then shift 8 to account for
+    // tagging
+    unsafe { std::mem::transmute(std::mem::size_of::<SymbolCell>() << 8) };
 
 /// This type has two meanings, it is both a value that is tagged as well as
 /// something that is managed by the GC. It is intended to be pointer sized, and
@@ -203,7 +208,7 @@ where
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
             Some(x) => x.into_obj(block).copy_as_obj(block),
-            None => nil(),
+            None => NIL,
         }
     }
 }
@@ -773,7 +778,7 @@ cast_gc!(List<'ob> => &'ob Cons);
 
 impl List<'_> {
     pub(crate) fn empty() -> Gc<Self> {
-        unsafe { cast_gc(nil()) }
+        unsafe { cast_gc(NIL) }
     }
 }
 
@@ -836,7 +841,6 @@ impl<'ob> Function<'ob> {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1204,7 +1208,7 @@ impl<'ob> Gc<Object<'ob>> {
 
 impl Default for Gc<Object<'_>> {
     fn default() -> Self {
-        nil()
+        NIL
     }
 }
 
@@ -1316,7 +1320,7 @@ impl<'ob> List<'ob> {
     #[cfg(test)]
     pub(crate) fn car(self) -> GcObj<'ob> {
         match self {
-            List::Nil => nil(),
+            List::Nil => NIL,
             List::Cons(x) => x.car(),
         }
     }

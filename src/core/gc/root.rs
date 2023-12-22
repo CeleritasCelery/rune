@@ -585,7 +585,7 @@ impl<T> Deref for Rt<HashSet<T>> {
 
 #[cfg(test)]
 mod test {
-    use crate::core::object::nil;
+    use crate::core::object::NIL;
     use rune_core::macros::root;
 
     use super::super::RootSet;
@@ -612,12 +612,12 @@ mod test {
         let cx = &Context::new(root);
         let mut vec = Rt { inner: vec![], _aliasable: PhantomPinned };
 
-        vec.push(nil());
-        assert_eq!(vec[0], nil());
+        vec.push(NIL);
+        assert_eq!(vec[0], NIL);
         let str1 = cx.add("str1");
         let str2 = cx.add("str2");
         vec.push(str1);
         vec.push(str2);
-        assert_eq!(vec![nil(), str1, str2], vec.bind_ref(cx)[0..3]);
+        assert_eq!(vec![NIL, str1, str2], vec.bind_ref(cx)[0..3]);
     }
 }

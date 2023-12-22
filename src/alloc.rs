@@ -2,7 +2,7 @@
 use crate::core::env::{Symbol, SymbolCell};
 use crate::core::gc::Context;
 use crate::core::object::{
-    nil, ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder,
+    ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder, NIL,
 };
 use anyhow::{ensure, Result};
 use rune_core::macros::cons;
@@ -10,7 +10,7 @@ use rune_macros::defun;
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> {
-    let mut head = nil();
+    let mut head = NIL;
     for object in objects.iter().rev() {
         head = cons!(*object, head; cx);
     }

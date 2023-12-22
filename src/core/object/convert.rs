@@ -4,7 +4,7 @@
 
 use super::{
     super::error::{ArgError, Type, TypeError},
-    nil, qtrue, LispHashTable, LispString, LispVec,
+    LispHashTable, LispString, LispVec, NIL, TRUE,
 };
 use super::{Gc, Object};
 use super::{GcObj, LispFloat};
@@ -104,9 +104,9 @@ where
 impl<'ob> From<bool> for GcObj<'ob> {
     fn from(b: bool) -> Self {
         if b {
-            qtrue()
+            TRUE
         } else {
-            nil()
+            NIL
         }
     }
 }
@@ -125,7 +125,7 @@ where
     fn from(t: Option<T>) -> Self {
         match t {
             Some(x) => x.into(),
-            None => nil(),
+            None => NIL,
         }
     }
 }

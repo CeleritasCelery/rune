@@ -4,7 +4,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
-use crate::core::object::{nil, Gc, GcObj, LispString, Object, WithLifetime};
+use crate::core::object::{Gc, GcObj, LispString, Object, WithLifetime, NIL};
 use crate::interpreter;
 use crate::reader;
 use anyhow::{anyhow, Context as _};
@@ -147,7 +147,7 @@ pub(crate) fn load(
             val.set(new_load_file);
             prev
         }
-        None => nil(),
+        None => NIL,
     };
     root!(prev_load_file, cx);
     let result = match fs::read_to_string(&final_file)

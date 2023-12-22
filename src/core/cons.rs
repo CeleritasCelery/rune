@@ -1,7 +1,7 @@
 use rune_core::hashmap::HashSet;
 
 use super::gc::{Block, Context, GcManaged, GcMark, Trace};
-use super::object::{nil, CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj};
+use super::object::{CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
 
@@ -57,7 +57,7 @@ impl Cons {
         Gc<Tx>: Into<GcObj<'ob>>,
     {
         let car = car.into_obj(cx).into();
-        let cons = unsafe { Cons::new_unchecked(car, nil()) };
+        let cons = unsafe { Cons::new_unchecked(car, NIL) };
         cons.into_obj(cx).untag()
     }
 

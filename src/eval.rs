@@ -3,7 +3,7 @@ use crate::core::cons::Cons;
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{EvalError, EvalResult, Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::{nil, FnArgs, LispString, Object};
+use crate::core::object::{FnArgs, LispString, Object, NIL};
 use crate::core::{
     gc::{Context, IntoRoot},
     object::{Function, Gc, GcObj},
@@ -82,7 +82,7 @@ fn run_hooks<'ob>(
             x => bail!(TypeError::new(Type::Symbol, x)),
         }
     }
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]
@@ -117,7 +117,7 @@ fn run_hook_with_args<'ob>(
         }
         x => bail!(TypeError::new(Type::Symbol, x)),
     }
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]
@@ -149,7 +149,7 @@ pub(crate) fn autoload_do_load<'ob>(
                     Some(x) => Ok(x.into()),
                     None => Err(anyhow!("autoload of {func} did not provide a definition")),
                 },
-                _ => Ok(nil()),
+                _ => Ok(NIL),
             }
         }
         _ => Ok(fundef.bind(cx)),
@@ -262,7 +262,7 @@ fn internal__define_uninitialized_variable<'ob>(
     _doc: Option<GcObj>,
 ) -> GcObj<'ob> {
     // TODO: implement doc strings
-    nil()
+    NIL
 }
 
 #[defun]
@@ -285,7 +285,7 @@ fn set_default_toplevel_value<'ob>(
     env: &'ob mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
     env.set_var(symbol, value)?;
-    Ok(nil())
+    Ok(NIL)
 }
 
 #[defun]

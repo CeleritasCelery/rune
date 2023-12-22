@@ -4,7 +4,7 @@ use crate::core::{
     env::{interned_symbols, sym, Env, Symbol},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Rt},
-    object::{nil, Gc, GcObj, List, Number, Object, SubrFn},
+    object::{Gc, GcObj, List, Number, Object, SubrFn, NIL},
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
@@ -73,9 +73,9 @@ pub(crate) fn get<'ob>(
     match env.props.get(symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => cx.bind(element.1.bind(cx)),
-            None => nil(),
+            None => NIL,
         },
-        None => nil(),
+        None => NIL,
     }
 }
 
@@ -99,7 +99,7 @@ pub(crate) fn default_value<'ob>(
 pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
-        None => nil(),
+        None => NIL,
     }
 }
 
@@ -393,7 +393,7 @@ pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> Gc
     match object.untag() {
         Object::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),
-            None => nil(),
+            None => NIL,
         },
         _ => object,
     }
@@ -412,7 +412,7 @@ pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) ->
 pub(crate) fn car(list: Gc<List>) -> GcObj {
     match list.untag() {
         List::Cons(cons) => cons.car(),
-        List::Nil => nil(),
+        List::Nil => NIL,
     }
 }
 
@@ -420,7 +420,7 @@ pub(crate) fn car(list: Gc<List>) -> GcObj {
 pub(crate) fn cdr(list: Gc<List>) -> GcObj {
     match list.untag() {
         List::Cons(cons) => cons.cdr(),
-        List::Nil => nil(),
+        List::Nil => NIL,
     }
 }
 
@@ -428,7 +428,7 @@ pub(crate) fn cdr(list: Gc<List>) -> GcObj {
 pub(crate) fn car_safe(object: GcObj) -> GcObj {
     match object.untag() {
         Object::Cons(cons) => cons.car(),
-        _ => nil(),
+        _ => NIL,
     }
 }
 
@@ -436,7 +436,7 @@ pub(crate) fn car_safe(object: GcObj) -> GcObj {
 pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
     match object.untag() {
         Object::Cons(cons) => cons.cdr(),
-        _ => nil(),
+        _ => NIL,
     }
 }
 
