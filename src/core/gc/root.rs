@@ -510,6 +510,14 @@ impl<T> Rt<Vec<T>> {
     pub(crate) fn swap_remove(&mut self, index: usize) {
         self.as_mut_ref().swap_remove(index);
     }
+
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.as_mut_ref().reserve(additional);
+    }
+
+    pub(crate) fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
 }
 
 impl<T> Deref for Rt<Vec<T>> {

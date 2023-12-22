@@ -233,8 +233,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
             let old = self.frame.bind_mut(cx);
             std::mem::swap(old, &mut new);
             self.call_frames.push(new);
-            let frame_start = dbg!(len) - (dbg!(arg_cnt) + 1);
-            self.env.stack.push_frame(frame_start);
+            let frame_start = len - (arg_cnt + 1);
+            self.env.stack.push_frame(frame_start, f.depth);
             self.prepare_lisp_args(f, arg_cnt as u16, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
@@ -897,7 +897,7 @@ pub(crate) fn call<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     let len = env.stack.len();
-    env.stack.push_frame(len);
+    env.stack.push_frame(len, func.bind(cx).depth);
     for arg in args {
         env.stack.push(arg.bind(cx));
     }
@@ -941,7 +941,18 @@ mod test {
             println!("Test seq: {opcodes:?}");
             opcodes.into_obj(cx1).untag()
         };
-        let bytecode = crate::alloc::make_byte_code($arglist, &opcodes, constants, 0, None, None, &[], cx1).unwrap();
+        // TODO: we should probably caculate the actual depth
+        let depth = 10;
+        let bytecode = crate::alloc::make_byte_code(
+            $arglist,
+            &opcodes,
+            constants,
+            depth,
+            None,
+            None,
+            &[],
+            cx1
+        ).unwrap();
         root!(bytecode, cx1);
         let $name = bytecode;
         )

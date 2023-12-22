@@ -12,16 +12,13 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
-/// The allocation of a global symbol. This is shared
-/// between threads, so the interned value of a symbol
-/// will be the same location no matter which thread
-/// interned it. Functions are safe to share between
-/// threads because they are marked immutable by
-/// [`ObjectMap::set_func`](`crate::core::env::ObjectMap::set_func`)
-/// and they can only be replaced atomically.
-/// In order to garbage collect the function we need to
-/// halt all running threads. This has not been implemented
-/// yet.
+/// The allocation of a global symbol. This is shared between threads, so the
+/// interned value of a symbol will be the same location no matter which thread
+/// interned it. Functions are safe to share between threads because they are
+/// marked immutable by
+/// [`ObjectMap::set_func`](`crate::core::env::ObjectMap::set_func`) and they
+/// can only be replaced atomically. In order to garbage collect the function we
+/// need to halt all running threads. This has not been implemented yet.
 pub(crate) struct SymbolCell {
     name: SymbolName,
     // Global symbols are always immutable, so we mark them so they are not

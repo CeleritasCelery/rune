@@ -17,9 +17,15 @@ use std::ops::{Index, IndexMut, RangeTo};
 pub(crate) struct LispStack<'a> {
     vec: Vec<GcObj<'a>>,
     #[no_trace]
-    start: usize,
+    current: Frame,
     #[no_trace]
-    frame_starts: Vec<usize>,
+    frames: Vec<Frame>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct Frame {
+    start: usize,
+    end: usize,
 }
 
 // To make this simpler we implement indexing from the top of the stack (end of
@@ -57,26 +63,32 @@ impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
 }
 
 impl<'a> RootedLispStack<'a> {
-    pub(crate) fn push_frame(&mut self, start: usize) {
+    pub(crate) fn push_frame(&mut self, start: usize, depth: usize) {
         assert!(start <= self.len());
-        assert!(self.start <= start);
-        self.frame_starts.push(self.start);
-        self.start = start;
+        assert!(self.current.start <= start);
+        self.frames.push(self.current);
+        let end = start + depth;
+        // allocate space so that we don't have to reallocate later. This will
+        // also let us do unchecked pushes later.
+        if end > self.vec.capacity() {
+            self.vec.reserve(end - self.vec.len());
+        }
+        self.current = Frame { start, end };
     }
 
     pub(crate) fn pop_frame(&mut self) {
-        self.vec.truncate(self.start);
-        self.start = self.frame_starts.pop().unwrap();
+        self.vec.truncate(self.current.start);
+        self.current = self.frames.pop().unwrap();
     }
 
     pub(crate) fn return_frame(&mut self) {
-        self.vec.swap_remove(self.start);
-        self.vec.truncate(self.start + 1);
-        self.start = self.frame_starts.pop().unwrap();
+        self.vec.swap_remove(self.current.start);
+        self.vec.truncate(self.current.start + 1);
+        self.current = self.frames.pop().unwrap();
     }
 
     pub(crate) fn current_frame(&self) -> usize {
-        self.frame_starts.len()
+        self.frames.len()
     }
 
     pub(crate) fn unwind_frames(&mut self, frame: usize) {
@@ -84,8 +96,8 @@ impl<'a> RootedLispStack<'a> {
             return; /* no frames to unwind */
         }
         assert!(frame < self.current_frame());
-        self.start = self.frame_starts[frame];
-        self.frame_starts.truncate(frame);
+        self.current = self.frames[frame];
+        self.frames.truncate(frame);
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -93,23 +105,25 @@ impl<'a> RootedLispStack<'a> {
     }
 
     pub(crate) fn push(&mut self, value: GcObj) {
+        assert!(self.len() < self.current.end);
+        // could use https://github.com/rust-lang/rust/issues/100486
         self.vec.push(value);
     }
 
     pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
-        assert!(self.len() > self.start);
+        assert!(self.len() > self.current.start);
         self.vec.bind_mut(cx).pop().unwrap()
     }
 
     pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'a>> {
-        assert!(self.len() > self.start);
+        assert!(self.len() > self.current.start);
         self.vec.last_mut().unwrap()
     }
 
     pub(crate) fn offset_end(&self, i: usize) -> usize {
         assert!(i < self.len());
         let from_end = self.len() - (i + 1);
-        assert!(self.start <= from_end);
+        assert!(self.current.start <= from_end);
         from_end
     }
 
@@ -140,6 +154,6 @@ impl<'a> RootedLispStack<'a> {
     }
 
     pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
-        self.vec[self.start..].iter().rev()
+        self.vec[self.current.start..].iter().rev()
     }
 }
