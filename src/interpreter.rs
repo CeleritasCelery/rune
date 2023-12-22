@@ -215,6 +215,7 @@ impl Interpreter<'_, '_> {
                 let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
+                    // TODO: use array
                     root!(args, Vec::new(), cx);
                     args.push(form.bind(cx));
                     args.push(env);
@@ -644,7 +645,7 @@ impl Interpreter<'_, '_> {
 
 pub(crate) fn call_closure<'ob>(
     closure: &Rt<Gc<&Cons>>,
-    args: &Rt<Vec<GcObj>>,
+    args: &[Rt<GcObj>],
     name: &str,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,

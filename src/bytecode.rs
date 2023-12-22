@@ -891,15 +891,15 @@ fn fetch_bytecode(_object: GcObj) {
 
 pub(crate) fn call<'ob>(
     func: &Rt<&ByteFn>,
-    args: &mut Rt<Vec<GcObj>>,
+    args: &[Rt<GcObj>],
     name: &str,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     let len = env.stack.len();
     env.stack.push_frame(len);
-    for arg in args.bind_ref(cx).iter() {
-        env.stack.push(*arg);
+    for arg in args {
+        env.stack.push(arg.bind(cx));
     }
     let frame = CallFrame::new(func.bind(cx));
     let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };

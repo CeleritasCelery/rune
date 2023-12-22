@@ -67,16 +67,14 @@ fn run_hooks<'ob>(
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
                                 let func: &Rt<Gc<Function>> = hook.try_into()?;
-                                root!(args, Vec::new(), cx);
-                                func.call(args, None, env, cx)?;
+                                func.call0(None, env, cx)?;
                             }
                         }
                         Object::NIL => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
-                            root!(args, Vec::new(), cx);
-                            func.call(args, None, env, cx)?;
+                            func.call0(None, env, cx)?;
                         }
                     }
                 }
@@ -112,8 +110,7 @@ fn run_hook_with_args<'ob>(
                     _ => {
                         let func: Gc<Function> = val.try_into()?;
                         root!(func, cx);
-                        root!(args, Vec::new(), cx);
-                        func.call(args, None, env, cx)?;
+                        func.call0(None, env, cx)?;
                     }
                 }
             }
@@ -303,9 +300,28 @@ fn set_default<'ob>(
 }
 
 impl Rt<Gc<Function<'_>>> {
+    pub(crate) fn call0<'ob>(
+        &self,
+        name: Option<&str>,
+        env: &mut Rt<Env>,
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
+        self.call(&[], name, env, cx)
+    }
+
+    pub(crate) fn call1<'ob>(
+        &self,
+        arg: &Rt<GcObj>,
+        name: Option<&str>,
+        env: &mut Rt<Env>,
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
+        self.call(std::array::from_ref(arg), name, env, cx)
+    }
+
     pub(crate) fn call<'ob>(
         &self,
-        args: &mut Rt<Vec<GcObj<'static>>>,
+        args: &[Rt<GcObj>],
         name: Option<&str>,
         env: &mut Rt<Env>,
         cx: &'ob mut Context,
