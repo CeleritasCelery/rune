@@ -1,7 +1,7 @@
 //! Lisp evaluation primitives.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, Env, Symbol};
-use crate::core::error::{EvalError, Type, TypeError};
+use crate::core::error::{EvalError, EvalResult, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{nil, FnArgs, LispString, Object};
 use crate::core::{
@@ -12,7 +12,7 @@ use crate::fns::{assq, eq};
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{list, root, rooted_iter};
+use rune_core::macros::{bail_err, list, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]
@@ -300,6 +300,63 @@ fn set_default<'ob>(
     // TODO: implement buffer local variables
     env.set_var(symbol, value)?;
     Ok(value)
+}
+
+impl Rt<Gc<Function<'_>>> {
+    pub(crate) fn call<'ob>(
+        &self,
+        args: &mut Rt<Vec<GcObj<'static>>>,
+        name: Option<&str>,
+        env: &mut Rt<Env>,
+        cx: &'ob mut Context,
+    ) -> EvalResult<'ob> {
+        let name = name.unwrap_or("lambda");
+        let arg_cnt = args.len();
+        debug!("calling {self:?}");
+        match self.get(cx) {
+            Function::ByteFn(f) => {
+                root!(f, cx);
+                crate::bytecode::call(f, args, name, env, cx)
+                    .map_err(|e| e.add_trace(name, &args[..arg_cnt]))
+            }
+            Function::SubrFn(f) => {
+                (*f).call(args, env, cx).map_err(|e| add_trace(e, name, &args[..arg_cnt]))
+            }
+            Function::Cons(_) => {
+                crate::interpreter::call_closure(self.try_into().unwrap(), args, name, env, cx)
+                    .map_err(|e| e.add_trace(name, args))
+            }
+            Function::Symbol(sym) => {
+                let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
+                match func.untag() {
+                    Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+                        // TODO: inifinite loop if autoload does not resolve
+                        root!(sym, cx);
+                        crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)
+                            .map_err(|e| add_trace(e, name, &args[..arg_cnt]))?;
+                        let Some(func) = sym.bind(cx).follow_indirect(cx) else {
+                            bail_err!("autoload for {sym} failed to define function")
+                        };
+                        root!(func, cx);
+                        let name = sym.bind(cx).name().to_owned();
+                        func.call(args, Some(&name), env, cx)
+                    }
+                    _ => {
+                        root!(func, cx);
+                        let name = sym.name().to_owned();
+                        func.call(args, Some(&name), env, cx)
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> EvalError {
+    match err.downcast::<EvalError>() {
+        Ok(err) => err.add_trace(name, args),
+        Err(e) => EvalError::with_trace(e, name, args),
+    }
 }
 
 defsym!(FUNCTION);

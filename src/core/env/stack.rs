@@ -5,6 +5,13 @@ use crate::core::{
 use rune_macros::Trace;
 use std::ops::{Index, IndexMut, RangeTo};
 
+/// The stack of lisp objects used to pass and store arguments in the bytecode
+/// VM and interpreter. The top of the stack is index 0 and all indexing
+/// functions operate from top to bottom. The stack is partitioned into frames.
+/// Each frame represents a function call and it's arguments. The API is
+/// designed so that code cannot access elements outside of their frame (doing
+/// so results in a panic). Frames are added and removed with [push_frame] and
+/// [pop_frame] respectively.
 #[derive(Debug, Default, Trace)]
 pub(crate) struct LispStack {
     vec: Vec<GcObj<'static>>,
@@ -47,8 +54,8 @@ impl Index<RangeTo<usize>> for RootedLispStack {
 }
 
 impl RootedLispStack {
-    pub(crate) fn len(&self) -> usize {
-        self.vec.len()
+    fn frame_start(&self) -> usize {
+        self.frame_starts.last().copied().unwrap_or(0)
     }
 
     pub(crate) fn push_frame(&mut self, start: usize) {
@@ -60,6 +67,29 @@ impl RootedLispStack {
     pub(crate) fn pop_frame(&mut self) {
         let len = self.frame_starts.pop().unwrap();
         self.vec.truncate(len);
+    }
+
+    pub(crate) fn return_frame(&mut self) {
+        let start = self.frame_starts.pop().unwrap();
+        self.vec.swap_remove(start);
+        self.vec.truncate(start + 1);
+    }
+
+    pub(crate) fn current_frame(&self) -> usize {
+        self.frame_starts.len()
+    }
+
+    pub(crate) fn unwind_frames(&mut self, frame: usize) {
+        assert!(frame <= self.current_frame());
+        let Some(len) = self.frame_starts.get(frame) else {
+            return; /* no frames to unwind */
+        };
+        self.vec.truncate(*len);
+        self.frame_starts.truncate(frame);
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.vec.len()
     }
 
     pub(crate) fn push(&mut self, value: GcObj) {
@@ -107,7 +137,7 @@ impl RootedLispStack {
         self.vec.truncate(len);
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
-        self.vec.iter().rev()
+    pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
+        self.vec[self.frame_start()..].iter().rev()
     }
 }

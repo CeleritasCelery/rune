@@ -2,7 +2,9 @@
 use crate::core::env::{sym, Env, Symbol};
 use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Rt};
-use crate::core::object::{nil, ByteFn, Gc, GcObj, LispString, LispVec, Object, WithLifetime};
+use crate::core::object::{
+    nil, ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, WithLifetime,
+};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use rune_core::macros::{bail_err, cons, rebind, root};
@@ -73,19 +75,19 @@ struct CallFrame<'a> {
     #[no_trace]
     pc: ProgramCounter,
     consts: &'a LispVec,
-    /// The index where this call frame starts on the stack. The interpreter
-    /// should not access elements beyond this index.
-    #[no_trace]
-    start: usize,
+}
+
+impl<'old, 'new> WithLifetime<'new> for CallFrame<'old> {
+    type Out = CallFrame<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute::<CallFrame<'old>, CallFrame<'new>>(self)
+    }
 }
 
 impl CallFrame<'_> {
-    fn new(func: &ByteFn, frame_start: usize) -> CallFrame<'_> {
-        CallFrame {
-            pc: ProgramCounter::new(func.codes().as_bytes()),
-            consts: func.consts(),
-            start: frame_start,
-        }
+    fn new(func: &ByteFn) -> CallFrame<'_> {
+        CallFrame { pc: ProgramCounter::new(func.codes().as_bytes()), consts: func.consts() }
     }
 }
 
@@ -103,6 +105,10 @@ struct Handler<'ob> {
     jump_code: u16,
     #[no_trace]
     stack_size: usize,
+    #[no_trace]
+    stack_frame: usize,
+    #[no_trace]
+    call_frame: usize,
     condition: GcObj<'ob>,
 }
 
@@ -169,12 +175,21 @@ impl<'ob> RootedVM<'_, '_, '_> {
         self.env.unbind(idx, cx);
     }
 
-    #[inline(always)]
-    fn debug_enabled() -> bool {
-        cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled()
+    fn unwind(&mut self, idx: usize) {
+        assert!(idx <= self.call_frames.len());
+        let Some(frame) = self.call_frames.get_mut(idx) else {
+            return; /* no frames to unwind */
+        };
+        std::mem::swap(&mut self.frame, frame);
+        self.call_frames.truncate(idx);
     }
 
-    /// Prepare ethe arguments for lisp function call. This means filling all
+    #[inline(always)]
+    fn debug_enabled() -> bool {
+        cfg!(test) || (cfg!(feature = "debug_bytecode") && crate::debug::debug_enabled())
+    }
+
+    /// Prepare the arguments for lisp function call. This means filling all
     /// needed stack slots with `nil` and moving all the `&rest` arguments into
     /// a list.
     fn prepare_lisp_args(
@@ -204,21 +219,33 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
     fn call(&mut self, arg_cnt: u16, cx: &'ob mut Context) -> Result<(), EvalError> {
         let arg_cnt = arg_cnt as usize;
-        let sym = match self.env.stack[arg_cnt].get(cx) {
-            Object::Symbol(x) => x,
-            x => unreachable!("Expected symbol for call found {:?}", x),
+        let func: Gc<Function> = self.env.stack[arg_cnt].bind(cx).try_into()?;
+        let name = match func.untag() {
+            Function::Symbol(x) => x.name().to_owned(),
+            _ => String::from("lambda"),
         };
-
-        let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
         let slice = &self.env.stack[..arg_cnt];
-        let args = Rt::bind_slice(slice, cx).to_vec();
-        let name = sym.name().to_owned();
-        root!(args, cx);
-        root!(func, cx);
-        let result = func.call(args, Some(&name), self.env, cx)?;
-        self.env.stack.remove_top(arg_cnt);
-        self.env.stack[0].set(result);
-        cx.garbage_collect(false);
+        if let Function::ByteFn(f) = func.untag() {
+            // If bytecode, add another frame and resume execution.
+            // OpCode::Return will remove the call frame.
+            let len = self.env.stack.len();
+            let mut new = CallFrame::new(f);
+            let old = self.frame.bind_mut(cx);
+            std::mem::swap(old, &mut new);
+            self.call_frames.push(new);
+            let frame_start = dbg!(len) - (dbg!(arg_cnt) + 1);
+            self.env.stack.push_frame(frame_start);
+            self.prepare_lisp_args(f, arg_cnt as u16, &name, cx)?;
+        } else {
+            // Otherwise, call the function directly.
+            let args = Rt::bind_slice(slice, cx).to_vec();
+            root!(args, cx);
+            root!(func, cx);
+            let result = func.call(args, Some(&name), self.env, cx)?;
+            self.env.stack.remove_top(arg_cnt);
+            self.env.stack.top().set(result);
+            cx.garbage_collect(false);
+        }
         Ok(())
     }
 
@@ -256,6 +283,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     // full errors are implemented
                     cons!(sym::ERROR, format!("{err}"); cx)
                 };
+                self.env.stack.unwind_frames(handler.stack_frame);
+                self.unwind(handler.call_frame);
                 self.env.stack.truncate(handler.stack_size);
                 self.env.stack.push(error);
                 self.frame.pc.goto(handler.jump_code);
@@ -278,7 +307,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
             if Self::debug_enabled() {
                 println!("[");
-                for (idx, x) in self.env.stack.iter().enumerate() {
+                for (idx, x) in self.env.stack.frame_iter().enumerate() {
                     println!("    {idx}: {x},");
                 }
                 println!("]");
@@ -387,6 +416,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     let handler = Handler {
                         jump_code: self.frame.pc.arg2(),
                         stack_size: self.env.stack.len(),
+                        stack_frame: self.env.stack.current_frame(),
+                        call_frame: self.call_frames.len(),
                         condition,
                     };
                     self.handlers.push(handler);
@@ -636,17 +667,13 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     }
                 }
                 op::Return => {
-                    if self.call_frames.is_empty() {
-                        return Ok(self.env.stack.pop(cx));
-                    }
-                    let start = self.frame.start;
-                    let var = self.env.stack.pop(cx);
-                    self.env.stack.truncate(start + 1);
-                    self.env.stack.top().set(var);
-                    // swap the last call frame for the current one and then
-                    // drop the current one
-                    std::mem::swap(self.call_frames.last_mut().unwrap(), &mut self.frame);
-                    self.call_frames.pop();
+                    let Some(prev_frame) = self.call_frames.bind_mut(cx).pop() else {
+                        let top = self.env.stack.pop(cx);
+                        self.env.stack.pop_frame();
+                        return Ok(top);
+                    };
+                    self.env.stack.return_frame();
+                    self.frame.set(prev_frame);
                 }
                 op::Discard => {
                     self.env.stack.pop(cx);
@@ -869,14 +896,15 @@ pub(crate) fn call<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
-    let arg_cnt = args.len() as u16;
     let len = env.stack.len();
+    env.stack.push_frame(len);
     for arg in args.bind_ref(cx).iter() {
         env.stack.push(*arg);
     }
-    let frame = CallFrame::new(func.bind(cx), len);
+    let frame = CallFrame::new(func.bind(cx));
     let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
     root!(vm, cx);
+    let arg_cnt = args.len() as u16;
     vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     let res = vm.run(cx).map_err(|e| e.add_trace(name, args));
     res
@@ -950,10 +978,8 @@ mod test {
         cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
-        env.stack.push_frame(0);
         let val = rebind!(call(bytecode, args, "test", env, cx).unwrap());
         let expect = expect.bind(cx);
-        env.stack.pop_frame();
         assert_eq!(val, expect);
     }
 
@@ -1165,5 +1191,46 @@ mod test {
         );
         check_bytecode!(bytecode, [3], 7, cx);
         check_bytecode!(bytecode, [sym::FLOOR], "floor", cx);
+    }
+
+    #[test]
+    fn test_recursive_handlers() {
+        use OpCode::*;
+
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        sym::init_symbols();
+        let err = cons!(sym::ERROR; cx);
+
+        // (lambda () (floor))
+        // ;; This will error out
+        make_bytecode!(inner, 0, [Constant0, Call0, Return], [sym::FLOOR], cx);
+
+        // (lambda (x)
+        //    (condition-case nil
+        //        (funcall x)
+        //      (error 7)))
+        make_bytecode!(
+            outer,
+            257,
+            [
+                Constant0,
+                PushCondtionCase,
+                0x08,
+                0x0,
+                Duplicate,
+                Call0,
+                PopHandler,
+                Return,
+                Discard,
+                Constant1,
+                Return
+            ],
+            [err, 7],
+            cx
+        );
+        let inner = cx.add(inner.bind(cx));
+        root!(inner, cx);
+        check_bytecode!(outer, [inner], 7, cx);
     }
 }
