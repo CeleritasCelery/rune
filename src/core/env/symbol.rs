@@ -57,8 +57,12 @@ impl std::ops::Deref for Symbol<'_> {
 impl<'a> Symbol<'a> {
     pub(crate) fn get(self) -> &'a SymbolCell {
         unsafe {
-            let ptr = self.data;
-            let ptr = ptr.map_addr(|x| x.wrapping_add(BUILTIN_SYMBOLS.as_ptr().addr()));
+            let base = BUILTIN_SYMBOLS.as_ptr().addr();
+            // we checked that the pointer was not below the base in `from_ptr`
+            // so we don't need to check it here. In fact I don't think it is
+            // possible for the address to be lower then a static pointer in the
+            // binary.
+            let ptr = self.data.map_addr(|x| x + base);
             // If type was a static symbol then we need to give it provenance
             if BUILTIN_SYMBOLS.as_ptr_range().contains(&ptr) {
                 &*BUILTIN_SYMBOLS.as_ptr().with_addr(ptr.addr())
@@ -81,7 +85,8 @@ impl<'a> Symbol<'a> {
     }
 
     pub(in crate::core) unsafe fn from_ptr(ptr: *const SymbolCell) -> Self {
-        let ptr = ptr.map_addr(|x| (x.wrapping_sub(BUILTIN_SYMBOLS.as_ptr().addr())));
+        let base = BUILTIN_SYMBOLS.as_ptr().addr();
+        let ptr = ptr.map_addr(|x| (x.checked_sub(base).unwrap()));
         Self { data: ptr, marker: PhantomData }
     }
 
