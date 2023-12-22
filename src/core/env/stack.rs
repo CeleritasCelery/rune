@@ -14,8 +14,8 @@ use std::ops::{Index, IndexMut, RangeTo};
 /// [push_frame](RootedLispStack::push_frame) and
 /// [pop_frame](RootedLispStack::pop_frame) respectively.
 #[derive(Debug, Default, Trace)]
-pub(crate) struct LispStack {
-    vec: Vec<GcObj<'static>>,
+pub(crate) struct LispStack<'a> {
+    vec: Vec<GcObj<'a>>,
     #[no_trace]
     pub(crate) frame_starts: Vec<usize>,
 }
@@ -23,8 +23,8 @@ pub(crate) struct LispStack {
 // To make this simpler we implement indexing from the top of the stack (end of
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
-impl Index<usize> for RootedLispStack {
-    type Output = Rt<GcObj<'static>>;
+impl<'a> Index<usize> for RootedLispStack<'a> {
+    type Output = Rt<GcObj<'a>>;
 
     fn index(&self, index: usize) -> &Self::Output {
         let index = self.offset_end(index);
@@ -34,7 +34,7 @@ impl Index<usize> for RootedLispStack {
 
 // This impl is specifically for the Stack. It takes the index from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl IndexMut<usize> for RootedLispStack {
+impl IndexMut<usize> for RootedLispStack<'_> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let index = self.offset_end(index);
         &mut self.vec[index]
@@ -43,8 +43,8 @@ impl IndexMut<usize> for RootedLispStack {
 
 // This impl is specifically for the Stack. It takes the range from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
-impl Index<RangeTo<usize>> for RootedLispStack {
-    type Output = [Rt<GcObj<'static>>];
+impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
+    type Output = [Rt<GcObj<'a>>];
 
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
         assert!(index.end <= self.len());
@@ -54,7 +54,7 @@ impl Index<RangeTo<usize>> for RootedLispStack {
     }
 }
 
-impl RootedLispStack {
+impl<'a> RootedLispStack<'a> {
     fn frame_start(&self) -> usize {
         self.frame_starts.last().copied().unwrap_or(0)
     }
@@ -101,7 +101,7 @@ impl RootedLispStack {
         self.vec.bind_mut(cx).pop().unwrap()
     }
 
-    pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'static>> {
+    pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'a>> {
         self.vec.last_mut().unwrap()
     }
 

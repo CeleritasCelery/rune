@@ -24,7 +24,7 @@ pub(crate) struct Env<'a> {
     pub(crate) match_data: GcObj<'a>,
     #[no_trace]
     pub(crate) current_buffer: Option<OpenBuffer<'a>>,
-    pub(crate) stack: LispStack,
+    pub(crate) stack: LispStack<'a>,
 }
 
 // RootedEnv created by #[derive(Trace)]

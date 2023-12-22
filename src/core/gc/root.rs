@@ -53,14 +53,14 @@ where
     }
 }
 
-impl IntoRoot<GcObj<'static>> for bool {
-    unsafe fn into_root(self) -> GcObj<'static> {
+impl<'a> IntoRoot<GcObj<'a>> for bool {
+    unsafe fn into_root(self) -> GcObj<'a> {
         self.into()
     }
 }
 
-impl IntoRoot<GcObj<'static>> for i64 {
-    unsafe fn into_root(self) -> GcObj<'static> {
+impl<'a> IntoRoot<GcObj<'a>> for i64 {
+    unsafe fn into_root(self) -> GcObj<'a> {
         self.into()
     }
 }
