@@ -60,6 +60,8 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
                 syn::Fields::Unit => panic!("fieldless structs don't need tracing"),
             }
             let test_mod = format_ident!("derive_trace_{orig_name}");
+            let doc_string =
+                format!("Automatically derived from [{orig_name}] via `#[derive(Trace)]`");
             quote! {
                 impl #generic_params crate::core::gc::Trace for #orig_name #generic_params {
                     fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
@@ -69,6 +71,7 @@ pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
 
                 #[automatically_derived]
                 #[allow(non_camel_case_types)]
+                #[doc = #doc_string]
                 #vis struct #rooted_name #generic_params #new_fields
 
                 // This makes sure that the offsets of the fields are the same
