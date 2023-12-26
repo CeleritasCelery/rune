@@ -900,6 +900,7 @@ mod test {
 
     #[test]
     fn test_maphash() {
+        sym::init_symbols();
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let mut table = HashTable::default();
@@ -919,6 +920,7 @@ mod test {
     #[test]
     #[allow(clippy::needless_borrow)]
     fn test_sort() {
+        sym::init_symbols();
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(env, Env::default(), cx);

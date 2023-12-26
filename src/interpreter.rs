@@ -779,6 +779,7 @@ mod test {
     where
         T: IntoObject,
     {
+        sym::init_symbols();
         root!(env, Env::default(), cx);
         println!("Test String: {test_str}");
         let obj = crate::reader::read(test_str, cx).unwrap().0;
