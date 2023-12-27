@@ -2,10 +2,10 @@
 use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
-        env::{sym, Env, Symbol},
+        env::{sym, Env},
         error::{ArgError, Type, TypeError},
         gc::{Context, Rt},
-        object::{Function, Gc, GcObj, List, Object, NIL, TRUE},
+        object::{Function, Gc, GcObj, List, Object, Symbol, NIL, TRUE},
     },
     eval::{add_trace, ErrorType, EvalError, EvalResult},
 };

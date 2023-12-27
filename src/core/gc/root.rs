@@ -3,8 +3,7 @@ use super::super::{
     object::{GcObj, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::env::Symbol;
-use crate::core::object::{Gc, IntoObject, LispString, Object, Untag, WithLifetime};
+use crate::core::object::{Gc, IntoObject, LispString, Object, Symbol, Untag, WithLifetime};
 use rune_core::hashmap::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;

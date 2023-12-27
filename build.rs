@@ -152,10 +152,10 @@ fn main() {
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 pub(crate) mod sym {{
-use crate::core::env::SymbolCell;
-use crate::core::env::Symbol;
+use crate::core::object::SymbolCell;
+use crate::core::object::Symbol;
 
-pub(super) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
+pub(in crate::core) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
     SymbolCell::new_const(\"nil\"),
     SymbolCell::new_const(\"t\"),",
     )

@@ -1,8 +1,8 @@
 //! Lisp reader that reads an object from a string.
 use crate::core::{
-    env::{intern, sym, Symbol},
+    env::{intern, sym},
     gc::Context,
-    object::GcObj,
+    object::{GcObj, Symbol},
 };
 use crate::fns;
 use rune_core::macros::list;

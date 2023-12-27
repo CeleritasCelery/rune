@@ -2,10 +2,10 @@
 use std::fmt::{Display, Formatter};
 
 use crate::core::cons::{Cons, ConsError};
-use crate::core::env::{sym, Env, Symbol};
+use crate::core::env::{sym, Env};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::{display_slice, FnArgs, LispString, Object, NIL};
+use crate::core::object::{display_slice, FnArgs, LispString, Object, Symbol, NIL};
 use crate::core::{
     gc::{Context, IntoRoot},
     object::{Function, Gc, GcObj},

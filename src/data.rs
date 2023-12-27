@@ -1,10 +1,10 @@
 //! Utilities for variables and values.
 use crate::core::{
     cons::Cons,
-    env::{interned_symbols, sym, Env, Symbol},
+    env::{interned_symbols, sym, Env},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Rt},
-    object::{Gc, GcObj, List, Number, Object, SubrFn, NIL},
+    object::{Gc, GcObj, List, Number, Object, SubrFn, Symbol, NIL},
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;

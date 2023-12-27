@@ -1,10 +1,9 @@
 //! Loading elisp from files and strings.
-use crate::core::env::Symbol;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
-use crate::core::object::{Gc, GcObj, LispString, Object, WithLifetime, NIL};
+use crate::core::object::{Gc, GcObj, LispString, Object, Symbol, WithLifetime, NIL};
 use crate::interpreter;
 use crate::reader;
 use anyhow::{anyhow, Context as _};

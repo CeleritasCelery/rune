@@ -2,14 +2,14 @@
 use super::{
     super::{
         cons::Cons,
-        env::{Symbol, SymbolCell},
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
     LispBuffer,
 };
 use super::{
-    ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder, SubrFn,
+    ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
+    SubrFn, Symbol, SymbolCell,
 };
 use crate::core::env::sym;
 use crate::core::gc::{GcManaged, Trace};

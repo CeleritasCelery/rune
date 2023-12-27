@@ -1,8 +1,8 @@
 //! builtin lisp data structures.
-use crate::core::env::{Symbol, SymbolCell};
 use crate::core::gc::Context;
 use crate::core::object::{
-    ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder, NIL,
+    ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder, Symbol, SymbolCell,
+    NIL,
 };
 use anyhow::{ensure, Result};
 use rune_core::macros::cons;

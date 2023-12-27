@@ -16,6 +16,7 @@ mod float;
 mod func;
 mod hashtable;
 mod string;
+mod symbol;
 mod tagged;
 mod vector;
 
@@ -27,6 +28,7 @@ pub(crate) use float::*;
 pub(crate) use func::*;
 pub(crate) use hashtable::*;
 pub(crate) use string::*;
+pub(crate) use symbol::*;
 pub(crate) use tagged::*;
 pub(crate) use vector::*;
 

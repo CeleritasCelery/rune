@@ -2,12 +2,12 @@
 use crate::{
     core::{
         cons::Cons,
-        env::{sym, Env, Symbol},
+        env::{sym, Env},
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
             Function, Gc, GcObj, HashTable, HashTableView, IntoObject, LispHashTable, LispString,
-            LispVec, List, Object, NIL,
+            LispVec, List, Object, Symbol, NIL,
         },
     },
     data::aref,

@@ -1,7 +1,6 @@
 use super::OwnedObject;
 use super::Trace;
-use crate::core::env::UninternedSymbolMap;
-use crate::core::object::{Gc, GcObj, IntoObject, WithLifetime};
+use crate::core::object::{Gc, GcObj, IntoObject, UninternedSymbolMap, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;

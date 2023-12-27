@@ -1,6 +1,8 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
-use super::object::{CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, WithLifetime};
+use super::object::{
+    CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, Symbol, SymbolCell, WithLifetime,
+};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;
 use rune_core::macros::list;
@@ -8,9 +10,7 @@ use rune_macros::Trace;
 use std::sync::Mutex;
 
 mod stack;
-mod symbol;
 use stack::LispStack;
-pub(crate) use symbol::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {

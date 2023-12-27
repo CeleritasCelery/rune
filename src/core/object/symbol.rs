@@ -83,7 +83,7 @@ impl<'a> Symbol<'a> {
         Self { data: ptr, marker: PhantomData }
     }
 
-    pub(super) const fn new_builtin(idx: usize) -> Self {
+    pub(in crate::core) const fn new_builtin(idx: usize) -> Self {
         let ptr = sptr::invalid(idx * std::mem::size_of::<SymbolCell>());
         Self { data: ptr, marker: PhantomData }
     }
@@ -189,7 +189,7 @@ impl SymbolCell {
     #[allow(clippy::declare_interior_mutable_const)]
     const EMTPTY: AtomicPtr<u8> = AtomicPtr::new(Self::NULL);
 
-    pub(super) const fn new(name: &'static str) -> Self {
+    pub(in crate::core) const fn new(name: &'static str) -> Self {
         // We have to do this workaround because starts_with is not const
         if name.as_bytes()[0] == b':' {
             Self::new_const(name)
@@ -203,7 +203,7 @@ impl SymbolCell {
         }
     }
 
-    pub(super) const fn new_special(name: &'static str) -> Self {
+    pub(in crate::core) const fn new_special(name: &'static str) -> Self {
         Self {
             name: SymbolName::Interned(name),
             func: Some(Self::EMTPTY),
@@ -212,7 +212,7 @@ impl SymbolCell {
         }
     }
 
-    pub(super) const fn new_const(name: &'static str) -> Self {
+    pub(in crate::core) const fn new_const(name: &'static str) -> Self {
         Self {
             name: SymbolName::Interned(name),
             func: None,
@@ -284,7 +284,7 @@ impl SymbolCell {
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` block
     /// 3. Ensured the symbol is not constant
-    pub(super) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
+    pub(in crate::core) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
         let Some(fn_cell) = self.func.as_ref() else {
             bail!("Attempt to set a constant symbol: {self}")
         };
@@ -368,7 +368,7 @@ impl UninternedSymbolMap {
             .push(unsafe { (old.with_lifetime(), new.with_lifetime()) });
     }
 
-    pub(in crate::core::env) fn clear(&self) {
+    pub(in crate::core) fn clear(&self) {
         self.map.borrow_mut().clear();
     }
 }
