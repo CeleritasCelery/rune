@@ -1,10 +1,10 @@
 //! The main bytecode interpeter.
 use crate::core::env::{sym, Env, Symbol};
-use crate::core::error::{ErrorType, EvalError, EvalResult};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
     ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, WithLifetime, NIL,
 };
+use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use rune_core::macros::{bail_err, cons, rebind, root};

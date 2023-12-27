@@ -37,10 +37,10 @@ mod timefns;
 
 use crate::core::{
     env::{intern, sym, Env},
-    error::EvalError,
     gc::{Context, RootSet, Rt},
     object::{Gc, LispString, NIL},
 };
+use crate::eval::EvalError;
 use rune_core::macros::root;
 use std::io::{self, Write};
 

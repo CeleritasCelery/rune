@@ -3,11 +3,11 @@ use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
         env::{sym, Env, Symbol},
-        error::{ArgError, ErrorType, EvalError, EvalResult, Type, TypeError},
+        error::{ArgError, Type, TypeError},
         gc::{Context, Rt},
         object::{Function, Gc, GcObj, List, Object, NIL, TRUE},
     },
-    eval::add_trace,
+    eval::{add_trace, ErrorType, EvalError, EvalResult},
 };
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;

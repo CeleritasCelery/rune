@@ -62,8 +62,8 @@ macro_rules! __list {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __error {
-    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (crate::core::error::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
-    ($err:expr) => (crate::core::error::EvalError::new($err));
+    ($msg:literal $(,)?  $($args:expr),* $(,)?) => (crate::eval::EvalError::new_error(anyhow::anyhow!($msg, $($args),*)));
+    ($err:expr) => (crate::eval::EvalError::new($err));
 }
 
 #[macro_export]
