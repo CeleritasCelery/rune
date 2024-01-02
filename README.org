@@ -1,6 +1,8 @@
 * Rune
 *R* ust *UN* der *E* macs
 
+[[https://rune-rs.netlify.app/rune/][Docs]]
+
 This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using Rust as a host language. See the [[file:design.org][design doc]] for more details.
 ** Status
 The current goal of this project is to create an editor MVP. We have a basic elisp runtime, and we are working on adding basic editing functionality in a minimal GUI. This will include:
