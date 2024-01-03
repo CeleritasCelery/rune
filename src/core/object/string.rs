@@ -87,7 +87,7 @@ impl Display for LispString {
                     if byte.is_ascii() {
                         write!(f, "{}", *byte as char)?;
                     } else {
-                        write!(f, "\\x{:02x}", byte)?;
+                        write!(f, "\\{:03o}", byte)?;
                     }
                 }
                 Ok(())
