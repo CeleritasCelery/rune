@@ -444,12 +444,9 @@ impl Rt<Gc<Function<'_>>> {
         match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                crate::bytecode::call(f, args, name, env, cx)
-                    .map_err(|e| e.add_trace(name, args))
+                crate::bytecode::call(f, args, name, env, cx).map_err(|e| e.add_trace(name, args))
             }
-            Function::SubrFn(f) => {
-                (*f).call(args.len(), args, env, cx).map_err(|e| add_trace(e, name, args))
-            }
+            Function::SubrFn(f) => (*f).call(args, env, cx).map_err(|e| add_trace(e, name, args)),
             Function::Cons(_) => {
                 crate::interpreter::call_closure(self.try_into().unwrap(), args, name, env, cx)
                     .map_err(|e| e.add_trace(name, args))
