@@ -2,12 +2,12 @@
 use std::fmt::{Display, Formatter};
 
 use crate::core::cons::{Cons, ConsError};
-use crate::core::env::{sym, Env};
+use crate::core::env::{sym, Env, FnFrame};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{display_slice, FnArgs, LispString, Object, Symbol, NIL};
 use crate::core::{
-    gc::{Context, IntoRoot},
+    gc::Context,
     object::{Function, Gc, GcObj},
 };
 use crate::fns::{assq, eq};
@@ -135,21 +135,21 @@ pub(crate) fn apply<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let args = match arguments.len() {
-        0 => Vec::new(),
-        len => {
-            let end = len - 1;
-            let last = &arguments[end];
-            let mut args: Vec<_> = arguments[..end].iter().map(|x| x.bind(cx)).collect();
-            for element in last.bind(cx).as_list()? {
-                let e = cx.bind(element?);
-                args.push(e);
-            }
-            args
+    let frame = &mut FnFrame::new(env);
+    if !arguments.is_empty() {
+        let len = arguments.len();
+        let end = len - 1;
+        let last = &arguments[end];
+        let args = Rt::bind_slice(&arguments[..end], cx);
+        frame.push_arg_slice(args);
+        let mut args = args.to_vec();
+        for element in last.bind(cx).as_list()? {
+            let e = cx.bind(element?);
+            args.push(e);
+            frame.push_arg(e);
         }
-    };
-    root!(args, cx);
-    function.call(args, None, env, cx).map_err(Into::into)
+    }
+    function.call(frame, None, cx).map_err(Into::into)
 }
 
 #[defun]
@@ -159,9 +159,10 @@ pub(crate) fn funcall<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let arguments = unsafe { Rt::bind_slice(arguments, cx).to_vec().into_root() };
-    root!(arg_list, arguments, cx);
-    function.call(arg_list, None, env, cx).map_err(Into::into)
+    let args = Rt::bind_slice(arguments, cx);
+    let frame = &mut FnFrame::new(env);
+    frame.push_arg_slice(args);
+    function.call(frame, None, cx).map_err(Into::into)
 }
 
 #[defun]
@@ -180,14 +181,14 @@ fn run_hooks<'ob>(
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
                                 let func: &Rt<Gc<Function>> = hook.try_into()?;
-                                func.call0(None, env, cx)?;
+                                func.call(&mut FnFrame::new(env), None, cx)?;
                             }
                         }
                         Object::NIL => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
-                            func.call0(None, env, cx)?;
+                            func.call(&mut FnFrame::new(env), None, cx)?;
                         }
                     }
                 }
@@ -214,16 +215,17 @@ fn run_hook_with_args<'ob>(
                         rooted_iter!(hooks, hook_list, cx);
                         while let Some(hook) = hooks.next()? {
                             let func: &Rt<Gc<Function>> = hook.try_into()?;
-                            let args = Rt::bind_slice(args, cx).to_vec();
-                            root!(args, cx);
-                            func.call(args, None, env, cx)?;
+                            let args = Rt::bind_slice(args, cx);
+                            let frame = &mut FnFrame::new(env);
+                            frame.push_arg_slice(args);
+                            func.call(frame, None, cx)?;
                         }
                     }
                     Object::NIL => {}
                     _ => {
                         let func: Gc<Function> = val.try_into()?;
                         root!(func, cx);
-                        func.call0(None, env, cx)?;
+                        func.call(&mut FnFrame::new(env), None, cx)?;
                     }
                 }
             }
@@ -304,11 +306,15 @@ pub(crate) fn macroexpand<'ob>(
         _ => get_macro_func(sym, cx),
     };
     let Some(macro_func) = func else { return Ok(form.bind(cx)) };
-    let macro_args: Vec<_> = cons.cdr().as_list()?.fallible().collect()?;
-    root!(macro_args, cx);
+    let mut iter = cons.cdr().as_list()?.fallible();
+    let mut frame = FnFrame::new(env);
+    while let Some(arg) = iter.next()? {
+        frame.push_arg(arg);
+    }
     root!(macro_func, cx);
     let name = sym.name().to_owned();
-    let new_form = macro_func.call(macro_args, Some(&name), env, cx)?;
+    let new_form = macro_func.call(&mut frame, Some(&name), cx)?;
+    drop(frame);
     root!(new_form, cx); // polonius
     if eq(new_form.bind(cx), form.bind(cx)) {
         Ok(form.bind(cx))
@@ -413,43 +419,28 @@ fn set_default<'ob>(
 }
 
 impl Rt<Gc<Function<'_>>> {
-    pub(crate) fn call0<'ob>(
-        &self,
-        name: Option<&str>,
-        env: &mut Rt<Env>,
-        cx: &'ob mut Context,
-    ) -> EvalResult<'ob> {
-        self.call(&[], name, env, cx)
-    }
-
-    pub(crate) fn call1<'ob>(
-        &self,
-        arg: &Rt<GcObj>,
-        name: Option<&str>,
-        env: &mut Rt<Env>,
-        cx: &'ob mut Context,
-    ) -> EvalResult<'ob> {
-        self.call(std::array::from_ref(arg), name, env, cx)
-    }
-
     pub(crate) fn call<'ob>(
         &self,
-        args: &[Rt<GcObj>],
+        frame: &mut FnFrame<'_, '_>,
         name: Option<&str>,
-        env: &mut Rt<Env>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
+        let arg_cnt = frame.arg_count();
         debug!("calling {self:?}");
         match self.get(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                crate::bytecode::call(f, args, name, env, cx).map_err(|e| e.add_trace(name, args))
+                frame.set_depth(f.bind(cx).depth);
+                crate::bytecode::call(f, arg_cnt, name, frame, cx)
+                    .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
-            Function::SubrFn(f) => (*f).call(args, env, cx).map_err(|e| add_trace(e, name, args)),
+            Function::SubrFn(f) => {
+                (*f).call(arg_cnt, frame, cx).map_err(|e| add_trace(e, name, frame.arg_slice()))
+            }
             Function::Cons(_) => {
-                crate::interpreter::call_closure(self.try_into().unwrap(), args, name, env, cx)
-                    .map_err(|e| e.add_trace(name, args))
+                crate::interpreter::call_closure(self.try_into().unwrap(), arg_cnt, name, frame, cx)
+                    .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
             Function::Symbol(sym) => {
                 let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
@@ -457,19 +448,19 @@ impl Rt<Gc<Function<'_>>> {
                     Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
-                        crate::eval::autoload_do_load(self.use_as(), None, None, env, cx)
-                            .map_err(|e| add_trace(e, name, args))?;
+                        crate::eval::autoload_do_load(self.use_as(), None, None, frame, cx)
+                            .map_err(|e| add_trace(e, name, frame.arg_slice()))?;
                         let Some(func) = sym.bind(cx).follow_indirect(cx) else {
                             bail_err!("autoload for {sym} failed to define function")
                         };
                         root!(func, cx);
                         let name = sym.bind(cx).name().to_owned();
-                        func.call(args, Some(&name), env, cx)
+                        func.call(frame, Some(&name), cx)
                     }
                     _ => {
                         root!(func, cx);
                         let name = sym.name().to_owned();
-                        func.call(args, Some(&name), env, cx)
+                        func.call(frame, Some(&name), cx)
                     }
                 }
             }

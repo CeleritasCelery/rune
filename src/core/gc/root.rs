@@ -499,23 +499,29 @@ impl<T> Rt<Vec<T>> {
     }
 
     pub(crate) fn truncate(&mut self, len: usize) {
-        self.as_mut_ref().truncate(len);
+        self.inner.truncate(len);
     }
 
     pub(crate) fn pop(&mut self) {
-        self.as_mut_ref().pop();
+        self.inner.pop();
     }
 
     pub(crate) fn swap_remove(&mut self, index: usize) {
-        self.as_mut_ref().swap_remove(index);
+        self.inner.swap_remove(index);
     }
 
     pub(crate) fn reserve(&mut self, additional: usize) {
-        self.as_mut_ref().reserve(additional);
+        self.inner.reserve(additional);
     }
 
     pub(crate) fn capacity(&self) -> usize {
         self.inner.capacity()
+    }
+}
+
+impl<T: Copy> Rt<Vec<T>> {
+    pub(crate) fn extend_from_slice<U: IntoRoot<T> + Copy>(&mut self, src: &[U]) {
+        self.inner.extend_from_slice(unsafe { std::mem::transmute::<&[U], &[T]>(src) });
     }
 }
 

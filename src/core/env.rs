@@ -10,7 +10,7 @@ use rune_macros::Trace;
 use std::sync::Mutex;
 
 mod stack;
-use stack::LispStack;
+pub(crate) use stack::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {

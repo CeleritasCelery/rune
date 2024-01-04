@@ -164,7 +164,7 @@ impl FnArgs {
 }
 
 pub(crate) type BuiltInFn =
-    for<'ob> fn(&[Rt<GcObj>], &mut Rt<Env>, &'ob mut Context) -> Result<GcObj<'ob>>;
+    for<'ob> fn(usize, &mut Rt<Env>, &'ob mut Context) -> Result<GcObj<'ob>>;
 
 #[derive(Eq)]
 pub(crate) struct SubrFn {
@@ -177,11 +177,11 @@ define_unbox!(SubrFn, Func, &'ob SubrFn);
 impl SubrFn {
     pub(crate) fn call<'ob>(
         &self,
-        args: &[Rt<GcObj>],
+        arg_cnt: usize,
         env: &mut Rt<Env>,
         cx: &'ob mut Context,
     ) -> Result<GcObj<'ob>> {
-        (self.subr)(args, env, cx)
+        (self.subr)(arg_cnt, env, cx)
     }
 }
 

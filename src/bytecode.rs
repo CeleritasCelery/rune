@@ -1,5 +1,5 @@
 //! The main bytecode interpeter.
-use crate::core::env::{sym, Env};
+use crate::core::env::{sym, Env, FnFrame};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
     ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, Symbol, WithLifetime, NIL,
@@ -206,7 +206,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
         if rest_size > 0 {
             let slice = &self.env.stack[..rest_size as usize];
             let list = crate::fns::slice_into_list(Rt::bind_slice(slice, cx), None, cx);
-            self.env.stack.remove_top(rest_size - 1);
+            self.env.stack.remove_top(rest_size as usize - 1);
             self.env.stack[0].set(list);
             Ok(total_args - rest_size + 1)
         } else if func.args.rest {
@@ -224,7 +224,6 @@ impl<'ob> RootedVM<'_, '_, '_> {
             Function::Symbol(x) => x.name().to_owned(),
             _ => String::from("lambda"),
         };
-        let slice = &self.env.stack[..arg_cnt];
         if let Function::ByteFn(f) = func.untag() {
             // If bytecode, add another frame and resume execution.
             // OpCode::Return will remove the call frame.
@@ -234,15 +233,14 @@ impl<'ob> RootedVM<'_, '_, '_> {
             std::mem::swap(old, &mut new);
             self.call_frames.push(new);
             let frame_start = len - (arg_cnt + 1);
-            self.env.stack.push_frame(frame_start, f.depth);
+            self.env.stack.push_bytecode_frame(frame_start, f.depth);
             self.prepare_lisp_args(f, arg_cnt as u16, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
-            let args = Rt::bind_slice(slice, cx).to_vec();
-            root!(args, cx);
+            let mut frame = FnFrame::new_with_args(self.env, arg_cnt);
             root!(func, cx);
-            let result = func.call(args, Some(&name), self.env, cx)?;
-            self.env.stack.remove_top(arg_cnt);
+            let result = func.call(&mut frame, Some(&name), cx)?;
+            drop(frame); // removes the arguments from the stack
             self.env.stack.top().set(result);
             cx.garbage_collect(false);
         }
@@ -669,7 +667,6 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Return => {
                     let Some(prev_frame) = self.call_frames.bind_mut(cx).pop() else {
                         let top = self.env.stack.pop(cx);
-                        self.env.stack.pop_frame();
                         return Ok(top);
                     };
                     self.env.stack.return_frame();
@@ -880,8 +877,7 @@ fn byte_code<'ob>(
         cx,
     )?;
     root!(fun, cx);
-    root!(args, Vec::new(), cx);
-    Ok(call(fun, args, "unnamed", env, cx)?)
+    Ok(call(fun, 0, "unnamed", env, cx)?)
 }
 
 #[defun]
@@ -891,26 +887,18 @@ fn fetch_bytecode(_object: GcObj) {
 
 pub(crate) fn call<'ob>(
     func: &Rt<&ByteFn>,
-    args: &[Rt<GcObj>],
+    arg_cnt: usize,
     name: &str,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
-    let len = env.stack.len();
-    env.stack.push_frame(len, func.bind(cx).depth);
-    for arg in args {
-        env.stack.push(arg.bind(cx));
-    }
     let frame = CallFrame::new(func.bind(cx));
     let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
     root!(vm, cx);
-    let arg_cnt = args.len() as u16;
-    vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
-    let res = vm.run(cx).map_err(|e| e.add_trace(name, args));
-    res
+    vm.prepare_lisp_args(func.bind(cx), arg_cnt as u16, name, cx)?;
+    vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.arg_slice()))
 }
 
-#[allow(clippy::enum_glob_use)]
 #[cfg(test)]
 mod test {
     use crate::core::{
@@ -989,7 +977,9 @@ mod test {
         cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
-        let val = rebind!(call(bytecode, args, "test", env, cx).unwrap());
+        let frame = &mut FnFrame::new(env);
+        frame.push_arg_slice(Rt::bind_slice(args, cx));
+        let val = rebind!(call(bytecode, frame.arg_count(), "test", frame, cx).unwrap());
         let expect = expect.bind(cx);
         assert_eq!(val, expect);
     }

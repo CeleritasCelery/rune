@@ -44,13 +44,16 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         #[automatically_derived]
         #[doc(hidden)]
         fn #func_name<'ob>(
-            args: &[crate::core::gc::Rt<crate::core::object::GcObj>],
+            arg_cnt: usize,
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
-            if args.len() < #required as usize {
-                return Err(crate::core::error::ArgError::new(#required, args.len() as u16, #lisp_name).into());
+            if arg_cnt < #required as usize {
+                return Err(crate::core::error::ArgError::new(#required, arg_cnt as u16, #lisp_name).into());
             }
+            let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
+            rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
+            args.extend_from_slice(stack_slice);
             #subr_call
         }
 

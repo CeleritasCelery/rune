@@ -2,7 +2,7 @@
 use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
-        env::{sym, Env},
+        env::{sym, Env, FnFrame},
         error::{ArgError, Type, TypeError},
         gc::{Context, Rt},
         object::{Function, Gc, GcObj, List, Object, Symbol, NIL, TRUE},
@@ -163,11 +163,16 @@ impl Interpreter<'_, '_> {
             }
             Function::Cons(form) if form.car() == sym::MACRO => {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
-                let macro_args: Vec<_> = args.bind(cx).as_list()?.fallible().collect()?;
-                root!(macro_args, cx);
+
+                let mut iter = args.bind(cx).as_list()?.fallible();
+                let mut frame = FnFrame::new(self.env);
+                while let Some(arg) = iter.next()? {
+                    frame.push_arg(arg);
+                }
                 root!(mcro, cx);
                 let name = sym.bind(cx).name().to_owned();
-                let value = mcro.call(macro_args, Some(&name), self.env, cx)?;
+                let value = mcro.call(&mut frame, Some(&name), cx)?;
+                drop(frame);
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
@@ -180,8 +185,10 @@ impl Interpreter<'_, '_> {
             let result = self.eval_form(x, cx)?;
             args.push(result);
         }
+        let frame = &mut FnFrame::new(self.env);
+        frame.push_arg_slice(args.bind_ref(cx));
         let name = sym.bind(cx).name().to_owned();
-        func.call(args, Some(&name), self.env, cx)
+        func.call(frame, Some(&name), cx)
     }
 
     fn eval_function<'ob>(
@@ -215,9 +222,10 @@ impl Interpreter<'_, '_> {
                 let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
-                    let args = [form.bind(cx), env];
-                    root!(args, cx);
-                    return closure_fn.call(&args[..], None, self.env, cx);
+                    let frame = &mut FnFrame::new(self.env);
+                    frame.push_arg(form.bind(cx));
+                    frame.push_arg(env);
+                    return closure_fn.call(frame, None, cx);
                 }
             }
         }
@@ -643,7 +651,7 @@ impl Interpreter<'_, '_> {
 
 pub(crate) fn call_closure<'ob>(
     closure: &Rt<Gc<&Cons>>,
-    args: &[Rt<GcObj>],
+    arg_cnt: usize,
     name: &str,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -653,8 +661,7 @@ pub(crate) fn call_closure<'ob>(
     match closure.car().untag() {
         Object::Symbol(sym::CLOSURE) => {
             rooted_iter!(forms, closure.cdr(), cx);
-            // TODO: remove this temp vector
-            let args = args.iter().map(|x| x.bind(cx)).collect();
+            let args = Rt::bind_slice(&env.stack[..arg_cnt], cx);
             let vars = bind_variables(&mut forms, args, name, cx)?;
             root!(vars, cx);
             Interpreter { vars, env }.implicit_progn(forms, cx)
@@ -665,7 +672,7 @@ pub(crate) fn call_closure<'ob>(
 
 fn bind_variables<'a>(
     forms: &mut ElemStreamIter<'_>,
-    args: Vec<GcObj<'a>>,
+    args: &[GcObj<'a>],
     name: &str,
     cx: &'a Context,
 ) -> AnyResult<Vec<&'a Cons>> {
@@ -700,7 +707,7 @@ fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
 
 fn bind_args<'a>(
     arg_list: GcObj,
-    args: Vec<GcObj<'a>>,
+    args: &[GcObj<'a>],
     vars: &mut Vec<&'a Cons>,
     name: &str,
     cx: &'a Context,
@@ -716,7 +723,8 @@ fn bind_args<'a>(
         ArgError::new(num_required_args, num_actual_args, name)
     );
 
-    let mut arg_values = args.into_iter();
+    let mut arg_values = args.iter().copied();
+    let rest_offset = args.len().min(required.len() + optional.len());
 
     for name in required {
         let val = arg_values.next().unwrap();
@@ -729,8 +737,7 @@ fn bind_args<'a>(
     }
 
     if let Some(rest_name) = rest {
-        let values = arg_values.as_slice();
-        let list = crate::fns::slice_into_list(values, None, cx);
+        let list = crate::fns::slice_into_list(&args[rest_offset..], None, cx);
         vars.push(Cons::new(rest_name, list, cx));
     } else {
         // Ensure too many args were not provided

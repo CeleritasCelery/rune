@@ -2,7 +2,7 @@
 use crate::{
     core::{
         cons::Cons,
-        env::{sym, Env},
+        env::{sym, Env, FnFrame},
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
@@ -118,7 +118,9 @@ pub(crate) fn mapcar<'ob>(
             rooted_iter!(iter, cons, cx);
             root!(outputs, Vec::new(), cx);
             while let Some(obj) = iter.next()? {
-                let output = function.call1(obj, None, env, cx)?;
+                let frame = &mut FnFrame::new(env);
+                frame.push_arg(obj);
+                let output = function.call(frame, None, cx)?;
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
@@ -128,10 +130,11 @@ pub(crate) fn mapcar<'ob>(
             let len = fun.len();
             root!(fun, cx);
             root!(outputs, Vec::new(), cx);
-            root!(arg, NIL, cx);
             for i in 0..len {
-                arg.set(fun.bind(cx).index(i).unwrap());
-                let output = function.call1(arg, None, env, cx)?;
+                let frame = &mut FnFrame::new(env);
+                let val = fun.bind(cx).index(i).unwrap();
+                frame.push_arg(val);
+                let output = function.call(frame, None, cx)?;
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
@@ -153,7 +156,9 @@ pub(crate) fn mapc<'ob>(
         List::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
-                function.call1(elem, None, env, cx)?;
+                let frame = &mut FnFrame::new(env);
+                frame.push_arg(elem);
+                function.call(frame, None, cx)?;
             }
             Ok(sequence.bind(cx).into())
         }
@@ -306,18 +311,16 @@ pub(crate) fn assoc<'ob>(
             let func: Gc<Function> = x.bind(cx).try_into()?;
             root!(func, cx);
             rooted_iter!(iter, alist, cx);
-            // TODO: replace this with an array
-            root!(args, Vec::new(), cx);
-            args.push(key);
             while let Some(elem) = iter.next()? {
                 if let Object::Cons(cons) = elem.bind(cx).untag() {
+                    let frame = &mut FnFrame::new(env);
+                    frame.push_arg(key);
+                    frame.push_arg(cons.car());
                     root!(cons, cx);
-                    args.push(cons.car(cx));
-                    let result = func.call(args, None, env, cx)?;
+                    let result = func.call(frame, None, cx)?;
                     if result != NIL {
                         return Ok(cons.bind(cx).into());
                     }
-                    args.pop();
                 }
             }
         }
@@ -421,6 +424,7 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 }
 
 // TODO: Handle sorting vectors
+// TODO: Sort shouldn't change the values in place
 #[defun]
 fn sort<'ob>(
     seq: &Rt<Gc<List>>,
@@ -436,16 +440,16 @@ fn sort<'ob>(
 
     root!(tmp, NIL, cx);
     root!(vec, cx);
-    root!(args, [NIL, NIL], cx);
     // A simple insertion sort
     // TODO: use a better sort like tim sort
     for i in 1..len {
         tmp.set(&vec[i]);
         let mut j = i;
         while j > 0 {
-            args[0].set(&vec[j - 1]);
-            args[1].set(&*tmp);
-            match predicate.call(&args[..], None, env, cx) {
+            let frame = &mut FnFrame::new(env);
+            frame.push_arg(&vec[j - 1]);
+            frame.push_arg(&*tmp);
+            match predicate.call(frame, None, cx) {
                 Ok(cmp) => {
                     if cmp != NIL {
                         break;
@@ -688,16 +692,16 @@ fn maphash(
         }
     };
 
-    root!(args, [NIL, NIL], cx);
     loop {
+        let frame = &mut FnFrame::new(env);
         {
             let mut view = table.bind(cx).untag().try_borrow_mut()?;
             let Some(idx) = get_idx(&mut view) else { break };
             let (key, val) = view.get_index(idx).unwrap();
-            args[0].set(*key);
-            args[1].set(*val);
+            frame.push_arg(*key);
+            frame.push_arg(*val);
         }
-        if let Err(e) = function.call(&args[..], None, env, cx) {
+        if let Err(e) = function.call(frame, None, cx) {
             table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
             return Err(e.into());
         }
