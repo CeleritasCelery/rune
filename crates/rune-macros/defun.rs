@@ -24,21 +24,46 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
 
     let arg_conversion = get_arg_conversion(&function.args);
 
+    let create_args = if function.args.iter().any(|x| matches!(x, ArgType::Env(MUT))) {
+        // If the function requires a mutable env, we need to create a new
+        // vector to hold the roots for the arguments
+        if rest {
+            quote! {
+                rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
+                let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
+                args.extend_from_slice(stack_slice);
+            }
+        } else {
+            let len = (required + optional) as usize;
+            quote! {
+                rune_core::macros::root!(args, [crate::core::object::NIL; #len], cx);
+                let stack_slice = &env.stack[..arg_cnt];
+                assert!(arg_cnt <= #len);
+                for i in 0..arg_cnt {
+                    args[i].set(&stack_slice[i]);
+                }
+                let args = &args[..arg_cnt];
+            }
+        }
+    } else {
+        quote! { let args = &env.stack[..arg_cnt]; }
+    };
+
     let err = if function.fallible {
         quote! {?}
     } else {
         quote! {}
     };
-    let subr_call =
-        // Create the context from a pointer to get around the issue that the
-        // return val is bound to the mutable borrow, meaning we can use them
-        // both in the into_obj function. Similar to the rebind! macro.
-        quote! {
-            let ptr = cx as *mut crate::core::gc::Context;
-            let val = #subr(#(#arg_conversion),*)#err;
-            let cx: &'ob mut crate::core::gc::Context = unsafe {&mut *ptr};
-            Ok(crate::core::object::IntoObject::into_obj(val, cx).into())
-        };
+
+    // Create the context from a pointer to get around the issue that the
+    // return val is bound to the mutable borrow, meaning we can use them
+    // both in the into_obj function. Similar to the rebind! macro.
+    let subr_call = quote! {
+        let ptr = cx as *mut crate::core::gc::Context;
+        let val = #subr(#(#arg_conversion),*)#err;
+        let cx: &'ob mut crate::core::gc::Context = unsafe {&mut *ptr};
+        Ok(crate::core::object::IntoObject::into_obj(val, cx).into())
+    };
 
     quote! {
         #[automatically_derived]
@@ -51,9 +76,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             if arg_cnt < #required as usize {
                 return Err(crate::core::error::ArgError::new(#required, arg_cnt as u16, #lisp_name).into());
             }
-            let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
-            rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
-            args.extend_from_slice(stack_slice);
+            #create_args
             #subr_call
         }
 
@@ -81,7 +104,7 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
         .enumerate()
         .map(|(idx, arg_type)| match arg_type {
             ArgType::Context(_) => quote! {cx},
-            ArgType::Env => quote! {env},
+            ArgType::Env(_) => quote! {env},
             // Rt<Gc<..>>
             ArgType::Rt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx]},
@@ -188,7 +211,7 @@ enum Gc {
 #[derive(PartialEq, Debug, Copy, Clone)]
 enum ArgType {
     Context(bool),
-    Env,
+    Env(bool),
     Rt(Gc),
     Gc(Gc),
     Slice(Gc),
@@ -322,7 +345,7 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
         syn::Type::Reference(syn::TypeReference { elem, mutability, .. }) => match elem.as_ref() {
             syn::Type::Path(path) => match get_path_ident_name(path).to_string().as_str() {
                 "Context" => ArgType::Context(mutability.is_some()),
-                "Rt" => get_rt_type(path)?,
+                "Rt" => get_rt_type(path, mutability.is_some())?,
                 _ => ArgType::Other,
             },
             syn::Type::Slice(slice) => match get_arg_type(slice.elem.as_ref())? {
@@ -335,7 +358,7 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
         syn::Type::Path(path) => {
             let name = get_path_ident_name(path);
             if name == "Rt" {
-                get_rt_type(path)?
+                get_rt_type(path, false)?
             } else if name == "Option" {
                 let outer = path.path.segments.last().unwrap();
                 match get_generic_param(outer) {
@@ -366,18 +389,18 @@ fn get_object_type(type_path: &syn::TypePath) -> ArgType {
         };
         ArgType::Gc(inner)
     } else if outer_type.ident == "Env" {
-        ArgType::Env
+        ArgType::Env(false)
     } else {
         ArgType::Other
     }
 }
 
-fn get_rt_type(type_path: &syn::TypePath) -> Result<ArgType, Error> {
+fn get_rt_type(type_path: &syn::TypePath, mutable: bool) -> Result<ArgType, Error> {
     let segment = type_path.path.segments.last().unwrap();
     match get_generic_param(segment) {
         Some(syn::Type::Path(inner)) => match get_object_type(inner) {
             ArgType::Gc(gc) => Ok(ArgType::Rt(gc)),
-            ArgType::Env => Ok(ArgType::Env),
+            ArgType::Env(_) => Ok(ArgType::Env(mutable)),
             _ => Err(Error::new_spanned(inner, "Found Rt of non-Gc type")),
         },
         _ => Ok(ArgType::Other),
@@ -470,10 +493,16 @@ mod test {
         test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
-        test_args(quote! {x: &Rt<Env>}, &[ArgType::Env]);
+        test_args(quote! {x: &Rt<Env>}, &[ArgType::Env(false)]);
+        test_args(quote! {x: &mut Rt<Env>}, &[ArgType::Env(MUT)]);
         test_args(
             quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Rt<Env>},
-            &[ArgType::Other, ArgType::SliceRt(Gc::Obj), ArgType::Context(false), ArgType::Env],
+            &[
+                ArgType::Other,
+                ArgType::SliceRt(Gc::Obj),
+                ArgType::Context(false),
+                ArgType::Env(false),
+            ],
         );
     }
 
