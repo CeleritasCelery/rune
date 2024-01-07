@@ -999,6 +999,11 @@ mod test {
             8,
             cx,
         );
+
+        // takes 1 arg
+        check_error("(1+)", cx);
+        check_error("(/)", cx);
+        check_error("(1+ 1 2)", cx);
     }
 
     #[test]

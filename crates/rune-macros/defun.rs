@@ -17,36 +17,38 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
     let struct_name = format_ident!("__subr_{}", &subr_name);
     let func_name = format_ident!("__wrapper_fn_{}", &subr_name);
     let lisp_name = spec.name.unwrap_or_else(|| map_function_name(&subr_name));
-    let (required, optional, rest) = match get_call_signature(&function.args, spec.required) {
-        Ok(x) => x,
-        Err(e) => return e,
-    };
+    let (required, optional, rest) = parse_call_signature(&function.args, spec.required);
 
     let arg_conversion = get_arg_conversion(&function.args);
 
-    let create_args = if function.args.iter().any(|x| matches!(x, ArgType::Env(MUT))) {
-        // If the function requires a mutable env, we need to create a new
-        // vector to hold the roots for the arguments
-        if rest {
-            quote! {
-                rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
-                let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
-                args.extend_from_slice(stack_slice);
+    let create_args = if !function.args.iter().any(|x| matches!(x, ArgType::Env(MUT))) {
+        // If mut Env is not needed, then we can just pass a slice from the
+        // stack directly. This is the cheapest option
+        quote! { let args = &env.stack[..arg_cnt]; }
+    } else if !rest || function.args.iter().any(|x| matches!(x, ArgType::ArgSlice)) {
+        // If number of arguments are known, we can allocate them on the stack
+        // as an array to avoid allocation. This is the purpose of the ArgSlice
+        // type, to give us a know set of arguments when the callee is expecting
+        // a slice.
+        let positional_args = (required + optional) as usize;
+        quote! {
+            rune_core::macros::root!(args, [crate::core::object::NIL; #positional_args], cx);
+            let pos_count = std::cmp::min(arg_cnt, #positional_args);
+            let stack_slice = &env.stack[..arg_cnt];
+            for i in 0..pos_count {
+                args[i].set(&stack_slice[i]);
             }
-        } else {
-            let len = (required + optional) as usize;
-            quote! {
-                rune_core::macros::root!(args, [crate::core::object::NIL; #len], cx);
-                let stack_slice = &env.stack[..arg_cnt];
-                assert!(arg_cnt <= #len);
-                for i in 0..arg_cnt {
-                    args[i].set(&stack_slice[i]);
-                }
-                let args = &args[..arg_cnt];
-            }
+            let args = &args[..pos_count];
         }
     } else {
-        quote! { let args = &env.stack[..arg_cnt]; }
+        // If the function requires a mutable env and arguments are
+        // unbounded, we need to create a new vector to hold the roots for
+        // the arguments
+        quote! {
+            rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
+            let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
+            args.extend_from_slice(stack_slice);
+        }
     };
 
     let err = if function.fallible {
@@ -65,6 +67,13 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         Ok(crate::core::object::IntoObject::into_obj(val, cx).into())
     };
 
+    let arg_count_guard = match (required as usize, optional as usize, rest) {
+        (r, 0, false) => quote! {arg_cnt != #r},
+        (0, o, false) => quote! {#o < arg_cnt},
+        (r, o, false) => quote! {arg_cnt < #r || #r + #o < arg_cnt},
+        (r, _, true) => quote! {arg_cnt < #r},
+    };
+
     quote! {
         #[automatically_derived]
         #[doc(hidden)]
@@ -73,8 +82,11 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
         ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
-            if arg_cnt < #required as usize {
-                return Err(crate::core::error::ArgError::new(#required, arg_cnt as u16, #lisp_name).into());
+            #[allow(clippy::manual_range_contains)]
+            if #arg_count_guard {
+                let upper = #required + #optional;
+                let expected = if arg_cnt > upper as usize {upper} else {#required};
+                return Err(crate::core::error::ArgError::new(expected, arg_cnt as u16, #lisp_name).into());
             }
             #create_args
             #subr_call
@@ -132,6 +144,11 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
                 Gc::Obj => quote! {&args[(#idx).min(args.len())..]},
                 Gc::Other => unreachable!(),
             },
+            // ArgSlice
+            ArgType::ArgSlice => {
+                let positional = args.iter().filter(|x| x.is_positional_arg()).count();
+                quote! {crate::core::env::ArgSlice::new(arg_cnt.saturating_sub(#positional))}
+            }
             // Option<Rt<Gc<..>>>
             ArgType::OptionRt => {
                 quote! {
@@ -163,10 +180,7 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
         .collect()
 }
 
-fn get_call_signature(
-    args: &[ArgType],
-    spec_required: Option<u16>,
-) -> Result<(u16, u16, bool), TokenStream> {
+fn parse_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u16, bool) {
     let required = {
         let actual_required = args.iter().filter(|x| x.is_required_arg()).count();
         let spec_required = match spec_required {
@@ -181,15 +195,11 @@ fn get_call_signature(
         pos_args - required
     };
 
-    let rest = args.iter().any(|x| matches!(x, ArgType::Slice(_) | ArgType::SliceRt(_)));
+    let rest = args.iter().any(|x| x.is_rest_arg());
 
-    let Ok(required) = u16::try_from(required) else {
-        return Err(quote! {compile_error!("Required arguments greater then {}", u16::MAX)});
-    };
-    let Ok(optional) = u16::try_from(optional) else {
-        return Err(quote! {compile_error!("optional arguments greater then {}", u16::MAX)});
-    };
-    Ok((required, optional, rest))
+    let required = u16::try_from(required).unwrap();
+    let optional = u16::try_from(optional).unwrap();
+    (required, optional, rest)
 }
 
 fn get_path_ident_name(type_path: &syn::TypePath) -> &syn::Ident {
@@ -216,6 +226,7 @@ enum ArgType {
     Gc(Gc),
     Slice(Gc),
     SliceRt(Gc),
+    ArgSlice,
     Option,
     OptionRt,
     Other,
@@ -234,7 +245,7 @@ impl ArgType {
 
     fn is_rest_arg(self) -> bool {
         use ArgType as A;
-        matches!(self, A::SliceRt(_) | A::Slice(_))
+        matches!(self, A::SliceRt(_) | A::Slice(_) | A::ArgSlice)
     }
 }
 
@@ -359,6 +370,8 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
             let name = get_path_ident_name(path);
             if name == "Rt" {
                 get_rt_type(path, false)?
+            } else if name == "ArgSlice" {
+                ArgType::ArgSlice
             } else if name == "Option" {
                 let outer = path.path.segments.last().unwrap();
                 match get_generic_param(outer) {
@@ -423,8 +436,6 @@ pub(crate) struct Spec {
     name: Option<String>,
     #[darling(default)]
     required: Option<u16>,
-    #[darling(default)]
-    intspec: Option<String>,
 }
 
 #[cfg(test)]
@@ -433,7 +444,7 @@ mod test {
 
     fn test_sig(stream: TokenStream, min: Option<u16>, expect: (u16, u16, bool)) {
         let function: Function = syn::parse2(stream).unwrap();
-        let sig = get_call_signature(&function.args, min).unwrap();
+        let sig = parse_call_signature(&function.args, min);
         assert_eq!(sig, expect);
     }
 
@@ -490,6 +501,7 @@ mod test {
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[u8]}, &[ArgType::Slice(Gc::Other)]);
+        test_args(quote! {x: ArgSlice}, &[ArgType::ArgSlice]);
         test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
@@ -532,7 +544,7 @@ mod test {
             }
         };
         let function: Function = syn::parse2(stream).unwrap();
-        let spec = Spec { name: Some("+".into()), required: None, intspec: None };
+        let spec = Spec { name: Some("+".into()), ..Default::default() };
         let result = expand(function, spec);
         println!("{result}");
     }

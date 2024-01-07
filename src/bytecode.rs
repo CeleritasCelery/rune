@@ -896,7 +896,7 @@ pub(crate) fn call<'ob>(
     let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
     root!(vm, cx);
     vm.prepare_lisp_args(func.bind(cx), arg_cnt as u16, name, cx)?;
-    vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.arg_slice()))
+    vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))
 }
 
 #[cfg(test)]

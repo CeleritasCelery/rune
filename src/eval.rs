@@ -2,7 +2,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::core::cons::{Cons, ConsError};
-use crate::core::env::{sym, Env, FnFrame};
+use crate::core::env::{sym, ArgSlice, Env, FnFrame};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{display_slice, FnArgs, LispString, Object, Symbol, NIL};
@@ -131,37 +131,39 @@ pub(crate) type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
 #[defun]
 pub(crate) fn apply<'ob>(
     function: &Rt<Gc<Function>>,
-    arguments: &[Rt<GcObj>],
+    arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let frame = &mut FnFrame::new(env);
-    if !arguments.is_empty() {
-        let len = arguments.len();
+    let arg_slice = env.stack.arg_slice(arguments);
+    if !arg_slice.is_empty() {
+        let last = arg_slice.last().unwrap().bind(cx);
+        let len = env.stack.len();
+        let beg = len - arg_slice.len();
         let end = len - 1;
-        let last = &arguments[end];
-        let args = Rt::bind_slice(&arguments[..end], cx);
-        frame.push_arg_slice(args);
-        let mut args = args.to_vec();
-        for element in last.bind(cx).as_list()? {
+        env.stack.extend_as_vec_from_within(beg..end);
+        for element in last.as_list()? {
             let e = cx.bind(element?);
-            args.push(e);
-            frame.push_arg(e);
+            env.stack.push(e);
         }
+        let args = env.stack.len() - len;
+        let frame = &mut FnFrame::new_with_args(env, args);
+        function.call(frame, None, cx).map_err(Into::into)
+    } else {
+        function.call(&mut FnFrame::new(env), None, cx).map_err(Into::into)
     }
-    function.call(frame, None, cx).map_err(Into::into)
 }
 
 #[defun]
 pub(crate) fn funcall<'ob>(
     function: &Rt<Gc<Function>>,
-    arguments: &[Rt<GcObj>],
+    arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    let args = Rt::bind_slice(arguments, cx);
-    let frame = &mut FnFrame::new(env);
-    frame.push_arg_slice(args);
+    let beg = env.stack.len() - arguments.len();
+    env.stack.extend_as_vec_from_within(beg..);
+    let frame = &mut FnFrame::new_with_args(env, arguments.len());
     function.call(frame, None, cx).map_err(Into::into)
 }
 
@@ -202,7 +204,7 @@ fn run_hooks<'ob>(
 #[defun]
 fn run_hook_with_args<'ob>(
     hook: &Rt<GcObj>,
-    args: &[Rt<GcObj>],
+    args: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
@@ -215,9 +217,9 @@ fn run_hook_with_args<'ob>(
                         rooted_iter!(hooks, hook_list, cx);
                         while let Some(hook) = hooks.next()? {
                             let func: &Rt<Gc<Function>> = hook.try_into()?;
-                            let args = Rt::bind_slice(args, cx);
-                            let frame = &mut FnFrame::new(env);
-                            frame.push_arg_slice(args);
+                            let beg = env.stack.len() - args.len();
+                            env.stack.extend_as_vec_from_within(beg..);
+                            let frame = &mut FnFrame::new_with_args(env, args.len());
                             func.call(frame, None, cx)?;
                         }
                     }

@@ -5,7 +5,7 @@ use super::super::{
 use super::{Block, Context, RootSet, Trace};
 use crate::core::object::{Gc, IntoObject, LispString, Object, Symbol, Untag, WithLifetime};
 use rune_core::hashmap::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
 use std::slice::SliceIndex;
 use std::{
     collections::VecDeque,
@@ -307,7 +307,7 @@ impl<T> Rt<T> {
         }
     }
 
-    pub(crate) fn bind_slice<'ob, U>(slice: &[Rt<T>], _: &'ob Context) -> &'ob [U]
+    pub(crate) fn bind_slice<'brw, 'ob, U>(slice: &'brw [Rt<T>], _: &'ob Context) -> &'brw [U]
     where
         T: WithLifetime<'ob, Out = U>,
     {
@@ -522,6 +522,10 @@ impl<T> Rt<Vec<T>> {
 impl<T: Copy> Rt<Vec<T>> {
     pub(crate) fn extend_from_slice<U: IntoRoot<T> + Copy>(&mut self, src: &[U]) {
         self.inner.extend_from_slice(unsafe { std::mem::transmute::<&[U], &[T]>(src) });
+    }
+
+    pub(crate) fn extend_from_within(&mut self, src: impl RangeBounds<usize>) {
+        self.inner.extend_from_within(src);
     }
 }
 

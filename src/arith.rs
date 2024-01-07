@@ -5,6 +5,8 @@ use rune_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
+/// Similar to the object type `Number`, but contains a float instead of a
+/// reference to a float. This makes it easier to construct and mutate.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum NumberValue {
     Int(i64),

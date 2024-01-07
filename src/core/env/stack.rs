@@ -3,7 +3,7 @@ use crate::core::{
     object::{GcObj, NIL},
 };
 use rune_macros::Trace;
-use std::ops::{Deref, DerefMut, Index, IndexMut, RangeTo};
+use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds, RangeTo};
 
 /// The stack of lisp objects used to pass and store arguments in the bytecode
 /// VM and interpreter. The top of the stack is index 0 and all indexing
@@ -31,6 +31,21 @@ struct Frame {
 impl Default for Frame {
     fn default() -> Self {
         Self { start: Default::default(), end: usize::MAX }
+    }
+}
+
+/// Type representing a slice of arguments on the stack. Used to avoid
+/// allocations and copies when calling functions.
+#[derive(Copy, Clone)]
+pub(crate) struct ArgSlice(usize);
+
+impl ArgSlice {
+    pub(crate) fn new(size: usize) -> Self {
+        Self(size)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0
     }
 }
 
@@ -197,12 +212,28 @@ impl<'a> RootedLispStack<'a> {
         self.vec.extend_from_slice(src);
     }
 
+    // This indexing is backwards from the normal stack sematics, so we add
+    // "as_vec" to the name to hopefully make it clearer
+    pub(crate) fn extend_as_vec_from_within(&mut self, src: impl RangeBounds<usize>) {
+        self.vec.extend_from_within(src);
+    }
+
     pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
         self.vec[self.current.start..].iter().rev()
     }
 
-    pub(crate) fn arg_slice(&self) -> &[Rt<GcObj>] {
+    pub(crate) fn arg_count(&self) -> usize {
+        self.len() - self.current.start
+    }
+
+    pub(crate) fn current_args(&self) -> &[Rt<GcObj>] {
+        // index as vec
         &self.vec[self.current.start..]
+    }
+
+    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<GcObj>] {
+        // index as stack
+        &self[..arg_slice.0]
     }
 }
 
@@ -234,7 +265,7 @@ impl<'brw, 'rt> FnFrame<'brw, 'rt> {
     }
 
     pub(crate) fn arg_count(&self) -> usize {
-        self.env.stack.len() - self.env.stack.current.start
+        self.env.stack.arg_count()
     }
 
     pub(crate) fn arg_slice(&self) -> &[Rt<GcObj<'rt>>] {
