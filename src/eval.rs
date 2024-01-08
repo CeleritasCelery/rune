@@ -168,13 +168,11 @@ pub(crate) fn funcall<'ob>(
 }
 
 #[defun]
-fn run_hooks<'ob>(
-    hooks: &[Rt<GcObj>],
-    env: &mut Rt<Env>,
-    cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
-    for hook in hooks {
-        match hook.get(cx) {
+fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+    let hook_count = hooks.len();
+    for i in 0..hook_count {
+        let hook = env.stack[hook_count - i - 1].bind(cx);
+        match hook.untag() {
             Object::Symbol(sym) => {
                 if let Some(val) = env.vars.get(sym) {
                     let val = val.bind(cx);

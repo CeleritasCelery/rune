@@ -310,6 +310,7 @@ impl<T> Rt<T> {
     pub(crate) fn bind_slice<'brw, 'ob, U>(slice: &'brw [Rt<T>], _: &'ob Context) -> &'brw [U]
     where
         T: WithLifetime<'ob, Out = U>,
+        U: 'ob,
     {
         unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
     }

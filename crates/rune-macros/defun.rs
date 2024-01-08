@@ -41,14 +41,9 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             let args = &args[..pos_count];
         }
     } else {
-        // If the function requires a mutable env and arguments are
-        // unbounded, we need to create a new vector to hold the roots for
-        // the arguments
-        quote! {
-            rune_core::macros::root!(args, Vec::with_capacity(arg_cnt), cx);
-            let stack_slice = crate::core::gc::Rt::bind_slice(&env.stack[..arg_cnt], cx);
-            args.extend_from_slice(stack_slice);
-        }
+        // If the function requires a mutable env and arguments are unbounded,
+        // we should use the ArgSlice type to avoid allocating
+        quote! { compile_error!("Can't use an argument slice with a mutable enviroment. Use `ArgSlice` instead."); }
     };
 
     let err = if function.fallible {

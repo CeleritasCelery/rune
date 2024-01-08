@@ -119,6 +119,7 @@ impl<T: TaggedPtr> Gc<T> {
     }
 }
 
+/// Untag a type erased `Gc` value. This is useful in generic code.
 pub(crate) trait Untag<T> {
     fn untag_erased(self) -> T;
 }

@@ -1,7 +1,7 @@
 //! Buffer editing utilities.
 use crate::core::{
-    env::Env,
-    gc::Rt,
+    env::{ArgSlice, Env},
+    gc::{Context, Rt},
     object::{GcObj, Object},
 };
 use anyhow::{bail, ensure, Result};
@@ -87,8 +87,10 @@ fn char_to_string(chr: u64) -> Result<String> {
 
 // TODO: this should not throw and error. Buffer will always be present.
 #[defun]
-pub(crate) fn insert(args: &[GcObj], env: &mut Rt<Env>) -> Result<()> {
+pub(crate) fn insert(args: ArgSlice, env: &mut Rt<Env>, cx: &Context) -> Result<()> {
+    let env = &mut **env; // Deref into rooted type so we can split the borrow
     let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    let args = Rt::bind_slice(env.stack.arg_slice(args), cx);
     for arg in args {
         buffer.insert(*arg)?;
     }
@@ -185,7 +187,12 @@ mod test {
         let buffer = get_buffer_create(cx.add("test_insert"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
-        insert(&[104.into(), 101.into(), 108.into(), 108.into(), 111.into()], env).unwrap();
+        env.stack.push(104);
+        env.stack.push(101);
+        env.stack.push(108);
+        env.stack.push(108);
+        env.stack.push(111);
+        insert(ArgSlice::new(5), env, cx).unwrap();
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hello");
     }
 
@@ -197,7 +204,9 @@ mod test {
         let buffer = get_buffer_create(cx.add("test_delete_region"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
-        insert(&[cx.add("hello"), cx.add(" world")], env).unwrap();
+        env.stack.push(cx.add("hello"));
+        env.stack.push(cx.add(" world"));
+        insert(ArgSlice::new(2), env, cx).unwrap();
 
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hello world");
         delete_region(1, 3, env).unwrap();
