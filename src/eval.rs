@@ -206,7 +206,7 @@ fn run_hook_with_args<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    match hook.get(cx) {
+    match hook.untag(cx) {
         Object::Symbol(sym) => {
             if let Some(val) = env.vars.get(sym) {
                 let val = val.bind(cx);
@@ -244,7 +244,7 @@ pub(crate) fn autoload_do_load<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
     // TODO: want to handle the case where the file is already loaded.
-    match fundef.get(cx) {
+    match fundef.untag(cx) {
         Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
             ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
             let mut iter = cons.elements();
@@ -260,7 +260,7 @@ pub(crate) fn autoload_do_load<'ob>(
             root!(file, cx);
             crate::lread::load(file, None, None, cx, env)?;
             match funname {
-                Some(func) => match func.get(cx).func(cx) {
+                Some(func) => match func.untag(cx).func(cx) {
                     Some(x) => Ok(x.into()),
                     None => Err(anyhow!("autoload of {func} did not provide a definition")),
                 },
@@ -295,7 +295,7 @@ pub(crate) fn macroexpand<'ob>(
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
 ) -> Result<GcObj<'ob>> {
-    let Object::Cons(cons) = form.get(cx) else { return Ok(form.bind(cx)) };
+    let Object::Cons(cons) = form.untag(cx) else { return Ok(form.bind(cx)) };
     let Object::Symbol(sym) = cons.car().untag() else { return Ok(form.bind(cx)) };
     // shadow the macro based on ENVIRONMENT
     let func = match environment {
@@ -428,7 +428,7 @@ impl Rt<Gc<Function<'_>>> {
         let name = name.unwrap_or("lambda");
         let arg_cnt = frame.arg_count();
         debug!("calling {self:?}");
-        match self.get(cx) {
+        match self.untag(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
                 frame.set_depth(f.bind(cx).depth);

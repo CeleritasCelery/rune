@@ -37,7 +37,7 @@ pub(crate) fn eval<'ob>(
 
 impl Interpreter<'_, '_> {
     fn eval_form<'ob>(&mut self, rt: &Rt<GcObj>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        match rt.get(cx) {
+        match rt.untag(cx) {
             Object::Symbol(sym) => self.var_ref(sym, cx),
             Object::Cons(_) => {
                 let x = rt.try_into().unwrap();
@@ -155,7 +155,7 @@ impl Interpreter<'_, '_> {
         };
         root!(func, cx);
 
-        match func.get(cx) {
+        match func.untag(cx) {
             Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                 crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)
                     .map_err(|e| add_trace(e, "autoload", &[]))?;
@@ -453,13 +453,13 @@ impl Interpreter<'_, '_> {
         let mut varbind_count = 0;
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next()? {
-            match binding.get(cx) {
+            match binding.untag(cx) {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
                     let val = rebind!(self.let_bind_value(cons, cx)?);
                     let var: Symbol =
-                        cons.get(cx).car().try_into().context("let variable must be a symbol")?;
+                        cons.untag(cx).car().try_into().context("let variable must be a symbol")?;
                     varbind_count += self.create_let_binding(var, val, cx);
                 }
                 // (let (x))
@@ -477,13 +477,13 @@ impl Interpreter<'_, '_> {
         root!(let_bindings, Vec::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next()? {
-            match binding.get(cx) {
+            match binding.untag(cx) {
                 // (let ((x y)))
                 Object::Cons(_) => {
                     let cons = binding.as_cons();
                     let var = rebind!(self.let_bind_value(cons, cx)?);
                     let sym: Symbol =
-                        cons.get(cx).car().try_into().context("let variable must be a symbol")?;
+                        cons.untag(cx).car().try_into().context("let variable must be a symbol")?;
                     let_bindings.push((sym, var));
                 }
                 // (let (x))
@@ -602,7 +602,7 @@ impl Interpreter<'_, '_> {
             return Err(err);
         }
         while let Some(handler) = forms.next()? {
-            match handler.get(cx) {
+            match handler.untag(cx) {
                 Object::Cons(cons) => {
                     // Check that conditions match
                     let condition = cons.car();
@@ -657,7 +657,7 @@ pub(crate) fn call_closure<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     cx.garbage_collect(false);
-    let closure: &Cons = closure.get(cx);
+    let closure: &Cons = closure.untag(cx);
     match closure.car().untag() {
         Object::Symbol(sym::CLOSURE) => {
             rooted_iter!(forms, closure.cdr(), cx);

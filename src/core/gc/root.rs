@@ -370,7 +370,8 @@ impl<T> Rt<Gc<T>> {
         }
     }
 
-    pub(crate) fn get<'ob, U>(&self, cx: &'ob Context) -> U
+    /// Calls [untag](Untag::untag_erased) on the tagged Gc pointer
+    pub(crate) fn untag<'ob, U>(&self, cx: &'ob Context) -> U
     where
         Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
         Gc<U>: Untag<U>,

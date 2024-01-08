@@ -868,8 +868,8 @@ fn byte_code<'ob>(
 ) -> Result<GcObj<'ob>> {
     let fun = crate::alloc::make_byte_code(
         0,
-        bytestr.get(cx),
-        vector.get(cx),
+        bytestr.untag(cx),
+        vector.untag(cx),
         maxdepth,
         None,
         None,

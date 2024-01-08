@@ -113,13 +113,9 @@ impl<T> Gc<T> {
     }
 }
 
-impl<T: TaggedPtr> Gc<T> {
-    pub(crate) fn untag(self) -> T {
-        T::untag(self)
-    }
-}
-
-/// Untag a type erased `Gc` value. This is useful in generic code.
+/// The [TaggedPtr] trait is local to this module (by design). This trait
+/// exports the one pubic method we want (untag) so it can be used in other
+/// modules.
 pub(crate) trait Untag<T> {
     fn untag_erased(self) -> T;
 }
@@ -127,6 +123,18 @@ pub(crate) trait Untag<T> {
 impl<T: TaggedPtr> Untag<T> for Gc<T> {
     fn untag_erased(self) -> T {
         T::untag(self)
+    }
+}
+
+impl<T> Gc<T>
+where
+    Gc<T>: Untag<T>,
+{
+    /// A non-trait version of [Untag::untag_erased]. This is useful when we
+    /// don't want to import the trait all over the place. The only time we need
+    /// to import the trait is in generic code.
+    pub(crate) fn untag(self) -> T {
+        Self::untag_erased(self)
     }
 }
 
@@ -392,7 +400,7 @@ mod private {
     ///
     /// Every method has a default implementation, and the doc string
     /// indicates if it should be reimplemented or left untouched.
-    pub(crate) trait TaggedPtr: Copy + for<'a> WithLifetime<'a> {
+    pub(super) trait TaggedPtr: Copy + for<'a> WithLifetime<'a> {
         /// The type of object being pointed to. This will be different for all
         /// implementors.
         type Ptr;

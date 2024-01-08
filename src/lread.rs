@@ -120,7 +120,7 @@ pub(crate) fn load(
 ) -> Result<bool> {
     let noerror = noerror.is_some();
     let nomessage = nomessage.is_some();
-    let file: &str = file.get(cx).try_into()?;
+    let file: &str = file.untag(cx).try_into()?;
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {

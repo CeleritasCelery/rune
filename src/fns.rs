@@ -151,7 +151,7 @@ pub(crate) fn mapc<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>> {
-    match sequence.get(cx) {
+    match sequence.untag(cx) {
         List::Nil => Ok(NIL),
         List::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
@@ -492,18 +492,18 @@ pub(crate) fn require<'ob>(
     cx: &'ob mut Context,
 ) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root
-    let feat = unsafe { feature.get(cx).into_root() };
+    let feat = unsafe { feature.untag(cx).into_root() };
     if crate::data::features().lock().unwrap().contains(&feat) {
-        return Ok(feature.get(cx));
+        return Ok(feature.untag(cx));
     }
     let file = match filename {
-        Some(file) => file.get(cx).try_into()?,
-        None => feature.get(cx).get().name(),
+        Some(file) => file.untag(cx).try_into()?,
+        None => feature.untag(cx).get().name(),
     };
     let file = file.into_obj(cx);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
-        Ok(_) => Ok(feature.get(cx)),
+        Ok(_) => Ok(feature.untag(cx)),
         Err(e) => match noerror {
             Some(()) => Ok(sym::NIL),
             None => Err(e),
