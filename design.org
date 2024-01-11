@@ -22,10 +22,6 @@ Separate the GUI code from the backend code. So that you could make the front en
 ** Modular
 Make it so that any component can be a crate and removed and repackaged. We can change string representation without issue. We can change GC without issue. We can change GUI toolkit without issue. We can change the interpreter without issue. Make everything easier to change and replace.
 
-** Garbage collector
-The best GC for Emacs would be a compacting, generational GC. That should be much easier to write then a concurrent GC. We would run the generational GC anytime we are in an idle state. That means that each command will trigger gc, but only for the nursery it created. We could also run it when the minibuffer is torn down and after loading a file. If we have predefined points where we run the generational GC, then we will hopefully only rarely need to run it when the user is waiting. We could have nested generations so that nested commands (such as minibuffer) would be each cleaning their own generation.
-
-Current approach to a safe GC is documented [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][here]].
 
 ** Unit tested
 This will really help me get in the habit. Try writing simple unit tests that will make sure you are not breaking anything as you develop. You might thank yourself later.
