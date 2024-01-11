@@ -38,7 +38,6 @@ rune-macros = { version = "0.1.0", path = "crates/rune-macros" }
 anyhow = { workspace = true }
 bstr = { workspace = true }
 bytecount = "0.6.3"
-druid = "0.8.3"
 fancy-regex = "0.13.0"
 float-cmp = { workspace = true }
 hostname = "0.3.1"

@@ -25,7 +25,6 @@ mod eval;
 mod fileio;
 mod floatfns;
 mod fns;
-mod gui;
 mod interpreter;
 mod keymap;
 mod lread;
@@ -62,10 +61,6 @@ fn main() {
 
     if args.repl {
         repl(env, cx);
-    }
-
-    if args.gui {
-        gui::launch();
     }
 }
 
@@ -134,12 +129,11 @@ fn load(env: &mut Rt<Env>, cx: &mut Context) {
 struct Args {
     load: bool,
     repl: bool,
-    gui: bool,
 }
 
 impl Args {
     fn empty(&self) -> bool {
-        !self.load && !self.repl && !self.gui
+        !self.load && !self.repl
     }
 
     fn parse() -> Self {
@@ -148,7 +142,6 @@ impl Args {
             match arg.as_str() {
                 "--repl" => args.repl = true,
                 "--load" => args.load = true,
-                "--gui" => args.gui = true,
                 x => println!("unknown arg: {x}"),
             }
         }
