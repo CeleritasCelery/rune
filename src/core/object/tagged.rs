@@ -170,6 +170,14 @@ impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
 // Traits for Objects //
 ////////////////////////
 
+/// Helper trait to change the lifetime of a [GcManaged] type. This is useful
+/// because objects are initially tied to the lifetime of the
+/// [Context](crate::core::gc::Context) they are allocated in. But when rooted
+/// the lifetime is dissociated from the Context. If we only worked with
+/// references, we could just use transmutes or casts to handle this, but
+/// generic types don't expose their lifetimes. This trait is used to work
+/// around that. Must be used with extreme care, as it is easy to cast it to an
+/// invalid lifetime.
 pub(crate) trait WithLifetime<'new> {
     type Out: 'new;
     unsafe fn with_lifetime(self) -> Self::Out;

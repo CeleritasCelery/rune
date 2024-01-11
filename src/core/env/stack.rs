@@ -22,15 +22,23 @@ pub(crate) struct LispStack<'a> {
     frames: Vec<Frame>,
 }
 
+/// A function call frame. These mirror the lisp call stack and are used to
+/// display backtraces as well as return.
 #[derive(Debug, Clone, Copy)]
 struct Frame {
+    /// The start of the call frame, as a index from the start of the stack (not the end).
     start: usize,
+    /// The maximum size this stack frame can grow.
     end: usize,
+    /// Number of arguments in this call frame. The first is the count and the
+    /// second is boolean indicating if the last argument is a cons cell with
+    /// the remaining variadic arguments.
+    arg_cnt: (u16, bool),
 }
 
 impl Default for Frame {
     fn default() -> Self {
-        Self { start: Default::default(), end: usize::MAX }
+        Self { start: 0, end: usize::MAX, arg_cnt: (0, false) }
     }
 }
 
@@ -95,14 +103,14 @@ impl<'a> RootedLispStack<'a> {
             assert!(end - self.vec.len() < 100); // make sure this doesn't blow up
             self.vec.reserve(end - self.vec.len());
         }
-        self.current = Frame { start, end };
+        self.current = Frame { start, end, ..Frame::default() };
     }
 
     pub(crate) fn push_frame(&mut self) {
         let start = self.len();
         assert!(self.current.start <= start);
         self.frames.push(self.current);
-        self.current = Frame { start, end: usize::MAX };
+        self.current = Frame { start, ..Frame::default() };
     }
 
     pub(crate) fn push_frame_with_args(&mut self, arg_cnt: usize) {
@@ -110,7 +118,8 @@ impl<'a> RootedLispStack<'a> {
         let start = self.len() - arg_cnt;
         assert!(self.current.start <= start);
         self.frames.push(self.current);
-        self.current = Frame { start, end: usize::MAX };
+        self.current =
+            Frame { start, arg_cnt: (u16::try_from(arg_cnt).unwrap(), false), ..Frame::default() };
     }
 
     pub(crate) fn pop_frame(&mut self) {
@@ -149,6 +158,10 @@ impl<'a> RootedLispStack<'a> {
             assert!(end - self.vec.len() < 1000); // make sure this doesn't blow up if we have a bug
             self.vec.reserve(end - self.vec.len());
         }
+    }
+
+    pub(crate) fn set_arg_count(&mut self, arg_cnt: u16, rest: bool) {
+        self.current.arg_cnt = (arg_cnt, rest);
     }
 
     pub(crate) fn push<T: IntoRoot<GcObj<'a>>>(&mut self, value: T) {
@@ -264,8 +277,17 @@ impl<'brw, 'rt> FnFrame<'brw, 'rt> {
         self.env.stack.push(arg);
     }
 
+    /// Set the total argument count before a function call
+    pub(crate) fn finalize_arguments(&mut self) {
+        let args = self.env.stack.arg_count().try_into().unwrap();
+        self.env.stack.set_arg_count(args, false);
+    }
+
     pub(crate) fn arg_count(&self) -> usize {
-        self.env.stack.arg_count()
+        let count1 = self.env.stack.arg_count();
+        let count2 = self.env.stack.current.arg_cnt.0 as usize;
+        assert_eq!(count1, count2);
+        count1
     }
 
     pub(crate) fn arg_slice(&self) -> &[Rt<GcObj<'rt>>] {

@@ -426,6 +426,7 @@ impl Rt<Gc<Function<'_>>> {
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let name = name.unwrap_or("lambda");
+        frame.finalize_arguments();
         let arg_cnt = frame.arg_count();
         debug!("calling {self:?}");
         match self.untag(cx) {

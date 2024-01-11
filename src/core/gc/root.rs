@@ -376,8 +376,7 @@ impl<T> Rt<Gc<T>> {
         Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
         Gc<U>: Untag<U>,
     {
-        let gc: Gc<U> = self.bind(cx);
-        gc.untag_erased()
+        self.bind(cx).untag_erased()
     }
 }
 

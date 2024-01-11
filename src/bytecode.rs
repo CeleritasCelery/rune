@@ -195,10 +195,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
     fn prepare_lisp_args(
         &mut self,
         func: &ByteFn,
-        arg_cnt: u16,
+        arg_cnt: usize,
         name: &str,
         cx: &'ob Context,
-    ) -> Result<u16> {
+    ) -> Result<()> {
+        let arg_cnt = arg_cnt as u16;
         let fill_args = func.args.num_of_fill_args(arg_cnt, name)?;
         self.env.stack.fill_extra_args(fill_args);
         let total_args = arg_cnt + fill_args;
@@ -208,17 +209,18 @@ impl<'ob> RootedVM<'_, '_, '_> {
             let list = crate::fns::slice_into_list(Rt::bind_slice(slice, cx), None, cx);
             self.env.stack.remove_top(rest_size as usize - 1);
             self.env.stack[0].set(list);
-            Ok(total_args - rest_size + 1)
+            self.env.stack.set_arg_count(total_args - rest_size + 1, true);
         } else if func.args.rest {
             self.env.stack.push(NIL);
-            Ok(total_args + 1)
+            self.env.stack.set_arg_count(total_args + 1, true)
         } else {
-            Ok(total_args)
-        }
+            self.env.stack.set_arg_count(total_args, false)
+        };
+        Ok(())
     }
 
     fn call(&mut self, arg_cnt: u16, cx: &'ob mut Context) -> Result<(), EvalError> {
-        let arg_cnt = arg_cnt as usize;
+        let arg_cnt = usize::from(arg_cnt);
         let func: Gc<Function> = self.env.stack[arg_cnt].bind(cx).try_into()?;
         let name = match func.untag() {
             Function::Symbol(x) => x.name().to_owned(),
@@ -234,7 +236,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
             self.call_frames.push(new);
             let frame_start = len - (arg_cnt + 1);
             self.env.stack.push_bytecode_frame(frame_start, f.depth);
-            self.prepare_lisp_args(f, arg_cnt as u16, &name, cx)?;
+            self.prepare_lisp_args(f, arg_cnt, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
             let mut frame = FnFrame::new_with_args(self.env, arg_cnt);
@@ -895,7 +897,7 @@ pub(crate) fn call<'ob>(
     let frame = CallFrame::new(func.bind(cx));
     let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
     root!(vm, cx);
-    vm.prepare_lisp_args(func.bind(cx), arg_cnt as u16, name, cx)?;
+    vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))
 }
 
@@ -979,6 +981,7 @@ mod test {
         root!(env, Env::default(), cx);
         let frame = &mut FnFrame::new(env);
         frame.push_arg_slice(Rt::bind_slice(args, cx));
+        frame.finalize_arguments();
         let val = rebind!(call(bytecode, frame.arg_count(), "test", frame, cx).unwrap());
         let expect = expect.bind(cx);
         assert_eq!(val, expect);
