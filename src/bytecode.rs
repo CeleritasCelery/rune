@@ -1,3 +1,4 @@
+#![allow(unstable_name_collisions)]
 //! The main bytecode interpeter.
 use crate::core::env::{sym, Env, FnFrame};
 use crate::core::gc::{Context, IntoRoot, Rt};
@@ -9,6 +10,7 @@ use anyhow::{bail, Result};
 use bstr::ByteSlice;
 use rune_core::macros::{bail_err, cons, rebind, root};
 use rune_macros::{defun, Trace};
+use sptr::Strict;
 
 mod opcode;
 
@@ -24,6 +26,14 @@ struct ProgramCounter {
 impl ProgramCounter {
     fn new(vec: &[u8]) -> Self {
         ProgramCounter { range: vec.as_ptr_range(), pc: vec.as_ptr() }
+    }
+
+    fn with_offset(vec: &[u8], offset: usize) -> Self {
+        ProgramCounter { range: vec.as_ptr_range(), pc: vec.as_ptr().map_addr(|a| a + offset) }
+    }
+
+    fn as_offset(&self) -> usize {
+        self.pc.addr() - self.range.start.addr()
     }
 
     fn goto(&mut self, offset: u16) {
@@ -75,6 +85,7 @@ struct CallFrame<'a> {
     #[no_trace]
     pc: ProgramCounter,
     consts: &'a LispVec,
+    func: &'a ByteFn,
 }
 
 impl<'old, 'new> WithLifetime<'new> for CallFrame<'old> {
@@ -87,7 +98,7 @@ impl<'old, 'new> WithLifetime<'new> for CallFrame<'old> {
 
 impl CallFrame<'_> {
     fn new(func: &ByteFn) -> CallFrame<'_> {
-        CallFrame { pc: ProgramCounter::new(func.codes().as_bytes()), consts: func.consts() }
+        CallFrame { pc: ProgramCounter::new(func.codes().as_bytes()), consts: func.consts(), func }
     }
 }
 
@@ -107,8 +118,6 @@ struct Handler<'ob> {
     stack_size: usize,
     #[no_trace]
     stack_frame: usize,
-    #[no_trace]
-    call_frame: usize,
     condition: GcObj<'ob>,
 }
 
@@ -124,8 +133,6 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// execution stack is part of the Environment.
 #[derive(Trace)]
 struct VM<'brw, 'env, 'rt> {
-    /// Previous call frames
-    call_frames: Vec<CallFrame<'rt>>,
     /// The current call frame.
     frame: CallFrame<'rt>,
     /// All currently active condition-case handlers
@@ -175,13 +182,22 @@ impl<'ob> RootedVM<'_, '_, '_> {
         self.env.unbind(idx, cx);
     }
 
-    fn unwind(&mut self, idx: usize) {
-        assert!(idx <= self.call_frames.len());
-        let Some(frame) = self.call_frames.get_mut(idx) else {
-            return; /* no frames to unwind */
+    fn unwind(&mut self, idx: usize, cx: &'ob Context) {
+        if idx == self.env.stack.current_frame() {
+            return;
+        }
+        assert!(idx < self.env.stack.current_frame());
+        let Some((f, offset)) = self.env.stack.get_bytecode_frame(idx) else {
+            unreachable!("Unwind frame not found")
         };
-        std::mem::swap(&mut self.frame, frame);
-        self.call_frames.truncate(idx);
+        let f = f.bind(cx);
+        let frame = CallFrame {
+            consts: f.consts(),
+            func: f,
+            pc: ProgramCounter::with_offset(f.codes().as_bytes(), offset),
+        };
+        self.frame.set(frame);
+        self.env.stack.unwind_frames(idx);
     }
 
     #[inline(always)]
@@ -233,9 +249,10 @@ impl<'ob> RootedVM<'_, '_, '_> {
             let mut new = CallFrame::new(f);
             let old = self.frame.bind_mut(cx);
             std::mem::swap(old, &mut new);
-            self.call_frames.push(new);
+            let pc_offset = new.pc.as_offset();
+            let func = &new.func;
             let frame_start = len - (arg_cnt + 1);
-            self.env.stack.push_bytecode_frame(frame_start, f.depth);
+            self.env.stack.push_bytecode_frame(frame_start, f.depth, func, pc_offset);
             self.prepare_lisp_args(f, arg_cnt, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
@@ -283,8 +300,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     // full errors are implemented
                     cons!(sym::ERROR, format!("{err}"); cx)
                 };
-                self.env.stack.unwind_frames(handler.stack_frame);
-                self.unwind(handler.call_frame);
+                self.unwind(handler.stack_frame, cx);
                 self.env.stack.truncate(handler.stack_size);
                 self.env.stack.push(error);
                 self.frame.pc.goto(handler.jump_code);
@@ -417,7 +433,6 @@ impl<'ob> RootedVM<'_, '_, '_> {
                         jump_code: self.frame.pc.arg2(),
                         stack_size: self.env.stack.len(),
                         stack_frame: self.env.stack.current_frame(),
-                        call_frame: self.call_frames.len(),
                         condition,
                     };
                     self.handlers.push(handler);
@@ -667,12 +682,19 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     }
                 }
                 op::Return => {
-                    let Some(prev_frame) = self.call_frames.bind_mut(cx).pop() else {
+                    if let Some((f, offset)) = self.env.stack.prev_bytecode_frame() {
+                        let f = f.bind(cx);
+                        let frame = CallFrame {
+                            consts: f.consts(),
+                            func: f,
+                            pc: ProgramCounter::with_offset(f.codes().as_bytes(), offset),
+                        };
+                        self.frame.set(frame);
+                        self.env.stack.return_frame();
+                    } else {
                         let top = self.env.stack.pop(cx);
                         return Ok(top);
-                    };
-                    self.env.stack.return_frame();
-                    self.frame.set(prev_frame);
+                    }
                 }
                 op::Discard => {
                     self.env.stack.pop(cx);
@@ -896,7 +918,7 @@ pub(crate) fn call<'ob>(
 ) -> EvalResult<'ob> {
     frame.stack.set_depth(func.bind(cx).depth);
     let call_frame = CallFrame::new(func.bind(cx));
-    let vm = VM { call_frames: vec![], frame: call_frame, env: frame, handlers: Vec::new() };
+    let vm = VM { frame: call_frame, env: frame, handlers: Vec::new() };
     root!(vm, cx);
     vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))

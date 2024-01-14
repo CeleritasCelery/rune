@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Context, IntoRoot, Rt},
-    object::{GcObj, NIL},
+    object::{ByteFn, GcObj, WithLifetime, NIL},
 };
 use rune_macros::Trace;
 use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds, RangeTo};
@@ -18,8 +18,7 @@ pub(crate) struct LispStack<'a> {
     vec: Vec<GcObj<'a>>,
     #[no_trace]
     current: Frame,
-    #[no_trace]
-    frames: Vec<Frame>,
+    frames: Vec<FrameStore<'a>>,
 }
 
 /// A function call frame. These mirror the lisp call stack and are used to
@@ -39,6 +38,38 @@ struct Frame {
 impl Default for Frame {
     fn default() -> Self {
         Self { start: 0, end: usize::MAX, arg_cnt: (0, false) }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Trace)]
+struct ByteFrame<'a> {
+    func: &'a ByteFn,
+    #[no_trace]
+    pc_offset: usize,
+}
+
+#[derive(Debug, Clone, Copy, Trace)]
+struct FrameStore<'a> {
+    #[no_trace]
+    frame: Frame,
+    bytecode: Option<ByteFrame<'a>>,
+}
+
+impl<'ob> FrameStore<'ob> {
+    fn new(frame: Frame) -> Self {
+        Self { frame, bytecode: None }
+    }
+
+    fn new_bytecode(frame: Frame, func: &'ob ByteFn, pc_offset: usize) -> Self {
+        Self { frame, bytecode: Some(ByteFrame { func, pc_offset }) }
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for FrameStore<'old> {
+    type Out = FrameStore<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute::<FrameStore<'old>, FrameStore<'new>>(self)
     }
 }
 
@@ -92,10 +123,16 @@ impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
 }
 
 impl<'a> RootedLispStack<'a> {
-    pub(crate) fn push_bytecode_frame(&mut self, start: usize, depth: usize) {
+    pub(crate) fn push_bytecode_frame(
+        &mut self,
+        start: usize,
+        depth: usize,
+        func: &ByteFn,
+        pc: usize,
+    ) {
         assert!(start <= self.len());
         assert!(self.current.start <= start);
-        self.frames.push(self.current);
+        self.frames.push(FrameStore::new_bytecode(self.current, func, pc));
         let end = start + depth;
         // allocate space so that we don't have to reallocate later. This will
         // also let us do unchecked pushes later.
@@ -109,7 +146,7 @@ impl<'a> RootedLispStack<'a> {
     pub(crate) fn push_frame(&mut self) {
         let start = self.len();
         assert!(self.current.start <= start);
-        self.frames.push(self.current);
+        self.frames.push(FrameStore::new(self.current));
         self.current = Frame { start, ..Frame::default() };
     }
 
@@ -117,20 +154,42 @@ impl<'a> RootedLispStack<'a> {
         assert!(arg_cnt <= self.len());
         let start = self.len() - arg_cnt;
         assert!(self.current.start <= start);
-        self.frames.push(self.current);
+        self.frames.push(FrameStore::new(self.current));
         self.current =
             Frame { start, arg_cnt: (u16::try_from(arg_cnt).unwrap(), false), ..Frame::default() };
     }
 
     pub(crate) fn pop_frame(&mut self) {
         self.vec.truncate(self.current.start);
-        self.current = self.frames.pop().unwrap();
+        self.current = self.frames.last().unwrap().frame;
+        self.frames.pop();
+    }
+
+    pub(crate) fn get_bytecode_frame(&self, idx: usize) -> Option<(&Rt<&ByteFn>, usize)> {
+        self.frames.get(idx).and_then(|f| {
+            f.bytecode.as_ref().map(|f| {
+                let func = &f.func;
+                let pc = f.pc_offset;
+                (func, pc)
+            })
+        })
+    }
+
+    pub(crate) fn prev_bytecode_frame(&self) -> Option<(&Rt<&ByteFn>, usize)> {
+        self.frames.last().and_then(|f| {
+            f.bytecode.as_ref().map(|f| {
+                let func = &f.func;
+                let pc = f.pc_offset;
+                (func, pc)
+            })
+        })
     }
 
     pub(crate) fn return_frame(&mut self) {
         self.vec.swap_remove(self.current.start);
         self.vec.truncate(self.current.start + 1);
-        self.current = self.frames.pop().unwrap();
+        self.current = self.frames.last().unwrap().frame;
+        self.frames.pop();
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -142,7 +201,7 @@ impl<'a> RootedLispStack<'a> {
             return; /* no frames to unwind */
         }
         assert!(frame < self.current_frame());
-        self.current = self.frames[frame];
+        self.current = self.frames[frame].frame;
         self.frames.truncate(frame);
     }
 
