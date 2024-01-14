@@ -269,10 +269,6 @@ impl<'brw, 'rt> FnFrame<'brw, 'rt> {
         Self { env }
     }
 
-    pub(crate) fn set_depth(&mut self, depth: usize) {
-        self.env.stack.set_depth(depth)
-    }
-
     pub(crate) fn push_arg(&mut self, arg: impl IntoRoot<GcObj<'rt>>) {
         self.env.stack.push(arg);
     }

@@ -879,7 +879,7 @@ fn byte_code<'ob>(
         cx,
     )?;
     root!(fun, cx);
-    Ok(call(fun, 0, "unnamed", env, cx)?)
+    Ok(call(fun, 0, "unnamed", &mut FnFrame::new(env), cx)?)
 }
 
 #[defun]
@@ -891,11 +891,12 @@ pub(crate) fn call<'ob>(
     func: &Rt<&ByteFn>,
     arg_cnt: usize,
     name: &str,
-    env: &mut Rt<Env>,
+    frame: &mut FnFrame,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
-    let frame = CallFrame::new(func.bind(cx));
-    let vm = VM { call_frames: vec![], frame, env, handlers: Vec::new() };
+    frame.stack.set_depth(func.bind(cx).depth);
+    let call_frame = CallFrame::new(func.bind(cx));
+    let vm = VM { call_frames: vec![], frame: call_frame, env: frame, handlers: Vec::new() };
     root!(vm, cx);
     vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))

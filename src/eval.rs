@@ -432,7 +432,6 @@ impl Rt<Gc<Function<'_>>> {
         match self.untag(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);
-                frame.set_depth(f.bind(cx).depth);
                 crate::bytecode::call(f, arg_cnt, name, frame, cx)
                     .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
