@@ -143,14 +143,7 @@ impl<'a> RootedLispStack<'a> {
         self.current = Frame { start, end, ..Frame::default() };
     }
 
-    pub(crate) fn push_frame(&mut self) {
-        let start = self.len();
-        assert!(self.current.start <= start);
-        self.frames.push(FrameStore::new(self.current));
-        self.current = Frame { start, ..Frame::default() };
-    }
-
-    pub(crate) fn push_frame_with_args(&mut self, arg_cnt: usize) {
+    pub(crate) fn push_frame(&mut self, arg_cnt: usize) {
         assert!(arg_cnt <= self.len());
         let start = self.len() - arg_cnt;
         assert!(self.current.start <= start);
@@ -159,6 +152,8 @@ impl<'a> RootedLispStack<'a> {
             Frame { start, arg_cnt: (u16::try_from(arg_cnt).unwrap(), false), ..Frame::default() };
     }
 
+    /// Remove all the stack variables in the current frame and switch to the
+    /// previous one
     pub(crate) fn pop_frame(&mut self) {
         self.vec.truncate(self.current.start);
         self.current = self.frames.last().unwrap().frame;
@@ -183,13 +178,6 @@ impl<'a> RootedLispStack<'a> {
                 (func, pc)
             })
         })
-    }
-
-    pub(crate) fn return_frame(&mut self) {
-        self.vec.swap_remove(self.current.start);
-        self.vec.truncate(self.current.start + 1);
-        self.current = self.frames.last().unwrap().frame;
-        self.frames.pop();
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -318,13 +306,14 @@ pub(crate) struct FnFrame<'brw, 'rt> {
 }
 
 impl<'brw, 'rt> FnFrame<'brw, 'rt> {
+    /// Create a new function call frame with a drop guard to be removed when
+    /// this goes out of scope.
     pub(crate) fn new(env: &'brw mut Rt<super::Env<'rt>>) -> Self {
-        env.stack.push_frame();
-        Self { env }
+        Self::new_with_args(env, 0)
     }
 
     pub(crate) fn new_with_args(env: &'brw mut Rt<super::Env<'rt>>, args: usize) -> Self {
-        env.stack.push_frame_with_args(args);
+        env.stack.push_frame(args);
         Self { env }
     }
 

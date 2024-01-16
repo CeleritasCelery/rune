@@ -15,7 +15,8 @@ use sptr::Strict;
 mod opcode;
 
 /// An program counter. This is implemented as a bound checked range pointer.
-#[derive(Clone)]
+// TODO: If the GC moves the bytecode, this will be invalid. We need to fix this
+#[derive(Clone, Debug)]
 struct ProgramCounter {
     /// Valid range for this instruction pointer.
     range: std::ops::Range<*const u8>,
@@ -78,36 +79,6 @@ impl ProgramCounter {
     }
 }
 
-/// A function call frame. This represents the state of the current executing
-/// function as well as all it's associated constants.
-#[derive(Clone, Trace)]
-struct CallFrame<'a> {
-    #[no_trace]
-    pc: ProgramCounter,
-    consts: &'a LispVec,
-    func: &'a ByteFn,
-}
-
-impl<'old, 'new> WithLifetime<'new> for CallFrame<'old> {
-    type Out = CallFrame<'new>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<CallFrame<'old>, CallFrame<'new>>(self)
-    }
-}
-
-impl CallFrame<'_> {
-    fn new(func: &ByteFn) -> CallFrame<'_> {
-        CallFrame { pc: ProgramCounter::new(func.codes().as_bytes()), consts: func.consts(), func }
-    }
-}
-
-impl RootedCallFrame<'_> {
-    fn get_const<'ob>(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
-        self.consts.bind(cx).get(i).expect("constant had invalid index").get()
-    }
-}
-
 #[derive(Debug, Trace)]
 /// A handler for a condition-case. These are stored in a vector in the VM and
 /// added/removed via bytecodes.
@@ -133,8 +104,14 @@ impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
 /// execution stack is part of the Environment.
 #[derive(Trace)]
 struct VM<'brw, 'env, 'rt> {
-    /// The current call frame.
-    frame: CallFrame<'rt>,
+    #[no_trace]
+    /// Current program counter
+    pc: ProgramCounter,
+    /// Associated constants for this function
+    consts: &'rt LispVec,
+    /// The current function being executed. Saved to ensure it is preserved by
+    /// the garbage collector.
+    func: &'rt ByteFn,
     /// All currently active condition-case handlers
     handlers: Vec<Handler<'rt>>,
     /// The runtime environment
@@ -150,7 +127,7 @@ impl<'brw, 'env> IntoRoot<VM<'brw, 'env, 'static>> for VM<'brw, 'env, '_> {
 
 impl<'ob> RootedVM<'_, '_, '_> {
     fn varref(&mut self, idx: u16, cx: &'ob Context) -> Result<()> {
-        let symbol = self.frame.get_const(idx as usize, cx);
+        let symbol = self.get_const(idx as usize, cx);
         if let Object::Symbol(sym) = symbol.untag() {
             let Some(var) = self.env.vars.get(sym) else { bail!("Void Variable: {sym}") };
             let var = var.bind(cx);
@@ -162,7 +139,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
     }
 
     fn varset(&mut self, idx: usize, cx: &Context) -> Result<()> {
-        let obj = self.frame.get_const(idx, cx);
+        let obj = self.get_const(idx, cx);
         let symbol: Symbol = obj.try_into()?;
         let value = self.env.stack.pop(cx);
         crate::data::set(symbol, value, self.env)?;
@@ -171,7 +148,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
     fn varbind(&mut self, idx: u16, cx: &'ob Context) {
         let value = self.env.stack.pop(cx);
-        let symbol = self.frame.get_const(idx as usize, cx);
+        let symbol = self.get_const(idx as usize, cx);
         let Object::Symbol(sym) = symbol.untag() else {
             unreachable!("Varbind was not a symbol: {:?}", symbol)
         };
@@ -182,22 +159,27 @@ impl<'ob> RootedVM<'_, '_, '_> {
         self.env.unbind(idx, cx);
     }
 
+    fn get_const(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
+        self.consts.bind(cx).get(i).expect("constant had invalid index").get()
+    }
+
+    fn set_current_frame(&mut self, f: &ByteFn, offset: usize) {
+        self.consts.set(f.consts());
+        self.func.set(f);
+        self.pc = ProgramCounter::with_offset(f.codes().as_bytes(), offset);
+    }
+
     fn unwind(&mut self, idx: usize, cx: &'ob Context) {
         if idx == self.env.stack.current_frame() {
             return;
         }
         assert!(idx < self.env.stack.current_frame());
-        let Some((f, offset)) = self.env.stack.get_bytecode_frame(idx) else {
+        if let Some((f, offset)) = self.env.stack.get_bytecode_frame(idx) {
+            self.set_current_frame(f.bind(cx), offset);
+            self.env.stack.unwind_frames(idx);
+        } else {
             unreachable!("Unwind frame not found")
-        };
-        let f = f.bind(cx);
-        let frame = CallFrame {
-            consts: f.consts(),
-            func: f,
-            pc: ProgramCounter::with_offset(f.codes().as_bytes(), offset),
-        };
-        self.frame.set(frame);
-        self.env.stack.unwind_frames(idx);
+        }
     }
 
     #[inline(always)]
@@ -246,11 +228,9 @@ impl<'ob> RootedVM<'_, '_, '_> {
             // If bytecode, add another frame and resume execution.
             // OpCode::Return will remove the call frame.
             let len = self.env.stack.len();
-            let mut new = CallFrame::new(f);
-            let old = self.frame.bind_mut(cx);
-            std::mem::swap(old, &mut new);
-            let pc_offset = new.pc.as_offset();
-            let func = &new.func;
+            let pc_offset = self.pc.as_offset();
+            let func = self.func.bind(cx);
+            self.set_current_frame(f, 0);
             let frame_start = len - (arg_cnt + 1);
             self.env.stack.push_bytecode_frame(frame_start, f.depth, func, pc_offset);
             self.prepare_lisp_args(f, arg_cnt, &name, cx)?;
@@ -303,7 +283,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 self.unwind(handler.stack_frame, cx);
                 self.env.stack.truncate(handler.stack_size);
                 self.env.stack.push(error);
-                self.frame.pc.goto(handler.jump_code);
+                self.pc.goto(handler.jump_code);
                 continue 'main;
             }
             return Err(err);
@@ -316,7 +296,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
         use crate::{alloc, arith, data, fns};
         use opcode::OpCode as op;
         loop {
-            let op = match self.frame.pc.next().try_into() {
+            let op = match self.pc.next().try_into() {
                 Ok(x) => x,
                 Err(e) => panic!("Invalid Bytecode: {e}"),
             };
@@ -327,7 +307,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     println!("    {idx}: {x},");
                 }
                 println!("]");
-                let byte_offset = self.frame.pc.pc as i64 - self.frame.pc.range.start as i64 - 1;
+                let byte_offset = self.pc.pc as i64 - self.pc.range.start as i64 - 1;
                 println!("op :{byte_offset}: {op:?}");
             }
             match op {
@@ -338,19 +318,19 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::StackRef4 => self.env.stack.push_ref(4, cx),
                 op::StackRef5 => self.env.stack.push_ref(5, cx),
                 op::StackRefN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.env.stack.push_ref(idx, cx);
                 }
                 op::StackRefN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.env.stack.push_ref(idx, cx);
                 }
                 op::StackSetN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.env.stack.set_ref(idx);
                 }
                 op::StackSetN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.env.stack.set_ref(idx);
                 }
                 op::VarRef0 => self.varref(0, cx)?,
@@ -360,11 +340,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::VarRef4 => self.varref(4, cx)?,
                 op::VarRef5 => self.varref(5, cx)?,
                 op::VarRefN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.varref(idx, cx)?;
                 }
                 op::VarRefN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.varref(idx, cx)?;
                 }
                 op::VarSet0 => self.varset(0, cx)?,
@@ -374,11 +354,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::VarSet4 => self.varset(4, cx)?,
                 op::VarSet5 => self.varset(5, cx)?,
                 op::VarSetN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.varset(idx.into(), cx)?;
                 }
                 op::VarSetN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.varset(idx.into(), cx)?;
                 }
                 op::VarBind0 => self.varbind(0, cx),
@@ -388,11 +368,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::VarBind4 => self.varbind(4, cx),
                 op::VarBind5 => self.varbind(5, cx),
                 op::VarBindN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.varbind(idx, cx);
                 }
                 op::VarBindN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.varbind(idx, cx);
                 }
                 op::Call0 => self.call(0, cx)?,
@@ -402,11 +382,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Call4 => self.call(4, cx)?,
                 op::Call5 => self.call(5, cx)?,
                 op::CallN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.call(idx, cx)?;
                 }
                 op::CallN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.call(idx, cx)?;
                 }
                 op::Unbind0 => self.unbind(0, cx),
@@ -416,11 +396,11 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Unbind4 => self.unbind(4, cx),
                 op::Unbind5 => self.unbind(5, cx),
                 op::UnbindN => {
-                    let idx = self.frame.pc.arg1();
+                    let idx = self.pc.arg1();
                     self.unbind(idx, cx);
                 }
                 op::UnbindN2 => {
-                    let idx = self.frame.pc.arg2();
+                    let idx = self.pc.arg2();
                     self.unbind(idx, cx);
                 }
                 op::PopHandler => {
@@ -430,7 +410,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     // pop before getting stack size
                     let condition = self.env.stack.pop(cx);
                     let handler = Handler {
-                        jump_code: self.frame.pc.arg2(),
+                        jump_code: self.pc.arg2(),
                         stack_size: self.env.stack.len(),
                         stack_frame: self.env.stack.current_frame(),
                         condition,
@@ -644,53 +624,50 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Widen => todo!("Widen bytecode"),
                 op::EndOfLine => todo!("EndOfLine bytecode"),
                 op::ConstantN2 => {
-                    let idx = self.frame.pc.arg2();
-                    self.env.stack.push(self.frame.get_const(idx.into(), cx));
+                    let idx = self.pc.arg2();
+                    let cnst = self.get_const(idx.into(), cx);
+                    self.env.stack.push(cnst);
                 }
                 op::Goto => {
-                    let offset = self.frame.pc.arg2();
-                    self.frame.pc.goto(offset);
+                    let offset = self.pc.arg2();
+                    self.pc.goto(offset);
                 }
                 op::GotoIfNil => {
                     let cond = self.env.stack.pop(cx);
-                    let offset = self.frame.pc.arg2();
+                    let offset = self.pc.arg2();
                     if cond.is_nil() {
-                        self.frame.pc.goto(offset);
+                        self.pc.goto(offset);
                     }
                 }
                 op::GotoIfNonNil => {
                     let cond = self.env.stack.pop(cx);
-                    let offset = self.frame.pc.arg2();
+                    let offset = self.pc.arg2();
                     if !cond.is_nil() {
-                        self.frame.pc.goto(offset);
+                        self.pc.goto(offset);
                     }
                 }
                 op::GotoIfNilElsePop => {
-                    let offset = self.frame.pc.arg2();
+                    let offset = self.pc.arg2();
                     if self.env.stack[0].bind(cx).is_nil() {
-                        self.frame.pc.goto(offset);
+                        self.pc.goto(offset);
                     } else {
                         self.env.stack.pop(cx);
                     }
                 }
                 op::GotoIfNonNilElsePop => {
-                    let offset = self.frame.pc.arg2();
+                    let offset = self.pc.arg2();
                     if self.env.stack[0].bind(cx).is_nil() {
                         self.env.stack.pop(cx);
                     } else {
-                        self.frame.pc.goto(offset);
+                        self.pc.goto(offset);
                     }
                 }
                 op::Return => {
                     if let Some((f, offset)) = self.env.stack.prev_bytecode_frame() {
-                        let f = f.bind(cx);
-                        let frame = CallFrame {
-                            consts: f.consts(),
-                            func: f,
-                            pc: ProgramCounter::with_offset(f.codes().as_bytes(), offset),
-                        };
-                        self.frame.set(frame);
-                        self.env.stack.return_frame();
+                        self.set_current_frame(f.bind(cx), offset);
+                        let top = self.env.stack.top().bind(cx);
+                        self.env.stack.pop_frame();
+                        self.env.stack.push(top);
                     } else {
                         let top = self.env.stack.pop(cx);
                         return Ok(top);
@@ -700,7 +677,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     self.env.stack.pop(cx);
                 }
                 op::DiscardN => {
-                    let arg = self.frame.pc.arg1();
+                    let arg = self.pc.arg1();
                     let cur_len = self.env.stack.len();
                     let keep_tos = (arg & 0x80) != 0;
                     let count = (arg & 0x7F) as usize;
@@ -789,7 +766,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     top.set(data::integerp(top.bind(cx)));
                 }
                 op::ListN => {
-                    let size = self.frame.pc.arg1() as usize;
+                    let size = self.pc.arg1() as usize;
                     let slice = Rt::bind_slice(&self.env.stack[..size], cx);
                     let list = alloc::list(slice, cx);
                     let len = self.env.stack.len();
@@ -807,7 +784,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                         let Object::Int(offset) = offset.get().untag() else {
                             unreachable!("switch value was not a int")
                         };
-                        self.frame.pc.goto(offset as u16);
+                        self.pc.goto(offset as u16);
                     }
                 }
                 op::Constant0
@@ -875,7 +852,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 | op::Constant62
                 | op::Constant63 => {
                     let idx = (op as u8) - (op::Constant0 as u8);
-                    self.env.stack.push(self.frame.get_const(idx as usize, cx));
+                    let cnst = self.get_const(idx as usize, cx);
+                    self.env.stack.push(cnst);
                 }
             }
         }
@@ -917,10 +895,16 @@ pub(crate) fn call<'ob>(
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     frame.stack.set_depth(func.bind(cx).depth);
-    let call_frame = CallFrame::new(func.bind(cx));
-    let vm = VM { frame: call_frame, env: frame, handlers: Vec::new() };
+    let func = func.bind(cx);
+    let vm = VM {
+        pc: ProgramCounter::new(func.codes().as_bytes()),
+        consts: func.consts(),
+        func,
+        env: frame,
+        handlers: Vec::new(),
+    };
     root!(vm, cx);
-    vm.prepare_lisp_args(func.bind(cx), arg_cnt, name, cx)?;
+    vm.prepare_lisp_args(func, arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))
 }
 
