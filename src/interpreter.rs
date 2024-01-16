@@ -2,7 +2,7 @@
 use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
-        env::{sym, Env, FnFrame},
+        env::{sym, CallFrame, Env},
         error::{ArgError, Type, TypeError},
         gc::{Context, Rt},
         object::{Function, Gc, GcObj, List, Object, Symbol, NIL, TRUE},
@@ -165,7 +165,7 @@ impl Interpreter<'_, '_> {
                 let mcro: Gc<Function> = form.cdr().try_into()?;
 
                 let mut iter = args.bind(cx).as_list()?.fallible();
-                let mut frame = FnFrame::new(self.env);
+                let mut frame = CallFrame::new(self.env);
                 while let Some(arg) = iter.next()? {
                     frame.push_arg(arg);
                 }
@@ -185,7 +185,7 @@ impl Interpreter<'_, '_> {
             let result = self.eval_form(x, cx)?;
             args.push(result);
         }
-        let frame = &mut FnFrame::new(self.env);
+        let frame = &mut CallFrame::new(self.env);
         frame.push_arg_slice(args.bind_ref(cx));
         let name = sym.bind(cx).name().to_owned();
         func.call(frame, Some(&name), cx)
@@ -222,7 +222,7 @@ impl Interpreter<'_, '_> {
                 let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
-                    let frame = &mut FnFrame::new(self.env);
+                    let frame = &mut CallFrame::new(self.env);
                     frame.push_arg(form.bind(cx));
                     frame.push_arg(env);
                     return closure_fn.call(frame, None, cx);

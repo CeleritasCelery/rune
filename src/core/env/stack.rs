@@ -301,22 +301,25 @@ impl<'a> RootedLispStack<'a> {
 ///
 /// This is a guard type that will pop the frame when it
 /// goes out of scope.
-pub(crate) struct FnFrame<'brw, 'rt> {
+pub(crate) struct CallFrame<'brw, 'rt> {
     env: &'brw mut Rt<super::Env<'rt>>,
 }
 
-impl<'brw, 'rt> FnFrame<'brw, 'rt> {
+impl<'brw, 'rt> CallFrame<'brw, 'rt> {
     /// Create a new function call frame with a drop guard to be removed when
     /// this goes out of scope.
     pub(crate) fn new(env: &'brw mut Rt<super::Env<'rt>>) -> Self {
         Self::new_with_args(env, 0)
     }
 
+    /// Create a new function call frame with the top args on the stack. This
+    /// frame will be removed when the `CallFrame` goes out of scope.
     pub(crate) fn new_with_args(env: &'brw mut Rt<super::Env<'rt>>, args: usize) -> Self {
         env.stack.push_frame(args);
         Self { env }
     }
 
+    /// Push an argument onto the stack as part of this call frame
     pub(crate) fn push_arg(&mut self, arg: impl IntoRoot<GcObj<'rt>>) {
         self.env.stack.push(arg);
     }
@@ -338,18 +341,19 @@ impl<'brw, 'rt> FnFrame<'brw, 'rt> {
         &self.env.stack[..self.arg_count()]
     }
 
+    /// Push a slice of arguments onto the stack as part of this call frame.
     pub(crate) fn push_arg_slice(&mut self, src: &[GcObj]) {
         self.env.stack.extend_from_slice(src);
     }
 }
 
-impl Drop for FnFrame<'_, '_> {
+impl Drop for CallFrame<'_, '_> {
     fn drop(&mut self) {
         self.env.stack.pop_frame();
     }
 }
 
-impl<'rt> Deref for FnFrame<'_, 'rt> {
+impl<'rt> Deref for CallFrame<'_, 'rt> {
     type Target = Rt<super::Env<'rt>>;
 
     fn deref(&self) -> &Self::Target {
@@ -357,7 +361,7 @@ impl<'rt> Deref for FnFrame<'_, 'rt> {
     }
 }
 
-impl<'b> DerefMut for FnFrame<'_, 'b> {
+impl<'b> DerefMut for CallFrame<'_, 'b> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.env
     }

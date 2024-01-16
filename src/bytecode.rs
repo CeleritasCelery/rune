@@ -1,6 +1,6 @@
 #![allow(unstable_name_collisions)]
 //! The main bytecode interpeter.
-use crate::core::env::{sym, Env, FnFrame};
+use crate::core::env::{sym, CallFrame, Env};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
     ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, Symbol, WithLifetime, NIL,
@@ -236,7 +236,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
             self.prepare_lisp_args(f, arg_cnt, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
-            let mut frame = FnFrame::new_with_args(self.env, arg_cnt);
+            let mut frame = CallFrame::new_with_args(self.env, arg_cnt);
             root!(func, cx);
             let result = func.call(&mut frame, Some(&name), cx)?;
             drop(frame); // removes the arguments from the stack
@@ -879,7 +879,7 @@ fn byte_code<'ob>(
         cx,
     )?;
     root!(fun, cx);
-    Ok(call(fun, 0, "unnamed", &mut FnFrame::new(env), cx)?)
+    Ok(call(fun, 0, "unnamed", &mut CallFrame::new(env), cx)?)
 }
 
 #[defun]
@@ -891,7 +891,7 @@ pub(crate) fn call<'ob>(
     func: &Rt<&ByteFn>,
     arg_cnt: usize,
     name: &str,
-    frame: &mut FnFrame,
+    frame: &mut CallFrame,
     cx: &'ob mut Context,
 ) -> EvalResult<'ob> {
     frame.stack.set_depth(func.bind(cx).depth);
@@ -986,7 +986,7 @@ mod test {
         cx: &mut Context,
     ) {
         root!(env, Env::default(), cx);
-        let frame = &mut FnFrame::new(env);
+        let frame = &mut CallFrame::new(env);
         frame.push_arg_slice(Rt::bind_slice(args, cx));
         frame.finalize_arguments();
         let val = rebind!(call(bytecode, frame.arg_count(), "test", frame, cx).unwrap());

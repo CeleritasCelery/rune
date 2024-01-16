@@ -2,7 +2,7 @@
 use crate::{
     core::{
         cons::Cons,
-        env::{sym, Env, FnFrame},
+        env::{sym, CallFrame, Env},
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
@@ -118,7 +118,7 @@ pub(crate) fn mapcar<'ob>(
             rooted_iter!(iter, cons, cx);
             root!(outputs, Vec::new(), cx);
             while let Some(obj) = iter.next()? {
-                let frame = &mut FnFrame::new(env);
+                let frame = &mut CallFrame::new(env);
                 frame.push_arg(obj);
                 let output = function.call(frame, None, cx)?;
                 outputs.push(output);
@@ -131,7 +131,7 @@ pub(crate) fn mapcar<'ob>(
             root!(fun, cx);
             root!(outputs, Vec::new(), cx);
             for i in 0..len {
-                let frame = &mut FnFrame::new(env);
+                let frame = &mut CallFrame::new(env);
                 let val = fun.bind(cx).index(i).unwrap();
                 frame.push_arg(val);
                 let output = function.call(frame, None, cx)?;
@@ -156,7 +156,7 @@ pub(crate) fn mapc<'ob>(
         List::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
-                let frame = &mut FnFrame::new(env);
+                let frame = &mut CallFrame::new(env);
                 frame.push_arg(elem);
                 function.call(frame, None, cx)?;
             }
@@ -313,7 +313,7 @@ pub(crate) fn assoc<'ob>(
             rooted_iter!(iter, alist, cx);
             while let Some(elem) = iter.next()? {
                 if let Object::Cons(cons) = elem.bind(cx).untag() {
-                    let frame = &mut FnFrame::new(env);
+                    let frame = &mut CallFrame::new(env);
                     frame.push_arg(key);
                     frame.push_arg(cons.car());
                     root!(cons, cx);
@@ -446,7 +446,7 @@ fn sort<'ob>(
         tmp.set(&vec[i]);
         let mut j = i;
         while j > 0 {
-            let frame = &mut FnFrame::new(env);
+            let frame = &mut CallFrame::new(env);
             frame.push_arg(&vec[j - 1]);
             frame.push_arg(&*tmp);
             match predicate.call(frame, None, cx) {
@@ -693,7 +693,7 @@ fn maphash(
     };
 
     loop {
-        let frame = &mut FnFrame::new(env);
+        let frame = &mut CallFrame::new(env);
         {
             let mut view = table.bind(cx).untag().try_borrow_mut()?;
             let Some(idx) = get_idx(&mut view) else { break };

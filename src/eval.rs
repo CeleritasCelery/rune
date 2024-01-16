@@ -2,7 +2,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::core::cons::{Cons, ConsError};
-use crate::core::env::{sym, ArgSlice, Env, FnFrame};
+use crate::core::env::{sym, ArgSlice, CallFrame, Env};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::Rt;
 use crate::core::object::{display_slice, FnArgs, LispString, Object, Symbol, NIL};
@@ -147,10 +147,10 @@ pub(crate) fn apply<'ob>(
             env.stack.push(e);
         }
         let args = env.stack.len() - len;
-        let frame = &mut FnFrame::new_with_args(env, args);
+        let frame = &mut CallFrame::new_with_args(env, args);
         function.call(frame, None, cx).map_err(Into::into)
     } else {
-        function.call(&mut FnFrame::new(env), None, cx).map_err(Into::into)
+        function.call(&mut CallFrame::new(env), None, cx).map_err(Into::into)
     }
 }
 
@@ -163,7 +163,7 @@ pub(crate) fn funcall<'ob>(
 ) -> Result<GcObj<'ob>> {
     let beg = env.stack.len() - arguments.len();
     env.stack.extend_as_vec_from_within(beg..);
-    let frame = &mut FnFrame::new_with_args(env, arguments.len());
+    let frame = &mut CallFrame::new_with_args(env, arguments.len());
     function.call(frame, None, cx).map_err(Into::into)
 }
 
@@ -181,14 +181,14 @@ fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> R
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
                                 let func: &Rt<Gc<Function>> = hook.try_into()?;
-                                func.call(&mut FnFrame::new(env), None, cx)?;
+                                func.call(&mut CallFrame::new(env), None, cx)?;
                             }
                         }
                         Object::NIL => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
-                            func.call(&mut FnFrame::new(env), None, cx)?;
+                            func.call(&mut CallFrame::new(env), None, cx)?;
                         }
                     }
                 }
@@ -217,7 +217,7 @@ fn run_hook_with_args<'ob>(
                             let func: &Rt<Gc<Function>> = hook.try_into()?;
                             let beg = env.stack.len() - args.len();
                             env.stack.extend_as_vec_from_within(beg..);
-                            let frame = &mut FnFrame::new_with_args(env, args.len());
+                            let frame = &mut CallFrame::new_with_args(env, args.len());
                             func.call(frame, None, cx)?;
                         }
                     }
@@ -225,7 +225,7 @@ fn run_hook_with_args<'ob>(
                     _ => {
                         let func: Gc<Function> = val.try_into()?;
                         root!(func, cx);
-                        func.call(&mut FnFrame::new(env), None, cx)?;
+                        func.call(&mut CallFrame::new(env), None, cx)?;
                     }
                 }
             }
@@ -307,7 +307,7 @@ pub(crate) fn macroexpand<'ob>(
     };
     let Some(macro_func) = func else { return Ok(form.bind(cx)) };
     let mut iter = cons.cdr().as_list()?.fallible();
-    let mut frame = FnFrame::new(env);
+    let mut frame = CallFrame::new(env);
     while let Some(arg) = iter.next()? {
         frame.push_arg(arg);
     }
@@ -421,7 +421,7 @@ fn set_default<'ob>(
 impl Rt<Gc<Function<'_>>> {
     pub(crate) fn call<'ob>(
         &self,
-        frame: &mut FnFrame<'_, '_>,
+        frame: &mut CallFrame<'_, '_>,
         name: Option<&str>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
