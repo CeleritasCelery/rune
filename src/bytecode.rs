@@ -224,16 +224,18 @@ impl<'ob> RootedVM<'_, '_, '_> {
             Function::Symbol(x) => x.name().to_owned(),
             _ => String::from("lambda"),
         };
-        if let Function::ByteFn(f) = func.untag() {
+        if let Function::ByteFn(next_fn) = func.untag() {
             // If bytecode, add another frame and resume execution.
             // OpCode::Return will remove the call frame.
             let len = self.env.stack.len();
             let pc_offset = self.pc.as_offset();
-            let func = self.func.bind(cx);
-            self.set_current_frame(f, 0);
+            let prev_fn = self.func.bind(cx);
+            self.set_current_frame(next_fn, 0);
             let frame_start = len - (arg_cnt + 1);
-            self.env.stack.push_bytecode_frame(frame_start, f.depth, func, pc_offset);
-            self.prepare_lisp_args(f, arg_cnt, &name, cx)?;
+            self.env
+                .stack
+                .push_bytecode_frame(frame_start, next_fn.depth, prev_fn, pc_offset);
+            self.prepare_lisp_args(next_fn, arg_cnt, &name, cx)?;
         } else {
             // Otherwise, call the function directly.
             let mut frame = CallFrame::new_with_args(self.env, arg_cnt);
