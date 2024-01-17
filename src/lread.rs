@@ -96,7 +96,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<Pat
     for path in paths {
         match path?.untag() {
             Object::String(path) => {
-                if let Some(x) = file_in_path(file, path.try_into()?) {
+                if let Some(x) = file_in_path(file, path) {
                     final_file = Some(x);
                     break;
                 }
@@ -120,7 +120,7 @@ pub(crate) fn load(
 ) -> Result<bool> {
     let noerror = noerror.is_some();
     let nomessage = nomessage.is_some();
-    let file: &str = file.untag(cx).try_into()?;
+    let file: &str = file.untag(cx);
     let final_file = if Path::new(file).exists() {
         PathBuf::from(file)
     } else {
@@ -184,7 +184,7 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> 
         }
         Object::String(string) => {
             let map = crate::core::env::interned_symbols().lock().unwrap();
-            match map.get(string.try_into()?) {
+            match map.get(string) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),
                 None => Ok(sym::NIL),
             }

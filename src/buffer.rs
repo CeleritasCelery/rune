@@ -35,10 +35,9 @@ pub(crate) fn set_buffer<'ob>(
 fn resolve_buffer<'ob>(buffer_or_name: GcObj, cx: &'ob Context) -> Result<&'ob LispBuffer> {
     match buffer_or_name.untag() {
         Object::Buffer(b) => Ok(b),
-        Object::String(s) => {
-            let name: &str = s.try_into()?;
+        Object::String(name) => {
             let buffer_list = buffers().lock().unwrap();
-            let Some(buffer) = buffer_list.get(name) else {
+            let Some(buffer) = buffer_list.get(name.as_ref()) else {
                 bail!("No buffer named {}", name);
             };
             Ok(cx.bind(*buffer))
@@ -73,10 +72,9 @@ pub(crate) fn get_buffer_create<'ob>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     match buffer_or_name.untag() {
-        Object::String(x) => {
-            let name = x.try_into()?;
+        Object::String(name) => {
             let mut buffer_list = buffers().lock().unwrap();
-            match buffer_list.get(name) {
+            match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
                 None => {
                     // If not already in the global buffer list, create a new
@@ -101,10 +99,9 @@ pub(crate) fn get_buffer_create<'ob>(
 #[defun]
 pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match buffer_or_name.untag() {
-        Object::String(x) => {
-            let name: &str = x.try_into()?;
+        Object::String(name) => {
             let buffer_list = buffers().lock().unwrap();
-            match buffer_list.get(name) {
+            match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
                 None => Ok(NIL),
             }

@@ -4,7 +4,7 @@
 
 use super::{
     super::error::{ArgError, Type, TypeError},
-    LispHashTable, LispString, LispVec, NIL, TRUE,
+    ByteString, LispHashTable, LispString, LispVec, NIL, TRUE,
 };
 use super::{Gc, GcObj, LispFloat, Object, Symbol};
 use anyhow::Context;
@@ -13,7 +13,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::String(x) => x.try_into(),
+            Object::String(x) => Ok(x),
             x => Err(TypeError::new(Type::String, x).into()),
         }
     }
@@ -24,7 +24,7 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
             Object::NIL => Ok(None),
-            Object::String(x) => Ok(Some(x.try_into()?)),
+            Object::String(x) => Ok(Some(x)),
             x => Err(TypeError::new(Type::String, x).into()),
         }
     }
@@ -113,6 +113,7 @@ define_unbox!(Int, i64);
 define_unbox!(Float, &'ob LispFloat);
 define_unbox!(HashTable, &'ob LispHashTable);
 define_unbox!(String, &'ob LispString);
+define_unbox!(ByteString, String, &'ob ByteString);
 define_unbox!(Vec, &'ob LispVec);
 define_unbox!(Symbol, Symbol<'ob>);
 

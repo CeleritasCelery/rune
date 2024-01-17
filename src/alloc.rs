@@ -1,7 +1,7 @@
 //! builtin lisp data structures.
 use crate::core::gc::Context;
 use crate::core::object::{
-    ByteFn, FnArgs, Gc, GcObj, IntoObject, LispString, LispVec, RecordBuilder, Symbol, SymbolCell,
+    ByteFn, ByteString, FnArgs, Gc, GcObj, IntoObject, LispVec, RecordBuilder, Symbol, SymbolCell,
     NIL,
 };
 use anyhow::{ensure, Result};
@@ -45,7 +45,7 @@ pub(crate) fn make_closure<'ob>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn make_byte_code<'ob>(
     arglist: u64,
-    byte_code: &'ob LispString,
+    byte_code: &'ob ByteString,
     constants: &'ob LispVec,
     depth: usize,
     _docstring: Option<GcObj>,

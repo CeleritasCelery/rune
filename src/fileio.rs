@@ -28,9 +28,8 @@ pub(crate) fn expand_file_name(
     } else {
         let dir = env.vars.get(sym::DEFAULT_DIRECTORY).unwrap();
         match dir.untag(cx) {
-            Object::String(s) => {
-                let name: &str = s.try_into()?;
-                let path = Path::new(name);
+            Object::String(dir) => {
+                let path = Path::new(dir.as_ref());
                 Ok(path.join(name).to_string_lossy().to_string())
             }
             _ => unreachable!("`default-directory' should be a string"),

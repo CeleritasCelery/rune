@@ -47,7 +47,7 @@ impl<'a> OpenBuffer<'a> {
                 let Some(chr) = char::from_u32(u_32) else { bail!("{i} is an Invalid char") };
                 self.get_mut().text.insert_char(chr);
             }
-            Object::String(s) => self.get_mut().text.insert(s.try_into()?),
+            Object::String(s) => self.get_mut().text.insert(s),
             x => bail!(TypeError::new(Type::String, x)),
         }
         Ok(())

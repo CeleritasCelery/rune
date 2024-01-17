@@ -3,11 +3,10 @@
 use crate::core::env::{sym, CallFrame, Env};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
-    ByteFn, Function, Gc, GcObj, LispString, LispVec, Object, Symbol, WithLifetime, NIL,
+    ByteFn, ByteString, Function, Gc, GcObj, LispVec, Object, Symbol, WithLifetime, NIL,
 };
 use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
-use bstr::ByteSlice;
 use rune_core::macros::{bail_err, cons, rebind, root};
 use rune_macros::{defun, Trace};
 use sptr::Strict;
@@ -166,7 +165,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
     fn set_current_frame(&mut self, f: &ByteFn, offset: usize) {
         self.consts.set(f.consts());
         self.func.set(f);
-        self.pc = ProgramCounter::with_offset(f.codes().as_bytes(), offset);
+        self.pc = ProgramCounter::with_offset(f.codes(), offset);
     }
 
     fn unwind(&mut self, idx: usize, cx: &'ob Context) {
@@ -864,7 +863,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
 #[defun]
 fn byte_code<'ob>(
-    bytestr: &Rt<Gc<&LispString>>,
+    bytestr: &Rt<Gc<&ByteString>>,
     vector: &Rt<Gc<&LispVec>>,
     maxdepth: usize,
     env: &mut Rt<Env>,
@@ -899,7 +898,7 @@ pub(crate) fn call<'ob>(
     frame.stack.set_depth(func.bind(cx).depth);
     let func = func.bind(cx);
     let vm = VM {
-        pc: ProgramCounter::new(func.codes().as_bytes()),
+        pc: ProgramCounter::new(func.codes()),
         consts: func.consts(),
         func,
         env: frame,

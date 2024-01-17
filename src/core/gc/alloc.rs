@@ -1,7 +1,7 @@
 use super::Block;
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, LispBuffer, LispFloat, LispHashTable, LispString, LispVec, SymbolCell,
+    ByteFn, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -14,6 +14,7 @@ pub(super) enum OwnedObject {
     Vec(Box<LispVec>),
     HashTable(Box<LispHashTable>),
     String(Box<LispString>),
+    ByteString(Box<ByteString>),
     Symbol(Box<SymbolCell>),
     ByteFn(Box<ByteFn>),
     Buffer(Box<LispBuffer>),
@@ -67,6 +68,17 @@ impl AllocObject for LispString {
         let mut objects = block.objects.borrow_mut();
         Block::<C>::register(&mut objects, OwnedObject::String(Box::new(self)));
         let Some(OwnedObject::String(x)) = objects.last_mut() else { unreachable!() };
+        x.as_ref()
+    }
+}
+
+impl AllocObject for ByteString {
+    type Output = Self;
+
+    fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
+        let mut objects = block.objects.borrow_mut();
+        Block::<C>::register(&mut objects, OwnedObject::ByteString(Box::new(self)));
+        let Some(OwnedObject::ByteString(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }
 }

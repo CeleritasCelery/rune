@@ -1,18 +1,19 @@
 #+title: Next steps for Rune
-* Path to MVP
-
 * define benchmarks
 * Define special forms as subr's
 Currently symbol-function of a special form will return nil
-* add call variants (call1, call2, call3)
-This will let us remove the need for the intermediate vector when trying to call a function. If the underlying type requires a vector (I.e. Interpreted or bytecode) then we can make one, but otherwise we can just pass arguments to a native function.
-* make rooted_iter fallible
+* unify handlers between bytecode and interpreter
+* Allow debugger to be entered on error instead of just printing a back trace
+This means we will need to not unwind the stack, but instead collect the backtrace as we go down the call stack and halt it there.
+
 * can we make rooted_iter be generic over any iterators?
 * See how much we can unify the interpters
 * Steps to add a new object type
+- define the type and implement ~GcManaged~ for it
 - define in gc/alloc.rs
 - add boxing function
 - define in object
+- add to ~cast_gc!~ macro
 - impl ~IntoObject~
 - impl ~TaggedPtr~
 - implement tryfrom object

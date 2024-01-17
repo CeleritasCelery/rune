@@ -251,10 +251,7 @@ fn bufferp(_object: GcObj) -> bool {
 
 #[defun]
 pub(crate) fn multibyte_string_p(object: GcObj) -> bool {
-    match object.untag() {
-        Object::String(string) => string.is_valid_unicode(),
-        _ => false,
-    }
+    matches!(object.untag(), Object::String(_))
 }
 
 #[defun]
@@ -363,6 +360,13 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
+        Object::ByteString(string) => match string.get(idx) {
+            Some(x) => Ok((i64::from(*x)).into()),
+            None => {
+                let len = string.len();
+                Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
+            }
+        },
         Object::ByteFn(fun) => match fun.index(idx) {
             Some(x) => Ok(x),
             None => Err(anyhow!("index {idx} is out of bounds")),
@@ -382,7 +386,7 @@ fn type_of(object: GcObj) -> GcObj {
         Object::Record(x) => x.first().expect("record was missing type").get(),
         Object::ByteFn(_) => sym::COMPILED_FUNCTION.into(),
         Object::HashTable(_) => sym::HASH_TABLE.into(),
-        Object::String(_) => sym::STRING.into(),
+        Object::String(_) | Object::ByteString(_) => sym::STRING.into(),
         Object::SubrFn(_) => sym::SUBR.into(),
         Object::Buffer(_) => sym::BUFFER.into(),
     }

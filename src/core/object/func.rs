@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context},
     },
-    display_slice, CloneIn, IntoObject, LispString, LispVec,
+    display_slice, ByteString, CloneIn, IntoObject, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::{
@@ -23,7 +23,7 @@ pub(crate) struct ByteFn {
     pub(crate) args: FnArgs,
     #[no_trace]
     pub(crate) depth: usize,
-    op_codes: &'static LispString,
+    op_codes: &'static ByteString,
     constants: &'static LispVec,
 }
 
@@ -31,7 +31,7 @@ define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
     pub(crate) unsafe fn new(
-        op_codes: &LispString,
+        op_codes: &ByteString,
         consts: &LispVec,
         args: FnArgs,
         depth: usize,
@@ -45,7 +45,7 @@ impl ByteFn {
         }
     }
 
-    pub(crate) fn codes(&self) -> &LispString {
+    pub(crate) fn codes(&self) -> &ByteString {
         unsafe { self.op_codes.with_lifetime() }
     }
 

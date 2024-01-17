@@ -1,7 +1,7 @@
 //! Character and string utilities.
 use crate::core::{
     gc::Context,
-    object::{int_to_char, Gc, GcObj, IntoObject, LispString, Object},
+    object::{int_to_char, Gc, GcObj, Object},
 };
 use anyhow::Result;
 use rune_macros::defun;
@@ -44,14 +44,14 @@ fn make_string<'ob>(
     init: usize,
     multibyte: Option<()>,
     cx: &'ob Context,
-) -> Result<Gc<&'ob LispString>> {
+) -> Result<GcObj<'ob>> {
     if multibyte.is_some() {
         let chr = int_to_char(i64::try_from(init)?)?;
         let string: String = (0..length).map(|_| chr).collect();
-        Ok(string.into_obj(cx))
+        Ok(cx.add(string))
     } else {
         let chr = u8::try_from(init)?;
         let string: Vec<_> = (0..length).map(|_| chr).collect();
-        Ok(string.into_obj(cx))
+        Ok(cx.add(string))
     }
 }

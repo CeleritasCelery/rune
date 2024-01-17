@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    LispBuffer,
+    ByteString, LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -321,12 +321,12 @@ impl IntoObject for &str {
 }
 
 impl IntoObject for Vec<u8> {
-    type Out<'ob> = <String as IntoObject>::Out<'ob>;
+    type Out<'ob> = &'ob ByteString;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::from_bstring(self).alloc_obj(block);
-            <&LispString>::tag_ptr(ptr)
+            let ptr = ByteString::new(self).alloc_obj(block);
+            <&ByteString>::tag_ptr(ptr)
         }
     }
 }
@@ -375,6 +375,7 @@ mod private {
         Float,
         Cons,
         String,
+        ByteString,
         Vec,
         Record,
         HashTable,
@@ -482,6 +483,7 @@ impl<'a> TaggedPtr for Object<'a> {
                 Tag::Int => Object::Int(i64::from_obj_ptr(ptr)),
                 Tag::Float => Object::Float(<&LispFloat>::from_obj_ptr(ptr)),
                 Tag::String => Object::String(<&LispString>::from_obj_ptr(ptr)),
+                Tag::ByteString => Object::ByteString(<&ByteString>::from_obj_ptr(ptr)),
                 Tag::Vec => Object::Vec(<&LispVec>::from_obj_ptr(ptr)),
                 Tag::Record => Object::Record(<&Record>::from_obj_ptr(ptr)),
                 Tag::HashTable => Object::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
@@ -500,6 +502,7 @@ impl<'a> TaggedPtr for Object<'a> {
             Object::Record(x) => TaggedPtr::tag(x).into(),
             Object::HashTable(x) => TaggedPtr::tag(x).into(),
             Object::String(x) => TaggedPtr::tag(x).into(),
+            Object::ByteString(x) => TaggedPtr::tag(x).into(),
             Object::ByteFn(x) => TaggedPtr::tag(x).into(),
             Object::SubrFn(x) => TaggedPtr::tag(x).into(),
             Object::Buffer(x) => TaggedPtr::tag(x).into(),
@@ -697,6 +700,18 @@ impl TaggedPtr for &LispString {
     }
 }
 
+impl TaggedPtr for &ByteString {
+    type Ptr = ByteString;
+    const TAG: Tag = Tag::ByteString;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
 impl TaggedPtr for &LispVec {
     type Ptr = LispVec;
     const TAG: Tag = Tag::Vec;
@@ -872,11 +887,28 @@ pub(crate) enum Object<'ob> {
     Record(&'ob Record) = Tag::Record as u8,
     HashTable(&'ob LispHashTable) = Tag::HashTable as u8,
     String(&'ob LispString) = Tag::String as u8,
+    ByteString(&'ob ByteString) = Tag::ByteString as u8,
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
 }
-cast_gc!(Object<'ob> => Number<'ob>, List<'ob>, Function<'ob>, i64, Symbol<'_>, &LispFloat, &'ob Cons, &'ob LispVec, &'ob Record, &'ob LispHashTable, &'ob LispString, &'ob ByteFn, &'ob SubrFn, &'ob LispBuffer);
+
+cast_gc!(Object<'ob> => Number<'ob>,
+         List<'ob>,
+         Function<'ob>,
+         i64,
+         Symbol<'_>,
+         &LispFloat,
+         &'ob Cons,
+         &'ob LispVec,
+         &'ob Record,
+         &'ob LispHashTable,
+         &'ob LispString,
+         &'ob ByteString,
+         &'ob ByteFn,
+         &'ob SubrFn,
+         &'ob LispBuffer
+);
 
 impl Object<'_> {
     pub(crate) const NIL: Object<'static> = Object::Symbol(sym::NIL);
@@ -892,6 +924,7 @@ impl Object<'_> {
             Object::Record(_) => Type::Record,
             Object::HashTable(_) => Type::HashTable,
             Object::String(_) => Type::String,
+            Object::ByteString(_) => Type::String,
             Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
             Object::Buffer(_) => Type::Buffer,
         }
@@ -1097,6 +1130,17 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
     }
 }
 
+impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob ByteString> {
+    type Error = TypeError;
+
+    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::ByteString => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::String, value)),
+        }
+    }
+}
+
 impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
     type Error = TypeError;
 
@@ -1156,6 +1200,7 @@ where
             Object::Int(x) => x.into(),
             Object::Cons(x) => x.clone_in(bk).into(),
             Object::String(x) => x.clone_in(bk).into(),
+            Object::ByteString(x) => x.clone_in(bk).into(),
             Object::Symbol(x) => x.clone_in(bk).into(),
             Object::ByteFn(x) => x.clone_in(bk).into(),
             Object::SubrFn(x) => x.into(),
@@ -1173,7 +1218,7 @@ where
 impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
-            Object::String(x) => **x == other.as_bytes(),
+            Object::String(x) => **x == **other,
             _ => false,
         }
     }
@@ -1288,6 +1333,7 @@ impl Object<'_> {
             Object::Record(x) => x.display_walk(f, seen),
             Object::HashTable(x) => x.display_walk(f, seen),
             Object::String(x) => write!(f, "\"{x}\""),
+            Object::ByteString(x) => write!(f, "\"{x}\""),
             Object::Symbol(x) => D::fmt(x, f),
             Object::ByteFn(x) => D::fmt(x, f),
             Object::SubrFn(x) => D::fmt(x, f),
@@ -1311,6 +1357,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Record(x) => x.is_marked(),
             Object::HashTable(x) => x.is_marked(),
             Object::String(x) => x.is_marked(),
+            Object::ByteString(x) => x.is_marked(),
             Object::ByteFn(x) => x.is_marked(),
             Object::Symbol(x) => x.is_marked(),
             Object::Buffer(x) => x.is_marked(),
@@ -1322,6 +1369,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Int(_) | Object::SubrFn(_) => {}
             Object::Float(x) => x.mark(),
             Object::String(x) => x.mark(),
+            Object::ByteString(x) => x.mark(),
             Object::Vec(vec) => vec.trace(stack),
             Object::Record(x) => x.trace(stack),
             Object::HashTable(x) => x.trace(stack),

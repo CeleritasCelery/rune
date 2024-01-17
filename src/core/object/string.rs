@@ -1,7 +1,5 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcManaged, GcMark};
-use anyhow::Result;
-use bstr::{BStr, BString, ByteSlice};
 use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
@@ -12,51 +10,28 @@ use std::{
 pub(crate) struct LispString {
     gc: GcMark,
     #[no_trace]
-    string: StrType,
+    string: String,
 }
 
 unsafe impl Sync for LispString {}
 
-#[derive(Debug, PartialEq, Eq)]
-enum StrType {
-    String(String),
-    BString(BString),
-}
-
 impl LispString {
     pub(crate) fn get_char_at(&self, idx: usize) -> Option<u32> {
-        match &self.string {
-            StrType::String(s) => s.chars().nth(idx).map(|c| c.into()),
-            StrType::BString(s) => s.iter().nth(idx).map(|b| (*b).into()),
-        }
+        self.string.chars().nth(idx).map(|c| c.into())
     }
 
     pub(crate) fn len(&self) -> usize {
-        match &self.string {
-            StrType::String(s) => s.chars().count(),
-            StrType::BString(s) => s.len(),
-        }
+        self.string.chars().count()
     }
 
-    pub(crate) unsafe fn from_string(value: String) -> Self {
-        Self { gc: GcMark::default(), string: StrType::String(value) }
-    }
-
-    pub(crate) unsafe fn from_bstring(value: Vec<u8>) -> Self {
-        Self { gc: GcMark::default(), string: StrType::BString(BString::from(value)) }
-    }
-
-    pub(crate) fn is_valid_unicode(&self) -> bool {
-        matches!(&self.string, StrType::String(_))
+    pub(crate) unsafe fn from_string(string: String) -> Self {
+        Self { gc: GcMark::default(), string }
     }
 }
 
 impl<'new> CloneIn<'new, &'new Self> for LispString {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-        match &self.string {
-            StrType::String(s) => s.clone().into_obj(bk),
-            StrType::BString(s) => s.as_bytes().to_vec().into_obj(bk),
-        }
+        self.string.clone().into_obj(bk)
     }
 }
 
@@ -67,32 +42,22 @@ impl GcManaged for LispString {
 }
 
 impl Deref for LispString {
-    type Target = BStr;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        match &self.string {
-            StrType::String(s) => BStr::new(s),
-            StrType::BString(s) => s.as_ref(),
-        }
+        &self.string
+    }
+}
+
+impl AsRef<str> for LispString {
+    fn as_ref(&self) -> &str {
+        &self.string
     }
 }
 
 impl Display for LispString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.string {
-            StrType::String(s) => write!(f, "{s}"),
-            StrType::BString(s) => {
-                let bytes: &[u8] = s.as_ref();
-                for byte in bytes {
-                    if byte.is_ascii() {
-                        write!(f, "{}", *byte as char)?;
-                    } else {
-                        write!(f, "\\{:03o}", byte)?;
-                    }
-                }
-                Ok(())
-            }
-        }
+        write!(f, "{}", &**self)
     }
 }
 
@@ -102,13 +67,68 @@ impl Debug for LispString {
     }
 }
 
-impl<'a> TryFrom<&'a LispString> for &'a str {
-    type Error = anyhow::Error;
+impl<'a> From<&'a LispString> for &'a str {
+    fn from(value: &'a LispString) -> Self {
+        value
+    }
+}
 
-    fn try_from(value: &'a LispString) -> Result<Self, Self::Error> {
-        match &value.string {
-            StrType::String(s) => Ok(s),
-            StrType::BString(s) => Ok(s.try_into()?),
+impl<'a> From<&'a LispString> for &'a [u8] {
+    fn from(value: &'a LispString) -> Self {
+        value.as_bytes()
+    }
+}
+
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct ByteString {
+    gc: GcMark,
+    #[no_trace]
+    string: Vec<u8>,
+}
+
+unsafe impl Sync for ByteString {}
+
+impl ByteString {
+    pub(super) fn new(string: Vec<u8>) -> Self {
+        Self { gc: GcMark::default(), string }
+    }
+}
+
+impl GcManaged for ByteString {
+    fn get_mark(&self) -> &GcMark {
+        &self.gc
+    }
+}
+
+impl Deref for ByteString {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.string
+    }
+}
+
+impl<'new> CloneIn<'new, &'new Self> for ByteString {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+        self.string.to_vec().into_obj(bk)
+    }
+}
+
+impl Display for ByteString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in &self.string {
+            if byte.is_ascii() {
+                write!(f, "{}", *byte as char)?;
+            } else {
+                write!(f, "\\{:03o}", byte)?;
+            }
         }
+        Ok(())
+    }
+}
+
+impl Debug for ByteString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }

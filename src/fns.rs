@@ -13,7 +13,6 @@ use crate::{
     data::aref,
 };
 use anyhow::{bail, Result};
-use bstr::ByteSlice;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{cons, list, rebind, root, rooted_iter};
@@ -190,7 +189,7 @@ pub(crate) fn mapconcat(
 ) -> Result<String> {
     let mapped = rebind!(mapcar(function, sequence, env, cx)?);
     let sep = match seperator {
-        Some(sep) => sep.bind(cx).untag().try_into()?,
+        Some(sep) => sep.bind(cx).untag(),
         _ => "",
     };
     let mut string = String::new();
@@ -497,7 +496,7 @@ pub(crate) fn require<'ob>(
         return Ok(feature.untag(cx));
     }
     let file = match filename {
-        Some(file) => file.untag(cx).try_into()?,
+        Some(file) => file.untag(cx),
         None => feature.untag(cx).get().name(),
     };
     let file = file.into_obj(cx);
@@ -516,7 +515,7 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
     let mut concat = String::new();
     for elt in sequences {
         match elt.untag() {
-            Object::String(string) => concat += string.try_into()?,
+            Object::String(string) => concat += string,
             Object::NIL => continue,
             _ => bail!("Currently only concatenating strings are supported"),
         }
@@ -558,6 +557,7 @@ pub(crate) fn length(sequence: GcObj) -> Result<usize> {
         Object::Cons(x) => x.elements().len()?,
         Object::Vec(x) => x.len(),
         Object::String(x) => x.len(),
+        Object::ByteString(x) => x.len(),
         Object::ByteFn(x) => x.len(),
         Object::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
@@ -727,13 +727,7 @@ fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
             }
             Ok(slice_into_list(&elements, tail, cx))
         }
-        Object::String(x) => {
-            let string: Result<&str, _> = x.try_into();
-            match string {
-                Ok(s) => Ok(cx.add(s)),
-                Err(_) => Ok(cx.add(x.to_vec())),
-            }
-        }
+        Object::String(x) => Ok(cx.add(x.to_owned())),
         Object::NIL => Ok(NIL),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
