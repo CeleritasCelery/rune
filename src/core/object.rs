@@ -20,7 +20,6 @@ mod symbol;
 mod tagged;
 mod vector;
 
-#[allow(unused_imports)]
 pub(crate) use buffer::*;
 pub(super) use cell::*;
 pub(crate) use convert::*;

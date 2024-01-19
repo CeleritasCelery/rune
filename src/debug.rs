@@ -1,5 +1,4 @@
 //! Debugging utilities.
-#![allow(dead_code)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static FLAG: AtomicBool = AtomicBool::new(false);

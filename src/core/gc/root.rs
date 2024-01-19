@@ -451,8 +451,6 @@ impl<T> Deref for Rt<Option<T>> {
 }
 
 impl<T> Rt<Option<T>> {
-    // This is not really dead code, but the static analysis fails to find it
-    #[allow(dead_code)]
     pub(crate) fn as_ref(&self) -> Option<&Rt<T>> {
         let option = self.inner.as_ref();
         option.map(|x| unsafe { &*(x as *const T).cast::<Rt<T>>() })
