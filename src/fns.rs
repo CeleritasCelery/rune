@@ -266,10 +266,23 @@ pub(crate) fn append<'ob>(
     cx: &'ob Context,
 ) -> Result<GcObj<'ob>> {
     let mut list = Vec::new();
-    join(&mut list, append.try_into()?)?;
+    match append.untag() {
+        Object::String(string) => {
+            for ch in string.chars() {
+                list.push((ch as i64).into());
+            }
+        }
+        Object::ByteString(string) => {
+            for ch in &**string {
+                list.push((*ch as i64).into());
+            }
+        }
+        _ => join(&mut list, append.try_into()?)?,
+    }
     for seq in sequences {
         join(&mut list, (*seq).try_into()?)?;
     }
+    // TODO: Remove this temp vector
     Ok(slice_into_list(&list, None, cx))
 }
 
@@ -883,6 +896,15 @@ mod test {
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
+    }
+
+    #[test]
+    fn test_append() {
+        let roots = &RootSet::default();
+        let cx = &Context::new(roots);
+        let expect = list![104, 101, 108, 108, 111; cx];
+        let result = append(cx.add("hello"), &[], cx).unwrap();
+        assert_eq!(result, expect);
     }
 
     #[test]
