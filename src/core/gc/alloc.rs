@@ -1,7 +1,8 @@
 use super::Block;
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec, SymbolCell,
+    ByteFn, ByteString, LispBuffer, LispFloat, LispFloatInner, LispHashTable, LispString, LispVec,
+    SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -32,7 +33,8 @@ impl AllocObject for f64 {
     type Output = LispFloat;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(LispFloat::new(self))));
+        let f = LispFloatInner(self);
+        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(LispFloat::new(f))));
         let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

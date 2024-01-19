@@ -5,9 +5,7 @@ Currently symbol-function of a special form will return nil
 * unify handlers between bytecode and interpreter
 * Allow debugger to be entered on error instead of just printing a back trace
 This means we will need to not unwind the stack, but instead collect the backtrace as we go down the call stack and halt it there.
-
 * can we make rooted_iter be generic over any iterators?
-* See how much we can unify the interpters
 * Steps to add a new object type
 - define the type and implement ~GcManaged~ for it
 - define in gc/alloc.rs
@@ -26,3 +24,19 @@ This means we will need to not unwind the stack, but instead collect the backtra
 - custom widget the get's a slice of the buffer
 - allow buffer to be edited
 - new UI thread
+* Adding the GC
+The new GC will be generational, copying collector based on immix. We need to break this up into as many small steps as possible. The hard thing is that all parts of this seem to rely on one another. The easiest stand alone thing might be to make a semi-space copying collector for the whole heap. This means we don't have to worry about free-lists or immix or generational barriers. And then when we create the generation older immix heap we can work on copying to that.
+** GcHeap
+We have two options to access the header of an object. We can either make the object itself be repr C so the header is always first, or we can add a wrapper type. I am going to go for the wrapper type
+** allocation
+Change the allocation to used contiguous blocks of memory. We want to use immix style blocks for most things.
+** copying
+*** change Rt<T> to use a cell
+This will tell the compiler that the value can change. This will prevent some optimizations but supporting copying will be worth it.
+*** Move the data out of the semispace
+We will need to define forwarding pointers for this. Miri will help to make sure we don't break semantics.
+** Generational
+*** write barrier
+Need a write barrier to track pointer across generations. The write barrier needs to both be used for checking for read-only and for tracking between generations. We are planning on using a remembered set via SSB with field logging.
+** Cons cells cdr coded blocks
+This can be implemented later

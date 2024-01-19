@@ -1,38 +1,30 @@
-use crate::core::gc::{GcManaged, GcMark};
+use crate::core::gc::GcHeap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
+/// A wrapper type for floats to work around issues with Eq. Rust only allows
+/// types to be used in match statements if they derive Eq. Even if you never
+/// actually use that field in a match. So we need a float wrapper that
+/// implements that trait.
 #[derive(PartialEq)]
-pub(crate) struct LispFloat {
-    gc: GcMark,
-    float: f64,
-}
+#[repr(transparent)]
+pub(crate) struct LispFloatInner(pub(crate) f64);
 
-impl Eq for LispFloat {}
+impl Eq for LispFloatInner {}
 
-impl LispFloat {
-    pub(in crate::core) fn new(float: f64) -> Self {
-        Self { gc: GcMark::default(), float }
-    }
-}
+pub(crate) type LispFloat = GcHeap<LispFloatInner>;
 
-impl Deref for LispFloat {
+impl Deref for LispFloatInner {
     type Target = f64;
 
     fn deref(&self) -> &Self::Target {
-        &self.float
+        &self.0
     }
 }
 
-impl GcManaged for LispFloat {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl Display for LispFloat {
+impl Display for LispFloatInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let float = self.float;
+        let float = self.0;
         if float.fract() == 0.0_f64 {
             write!(f, "{float:.1}")
         } else {
@@ -41,7 +33,7 @@ impl Display for LispFloat {
     }
 }
 
-impl Debug for LispFloat {
+impl Debug for LispFloatInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
     }
