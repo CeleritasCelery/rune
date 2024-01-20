@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context},
     },
-    display_slice, ByteString, CloneIn, IntoObject, LispVec,
+    display_slice, CloneIn, IntoObject, LispVec,
 };
 use super::{GcObj, WithLifetime};
 use crate::core::{
@@ -23,7 +23,8 @@ pub(crate) struct ByteFn {
     pub(crate) args: FnArgs,
     #[no_trace]
     pub(crate) depth: usize,
-    op_codes: &'static ByteString,
+    #[no_trace]
+    op_codes: Box<[u8]>,
     constants: &'static LispVec,
 }
 
@@ -31,7 +32,7 @@ define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
     pub(crate) unsafe fn new(
-        op_codes: &ByteString,
+        op_codes: &[u8],
         consts: &LispVec,
         args: FnArgs,
         depth: usize,
@@ -39,25 +40,25 @@ impl ByteFn {
         Self {
             gc: GcMark::default(),
             constants: unsafe { consts.with_lifetime() },
-            op_codes: unsafe { op_codes.with_lifetime() },
+            op_codes: op_codes.to_vec().into_boxed_slice(),
             args,
             depth,
         }
     }
 
-    pub(crate) fn codes(&self) -> &ByteString {
-        unsafe { self.op_codes.with_lifetime() }
+    pub(crate) fn codes(&self) -> &[u8] {
+        &self.op_codes
     }
 
     pub(crate) fn consts(&self) -> &LispVec {
         unsafe { self.constants.with_lifetime() }
     }
 
-    pub(crate) fn index(&self, index: usize) -> Option<GcObj> {
+    pub(crate) fn index<'ob>(&self, index: usize, cx: &'ob Context) -> Option<GcObj<'ob>> {
         match index {
             0 => Some((self.args.into_arg_spec() as i64).into()),
-            1 => Some(self.codes().into()),
-            2 => Some(self.consts().into()),
+            1 => Some(cx.add(self.codes().to_vec())),
+            2 => Some(cx.bind::<GcObj>(self.consts().into())),
             3 => Some(self.depth.into()),
             _ => None,
         }
@@ -71,12 +72,7 @@ impl ByteFn {
 impl<'new> CloneIn<'new, &'new Self> for ByteFn {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
         let byte_fn = unsafe {
-            Self::new(
-                self.op_codes.clone_in(bk).untag(),
-                self.constants.clone_in(bk).untag(),
-                self.args,
-                self.depth,
-            )
+            Self::new(&self.op_codes, self.constants.clone_in(bk).untag(), self.args, self.depth)
         };
         byte_fn.into_obj(bk)
     }
@@ -91,7 +87,7 @@ impl GcManaged for ByteFn {
 impl Display for ByteFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spec = self.args.into_arg_spec();
-        let code = display_slice(self.op_codes);
+        let code = display_slice(&self.op_codes);
         let consts = display_slice(self.constants);
         let depth = self.depth;
         write!(f, "#[{spec} {code} {consts} {depth}]")

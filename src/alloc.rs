@@ -24,7 +24,7 @@ pub(crate) fn make_closure<'ob>(
     prototype: &ByteFn,
     closure_vars: &[GcObj<'ob>],
     cx: &'ob Context,
-) -> Result<ByteFn> {
+) -> Result<Gc<&'ob ByteFn>> {
     let const_len = prototype.consts().len();
     let vars = closure_vars.len();
     ensure!(vars <= const_len, "Closure vars do not fit in const vec");
@@ -35,10 +35,12 @@ pub(crate) fn make_closure<'ob>(
     }
     let new_constants = constants.into_obj(cx);
 
-    // TODO: returning an owned type is not safe here
-    Ok(unsafe {
-        ByteFn::new(prototype.codes(), new_constants.untag(), prototype.args, prototype.depth)
-    })
+    unsafe {
+        Ok(
+            ByteFn::new(prototype.codes(), new_constants.untag(), prototype.args, prototype.depth)
+                .into_obj(cx),
+        )
+    }
 }
 
 #[defun]
