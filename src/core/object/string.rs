@@ -1,5 +1,5 @@
 use super::{CloneIn, IntoObject};
-use crate::core::gc::{Block, GcManaged, GcMark};
+use crate::core::gc::{Block, GcHeap, GcManaged, GcMark};
 use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
@@ -7,15 +7,16 @@ use std::{
 };
 
 #[derive(PartialEq, Eq, Trace)]
-pub(crate) struct LispString {
-    gc: GcMark,
+pub(crate) struct LispStringInner {
     #[no_trace]
     string: String,
 }
 
-unsafe impl Sync for LispString {}
+pub(crate) type LispString = GcHeap<LispStringInner>;
 
-impl LispString {
+unsafe impl Sync for LispStringInner {}
+
+impl LispStringInner {
     pub(crate) fn get_char_at(&self, idx: usize) -> Option<u32> {
         self.string.chars().nth(idx).map(|c| c.into())
     }
@@ -25,7 +26,7 @@ impl LispString {
     }
 
     pub(crate) unsafe fn from_string(string: String) -> Self {
-        Self { gc: GcMark::default(), string }
+        Self { string }
     }
 }
 
@@ -35,13 +36,7 @@ impl<'new> CloneIn<'new, &'new Self> for LispString {
     }
 }
 
-impl GcManaged for LispString {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl Deref for LispString {
+impl Deref for LispStringInner {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -49,32 +44,32 @@ impl Deref for LispString {
     }
 }
 
-impl AsRef<str> for LispString {
+impl AsRef<str> for LispStringInner {
     fn as_ref(&self) -> &str {
         &self.string
     }
 }
 
-impl Display for LispString {
+impl Display for LispStringInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &**self)
     }
 }
 
-impl Debug for LispString {
+impl Debug for LispStringInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
     }
 }
 
-impl<'a> From<&'a LispString> for &'a str {
-    fn from(value: &'a LispString) -> Self {
+impl<'a> From<&'a LispStringInner> for &'a str {
+    fn from(value: &'a LispStringInner) -> Self {
         value
     }
 }
 
-impl<'a> From<&'a LispString> for &'a [u8] {
-    fn from(value: &'a LispString) -> Self {
+impl<'a> From<&'a LispStringInner> for &'a [u8] {
+    fn from(value: &'a LispStringInner) -> Self {
         value.as_bytes()
     }
 }

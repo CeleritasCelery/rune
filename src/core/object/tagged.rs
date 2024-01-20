@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteString, LispBuffer,
+    ByteString, LispBuffer, LispStringInner,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -303,7 +303,7 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::from_string(self).alloc_obj(block);
+            let ptr = LispStringInner::from_string(self).alloc_obj(block);
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -314,7 +314,7 @@ impl IntoObject for &str {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::from_string(self.to_owned()).alloc_obj(block);
+            let ptr = LispStringInner::from_string(self.to_owned()).alloc_obj(block);
             <&LispString>::tag_ptr(ptr)
         }
     }
@@ -1218,7 +1218,7 @@ where
 impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
-            Object::String(x) => **x == **other,
+            Object::String(x) => ***x == **other,
             _ => false,
         }
     }

@@ -10,6 +10,7 @@ use super::{GcManaged, GcMark};
 #[derive(Debug)]
 struct GcHeader {
     marked: GcMark,
+    #[allow(dead_code)]
     size: u32,
 }
 
