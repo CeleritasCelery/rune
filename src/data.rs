@@ -337,7 +337,7 @@ pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Re
 }
 
 #[defun]
-pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
+pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match array.untag() {
         Object::Vec(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
@@ -367,7 +367,7 @@ pub(crate) fn aref(array: GcObj, idx: usize) -> Result<GcObj> {
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::ByteFn(fun) => match fun.index(idx) {
+        Object::ByteFn(fun) => match fun.index(idx, cx) {
             Some(x) => Ok(x),
             None => Err(anyhow!("index {idx} is out of bounds")),
         },

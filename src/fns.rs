@@ -131,7 +131,7 @@ pub(crate) fn mapcar<'ob>(
             root!(outputs, Vec::new(), cx);
             for i in 0..len {
                 let frame = &mut CallFrame::new(env);
-                let val = fun.bind(cx).index(i).unwrap();
+                let val = fun.bind(cx).index(i, cx).unwrap();
                 frame.push_arg(val);
                 let output = function.call(frame, None, cx)?;
                 outputs.push(output);
@@ -606,14 +606,14 @@ pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
 }
 
 #[defun]
-pub(crate) fn elt(sequence: GcObj, n: usize) -> Result<GcObj> {
+pub(crate) fn elt<'ob>(sequence: GcObj<'ob>, n: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
     match sequence.untag() {
         Object::Cons(x) => nth(n, x.into()),
         Object::NIL => Ok(NIL),
-        Object::Vec(x) => aref(x.into(), n),
-        Object::Record(x) => aref(x.into(), n),
-        Object::String(x) => aref(x.into(), n),
-        Object::ByteFn(x) => aref(x.into(), n),
+        Object::Vec(x) => aref(x.into(), n, cx),
+        Object::Record(x) => aref(x.into(), n, cx),
+        Object::String(x) => aref(x.into(), n, cx),
+        Object::ByteFn(x) => aref(x.into(), n, cx),
         other => Err(TypeError::new(Type::Sequence, other).into()),
     }
 }

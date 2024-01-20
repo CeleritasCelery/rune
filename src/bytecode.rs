@@ -496,7 +496,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Aref => {
                     let idx = self.env.stack.pop(cx);
                     let top = self.env.stack.top();
-                    top.set(data::aref(top.bind(cx), idx.try_into()?)?);
+                    top.set(data::aref(top.bind(cx), idx.try_into()?, cx)?);
                 }
                 op::Aset => {
                     let newlet = self.env.stack.pop(cx);
@@ -717,7 +717,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Elt => {
                     let n = self.env.stack.pop(cx);
                     let top = self.env.stack.top();
-                    top.set(fns::elt(top.bind(cx), n.try_into()?)?);
+                    top.set(fns::elt(top.bind(cx), n.try_into()?, cx)?);
                 }
                 op::Member => {
                     let list = self.env.stack.pop(cx);
