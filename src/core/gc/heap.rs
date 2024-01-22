@@ -3,7 +3,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use super::{GcManaged, GcMark};
+use crate::core::object::RawObj;
+
+use super::{GcManaged, GcMark, Trace};
 
 // align to 64-bit boundaries
 #[repr(align(8))]
@@ -27,6 +29,13 @@ impl<T> GcHeap<T> {
             header: GcHeader { marked: GcMark::default(), size: std::mem::size_of::<T>() as u32 },
             data,
         }
+    }
+}
+
+impl<T: Trace> GcHeap<T> {
+    pub(in crate::core) fn trace_mark(&self, stack: &mut Vec<RawObj>) {
+        self.mark();
+        self.data.trace(stack);
     }
 }
 

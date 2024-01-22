@@ -1,7 +1,8 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
-use crate::core::gc::{Block, GcManaged, GcMark, Trace};
+use crate::core::gc::{Block, GcHeap, Trace};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
+use rune_macros::Trace;
 use std::{
     fmt::{self, Write},
     mem,
@@ -14,26 +15,25 @@ use std::{
 /// default. However with the [`LispVec::try_mut`] method, you can obtain a mutable view
 /// into this slice.
 #[derive(Eq)]
-pub(crate) struct LispVec {
-    gc: GcMark,
+pub(crate) struct LispVecInner {
     is_const: bool,
     inner: Box<[ObjCell]>,
 }
 
-unsafe impl Sync for LispVec {}
+pub(crate) type LispVec = GcHeap<LispVecInner>;
 
-impl PartialEq for LispVec {
+impl PartialEq for LispVecInner {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl LispVec {
+impl LispVecInner {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to use in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: Vec<GcObj>) -> Self {
         let cell = mem::transmute::<Vec<GcObj>, Vec<ObjCell>>(vec);
-        Self { gc: GcMark::default(), is_const: false, inner: cell.into_boxed_slice() }
+        Self { is_const: false, inner: cell.into_boxed_slice() }
     }
 
     pub(in crate::core) fn make_const(&mut self) {
@@ -56,7 +56,7 @@ impl LispVec {
     }
 }
 
-impl Deref for LispVec {
+impl Deref for LispVecInner {
     type Target = [ObjCell];
 
     fn deref(&self) -> &Self::Target {
@@ -71,33 +71,26 @@ impl<'new> CloneIn<'new, &'new Self> for LispVec {
     }
 }
 
-impl GcManaged for LispVec {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl Trace for LispVec {
+impl Trace for LispVecInner {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
-        self.mark();
         let unmarked = self.iter().map(ObjCell::get).filter(|x| x.is_markable()).map(Gc::into_raw);
         stack.extend(unmarked);
     }
 }
 
-impl fmt::Display for LispVec {
+impl fmt::Display for LispVecInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl fmt::Debug for LispVec {
+impl fmt::Debug for LispVecInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl LispVec {
+impl LispVecInner {
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter<'_>,
@@ -123,12 +116,14 @@ impl LispVec {
 #[repr(transparent)]
 pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<GcObj<'ob>>);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Trace)]
 #[repr(transparent)]
-pub(crate) struct Record(LispVec);
+pub(crate) struct RecordInner(LispVecInner);
 
-impl Deref for Record {
-    type Target = LispVec;
+pub(crate) type Record = GcHeap<RecordInner>;
+
+impl Deref for RecordInner {
+    type Target = LispVecInner;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -142,19 +137,13 @@ impl<'new> CloneIn<'new, &'new Self> for Record {
     }
 }
 
-impl GcManaged for Record {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl fmt::Display for Record {
+impl fmt::Display for RecordInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl Record {
+impl RecordInner {
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter<'_>,

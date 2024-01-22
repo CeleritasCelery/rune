@@ -97,6 +97,7 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
 
 impl Trace for LispHashTable {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
+        self.mark();
         let table = self.borrow();
         for (k, v) in &table.inner {
             if k.is_markable() {
@@ -106,7 +107,6 @@ impl Trace for LispHashTable {
                 stack.push(v.get().into_raw());
             }
         }
-        self.mark();
     }
 }
 

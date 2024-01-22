@@ -2,7 +2,7 @@ use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
     ByteFn, ByteString, LispBuffer, LispFloat, LispFloatInner, LispHashTable, LispString,
-    LispStringInner, LispVec, SymbolCell,
+    LispStringInner, LispVec, LispVecInner, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -96,7 +96,7 @@ impl AllocObject for ByteFn {
     }
 }
 
-impl AllocObject for LispVec {
+impl AllocObject for LispVecInner {
     type Output = LispVec;
 
     fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
@@ -104,7 +104,7 @@ impl AllocObject for LispVec {
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(self)));
+        Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(GcHeap::new(self))));
         let Some(OwnedObject::Vec(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
