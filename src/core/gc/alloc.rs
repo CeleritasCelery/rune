@@ -1,8 +1,8 @@
 use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteString, LispBuffer, LispFloat, LispFloatInner, LispHashTable, LispString,
-    LispStringInner, LispVec, LispVecInner, SymbolCell,
+    ByteFn, ByteString, LispBuffer, LispFloat, LispFloatInner, LispHashTable, LispHashTableInner,
+    LispString, LispStringInner, LispVec, LispVecInner, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -110,15 +110,15 @@ impl AllocObject for LispVecInner {
     }
 }
 
-impl AllocObject for LispHashTable {
-    type Output = Self;
+impl AllocObject for LispHashTableInner {
+    type Output = LispHashTable;
 
     fn alloc_obj<const CONST: bool>(mut self, block: &Block<CONST>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(self)));
+        Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(GcHeap::new(self))));
         let Some(OwnedObject::HashTable(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

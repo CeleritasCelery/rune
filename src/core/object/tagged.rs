@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteString, LispBuffer, LispStringInner, LispVecInner,
+    ByteString, LispBuffer, LispHashTableInner, LispStringInner, LispVecInner,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -366,7 +366,7 @@ impl<'a> IntoObject for HashTable<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispHashTable::new(self).alloc_obj(block);
+            let ptr = LispHashTableInner::new(self).alloc_obj(block);
             <&LispHashTable>::tag_ptr(ptr)
         }
     }
@@ -1380,7 +1380,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::ByteString(x) => x.mark(),
             Object::Vec(vec) => vec.trace_mark(stack),
             Object::Record(x) => x.trace_mark(stack),
-            Object::HashTable(x) => x.trace(stack),
+            Object::HashTable(x) => x.trace_mark(stack),
             Object::Cons(x) => x.trace(stack),
             Object::Symbol(x) => x.trace(stack),
             Object::ByteFn(x) => x.trace(stack),

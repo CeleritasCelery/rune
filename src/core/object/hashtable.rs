@@ -1,11 +1,10 @@
 use super::{CloneIn, Gc, GcObj, IntoObject, ObjCell};
-use crate::core::gc::{GcManaged, GcMark, Trace};
+use crate::core::gc::{GcHeap, Trace};
 use rune_core::hashmap::{HashSet, IndexMap};
 use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
 use std::fmt::{self, Debug, Display, Write};
 
 pub(crate) type HashTable<'ob> = IndexMap<GcObj<'ob>, GcObj<'ob>>;
-// pub(crate) type HashTableView<'ob, T> = IndexMap<GcObj<'ob>, T>;
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct HashTableView<'ob, T> {
@@ -14,11 +13,11 @@ pub(crate) struct HashTableView<'ob, T> {
 }
 
 #[derive(Eq)]
-pub(crate) struct LispHashTable {
-    gc: GcMark,
-    is_const: bool,
+pub(crate) struct LispHashTableInner {
     inner: RefCell<HashTableView<'static, ObjCell>>,
 }
+
+pub(crate) type LispHashTable = GcHeap<LispHashTableInner>;
 
 impl<'ob, T> std::ops::Deref for HashTableView<'ob, T> {
     type Target = IndexMap<GcObj<'ob>, T>;
@@ -34,27 +33,22 @@ impl<'ob, T> std::ops::DerefMut for HashTableView<'ob, T> {
     }
 }
 
-impl PartialEq for LispHashTable {
+impl PartialEq for LispHashTableInner {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
 }
 
-impl LispHashTable {
+impl LispHashTableInner {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to create an owned version in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: HashTable) -> Self {
         let cell =
             std::mem::transmute::<IndexMap<GcObj, GcObj>, IndexMap<GcObj<'static>, ObjCell>>(vec);
-        Self {
-            gc: GcMark::default(),
-            is_const: false,
-            inner: RefCell::new(HashTableView { iter_next: 0, inner: cell }),
-        }
+        Self { inner: RefCell::new(HashTableView { iter_next: 0, inner: cell }) }
     }
 
     pub(in crate::core) fn make_const(&mut self) {
-        self.is_const = true;
         // Leak the borrow so that is cannot be borrowed mutabley
         std::mem::forget(self.inner.borrow());
     }
@@ -95,9 +89,8 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
     }
 }
 
-impl Trace for LispHashTable {
+impl Trace for LispHashTableInner {
     fn trace(&self, stack: &mut Vec<super::RawObj>) {
-        self.mark();
         let table = self.borrow();
         for (k, v) in &table.inner {
             if k.is_markable() {
@@ -110,25 +103,19 @@ impl Trace for LispHashTable {
     }
 }
 
-impl GcManaged for LispHashTable {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl Debug for LispHashTable {
+impl Debug for LispHashTableInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl Display for LispHashTable {
+impl Display for LispHashTableInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl LispHashTable {
+impl LispHashTableInner {
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter,
