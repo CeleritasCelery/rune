@@ -20,11 +20,7 @@ pub(crate) struct Cons {
 // TODO: we need to handle loops in equal
 impl PartialEq for Cons {
     fn eq(&self, other: &Self) -> bool {
-        if std::ptr::eq(self, other) {
-            true
-        } else {
-            self.car() == other.car() && self.cdr() == other.cdr()
-        }
+        self.car() == other.car() && self.cdr() == other.cdr()
     }
 }
 

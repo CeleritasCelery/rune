@@ -1302,7 +1302,7 @@ impl<T> fmt::Debug for Gc<T> {
 
 impl<T> PartialEq for Gc<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.as_obj().untag() == other.as_obj().untag()
+        self.ptr == other.ptr || self.as_obj().untag() == other.as_obj().untag()
     }
 }
 
