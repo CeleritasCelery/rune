@@ -342,6 +342,14 @@ impl<'a> IntoObject for Vec<GcObj<'a>> {
     }
 }
 
+impl<'a> IntoObject for &[GcObj<'a>] {
+    type Out<'ob> = &'ob LispVec;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        self.to_vec().into_obj(block)
+    }
+}
+
 impl<'a> IntoObject for RecordBuilder<'a> {
     type Out<'ob> = &'ob Record;
 
