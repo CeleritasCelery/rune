@@ -1,15 +1,18 @@
 use super::{CloneIn, IntoObject};
-use crate::core::gc::{Block, GcHeap, GcManaged, GcMark};
+use crate::core::gc::{Block, GcHeap, GcManaged, GcMark, Trace};
 use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
     ops::Deref,
 };
 
-#[derive(PartialEq, Eq, Trace)]
+#[derive(PartialEq, Eq)]
 pub(crate) struct LispStringInner {
-    #[no_trace]
     string: String,
+}
+
+impl Trace for LispStringInner {
+    fn trace(&self, _stack: &mut Vec<super::RawObj>) {}
 }
 
 pub(crate) type LispString = GcHeap<LispStringInner>;

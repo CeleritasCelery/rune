@@ -106,8 +106,6 @@ struct VM<'brw, 'env, 'rt> {
     #[no_trace]
     /// Current program counter
     pc: ProgramCounter,
-    /// Associated constants for this function
-    consts: &'rt LispVec,
     /// The current function being executed. Saved to ensure it is preserved by
     /// the garbage collector.
     func: &'rt ByteFn,
@@ -159,11 +157,10 @@ impl<'ob> RootedVM<'_, '_, '_> {
     }
 
     fn get_const(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
-        self.consts.bind(cx).get(i).expect("constant had invalid index").get()
+        *self.func.bind(cx).consts().get(i).expect("constant had invalid index")
     }
 
     fn set_current_frame(&mut self, f: &ByteFn, offset: usize) {
-        self.consts.set(f.consts());
         self.func.set(f);
         self.pc = ProgramCounter::with_offset(f.codes(), offset);
     }
@@ -897,13 +894,7 @@ pub(crate) fn call<'ob>(
 ) -> EvalResult<'ob> {
     frame.stack.set_depth(func.bind(cx).depth);
     let func = func.bind(cx);
-    let vm = VM {
-        pc: ProgramCounter::new(func.codes()),
-        consts: func.consts(),
-        func,
-        env: frame,
-        handlers: Vec::new(),
-    };
+    let vm = VM { pc: ProgramCounter::new(func.codes()), func, env: frame, handlers: Vec::new() };
     root!(vm, cx);
     vm.prepare_lisp_args(func, arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))
