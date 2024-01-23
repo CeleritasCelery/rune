@@ -8,7 +8,7 @@ use super::{
 use super::{GcObj, WithLifetime};
 use crate::core::{
     env::Env,
-    gc::{GcManaged, GcMark, Rt},
+    gc::{GcHeap, Rt},
 };
 use anyhow::{bail, ensure, Result};
 use rune_macros::Trace;
@@ -17,8 +17,7 @@ use std::fmt::{self, Debug, Display};
 /// A function implemented in lisp. Note that all functions are byte compiled,
 /// so this contains the byte-code representation of the function.
 #[derive(PartialEq, Eq, Trace)]
-pub(crate) struct ByteFn {
-    gc: GcMark,
+pub(crate) struct ByteFnInner {
     #[no_trace]
     pub(crate) args: FnArgs,
     #[no_trace]
@@ -28,6 +27,8 @@ pub(crate) struct ByteFn {
     constants: Vec<GcObj<'static>>,
 }
 
+pub(crate) type ByteFn = GcHeap<ByteFnInner>;
+
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
@@ -35,21 +36,22 @@ impl ByteFn {
     // block as the bytecode function. Otherwise they will be collected and we
     // will have a dangling pointer. Also this type must immediatly be put into
     // the GC heap, because holding it past garbage collections is unsafe.
-    pub(crate) unsafe fn new(
+    pub(crate) unsafe fn make(
         op_codes: &[u8],
         consts: Vec<GcObj>,
         args: FnArgs,
         depth: usize,
-    ) -> Self {
-        Self {
-            gc: GcMark::default(),
+    ) -> ByteFnInner {
+        ByteFnInner {
             constants: unsafe { consts.with_lifetime() },
             op_codes: op_codes.to_vec().into_boxed_slice(),
             args,
             depth,
         }
     }
+}
 
+impl ByteFnInner {
     pub(crate) fn codes(&self) -> &[u8] {
         &self.op_codes
     }
@@ -76,14 +78,8 @@ impl ByteFn {
 impl<'new> CloneIn<'new, &'new Self> for ByteFn {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
         let constants = self.constants.iter().map(|x| x.clone_in(bk)).collect();
-        let byte_fn = unsafe { Self::new(&self.op_codes, constants, self.args, self.depth) };
+        let byte_fn = unsafe { ByteFn::make(&self.op_codes, constants, self.args, self.depth) };
         byte_fn.into_obj(bk)
-    }
-}
-
-impl GcManaged for ByteFn {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
     }
 }
 

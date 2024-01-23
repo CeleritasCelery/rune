@@ -35,7 +35,10 @@ pub(crate) fn make_closure<'ob>(
     }
 
     unsafe {
-        Ok(ByteFn::new(prototype.codes(), constants, prototype.args, prototype.depth).into_obj(cx))
+        Ok(
+            ByteFn::make(prototype.codes(), constants, prototype.args, prototype.depth)
+                .into_obj(cx),
+        )
     }
 }
 
@@ -53,7 +56,7 @@ pub(crate) fn make_byte_code<'ob>(
 ) -> Result<&'ob ByteFn> {
     unsafe {
         let bytefn =
-            ByteFn::new(byte_code, constants.to_vec(), FnArgs::from_arg_spec(arglist)?, depth);
+            ByteFn::make(byte_code, constants.to_vec(), FnArgs::from_arg_spec(arglist)?, depth);
         Ok(bytefn.into_obj(cx).untag())
     }
 }
