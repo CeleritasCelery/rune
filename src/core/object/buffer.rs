@@ -1,7 +1,7 @@
 use super::{Gc, GcObj, Object, RawObj, TagType, WithLifetime};
 use crate::core::{
     error::{Type, TypeError},
-    gc::{AllocObject, Block, Context, GcManaged, GcMark, Trace},
+    gc::{AllocObject, Block, Context, GcHeap, Trace},
 };
 use anyhow::{bail, Result};
 use std::{
@@ -97,14 +97,17 @@ pub(crate) struct BufferData {
 /// A lisp handle to a buffer. This is a just a reference type and does not give
 /// access to the contents until it is locked and a `OpenBuffer` is returned.
 #[derive(Debug)]
-pub(crate) struct LispBuffer {
+pub(crate) struct LispBufferInner {
     text_buffer: Mutex<Option<BufferData>>,
 }
 
+pub(crate) type LispBuffer = GcHeap<LispBufferInner>;
+
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
-        let new =
-            Self { text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })) };
+        let new = LispBufferInner {
+            text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })),
+        };
         let ptr = new.alloc_obj(block);
         unsafe { &*ptr }
     }
@@ -118,7 +121,7 @@ impl LispBuffer {
     }
 }
 
-impl PartialEq for LispBuffer {
+impl PartialEq for LispBufferInner {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
@@ -126,19 +129,19 @@ impl PartialEq for LispBuffer {
 
 impl PartialEq<OpenBuffer<'_>> for LispBuffer {
     fn eq(&self, other: &OpenBuffer) -> bool {
-        other.back_ref == self
+        other.back_ref == &**self
     }
 }
 
 impl PartialEq<LispBuffer> for OpenBuffer<'_> {
     fn eq(&self, other: &LispBuffer) -> bool {
-        self.back_ref == other
+        self.back_ref == &**other
     }
 }
 
-impl Eq for LispBuffer {}
+impl Eq for LispBufferInner {}
 
-impl Display for LispBuffer {
+impl Display for LispBufferInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data = self.text_buffer.lock().unwrap();
         let name = match data.as_ref() {
@@ -149,15 +152,9 @@ impl Display for LispBuffer {
     }
 }
 
-impl Trace for LispBuffer {
+impl Trace for LispBufferInner {
     fn trace(&self, _v: &mut Vec<RawObj>) {
         // Implement once we hold gc data in the buffer
-    }
-}
-
-impl GcManaged for LispBuffer {
-    fn get_mark(&self) -> &GcMark {
-        panic!("Buffer does not use GcMark")
     }
 }
 

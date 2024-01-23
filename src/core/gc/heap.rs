@@ -16,6 +16,8 @@ struct GcHeader {
     size: u32,
 }
 
+unsafe impl Sync for GcHeader {}
+
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct GcHeap<T: ?Sized> {
@@ -29,6 +31,12 @@ impl<T> GcHeap<T> {
             header: GcHeader { marked: GcMark::default(), size: std::mem::size_of::<T>() as u32 },
             data,
         }
+    }
+}
+
+impl<T: Trace> Trace for GcHeap<T> {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        self.trace_mark(stack);
     }
 }
 

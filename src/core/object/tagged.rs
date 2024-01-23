@@ -1384,7 +1384,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Cons(x) => x.trace(stack),
             Object::Symbol(x) => x.trace(stack),
             Object::ByteFn(x) => x.trace(stack),
-            Object::Buffer(x) => x.trace(stack),
+            Object::Buffer(x) => x.trace_mark(stack),
         }
     }
 }
