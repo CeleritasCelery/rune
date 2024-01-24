@@ -1,6 +1,7 @@
 use rune_core::hashmap::HashSet;
+use rune_macros::Trace;
 
-use super::gc::{Block, Context, GcManaged, GcMark, Trace};
+use super::gc::{Block, Context, GcHeap, GcManaged, GcMark, Trace};
 use super::object::{CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
@@ -10,15 +11,25 @@ mod iter;
 pub(crate) use iter::*;
 
 #[derive(Eq)]
-pub(crate) struct Cons {
-    marked: GcMark,
+pub(crate) struct ConsInner {
     mutable: bool,
     car: ObjCell,
     cdr: ObjCell,
 }
 
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct Cons(GcHeap<ConsInner>);
+
+impl std::ops::Deref for Cons {
+    type Target = GcHeap<ConsInner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 // TODO: we need to handle loops in equal
-impl PartialEq for Cons {
+impl PartialEq for ConsInner {
     fn eq(&self, other: &Self) -> bool {
         self.car() == other.car() && self.cdr() == other.cdr()
     }
@@ -29,12 +40,11 @@ impl Cons {
     // the stack. Otherwise it could outlive it's objects since it has no
     // lifetimes.
     pub(crate) unsafe fn new_unchecked(car: GcObj, cdr: GcObj) -> Self {
-        Self {
-            marked: GcMark::default(),
+        Cons(GcHeap::new(ConsInner {
             mutable: true,
             car: ObjCell::new(car),
             cdr: ObjCell::new(cdr),
-        }
+        }))
     }
 
     /// Create a new cons cell
@@ -63,9 +73,11 @@ impl Cons {
     }
 
     pub(in crate::core) fn mark_const(&mut self) {
-        self.mutable = false;
+        self.0.mutable = false;
     }
+}
 
+impl ConsInner {
     pub(crate) fn car(&self) -> GcObj {
         self.car.get()
     }
@@ -103,11 +115,11 @@ impl<'new> CloneIn<'new, &'new Cons> for Cons {
 
 impl GcManaged for Cons {
     fn get_mark(&self) -> &GcMark {
-        &self.marked
+        self.0.get_mark()
     }
 }
 
-impl Trace for Cons {
+impl Trace for ConsInner {
     fn trace(&self, stack: &mut Vec<RawObj>) {
         let cdr = self.cdr();
         if cdr.is_markable() {
@@ -117,7 +129,6 @@ impl Trace for Cons {
         if car.is_markable() {
             stack.push(car.into_raw());
         }
-        self.mark();
     }
 }
 

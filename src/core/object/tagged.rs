@@ -1381,7 +1381,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Vec(vec) => vec.trace_mark(stack),
             Object::Record(x) => x.trace_mark(stack),
             Object::HashTable(x) => x.trace_mark(stack),
-            Object::Cons(x) => x.trace(stack),
+            Object::Cons(x) => x.trace_mark(stack),
             Object::Symbol(x) => x.trace(stack),
             Object::ByteFn(x) => x.trace_mark(stack),
             Object::Buffer(x) => x.trace_mark(stack),

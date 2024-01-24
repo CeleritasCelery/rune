@@ -75,7 +75,7 @@ impl<'ob> Iterator for ElemIter<'ob> {
     type Item = Result<GcObj<'ob>, ConsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|x| x.map(Cons::car))
+        self.0.next().map(|x| x.map(|x| x.car()))
     }
 }
 
