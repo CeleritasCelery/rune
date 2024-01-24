@@ -8,7 +8,6 @@ use crate::core::{
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
-use rune_core::macros::cons;
 use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -295,7 +294,7 @@ fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> GcObj<'ob> {
             (min + subr.args.optional as usize).into()
         }
     };
-    cons!(min, max; cx)
+    Cons::new(min, max, cx).into()
 }
 
 #[defun]
@@ -458,7 +457,7 @@ pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>>
 
 #[defun]
 pub(crate) fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
-    cons!(car, cdr; cx)
+    Cons::new(car, cdr, cx).into()
 }
 
 // Symbol with position

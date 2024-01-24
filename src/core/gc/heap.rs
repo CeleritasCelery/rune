@@ -1,11 +1,12 @@
 use std::{
+    cell::Cell,
     fmt::Display,
     ops::{Deref, DerefMut},
 };
 
 use crate::core::object::RawObj;
 
-use super::{GcManaged, GcMark, Trace};
+use super::{Block, GcManaged, GcMark, Trace};
 
 // align to 64-bit boundaries
 #[repr(align(8))]
@@ -26,9 +27,13 @@ pub(crate) struct GcHeap<T: ?Sized> {
 }
 
 impl<T> GcHeap<T> {
-    pub(in crate::core) fn new(data: T) -> Self {
+    pub(in crate::core) fn new<const CONST: bool>(data: T, _: &Block<CONST>) -> Self {
         Self {
-            header: GcHeader { marked: GcMark::default(), size: std::mem::size_of::<T>() as u32 },
+            header: GcHeader {
+                // if the block is const, mark the object so it will not be traced
+                marked: GcMark(Cell::new(CONST)),
+                size: std::mem::size_of::<T>() as u32,
+            },
             data,
         }
     }
@@ -42,8 +47,10 @@ impl<T: Trace> Trace for GcHeap<T> {
 
 impl<T: Trace> GcHeap<T> {
     pub(in crate::core) fn trace_mark(&self, stack: &mut Vec<RawObj>) {
-        self.mark();
-        self.data.trace(stack);
+        if !self.is_marked() {
+            self.mark();
+            self.data.trace(stack);
+        }
     }
 }
 

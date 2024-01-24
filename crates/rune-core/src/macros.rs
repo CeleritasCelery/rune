@@ -36,27 +36,13 @@ macro_rules! __define_unbox {
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __cons {
-    ($car:expr, $cdr:expr; $cx:expr) => {
-        $cx.add({
-            let car = $cx.add($car);
-            let cdr = $cx.add($cdr);
-            unsafe { crate::core::cons::Cons::new_unchecked(car, cdr) }
-        })
-    };
-    ($car:expr; $cx:expr) => {
-        $cx.add({
-            let car = $cx.add($car);
-            unsafe { crate::core::cons::Cons::new_unchecked(car, crate::core::object::NIL) }
-        })
-    };
-}
-
-#[macro_export]
-#[doc(hidden)]
 macro_rules! __list {
-    ($x:expr; $cx:expr) => ($crate::macros::cons!($x; $cx));
-    ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => ($crate::macros::cons!($x, list!($($y),+ ; $cx) ; $cx));
+    ($x:expr; $cx:expr) => {
+        crate::core::object::GcObj::from(crate::core::cons::Cons::new1($x, $cx))
+    };
+    ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => {
+        crate::core::object::GcObj::from(crate::core::cons::Cons::new($x, list!($($y),+ ; $cx), $cx))
+    };
 }
 
 #[macro_export]
@@ -156,10 +142,6 @@ macro_rules! __rebind {
 /// TODO: Document
 #[doc(inline)]
 pub use __bail_err as bail_err;
-
-/// TODO: Document
-#[doc(inline)]
-pub use __cons as cons;
 
 /// TODO: Document
 #[doc(inline)]

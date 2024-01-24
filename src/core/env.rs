@@ -279,7 +279,9 @@ pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 
 #[cfg(test)]
 mod test {
-    use rune_core::macros::{cons, list, root};
+    use rune_core::macros::{list, root};
+
+    use crate::core::cons::Cons;
 
     use super::*;
 
@@ -312,18 +314,18 @@ mod test {
         let sym = unsafe { fix_lifetime(Symbol::new(&inner)) };
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());
-        let func1 = cons!(1; cx);
+        let func1 = Cons::new1(1, cx);
         unsafe {
-            sym.set_func(func1.try_into().unwrap()).unwrap();
+            sym.set_func(func1.into()).unwrap();
         }
         let cell1 = sym.func(cx).unwrap();
         let Function::Cons(before) = cell1.untag() else {
             unreachable!("Type should be a lisp function")
         };
         assert_eq!(before.car(), 1);
-        let func2 = cons!(2; cx);
+        let func2 = Cons::new1(2, cx);
         unsafe {
-            sym.set_func(func2.try_into().unwrap()).unwrap();
+            sym.set_func(func2.into()).unwrap();
         }
         let cell2 = sym.func(cx).unwrap();
         let Function::Cons(after) = cell2.untag() else {

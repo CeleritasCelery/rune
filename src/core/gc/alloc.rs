@@ -35,7 +35,7 @@ impl AllocObject for f64 {
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
         let f = LispFloatInner(self);
-        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(LispFloat::new(f))));
+        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(GcHeap::new(f, block))));
         let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
@@ -69,7 +69,7 @@ impl AllocObject for LispStringInner {
 
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(&mut objects, OwnedObject::String(Box::new(GcHeap::new(self))));
+        Block::<C>::register(&mut objects, OwnedObject::String(Box::new(GcHeap::new(self, block))));
         let Some(OwnedObject::String(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }
@@ -90,7 +90,7 @@ impl AllocObject for ByteFnInner {
     type Output = ByteFn;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let boxed = Box::new(GcHeap::new(self));
+        let boxed = Box::new(GcHeap::new(self, block));
         Block::<C>::register(&mut objects, OwnedObject::ByteFn(boxed));
         let Some(OwnedObject::ByteFn(x)) = objects.last() else { unreachable!() };
         x.as_ref()
@@ -105,7 +105,10 @@ impl AllocObject for LispVecInner {
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(&mut objects, OwnedObject::Vec(Box::new(GcHeap::new(self))));
+        Block::<CONST>::register(
+            &mut objects,
+            OwnedObject::Vec(Box::new(GcHeap::new(self, block))),
+        );
         let Some(OwnedObject::Vec(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
@@ -119,7 +122,10 @@ impl AllocObject for LispHashTableInner {
         if CONST {
             self.make_const();
         }
-        Block::<CONST>::register(&mut objects, OwnedObject::HashTable(Box::new(GcHeap::new(self))));
+        Block::<CONST>::register(
+            &mut objects,
+            OwnedObject::HashTable(Box::new(GcHeap::new(self, block))),
+        );
         let Some(OwnedObject::HashTable(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }
@@ -131,7 +137,10 @@ impl AllocObject for LispBufferInner {
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         assert!(CONST, "Buffers must only be created in the shared block");
         let mut objects = block.objects.borrow_mut();
-        Block::<CONST>::register(&mut objects, OwnedObject::Buffer(Box::new(GcHeap::new(self))));
+        Block::<CONST>::register(
+            &mut objects,
+            OwnedObject::Buffer(Box::new(GcHeap::new(self, block))),
+        );
         let Some(OwnedObject::Buffer(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

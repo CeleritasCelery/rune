@@ -41,7 +41,7 @@ impl<'rt> Drop for Context<'rt> {
 }
 
 #[derive(Debug, Default, Eq)]
-pub(in crate::core) struct GcMark(Cell<bool>);
+pub(in crate::core) struct GcMark(pub(in crate::core) Cell<bool>);
 
 impl Trace for GcMark {
     fn trace(&self, _: &mut Vec<crate::core::object::RawObj>) {

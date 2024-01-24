@@ -511,8 +511,7 @@ pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(GcObj<'ob>, us
 
 #[cfg(test)]
 mod test {
-    use crate::core::gc::RootSet;
-    use rune_core::macros::cons;
+    use crate::core::{cons::Cons, gc::RootSet};
 
     use super::*;
 
@@ -618,11 +617,11 @@ baz""#,
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         check_reader!(false, "()", cx);
-        check_reader!(cons!(1, 2; cx), "(1 . 2)", cx);
+        check_reader!(Cons::new(1, 2, cx), "(1 . 2)", cx);
         check_reader!(list!(1; cx), "(1)", cx);
         check_reader!(list!("foo"; cx), "(\"foo\")", cx);
-        check_reader!(cons!(1, cons!(1.5, "foo"; cx); cx), "(1 1.5 . \"foo\")", cx);
-        check_reader!(list!("foo", cons!(1, 1.5; cx); cx), "(\"foo\" (1 . 1.5))", cx);
+        check_reader!(Cons::new(1, Cons::new(1.5, "foo", cx), cx), "(1 1.5 . \"foo\")", cx);
+        check_reader!(list!("foo", Cons::new(1, 1.5, cx); cx), "(\"foo\" (1 . 1.5))", cx);
         check_reader!(list!(1, 1.5; cx), "(1 1.5)", cx);
         check_reader!(list!(1, 1.5, -7; cx), "(1 1.5 -7)", cx);
         check_reader!(list!(1, 1.5, intern(".", cx); cx), "(1 1.5 .)", cx);

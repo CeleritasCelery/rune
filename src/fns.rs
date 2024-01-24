@@ -15,7 +15,7 @@ use crate::{
 use anyhow::{bail, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{cons, list, rebind, root, rooted_iter};
+use rune_core::macros::{list, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]
@@ -29,7 +29,7 @@ pub(crate) fn slice_into_list<'ob>(
     cx: &'ob Context,
 ) -> GcObj<'ob> {
     let from_end = slice.iter().rev();
-    from_end.fold(tail.into(), |acc, obj| cons!(*obj, acc; cx))
+    from_end.fold(tail.into(), |acc, obj| Cons::new(*obj, acc, cx).into())
 }
 
 pub(crate) fn build_list<'ob, E>(
@@ -221,7 +221,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     let mut tail = NIL;
     for elem in seq {
-        tail = cons!(elem?, tail; cx);
+        tail = Cons::new(elem?, tail, cx).into();
     }
     Ok(tail)
 }
@@ -375,7 +375,7 @@ fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>>
 
 fn copy_alist_elem<'ob>(elem: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
     match elem.untag() {
-        Object::Cons(cons) => cons!(cons.car(), cons.cdr(); cx),
+        Object::Cons(cons) => Cons::new(cons.car(), cons.cdr(), cx).into(),
         _ => elem,
     }
 }
@@ -911,7 +911,7 @@ mod test {
     fn test_assq() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let element = cons!(5, 6; cx);
+        let element = GcObj::from(Cons::new(5, 6, cx));
         let list = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), element; cx];
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list).unwrap();
@@ -996,7 +996,7 @@ mod test {
     fn test_copy_alist() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let alist = list![cons!(1, 2; cx), cons!(3, 4; cx), cons!(5, 6; cx); cx];
+        let alist = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), Cons::new(5, 6, cx); cx];
         let list = alist.try_into().unwrap();
         let result = copy_alist(list, cx).unwrap();
         assert_eq!(alist, result);

@@ -1,5 +1,6 @@
 #![allow(unstable_name_collisions)]
 //! The main bytecode interpeter.
+use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
@@ -7,7 +8,7 @@ use crate::core::object::{
 };
 use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
-use rune_core::macros::{bail_err, cons, rebind, root};
+use rune_core::macros::{bail_err, rebind, root};
 use rune_macros::{defun, Trace};
 use sptr::Strict;
 
@@ -272,15 +273,15 @@ impl<'ob> RootedVM<'_, '_, '_> {
                     let Some((sym, data)) = self.env.get_exception(id) else {
                         unreachable!("Exception not found")
                     };
-                    cons!(sym, data; cx)
+                    Cons::new(sym, data, cx)
                 } else {
                     // TODO: Need to remove the anyhow branch once
                     // full errors are implemented
-                    cons!(sym::ERROR, format!("{err}"); cx)
+                    Cons::new(sym::ERROR, format!("{err}"), cx)
                 };
                 self.unwind(handler.stack_frame, cx);
                 self.env.stack.truncate(handler.stack_size);
-                self.env.stack.push(error);
+                self.env.stack.push(GcObj::from(error));
                 self.pc.goto(handler.jump_code);
                 continue 'main;
             }
@@ -907,7 +908,7 @@ mod test {
         gc::RootSet,
         object::{HashTable, IntoObject, LispVec},
     };
-    use rune_core::macros::{cons, list, rebind, root};
+    use rune_core::macros::{list, rebind, root};
 
     use super::{opcode::OpCode, *};
 
@@ -1160,12 +1161,12 @@ mod test {
 
     #[test]
     fn test_handlers() {
-        use OpCode::*;
+        use OpCode as O;
 
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         sym::init_symbols();
-        let err = cons!(sym::ERROR; cx);
+        let err = Cons::new1(sym::ERROR, cx);
 
         // (lambda (y) (condition-case nil
         //            (floor)
@@ -1174,20 +1175,20 @@ mod test {
             bytecode,
             257,
             [
-                Constant0,
-                PushCondtionCase,
+                O::Constant0,
+                O::PushCondtionCase,
                 0x09,
                 0x0,
-                Constant1,
-                StackRef1,
-                Call1,
-                PopHandler,
-                Return,
-                Discard,
-                Duplicate,
-                Constant2,
-                Plus,
-                Return
+                O::Constant1,
+                O::StackRef1,
+                O::Call1,
+                O::PopHandler,
+                O::Return,
+                O::Discard,
+                O::Duplicate,
+                O::Constant2,
+                O::Plus,
+                O::Return
             ],
             [err, sym::SYMBOL_NAME, 4],
             cx
@@ -1198,16 +1199,16 @@ mod test {
 
     #[test]
     fn test_recursive_handlers() {
-        use OpCode::*;
+        use OpCode as O;
 
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         sym::init_symbols();
-        let err = cons!(sym::ERROR; cx);
+        let err = Cons::new1(sym::ERROR, cx);
 
         // (lambda () (floor))
         // ;; This will error out
-        make_bytecode!(inner, 0, [Constant0, Call0, Return], [sym::FLOOR], cx);
+        make_bytecode!(inner, 0, [O::Constant0, O::Call0, O::Return], [sym::FLOOR], cx);
 
         // (lambda (x)
         //    (condition-case nil
@@ -1217,17 +1218,17 @@ mod test {
             outer,
             257,
             [
-                Constant0,
-                PushCondtionCase,
+                O::Constant0,
+                O::PushCondtionCase,
                 0x08,
                 0x0,
-                Duplicate,
-                Call0,
-                PopHandler,
-                Return,
-                Discard,
-                Constant1,
-                Return
+                O::Duplicate,
+                O::Call0,
+                O::PopHandler,
+                O::Return,
+                O::Discard,
+                O::Constant1,
+                O::Return
             ],
             [err, 7],
             cx

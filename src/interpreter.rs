@@ -14,7 +14,7 @@ use anyhow::Result as AnyResult;
 use anyhow::{anyhow, bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{bail_err, cons, error, rebind, root, rooted_iter};
+use rune_core::macros::{bail_err, error, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 struct Interpreter<'brw, 'rt> {
@@ -209,9 +209,9 @@ impl Interpreter<'_, '_> {
             return Ok(form.bind(cx));
         }
         let env = {
-            let mut tail = cons!(true; cx);
+            let mut tail = GcObj::from(Cons::new1(true, cx));
             for var in self.vars.iter().rev() {
-                tail = cons!(var.bind(cx), tail; cx);
+                tail = Cons::new(var.bind(cx), tail, cx).into();
             }
             tail
         };
@@ -230,7 +230,7 @@ impl Interpreter<'_, '_> {
             }
         }
         let end = Cons::new(env, cons.cdr(), cx);
-        Ok(cons!(sym::CLOSURE, end; cx))
+        Ok(Cons::new(sym::CLOSURE, end, cx).into())
     }
 
     /// Handle special case of oclosure documentation symbol
@@ -624,11 +624,11 @@ impl Interpreter<'_, '_> {
                         let Some((sym, data)) = self.env.get_exception(id) else {
                             unreachable!("Exception not found")
                         };
-                        cons!(sym, data; cx)
+                        Cons::new(sym, data, cx)
                     } else {
                         // TODO: Need to remove the anyhow branch once
                         // full errors are implemented
-                        cons!(sym::ERROR, format!("{err}"); cx)
+                        Cons::new(sym::ERROR, format!("{err}"), cx)
                     };
                     let binding = Cons::new(var, Cons::new1(error, cx), cx);
                     self.vars.push(binding);
@@ -928,7 +928,7 @@ mod test {
         let x = intern("x", cx);
         let y = intern("y", cx);
         let list: GcObj =
-            list![sym::CLOSURE, list![cons!(y, 1; cx), true; cx], list![x; cx], x; cx];
+            list![sym::CLOSURE, list![Cons::new(y, 1, cx), true; cx], list![x; cx], x; cx];
         root!(list, cx);
         check_interpreter("(let ((y 1)) (function (lambda (x) x)))", list, cx);
 

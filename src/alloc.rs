@@ -1,18 +1,18 @@
 //! builtin lisp data structures.
+use crate::core::cons::Cons;
 use crate::core::gc::Context;
 use crate::core::object::{
     ByteFn, ByteString, FnArgs, Gc, GcObj, IntoObject, LispVec, RecordBuilder, Symbol, SymbolCell,
     NIL,
 };
 use anyhow::{ensure, Result};
-use rune_core::macros::cons;
 use rune_macros::defun;
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> {
     let mut head = NIL;
     for object in objects.iter().rev() {
-        head = cons!(*object, head; cx);
+        head = Cons::new(*object, head, cx).into();
     }
     head
 }

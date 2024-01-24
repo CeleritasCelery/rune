@@ -1,4 +1,5 @@
 //! Loading elisp from files and strings.
+use crate::core::cons::Cons;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
@@ -8,7 +9,7 @@ use crate::interpreter;
 use crate::reader;
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
-use rune_core::macros::{cons, root};
+use rune_core::macros::root;
 use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -53,7 +54,7 @@ pub(crate) fn read_from_string<'ob>(
             bail!(e);
         }
     };
-    Ok(cons!(obj, new_pos as i64; cx))
+    Ok(Cons::new(obj, new_pos as i64, cx).into())
 }
 
 pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<bool> {
