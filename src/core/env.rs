@@ -1,7 +1,8 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Block, Context, Rt};
 use super::object::{
-    CloneIn, Function, Gc, GcObj, LispBuffer, OpenBuffer, Symbol, SymbolCell, WithLifetime,
+    CloneIn, Function, Gc, GcObj, IntoObject, LispBuffer, OpenBuffer, Symbol, SymbolCell,
+    WithLifetime,
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;
@@ -158,41 +159,8 @@ pub(crate) struct ObjectMap {
     block: Block<true>,
 }
 
-/// Box is marked as unique. However we are freely sharing the pointer to this
-/// Symbol amoung threads. So instead of Box we need to use a custom wrapper
-/// type for this to be sound.
-struct SymbolBox(*const SymbolCell);
-unsafe impl Send for SymbolBox {}
-
-impl SymbolBox {
-    fn new(inner: SymbolCell) -> Self {
-        let ptr = Box::into_raw(Box::new(inner));
-        Self(ptr)
-    }
-
-    fn from_static(inner: Symbol<'static>) -> Self {
-        Self(inner.get())
-    }
-}
-
-impl AsRef<SymbolCell> for SymbolBox {
-    fn as_ref(&self) -> &SymbolCell {
-        unsafe { &*self.0 }
-    }
-}
-
-// `SymbolBox` should not be dropped until we
-// have a garbage collector
-impl Drop for SymbolBox {
-    fn drop(&mut self) {
-        assert!(!std::thread::panicking(), "Error: Tried to drop Symbol: {:?}", unsafe {
-            &*self.0
-        });
-    }
-}
-
 struct SymbolMap {
-    map: HashMap<&'static str, SymbolBox>,
+    map: HashMap<&'static str, Symbol<'static>>,
 }
 
 impl SymbolMap {
@@ -203,17 +171,17 @@ impl SymbolMap {
     }
 
     fn get(&self, name: &str) -> Option<Symbol> {
-        unsafe {
-            self.map.get(name).map(|x| {
-                let ptr: *const SymbolCell = x.as_ref();
-                Symbol::new(&*ptr)
-            })
-        }
+        self.map.get(name).map(|x| unsafe { x.with_lifetime() })
     }
 
-    fn intern<'ob>(&mut self, name: &str, _cx: &'ob Context) -> Symbol<'ob> {
-        let sym = match self.map.get(name) {
-            Some(x) => x.0,
+    fn intern<'ob, const C: bool>(
+        &mut self,
+        name: &str,
+        block: &Block<C>,
+        cx: &'ob Context,
+    ) -> Symbol<'ob> {
+        match self.get(name) {
+            Some(x) => cx.bind(x),
             None => {
                 let name = name.to_owned();
                 // Leak the memory so that it is static
@@ -222,17 +190,11 @@ impl SymbolMap {
                     &*name_ptr
                 };
                 let inner = SymbolCell::new(static_name);
-                let sym = SymbolBox::new(inner);
-                let ptr: *const SymbolCell = sym.as_ref();
-                self.map.insert(static_name, sym);
-                ptr
+                let sym = inner.into_obj(block).untag();
+                self.map.insert(static_name, unsafe { sym.with_lifetime() });
+                cx.bind(sym)
             }
-        };
-        // SAFETY: We can guarantee that the reference is static because we have
-        // no methods to remove items from SymbolMap and SymbolMap has a private
-        // constructor, so the only one that exists is the one we create in this
-        // module, which is static.
-        unsafe { Symbol::new(&*sym) }
+        }
     }
 
     fn pre_init(&mut self, sym: Symbol<'static>) {
@@ -240,13 +202,13 @@ impl SymbolMap {
         let name = sym.get().name();
         let entry = self.map.entry(name);
         assert!(matches!(entry, Entry::Vacant(_)), "Attempt to intitalize {name} twice");
-        entry.or_insert_with(|| SymbolBox::from_static(sym));
+        entry.or_insert_with(|| sym);
     }
 }
 
 impl ObjectMap {
     pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> Symbol<'ob> {
-        self.map.intern(name, cx)
+        self.map.intern(name, &self.block, cx)
     }
 
     pub(crate) fn set_func(&self, symbol: Symbol, func: Gc<Function>) -> Result<()> {
@@ -254,9 +216,8 @@ impl ObjectMap {
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]
         new_func.untag().set_as_miri_root();
-        // SAFETY: The object is marked read-only, we have cloned in the
-        // map's context, and it is not const, so calling this function
-        // is safe.
+        // SAFETY: The object is marked read-only, we have cloned in the map's
+        // context, and it is const, so calling this function is safe.
         unsafe { symbol.set_func(new_func) }
     }
 
