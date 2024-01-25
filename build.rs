@@ -226,10 +226,10 @@ pub(crate) fn init_symbols() {{
         "
 /// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
 use std::sync::OnceLock;
-static INTERNED_SYMBOLS: OnceLock<Mutex<ObjectMap>> = OnceLock::new();
+static INTERNED_SYMBOLS: OnceLock<std::sync::Mutex<ObjectMap>> = OnceLock::new();
 
-pub(crate) fn interned_symbols() -> &'static Mutex<ObjectMap> {{
-    INTERNED_SYMBOLS.get_or_init(|| Mutex::new({{
+pub(crate) fn interned_symbols() -> &'static std::sync::Mutex<ObjectMap> {{
+    INTERNED_SYMBOLS.get_or_init(|| std::sync::Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
         for sym in &sym::BUILTIN_SYMBOLS {{
@@ -254,6 +254,7 @@ pub(crate) fn init_variables(
     env: &mut crate::core::gc::Rt<crate::core::env::Env>,
 ) {{
 use crate::core::object::Object;
+use rune_core::macros::list;
 "
     )
     .unwrap();
