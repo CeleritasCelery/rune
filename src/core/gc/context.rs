@@ -47,44 +47,12 @@ impl<'rt> Drop for Context<'rt> {
     }
 }
 
-#[derive(Debug, Default, Eq)]
-pub(in crate::core) struct GcMark(pub(in crate::core) Cell<bool>);
-
-impl Trace for GcMark {
-    fn trace(&self, _: &mut Vec<crate::core::object::RawObj>) {
-        self.0.set(true);
-    }
-}
-
-/// This trait represents a type that is managed by the Garbage collector and
-/// therefore has a markbit to preserve it.
-pub(in crate::core) trait GcManaged {
-    fn get_mark(&self) -> &GcMark;
-
-    fn mark(&self) {
-        self.get_mark().0.set(true);
-    }
-
-    fn unmark(&self) {
-        self.get_mark().0.set(false);
-    }
-
-    fn is_marked(&self) -> bool {
-        self.get_mark().0.get()
-    }
-}
-
-impl PartialEq for GcMark {
-    #[inline(always)]
-    fn eq(&self, _: &Self) -> bool {
-        true
-    }
-}
-
 thread_local! {
+    /// Ensure there is only one context per thread.
     static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
 }
 
+/// Ensure there is only one global context.
 static GLOBAL_CHECK: AtomicBool = AtomicBool::new(false);
 
 impl Block<true> {

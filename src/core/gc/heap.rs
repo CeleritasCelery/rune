@@ -6,13 +6,13 @@ use std::{
 
 use crate::core::object::RawObj;
 
-use super::{Block, GcManaged, GcMark, Trace};
+use super::{Block, Trace};
 
 // align to 64-bit boundaries
 #[repr(align(8))]
 #[derive(Debug)]
 struct GcHeader {
-    marked: GcMark,
+    marked: Cell<bool>,
 }
 
 unsafe impl Sync for GcHeader {}
@@ -29,7 +29,7 @@ impl<T> GcHeap<T> {
     pub(in crate::core) fn new<const CONST: bool>(data: T, _: &Block<CONST>) -> Self {
         Self {
             // if the block is const, mark the object so it will not be traced
-            header: GcHeader { marked: GcMark(Cell::new(CONST)) },
+            header: GcHeader { marked: Cell::new(CONST) },
             data,
         }
     }
@@ -38,7 +38,19 @@ impl<T> GcHeap<T> {
     /// is used for "pure" storage of objects that are allocated at the start of
     /// the program and never freed. Only used for the Symbol map at the moment.
     pub(in crate::core) const fn new_pure(data: T) -> Self {
-        Self { header: GcHeader { marked: GcMark(Cell::new(true)) }, data }
+        Self { header: GcHeader { marked: Cell::new(true) }, data }
+    }
+
+    pub(in crate::core) fn is_marked(&self) -> bool {
+        self.header.marked.get()
+    }
+
+    pub(in crate::core) fn mark(&self) {
+        self.header.marked.set(true);
+    }
+
+    pub(in crate::core) fn unmark(&self) {
+        self.header.marked.set(false);
     }
 }
 
@@ -70,12 +82,6 @@ impl<T: PartialEq> PartialEq<T> for GcHeap<T> {
 }
 
 impl<T: Eq> Eq for GcHeap<T> {}
-
-impl<T> GcManaged for GcHeap<T> {
-    fn get_mark(&self) -> &GcMark {
-        &self.header.marked
-    }
-}
 
 impl<T> Deref for GcHeap<T> {
     type Target = T;

@@ -1,7 +1,7 @@
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 
-use super::gc::{Block, Context, GcHeap, GcManaged, GcMark, Trace};
+use super::gc::{Block, Context, GcHeap, Trace};
 use super::object::{CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
@@ -108,12 +108,6 @@ impl ConsInner {
 impl<'new> CloneIn<'new, &'new Cons> for Cons {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Cons> {
         Cons::new(self.car().clone_in(bk), self.cdr().clone_in(bk), bk).into_obj(bk)
-    }
-}
-
-impl GcManaged for Cons {
-    fn get_mark(&self) -> &GcMark {
-        self.0.get_mark()
     }
 }
 

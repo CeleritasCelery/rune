@@ -273,7 +273,7 @@ pub(crate) fn append<'ob>(
             }
         }
         Object::ByteString(string) => {
-            for ch in &**string {
+            for ch in string.iter() {
                 list.push((*ch as i64).into());
             }
         }

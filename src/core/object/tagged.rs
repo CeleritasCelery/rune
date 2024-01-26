@@ -5,14 +5,14 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteFnInner, ByteString, LispBuffer, LispHashTableInner, LispStringInner, LispVecInner,
+    ByteFnInner, ByteString, ByteStringInner, LispBuffer, LispHashTableInner, LispStringInner,
+    LispVecInner,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
     SubrFn, Symbol, SymbolCell,
 };
 use crate::core::env::sym;
-use crate::core::gc::GcManaged;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -191,13 +191,27 @@ impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Gc<T> {
     }
 }
 
-impl<'new, 'old, T: GcManaged + 'new> WithLifetime<'new> for &'old T {
-    type Out = &'new T;
+macro_rules! with_lifetime_impl {
+    ($ty:ty) => {
+        impl<'old, 'new> WithLifetime<'new> for &'old $ty {
+            type Out = &'new $ty;
 
-    unsafe fn with_lifetime(self) -> Self::Out {
-        &*(self as *const T)
-    }
+            unsafe fn with_lifetime(self) -> Self::Out {
+                std::mem::transmute(self)
+            }
+        }
+    };
 }
+
+with_lifetime_impl!(LispFloat);
+with_lifetime_impl!(Cons);
+with_lifetime_impl!(ByteFn);
+with_lifetime_impl!(LispString);
+with_lifetime_impl!(ByteString);
+with_lifetime_impl!(LispVec);
+with_lifetime_impl!(Record);
+with_lifetime_impl!(LispHashTable);
+with_lifetime_impl!(LispBuffer);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -325,7 +339,7 @@ impl IntoObject for Vec<u8> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = ByteString::new(self).alloc_obj(block);
+            let ptr = ByteStringInner::new(self).alloc_obj(block);
             <&ByteString>::tag_ptr(ptr)
         }
     }

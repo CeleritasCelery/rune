@@ -1,6 +1,6 @@
 #![allow(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::{Block, Context, GcHeap, GcManaged, Trace};
+use crate::core::gc::{Block, Context, GcHeap, Trace};
 use crate::core::object::{CloneIn, Function, Gc, IntoObject, RawObj, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
@@ -102,13 +102,7 @@ impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
 
 impl Trace for Symbol<'_> {
     fn trace(&self, stack: &mut Vec<RawObj>) {
-        // interned symbols are not collected yet
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.mark();
-            if let Some(func) = self.get().get() {
-                func.as_obj().trace_mark(stack);
-            }
-        }
+        self.get().trace(stack);
     }
 }
 

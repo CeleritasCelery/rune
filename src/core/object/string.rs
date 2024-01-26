@@ -1,5 +1,5 @@
 use super::{CloneIn, IntoObject};
-use crate::core::gc::{Block, GcHeap, GcManaged, GcMark};
+use crate::core::gc::{Block, GcHeap};
 use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
@@ -74,27 +74,20 @@ impl<'a> From<&'a LispStringInner> for &'a [u8] {
 }
 
 #[derive(PartialEq, Eq, Trace)]
-pub(crate) struct ByteString {
-    gc: GcMark,
+pub(crate) struct ByteStringInner {
     #[no_trace]
     string: Vec<u8>,
 }
 
-unsafe impl Sync for ByteString {}
+pub(crate) type ByteString = GcHeap<ByteStringInner>;
 
-impl ByteString {
+impl ByteStringInner {
     pub(super) fn new(string: Vec<u8>) -> Self {
-        Self { gc: GcMark::default(), string }
+        Self { string }
     }
 }
 
-impl GcManaged for ByteString {
-    fn get_mark(&self) -> &GcMark {
-        &self.gc
-    }
-}
-
-impl Deref for ByteString {
+impl Deref for ByteStringInner {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {

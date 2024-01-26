@@ -1,9 +1,9 @@
 use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteFnInner, ByteString, LispBuffer, LispBufferInner, LispFloat, LispFloatInner,
-    LispHashTable, LispHashTableInner, LispString, LispStringInner, LispVec, LispVecInner,
-    SymbolCell,
+    ByteFn, ByteFnInner, ByteString, ByteStringInner, LispBuffer, LispBufferInner, LispFloat,
+    LispFloatInner, LispHashTable, LispHashTableInner, LispString, LispStringInner, LispVec,
+    LispVecInner, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -75,12 +75,15 @@ impl AllocObject for LispStringInner {
     }
 }
 
-impl AllocObject for ByteString {
-    type Output = Self;
+impl AllocObject for ByteStringInner {
+    type Output = ByteString;
 
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(&mut objects, OwnedObject::ByteString(Box::new(self)));
+        Block::<C>::register(
+            &mut objects,
+            OwnedObject::ByteString(Box::new(GcHeap::new(self, block))),
+        );
         let Some(OwnedObject::ByteString(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }
