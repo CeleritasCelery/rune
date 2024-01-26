@@ -156,8 +156,8 @@ use crate::core::object::SymbolCell;
 use crate::core::object::Symbol;
 
 pub(in crate::core) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
-    SymbolCell::new_const(\"nil\"),
-    SymbolCell::new_const(\"t\"),",
+    SymbolCell::new_static_const(\"nil\"),
+    SymbolCell::new_static_const(\"t\"),",
     )
     .unwrap();
 
@@ -167,18 +167,18 @@ pub(in crate::core) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
             Some(name) => name.trim_matches('"').to_string(),
             None => map_varname(sym),
         };
-        writeln!(f, "    SymbolCell::new(\"{sym_name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new_static(\"{sym_name}\"),").unwrap();
     }
 
     for (_, name, _, _) in &all_defvar {
         #[rustfmt::skip]
-        writeln!(f, "    SymbolCell::new_special(\"{name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new_static_special(\"{name}\"),").unwrap();
     }
 
     // write the list of all defun to a file in out_dir
     for (_, _, lisp_name) in &all_defun {
         #[rustfmt::skip]
-        writeln!(f, "    SymbolCell::new(\"{lisp_name}\"),").unwrap();
+        writeln!(f, "    SymbolCell::new_static(\"{lisp_name}\"),").unwrap();
     }
 
     // End BUILTIN_SYMBOLS
@@ -233,7 +233,7 @@ pub(crate) fn interned_symbols() -> &'static std::sync::Mutex<ObjectMap> {{
         let size: usize = {symbol_len};
         let mut map = SymbolMap::with_capacity(size);
         for sym in &sym::BUILTIN_SYMBOLS {{
-            map.pre_init(Symbol::new(sym));
+            map.pre_init(unsafe {{Symbol::from_ptr(sym as *const _)}});
         }}
         ObjectMap {{
             map,

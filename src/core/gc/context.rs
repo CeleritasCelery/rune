@@ -33,6 +33,13 @@ pub(crate) struct Context<'rt> {
 impl<'rt> Drop for Context<'rt> {
     fn drop(&mut self) {
         self.garbage_collect(true);
+        if self.block.objects.borrow().is_empty() {
+            return;
+        } else {
+            for obj in self.block.objects.borrow().iter() {
+                eprintln!("dropping: {:?}", obj);
+            }
+        }
         assert!(
             std::thread::panicking() || self.block.objects.borrow().is_empty(),
             "Error: Context was dropped while still holding data"

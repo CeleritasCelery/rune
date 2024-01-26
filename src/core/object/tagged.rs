@@ -12,7 +12,7 @@ use super::{
     SubrFn, Symbol, SymbolCell,
 };
 use crate::core::env::sym;
-use crate::core::gc::{GcManaged, Trace};
+use crate::core::gc::GcManaged;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -1382,7 +1382,7 @@ impl<'ob> Gc<Object<'ob>> {
             Object::Record(x) => x.trace_mark(stack),
             Object::HashTable(x) => x.trace_mark(stack),
             Object::Cons(x) => x.trace_mark(stack),
-            Object::Symbol(x) => x.trace(stack),
+            Object::Symbol(x) => x.trace_mark(stack),
             Object::ByteFn(x) => x.trace_mark(stack),
             Object::Buffer(x) => x.trace_mark(stack),
         }

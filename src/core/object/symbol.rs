@@ -1,10 +1,7 @@
 #![allow(unstable_name_collisions)]
-use super::super::gc::Trace;
-use super::super::object::{Function, Gc, WithLifetime};
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::GcManaged;
-use crate::core::object::{CloneIn, IntoObject, TagType};
-use crate::core::{gc::Context, object::RawObj};
+use crate::core::gc::{Block, Context, GcHeap, GcManaged, Trace};
+use crate::core::object::{CloneIn, Function, Gc, IntoObject, RawObj, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
 use std::fmt;
@@ -19,16 +16,15 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// [`ObjectMap::set_func`](`crate::core::env::ObjectMap::set_func`) and they
 /// can only be replaced atomically. In order to garbage collect the function we
 /// need to halt all running threads. This has not been implemented yet.
-pub(crate) struct SymbolCell {
+pub(crate) struct SymbolCellInner {
     name: SymbolName,
-    // Global symbols are always immutable, so we mark them so they are not
-    // traced by the GC.
-    marked: AtomicBool,
     // We can't use AtomicCell due to this issue:
     // https://github.com/crossbeam-rs/crossbeam/issues/748
     func: Option<AtomicPtr<u8>>,
     special: AtomicBool,
 }
+
+pub(crate) type SymbolCell = GcHeap<SymbolCellInner>;
 
 #[derive(Debug)]
 enum SymbolName {
@@ -69,10 +65,6 @@ impl<'a> Symbol<'a> {
         self.data.cast()
     }
 
-    pub(in crate::core) fn new(data: &'a SymbolCell) -> Self {
-        Self::new_runtime(data)
-    }
-
     pub(in crate::core) unsafe fn from_offset_ptr(ptr: *const u8) -> Self {
         Self { data: ptr.cast(), marker: PhantomData }
     }
@@ -86,10 +78,6 @@ impl<'a> Symbol<'a> {
     pub(in crate::core) const fn new_builtin(idx: usize) -> Self {
         let ptr = sptr::invalid(idx * std::mem::size_of::<SymbolCell>());
         Self { data: ptr, marker: PhantomData }
-    }
-
-    pub(super) fn new_runtime(sym: &SymbolCell) -> Self {
-        unsafe { Self::from_ptr(sym) }
     }
 
     pub(crate) fn make_special(self) {
@@ -124,6 +112,17 @@ impl Trace for Symbol<'_> {
     }
 }
 
+impl Trace for SymbolCellInner {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        // interned symbols are not collected yet
+        if matches!(self.name, SymbolName::Uninterned(_)) {
+            if let Some(func) = self.get() {
+                func.as_obj().trace_mark(stack);
+            }
+        }
+    }
+}
+
 impl fmt::Display for Symbol<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
@@ -151,7 +150,7 @@ impl<'old, 'new> Symbol<'old> {
             match bk.uninterned_symbol_map.get(self) {
                 Some(new) => new.tag(),
                 None => {
-                    let sym = SymbolCell::new_uninterned(name);
+                    let sym = Symbol::new_uninterned(name, bk);
                     if let Some(old_func) = self.get().get() {
                         let new_func = old_func.clone_in(bk);
                         unsafe {
@@ -184,51 +183,91 @@ impl Hash for SymbolCell {
     }
 }
 
+impl<'ob> Symbol<'ob> {
+    pub(in crate::core) fn new(name: &'static str, block: &'ob Block<true>) -> Self {
+        SymbolCell::new_normal(name, block).into_obj(block).untag()
+    }
+
+    pub(crate) fn new_uninterned<const C: bool>(name: &str, block: &'ob Block<C>) -> Self {
+        SymbolCell::new_uninterned(name, block).into_obj(block).untag()
+    }
+}
+
 impl SymbolCell {
     const NULL: *mut u8 = std::ptr::null_mut();
     #[allow(clippy::declare_interior_mutable_const)]
     const EMTPTY: AtomicPtr<u8> = AtomicPtr::new(Self::NULL);
 
-    pub(in crate::core) const fn new(name: &'static str) -> Self {
+    fn new_normal(name: &'static str, block: &Block<true>) -> Self {
         // We have to do this workaround because starts_with is not const
         if name.as_bytes()[0] == b':' {
-            Self::new_const(name)
+            Self::new_const(name, block)
         } else {
-            Self {
+            GcHeap::new(
+                SymbolCellInner {
+                    name: SymbolName::Interned(name),
+                    func: Some(Self::EMTPTY),
+                    special: AtomicBool::new(false),
+                },
+                block,
+            )
+        }
+    }
+
+    pub(in crate::core) const fn new_static(name: &'static str) -> Self {
+        // We have to do this workaround because starts_with is not const
+        if name.as_bytes()[0] == b':' {
+            Self::new_static_const(name)
+        } else {
+            GcHeap::new_pure(SymbolCellInner {
                 name: SymbolName::Interned(name),
                 func: Some(Self::EMTPTY),
-                marked: AtomicBool::new(true),
                 special: AtomicBool::new(false),
-            }
+            })
         }
     }
 
-    pub(in crate::core) const fn new_special(name: &'static str) -> Self {
-        Self {
+    pub(in crate::core) const fn new_static_special(name: &'static str) -> Self {
+        GcHeap::new_pure(SymbolCellInner {
             name: SymbolName::Interned(name),
             func: Some(Self::EMTPTY),
-            marked: AtomicBool::new(true),
             special: AtomicBool::new(true),
-        }
+        })
     }
 
-    pub(in crate::core) const fn new_const(name: &'static str) -> Self {
-        Self {
+    fn new_const(name: &'static str, block: &Block<true>) -> Self {
+        GcHeap::new(
+            SymbolCellInner {
+                name: SymbolName::Interned(name),
+                func: None,
+                special: AtomicBool::new(true),
+            },
+            block,
+        )
+    }
+
+    pub(in crate::core) const fn new_static_const(name: &'static str) -> Self {
+        GcHeap::new_pure(SymbolCellInner {
             name: SymbolName::Interned(name),
             func: None,
-            marked: AtomicBool::new(true),
             special: AtomicBool::new(true),
-        }
+        })
     }
 
-    pub(crate) fn new_uninterned(name: &str) -> Self {
-        Self {
-            name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
-            func: Some(Self::EMTPTY),
-            marked: AtomicBool::new(false),
-            special: AtomicBool::new(false),
-        }
+    fn new_uninterned<const C: bool>(name: &str, block: &Block<C>) -> Self {
+        GcHeap::new(
+            SymbolCellInner {
+                name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
+                func: Some(Self::EMTPTY),
+                special: AtomicBool::new(false),
+            },
+            block,
+        )
     }
+}
+
+impl SymbolCellInner {
+    const NULL: *mut u8 = std::ptr::null_mut();
 
     pub(crate) fn name(&self) -> &str {
         match &self.name {
@@ -237,13 +276,13 @@ impl SymbolCell {
         }
     }
 
-    pub(crate) const fn interned(&self) -> bool {
+    pub(crate) fn interned(&self) -> bool {
         matches!(self.name, SymbolName::Interned(_))
     }
 
     #[inline(always)]
     /// Check if the symbol is constant like nil, t, or :keyword
-    pub(crate) const fn is_const(&self) -> bool {
+    pub(crate) fn is_const(&self) -> bool {
         self.func.is_none()
     }
 
@@ -300,50 +339,13 @@ impl SymbolCell {
     }
 }
 
-impl GcManaged for SymbolCell {
-    fn get_mark(&self) -> &crate::core::gc::GcMark {
-        panic!("Symbol does not use GcMark")
-    }
-
-    fn mark(&self) {
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.marked.store(true, Ordering::Release);
-        }
-    }
-
-    fn unmark(&self) {
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.marked.store(false, Ordering::Release);
-        }
-    }
-
-    fn is_marked(&self) -> bool {
-        match self.name {
-            SymbolName::Uninterned(_) => self.marked.load(Ordering::Acquire),
-            SymbolName::Interned(_) => true,
-        }
-    }
-}
-
-impl Trace for SymbolCell {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
-        // interned symbols are not collected yet
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            self.mark();
-            if let Some(func) = self.get() {
-                func.as_obj().trace_mark(stack);
-            }
-        }
-    }
-}
-
-impl fmt::Display for SymbolCell {
+impl fmt::Display for SymbolCellInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl fmt::Debug for SymbolCell {
+impl fmt::Debug for SymbolCellInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }

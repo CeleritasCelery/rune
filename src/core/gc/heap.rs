@@ -13,12 +13,11 @@ use super::{Block, GcManaged, GcMark, Trace};
 #[derive(Debug)]
 struct GcHeader {
     marked: GcMark,
-    #[allow(dead_code)]
-    size: u32,
 }
 
 unsafe impl Sync for GcHeader {}
 
+/// A block of memory allocated on the heap that is managed by the garbage collector.
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct GcHeap<T: ?Sized> {
@@ -29,13 +28,17 @@ pub(crate) struct GcHeap<T: ?Sized> {
 impl<T> GcHeap<T> {
     pub(in crate::core) fn new<const CONST: bool>(data: T, _: &Block<CONST>) -> Self {
         Self {
-            header: GcHeader {
-                // if the block is const, mark the object so it will not be traced
-                marked: GcMark(Cell::new(CONST)),
-                size: std::mem::size_of::<T>() as u32,
-            },
+            // if the block is const, mark the object so it will not be traced
+            header: GcHeader { marked: GcMark(Cell::new(CONST)) },
             data,
         }
+    }
+
+    /// Allocate a new object that is not managed by the garbage collector. This
+    /// is used for "pure" storage of objects that are allocated at the start of
+    /// the program and never freed. Only used for the Symbol map at the moment.
+    pub(in crate::core) const fn new_pure(data: T) -> Self {
+        Self { header: GcHeader { marked: GcMark(Cell::new(true)) }, data }
     }
 }
 

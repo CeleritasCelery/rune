@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Block, Context},
-    object::{CloneIn, Function, Gc, IntoObject, LispBuffer, Symbol, SymbolCell, WithLifetime},
+    object::{CloneIn, Function, Gc, LispBuffer, Symbol, WithLifetime},
 };
 use anyhow::Result;
 use rune_core::hashmap::HashMap;
@@ -25,12 +25,7 @@ impl SymbolMap {
         self.map.get(name).map(|x| unsafe { x.with_lifetime() })
     }
 
-    fn intern<'ob, const C: bool>(
-        &mut self,
-        name: &str,
-        block: &Block<C>,
-        cx: &'ob Context,
-    ) -> Symbol<'ob> {
+    fn intern<'ob>(&mut self, name: &str, block: &Block<true>, cx: &'ob Context) -> Symbol<'ob> {
         match self.get(name) {
             Some(x) => cx.bind(x),
             None => {
@@ -40,8 +35,7 @@ impl SymbolMap {
                     let name_ptr: *const str = Box::into_raw(name.into_boxed_str());
                     &*name_ptr
                 };
-                let inner = SymbolCell::new(static_name);
-                let sym = inner.into_obj(block).untag();
+                let sym = Symbol::new(static_name, block);
                 self.map.insert(static_name, unsafe { sym.with_lifetime() });
                 cx.bind(sym)
             }
@@ -103,10 +97,6 @@ mod test {
         assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
     }
 
-    unsafe fn fix_lifetime(inner: Symbol) -> Symbol<'static> {
-        std::mem::transmute::<Symbol, Symbol<'static>>(inner)
-    }
-
     #[test]
     fn init() {
         let roots = &RootSet::default();
@@ -119,8 +109,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         sym::init_symbols();
-        let inner = SymbolCell::new("foo");
-        let sym = unsafe { fix_lifetime(Symbol::new(&inner)) };
+        let sym = Symbol::new_uninterned("foo", cx);
         assert_eq!("foo", sym.name());
         assert!(sym.func(cx).is_none());
         let func1 = Cons::new1(1, cx);

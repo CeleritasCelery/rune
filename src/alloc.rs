@@ -2,8 +2,7 @@
 use crate::core::cons::Cons;
 use crate::core::gc::Context;
 use crate::core::object::{
-    ByteFn, ByteString, FnArgs, Gc, GcObj, IntoObject, LispVec, RecordBuilder, Symbol, SymbolCell,
-    NIL,
+    ByteFn, ByteString, FnArgs, Gc, GcObj, IntoObject, LispVec, RecordBuilder, Symbol, NIL,
 };
 use anyhow::{ensure, Result};
 use rune_macros::defun;
@@ -84,7 +83,6 @@ fn purecopy(obj: GcObj) -> GcObj {
 }
 
 #[defun]
-fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Gc<Symbol<'ob>> {
-    let sym = SymbolCell::new_uninterned(name);
-    sym.into_obj(cx)
+fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
+    Symbol::new_uninterned(name, cx)
 }
