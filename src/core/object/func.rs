@@ -14,19 +14,25 @@ use anyhow::{bail, ensure, Result};
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
-/// A function implemented in lisp. Note that all functions are byte compiled,
-/// so this contains the byte-code representation of the function.
-#[derive(PartialEq, Eq, Trace)]
-pub(crate) struct ByteFnInner {
-    #[no_trace]
-    pub(crate) args: FnArgs,
-    #[no_trace]
-    pub(crate) depth: usize,
-    #[no_trace]
-    op_codes: Box<[u8]>,
-    constants: Vec<GcObj<'static>>,
+mod sealed {
+    use super::*;
+
+    #[derive(PartialEq, Eq, Trace)]
+    pub(crate) struct ByteFnInner {
+        #[no_trace]
+        pub(crate) args: FnArgs,
+        #[no_trace]
+        pub(crate) depth: usize,
+        #[no_trace]
+        pub(super) op_codes: Box<[u8]>,
+        pub(super) constants: Vec<GcObj<'static>>,
+    }
 }
 
+pub(in crate::core) use sealed::ByteFnInner;
+
+/// A function implemented in lisp. Note that all functions are byte compiled,
+/// so this contains the byte-code representation of the function.
 pub(crate) type ByteFn = GcHeap<ByteFnInner>;
 
 define_unbox!(ByteFn, Func, &'ob ByteFn);

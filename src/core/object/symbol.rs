@@ -9,6 +9,20 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+mod sealed {
+    use super::{AtomicBool, AtomicPtr, SymbolName};
+
+    pub(crate) struct SymbolCellInner {
+        pub(super) name: SymbolName,
+        // We can't use AtomicCell due to this issue:
+        // https://github.com/crossbeam-rs/crossbeam/issues/748
+        pub(super) func: Option<AtomicPtr<u8>>,
+        pub(super) special: AtomicBool,
+    }
+}
+
+pub(in crate::core) use sealed::SymbolCellInner;
+
 /// The allocation of a global symbol. This is shared between threads, so the
 /// interned value of a symbol will be the same location no matter which thread
 /// interned it. Functions are safe to share between threads because they are
@@ -16,14 +30,6 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// [`ObjectMap::set_func`](`crate::core::env::ObjectMap::set_func`) and they
 /// can only be replaced atomically. In order to garbage collect the function we
 /// need to halt all running threads. This has not been implemented yet.
-pub(crate) struct SymbolCellInner {
-    name: SymbolName,
-    // We can't use AtomicCell due to this issue:
-    // https://github.com/crossbeam-rs/crossbeam/issues/748
-    func: Option<AtomicPtr<u8>>,
-    special: AtomicBool,
-}
-
 pub(crate) type SymbolCell = GcHeap<SymbolCellInner>;
 
 #[derive(Debug)]

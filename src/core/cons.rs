@@ -10,12 +10,17 @@ mod iter;
 
 pub(crate) use iter::*;
 
-#[derive(Eq)]
-pub(crate) struct ConsInner {
-    mutable: bool,
-    car: ObjCell,
-    cdr: ObjCell,
+mod sealed {
+    use super::*;
+    #[derive(Eq)]
+    pub(crate) struct ConsInner {
+        pub(super) mutable: bool,
+        pub(super) car: ObjCell,
+        pub(super) cdr: ObjCell,
+    }
 }
+
+pub(in crate::core) use sealed::ConsInner;
 
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct Cons(GcHeap<ConsInner>);

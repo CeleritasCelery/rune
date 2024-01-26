@@ -165,7 +165,7 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
         // or we switch to nightly, this can be moved into a const
         // assertion.
         #[cfg(test)]
-        #[allow(non_snake_case_types)]
+        #[allow(non_snake_case)]
         mod #test_mod {
             #[test]
             #[doc(hidden)]

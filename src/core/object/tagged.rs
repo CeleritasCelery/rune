@@ -170,7 +170,7 @@ impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
 // Traits for Objects //
 ////////////////////////
 
-/// Helper trait to change the lifetime of a [GcManaged] type. This is useful
+/// Helper trait to change the lifetime of a Gc mangaged type. This is useful
 /// because objects are initially tied to the lifetime of the
 /// [Context](crate::core::gc::Context) they are allocated in. But when rooted
 /// the lifetime is dissociated from the Context. If we only worked with

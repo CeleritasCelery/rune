@@ -1,15 +1,23 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap};
-use rune_macros::Trace;
 use std::{
     fmt::{Debug, Display},
     ops::Deref,
 };
 
-#[derive(PartialEq, Eq)]
-pub(crate) struct LispStringInner {
-    string: String,
+mod sealed {
+    #[derive(PartialEq, Eq)]
+    pub(crate) struct LispStringInner {
+        pub(super) string: String,
+    }
+
+    #[derive(PartialEq, Eq)]
+    pub(crate) struct ByteStringInner {
+        pub(super) string: Vec<u8>,
+    }
 }
+
+pub(in crate::core) use sealed::{ByteStringInner, LispStringInner};
 
 pub(crate) type LispString = GcHeap<LispStringInner>;
 
@@ -71,12 +79,6 @@ impl<'a> From<&'a LispStringInner> for &'a [u8] {
     fn from(value: &'a LispStringInner) -> Self {
         value.as_bytes()
     }
-}
-
-#[derive(PartialEq, Eq, Trace)]
-pub(crate) struct ByteStringInner {
-    #[no_trace]
-    string: Vec<u8>,
 }
 
 pub(crate) type ByteString = GcHeap<ByteStringInner>;

@@ -94,13 +94,19 @@ pub(crate) struct BufferData {
     pub(crate) text: TextBuffer,
 }
 
-/// A lisp handle to a buffer. This is a just a reference type and does not give
-/// access to the contents until it is locked and a `OpenBuffer` is returned.
-#[derive(Debug)]
-pub(crate) struct LispBufferInner {
-    text_buffer: Mutex<Option<BufferData>>,
+mod sealed {
+    use super::{BufferData, Mutex};
+
+    #[derive(Debug)]
+    pub(crate) struct LispBufferInner {
+        pub(super) text_buffer: Mutex<Option<BufferData>>,
+    }
 }
 
+pub(in crate::core) use sealed::LispBufferInner;
+
+/// A lisp handle to a buffer. This is a just a reference type and does not give
+/// access to the contents until it is locked and a `OpenBuffer` is returned.
 pub(crate) type LispBuffer = GcHeap<LispBufferInner>;
 
 impl LispBuffer {

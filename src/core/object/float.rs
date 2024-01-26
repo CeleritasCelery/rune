@@ -2,16 +2,20 @@ use crate::core::gc::GcHeap;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
+mod sealed {
+    #[derive(PartialEq)]
+    #[repr(transparent)]
+    pub(crate) struct LispFloatInner(pub(in crate::core) f64);
+}
+
+pub(in crate::core) use sealed::LispFloatInner;
+
+impl Eq for LispFloatInner {}
+
 /// A wrapper type for floats to work around issues with Eq. Rust only allows
 /// types to be used in match statements if they derive Eq. Even if you never
 /// actually use that field in a match. So we need a float wrapper that
 /// implements that trait.
-#[derive(PartialEq)]
-#[repr(transparent)]
-pub(crate) struct LispFloatInner(pub(crate) f64);
-
-impl Eq for LispFloatInner {}
-
 pub(crate) type LispFloat = GcHeap<LispFloatInner>;
 
 impl Deref for LispFloatInner {

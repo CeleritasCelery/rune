@@ -12,10 +12,16 @@ pub(crate) struct HashTableView<'ob, T> {
     inner: IndexMap<GcObj<'ob>, T>,
 }
 
-#[derive(Eq)]
-pub(crate) struct LispHashTableInner {
-    inner: RefCell<HashTableView<'static, ObjCell>>,
+mod sealed {
+    use super::*;
+
+    #[derive(Eq)]
+    pub(crate) struct LispHashTableInner {
+        pub(super) inner: RefCell<HashTableView<'static, ObjCell>>,
+    }
 }
+
+pub(in crate::core) use sealed::LispHashTableInner;
 
 pub(crate) type LispHashTable = GcHeap<LispHashTableInner>;
 

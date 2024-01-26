@@ -10,16 +10,26 @@ use std::{
     ptr::addr_of,
 };
 
-/// A lisp vector. Unlike vectors in other languages this is not resizeable.
-/// This type is represented as slice of [`ObjCell`] which is immutable by
-/// default. However with the [`LispVec::try_mut`] method, you can obtain a mutable view
-/// into this slice.
-#[derive(Eq)]
-pub(crate) struct LispVecInner {
-    is_const: bool,
-    inner: Box<[ObjCell]>,
+mod sealed {
+    use super::*;
+
+    #[derive(Eq)]
+    pub(crate) struct LispVecInner {
+        pub(super) is_const: bool,
+        pub(super) inner: Box<[ObjCell]>,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Trace)]
+    #[repr(transparent)]
+    pub(crate) struct RecordInner(pub(super) LispVecInner);
 }
 
+pub(in crate::core) use sealed::{LispVecInner, RecordInner};
+
+/// A lisp vector. Unlike vectors in other languages this is not resizeable.
+/// This type is represented as slice of [`ObjCell`] which is immutable by
+/// default. However with the [try_mut](LispVecInner::try_mut) method, you can obtain a mutable view
+/// into this slice.
 pub(crate) type LispVec = GcHeap<LispVecInner>;
 
 impl PartialEq for LispVecInner {
@@ -115,10 +125,6 @@ impl LispVecInner {
 
 #[repr(transparent)]
 pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<GcObj<'ob>>);
-
-#[derive(Debug, PartialEq, Eq, Trace)]
-#[repr(transparent)]
-pub(crate) struct RecordInner(LispVecInner);
 
 pub(crate) type Record = GcHeap<RecordInner>;
 
