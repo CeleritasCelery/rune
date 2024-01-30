@@ -2,7 +2,7 @@
 use crate::core::{
     env::Env,
     gc::{Context, Rt},
-    object::{Gc, GcObj, List, NIL},
+    object::{Gc, GcObj, List, Object, NIL},
 };
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
@@ -42,15 +42,16 @@ fn string_match<'ob>(
 #[defun]
 fn replace_match(
     newtext: &str,
-    fixedcase: Option<()>,
-    literal: Option<()>,
+    _fixedcase: Option<()>,
+    _literal: Option<()>,
     string: Option<&str>,
     subexp: Option<usize>,
     env: &Rt<Env>,
     cx: &Context,
 ) -> Result<String> {
-    ensure!(literal.is_none(), "replace-match literal field is not implemented");
-    ensure!(fixedcase.is_none(), "replace-match fixedcase field is not implemented");
+    // TODO: Handle newtext interpolation. Treat \ as special. See docstring for more.
+    //
+    // TODO: Handle automatic case adjustment
     let Some(string) = string else { bail!("replace-match for buffers not yet implemented") };
     let mut match_data = env.match_data.bind(cx).as_list()?.fallible();
     let subexp = subexp.unwrap_or(0);
@@ -152,6 +153,21 @@ fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Resul
 fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
     let list = env.match_data.bind(cx).as_list()?;
     Ok(list.fallible().nth(subexp + 1)?.unwrap_or_default())
+}
+
+#[defun]
+#[allow(non_snake_case)]
+fn match_data__translate(n: i64, env: &Rt<Env>, cx: &Context) -> Result<()> {
+    let search_regs: Gc<List> = env.match_data.bind(cx).try_into()?;
+    for reg in search_regs.conses() {
+        let reg = reg?;
+        if let Object::Int(old) = reg.car().untag() {
+            reg.set_car((old + n).into())?;
+        } else {
+            bail!("match data was not int");
+        }
+    }
+    Ok(())
 }
 
 #[defun]
