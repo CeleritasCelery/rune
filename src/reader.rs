@@ -397,9 +397,9 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         match self.tokens.next() {
             Some(Token::CloseParen(_)) => Ok(None),
             Some(sexp) => {
-                let obj = self.read_sexp(sexp);
+                let obj = self.read_sexp(sexp)?;
                 match self.tokens.next() {
-                    Some(Token::CloseParen(_)) => obj.map(Some),
+                    Some(Token::CloseParen(_)) => Ok(Some(obj)),
                     Some(token) => Err(Error::ExtraItemInCdr(self.tokens.relative_pos(token))),
                     None => Err(Error::MissingCloseParen(delim)),
                 }
@@ -690,6 +690,7 @@ baz""#,
         assert_error("(1 3 \0)", Error::UnexpectedChar('\0', 5), cx);
         assert_error(" '", Error::MissingQuotedItem(1), cx);
         assert_error(" )", Error::ExtraCloseParen(1), cx);
+        assert_error("(1 . #o9 3)", Error::ParseInt(8, 5), cx);
     }
 
     #[test]
