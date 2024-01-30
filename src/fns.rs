@@ -12,7 +12,7 @@ use crate::{
     },
     data::aref,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{list, rebind, root, rooted_iter};
@@ -73,14 +73,33 @@ fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
 
 #[defun]
 fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    let plist: Result<Gc<List>, _> = plist.try_into();
-    let Ok(plist) = plist else { return Ok(NIL) };
+    let Ok(plist) = Gc::<List>::try_from(plist) else { return Ok(NIL) };
     // TODO: this function should never fail. Need to implement safe iterator
-    let iter = plist.elements().zip(plist.elements().skip(1));
-
-    for (cur_prop, value) in iter {
+    let mut iter = plist.elements();
+    while let Some(cur_prop) = iter.next() {
+        let Some(value) = iter.next() else { return Ok(NIL) };
         if eq(cur_prop?, prop) {
             return Ok(value?);
+        }
+    }
+    Ok(NIL)
+}
+
+#[defun]
+fn plist_member<'ob>(
+    plist: GcObj<'ob>,
+    prop: GcObj<'ob>,
+    predicate: Option<GcObj>,
+) -> Result<GcObj<'ob>> {
+    ensure!(predicate.is_none(), "plist-member predicate support not implemented");
+    let plist: Gc<List> = plist.try_into()?;
+    for (idx, value) in plist.conses().enumerate() {
+        if idx % 2 != 0 {
+            continue;
+        }
+        let value = value?;
+        if eq(value.car(), prop) {
+            return Ok(value.into());
         }
     }
     Ok(NIL)

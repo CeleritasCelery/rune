@@ -296,8 +296,7 @@ impl SymbolCellInner {
     fn get(&self) -> Option<Gc<Function>> {
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
-            // If ptr is null then the symbol-function is nil. This is because
-            // nil is represented as a null pointer.
+            // nil is represented as zero (null pointer).
             if !ptr.is_null() {
                 return Some(unsafe { Gc::from_raw_ptr(ptr) });
             }
