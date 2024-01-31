@@ -134,7 +134,7 @@ pub(crate) fn mapcar<'ob>(
         Object::NIL => Ok(NIL),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
-            root!(outputs, Vec::new(), cx);
+            root!(outputs, Vec::<GcObj>::new(), cx);
             while let Some(obj) = iter.next()? {
                 let frame = &mut CallFrame::new(env);
                 frame.push_arg(obj);
@@ -147,7 +147,7 @@ pub(crate) fn mapcar<'ob>(
         Object::ByteFn(fun) => {
             let len = fun.len();
             root!(fun, cx);
-            root!(outputs, Vec::new(), cx);
+            root!(outputs, Vec::<GcObj>::new(), cx);
             for i in 0..len {
                 let frame = &mut CallFrame::new(env);
                 let val = fun.bind(cx).index(i, cx).unwrap();

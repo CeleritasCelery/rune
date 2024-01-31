@@ -30,7 +30,7 @@ pub(crate) fn eval<'ob>(
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>, anyhow::Error> {
     cx.garbage_collect(false);
-    root!(vars, Vec::new(), cx);
+    root!(vars, Vec::<&Cons>::new(), cx);
     let mut interpreter = Interpreter { vars, env };
     interpreter.eval_form(form, cx).map_err(Into::into)
 }
@@ -180,7 +180,7 @@ impl Interpreter<'_, '_> {
         }
 
         rooted_iter!(iter, args, cx);
-        root!(args, Vec::new(), cx);
+        root!(args, Vec::<GcObj>::new(), cx);
         while let Some(x) = iter.next()? {
             let result = self.eval_form(x, cx)?;
             args.push(result);
@@ -259,7 +259,7 @@ impl Interpreter<'_, '_> {
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let mut count = 0;
-        root!(returned_form, None, cx);
+        root!(returned_form, None::<GcObj>, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
             let value = self.eval_form(form, cx)?;
@@ -474,7 +474,7 @@ impl Interpreter<'_, '_> {
     }
 
     fn let_bind_parallel(&mut self, form: &Rt<GcObj>, cx: &mut Context) -> Result<u16, EvalError> {
-        root!(let_bindings, Vec::new(), cx);
+        root!(let_bindings, Vec::<(Symbol, GcObj)>::new(), cx);
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next()? {
             match binding.untag(cx) {

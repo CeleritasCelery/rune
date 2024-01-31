@@ -95,6 +95,7 @@ mod test {
     use super::*;
     use rune_core::macros::root;
 
+    #[derive(Default)]
     struct Foo(u64);
     impl Trace for Foo {
         fn trace(&self, _stack: &mut Vec<RawObj>) {
