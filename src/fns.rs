@@ -455,7 +455,7 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 }
 
 // TODO: Handle sorting vectors
-// TODO: Sort shouldn't change the values in place
+// TODO: Sort items in place
 #[defun]
 fn sort<'ob>(
     seq: &Rt<Gc<List>>,
@@ -478,11 +478,12 @@ fn sort<'ob>(
         let mut j = i;
         while j > 0 {
             let frame = &mut CallFrame::new(env);
-            frame.push_arg(&vec[j - 1]);
             frame.push_arg(&*tmp);
+            frame.push_arg(&vec[j - 1]);
+            // check if elements are out of order
             match predicate.call(frame, None, cx) {
                 Ok(cmp) => {
-                    if cmp != NIL {
+                    if cmp == NIL {
                         break;
                     }
                 }
@@ -1008,6 +1009,21 @@ mod test {
             root!(func, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![5, 4, 3, 2, 1; cx]);
+        }
+        {
+            // check stable sorting
+            let func = sym::CAR_LESS_THAN_CAR.func(cx).unwrap();
+            let list: Gc<List> =
+                list![Cons::new(1, 1, cx), Cons::new(1, 2, cx), Cons::new(1, 3, cx); cx]
+                    .try_into()
+                    .unwrap();
+            root!(list, cx);
+            root!(func, cx);
+            let res = rebind!(sort(list, func, env, cx).unwrap());
+            assert_eq!(
+                res,
+                list![Cons::new(1, 1, cx), Cons::new(1, 2, cx), Cons::new(1, 3, cx); cx]
+            );
         }
     }
 
