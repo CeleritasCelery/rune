@@ -429,7 +429,7 @@ impl Rt<Gc<Function<'_>>> {
         let name = name.unwrap_or("lambda");
         frame.finalize_arguments();
         let arg_cnt = frame.arg_count();
-        debug!("calling {self:?}");
+        debug!("calling: {self}");
         match self.untag(cx) {
             Function::ByteFn(f) => {
                 root!(f, cx);

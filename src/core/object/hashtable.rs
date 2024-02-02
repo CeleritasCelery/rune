@@ -55,8 +55,11 @@ impl LispHashTableInner {
     }
 
     pub(in crate::core) fn make_const(&mut self) {
-        // Leak the borrow so that is cannot be borrowed mutabley
-        std::mem::forget(self.inner.borrow());
+        // TODO: once we have resolved
+        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
+        // that is cannot be borrowed mutabley. In the mean time this will
+        // introduce a race condtion when access from multiple threads.
+        // std::mem::forget(self.inner.borrow());
     }
 
     pub(crate) fn borrow<'a>(&'a self) -> Ref<'a, HashTableView<'a, ObjCell>> {

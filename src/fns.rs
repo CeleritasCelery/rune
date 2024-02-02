@@ -655,7 +655,7 @@ pub(crate) fn make_hash_table<'ob>(
         let Some(val) = keyword_args.get((i * 2) + 1) else {
             bail!("Missing keyword value for :test")
         };
-        if *val != sym::EQ && *val != sym::EQUAL {
+        if *val != sym::EQ && *val != sym::EQUAL && *val != sym::EQL {
             // TODO: we are currently only using `equal', but eq should be okay
             bail!("only `eq' and `equal' keywords support for make-hash-table :test. Found {val}");
         }

@@ -96,7 +96,7 @@ impl ConsInner {
             unsafe { self.car.as_mut().set(new_car) }
             Ok(())
         } else {
-            Err(anyhow!("Attempt to call set-car on immutable cons cell"))
+            Err(anyhow!("Attempt to call setcar on immutable cons cell"))
         }
     }
 
@@ -105,7 +105,7 @@ impl ConsInner {
             unsafe { self.cdr.as_mut().set(new_cdr) }
             Ok(())
         } else {
-            Err(anyhow!("Attempt to call set-cdr on immutable cons cell"))
+            Err(anyhow!("Attempt to call setcdr on immutable cons cell"))
         }
     }
 }

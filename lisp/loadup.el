@@ -256,10 +256,10 @@
 ;; (load "language/indonesian")
 
 ;; (load "indent")
-;; (load "emacs-lisp/cl-generic")
+(load "emacs-lisp/cl-generic")
 ;; (load "simple")
 ;; (load "emacs-lisp/seq")
-;; (load "emacs-lisp/nadvice")
+(load "emacs-lisp/nadvice")
 ;; RUNE-BOOTSTRAP
 ;; (load "minibuffer") ;Needs cl-generic (and define-minor-mode).
 ;; (load "frame")

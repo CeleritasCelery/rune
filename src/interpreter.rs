@@ -208,6 +208,8 @@ impl Interpreter<'_, '_> {
         if cons.car() != sym::LAMBDA {
             return Ok(form.bind(cx));
         }
+        root!(doc, cons.cdr(), cx);
+        let body = rebind!(self.replace_doc_symbol(doc, cx)?);
         let env = {
             let mut tail = GcObj::from(Cons::new1(true, cx));
             for var in self.vars.iter().rev() {
@@ -215,7 +217,8 @@ impl Interpreter<'_, '_> {
             }
             tail
         };
-        Self::replace_doc_symbol(cons, cx)?;
+        // This function will trim the environment down to only what is actually
+        // captured in the closure
         if let Some(closure_fn) = self.env.vars.get(sym::INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION)
         {
             if closure_fn.bind(cx) != sym::NIL {
@@ -223,33 +226,48 @@ impl Interpreter<'_, '_> {
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
                     let frame = &mut CallFrame::new(self.env);
-                    frame.push_arg(form.bind(cx));
+                    frame.push_arg(GcObj::from(Cons::new(sym::LAMBDA, body, cx)));
                     frame.push_arg(env);
                     return closure_fn.call(frame, None, cx);
                 }
             }
         }
-        let end = Cons::new(env, cons.cdr(), cx);
+        // If the closure capture function is not defined, use the whole environment
+        let end = Cons::new(env, body, cx);
         Ok(Cons::new(sym::CLOSURE, end, cx).into())
     }
 
-    /// Handle special case of oclosure documentation symbol
-    fn replace_doc_symbol(cons: &Cons, cx: &Context) -> Result<(), EvalError> {
-        let Some(doc_str) = cons.conses().fallible().nth(2)? else { return Ok(()) };
-        let Object::Cons(c) = doc_str.car().untag() else { return Ok(()) };
-        if c.car() != sym::KW_DOCUMENTATION {
-            return Ok(());
-        }
-        let Object::Cons(c) = c.cdr().untag() else { return Ok(()) };
-        let Object::Cons(c) = c.car().untag() else { return Ok(()) };
-        let Some(sym) = c.elements().nth(1) else { return Ok(()) };
-        match sym?.untag() {
-            Object::Symbol(s) if s != sym::NIL => {
-                let doc = cx.add(s.name());
-                Ok(doc_str.set_car(doc)?)
+    /// Handle special case of (:documentation form) to build the docstring
+    /// dynamically. If the docstring is not of this form, just return the current body.
+    fn replace_doc_symbol<'ob>(&mut self, quoted: &Rt<GcObj>, cx: &'ob mut Context) -> Result<GcObj<'ob>, EvalError> {
+        // quoted = ((<args..>) (doc_str) ...)
+        let docstring = {
+            let Ok(list) = quoted.bind(cx).as_list() else { return Ok(quoted.bind(cx)) };
+            let Some(doc) = list.fallible().nth(1)? else { return Ok(quoted.bind(cx)) };
+            let Object::Cons(doc_cons) = doc.untag() else { return Ok(quoted.bind(cx)) };
+            if doc_cons.car() != sym::KW_DOCUMENTATION {
+                return Ok(quoted.bind(cx));
             }
-            _ => Ok(()),
-        }
+            let Object::Cons(doc_cons) = doc_cons.cdr().untag() else { return Ok(quoted.bind(cx)) };
+            root!(doc_form, doc_cons.car(), cx);
+            let docstring = rebind!(self.eval_form(doc_form, cx)?);
+            // Handle the special case of oclosure docstrings being a symbol
+            if let Object::Symbol(sym) = docstring.untag() {
+                if sym != sym::NIL {
+                    cx.add(sym.name())
+                } else {
+                    docstring
+                }
+            } else {
+                docstring
+            }
+        };
+        // ((<args..>) (:documentation <form>) body)
+        let mut forms = quoted.bind(cx).as_list().unwrap().fallible();
+        let arg_list = forms.next()?.unwrap();
+        let _old_doc = forms.next()?.unwrap();
+        let body = forms.next()?.unwrap_or_default();
+        Ok(Cons::new(arg_list, Cons::new(docstring, body, cx), cx).into())
     }
 
     fn eval_progx<'ob>(
@@ -608,6 +626,8 @@ impl Interpreter<'_, '_> {
                     let condition = cons.car();
                     match condition.untag() {
                         Object::Symbol(sym::ERROR | sym::VOID_VARIABLE) => {}
+                        // TODO: Remove this once error handling is correctly implemented
+                        Object::Symbol(s) if s.name() == "cl--generic-cyclic-definition" => {}
                         Object::Cons(conditions) => {
                             for condition in conditions {
                                 let condition = condition?;
