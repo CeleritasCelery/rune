@@ -66,6 +66,11 @@ impl ElemIter<'_> {
         self.clone().fallible().count()
     }
 
+    /// Take the rest of the list as a cons.
+    pub(crate) fn rest(&self) -> Result<Option<&Cons>, ConsError> {
+        self.0.cons.transpose()
+    }
+
     pub(crate) fn fallible(self) -> fallible_iterator::Convert<Self> {
         fallible_iterator::convert(self)
     }

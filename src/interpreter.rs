@@ -239,7 +239,11 @@ impl Interpreter<'_, '_> {
 
     /// Handle special case of (:documentation form) to build the docstring
     /// dynamically. If the docstring is not of this form, just return the current body.
-    fn replace_doc_symbol<'ob>(&mut self, quoted: &Rt<GcObj>, cx: &'ob mut Context) -> Result<GcObj<'ob>, EvalError> {
+    fn replace_doc_symbol<'ob>(
+        &mut self,
+        quoted: &Rt<GcObj>,
+        cx: &'ob mut Context,
+    ) -> Result<GcObj<'ob>, EvalError> {
         // quoted = ((<args..>) (doc_str) ...)
         let docstring = {
             let Ok(list) = quoted.bind(cx).as_list() else { return Ok(quoted.bind(cx)) };
@@ -263,10 +267,10 @@ impl Interpreter<'_, '_> {
             }
         };
         // ((<args..>) (:documentation <form>) body)
-        let mut forms = quoted.bind(cx).as_list().unwrap().fallible();
-        let arg_list = forms.next()?.unwrap();
-        let _old_doc = forms.next()?.unwrap();
-        let body = forms.next()?.unwrap_or_default();
+        let mut forms = quoted.bind(cx).as_list().unwrap();
+        let arg_list = forms.next().unwrap()?;
+        let _old_doc = forms.next().unwrap()?;
+        let body = forms.rest()?.map(|x| x.into()).unwrap_or(NIL);
         Ok(Cons::new(arg_list, Cons::new(docstring, body, cx), cx).into())
     }
 
