@@ -122,12 +122,6 @@ pub(crate) struct FnArgs {
     pub(crate) advice: bool,
 }
 
-impl Display for FnArgs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.required, self.optional, self.rest)
-    }
-}
-
 impl FnArgs {
     pub(crate) fn from_arg_spec(spec: u64) -> Result<Self> {
         // The spec is an integer of the form NNNNNNNRMMMMMMM where the 7bit
@@ -202,7 +196,7 @@ impl<'new> WithLifetime<'new> for &SubrFn {
 
 impl Display for SubrFn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(Builtin: {} -> {})", &self.name, self.args)
+        write!(f, "#<subr {}>", &self.name)
     }
 }
 
