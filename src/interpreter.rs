@@ -11,7 +11,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{bail_err, error, rebind, root, rooted_iter};
@@ -211,9 +211,10 @@ impl Interpreter<'_, '_> {
         root!(doc, cons.cdr(), cx);
         let body = rebind!(self.replace_doc_symbol(doc, cx)?);
         let env = {
+            let vars = self.vars.bind_ref(cx);
             let mut tail = GcObj::from(Cons::new1(true, cx));
-            for var in self.vars.iter().rev() {
-                tail = Cons::new(var.bind(cx), tail, cx).into();
+            for var in vars {
+                tail = Cons::new(*var, tail, cx).into();
             }
             tail
         };
@@ -687,6 +688,7 @@ pub(crate) fn call_closure<'ob>(
             rooted_iter!(forms, closure.cdr(), cx);
             let args = Rt::bind_slice(&env.stack[..arg_cnt], cx);
             let vars = bind_variables(&mut forms, args, name, cx)?;
+            debug!("call vars: {vars:?}");
             root!(vars, cx);
             Interpreter { vars, env }.implicit_progn(forms, cx)
         }
@@ -722,11 +724,14 @@ fn parse_closure_env(obj: GcObj) -> AnyResult<Vec<&Cons>> {
             Object::Cons(pair) => {
                 env.push(pair);
             }
-            Object::TRUE => return Ok(env),
+            Object::TRUE => break,
             x => bail!("Invalid closure environment member: {x}"),
         }
     }
-    Err(anyhow!("Closure env did not end with `t`"))
+    // The highest priority bindings are at the start of the closure list, but
+    // the end of the enviroment vector
+    env.reverse();
+    Ok(env)
 }
 
 fn bind_args<'a>(
@@ -975,6 +980,11 @@ mod test {
         check_interpreter(
             "(let ((x #'(lambda (x &optional y &rest z) (cons x (cons y z))))) (funcall x 5 7 11))",
             list,
+            cx,
+        );
+        check_interpreter(
+            "(let (z) (setq z (let ((x 5)) (let ((x 3)) (function (lambda () x))))) (funcall z))",
+            3,
             cx,
         );
     }
