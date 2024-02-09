@@ -49,7 +49,7 @@ impl<'rt> Drop for Context<'rt> {
 
 thread_local! {
     /// Ensure there is only one context per thread.
-    static SINGLETON_CHECK: Cell<bool> = Cell::new(false);
+    static SINGLETON_CHECK: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Ensure there is only one global context.
