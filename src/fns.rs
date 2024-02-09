@@ -534,12 +534,9 @@ pub(crate) fn require<'ob>(
     };
     let file = file.into_obj(cx);
     root!(file, cx);
-    match crate::lread::load(file, None, None, cx, env) {
+    match crate::lread::load(file, noerror, None, cx, env) {
         Ok(_) => Ok(feature.untag(cx)),
-        Err(e) => match noerror {
-            Some(()) => Ok(sym::NIL),
-            None => Err(e),
-        },
+        Err(e) => Err(e),
     }
 }
 
@@ -865,6 +862,11 @@ mod test {
             let list = list![1, 2, 3, 4; cx];
             let res = nreverse(list.try_into().unwrap()).unwrap();
             assert_eq!(res, list![4, 3, 2, 1; cx]);
+        }
+        {
+            let list = list![1, 2,; cx];
+            let res = nreverse(list.try_into().unwrap()).unwrap();
+            assert_eq!(res, list![2, 1; cx]);
         }
         {
             let list = list![1; cx];
