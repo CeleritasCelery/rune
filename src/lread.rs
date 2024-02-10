@@ -1,15 +1,18 @@
 //! Loading elisp from files and strings.
 use crate::core::cons::Cons;
-use crate::core::env::{sym, Env};
+use crate::core::env::{sym, CallFrame, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
-use crate::core::object::{Gc, GcObj, LispString, Object, Symbol, WithLifetime, NIL};
+use crate::core::object::{
+    Function, Gc, GcObj, LispString, Object, Symbol, WithLifetime, NIL, TRUE,
+};
 use crate::interpreter;
 use crate::reader;
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
-use rune_core::macros::root;
+use fallible_streaming_iterator::FallibleStreamingIterator;
+use rune_core::macros::{rebind, root, rooted_iter};
 use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -59,6 +62,11 @@ pub(crate) fn read_from_string<'ob>(
 
 pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<bool> {
     let mut pos = 0;
+    let macroexpand: Option<Gc<Function>> = None;
+    root!(macroexpand, cx);
+    if let Some(fun) = sym::INTERNAL_MACROEXPAND_FOR_LOAD.func(cx) {
+        macroexpand.set(Some(fun));
+    }
     loop {
         let (obj, new_pos) = match reader::read(&contents[pos..], cx) {
             Ok((obj, pos)) => (obj, pos),
@@ -74,10 +82,54 @@ pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>)
             println!("-----READ END-----");
         }
         root!(obj, cx);
-        interpreter::eval(obj, None, env, cx)?;
+        let result = if let Some(fun) = macroexpand.as_ref() {
+            eager_expand(obj, fun, env, cx)
+        } else {
+            interpreter::eval(obj, None, env, cx)
+        };
+        if let Err(e) = result {
+            let content = &contents[pos..(new_pos + pos)];
+            println!("-----LOAD ERROR START-----\n {content}");
+            println!("-----LOAD ERROR END-----");
+            return Err(e);
+        }
         assert_ne!(new_pos, 0);
         pos += new_pos;
     }
+}
+
+fn eager_expand<'ob>(
+    obj: &Rt<GcObj>,
+    macroexpand: &Rt<Gc<Function>>,
+    env: &mut Rt<Env>,
+    cx: &'ob mut Context,
+) -> Result<GcObj<'ob>, anyhow::Error> {
+    let name = Some("internal-macroexpand-for-load");
+    let val = {
+        let frame = &mut CallFrame::new(env);
+        frame.push_arg(obj);
+        frame.push_arg(NIL);
+        rebind!(macroexpand.call(frame, name, cx)?)
+    };
+    if let Object::Cons(top) = val.untag() {
+        if top.car() == sym::PROGN {
+            root!(val, NIL, cx);
+            rooted_iter!(forms, top.cdr(), cx);
+            while let Some(form) = forms.next()? {
+                let result = eager_expand(form, macroexpand, env, cx)?;
+                val.set(result);
+            }
+            return Ok(val.bind(cx));
+        }
+    }
+    let result = {
+        let frame = &mut CallFrame::new(env);
+        frame.push_arg(obj);
+        frame.push_arg(TRUE);
+        macroexpand.call(frame, name, cx)?
+    };
+    root!(result, cx);
+    interpreter::eval(result, None, env, cx)
 }
 
 fn file_in_path(file: &str, path: &str) -> Option<PathBuf> {
@@ -128,10 +180,7 @@ pub(crate) fn load(
         match find_file_in_load_path(file, cx, env) {
             Ok(x) => x,
             Err(e) => {
-                return match noerror {
-                    true => Ok(false),
-                    false => Err(e),
-                };
+                return if noerror { Ok(false) } else { Err(e) };
             }
         }
     };
@@ -194,6 +243,7 @@ pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> 
     }
 }
 
+defsym!(INTERNAL_MACROEXPAND_FOR_LOAD);
 defvar!(LEXICAL_BINDING, true);
 defvar!(CURRENT_LOAD_LIST);
 defvar!(LOAD_HISTORY);

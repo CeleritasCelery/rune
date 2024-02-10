@@ -21,10 +21,6 @@
   "stub of function for bootstrapping"
   docstring)
 
-(defun advice--cd*r (f)
-  "stub of function for bootstrapping"
-  f)
-
 (defun help-split-fundoc (docstring def &optional section)
   "stub of function for bootstrapping"
   (cons docstring ""))
