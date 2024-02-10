@@ -19,6 +19,17 @@ impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
     }
 }
 
+impl TryFrom<GcObj<'_>> for f64 {
+    type Error = anyhow::Error;
+    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
+        match obj.untag() {
+            Object::Int(x) => Ok(x as f64),
+            Object::Float(x) => Ok(***x),
+            x => Err(TypeError::new(Type::Number, x).into()),
+        }
+    }
+}
+
 impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
     type Error = anyhow::Error;
     fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {

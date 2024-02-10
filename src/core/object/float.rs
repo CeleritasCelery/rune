@@ -1,4 +1,5 @@
-use crate::core::gc::GcHeap;
+use super::{CloneIn, IntoObject};
+use crate::core::gc::{Block, GcHeap};
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
@@ -23,6 +24,12 @@ impl Deref for LispFloatInner {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<'new> CloneIn<'new, &'new LispFloat> for LispFloat {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+        (***self).into_obj(bk)
     }
 }
 
