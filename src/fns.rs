@@ -2,7 +2,7 @@
 use crate::{
     core::{
         cons::Cons,
-        env::{sym, CallFrame, Env},
+        env::{sym, Env},
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
@@ -15,7 +15,7 @@ use crate::{
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{list, rebind, root, rooted_iter};
+use rune_core::macros::{call, list, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]
@@ -136,9 +136,7 @@ pub(crate) fn mapcar<'ob>(
             rooted_iter!(iter, cons, cx);
             root!(outputs, Vec::<GcObj>::new(), cx);
             while let Some(obj) = iter.next()? {
-                let frame = &mut CallFrame::new(env);
-                frame.push_arg(obj);
-                let output = function.call(frame, None, cx)?;
+                let output = call!(function, obj; env, cx)?;
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
@@ -149,10 +147,8 @@ pub(crate) fn mapcar<'ob>(
             root!(fun, cx);
             root!(outputs, Vec::<GcObj>::new(), cx);
             for i in 0..len {
-                let frame = &mut CallFrame::new(env);
                 let val = fun.bind(cx).index(i, cx).unwrap();
-                frame.push_arg(val);
-                let output = function.call(frame, None, cx)?;
+                let output = call!(function, val; env, cx)?;
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
@@ -174,9 +170,7 @@ pub(crate) fn mapc<'ob>(
         List::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
-                let frame = &mut CallFrame::new(env);
-                frame.push_arg(elem);
-                function.call(frame, None, cx)?;
+                call!(function, elem; env, cx)?;
             }
             Ok(sequence.bind(cx).into())
         }
@@ -344,11 +338,9 @@ pub(crate) fn assoc<'ob>(
             rooted_iter!(iter, alist, cx);
             while let Some(elem) = iter.next()? {
                 if let Object::Cons(cons) = elem.bind(cx).untag() {
-                    let frame = &mut CallFrame::new(env);
-                    frame.push_arg(key);
-                    frame.push_arg(cons.car());
+                    let val = cons.car();
                     root!(cons, cx);
-                    let result = func.call(frame, None, cx)?;
+                    let result = call!(func, key, val; env, cx)?;
                     if result != NIL {
                         return Ok(cons.bind(cx).into());
                     }
@@ -477,11 +469,9 @@ fn sort<'ob>(
         tmp.set(&vec[i]);
         let mut j = i;
         while j > 0 {
-            let frame = &mut CallFrame::new(env);
-            frame.push_arg(&*tmp);
-            frame.push_arg(&vec[j - 1]);
+            let result = call!(predicate, &*tmp, &vec[j - 1]; env, cx);
             // check if elements are out of order
-            match predicate.call(frame, None, cx) {
+            match result {
                 Ok(cmp) => {
                     if cmp == NIL {
                         break;
@@ -723,15 +713,15 @@ fn maphash(
     };
 
     loop {
-        let frame = &mut CallFrame::new(env);
-        {
-            let mut view = table.bind(cx).untag().try_borrow_mut()?;
-            let Some(idx) = get_idx(&mut view) else { break };
-            let (key, val) = view.get_index(idx).unwrap();
-            frame.push_arg(*key);
-            frame.push_arg(*val);
-        }
-        if let Err(e) = function.call(frame, None, cx) {
+        let mut view = table.bind(cx).untag().try_borrow_mut()?;
+        let Some(idx) = get_idx(&mut view) else { break };
+        let (key, val) = view.get_index(idx).unwrap();
+        let key = cx.bind(*key);
+        let val = cx.bind(*val);
+        // Drop the hashtable so that the function can access it.
+        drop(view);
+        let result = call!(function, key, val; env, cx);
+        if let Err(e) = result {
             table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
             return Err(e.into());
         }

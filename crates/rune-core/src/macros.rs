@@ -154,6 +154,25 @@ macro_rules! __rebind {
     }};
 }
 
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __call {
+    ($fn:ident $(,$args:expr)* ; $env:expr, $cx:expr) => {{
+        let frame = &mut crate::core::env::CallFrame::new($env);
+        $(frame.push_arg($args);)*
+        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::Function>>::call(
+            $fn, frame, None, $cx
+        )
+    }};
+    ($fn:ident $(,$args:expr)* ; $name:expr, $env:expr, $cx:expr) => {{
+        let frame = &mut crate::core::env::CallFrame::new($env);
+        $(frame.push_arg($args);)*
+        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::Function>>::call(
+            $fn, frame, Some($name), $cx
+        )
+    }};
+}
+
 /// TODO: Document
 #[doc(inline)]
 pub use __bail_err as bail_err;
@@ -173,6 +192,10 @@ pub use __list as list;
 /// Helper macro for the `rebind!` macro
 #[doc(inline)]
 pub use __last as last;
+
+/// Helper macro to call a function with arguments
+#[doc(inline)]
+pub use __call as call;
 
 /// Rebinds an object so that it is bound to an immutable borrow of `crate::gc::Context`
 /// instead of a mutable borrow. This can release the mutable borrow and allow

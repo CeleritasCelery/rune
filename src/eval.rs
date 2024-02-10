@@ -1,6 +1,4 @@
 //! Lisp evaluation primitives.
-use std::fmt::{Display, Formatter};
-
 use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
 use crate::core::error::{ArgError, Type, TypeError};
@@ -14,8 +12,9 @@ use crate::fns::{assq, eq};
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{bail_err, list, root, rooted_iter};
+use rune_core::macros::{bail_err, call, list, root, rooted_iter};
 use rune_macros::defun;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub(crate) struct EvalError {
@@ -180,15 +179,15 @@ fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> R
                         Object::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
-                                let func: &Rt<Gc<Function>> = hook.try_into()?;
-                                func.call(&mut CallFrame::new(env), None, cx)?;
+                                let func = hook.try_into()?;
+                                call!(func; env, cx)?;
                             }
                         }
                         Object::NIL => {}
                         _ => {
                             let func: Gc<Function> = val.try_into()?;
                             root!(func, cx);
-                            func.call(&mut CallFrame::new(env), None, cx)?;
+                            call!(func; env, cx)?;
                         }
                     }
                 }
@@ -225,7 +224,7 @@ fn run_hook_with_args<'ob>(
                     _ => {
                         let func: Gc<Function> = val.try_into()?;
                         root!(func, cx);
-                        func.call(&mut CallFrame::new(env), None, cx)?;
+                        call!(func; env, cx)?;
                     }
                 }
             }

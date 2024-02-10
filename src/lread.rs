@@ -1,6 +1,6 @@
 //! Loading elisp from files and strings.
 use crate::core::cons::Cons;
-use crate::core::env::{sym, CallFrame, Env};
+use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
@@ -12,7 +12,7 @@ use crate::reader;
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{rebind, root, rooted_iter};
+use rune_core::macros::{call, rebind, root, rooted_iter};
 use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,13 +104,9 @@ fn eager_expand<'ob>(
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<GcObj<'ob>, anyhow::Error> {
-    let name = Some("internal-macroexpand-for-load");
-    let val = {
-        let frame = &mut CallFrame::new(env);
-        frame.push_arg(obj);
-        frame.push_arg(NIL);
-        rebind!(macroexpand.call(frame, name, cx)?)
-    };
+    let name = "internal-macroexpand-for-load";
+    let val = call!(macroexpand, obj, NIL; name, env, cx)?;
+    let val = rebind!(val, cx);
     if let Object::Cons(top) = val.untag() {
         if top.car() == sym::PROGN {
             root!(val, NIL, cx);
@@ -122,12 +118,7 @@ fn eager_expand<'ob>(
             return Ok(val.bind(cx));
         }
     }
-    let result = {
-        let frame = &mut CallFrame::new(env);
-        frame.push_arg(obj);
-        frame.push_arg(TRUE);
-        macroexpand.call(frame, name, cx)?
-    };
+    let result = call!(macroexpand, obj, TRUE; name, env, cx)?;
     root!(result, cx);
     interpreter::eval(result, None, env, cx)
 }

@@ -14,7 +14,7 @@ use anyhow::Result as AnyResult;
 use anyhow::{bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{bail_err, error, rebind, root, rooted_iter};
+use rune_core::macros::{bail_err, call, error, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 struct Interpreter<'brw, 'rt> {
@@ -226,10 +226,8 @@ impl Interpreter<'_, '_> {
                 let closure_fn: Result<&Rt<Gc<Function>>, _> = closure_fn.try_into();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
-                    let frame = &mut CallFrame::new(self.env);
-                    frame.push_arg(GcObj::from(Cons::new(sym::LAMBDA, body, cx)));
-                    frame.push_arg(env);
-                    return closure_fn.call(frame, None, cx);
+                    let lambda = GcObj::from(Cons::new(sym::LAMBDA, body, cx));
+                    return call!(closure_fn, lambda, env; self.env, cx);
                 }
             }
         }
