@@ -110,7 +110,7 @@ mod test {
         let foo = Foo(7);
         assert_eq!(roots.roots.borrow().len(), 0);
         {
-            root!(_root, foo, cx);
+            root!(_root, init(foo), cx);
             assert_eq!(roots.roots.borrow().len(), 1);
         }
         assert_eq!(roots.roots.borrow().len(), 0);

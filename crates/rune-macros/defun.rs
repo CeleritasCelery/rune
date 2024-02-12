@@ -32,7 +32,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         // a slice.
         let positional_args = (required + optional) as usize;
         quote! {
-            rune_core::macros::root!(args, [crate::core::object::NIL; #positional_args], cx);
+            rune_core::macros::root!(args, init([crate::core::object::NIL; #positional_args]), cx);
             let pos_count = std::cmp::min(arg_cnt, #positional_args);
             let stack_slice = &env.stack[..arg_cnt];
             for i in 0..pos_count {

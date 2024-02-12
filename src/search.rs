@@ -198,7 +198,7 @@ mod test {
     fn test_replace_match() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let string = "foo bar baz";
         let newtext = "quux";
         string_match("bar", string, None, None, env, cx).unwrap();

@@ -43,7 +43,7 @@ use std::io::{self, Write};
 fn main() {
     let roots = &RootSet::default();
     let cx = &mut Context::new(roots);
-    root!(env, Env::default(), cx);
+    root!(env, new(Env), cx);
 
     let args = Args::parse();
 

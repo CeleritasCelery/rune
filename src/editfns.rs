@@ -183,7 +183,7 @@ mod test {
     fn test_insert() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let buffer = get_buffer_create(cx.add("test_insert"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);
@@ -200,7 +200,7 @@ mod test {
     fn test_delete_region() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let buffer = get_buffer_create(cx.add("test_delete_region"), Some(NIL), cx).unwrap();
         set_buffer(buffer, env, cx).unwrap();
         cx.garbage_collect(true);

@@ -64,25 +64,16 @@ macro_rules! __root {
     ($ident:ident, $cx:ident) => {
         rune_core::macros::root!(@ $ident, unsafe { crate::core::gc::IntoRoot::into_root($ident) }, $cx);
     };
-    ($ident:ident, $value:expr, $cx:ident) => {
-        // What is this struct and trait doing here?
-        // https://github.com/dtolnay/case-studies/blob/master/autoref-specialization/README.md
-        struct A<T>(Option<T>);
-        trait B<T> {
-            fn f(self) -> T;
-        }
-        impl<T: crate::core::gc::IntoRoot<U>, U> B<U> for A<T> {
-            fn f(self) -> U {
-                unsafe { crate::core::gc::IntoRoot::into_root(self.0.unwrap()) }
-            }
-        }
-        impl<T> B<T> for &mut A<T> {
-            fn f(self) -> T {
-                self.0.take().unwrap()
-            }
-        }
-        let value = A(Some($value)).f();
+    ($ident:ident, init($init:expr), $cx:ident) => {
+        let value = $init;
         rune_core::macros::root!(@ $ident, value, $cx);
+    };
+    ($ident:ident, new($path:tt$(<$ty:ty>)?), $cx:ident) => {
+        let value = $path$(::<$ty>)?::default();
+        rune_core::macros::root!(@ $ident, value, $cx);
+    };
+    ($ident:ident, $value:expr, $cx:ident) => {
+        rune_core::macros::root!(@ $ident, unsafe { crate::core::gc::IntoRoot::into_root($value) }, $cx);
     };
     (@ $ident:ident, $value:expr, $cx:ident) => {
         let mut rooted = $value;

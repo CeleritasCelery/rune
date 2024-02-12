@@ -167,7 +167,7 @@ mod test {
     fn test_init_variables() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         init_variables(cx, env);
     }
 }

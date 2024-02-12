@@ -238,8 +238,7 @@ mod test {
     fn garbage_collect() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        let vec1: Vec<GcObj> = Vec::new();
-        root!(vec, vec1, cx);
+        root!(vec, new(Vec), cx);
         cx.garbage_collect(true);
         let cons = list!["foo", 1, false, "end"; cx];
         vec.push(cons);

@@ -134,7 +134,7 @@ pub(crate) fn mapcar<'ob>(
         Object::NIL => Ok(NIL),
         Object::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
-            root!(outputs, Vec::<GcObj>::new(), cx);
+            root!(outputs, new(Vec), cx);
             while let Some(obj) = iter.next()? {
                 let output = call!(function, obj; env, cx)?;
                 outputs.push(output);
@@ -145,7 +145,7 @@ pub(crate) fn mapcar<'ob>(
         Object::ByteFn(fun) => {
             let len = fun.len();
             root!(fun, cx);
-            root!(outputs, Vec::<GcObj>::new(), cx);
+            root!(outputs, new(Vec), cx);
             for i in 0..len {
                 let val = fun.bind(cx).index(i, cx).unwrap();
                 let output = call!(function, val; env, cx)?;
@@ -941,7 +941,7 @@ mod test {
         table.insert(3.into(), 10.into());
         let table = table.into_obj(cx);
         let func = sym::EQ.func(cx).unwrap();
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         root!(table, cx);
         root!(func, cx);
         // This test does not assert anything, but allows this to be checked by
@@ -955,7 +955,7 @@ mod test {
         sym::init_symbols();
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let func = sym::LESS_THAN.func(cx).unwrap();
         root!(func, cx);
         {

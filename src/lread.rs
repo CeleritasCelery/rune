@@ -256,7 +256,7 @@ mod test {
     fn test_load() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", cx, env).unwrap();
 
         let obj = reader::read("(+ foo bar baz)", cx).unwrap().0;

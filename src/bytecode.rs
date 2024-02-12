@@ -978,7 +978,7 @@ mod test {
         expect: &Rt<GcObj>,
         cx: &mut Context,
     ) {
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let frame = &mut CallFrame::new(env);
         frame.push_arg_slice(Rt::bind_slice(args, cx));
         frame.finalize_arguments();

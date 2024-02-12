@@ -21,7 +21,7 @@ fn go_internal(obj: GcObj) -> JoinHandle<()> {
     thread::spawn(move || {
         let roots = &RootSet::default();
         let cx = &mut Context::from_block(block, roots);
-        root!(env, Env::default(), cx);
+        root!(env, new(Env), cx);
         let obj = unsafe { GcObj::from_raw(raw) };
         root!(obj, cx);
         _ = crate::interpreter::eval(obj, None, env, cx);
