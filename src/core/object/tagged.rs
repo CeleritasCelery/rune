@@ -19,8 +19,6 @@ use sptr::Strict;
 use std::fmt;
 use std::marker::PhantomData;
 
-pub(crate) type Object<'ob> = Gc<ObjectType<'ob>>;
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RawObj {
     ptr: *const u8,
@@ -807,12 +805,14 @@ macro_rules! cast_gc {
 // Number
 #[derive(Copy, Clone)]
 #[repr(u8)]
+/// The enum form of [Number] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum NumberType<'ob> {
     Int(i64) = Tag::Int as u8,
     Float(&'ob LispFloat) = Tag::Float as u8,
 }
 cast_gc!(NumberType<'ob> => i64, &LispFloat);
 
+/// Represents a tagged pointer to a number value
 pub(crate) type Number<'ob> = Gc<NumberType<'ob>>;
 
 impl<'old, 'new> WithLifetime<'new> for NumberType<'old> {
@@ -826,12 +826,15 @@ impl<'old, 'new> WithLifetime<'new> for NumberType<'old> {
 // List
 #[derive(Copy, Clone)]
 #[repr(u8)]
+/// The enum form of [List] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum ListType<'ob> {
-    Nil = 0,
+    // Since Tag::Symbol is 0 and sym::NIL is 0, we can use 0 as the nil value
+    Nil = Tag::Symbol as u8,
     Cons(&'ob Cons) = Tag::Cons as u8,
 }
 cast_gc!(ListType<'ob> => &'ob Cons);
 
+/// Represents a tagged pointer to a list value (cons or nil)
 pub(crate) type List<'ob> = Gc<ListType<'ob>>;
 
 impl ListType<'_> {
@@ -851,6 +854,7 @@ impl<'old, 'new> WithLifetime<'new> for ListType<'old> {
 // Function
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
+/// The enum form of [Function] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum FunctionType<'ob> {
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
@@ -859,6 +863,9 @@ pub(crate) enum FunctionType<'ob> {
 }
 cast_gc!(FunctionType<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, Symbol<'ob>);
 
+/// Represents a tagged pointer to a lisp object that could be interpreted as a
+/// function. Note that not all `Function` types are valid functions (it could
+/// be a cons cell for example).
 pub(crate) type Function<'ob> = Gc<FunctionType<'ob>>;
 
 impl<'old, 'new> WithLifetime<'new> for FunctionType<'old> {
@@ -903,9 +910,7 @@ impl<'ob> FunctionType<'ob> {
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-/// The Object defintion that contains all other possible lisp objects. This
-/// type must remain covariant over 'ob. This is just an expanded form of our
-/// tagged pointer type to take advantage of ergonomics of enums in Rust.
+/// The enum form of [Object] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum ObjectType<'ob> {
     Int(i64) = Tag::Int as u8,
     Float(&'ob LispFloat) = Tag::Float as u8,
@@ -920,6 +925,10 @@ pub(crate) enum ObjectType<'ob> {
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
 }
+
+/// The Object defintion that contains all other possible lisp objects. This
+/// type must remain covariant over 'ob.
+pub(crate) type Object<'ob> = Gc<ObjectType<'ob>>;
 
 cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          ListType<'ob>,
