@@ -5,7 +5,7 @@ use super::{
     },
     display_slice, CloneIn, IntoObject,
 };
-use super::{GcObj, WithLifetime};
+use super::{Object, WithLifetime};
 use crate::core::{
     env::Env,
     gc::{GcHeap, Rt},
@@ -25,7 +25,7 @@ mod sealed {
         pub(crate) depth: usize,
         #[no_trace]
         pub(super) op_codes: Box<[u8]>,
-        pub(super) constants: Vec<GcObj<'static>>,
+        pub(super) constants: Vec<Object<'static>>,
     }
 }
 
@@ -44,7 +44,7 @@ impl ByteFn {
     // the GC heap, because holding it past garbage collections is unsafe.
     pub(crate) unsafe fn make(
         op_codes: &[u8],
-        consts: Vec<GcObj>,
+        consts: Vec<Object>,
         args: FnArgs,
         depth: usize,
     ) -> ByteFnInner {
@@ -62,11 +62,13 @@ impl ByteFnInner {
         &self.op_codes
     }
 
-    pub(crate) fn consts<'ob>(&'ob self) -> &'ob [GcObj<'ob>] {
-        unsafe { std::mem::transmute::<&'ob [GcObj<'static>], &'ob [GcObj<'ob>]>(&self.constants) }
+    pub(crate) fn consts<'ob>(&'ob self) -> &'ob [Object<'ob>] {
+        unsafe {
+            std::mem::transmute::<&'ob [Object<'static>], &'ob [Object<'ob>]>(&self.constants)
+        }
     }
 
-    pub(crate) fn index<'ob>(&self, index: usize, cx: &'ob Context) -> Option<GcObj<'ob>> {
+    pub(crate) fn index<'ob>(&self, index: usize, cx: &'ob Context) -> Option<Object<'ob>> {
         match index {
             0 => Some((self.args.into_arg_spec() as i64).into()),
             1 => Some(cx.add(self.codes().to_vec())),
@@ -165,7 +167,7 @@ impl FnArgs {
 }
 
 pub(crate) type BuiltInFn =
-    for<'ob> fn(usize, &mut Rt<Env>, &'ob mut Context) -> Result<GcObj<'ob>>;
+    for<'ob> fn(usize, &mut Rt<Env>, &'ob mut Context) -> Result<Object<'ob>>;
 
 #[derive(Eq)]
 pub(crate) struct SubrFn {
@@ -181,7 +183,7 @@ impl SubrFn {
         arg_cnt: usize,
         env: &mut Rt<Env>,
         cx: &'ob mut Context,
-    ) -> Result<GcObj<'ob>> {
+    ) -> Result<Object<'ob>> {
         (self.subr)(arg_cnt, env, cx)
     }
 }

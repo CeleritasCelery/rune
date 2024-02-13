@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Block, Context},
-    object::{CloneIn, Function, Gc, LispBuffer, Symbol, WithLifetime},
+    object::{CloneIn, Function, LispBuffer, Symbol, WithLifetime},
 };
 use anyhow::Result;
 use rune_core::hashmap::HashMap;
@@ -56,7 +56,7 @@ impl ObjectMap {
         self.map.intern(name, &self.block, cx)
     }
 
-    pub(crate) fn set_func(&self, symbol: Symbol, func: Gc<Function>) -> Result<()> {
+    pub(crate) fn set_func(&self, symbol: Symbol, func: Function) -> Result<()> {
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
         #[cfg(miri)]
@@ -87,14 +87,15 @@ pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 mod test {
     use super::*;
     use crate::core::gc::{Context, RootSet};
-    use crate::core::{cons::Cons, env::Env, object::GcObj};
+    use crate::core::object::FunctionType;
+    use crate::core::{cons::Cons, env::Env, object::Object};
     use rune_core::macros::{list, root};
     use std::mem::size_of;
 
     #[test]
     fn size() {
         assert_eq!(size_of::<isize>(), size_of::<Symbol>());
-        assert_eq!(size_of::<isize>(), size_of::<Gc<Function>>());
+        assert_eq!(size_of::<isize>(), size_of::<Function>());
     }
 
     #[test]
@@ -117,7 +118,7 @@ mod test {
             sym.set_func(func1.into()).unwrap();
         }
         let cell1 = sym.func(cx).unwrap();
-        let Function::Cons(before) = cell1.untag() else {
+        let FunctionType::Cons(before) = cell1.untag() else {
             unreachable!("Type should be a lisp function")
         };
         assert_eq!(before.car(), 1);
@@ -126,7 +127,7 @@ mod test {
             sym.set_func(func2.into()).unwrap();
         }
         let cell2 = sym.func(cx).unwrap();
-        let Function::Cons(after) = cell2.untag() else {
+        let FunctionType::Cons(after) = cell2.untag() else {
             unreachable!("Type should be a lisp function")
         };
         assert_eq!(after.car(), 2);
@@ -145,7 +146,7 @@ mod test {
         let cons = list!(1, 2, 3; cx);
         assert_eq!(cons, list!(1, 2, 3; cx));
         // is mutable
-        if let crate::core::object::Object::Cons(cons) = cons.untag() {
+        if let crate::core::object::ObjectType::Cons(cons) = cons.untag() {
             cons.set_car(4.into()).unwrap();
         } else {
             unreachable!();
@@ -154,9 +155,9 @@ mod test {
         let sym = intern("cons-test", cx);
         crate::data::fset(sym, cons).unwrap();
         // is not mutable
-        if let Function::Cons(cons) = sym.func(cx).unwrap().untag() {
+        if let FunctionType::Cons(cons) = sym.func(cx).unwrap().untag() {
             assert!(cons.set_car(5.into()).is_err());
-            let obj: GcObj = cons.into();
+            let obj: Object = cons.into();
             assert_eq!(obj, list!(4, 2, 3; cx));
         } else {
             unreachable!();

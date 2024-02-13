@@ -4,7 +4,7 @@ use crate::core::{
     env::{interned_symbols, sym, Env},
     error::{Type, TypeError},
     gc::{Context, IntoRoot, Rt},
-    object::{Gc, GcObj, List, Number, Object, SubrFn, Symbol, NIL},
+    object::{List, ListType, Number, Object, ObjectType, SubrFn, Symbol, NIL},
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
@@ -25,7 +25,7 @@ pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
 }
 
 #[defun]
-pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol<'ob>> {
+pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: Object) -> Result<Symbol<'ob>> {
     if definition.is_nil() {
         symbol.unbind_func();
     } else {
@@ -39,14 +39,18 @@ pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: GcObj) -> Result<Symbol
 #[defun]
 pub(crate) fn defalias<'ob>(
     symbol: Symbol<'ob>,
-    definition: GcObj,
+    definition: Object,
     _docstring: Option<&str>,
 ) -> Result<Symbol<'ob>> {
     fset(symbol, definition)
 }
 
 #[defun]
-pub(crate) fn set<'ob>(place: Symbol, newlet: GcObj<'ob>, env: &mut Rt<Env>) -> Result<GcObj<'ob>> {
+pub(crate) fn set<'ob>(
+    place: Symbol,
+    newlet: Object<'ob>,
+    env: &mut Rt<Env>,
+) -> Result<Object<'ob>> {
     env.set_var(place, newlet)?;
     Ok(newlet)
 }
@@ -55,9 +59,9 @@ pub(crate) fn set<'ob>(place: Symbol, newlet: GcObj<'ob>, env: &mut Rt<Env>) -> 
 pub(crate) fn put<'ob>(
     symbol: Symbol,
     propname: Symbol,
-    value: GcObj<'ob>,
+    value: Object<'ob>,
     env: &mut Rt<Env>,
-) -> GcObj<'ob> {
+) -> Object<'ob> {
     env.set_prop(symbol, propname, value);
     value
 }
@@ -68,7 +72,7 @@ pub(crate) fn get<'ob>(
     propname: Symbol,
     env: &Rt<Env>,
     cx: &'ob Context,
-) -> GcObj<'ob> {
+) -> Object<'ob> {
     match env.props.get(symbol) {
         Some(plist) => match plist.iter().find(|x| x.0 == propname) {
             Some(element) => cx.bind(element.1.bind(cx)),
@@ -89,13 +93,13 @@ pub(crate) fn default_value<'ob>(
     symbol: Symbol,
     env: &Rt<Env>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     // TODO: Implement buffer locals
     symbol_value(symbol, env, cx).ok_or_else(|| anyhow!("Void variable: {symbol}"))
 }
 
 #[defun]
-pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> GcObj<'ob> {
+pub(crate) fn symbol_function<'ob>(symbol: Symbol, cx: &'ob Context) -> Object<'ob> {
     match symbol.func(cx) {
         Some(f) => f.into(),
         None => NIL,
@@ -107,7 +111,7 @@ pub(crate) fn symbol_value<'ob>(
     symbol: Symbol,
     env: &Rt<Env>,
     cx: &'ob Context,
-) -> Option<GcObj<'ob>> {
+) -> Option<Object<'ob>> {
     env.vars.get(symbol).map(|x| x.bind(cx))
 }
 
@@ -117,7 +121,7 @@ pub(crate) fn symbol_name(symbol: Symbol<'_>) -> &str {
 }
 
 #[defun]
-pub(crate) fn null(obj: GcObj) -> bool {
+pub(crate) fn null(obj: Object) -> bool {
     obj.is_nil()
 }
 
@@ -149,112 +153,112 @@ pub(crate) fn default_boundp(symbol: Symbol, env: &Rt<Env>) -> bool {
 }
 
 #[defun]
-pub(crate) fn listp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::NIL | Object::Cons(_))
+pub(crate) fn listp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::NIL | ObjectType::Cons(_))
 }
 
 #[defun]
-pub(crate) fn nlistp(object: GcObj) -> bool {
+pub(crate) fn nlistp(object: Object) -> bool {
     !listp(object)
 }
 
 #[defun]
-pub(crate) fn symbolp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Symbol(_))
+pub(crate) fn symbolp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Symbol(_))
 }
 
 #[defun]
-pub(crate) fn functionp(object: GcObj) -> bool {
+pub(crate) fn functionp(object: Object) -> bool {
     match object.untag() {
-        Object::ByteFn(_) | Object::SubrFn(_) => true,
-        Object::Cons(cons) => cons.car() == sym::CLOSURE,
-        Object::Symbol(sym) => sym.has_func(),
+        ObjectType::ByteFn(_) | ObjectType::SubrFn(_) => true,
+        ObjectType::Cons(cons) => cons.car() == sym::CLOSURE,
+        ObjectType::Symbol(sym) => sym.has_func(),
         _ => false,
     }
 }
 
 #[defun]
-pub(crate) fn subrp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::SubrFn(_))
+pub(crate) fn subrp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::SubrFn(_))
 }
 
 #[defun]
-pub(crate) fn stringp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::String(_))
+pub(crate) fn stringp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::String(_))
 }
 
 #[defun]
-pub(crate) fn numberp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Int(_) | Object::Float(_))
+pub(crate) fn numberp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Int(_) | ObjectType::Float(_))
 }
 
 #[defun]
-pub(crate) fn markerp(_: GcObj) -> bool {
+pub(crate) fn markerp(_: Object) -> bool {
     // TODO: implement
     false
 }
 
 #[defun]
-pub(crate) fn vectorp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Vec(_))
+pub(crate) fn vectorp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Vec(_))
 }
 
 #[defun]
-pub(crate) fn recordp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Record(_))
+pub(crate) fn recordp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Record(_))
 }
 
 #[defun]
-pub(crate) fn consp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Cons(_))
+pub(crate) fn consp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Cons(_))
 }
 
 #[defun]
-pub(crate) fn keywordp(object: GcObj) -> bool {
+pub(crate) fn keywordp(object: Object) -> bool {
     match object.untag() {
-        Object::Symbol(s) => s.name().starts_with(':'),
+        ObjectType::Symbol(s) => s.name().starts_with(':'),
         _ => false,
     }
 }
 
 #[defun]
-pub(crate) fn integerp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Int(_))
+pub(crate) fn integerp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Int(_))
 }
 
 #[defun]
-pub(crate) fn floatp(object: GcObj) -> bool {
-    matches!(object.untag(), Object::Float(_))
+pub(crate) fn floatp(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::Float(_))
 }
 
 #[defun]
-pub(crate) fn atom(object: GcObj) -> bool {
+pub(crate) fn atom(object: Object) -> bool {
     !consp(object)
 }
 
 #[defun]
-fn byte_code_function_p(object: GcObj) -> bool {
-    matches!(object.untag(), Object::ByteFn(_))
+fn byte_code_function_p(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::ByteFn(_))
 }
 
 #[defun]
-fn subr_native_elisp_p(_: GcObj) -> bool {
+fn subr_native_elisp_p(_: Object) -> bool {
     false
 }
 
 #[defun]
-fn bufferp(_object: GcObj) -> bool {
+fn bufferp(_object: Object) -> bool {
     // TODO: Implement once buffers are added
     false
 }
 
 #[defun]
-pub(crate) fn multibyte_string_p(object: GcObj) -> bool {
-    matches!(object.untag(), Object::String(_))
+pub(crate) fn multibyte_string_p(object: Object) -> bool {
+    matches!(object.untag(), ObjectType::String(_))
 }
 
 #[defun]
-fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> Gc<Number<'ob>> {
+fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> Number<'ob> {
     // TODO: Handle trailing characters, which should be ignored
     let base = base.unwrap_or(10);
     let string = string.trim();
@@ -270,10 +274,10 @@ fn string_to_number<'ob>(string: &str, base: Option<i64>, cx: &'ob Context) -> G
 #[defun]
 pub(crate) fn defvar<'ob>(
     symbol: Symbol,
-    initvalue: Option<GcObj<'ob>>,
+    initvalue: Option<Object<'ob>>,
     _docstring: Option<&str>,
     env: &mut Rt<Env>,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let value = initvalue.unwrap_or_default();
     set(symbol, value, env)
 }
@@ -285,9 +289,9 @@ pub(crate) fn make_variable_buffer_local(variable: Symbol) -> Symbol {
 }
 
 #[defun]
-fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> GcObj<'ob> {
+fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> Object<'ob> {
     let min = subr.args.required as usize;
-    let max: GcObj = {
+    let max: Object = {
         if subr.args.rest {
             sym::MANY.into()
         } else {
@@ -309,9 +313,13 @@ fn ash(value: i64, count: i64) -> i64 {
 }
 
 #[defun]
-pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Result<GcObj<'ob>> {
+pub(crate) fn aset<'ob>(
+    array: Object<'ob>,
+    idx: usize,
+    newlet: Object<'ob>,
+) -> Result<Object<'ob>> {
     match array.untag() {
-        Object::Vec(vec) => {
+        ObjectType::Vec(vec) => {
             let vec = vec.try_mut()?;
             if idx < vec.len() {
                 vec[idx].set(newlet);
@@ -321,7 +329,7 @@ pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Re
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         }
-        Object::Record(vec) => {
+        ObjectType::Record(vec) => {
             let vec = vec.try_mut()?;
             if idx < vec.len() {
                 vec[idx].set(newlet);
@@ -336,37 +344,37 @@ pub(crate) fn aset<'ob>(array: GcObj<'ob>, idx: usize, newlet: GcObj<'ob>) -> Re
 }
 
 #[defun]
-pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
+pub(crate) fn aref<'ob>(array: Object<'ob>, idx: usize, cx: &'ob Context) -> Result<Object<'ob>> {
     match array.untag() {
-        Object::Vec(vec) => match vec.get(idx) {
+        ObjectType::Vec(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
             None => {
                 let len = vec.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::Record(vec) => match vec.get(idx) {
+        ObjectType::Record(vec) => match vec.get(idx) {
             Some(x) => Ok(x.get()),
             None => {
                 let len = vec.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::String(string) => match string.get_char_at(idx) {
+        ObjectType::String(string) => match string.get_char_at(idx) {
             Some(x) => Ok((i64::from(x)).into()),
             None => {
                 let len = string.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::ByteString(string) => match string.get(idx) {
+        ObjectType::ByteString(string) => match string.get(idx) {
             Some(x) => Ok((i64::from(*x)).into()),
             None => {
                 let len = string.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        Object::ByteFn(fun) => match fun.index(idx, cx) {
+        ObjectType::ByteFn(fun) => match fun.index(idx, cx) {
             Some(x) => Ok(x),
             None => Err(anyhow!("index {idx} is out of bounds")),
         },
@@ -375,26 +383,26 @@ pub(crate) fn aref<'ob>(array: GcObj<'ob>, idx: usize, cx: &'ob Context) -> Resu
 }
 
 #[defun]
-fn type_of(object: GcObj) -> GcObj {
+fn type_of(object: Object) -> Object {
     match object.untag() {
-        Object::Int(_) => sym::INTEGER.into(),
-        Object::Float(_) => sym::FLOAT.into(),
-        Object::Symbol(_) => sym::SYMBOL.into(),
-        Object::Cons(_) => sym::CONS.into(),
-        Object::Vec(_) => sym::VECTOR.into(),
-        Object::Record(x) => x.first().expect("record was missing type").get(),
-        Object::ByteFn(_) => sym::COMPILED_FUNCTION.into(),
-        Object::HashTable(_) => sym::HASH_TABLE.into(),
-        Object::String(_) | Object::ByteString(_) => sym::STRING.into(),
-        Object::SubrFn(_) => sym::SUBR.into(),
-        Object::Buffer(_) => sym::BUFFER.into(),
+        ObjectType::Int(_) => sym::INTEGER.into(),
+        ObjectType::Float(_) => sym::FLOAT.into(),
+        ObjectType::Symbol(_) => sym::SYMBOL.into(),
+        ObjectType::Cons(_) => sym::CONS.into(),
+        ObjectType::Vec(_) => sym::VECTOR.into(),
+        ObjectType::Record(x) => x.first().expect("record was missing type").get(),
+        ObjectType::ByteFn(_) => sym::COMPILED_FUNCTION.into(),
+        ObjectType::HashTable(_) => sym::HASH_TABLE.into(),
+        ObjectType::String(_) | ObjectType::ByteString(_) => sym::STRING.into(),
+        ObjectType::SubrFn(_) => sym::SUBR.into(),
+        ObjectType::Buffer(_) => sym::BUFFER.into(),
     }
 }
 
 #[defun]
-pub(crate) fn indirect_function<'ob>(object: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
+pub(crate) fn indirect_function<'ob>(object: Object<'ob>, cx: &'ob Context) -> Object<'ob> {
     match object.untag() {
-        Object::Symbol(sym) => match sym.follow_indirect(cx) {
+        ObjectType::Symbol(sym) => match sym.follow_indirect(cx) {
             Some(func) => func.into(),
             None => NIL,
         },
@@ -412,51 +420,51 @@ pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) ->
 }
 
 #[defun]
-pub(crate) fn car(list: Gc<List>) -> GcObj {
+pub(crate) fn car(list: List) -> Object {
     match list.untag() {
-        List::Cons(cons) => cons.car(),
-        List::Nil => NIL,
+        ListType::Cons(cons) => cons.car(),
+        ListType::Nil => NIL,
     }
 }
 
 #[defun]
-pub(crate) fn cdr(list: Gc<List>) -> GcObj {
+pub(crate) fn cdr(list: List) -> Object {
     match list.untag() {
-        List::Cons(cons) => cons.cdr(),
-        List::Nil => NIL,
+        ListType::Cons(cons) => cons.cdr(),
+        ListType::Nil => NIL,
     }
 }
 
 #[defun]
-pub(crate) fn car_safe(object: GcObj) -> GcObj {
+pub(crate) fn car_safe(object: Object) -> Object {
     match object.untag() {
-        Object::Cons(cons) => cons.car(),
+        ObjectType::Cons(cons) => cons.car(),
         _ => NIL,
     }
 }
 
 #[defun]
-pub(crate) fn cdr_safe(object: GcObj) -> GcObj {
+pub(crate) fn cdr_safe(object: Object) -> Object {
     match object.untag() {
-        Object::Cons(cons) => cons.cdr(),
+        ObjectType::Cons(cons) => cons.cdr(),
         _ => NIL,
     }
 }
 
 #[defun]
-pub(crate) fn setcar<'ob>(cell: &Cons, newcar: GcObj<'ob>) -> Result<GcObj<'ob>> {
+pub(crate) fn setcar<'ob>(cell: &Cons, newcar: Object<'ob>) -> Result<Object<'ob>> {
     cell.set_car(newcar)?;
     Ok(newcar)
 }
 
 #[defun]
-pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: GcObj<'ob>) -> Result<GcObj<'ob>> {
+pub(crate) fn setcdr<'ob>(cell: &Cons, newcdr: Object<'ob>) -> Result<Object<'ob>> {
     cell.set_cdr(newcdr)?;
     Ok(newcdr)
 }
 
 #[defun]
-pub(crate) fn cons<'ob>(car: GcObj, cdr: GcObj, cx: &'ob Context) -> GcObj<'ob> {
+pub(crate) fn cons<'ob>(car: Object, cdr: Object, cx: &'ob Context) -> Object<'ob> {
     Cons::new(car, cdr, cx).into()
 }
 
@@ -468,7 +476,7 @@ fn bare_symbol(sym: Symbol) -> Symbol {
 }
 
 #[defun]
-fn symbol_with_pos_p(_sym: GcObj) -> bool {
+fn symbol_with_pos_p(_sym: Object) -> bool {
     // TODO: implement
     false
 }

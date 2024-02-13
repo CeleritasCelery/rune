@@ -2,7 +2,7 @@
 use crate::core::{
     env::{intern, sym},
     gc::Context,
-    object::{GcObj, Symbol},
+    object::{Object, Symbol},
 };
 use crate::fns;
 use rune_core::macros::list;
@@ -327,7 +327,7 @@ fn intern_symbol<'ob>(symbol: &str, cx: &'ob Context) -> Symbol<'ob> {
 
 /// Parse a symbol from a string. This will either by a true symbol or a number
 /// literal.
-fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> GcObj<'a> {
+fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> Object<'a> {
     match slice.parse::<i64>() {
         Ok(num) => cx.add(num),
         Err(_) => match slice.parse::<f64>() {
@@ -393,7 +393,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     /// '(1 2 3 . 45)
     ///           ^^^
     /// ```
-    fn read_cdr(&mut self, delim: usize) -> Result<Option<GcObj<'ob>>> {
+    fn read_cdr(&mut self, delim: usize) -> Result<Option<Object<'ob>>> {
         match self.tokens.next() {
             Some(Token::CloseParen(_)) => Ok(None),
             Some(sexp) => {
@@ -408,7 +408,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
-    fn read_list(&mut self, delim: usize) -> Result<GcObj<'ob>> {
+    fn read_list(&mut self, delim: usize) -> Result<Object<'ob>> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
@@ -426,7 +426,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         Err(Error::MissingCloseParen(delim))
     }
 
-    fn read_vec(&mut self, delim: usize) -> Result<GcObj<'ob>> {
+    fn read_vec(&mut self, delim: usize) -> Result<Object<'ob>> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
             match token {
@@ -438,8 +438,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// Quote an item using `symbol`.
-    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<GcObj<'ob>> {
-        let obj: GcObj = match self.tokens.next() {
+    fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
+        let obj: Object = match self.tokens.next() {
             Some(token) => self.read_sexp(token)?,
             None => return Err(Error::MissingQuotedItem(pos)),
         };
@@ -447,7 +447,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     /// Read number with specificed radix
-    fn read_radix(&mut self, pos: usize, radix: u8) -> Result<GcObj<'ob>> {
+    fn read_radix(&mut self, pos: usize, radix: u8) -> Result<Object<'ob>> {
         match self.tokens.next() {
             Some(Token::Ident(ident)) => match usize::from_str_radix(ident, radix.into()) {
                 Ok(x) => Ok(self.cx.add(x as i64)),
@@ -459,7 +459,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// read a sharp quoted character. This could be used for reader macro's in
     /// the future, but right now it just handles the special cases from elisp.
-    fn read_sharp(&mut self, pos: usize) -> Result<GcObj<'ob>> {
+    fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
                 Some(Token::OpenParen(i)) => {
@@ -480,7 +480,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
     }
 
-    fn read_sexp(&mut self, token: Token<'a>) -> Result<GcObj<'ob>> {
+    fn read_sexp(&mut self, token: Token<'a>) -> Result<Object<'ob>> {
         match token {
             Token::OpenParen(i) => self.read_list(i),
             Token::CloseParen(i) => Err(Error::ExtraCloseParen(i)),
@@ -501,7 +501,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
 /// read a lisp object from `slice`. Return the object and index of next
 /// remaining character in the slice.
-pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(GcObj<'ob>, usize)> {
+pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(Object<'ob>, usize)> {
     let mut reader = Reader { tokens: Tokenizer::new(slice), cx };
     match reader.tokens.next() {
         Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
@@ -663,12 +663,12 @@ baz""#,
     fn test_read_vec() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        check_reader!(Vec::<GcObj>::new(), "[]", cx);
-        let vec: Vec<GcObj> = vec![1.into()];
+        check_reader!(Vec::<Object>::new(), "[]", cx);
+        let vec: Vec<Object> = vec![1.into()];
         check_reader!(vec, "[1]", cx);
-        let vec: Vec<GcObj> = vec![1.into(), 2.into()];
+        let vec: Vec<Object> = vec![1.into(), 2.into()];
         check_reader!(vec, "[1 2]", cx);
-        let vec: Vec<GcObj> = vec![1.into(), 2.into(), 3.into()];
+        let vec: Vec<Object> = vec![1.into(), 2.into(), 3.into()];
         check_reader!(vec, "[1 2 3]", cx);
     }
 

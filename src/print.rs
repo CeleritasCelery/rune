@@ -1,9 +1,9 @@
 //! Printing utilities.
-use crate::core::object::GcObj;
+use crate::core::object::Object;
 use rune_macros::defun;
 
 #[defun]
-fn error_message_string(obj: GcObj) -> String {
+fn error_message_string(obj: Object) -> String {
     // TODO: implement
     format!("Error: {obj}")
 }

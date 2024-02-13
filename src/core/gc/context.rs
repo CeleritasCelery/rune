@@ -1,6 +1,6 @@
 use super::OwnedObject;
 use super::Trace;
-use crate::core::object::{Gc, GcObj, IntoObject, UninternedSymbolMap, WithLifetime};
+use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -82,10 +82,10 @@ impl Block<false> {
 }
 
 impl<const CONST: bool> Block<CONST> {
-    pub(crate) fn add<'ob, T, Tx>(&'ob self, obj: T) -> GcObj
+    pub(crate) fn add<'ob, T, Tx>(&'ob self, obj: T) -> Object
     where
         T: IntoObject<Out<'ob> = Tx>,
-        Gc<Tx>: Into<GcObj<'ob>>,
+        Gc<Tx>: Into<Object<'ob>>,
     {
         obj.into_obj(self).into()
     }
@@ -141,7 +141,7 @@ impl<'ob, 'rt> Context<'rt> {
             }
         }
         while let Some(raw) = gray_stack.pop() {
-            let obj = unsafe { GcObj::from_raw(raw) };
+            let obj = unsafe { Object::from_raw(raw) };
             if !obj.is_marked() {
                 obj.trace_mark(gray_stack);
             }
@@ -221,7 +221,7 @@ mod test {
     use rune_core::macros::{list, rebind, root};
 
     use super::*;
-    fn bind_to_mut<'ob>(cx: &'ob mut Context) -> GcObj<'ob> {
+    fn bind_to_mut<'ob>(cx: &'ob mut Context) -> Object<'ob> {
         cx.add("invariant")
     }
 

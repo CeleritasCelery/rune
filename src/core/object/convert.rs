@@ -6,46 +6,46 @@ use super::{
     super::error::{ArgError, Type, TypeError},
     ByteString, LispHashTable, LispString, LispVec, NIL, TRUE,
 };
-use super::{Gc, GcObj, LispFloat, Object, Symbol};
+use super::{Gc, LispFloat, Object, ObjectType, Symbol};
 use anyhow::Context;
 
-impl<'ob> TryFrom<GcObj<'ob>> for &'ob str {
+impl<'ob> TryFrom<Object<'ob>> for &'ob str {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::String(x) => Ok(x),
+            ObjectType::String(x) => Ok(x),
             x => Err(TypeError::new(Type::String, x).into()),
         }
     }
 }
 
-impl TryFrom<GcObj<'_>> for f64 {
+impl TryFrom<Object<'_>> for f64 {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::Int(x) => Ok(x as f64),
-            Object::Float(x) => Ok(***x),
+            ObjectType::Int(x) => Ok(x as f64),
+            ObjectType::Float(x) => Ok(***x),
             x => Err(TypeError::new(Type::Number, x).into()),
         }
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Option<&'ob str> {
+impl<'ob> TryFrom<Object<'ob>> for Option<&'ob str> {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::NIL => Ok(None),
-            Object::String(x) => Ok(Some(x)),
+            ObjectType::NIL => Ok(None),
+            ObjectType::String(x) => Ok(Some(x)),
             x => Err(TypeError::new(Type::String, x).into()),
         }
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for usize {
+impl<'ob> TryFrom<Object<'ob>> for usize {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::Int(x) => {
+            ObjectType::Int(x) => {
                 x.try_into().with_context(|| format!("Integer must be positive, but was {x}"))
             }
             x => Err(TypeError::new(Type::Int, x).into()),
@@ -53,11 +53,11 @@ impl<'ob> TryFrom<GcObj<'ob>> for usize {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for u64 {
+impl<'ob> TryFrom<Object<'ob>> for u64 {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::Int(x) => {
+            ObjectType::Int(x) => {
                 x.try_into().with_context(|| format!("Integer must be positive, but was {x}"))
             }
             x => Err(TypeError::new(Type::Int, x).into()),
@@ -65,30 +65,30 @@ impl<'ob> TryFrom<GcObj<'ob>> for u64 {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Option<usize> {
+impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
     type Error = anyhow::Error;
-    fn try_from(obj: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
-            Object::Int(x) => match x.try_into() {
+            ObjectType::Int(x) => match x.try_into() {
                 Ok(x) => Ok(Some(x)),
                 Err(e) => Err(e).with_context(|| format!("Integer must be positive, but was {x}")),
             },
-            Object::NIL => Ok(None),
+            ObjectType::NIL => Ok(None),
             _ => Err(TypeError::new(Type::Int, obj).into()),
         }
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for bool {
+impl<'ob> TryFrom<Object<'ob>> for bool {
     type Error = ArgError;
-    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil())
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
+impl<'ob> TryFrom<Object<'ob>> for Option<()> {
     type Error = ArgError;
-    fn try_from(obj: GcObj) -> Result<Self, Self::Error> {
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil().then_some(()))
     }
 }
@@ -98,9 +98,11 @@ impl<'ob> TryFrom<GcObj<'ob>> for Option<()> {
 /// without the need to allocate a new slice. We ensure that the two
 /// types have the exact same representation, so that no writes
 /// actually need to be performed.
-pub(crate) fn try_from_slice<'brw, 'ob, T, E>(slice: &'brw [GcObj<'ob>]) -> Result<&'brw [Gc<T>], E>
+pub(crate) fn try_from_slice<'brw, 'ob, T, E>(
+    slice: &'brw [Object<'ob>],
+) -> Result<&'brw [Gc<T>], E>
 where
-    Gc<T>: TryFrom<GcObj<'ob>, Error = E> + 'ob,
+    Gc<T>: TryFrom<Object<'ob>, Error = E> + 'ob,
 {
     for x in slice {
         let _new = Gc::<T>::try_from(*x)?;
@@ -110,7 +112,7 @@ where
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-impl<'ob> From<bool> for GcObj<'ob> {
+impl<'ob> From<bool> for Object<'ob> {
     fn from(b: bool) -> Self {
         if b {
             TRUE
@@ -128,9 +130,9 @@ define_unbox!(ByteString, String, &'ob ByteString);
 define_unbox!(Vec, &'ob LispVec);
 define_unbox!(Symbol, Symbol<'ob>);
 
-impl<'ob, T> From<Option<T>> for GcObj<'ob>
+impl<'ob, T> From<Option<T>> for Object<'ob>
 where
-    T: Into<GcObj<'ob>>,
+    T: Into<Object<'ob>>,
 {
     fn from(t: Option<T>) -> Self {
         match t {
@@ -148,7 +150,7 @@ mod test {
 
     use super::*;
 
-    fn wrapper(args: &[GcObj]) -> Result<i64, TypeError> {
+    fn wrapper(args: &[Object]) -> Result<i64, TypeError> {
         Ok(inner(
             std::convert::TryFrom::try_from(args[0])?,
             std::convert::TryFrom::try_from(args[1])?,

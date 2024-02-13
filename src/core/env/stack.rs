@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Context, IntoRoot, Rt},
-    object::{ByteFn, GcObj, WithLifetime, NIL},
+    object::{ByteFn, Object, WithLifetime, NIL},
 };
 use rune_macros::Trace;
 use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds, RangeTo};
@@ -15,7 +15,7 @@ use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds, RangeTo};
 /// [pop_frame](RootedLispStack::pop_frame) respectively.
 #[derive(Debug, Default, Trace)]
 pub(crate) struct LispStack<'a> {
-    vec: Vec<GcObj<'a>>,
+    vec: Vec<Object<'a>>,
     #[no_trace]
     current: Frame,
     frames: Vec<FrameStore<'a>>,
@@ -92,7 +92,7 @@ impl ArgSlice {
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
 impl<'a> Index<usize> for RootedLispStack<'a> {
-    type Output = Rt<GcObj<'a>>;
+    type Output = Rt<Object<'a>>;
 
     fn index(&self, index: usize) -> &Self::Output {
         let index = self.offset_end(index);
@@ -112,12 +112,12 @@ impl IndexMut<usize> for RootedLispStack<'_> {
 // This impl is specifically for the Stack. It takes the range from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
 impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
-    type Output = [Rt<GcObj<'a>>];
+    type Output = [Rt<Object<'a>>];
 
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
         assert!(index.end <= self.len());
         let end = self.len() - index.end;
-        let vec: &[Rt<GcObj>] = &self.vec;
+        let vec: &[Rt<Object>] = &self.vec;
         &vec[end..]
     }
 }
@@ -211,7 +211,7 @@ impl<'a> RootedLispStack<'a> {
         self.current.arg_cnt = (arg_cnt, rest);
     }
 
-    pub(crate) fn push<T: IntoRoot<GcObj<'a>>>(&mut self, value: T) {
+    pub(crate) fn push<T: IntoRoot<Object<'a>>>(&mut self, value: T) {
         if self.len() >= self.current.end {
             panic!(
                 "overflowed max depth - len was {}, but limit was {}",
@@ -223,12 +223,12 @@ impl<'a> RootedLispStack<'a> {
         self.vec.push(value);
     }
 
-    pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> GcObj<'ob> {
+    pub(crate) fn pop<'ob>(&mut self, cx: &'ob Context) -> Object<'ob> {
         assert!(self.len() > self.current.start);
         self.vec.bind_mut(cx).pop().unwrap()
     }
 
-    pub(crate) fn top(&mut self) -> &mut Rt<GcObj<'a>> {
+    pub(crate) fn top(&mut self) -> &mut Rt<Object<'a>> {
         assert!(self.len() > self.current.start);
         self.vec.last_mut().unwrap()
     }
@@ -268,7 +268,7 @@ impl<'a> RootedLispStack<'a> {
         self.vec.truncate(len);
     }
 
-    pub(crate) fn extend_from_slice(&mut self, src: &[GcObj]) {
+    pub(crate) fn extend_from_slice(&mut self, src: &[Object]) {
         self.vec.extend_from_slice(src);
     }
 
@@ -278,7 +278,7 @@ impl<'a> RootedLispStack<'a> {
         self.vec.extend_from_within(src);
     }
 
-    pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<GcObj>> {
+    pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<Object>> {
         self.vec[self.current.start..].iter().rev()
     }
 
@@ -286,12 +286,12 @@ impl<'a> RootedLispStack<'a> {
         self.len() - self.current.start
     }
 
-    pub(crate) fn current_args(&self) -> &[Rt<GcObj>] {
+    pub(crate) fn current_args(&self) -> &[Rt<Object>] {
         // index as vec
         &self.vec[self.current.start..]
     }
 
-    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<GcObj>] {
+    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<Object>] {
         // index as stack
         &self[..arg_slice.0]
     }
@@ -320,7 +320,7 @@ impl<'brw, 'rt> CallFrame<'brw, 'rt> {
     }
 
     /// Push an argument onto the stack as part of this call frame
-    pub(crate) fn push_arg(&mut self, arg: impl IntoRoot<GcObj<'rt>>) {
+    pub(crate) fn push_arg(&mut self, arg: impl IntoRoot<Object<'rt>>) {
         self.env.stack.push(arg);
     }
 
@@ -337,12 +337,12 @@ impl<'brw, 'rt> CallFrame<'brw, 'rt> {
         count1
     }
 
-    pub(crate) fn arg_slice(&self) -> &[Rt<GcObj<'rt>>] {
+    pub(crate) fn arg_slice(&self) -> &[Rt<Object<'rt>>] {
         &self.env.stack[..self.arg_count()]
     }
 
     /// Push a slice of arguments onto the stack as part of this call frame.
-    pub(crate) fn push_arg_slice(&mut self, src: &[GcObj]) {
+    pub(crate) fn push_arg_slice(&mut self, src: &[Object]) {
         self.env.stack.extend_from_slice(src);
     }
 }

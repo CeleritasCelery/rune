@@ -1,9 +1,9 @@
 use super::super::{
     cons::Cons,
-    object::{GcObj, RawObj},
+    object::{Object, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::object::{Gc, IntoObject, LispString, Object, Symbol, Untag, WithLifetime};
+use crate::core::object::{Gc, IntoObject, LispString, ObjectType, Symbol, Untag, WithLifetime};
 use rune_core::hashmap::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
 use std::slice::SliceIndex;
@@ -52,14 +52,14 @@ where
     }
 }
 
-impl<'a> IntoRoot<GcObj<'a>> for bool {
-    unsafe fn into_root(self) -> GcObj<'a> {
+impl<'a> IntoRoot<Object<'a>> for bool {
+    unsafe fn into_root(self) -> Object<'a> {
         self.into()
     }
 }
 
-impl<'a> IntoRoot<GcObj<'a>> for i64 {
-    unsafe fn into_root(self) -> GcObj<'a> {
+impl<'a> IntoRoot<Object<'a>> for i64 {
+    unsafe fn into_root(self) -> Object<'a> {
         self.into()
     }
 }
@@ -174,7 +174,7 @@ impl<T: Display> Display for Rt<T> {
     }
 }
 
-impl PartialEq for Rt<GcObj<'_>> {
+impl PartialEq for Rt<Object<'_>> {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
@@ -322,10 +322,10 @@ impl<T> Rt<T> {
     }
 }
 
-impl TryFrom<&Rt<GcObj<'_>>> for usize {
+impl TryFrom<&Rt<Object<'_>>> for usize {
     type Error = anyhow::Error;
 
-    fn try_from(value: &Rt<GcObj>) -> Result<Self, Self::Error> {
+    fn try_from(value: &Rt<Object>) -> Result<Self, Self::Error> {
         value.inner.try_into()
     }
 }
@@ -363,7 +363,7 @@ impl<T> Rt<Gc<T>> {
     // if something is cons
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
         match self.inner.as_obj().untag() {
-            crate::core::object::Object::Cons(_) => unsafe {
+            crate::core::object::ObjectType::Cons(_) => unsafe {
                 &*(self as *const Self).cast::<Rt<Gc<&Cons>>>()
             },
             x => panic!("attempt to convert type that was not cons: {x}"),
@@ -380,16 +380,16 @@ impl<T> Rt<Gc<T>> {
     }
 }
 
-impl From<&Rt<GcObj<'_>>> for Option<()> {
-    fn from(value: &Rt<GcObj<'_>>) -> Self {
+impl From<&Rt<Object<'_>>> for Option<()> {
+    fn from(value: &Rt<Object<'_>>) -> Self {
         value.inner.is_nil().then_some(())
     }
 }
 
-impl<'a> Rt<GcObj<'a>> {
+impl<'a> Rt<Object<'a>> {
     pub(crate) fn try_as_option<T, E>(&self) -> Result<Option<&Rt<Gc<T>>>, E>
     where
-        GcObj<'a>: TryInto<Gc<T>, Error = E>,
+        Object<'a>: TryInto<Gc<T>, Error = E>,
     {
         if self.inner.is_nil() {
             Ok(None)
@@ -400,16 +400,16 @@ impl<'a> Rt<GcObj<'a>> {
     }
 }
 
-impl IntoObject for &Rt<GcObj<'_>> {
-    type Out<'ob> = Object<'ob>;
+impl IntoObject for &Rt<Object<'_>> {
+    type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
     }
 }
 
-impl IntoObject for &mut Rt<GcObj<'_>> {
-    type Out<'ob> = Object<'ob>;
+impl IntoObject for &mut Rt<Object<'_>> {
+    type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { self.inner.with_lifetime() }
@@ -417,11 +417,11 @@ impl IntoObject for &mut Rt<GcObj<'_>> {
 }
 
 impl Rt<&Cons> {
-    pub(crate) fn car<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
+    pub(crate) fn car<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
         self.bind(cx).car()
     }
 
-    pub(crate) fn cdr<'ob>(&self, cx: &'ob Context) -> GcObj<'ob> {
+    pub(crate) fn cdr<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
         self.bind(cx).cdr()
     }
 }

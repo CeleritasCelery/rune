@@ -3,10 +3,10 @@ use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::Rt;
-use crate::core::object::{display_slice, FnArgs, LispString, Object, Symbol, NIL};
+use crate::core::object::{display_slice, FnArgs, Function, LispString, ObjectType, Symbol, NIL};
 use crate::core::{
     gc::Context,
-    object::{Function, Gc, GcObj},
+    object::{FunctionType, Gc, Object},
 };
 use crate::fns::{assq, eq};
 use anyhow::{anyhow, bail, ensure, Result};
@@ -47,14 +47,14 @@ impl EvalError {
         Self { backtrace: Vec::new(), error: ErrorType::Err(error) }
     }
 
-    pub(crate) fn signal(error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
+    pub(crate) fn signal(error_symbol: Object, data: Object, env: &mut Rt<Env>) -> Self {
         Self {
             backtrace: Vec::new(),
             error: ErrorType::Signal(env.set_exception(error_symbol, data)),
         }
     }
 
-    pub(crate) fn throw(tag: GcObj, data: GcObj, env: &mut Rt<Env>) -> Self {
+    pub(crate) fn throw(tag: Object, data: Object, env: &mut Rt<Env>) -> Self {
         Self { backtrace: Vec::new(), error: ErrorType::Throw(env.set_exception(tag, data)) }
     }
 
@@ -62,13 +62,13 @@ impl EvalError {
         error.into()
     }
 
-    pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> Self {
+    pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<Object>]) -> Self {
         let display = display_slice(args);
         let trace = format!("{name} {display}").into_boxed_str();
         Self { backtrace: vec![trace], error: ErrorType::Err(error) }
     }
 
-    pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<GcObj>]) -> Self {
+    pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<Object>]) -> Self {
         let display = display_slice(args);
         self.backtrace.push(format!("{name} {display}").into_boxed_str());
         self
@@ -125,15 +125,15 @@ impl From<std::convert::Infallible> for EvalError {
     }
 }
 
-pub(crate) type EvalResult<'ob> = Result<GcObj<'ob>, EvalError>;
+pub(crate) type EvalResult<'ob> = Result<Object<'ob>, EvalError>;
 
 #[defun]
 pub(crate) fn apply<'ob>(
-    function: &Rt<Gc<Function>>,
+    function: &Rt<Function>,
     arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let arg_slice = env.stack.arg_slice(arguments);
     if !arg_slice.is_empty() {
         let last = arg_slice.last().unwrap().bind(cx);
@@ -155,11 +155,11 @@ pub(crate) fn apply<'ob>(
 
 #[defun]
 pub(crate) fn funcall<'ob>(
-    function: &Rt<Gc<Function>>,
+    function: &Rt<Function>,
     arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let beg = env.stack.len() - arguments.len();
     env.stack.extend_as_vec_from_within(beg..);
     let frame = &mut CallFrame::new_with_args(env, arguments.len());
@@ -167,25 +167,25 @@ pub(crate) fn funcall<'ob>(
 }
 
 #[defun]
-fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> Result<GcObj<'ob>> {
+fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> Result<Object<'ob>> {
     let hook_count = hooks.len();
     for i in 0..hook_count {
         let hook = env.stack[hook_count - i - 1].bind(cx);
         match hook.untag() {
-            Object::Symbol(sym) => {
+            ObjectType::Symbol(sym) => {
                 if let Some(val) = env.vars.get(sym) {
                     let val = val.bind(cx);
                     match val.untag() {
-                        Object::Cons(hook_list) => {
+                        ObjectType::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
                                 let func = hook.try_into()?;
                                 call!(func; env, cx)?;
                             }
                         }
-                        Object::NIL => {}
+                        ObjectType::NIL => {}
                         _ => {
-                            let func: Gc<Function> = val.try_into()?;
+                            let func: Function = val.try_into()?;
                             root!(func, cx);
                             call!(func; env, cx)?;
                         }
@@ -200,29 +200,29 @@ fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> R
 
 #[defun]
 fn run_hook_with_args<'ob>(
-    hook: &Rt<GcObj>,
+    hook: &Rt<Object>,
     args: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     match hook.untag(cx) {
-        Object::Symbol(sym) => {
+        ObjectType::Symbol(sym) => {
             if let Some(val) = env.vars.get(sym) {
                 let val = val.bind(cx);
                 match val.untag() {
-                    Object::Cons(hook_list) => {
+                    ObjectType::Cons(hook_list) => {
                         rooted_iter!(hooks, hook_list, cx);
                         while let Some(hook) = hooks.next()? {
-                            let func: &Rt<Gc<Function>> = hook.try_into()?;
+                            let func: &Rt<Function> = hook.try_into()?;
                             let beg = env.stack.len() - args.len();
                             env.stack.extend_as_vec_from_within(beg..);
                             let frame = &mut CallFrame::new_with_args(env, args.len());
                             func.call(frame, None, cx)?;
                         }
                     }
-                    Object::NIL => {}
+                    ObjectType::NIL => {}
                     _ => {
-                        let func: Gc<Function> = val.try_into()?;
+                        let func: Function = val.try_into()?;
                         root!(func, cx);
                         call!(func; env, cx)?;
                     }
@@ -236,15 +236,15 @@ fn run_hook_with_args<'ob>(
 
 #[defun]
 pub(crate) fn autoload_do_load<'ob>(
-    fundef: &Rt<GcObj>,
+    fundef: &Rt<Object>,
     funname: Option<&Rt<Gc<Symbol>>>,
-    macro_only: Option<&Rt<GcObj>>,
+    macro_only: Option<&Rt<Object>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     // TODO: want to handle the case where the file is already loaded.
     match fundef.untag(cx) {
-        Object::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+        ObjectType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
             ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
             let mut iter = cons.elements();
             iter.next(); // autoload
@@ -274,9 +274,9 @@ pub(crate) fn autoload_do_load<'ob>(
 fn autoload<'ob>(
     function: Symbol<'ob>,
     file: &str,
-    docstring: Option<GcObj>,
-    interactive: Option<GcObj>,
-    load_type: Option<GcObj>,
+    docstring: Option<Object>,
+    interactive: Option<Object>,
+    load_type: Option<Object>,
     cx: &'ob Context,
 ) -> Result<Symbol<'ob>> {
     if function.has_func() {
@@ -289,17 +289,17 @@ fn autoload<'ob>(
 
 #[defun]
 pub(crate) fn macroexpand<'ob>(
-    form: &Rt<GcObj>,
-    environment: Option<&Rt<GcObj>>,
+    form: &Rt<Object>,
+    environment: Option<&Rt<Object>>,
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
-) -> Result<GcObj<'ob>> {
-    let Object::Cons(cons) = form.untag(cx) else { return Ok(form.bind(cx)) };
-    let Object::Symbol(sym) = cons.car().untag() else { return Ok(form.bind(cx)) };
+) -> Result<Object<'ob>> {
+    let ObjectType::Cons(cons) = form.untag(cx) else { return Ok(form.bind(cx)) };
+    let ObjectType::Symbol(sym) = cons.car().untag() else { return Ok(form.bind(cx)) };
     // shadow the macro based on ENVIRONMENT
     let func = match environment {
         Some(env) => match assq(sym.into(), env.bind(cx).try_into()?)?.untag() {
-            Object::Cons(cons) => Some(cons.cdr().try_into()?),
+            ObjectType::Cons(cons) => Some(cons.cdr().try_into()?),
             _ => get_macro_func(sym, cx),
         },
         _ => get_macro_func(sym, cx),
@@ -323,9 +323,9 @@ pub(crate) fn macroexpand<'ob>(
     }
 }
 
-fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
+fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Function<'ob>> {
     if let Some(callable) = name.follow_indirect(cx) {
-        if let Function::Cons(cons) = callable.untag() {
+        if let FunctionType::Cons(cons) = callable.untag() {
             if cons.car() == sym::MACRO {
                 return cons.cdr().try_into().ok();
             }
@@ -335,7 +335,7 @@ fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Gc<Function<'ob
 }
 
 #[defun]
-fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons> {
+fn func_arity<'ob>(function: Function, cx: &'ob Context) -> Result<&'ob Cons> {
     let from_args = |args: FnArgs| {
         let min = args.required;
         if args.rest {
@@ -346,12 +346,12 @@ fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons
         }
     };
     match function.untag() {
-        Function::ByteFn(func) => Ok(from_args(func.args)),
-        Function::SubrFn(func) => Ok(from_args(func.args)),
-        Function::Cons(func) => {
+        FunctionType::ByteFn(func) => Ok(from_args(func.args)),
+        FunctionType::SubrFn(func) => Ok(from_args(func.args)),
+        FunctionType::Cons(func) => {
             let arg_pos = match func.car().untag() {
-                Object::Symbol(sym::CLOSURE) => 2,
-                Object::Symbol(sym::LAMBDA) => 1,
+                ObjectType::Symbol(sym::CLOSURE) => 2,
+                ObjectType::Symbol(sym::LAMBDA) => 1,
                 other => bail!(TypeError::new(Type::Func, other)),
             };
             let Some(args) = func.elements().fallible().nth(arg_pos)? else {
@@ -366,7 +366,7 @@ fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons
             };
             Ok(from_args(args))
         }
-        Function::Symbol(sym) => {
+        FunctionType::Symbol(sym) => {
             let Some(func) = sym.follow_indirect(cx) else { bail!("Void Function: {sym}") };
             func_arity(func, cx)
         }
@@ -377,14 +377,14 @@ fn func_arity<'ob>(function: Gc<Function>, cx: &'ob Context) -> Result<&'ob Cons
 #[allow(non_snake_case)]
 fn internal__define_uninitialized_variable<'ob>(
     _symbol: Symbol<'ob>,
-    _doc: Option<GcObj>,
-) -> GcObj<'ob> {
+    _doc: Option<Object>,
+) -> Object<'ob> {
     // TODO: implement doc strings
     NIL
 }
 
 #[defun]
-fn signal(mut error_symbol: GcObj, data: GcObj, env: &mut Rt<Env>) -> Result<bool> {
+fn signal(mut error_symbol: Object, data: Object, env: &mut Rt<Env>) -> Result<bool> {
     if error_symbol.is_nil() && data.is_nil() {
         error_symbol = sym::ERROR.into();
     }
@@ -399,9 +399,9 @@ fn special_variable_p(symbol: Symbol) -> bool {
 #[defun]
 fn set_default_toplevel_value<'ob>(
     symbol: Symbol,
-    value: GcObj,
+    value: Object,
     env: &'ob mut Rt<Env>,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     env.set_var(symbol, value)?;
     Ok(NIL)
 }
@@ -409,15 +409,15 @@ fn set_default_toplevel_value<'ob>(
 #[defun]
 fn set_default<'ob>(
     symbol: Symbol,
-    value: GcObj<'ob>,
+    value: Object<'ob>,
     env: &'ob mut Rt<Env>,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     // TODO: implement buffer local variables
     env.set_var(symbol, value)?;
     Ok(value)
 }
 
-impl Rt<Gc<Function<'_>>> {
+impl Rt<Gc<FunctionType<'_>>> {
     pub(crate) fn call<'ob>(
         &self,
         frame: &mut CallFrame<'_, '_>,
@@ -430,22 +430,22 @@ impl Rt<Gc<Function<'_>>> {
         let arg_cnt = frame.arg_count();
         debug!("calling: {self}");
         match self.untag(cx) {
-            Function::ByteFn(f) => {
+            FunctionType::ByteFn(f) => {
                 root!(f, cx);
                 crate::bytecode::call(f, arg_cnt, name, frame, cx)
                     .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
-            Function::SubrFn(f) => {
+            FunctionType::SubrFn(f) => {
                 (*f).call(arg_cnt, frame, cx).map_err(|e| add_trace(e, name, frame.arg_slice()))
             }
-            Function::Cons(_) => {
+            FunctionType::Cons(_) => {
                 crate::interpreter::call_closure(self.try_into().unwrap(), arg_cnt, name, frame, cx)
                     .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
-            Function::Symbol(sym) => {
+            FunctionType::Symbol(sym) => {
                 let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
                 match func.untag() {
-                    Function::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+                    FunctionType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
                         crate::eval::autoload_do_load(self.use_as(), None, None, frame, cx)
@@ -468,7 +468,7 @@ impl Rt<Gc<Function<'_>>> {
     }
 }
 
-pub(crate) fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<GcObj>]) -> EvalError {
+pub(crate) fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<Object>]) -> EvalError {
     match err.downcast::<EvalError>() {
         Ok(err) => err.add_trace(name, args),
         Err(e) => EvalError::with_trace(e, name, args),

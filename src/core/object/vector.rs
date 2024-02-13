@@ -1,4 +1,4 @@
-use super::{CloneIn, Gc, GcObj, IntoObject, MutObjCell, ObjCell};
+use super::{CloneIn, Gc, IntoObject, MutObjCell, ObjCell, Object};
 use crate::core::gc::{Block, GcHeap, Trace};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
@@ -41,8 +41,8 @@ impl PartialEq for LispVecInner {
 impl LispVecInner {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to use in context of the allocator.
-    pub(in crate::core) unsafe fn new(vec: Vec<GcObj>) -> Self {
-        let cell = mem::transmute::<Vec<GcObj>, Vec<ObjCell>>(vec);
+    pub(in crate::core) unsafe fn new(vec: Vec<Object>) -> Self {
+        let cell = mem::transmute::<Vec<Object>, Vec<ObjCell>>(vec);
         Self { is_const: false, inner: cell.into_boxed_slice() }
     }
 
@@ -59,9 +59,9 @@ impl LispVecInner {
         }
     }
 
-    pub(crate) fn to_vec(&self) -> Vec<GcObj> {
+    pub(crate) fn to_vec(&self) -> Vec<Object> {
         // SAFETY: ObjCell and GcObj have the same representation.
-        let obj_slice = unsafe { &*(addr_of!(*self.inner) as *const [GcObj]) };
+        let obj_slice = unsafe { &*(addr_of!(*self.inner) as *const [Object]) };
         obj_slice.to_vec()
     }
 }
@@ -76,7 +76,7 @@ impl Deref for LispVecInner {
 
 impl<'new> CloneIn<'new, &'new Self> for LispVec {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
-        let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
+        let vec: Vec<Object> = self.iter().map(|x| x.get().clone_in(bk)).collect();
         vec.into_obj(bk)
     }
 }
@@ -124,7 +124,7 @@ impl LispVecInner {
 }
 
 #[repr(transparent)]
-pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<GcObj<'ob>>);
+pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<Object<'ob>>);
 
 pub(crate) type Record = GcHeap<RecordInner>;
 
@@ -138,7 +138,7 @@ impl Deref for RecordInner {
 
 impl<'new> CloneIn<'new, &'new Self> for Record {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
-        let vec: Vec<GcObj> = self.iter().map(|x| x.get().clone_in(bk)).collect();
+        let vec: Vec<Object> = self.iter().map(|x| x.get().clone_in(bk)).collect();
         RecordBuilder(vec).into_obj(bk)
     }
 }

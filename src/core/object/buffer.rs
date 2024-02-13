@@ -1,4 +1,4 @@
-use super::{Gc, GcObj, Object, RawObj, TagType, WithLifetime};
+use super::{Gc, Object, ObjectType, RawObj, TagType, WithLifetime};
 use crate::core::{
     error::{Type, TypeError},
     gc::{AllocObject, Block, Context, GcHeap, Trace},
@@ -40,14 +40,14 @@ impl<'a> OpenBuffer<'a> {
         cx.bind(self.back_ref)
     }
 
-    pub(crate) fn insert(&mut self, arg: GcObj) -> Result<()> {
+    pub(crate) fn insert(&mut self, arg: Object) -> Result<()> {
         match arg.untag() {
-            Object::Int(i) => {
+            ObjectType::Int(i) => {
                 let Ok(u_32) = i.try_into() else { bail!("{i} is an invalid char") };
                 let Some(chr) = char::from_u32(u_32) else { bail!("{i} is an Invalid char") };
                 self.get_mut().text.insert_char(chr);
             }
-            Object::String(s) => self.get_mut().text.insert(s),
+            ObjectType::String(s) => self.get_mut().text.insert(s),
             x => bail!(TypeError::new(Type::String, x)),
         }
         Ok(())

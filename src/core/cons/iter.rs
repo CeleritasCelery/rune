@@ -1,6 +1,8 @@
+use crate::core::object::List;
+
 use super::super::{
     gc::Rt,
-    object::{Gc, GcObj, List, Object},
+    object::{ListType, Object, ObjectType},
 };
 use super::Cons;
 use anyhow::Result;
@@ -32,8 +34,8 @@ impl<'ob> Iterator for ConsIter<'ob> {
             Err(e) => return Some(Err(e)),
         };
         self.cons = match cons.cdr().untag() {
-            Object::Cons(next) => Some(Ok(next)),
-            Object::NIL => None,
+            ObjectType::Cons(next) => Some(Ok(next)),
+            ObjectType::NIL => None,
             _ => Some(Err(ConsError::NonNilCdr)),
         };
 
@@ -50,7 +52,7 @@ impl<'ob> Iterator for ConsIter<'ob> {
 
 fn advance(cons: Option<&Cons>) -> Option<&Cons> {
     match cons?.cdr().untag() {
-        Object::Cons(next) => Some(next),
+        ObjectType::Cons(next) => Some(next),
         _ => None,
     }
 }
@@ -77,7 +79,7 @@ impl ElemIter<'_> {
 }
 
 impl<'ob> Iterator for ElemIter<'ob> {
-    type Item = Result<GcObj<'ob>, ConsError>;
+    type Item = Result<Object<'ob>, ConsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|x| x.map(|x| x.car()))
@@ -102,13 +104,13 @@ impl std::fmt::Display for ConsError {
 impl std::error::Error for ConsError {}
 
 pub(crate) struct ElemStreamIter<'rt> {
-    elem: Option<&'rt mut Rt<GcObj<'static>>>,
+    elem: Option<&'rt mut Rt<Object<'static>>>,
     cons: Option<Result<&'rt mut Rt<&'static Cons>, ConsError>>,
 }
 
 impl<'rt> ElemStreamIter<'rt> {
     pub(crate) fn new(
-        elem: Option<&'rt mut Rt<GcObj<'static>>>,
+        elem: Option<&'rt mut Rt<Object<'static>>>,
         cons: Option<&'rt mut Rt<&'static Cons>>,
     ) -> Self {
         Self { elem, cons: cons.map(Ok) }
@@ -116,7 +118,7 @@ impl<'rt> ElemStreamIter<'rt> {
 }
 
 impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'rt> {
-    type Item = Rt<GcObj<'static>>;
+    type Item = Rt<Object<'static>>;
     type Error = ConsError;
 
     fn advance(&mut self) -> Result<(), ConsError> {
@@ -129,12 +131,12 @@ impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamI
             let car = unsafe { cons.bind_unchecked().car() };
             elem.set(car);
             match unsafe { cons.bind_unchecked().cdr().untag() } {
-                Object::Cons(next) => {
+                ObjectType::Cons(next) => {
                     // dissociate the borrow of cons from cell
                     let x = unsafe { std::mem::transmute::<&Cons, &Cons>(next) };
                     cons.set(x);
                 }
-                Object::NIL => self.cons = None,
+                ObjectType::NIL => self.cons = None,
                 _ => self.cons = Some(Err(ConsError::NonNilCdr)),
             }
         } else {
@@ -175,20 +177,20 @@ impl<'ob> IntoIterator for &'ob Cons {
     }
 }
 
-impl<'ob> Gc<List<'ob>> {
+impl<'ob> List<'ob> {
     pub(crate) fn elements(self) -> ElemIter<'ob> {
         ElemIter(self.conses())
     }
 
     pub(crate) fn conses(self) -> ConsIter<'ob> {
         match self.untag() {
-            List::Nil => ConsIter::new(None),
-            List::Cons(cons) => ConsIter::new(Some(cons)),
+            ListType::Nil => ConsIter::new(None),
+            ListType::Cons(cons) => ConsIter::new(Some(cons)),
         }
     }
 }
 
-impl<'ob> IntoIterator for Gc<List<'ob>> {
+impl<'ob> IntoIterator for List<'ob> {
     type Item = <ElemIter<'ob> as Iterator>::Item;
 
     type IntoIter = ElemIter<'ob>;
@@ -198,9 +200,9 @@ impl<'ob> IntoIterator for Gc<List<'ob>> {
     }
 }
 
-impl<'ob> GcObj<'ob> {
+impl<'ob> Object<'ob> {
     pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
-        let list: Gc<List> = self.try_into()?;
+        let list: List = self.try_into()?;
         Ok(list.elements())
     }
 }
@@ -252,7 +254,7 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let cons = list![1, 2, 3, 4; cx];
-        let list: Gc<List> = cons.try_into().unwrap();
+        let list: List = cons.try_into().unwrap();
         let mut iter = list.conses();
         for expect in [1, 2, 3, 4] {
             let actual = iter.next().unwrap().unwrap().car();

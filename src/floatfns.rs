@@ -3,13 +3,13 @@ use crate::{
     arith::NumberValue,
     core::{
         gc::Context,
-        object::{Gc, Number},
+        object::{Number, NumberType},
     },
 };
 use rune_macros::defun;
 
 #[defun]
-fn floor(arg: Gc<Number>, divisor: Option<Gc<Number>>) -> i64 {
+fn floor(arg: Number, divisor: Option<Number>) -> i64 {
     let num = match divisor {
         Some(div) => arg.val() / div.val(),
         None => arg.val(),
@@ -21,9 +21,9 @@ fn floor(arg: Gc<Number>, divisor: Option<Gc<Number>>) -> i64 {
 }
 
 #[defun]
-fn float<'ob>(arg: Gc<Number<'ob>>, cx: &'ob Context) -> Gc<Number<'ob>> {
+fn float<'ob>(arg: Number<'ob>, cx: &'ob Context) -> Number<'ob> {
     match arg.untag() {
-        Number::Int(i) => cx.add_as(i as f64),
-        Number::Float(_) => arg,
+        NumberType::Int(i) => cx.add_as(i as f64),
+        NumberType::Float(_) => arg,
     }
 }

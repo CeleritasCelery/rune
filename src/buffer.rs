@@ -3,7 +3,7 @@ use crate::core::{
     env::{interned_symbols, Env},
     error::{Type, TypeError},
     gc::{Context, Rt},
-    object::{Gc, GcObj, LispBuffer, Object, NIL},
+    object::{Gc, LispBuffer, Object, ObjectType, NIL},
 };
 use anyhow::{bail, Result};
 use rune_core::hashmap::HashMap;
@@ -23,19 +23,19 @@ fn buffers() -> &'static Mutex<HashMap<String, &'static LispBuffer>> {
 
 #[defun]
 pub(crate) fn set_buffer<'ob>(
-    buffer_or_name: GcObj<'ob>,
+    buffer_or_name: Object<'ob>,
     env: &mut Rt<Env>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let buffer = resolve_buffer(buffer_or_name, cx)?;
     env.set_buffer(buffer)?;
     Ok(cx.add(buffer))
 }
 
-fn resolve_buffer<'ob>(buffer_or_name: GcObj, cx: &'ob Context) -> Result<&'ob LispBuffer> {
+fn resolve_buffer<'ob>(buffer_or_name: Object, cx: &'ob Context) -> Result<&'ob LispBuffer> {
     match buffer_or_name.untag() {
-        Object::Buffer(b) => Ok(b),
-        Object::String(name) => {
+        ObjectType::Buffer(b) => Ok(b),
+        ObjectType::String(name) => {
             let buffer_list = buffers().lock().unwrap();
             let Some(buffer) = buffer_list.get(name.as_ref()) else {
                 bail!("No buffer named {}", name);
@@ -47,15 +47,15 @@ fn resolve_buffer<'ob>(buffer_or_name: GcObj, cx: &'ob Context) -> Result<&'ob L
 }
 
 #[defun]
-fn set_buffer_modified_p(flag: GcObj) -> GcObj {
+fn set_buffer_modified_p(flag: Object) -> Object {
     // TODO: implement
     flag
 }
 
 #[defun]
-fn buffer_live_p(buffer: GcObj, env: &Rt<Env>) -> bool {
+fn buffer_live_p(buffer: Object, env: &Rt<Env>) -> bool {
     match buffer.untag() {
-        Object::Buffer(b) => env.with_buffer(Some(b), |_| {}).is_some(),
+        ObjectType::Buffer(b) => env.with_buffer(Some(b), |_| {}).is_some(),
         _ => false,
     }
 }
@@ -67,12 +67,12 @@ fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Option<String>
 
 #[defun]
 pub(crate) fn get_buffer_create<'ob>(
-    buffer_or_name: GcObj<'ob>,
-    _inhibit_buffer_hooks: Option<GcObj>,
+    buffer_or_name: Object<'ob>,
+    _inhibit_buffer_hooks: Option<Object>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     match buffer_or_name.untag() {
-        Object::String(name) => {
+        ObjectType::String(name) => {
             let mut buffer_list = buffers().lock().unwrap();
             match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
@@ -91,22 +91,25 @@ pub(crate) fn get_buffer_create<'ob>(
                 }
             }
         }
-        Object::Buffer(_) => Ok(buffer_or_name),
+        ObjectType::Buffer(_) => Ok(buffer_or_name),
         other => Err(TypeError::new(Type::BufferOrName, other).into()),
     }
 }
 
 #[defun]
-pub(crate) fn get_buffer<'ob>(buffer_or_name: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+pub(crate) fn get_buffer<'ob>(
+    buffer_or_name: Object<'ob>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
     match buffer_or_name.untag() {
-        Object::String(name) => {
+        ObjectType::String(name) => {
             let buffer_list = buffers().lock().unwrap();
             match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
                 None => Ok(NIL),
             }
         }
-        Object::Buffer(_) => Ok(buffer_or_name),
+        ObjectType::Buffer(_) => Ok(buffer_or_name),
         other => Err(TypeError::new(Type::BufferOrName, other).into()),
     }
 }
@@ -146,7 +149,7 @@ fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
 }
 
 #[defun]
-fn kill_buffer(buffer_or_name: Option<GcObj>, cx: &Context, env: &mut Rt<Env>) -> bool {
+fn kill_buffer(buffer_or_name: Option<Object>, cx: &Context, env: &mut Rt<Env>) -> bool {
     let buffer = match buffer_or_name {
         Some(buffer) => match resolve_buffer(buffer, cx) {
             Ok(b) => Some(b),
@@ -210,6 +213,6 @@ mod test {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let buffer = get_buffer_create(cx.add("test_create_buffer"), Some(NIL), cx).unwrap();
-        assert!(matches!(buffer.untag(), Object::Buffer(_)));
+        assert!(matches!(buffer.untag(), ObjectType::Buffer(_)));
     }
 }

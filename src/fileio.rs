@@ -3,7 +3,7 @@ use crate::core::{
     cons::Cons,
     env::{sym, Env},
     gc::{Context, Rt},
-    object::{Gc, Number, Object},
+    object::{Number, ObjectType},
 };
 use anyhow::Result;
 use rune_macros::defun;
@@ -28,7 +28,7 @@ pub(crate) fn expand_file_name(
     } else {
         let dir = env.vars.get(sym::DEFAULT_DIRECTORY).unwrap();
         match dir.untag(cx) {
-            Object::String(dir) => {
+            ObjectType::String(dir) => {
                 let path = Path::new(dir.as_ref());
                 Ok(path.join(name).to_string_lossy().to_string())
             }
@@ -39,8 +39,8 @@ pub(crate) fn expand_file_name(
 
 #[defun]
 fn car_less_than_car(a: &Cons, b: &Cons) -> Result<bool> {
-    let a: Gc<Number> = a.car().try_into()?;
-    let b: Gc<Number> = b.car().try_into()?;
+    let a: Number = a.car().try_into()?;
+    let b: Number = b.car().try_into()?;
     Ok(a.val() < b.val())
 }
 

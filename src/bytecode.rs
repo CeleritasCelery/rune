@@ -4,7 +4,8 @@ use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
 use crate::core::gc::{Context, IntoRoot, Rt};
 use crate::core::object::{
-    ByteFn, ByteString, Function, Gc, GcObj, LispVec, Object, Symbol, WithLifetime, NIL,
+    ByteFn, ByteString, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
+    WithLifetime, NIL,
 };
 use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
@@ -89,7 +90,7 @@ struct Handler<'ob> {
     stack_size: usize,
     #[no_trace]
     stack_frame: usize,
-    condition: GcObj<'ob>,
+    condition: Object<'ob>,
 }
 
 impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
@@ -126,7 +127,7 @@ impl<'brw, 'env> IntoRoot<VM<'brw, 'env, 'static>> for VM<'brw, 'env, '_> {
 impl<'ob> RootedVM<'_, '_, '_> {
     fn varref(&mut self, idx: u16, cx: &'ob Context) -> Result<()> {
         let symbol = self.get_const(idx as usize, cx);
-        if let Object::Symbol(sym) = symbol.untag() {
+        if let ObjectType::Symbol(sym) = symbol.untag() {
             let Some(var) = self.env.vars.get(sym) else { bail!("Void Variable: {sym}") };
             let var = var.bind(cx);
             self.env.stack.push(var);
@@ -147,7 +148,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
     fn varbind(&mut self, idx: u16, cx: &'ob Context) {
         let value = self.env.stack.pop(cx);
         let symbol = self.get_const(idx as usize, cx);
-        let Object::Symbol(sym) = symbol.untag() else {
+        let ObjectType::Symbol(sym) = symbol.untag() else {
             unreachable!("Varbind was not a symbol: {:?}", symbol)
         };
         self.env.varbind(sym, value, cx);
@@ -157,7 +158,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
         self.env.unbind(idx, cx);
     }
 
-    fn get_const(&self, i: usize, cx: &'ob Context) -> GcObj<'ob> {
+    fn get_const(&self, i: usize, cx: &'ob Context) -> Object<'ob> {
         *self.func.bind(cx).consts().get(i).expect("constant had invalid index")
     }
 
@@ -216,12 +217,12 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
     fn call(&mut self, arg_cnt: u16, cx: &'ob mut Context) -> Result<(), EvalError> {
         let arg_cnt = usize::from(arg_cnt);
-        let func: Gc<Function> = self.env.stack[arg_cnt].bind(cx).try_into()?;
+        let func: Function = self.env.stack[arg_cnt].bind(cx).try_into()?;
         let name = match func.untag() {
-            Function::Symbol(x) => x.name().to_owned(),
+            FunctionType::Symbol(x) => x.name().to_owned(),
             _ => String::from("lambda"),
         };
-        if let Function::ByteFn(next_fn) = func.untag() {
+        if let FunctionType::ByteFn(next_fn) = func.untag() {
             // If bytecode, add another frame and resume execution.
             // OpCode::Return will remove the call frame.
             let len = self.env.stack.len();
@@ -256,8 +257,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
             #[allow(clippy::never_loop)]
             while let Some(handler) = self.handlers.bind_mut(cx).pop() {
                 match handler.condition.untag() {
-                    Object::Symbol(sym::ERROR) => {}
-                    Object::Cons(conditions) => {
+                    ObjectType::Symbol(sym::ERROR) => {}
+                    ObjectType::Cons(conditions) => {
                         for condition in conditions {
                             let condition = condition?;
                             // TODO: Handle different error symbols
@@ -281,7 +282,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 };
                 self.unwind(handler.stack_frame, cx);
                 self.env.stack.truncate(handler.stack_size);
-                self.env.stack.push(GcObj::from(error));
+                self.env.stack.push(Object::from(error));
                 self.pc.goto(handler.jump_code);
                 continue 'main;
             }
@@ -520,7 +521,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Fset => {
                     let def = self.env.stack.pop(cx);
                     let top = self.env.stack.top();
-                    top.set::<GcObj>(data::fset(top.bind_as(cx)?, def)?.into());
+                    top.set::<Object>(data::fset(top.bind_as(cx)?, def)?.into());
                 }
                 op::Get => {
                     let prop = self.env.stack.pop(cx).try_into()?;
@@ -543,7 +544,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::EqlSign => {
                     let rhs = self.env.stack.pop(cx);
                     let top = self.env.stack.top();
-                    top.set::<GcObj>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
+                    top.set::<Object>(arith::num_eq(top.bind_as(cx)?, &[rhs.try_into()?]).into());
                 }
                 op::GreaterThan => {
                     let v1 = self.env.stack.pop(cx);
@@ -775,12 +776,12 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::ConcatN => todo!("ConcatN bytecode"),
                 op::InsertN => todo!("InsertN bytecode"),
                 op::Switch => {
-                    let Object::HashTable(table) = self.env.stack.pop(cx).untag() else {
+                    let ObjectType::HashTable(table) = self.env.stack.pop(cx).untag() else {
                         unreachable!("switch table was not a hash table")
                     };
                     let cond = self.env.stack.pop(cx);
                     if let Some(offset) = table.borrow().get(&cond) {
-                        let Object::Int(offset) = offset.get().untag() else {
+                        let ObjectType::Int(offset) = offset.get().untag() else {
                             unreachable!("switch value was not a int")
                         };
                         self.pc.goto(offset as u16);
@@ -866,7 +867,7 @@ fn byte_code<'ob>(
     maxdepth: usize,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let fun = crate::alloc::make_byte_code(
         0,
         bytestr.untag(cx),
@@ -882,7 +883,7 @@ fn byte_code<'ob>(
 }
 
 #[defun]
-fn fetch_bytecode(_object: GcObj) {
+fn fetch_bytecode(_object: Object) {
     // TODO: Implement
 }
 
@@ -922,7 +923,7 @@ mod test {
         // https://github.com/rust-lang/rust-analyzer/issues/11681
         let cx1: &Context = $cx;
         let constants: &LispVec = {
-            let vec: Vec<GcObj> = vec![$(cx1.add($constants)),*];
+            let vec: Vec<Object> = vec![$(cx1.add($constants)),*];
             vec.into_obj(cx1).untag()
         };
         let opcodes = {
@@ -957,7 +958,7 @@ mod test {
             let bytecode: &Rt<&ByteFn> = $bytecode;
             let cx: &mut Context = $cx;
 
-            let args: Vec<GcObj> = { vec![$(cx.add($args)),*] };
+            let args: Vec<Object> = { vec![$(cx.add($args)),*] };
             let expect = cx.add($expect);
 
             root!(args, cx);
@@ -973,9 +974,9 @@ mod test {
     }
 
     fn check_bytecode_internal(
-        args: &mut Rt<Vec<GcObj>>,
+        args: &mut Rt<Vec<Object>>,
         bytecode: &Rt<&ByteFn>,
-        expect: &Rt<GcObj>,
+        expect: &Rt<Object>,
         cx: &mut Context,
     ) {
         root!(env, new(Env), cx);

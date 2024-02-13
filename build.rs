@@ -253,7 +253,7 @@ pub(crate) fn init_variables(
     cx: &crate::core::gc::Context,
     env: &mut crate::core::gc::Rt<crate::core::env::Env>,
 ) {{
-use crate::core::object::Object;
+use crate::core::object;
 use rune_core::macros::list;
 "
     )
@@ -267,7 +267,7 @@ use rune_core::macros::list;
         if ident == "BYTE_BOOLEAN_VARS" {
             continue;
         }
-        let mut value = value.unwrap_or_else(|| "Object::NIL".to_string());
+        let mut value = value.unwrap_or_else(|| "object::NIL".to_string());
 
         // if value starts with list! then insert cx before that last character
         if value.starts_with("list") {

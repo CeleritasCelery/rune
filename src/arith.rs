@@ -1,11 +1,11 @@
 //! Arithmetic operators.
-use crate::core::object::{Gc, IntoObject, Number, Object};
+use crate::core::object::{Gc, IntoObject, Number, NumberType, ObjectType};
 use float_cmp::ApproxEq;
 use rune_macros::defun;
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
-/// Similar to the object type `Number`, but contains a float instead of a
+/// Similar to the object type [NumberType], but contains a float instead of a
 /// reference to a float. This makes it easier to construct and mutate.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum NumberValue {
@@ -13,17 +13,17 @@ pub(crate) enum NumberValue {
     Float(f64),
 }
 
-impl<'ob> Gc<Number<'ob>> {
+impl<'ob> Number<'ob> {
     pub(crate) fn val(self) -> NumberValue {
         match self.untag() {
-            Number::Int(x) => NumberValue::Int(x),
-            Number::Float(x) => NumberValue::Float(***x),
+            NumberType::Int(x) => NumberValue::Int(x),
+            NumberType::Float(x) => NumberValue::Float(***x),
         }
     }
 }
 
 impl IntoObject for NumberValue {
-    type Out<'ob> = Object<'ob>;
+    type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, block: &crate::core::gc::Block<C>) -> Gc<Self::Out<'_>> {
         match self {
@@ -39,15 +39,12 @@ fn arith(
     int_fn: fn(i64, i64) -> i64,
     float_fn: fn(f64, f64) -> f64,
 ) -> NumberValue {
-    match cur {
-        NumberValue::Float(cur) => match next {
-            NumberValue::Float(next) => NumberValue::Float(float_fn(cur, next)),
-            NumberValue::Int(next) => NumberValue::Float(float_fn(cur, next as f64)),
-        },
-        NumberValue::Int(cur) => match next {
-            NumberValue::Float(next) => NumberValue::Float(float_fn(cur as f64, next)),
-            NumberValue::Int(next) => NumberValue::Int(int_fn(cur, next)),
-        },
+    use NumberValue as N;
+    match (cur, next) {
+        (N::Int(l), N::Int(r)) => N::Int(int_fn(l, r)),
+        (N::Int(l), N::Float(r)) => N::Float(float_fn(l as f64, r)),
+        (N::Float(l), N::Int(r)) => N::Float(float_fn(l, r as f64)),
+        (N::Float(l), N::Float(r)) => N::Float(float_fn(l, r)),
     }
 }
 
@@ -100,7 +97,7 @@ impl Rem for NumberValue {
     }
 }
 
-impl<'ob> PartialEq<i64> for Gc<Number<'ob>> {
+impl<'ob> PartialEq<i64> for Number<'ob> {
     fn eq(&self, other: &i64) -> bool {
         match self.val() {
             NumberValue::Int(num) => num == *other,
@@ -109,7 +106,7 @@ impl<'ob> PartialEq<i64> for Gc<Number<'ob>> {
     }
 }
 
-impl<'ob> PartialEq<f64> for Gc<Number<'ob>> {
+impl<'ob> PartialEq<f64> for Number<'ob> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             NumberValue::Int(num) => num as f64 == *other,
@@ -134,12 +131,12 @@ impl PartialOrd for NumberValue {
 }
 
 #[defun(name = "+")]
-pub(crate) fn add(vars: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn add(vars: &[Number]) -> NumberValue {
     vars.iter().fold(NumberValue::Int(0), |acc, x| acc + x.val())
 }
 
 #[defun(name = "-")]
-pub(crate) fn sub(number: Option<Gc<Number>>, numbers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn sub(number: Option<Number>, numbers: &[Number]) -> NumberValue {
     match number {
         Some(num) => {
             let num = num.val();
@@ -154,27 +151,27 @@ pub(crate) fn sub(number: Option<Gc<Number>>, numbers: &[Gc<Number>]) -> NumberV
 }
 
 #[defun(name = "*")]
-pub(crate) fn mul(numbers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn mul(numbers: &[Number]) -> NumberValue {
     numbers.iter().fold(NumberValue::Int(1), |acc, x| acc * x.val())
 }
 
 #[defun(name = "/")]
-pub(crate) fn div(number: Gc<Number>, divisors: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn div(number: Number, divisors: &[Number]) -> NumberValue {
     divisors.iter().fold(number.val(), |acc, x| acc / x.val())
 }
 
 #[defun(name = "1+")]
-pub(crate) fn add_one(number: Gc<Number>) -> NumberValue {
+pub(crate) fn add_one(number: Number) -> NumberValue {
     number.val() + NumberValue::Int(1)
 }
 
 #[defun(name = "1-")]
-pub(crate) fn sub_one(number: Gc<Number>) -> NumberValue {
+pub(crate) fn sub_one(number: Number) -> NumberValue {
     number.val() - NumberValue::Int(1)
 }
 
 #[defun(name = "=")]
-pub(crate) fn num_eq(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         NumberValue::Int(num) => numbers.iter().all(|&x| x == num),
         NumberValue::Float(num) => numbers.iter().all(|&x| x == num),
@@ -183,18 +180,14 @@ pub(crate) fn num_eq(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
 
 #[defun(name = "/=")]
 #[allow(clippy::float_cmp)] // This is a bug in clippy, we are not comparing floats directly
-pub(crate) fn num_ne(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         NumberValue::Int(num) => numbers.iter().all(|&x| x != num),
         NumberValue::Float(num) => numbers.iter().all(|&x| x != num),
     }
 }
 
-fn cmp(
-    number: Gc<Number>,
-    numbers: &[Gc<Number>],
-    cmp: fn(&NumberValue, &NumberValue) -> bool,
-) -> bool {
+fn cmp(number: Number, numbers: &[Number], cmp: fn(&NumberValue, &NumberValue) -> bool) -> bool {
     numbers
         .iter()
         .try_fold(number.val(), |acc, &x| cmp(&acc, &x.val()).then_some(NumberValue::Int(0)))
@@ -202,22 +195,22 @@ fn cmp(
 }
 
 #[defun(name = "<")]
-pub(crate) fn less_than(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn less_than(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::lt)
 }
 
 #[defun(name = "<=")]
-pub(crate) fn less_than_or_eq(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn less_than_or_eq(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::le)
 }
 
 #[defun(name = ">")]
-pub(crate) fn greater_than(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn greater_than(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::gt)
 }
 
 #[defun(name = ">=")]
-pub(crate) fn greater_than_or_eq(number: Gc<Number>, numbers: &[Gc<Number>]) -> bool {
+pub(crate) fn greater_than_or_eq(number: Number, numbers: &[Number]) -> bool {
     cmp(number, numbers, NumberValue::ge)
 }
 
@@ -232,7 +225,7 @@ fn logand(int_or_markers: &[Gc<i64>]) -> i64 {
 }
 
 #[defun(name = "mod")]
-pub(crate) fn modulo(x: Gc<Number>, y: Gc<Number>) -> NumberValue {
+pub(crate) fn modulo(x: Number, y: Number) -> NumberValue {
     x.val() % y.val()
 }
 
@@ -243,7 +236,7 @@ pub(crate) fn remainder(x: i64, y: i64) -> i64 {
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
-fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
+fn max_val(x: NumberValue, y: &Number) -> NumberValue {
     let y = y.val();
     if x > y {
         x
@@ -253,7 +246,7 @@ fn max_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
-fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
+fn min_val(x: NumberValue, y: &Number) -> NumberValue {
     let y = y.val();
     if x < y {
         x
@@ -263,12 +256,12 @@ fn min_val(x: NumberValue, y: &Gc<Number>) -> NumberValue {
 }
 
 #[defun]
-pub(crate) fn max(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn max(number_or_marker: Number, number_or_markers: &[Number]) -> NumberValue {
     number_or_markers.iter().fold(number_or_marker.val(), max_val)
 }
 
 #[defun]
-pub(crate) fn min(number_or_marker: Gc<Number>, number_or_markers: &[Gc<Number>]) -> NumberValue {
+pub(crate) fn min(number_or_marker: Number, number_or_markers: &[Number]) -> NumberValue {
     number_or_markers.iter().fold(number_or_marker.val(), min_val)
 }
 

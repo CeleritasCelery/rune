@@ -19,7 +19,7 @@ use sptr::Strict;
 use std::fmt;
 use std::marker::PhantomData;
 
-pub(crate) type GcObj<'ob> = Gc<Object<'ob>>;
+pub(crate) type Object<'ob> = Gc<ObjectType<'ob>>;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RawObj {
@@ -38,13 +38,13 @@ impl Default for RawObj {
 ///
 /// The build.rs file guarantees that that `nil` is the first symbol in
 /// `BUILTIN_SYMBOLS`, so we know it will always be 0.
-pub(crate) const NIL: Gc<Object<'static>> = unsafe { std::mem::transmute(0u64) };
+pub(crate) const NIL: Object<'static> = unsafe { std::mem::transmute(0u64) };
 
 /// A `t` object.
 ///
 /// The build.rs file guarantees that that `t` is the second symbol in
 /// `BUILTIN_SYMBOLS`, so we can rely on its value being constant.
-pub(crate) const TRUE: Gc<Object<'static>> =
+pub(crate) const TRUE: Object<'static> =
     // offset from 0 by size of SymbolCell and then shift 8 to account for
     // tagging
     unsafe { std::mem::transmute(std::mem::size_of::<SymbolCell>() << 8) };
@@ -104,11 +104,11 @@ impl<T> Gc<T> {
         self.ptr == other.ptr
     }
 
-    pub(crate) fn copy_as_obj<const C: bool>(self, _: &Block<C>) -> Gc<Object> {
+    pub(crate) fn copy_as_obj<const C: bool>(self, _: &Block<C>) -> Object {
         Gc::new(self.ptr)
     }
 
-    pub(crate) fn as_obj(&self) -> Gc<Object<'_>> {
+    pub(crate) fn as_obj(&self) -> Object<'_> {
         Gc::new(self.ptr)
     }
 }
@@ -160,7 +160,7 @@ unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
     Gc::new(e.ptr)
 }
 
-impl<'a, T: 'a + Copy> From<Gc<T>> for Object<'a> {
+impl<'a, T: 'a + Copy> From<Gc<T>> for ObjectType<'a> {
     fn from(x: Gc<T>) -> Self {
         Gc::new(x.ptr).untag()
     }
@@ -223,7 +223,7 @@ pub(crate) trait IntoObject {
 }
 
 impl<T> IntoObject for Gc<T> {
-    type Out<'ob> = Object<'ob>;
+    type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe { cast_gc(self) }
@@ -234,7 +234,7 @@ impl<T> IntoObject for Option<T>
 where
     T: IntoObject,
 {
-    type Out<'ob> = Object<'ob>;
+    type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
@@ -345,7 +345,7 @@ impl IntoObject for Vec<u8> {
     }
 }
 
-impl<'a> IntoObject for Vec<GcObj<'a>> {
+impl<'a> IntoObject for Vec<Object<'a>> {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -356,7 +356,7 @@ impl<'a> IntoObject for Vec<GcObj<'a>> {
     }
 }
 
-impl<'a> IntoObject for &[GcObj<'a>] {
+impl<'a> IntoObject for &[Object<'a>] {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -487,8 +487,8 @@ mod private {
     }
 }
 
-impl<'a> TaggedPtr for Object<'a> {
-    type Ptr = Object<'a>;
+impl<'a> TaggedPtr for ObjectType<'a> {
+    type Ptr = ObjectType<'a>;
     const TAG: Tag = Tag::Int;
 
     unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
@@ -498,42 +498,42 @@ impl<'a> TaggedPtr for Object<'a> {
         let (ptr, tag) = val.untag_ptr();
         unsafe {
             match tag {
-                Tag::Symbol => Object::Symbol(<Symbol>::from_obj_ptr(ptr)),
-                Tag::Cons => Object::Cons(<&Cons>::from_obj_ptr(ptr)),
-                Tag::SubrFn => Object::SubrFn(&*ptr.cast()),
-                Tag::ByteFn => Object::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
-                Tag::Int => Object::Int(i64::from_obj_ptr(ptr)),
-                Tag::Float => Object::Float(<&LispFloat>::from_obj_ptr(ptr)),
-                Tag::String => Object::String(<&LispString>::from_obj_ptr(ptr)),
-                Tag::ByteString => Object::ByteString(<&ByteString>::from_obj_ptr(ptr)),
-                Tag::Vec => Object::Vec(<&LispVec>::from_obj_ptr(ptr)),
-                Tag::Record => Object::Record(<&Record>::from_obj_ptr(ptr)),
-                Tag::HashTable => Object::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
-                Tag::Buffer => Object::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
+                Tag::Symbol => ObjectType::Symbol(<Symbol>::from_obj_ptr(ptr)),
+                Tag::Cons => ObjectType::Cons(<&Cons>::from_obj_ptr(ptr)),
+                Tag::SubrFn => ObjectType::SubrFn(&*ptr.cast()),
+                Tag::ByteFn => ObjectType::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
+                Tag::Int => ObjectType::Int(i64::from_obj_ptr(ptr)),
+                Tag::Float => ObjectType::Float(<&LispFloat>::from_obj_ptr(ptr)),
+                Tag::String => ObjectType::String(<&LispString>::from_obj_ptr(ptr)),
+                Tag::ByteString => ObjectType::ByteString(<&ByteString>::from_obj_ptr(ptr)),
+                Tag::Vec => ObjectType::Vec(<&LispVec>::from_obj_ptr(ptr)),
+                Tag::Record => ObjectType::Record(<&Record>::from_obj_ptr(ptr)),
+                Tag::HashTable => ObjectType::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
+                Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
             }
         }
     }
 
     fn tag(self) -> Gc<Self> {
         match self {
-            Object::Int(x) => TaggedPtr::tag(x).into(),
-            Object::Float(x) => TaggedPtr::tag(x).into(),
-            Object::Symbol(x) => TaggedPtr::tag(x).into(),
-            Object::Cons(x) => TaggedPtr::tag(x).into(),
-            Object::Vec(x) => TaggedPtr::tag(x).into(),
-            Object::Record(x) => TaggedPtr::tag(x).into(),
-            Object::HashTable(x) => TaggedPtr::tag(x).into(),
-            Object::String(x) => TaggedPtr::tag(x).into(),
-            Object::ByteString(x) => TaggedPtr::tag(x).into(),
-            Object::ByteFn(x) => TaggedPtr::tag(x).into(),
-            Object::SubrFn(x) => TaggedPtr::tag(x).into(),
-            Object::Buffer(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Int(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Float(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Symbol(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Cons(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Vec(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Record(x) => TaggedPtr::tag(x).into(),
+            ObjectType::HashTable(x) => TaggedPtr::tag(x).into(),
+            ObjectType::String(x) => TaggedPtr::tag(x).into(),
+            ObjectType::ByteString(x) => TaggedPtr::tag(x).into(),
+            ObjectType::ByteFn(x) => TaggedPtr::tag(x).into(),
+            ObjectType::SubrFn(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Buffer(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
 
-impl<'a> TaggedPtr for List<'a> {
-    type Ptr = List<'a>;
+impl<'a> TaggedPtr for ListType<'a> {
+    type Ptr = ListType<'a>;
     const TAG: Tag = Tag::Int;
 
     unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
@@ -543,22 +543,22 @@ impl<'a> TaggedPtr for List<'a> {
     fn untag(val: Gc<Self>) -> Self {
         let (ptr, tag) = val.untag_ptr();
         match tag {
-            Tag::Symbol => List::Nil,
-            Tag::Cons => List::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
+            Tag::Symbol => ListType::Nil,
+            Tag::Cons => ListType::Cons(unsafe { <&Cons>::from_obj_ptr(ptr) }),
             _ => unreachable!(),
         }
     }
 
     fn tag(self) -> Gc<Self> {
         match self {
-            List::Nil => unsafe { cast_gc(TaggedPtr::tag(sym::NIL)) },
-            List::Cons(x) => TaggedPtr::tag(x).into(),
+            ListType::Nil => unsafe { cast_gc(TaggedPtr::tag(sym::NIL)) },
+            ListType::Cons(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
 
-impl<'a> TaggedPtr for Function<'a> {
-    type Ptr = Function<'a>;
+impl<'a> TaggedPtr for FunctionType<'a> {
+    type Ptr = FunctionType<'a>;
     const TAG: Tag = Tag::Int;
 
     unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
@@ -569,11 +569,11 @@ impl<'a> TaggedPtr for Function<'a> {
         let (ptr, tag) = val.untag_ptr();
         unsafe {
             match tag {
-                Tag::Cons => Function::Cons(<&Cons>::from_obj_ptr(ptr)),
+                Tag::Cons => FunctionType::Cons(<&Cons>::from_obj_ptr(ptr)),
                 // SubrFn does not have IntoObject implementation, so we cast it directly
-                Tag::SubrFn => Function::SubrFn(&*ptr.cast::<SubrFn>()),
-                Tag::ByteFn => Function::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
-                Tag::Symbol => Function::Symbol(<Symbol>::from_obj_ptr(ptr)),
+                Tag::SubrFn => FunctionType::SubrFn(&*ptr.cast::<SubrFn>()),
+                Tag::ByteFn => FunctionType::ByteFn(<&ByteFn>::from_obj_ptr(ptr)),
+                Tag::Symbol => FunctionType::Symbol(<Symbol>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
         }
@@ -581,16 +581,16 @@ impl<'a> TaggedPtr for Function<'a> {
 
     fn tag(self) -> Gc<Self> {
         match self {
-            Function::Cons(x) => TaggedPtr::tag(x).into(),
-            Function::SubrFn(x) => TaggedPtr::tag(x).into(),
-            Function::ByteFn(x) => TaggedPtr::tag(x).into(),
-            Function::Symbol(x) => TaggedPtr::tag(x).into(),
+            FunctionType::Cons(x) => TaggedPtr::tag(x).into(),
+            FunctionType::SubrFn(x) => TaggedPtr::tag(x).into(),
+            FunctionType::ByteFn(x) => TaggedPtr::tag(x).into(),
+            FunctionType::Symbol(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
 
-impl<'a> TaggedPtr for Number<'a> {
-    type Ptr = Number<'a>;
+impl<'a> TaggedPtr for NumberType<'a> {
+    type Ptr = NumberType<'a>;
     const TAG: Tag = Tag::Int;
 
     unsafe fn tag_ptr(_: *const Self::Ptr) -> Gc<Self> {
@@ -601,8 +601,8 @@ impl<'a> TaggedPtr for Number<'a> {
         let (ptr, tag) = val.untag_ptr();
         unsafe {
             match tag {
-                Tag::Int => Number::Int(i64::from_obj_ptr(ptr)),
-                Tag::Float => Number::Float(<&LispFloat>::from_obj_ptr(ptr)),
+                Tag::Int => NumberType::Int(i64::from_obj_ptr(ptr)),
+                Tag::Float => NumberType::Float(<&LispFloat>::from_obj_ptr(ptr)),
                 _ => unreachable!(),
             }
         }
@@ -610,8 +610,8 @@ impl<'a> TaggedPtr for Number<'a> {
 
     fn tag(self) -> Gc<Self> {
         match self {
-            Number::Int(x) => TaggedPtr::tag(x).into(),
-            Number::Float(x) => TaggedPtr::tag(x).into(),
+            NumberType::Int(x) => TaggedPtr::tag(x).into(),
+            NumberType::Float(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -807,59 +807,65 @@ macro_rules! cast_gc {
 // Number
 #[derive(Copy, Clone)]
 #[repr(u8)]
-pub(crate) enum Number<'ob> {
+pub(crate) enum NumberType<'ob> {
     Int(i64) = Tag::Int as u8,
     Float(&'ob LispFloat) = Tag::Float as u8,
 }
-cast_gc!(Number<'ob> => i64, &LispFloat);
+cast_gc!(NumberType<'ob> => i64, &LispFloat);
 
-impl<'old, 'new> WithLifetime<'new> for Number<'old> {
-    type Out = Number<'new>;
+pub(crate) type Number<'ob> = Gc<NumberType<'ob>>;
+
+impl<'old, 'new> WithLifetime<'new> for NumberType<'old> {
+    type Out = NumberType<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<Number<'old>, Number<'new>>(self)
+        std::mem::transmute::<NumberType<'old>, NumberType<'new>>(self)
     }
 }
 
 // List
 #[derive(Copy, Clone)]
 #[repr(u8)]
-pub(crate) enum List<'ob> {
+pub(crate) enum ListType<'ob> {
     Nil = 0,
     Cons(&'ob Cons) = Tag::Cons as u8,
 }
-cast_gc!(List<'ob> => &'ob Cons);
+cast_gc!(ListType<'ob> => &'ob Cons);
 
-impl List<'_> {
+pub(crate) type List<'ob> = Gc<ListType<'ob>>;
+
+impl ListType<'_> {
     pub(crate) fn empty() -> Gc<Self> {
         unsafe { cast_gc(NIL) }
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for List<'old> {
-    type Out = List<'new>;
+impl<'old, 'new> WithLifetime<'new> for ListType<'old> {
+    type Out = ListType<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<List<'old>, List<'new>>(self)
+        std::mem::transmute::<ListType<'old>, ListType<'new>>(self)
     }
 }
 
 // Function
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
-pub(crate) enum Function<'ob> {
+pub(crate) enum FunctionType<'ob> {
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Cons(&'ob Cons) = Tag::Cons as u8,
     Symbol(Symbol<'ob>) = Tag::Symbol as u8,
 }
-cast_gc!(Function<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, Symbol<'ob>);
+cast_gc!(FunctionType<'ob> => &'ob ByteFn, &'ob SubrFn, &'ob Cons, Symbol<'ob>);
 
-impl<'old, 'new> WithLifetime<'new> for Function<'old> {
-    type Out = Function<'new>;
+pub(crate) type Function<'ob> = Gc<FunctionType<'ob>>;
+
+impl<'old, 'new> WithLifetime<'new> for FunctionType<'old> {
+    type Out = FunctionType<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<Function<'old>, Function<'new>>(self)
+        std::mem::transmute::<FunctionType<'old>, FunctionType<'new>>(self)
     }
 }
 
@@ -869,28 +875,28 @@ extern "Rust" {
 }
 
 #[cfg(miri)]
-impl<'ob> Function<'ob> {
+impl<'ob> FunctionType<'ob> {
     pub(crate) fn set_as_miri_root(self) {
         match self {
-            Function::ByteFn(x) => {
+            FunctionType::ByteFn(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Function::SubrFn(x) => {
+            FunctionType::SubrFn(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Function::Cons(x) => {
+            FunctionType::Cons(x) => {
                 let ptr: *const _ = x;
                 unsafe {
                     miri_static_root(ptr as _);
                 }
             }
-            Function::Symbol(_) => {}
+            FunctionType::Symbol(_) => {}
         }
     }
 }
@@ -900,7 +906,7 @@ impl<'ob> Function<'ob> {
 /// The Object defintion that contains all other possible lisp objects. This
 /// type must remain covariant over 'ob. This is just an expanded form of our
 /// tagged pointer type to take advantage of ergonomics of enums in Rust.
-pub(crate) enum Object<'ob> {
+pub(crate) enum ObjectType<'ob> {
     Int(i64) = Tag::Int as u8,
     Float(&'ob LispFloat) = Tag::Float as u8,
     Symbol(Symbol<'ob>) = Tag::Symbol as u8,
@@ -915,9 +921,9 @@ pub(crate) enum Object<'ob> {
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
 }
 
-cast_gc!(Object<'ob> => Number<'ob>,
-         List<'ob>,
-         Function<'ob>,
+cast_gc!(ObjectType<'ob> => NumberType<'ob>,
+         ListType<'ob>,
+         FunctionType<'ob>,
          i64,
          Symbol<'_>,
          &'ob LispFloat,
@@ -932,34 +938,34 @@ cast_gc!(Object<'ob> => Number<'ob>,
          &'ob LispBuffer
 );
 
-impl Object<'_> {
-    pub(crate) const NIL: Object<'static> = Object::Symbol(sym::NIL);
-    pub(crate) const TRUE: Object<'static> = Object::Symbol(sym::TRUE);
+impl ObjectType<'_> {
+    pub(crate) const NIL: ObjectType<'static> = ObjectType::Symbol(sym::NIL);
+    pub(crate) const TRUE: ObjectType<'static> = ObjectType::Symbol(sym::TRUE);
     /// Return the type of an object
     pub(crate) fn get_type(self) -> Type {
         match self {
-            Object::Int(_) => Type::Int,
-            Object::Float(_) => Type::Float,
-            Object::Symbol(_) => Type::Symbol,
-            Object::Cons(_) => Type::Cons,
-            Object::Vec(_) => Type::Vec,
-            Object::Record(_) => Type::Record,
-            Object::HashTable(_) => Type::HashTable,
-            Object::String(_) => Type::String,
-            Object::ByteString(_) => Type::String,
-            Object::ByteFn(_) | Object::SubrFn(_) => Type::Func,
-            Object::Buffer(_) => Type::Buffer,
+            ObjectType::Int(_) => Type::Int,
+            ObjectType::Float(_) => Type::Float,
+            ObjectType::Symbol(_) => Type::Symbol,
+            ObjectType::Cons(_) => Type::Cons,
+            ObjectType::Vec(_) => Type::Vec,
+            ObjectType::Record(_) => Type::Record,
+            ObjectType::HashTable(_) => Type::HashTable,
+            ObjectType::String(_) => Type::String,
+            ObjectType::ByteString(_) => Type::String,
+            ObjectType::ByteFn(_) | ObjectType::SubrFn(_) => Type::Func,
+            ObjectType::Buffer(_) => Type::Buffer,
         }
     }
 }
 
 // Object Impl's
 
-impl<'old, 'new> WithLifetime<'new> for Object<'old> {
-    type Out = Object<'new>;
+impl<'old, 'new> WithLifetime<'new> for ObjectType<'old> {
+    type Out = ObjectType<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<Object<'old>, Object<'new>>(self)
+        std::mem::transmute::<ObjectType<'old>, ObjectType<'new>>(self)
     }
 }
 
@@ -971,7 +977,7 @@ impl<'new> WithLifetime<'new> for i64 {
     }
 }
 
-impl<'ob> From<usize> for Gc<Object<'ob>> {
+impl<'ob> From<usize> for Object<'ob> {
     fn from(x: usize) -> Self {
         let ptr = sptr::invalid(x);
         unsafe { i64::tag_ptr(ptr).into() }
@@ -1020,20 +1026,20 @@ impl TagType for u16 {
     }
 }
 
-impl<'ob> From<i32> for Gc<Object<'ob>> {
+impl<'ob> From<i32> for Object<'ob> {
     fn from(x: i32) -> Self {
         i64::from(x).into()
     }
 }
 
-impl From<Gc<Object<'_>>> for () {
-    fn from(_: Gc<Object>) {}
+impl From<Object<'_>> for () {
+    fn from(_: Object) {}
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
+impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::Int | Tag::Float => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Number, value)),
@@ -1041,10 +1047,10 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Number<'ob>> {
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
+impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         if value.is_nil() {
             Ok(None)
         } else {
@@ -1053,42 +1059,42 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Option<Gc<Number<'ob>>> {
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<List<'ob>> {
+impl<'ob> TryFrom<Object<'ob>> for List<'ob> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.untag() {
-            Object::NIL | Object::Cons(_) => unsafe { Ok(cast_gc(value)) },
+            ObjectType::NIL | ObjectType::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::List, value)),
         }
     }
 }
 
-impl<'ob> TryFrom<Gc<Function<'ob>>> for Gc<&'ob Cons> {
+impl<'ob> TryFrom<Function<'ob>> for Gc<&'ob Cons> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Function<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Function<'ob>) -> Result<Self, Self::Error> {
         match value.untag() {
-            Function::Cons(_) => unsafe { Ok(cast_gc(value)) },
+            FunctionType::Cons(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
         }
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Symbol<'ob>> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<Symbol<'ob>> {
     type Error = TypeError;
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.untag() {
-            Object::Symbol(_) => unsafe { Ok(cast_gc(value)) },
+            ObjectType::Symbol(_) => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Symbol, value)),
         }
     }
 }
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
+impl<'ob> TryFrom<Object<'ob>> for Function<'ob> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::ByteFn | Tag::SubrFn | Tag::Cons | Tag::Symbol => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Func, value)),
@@ -1100,10 +1106,10 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<Function<'ob>> {
 // Other implementations //
 ///////////////////////////
 
-impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<i64> {
     type Error = TypeError;
 
-    fn try_from(value: Gc<Object<'ob>>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::Int => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Int, value)),
@@ -1113,10 +1119,10 @@ impl<'ob> TryFrom<Gc<Object<'ob>>> for Gc<i64> {
 
 // This function is needed due to the lack of specialization and there being a
 // blanket impl for From<T> for Option<T>
-impl<'ob> GcObj<'ob> {
-    pub(crate) fn try_from_option<T, E>(value: GcObj<'ob>) -> Result<Option<T>, E>
+impl<'ob> Object<'ob> {
+    pub(crate) fn try_from_option<T, E>(value: Object<'ob>) -> Result<Option<T>, E>
     where
-        GcObj<'ob>: TryInto<T, Error = E>,
+        Object<'ob>: TryInto<T, Error = E>,
     {
         if value.is_nil() {
             Ok(None)
@@ -1130,10 +1136,10 @@ impl<'ob> GcObj<'ob> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob Cons> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::Cons => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Cons, value)),
@@ -1141,10 +1147,10 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob Cons> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispString> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::String => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::String, value)),
@@ -1152,10 +1158,10 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispString> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob ByteString> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob ByteString> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::ByteString => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::String, value)),
@@ -1163,10 +1169,10 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob ByteString> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispHashTable> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::HashTable => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::HashTable, value)),
@@ -1174,10 +1180,10 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispHashTable> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispVec> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::Vec => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Vec, value)),
@@ -1185,10 +1191,10 @@ impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispVec> {
     }
 }
 
-impl<'ob> TryFrom<GcObj<'ob>> for Gc<&'ob LispBuffer> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispBuffer> {
     type Error = TypeError;
 
-    fn try_from(value: GcObj<'ob>) -> Result<Self, Self::Error> {
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
         match value.get_tag() {
             Tag::Buffer => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Buffer, value)),
@@ -1215,90 +1221,90 @@ impl<'new, T, U, E> CloneIn<'new, U> for Gc<T>
 where
     // The WithLifetime bound ensures that T is the same type as U
     T: WithLifetime<'new, Out = U>,
-    Gc<U>: TryFrom<Gc<Object<'new>>, Error = E> + 'new,
+    Gc<U>: TryFrom<Object<'new>, Error = E> + 'new,
 {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<U> {
         let obj = match self.as_obj().untag() {
-            Object::Int(x) => x.into(),
-            Object::Cons(x) => x.clone_in(bk).into(),
-            Object::String(x) => x.clone_in(bk).into(),
-            Object::ByteString(x) => x.clone_in(bk).into(),
-            Object::Symbol(x) => x.clone_in(bk).into(),
-            Object::ByteFn(x) => x.clone_in(bk).into(),
-            Object::SubrFn(x) => x.into(),
-            Object::Float(x) => x.clone_in(bk).into(),
-            Object::Vec(x) => x.clone_in(bk).into(),
-            Object::Record(x) => x.clone_in(bk).into(),
-            Object::HashTable(x) => x.clone_in(bk).into(),
-            Object::Buffer(x) => x.clone_in(bk).into(),
+            ObjectType::Int(x) => x.into(),
+            ObjectType::Cons(x) => x.clone_in(bk).into(),
+            ObjectType::String(x) => x.clone_in(bk).into(),
+            ObjectType::ByteString(x) => x.clone_in(bk).into(),
+            ObjectType::Symbol(x) => x.clone_in(bk).into(),
+            ObjectType::ByteFn(x) => x.clone_in(bk).into(),
+            ObjectType::SubrFn(x) => x.into(),
+            ObjectType::Float(x) => x.clone_in(bk).into(),
+            ObjectType::Vec(x) => x.clone_in(bk).into(),
+            ObjectType::Record(x) => x.clone_in(bk).into(),
+            ObjectType::HashTable(x) => x.clone_in(bk).into(),
+            ObjectType::Buffer(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
     }
 }
 
-impl<'ob> PartialEq<&str> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<&str> for Object<'ob> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
-            Object::String(x) => ***x == **other,
+            ObjectType::String(x) => ***x == **other,
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<Symbol<'_>> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<Symbol<'_>> for Object<'ob> {
     fn eq(&self, other: &Symbol) -> bool {
         match self.untag() {
-            Object::Symbol(x) => x == *other,
+            ObjectType::Symbol(x) => x == *other,
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<f64> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<f64> for Object<'ob> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;
         match self.untag() {
-            Object::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
+            ObjectType::Float(x) => x.approx_eq(*other, (f64::EPSILON, 2)),
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<i64> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<i64> for Object<'ob> {
     fn eq(&self, other: &i64) -> bool {
         match self.untag() {
-            Object::Int(x) => x == *other,
+            ObjectType::Int(x) => x == *other,
             _ => false,
         }
     }
 }
 
-impl<'ob> PartialEq<bool> for Gc<Object<'ob>> {
+impl<'ob> PartialEq<bool> for Object<'ob> {
     fn eq(&self, other: &bool) -> bool {
         if *other {
-            matches!(self.untag(), Object::Symbol(sym::TRUE))
+            matches!(self.untag(), ObjectType::Symbol(sym::TRUE))
         } else {
-            matches!(self.untag(), Object::Symbol(sym::NIL))
+            matches!(self.untag(), ObjectType::Symbol(sym::NIL))
         }
     }
 }
 
-impl<'ob> Gc<Object<'ob>> {
+impl<'ob> Object<'ob> {
     pub(crate) fn as_cons(self) -> &'ob Cons {
         self.try_into().unwrap()
     }
 }
 
-impl Default for Gc<Object<'_>> {
+impl Default for Object<'_> {
     fn default() -> Self {
         NIL
     }
 }
 
-impl Default for Gc<List<'_>> {
+impl Default for List<'_> {
     fn default() -> Self {
-        List::empty()
+        ListType::empty()
     }
 }
 
@@ -1329,19 +1335,19 @@ impl<T> Hash for Gc<T> {
     }
 }
 
-impl fmt::Display for Object<'_> {
+impl fmt::Display for ObjectType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl fmt::Debug for Object<'_> {
+impl fmt::Debug for ObjectType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl Object<'_> {
+impl ObjectType<'_> {
     pub(crate) fn display_walk(
         &self,
         f: &mut fmt::Formatter,
@@ -1349,66 +1355,66 @@ impl Object<'_> {
     ) -> fmt::Result {
         use fmt::Display as D;
         match self {
-            Object::Int(x) => D::fmt(x, f),
-            Object::Cons(x) => x.display_walk(f, seen),
-            Object::Vec(x) => x.display_walk(f, seen),
-            Object::Record(x) => x.display_walk(f, seen),
-            Object::HashTable(x) => x.display_walk(f, seen),
-            Object::String(x) => write!(f, "\"{x}\""),
-            Object::ByteString(x) => write!(f, "\"{x}\""),
-            Object::Symbol(x) => D::fmt(x, f),
-            Object::ByteFn(x) => D::fmt(x, f),
-            Object::SubrFn(x) => D::fmt(x, f),
-            Object::Float(x) => D::fmt(x, f),
-            Object::Buffer(x) => D::fmt(x, f),
+            ObjectType::Int(x) => D::fmt(x, f),
+            ObjectType::Cons(x) => x.display_walk(f, seen),
+            ObjectType::Vec(x) => x.display_walk(f, seen),
+            ObjectType::Record(x) => x.display_walk(f, seen),
+            ObjectType::HashTable(x) => x.display_walk(f, seen),
+            ObjectType::String(x) => write!(f, "\"{x}\""),
+            ObjectType::ByteString(x) => write!(f, "\"{x}\""),
+            ObjectType::Symbol(x) => D::fmt(x, f),
+            ObjectType::ByteFn(x) => D::fmt(x, f),
+            ObjectType::SubrFn(x) => D::fmt(x, f),
+            ObjectType::Float(x) => D::fmt(x, f),
+            ObjectType::Buffer(x) => D::fmt(x, f),
         }
     }
 }
 
-impl<'ob> Gc<Object<'ob>> {
+impl<'ob> Object<'ob> {
     pub(crate) fn is_markable(self) -> bool {
-        !matches!(self.untag(), Object::Int(_) | Object::SubrFn(_))
+        !matches!(self.untag(), ObjectType::Int(_) | ObjectType::SubrFn(_))
     }
 
     pub(crate) fn is_marked(self) -> bool {
         match self.untag() {
-            Object::Int(_) | Object::SubrFn(_) => true,
-            Object::Float(x) => x.is_marked(),
-            Object::Cons(x) => x.is_marked(),
-            Object::Vec(x) => x.is_marked(),
-            Object::Record(x) => x.is_marked(),
-            Object::HashTable(x) => x.is_marked(),
-            Object::String(x) => x.is_marked(),
-            Object::ByteString(x) => x.is_marked(),
-            Object::ByteFn(x) => x.is_marked(),
-            Object::Symbol(x) => x.is_marked(),
-            Object::Buffer(x) => x.is_marked(),
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => true,
+            ObjectType::Float(x) => x.is_marked(),
+            ObjectType::Cons(x) => x.is_marked(),
+            ObjectType::Vec(x) => x.is_marked(),
+            ObjectType::Record(x) => x.is_marked(),
+            ObjectType::HashTable(x) => x.is_marked(),
+            ObjectType::String(x) => x.is_marked(),
+            ObjectType::ByteString(x) => x.is_marked(),
+            ObjectType::ByteFn(x) => x.is_marked(),
+            ObjectType::Symbol(x) => x.is_marked(),
+            ObjectType::Buffer(x) => x.is_marked(),
         }
     }
 
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.untag() {
-            Object::Int(_) | Object::SubrFn(_) => {}
-            Object::Float(x) => x.mark(),
-            Object::String(x) => x.mark(),
-            Object::ByteString(x) => x.mark(),
-            Object::Vec(vec) => vec.trace_mark(stack),
-            Object::Record(x) => x.trace_mark(stack),
-            Object::HashTable(x) => x.trace_mark(stack),
-            Object::Cons(x) => x.trace_mark(stack),
-            Object::Symbol(x) => x.trace_mark(stack),
-            Object::ByteFn(x) => x.trace_mark(stack),
-            Object::Buffer(x) => x.trace_mark(stack),
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
+            ObjectType::Float(x) => x.mark(),
+            ObjectType::String(x) => x.mark(),
+            ObjectType::ByteString(x) => x.mark(),
+            ObjectType::Vec(vec) => vec.trace_mark(stack),
+            ObjectType::Record(x) => x.trace_mark(stack),
+            ObjectType::HashTable(x) => x.trace_mark(stack),
+            ObjectType::Cons(x) => x.trace_mark(stack),
+            ObjectType::Symbol(x) => x.trace_mark(stack),
+            ObjectType::ByteFn(x) => x.trace_mark(stack),
+            ObjectType::Buffer(x) => x.trace_mark(stack),
         }
     }
 }
 
-impl<'ob> List<'ob> {
+impl<'ob> ListType<'ob> {
     #[cfg(test)]
-    pub(crate) fn car(self) -> GcObj<'ob> {
+    pub(crate) fn car(self) -> Object<'ob> {
         match self {
-            List::Nil => NIL,
-            List::Cons(x) => x.car(),
+            ListType::Nil => NIL,
+            ListType::Cons(x) => x.car(),
         }
     }
 }

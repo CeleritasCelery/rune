@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::{Block, Context, GcHeap, Trace};
-use crate::core::object::{CloneIn, Function, Gc, IntoObject, RawObj, TagType, WithLifetime};
+use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, RawObj, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
 use std::fmt;
@@ -22,6 +22,8 @@ mod sealed {
 }
 
 pub(in crate::core) use sealed::SymbolCellInner;
+
+use super::Function;
 
 /// The allocation of a global symbol. This is shared between threads, so the
 /// interned value of a symbol will be the same location no matter which thread
@@ -293,7 +295,7 @@ impl SymbolCellInner {
         }
     }
 
-    fn get(&self) -> Option<Gc<Function>> {
+    fn get(&self) -> Option<Function> {
         if let Some(func) = &self.func {
             let ptr = func.load(Ordering::Acquire);
             // nil is represented as zero (null pointer).
@@ -304,15 +306,15 @@ impl SymbolCellInner {
         None
     }
 
-    pub(crate) fn func<'a>(&self, _cx: &'a Context) -> Option<Gc<Function<'a>>> {
+    pub(crate) fn func<'a>(&self, _cx: &'a Context) -> Option<Function<'a>> {
         self.get().map(|x| unsafe { x.with_lifetime() })
     }
 
     /// Follow the chain of symbols to find the function at the end, if any.
-    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Context) -> Option<Gc<Function<'ob>>> {
+    pub(crate) fn follow_indirect<'ob>(&self, cx: &'ob Context) -> Option<Function<'ob>> {
         let func = self.func(cx)?;
         match func.untag() {
-            Function::Symbol(sym) => sym.follow_indirect(cx),
+            FunctionType::Symbol(sym) => sym.follow_indirect(cx),
             _ => Some(func),
         }
     }
@@ -322,7 +324,7 @@ impl SymbolCellInner {
     /// 1. Has marked the entire function as read only
     /// 2. Has cloned the function into the `SymbolMap` block
     /// 3. Ensured the symbol is not constant
-    pub(in crate::core) unsafe fn set_func(&self, func: Gc<Function>) -> Result<()> {
+    pub(in crate::core) unsafe fn set_func(&self, func: Function) -> Result<()> {
         let Some(fn_cell) = self.func.as_ref() else {
             bail!("Attempt to set a constant symbol: {self}")
         };

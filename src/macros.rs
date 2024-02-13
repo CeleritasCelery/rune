@@ -5,11 +5,11 @@ macro_rules! define_unbox {
     };
     ($ident:ident, $ty:ident, $self:ty) => {
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::core::object::GcObj<'ob>> for $self {
+        impl<'ob> std::convert::TryFrom<crate::core::object::Object<'ob>> for $self {
             type Error = crate::core::error::TypeError;
-            fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::core::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.untag() {
-                    crate::core::object::Object::$ident(x) => Ok(x),
+                    crate::core::object::ObjectType::$ident(x) => Ok(x),
                     _ => {
                         Err(crate::core::error::TypeError::new(crate::core::error::Type::$ty, obj))
                     }
@@ -17,12 +17,12 @@ macro_rules! define_unbox {
             }
         }
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::core::object::GcObj<'ob>> for Option<$self> {
+        impl<'ob> std::convert::TryFrom<crate::core::object::Object<'ob>> for Option<$self> {
             type Error = crate::core::error::TypeError;
-            fn try_from(obj: crate::core::object::GcObj<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::core::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.untag() {
-                    crate::core::object::Object::NIL => Ok(None),
-                    crate::core::object::Object::$ident(x) => Ok(Some(x)),
+                    crate::core::object::ObjectType::NIL => Ok(None),
+                    crate::core::object::ObjectType::$ident(x) => Ok(Some(x)),
                     _ => {
                         Err(crate::core::error::TypeError::new(crate::core::error::Type::$ty, obj))
                     }

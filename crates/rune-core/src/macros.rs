@@ -11,9 +11,9 @@ macro_rules! __define_unbox {
     };
     ($ident:ident, $ty:ident, $self:ty) => {
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::object::GcObj<'ob>> for $self {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for $self {
             type Error = crate::error::TypeError;
-            fn try_from(obj: crate::object::GcObj<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.untag() {
                     crate::object::Object::$ident(x) => Ok(x),
                     _ => Err(crate::error::TypeError::new(crate::error::Type::$ty, obj)),
@@ -21,9 +21,9 @@ macro_rules! __define_unbox {
             }
         }
         #[allow(unused_qualifications)]
-        impl<'ob> std::convert::TryFrom<crate::object::GcObj<'ob>> for Option<$self> {
+        impl<'ob> std::convert::TryFrom<crate::object::Object<'ob>> for Option<$self> {
             type Error = crate::error::TypeError;
-            fn try_from(obj: crate::object::GcObj<'ob>) -> Result<Self, Self::Error> {
+            fn try_from(obj: crate::object::Object<'ob>) -> Result<Self, Self::Error> {
                 match obj.untag() {
                     crate::object::Object::NIL => Ok(None),
                     crate::object::Object::$ident(x) => Ok(Some(x)),
@@ -38,10 +38,10 @@ macro_rules! __define_unbox {
 #[doc(hidden)]
 macro_rules! __list {
     ($x:expr; $cx:expr) => {
-        crate::core::object::GcObj::from(crate::core::cons::Cons::new1($x, $cx))
+        crate::core::object::Object::from(crate::core::cons::Cons::new1($x, $cx))
     };
     ($x:expr, $($y:expr),+ $(,)? ; $cx:expr) => {
-        crate::core::object::GcObj::from(crate::core::cons::Cons::new($x, list!($($y),+ ; $cx), $cx))
+        crate::core::object::Object::from(crate::core::cons::Cons::new($x, list!($($y),+ ; $cx), $cx))
     };
 }
 
@@ -93,12 +93,12 @@ macro_rules! __rooted_iter {
         let mut root_elem;
         let mut root_cons;
         // use match to ensure that $value is not evaled inside the unsafe block
-        let list: crate::core::object::Gc<crate::core::object::List> = match $value {
+        let list: crate::core::object::Gc<crate::core::object::ListType> = match $value {
             // Convert the value into a list
             value => unsafe { crate::core::gc::IntoRoot::into_root(value).try_into()? },
         };
         #[allow(unused_qualifications, unused_mut)]
-        let mut $ident = if let crate::core::object::List::Cons(head) = list.untag() {
+        let mut $ident = if let crate::core::object::ListType::Cons(head) = list.untag() {
             use crate::core::{cons, gc, object};
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
@@ -151,14 +151,14 @@ macro_rules! __call {
     ($fn:ident $(,$args:expr)* ; $env:expr, $cx:expr) => {{
         let frame = &mut crate::core::env::CallFrame::new($env);
         $(frame.push_arg($args);)*
-        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::Function>>::call(
+        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::FunctionType>>::call(
             $fn, frame, None, $cx
         )
     }};
     ($fn:ident $(,$args:expr)* ; $name:expr, $env:expr, $cx:expr) => {{
         let frame = &mut crate::core::env::CallFrame::new($env);
         $(frame.push_arg($args);)*
-        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::Function>>::call(
+        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::FunctionType>>::call(
             $fn, frame, Some($name), $cx
         )
     }};

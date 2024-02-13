@@ -2,7 +2,7 @@
 use crate::core::{
     env::Env,
     gc::{Context, Rt},
-    object::{Gc, GcObj, List, Object, NIL},
+    object::{List, Object, ObjectType, NIL},
 };
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
@@ -17,13 +17,13 @@ fn string_match<'ob>(
     _inhibit_modify: Option<()>,
     env: &mut Rt<Env>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     // TODO: implement inhibit-modify
     let re = Regex::new(&lisp_regex_to_rust(regexp))?;
 
     let start = start.unwrap_or(0) as usize;
     if let Some(matches) = re.captures_iter(&string[start..]).next() {
-        let mut all: Vec<GcObj> = Vec::new();
+        let mut all: Vec<Object> = Vec::new();
         let matches = matches?;
         let mut groups = matches.iter();
         // TODO: match data should be char position, not byte
@@ -128,7 +128,7 @@ fn match_data<'ob>(
     reseat: Option<()>,
     env: &Rt<Env>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     ensure!(integer.is_none(), "match-data integer field is not implemented");
     ensure!(reuse.is_none(), "match-data reuse field is not implemented");
     ensure!(reseat.is_none(), "match-data reseat field is not implemented");
@@ -136,21 +136,21 @@ fn match_data<'ob>(
 }
 
 #[defun]
-fn set_match_data<'ob>(list: Gc<List>, _reseat: Option<()>, env: &mut Rt<Env>) -> GcObj<'ob> {
+fn set_match_data<'ob>(list: List, _reseat: Option<()>, env: &mut Rt<Env>) -> Object<'ob> {
     // TODO: add reseat when markers implemented
-    let obj: GcObj = list.into();
+    let obj: Object = list.into();
     env.match_data.set(obj);
     NIL
 }
 
 #[defun]
-fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn match_beginning<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<Object<'ob>> {
     let list = env.match_data.bind(cx).as_list()?;
     Ok(list.fallible().nth(subexp)?.unwrap_or_default())
 }
 
 #[defun]
-fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<Object<'ob>> {
     let list = env.match_data.bind(cx).as_list()?;
     Ok(list.fallible().nth(subexp + 1)?.unwrap_or_default())
 }
@@ -158,10 +158,10 @@ fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<GcOb
 #[defun]
 #[allow(non_snake_case)]
 fn match_data__translate(n: i64, env: &Rt<Env>, cx: &Context) -> Result<()> {
-    let search_regs: Gc<List> = env.match_data.bind(cx).try_into()?;
+    let search_regs: List = env.match_data.bind(cx).try_into()?;
     for reg in search_regs.conses() {
         let reg = reg?;
-        if let Object::Int(old) = reg.car().untag() {
+        if let ObjectType::Int(old) = reg.car().untag() {
             reg.set_car((old + n).into())?;
         } else {
             bail!("match data was not int");

@@ -5,7 +5,7 @@ use crate::core::error::{Type, TypeError};
 use crate::core::gc::Context;
 use crate::core::gc::Rt;
 use crate::core::object::{
-    Function, Gc, GcObj, LispString, Object, Symbol, WithLifetime, NIL, TRUE,
+    Function, Gc, LispString, Object, ObjectType, Symbol, WithLifetime, NIL, TRUE,
 };
 use crate::interpreter;
 use crate::reader;
@@ -45,7 +45,7 @@ pub(crate) fn read_from_string<'ob>(
     start: Option<i64>,
     end: Option<i64>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let len = string.len();
     let start = check_lower_bounds(start, len)?;
     let end = check_upper_bounds(end, len)?;
@@ -62,7 +62,7 @@ pub(crate) fn read_from_string<'ob>(
 
 pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<bool> {
     let mut pos = 0;
-    let macroexpand: Option<Gc<Function>> = None;
+    let macroexpand: Option<Function> = None;
     root!(macroexpand, cx);
     if let Some(fun) = sym::INTERNAL_MACROEXPAND_FOR_LOAD.func(cx) {
         macroexpand.set(Some(fun));
@@ -99,15 +99,15 @@ pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>)
 }
 
 fn eager_expand<'ob>(
-    obj: &Rt<GcObj>,
-    macroexpand: &Rt<Gc<Function>>,
+    obj: &Rt<Object>,
+    macroexpand: &Rt<Function>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>, anyhow::Error> {
+) -> Result<Object<'ob>, anyhow::Error> {
     let name = "internal-macroexpand-for-load";
     let val = call!(macroexpand, obj, NIL; name, env, cx)?;
     let val = rebind!(val, cx);
-    if let Object::Cons(top) = val.untag() {
+    if let ObjectType::Cons(top) = val.untag() {
         if top.car() == sym::PROGN {
             root!(val, NIL, cx);
             rooted_iter!(forms, top.cdr(), cx);
@@ -139,7 +139,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<Pat
     let mut final_file = None;
     for path in paths {
         match path?.untag() {
-            Object::String(path) => {
+            ObjectType::String(path) => {
                 if let Some(x) = file_in_path(file, path) {
                     final_file = Some(x);
                     break;
@@ -213,17 +213,17 @@ pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> Symbol<'ob> {
 }
 
 #[defun]
-pub(crate) fn intern_soft(string: GcObj, obarray: Option<()>) -> Result<Symbol> {
+pub(crate) fn intern_soft(string: Object, obarray: Option<()>) -> Result<Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.untag() {
-        Object::Symbol(sym) => {
+        ObjectType::Symbol(sym) => {
             if sym.interned() {
                 Ok(sym)
             } else {
                 Ok(sym::NIL)
             }
         }
-        Object::String(string) => {
+        ObjectType::String(string) => {
             let map = crate::core::env::interned_symbols().lock().unwrap();
             match map.get(string) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),

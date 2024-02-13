@@ -76,7 +76,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             arg_cnt: usize,
             env: &mut crate::core::gc::Rt<crate::core::env::Env>,
             cx: &'ob mut crate::core::gc::Context,
-        ) -> anyhow::Result<crate::core::object::GcObj<'ob>> {
+        ) -> anyhow::Result<crate::core::object::Object<'ob>> {
             #[allow(clippy::manual_range_contains)]
             if #arg_count_guard {
                 let upper = #required + #optional;
@@ -388,8 +388,13 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
 
 fn get_object_type(type_path: &syn::TypePath) -> ArgType {
     let outer_type = type_path.path.segments.last().unwrap();
-    if outer_type.ident == "GcObj" {
+    if outer_type.ident == "Object" {
         ArgType::Gc(Gc::Obj)
+    } else if outer_type.ident == "Function"
+        || outer_type.ident == "Number"
+        || outer_type.ident == "List"
+    {
+        ArgType::Gc(Gc::Other)
     } else if outer_type.ident == "Gc" {
         let inner = match get_generic_param(outer_type) {
             Some(syn::Type::Path(generic)) if get_path_ident_name(generic) == "Object" => Gc::Obj,
@@ -460,12 +465,12 @@ mod test {
             (2, 1, false),
         );
         test_sig(
-            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<GcObj>], env: &Rt<Env>, cx: &mut Context) -> u8 {0} },
+            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<Object>], env: &Rt<Env>, cx: &mut Context) -> u8 {0} },
             None,
             (1, 0, true),
         );
         test_sig(
-            quote! { fn foo(env: &Rt<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<GcObj>]) -> u8 {0} },
+            quote! { fn foo(env: &Rt<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<Object>]) -> u8 {0} },
             None,
             (1, 1, true),
         );
@@ -484,26 +489,26 @@ mod test {
     #[test]
     fn test_arguments() {
         test_args(quote! {x: Gc<Object>}, &[ArgType::Gc(Gc::Obj)]);
-        test_args(quote! {x: GcObj}, &[ArgType::Gc(Gc::Obj)]);
+        test_args(quote! {x: Object}, &[ArgType::Gc(Gc::Obj)]);
         test_args(quote! {x: Gc<T>}, &[ArgType::Gc(Gc::Other)]);
-        test_args(quote! {x: &Rt<GcObj>}, &[ArgType::Rt(Gc::Obj)]);
+        test_args(quote! {x: &Rt<Object>}, &[ArgType::Rt(Gc::Obj)]);
         test_args(quote! {x: &Rt<Gc<Object>>}, &[ArgType::Rt(Gc::Obj)]);
         test_args(quote! {x: &Rt<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
         test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
-        test_args(quote! {x: Option<&Rt<GcObj>>}, &[ArgType::OptionRt]);
-        test_args(quote! {x: &[GcObj]}, &[ArgType::Slice(Gc::Obj)]);
+        test_args(quote! {x: Option<&Rt<Object>>}, &[ArgType::OptionRt]);
+        test_args(quote! {x: &[Object]}, &[ArgType::Slice(Gc::Obj)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[u8]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: ArgSlice}, &[ArgType::ArgSlice]);
-        test_args(quote! {x: &[Rt<GcObj>]}, &[ArgType::SliceRt(Gc::Obj)]);
+        test_args(quote! {x: &[Rt<Object>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
         test_args(quote! {x: &Rt<Env>}, &[ArgType::Env(false)]);
         test_args(quote! {x: &mut Rt<Env>}, &[ArgType::Env(MUT)]);
         test_args(
-            quote! {x: u8, s: &[Rt<GcObj>], y: &Context, z: &Rt<Env>},
+            quote! {x: u8, s: &[Rt<Object>], y: &Context, z: &Rt<Env>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),
@@ -521,17 +526,17 @@ mod test {
 
     #[test]
     fn test_error() {
-        check_error(quote! {fn foo(a: GcObj, a: &mut Context) {}});
+        check_error(quote! {fn foo(a: Object, a: &mut Context) {}});
         check_error(quote! {fn foo(a: &[Rt<T>]) {}});
-        check_error(quote! {fn foo(a: Rt<GcObj>) {}});
-        check_error(quote! {fn foo(a: u8, b: &[GcObj], c: &[GcObj]) {}});
+        check_error(quote! {fn foo(a: Rt<Object>) {}});
+        check_error(quote! {fn foo(a: u8, b: &[Object], c: &[Object]) {}});
         check_error(quote! {fn foo(a: u8, b: Option<u8>, c: u8) {}});
     }
 
     #[test]
     fn test_expand() {
         let stream = quote! {
-            fn car<'ob>(list: Gc<List>, cx: &'ob Context) -> GcObj<'ob> {
+            fn car<'ob>(list: Gc<List>, cx: &'ob Context) -> Object<'ob> {
                 match list.get() {
                     List::Cons(cons) => cons.car(),
                     List::Nil => NIL,

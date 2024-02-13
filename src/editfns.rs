@@ -2,14 +2,14 @@
 use crate::core::{
     env::{ArgSlice, Env},
     gc::{Context, Rt},
-    object::{GcObj, Object},
+    object::{Object, ObjectType},
 };
 use anyhow::{bail, ensure, Result};
 use rune_macros::defun;
 use std::{fmt::Write as _, io::Write};
 
 #[defun]
-fn message(format_string: &str, args: &[GcObj]) -> Result<String> {
+fn message(format_string: &str, args: &[Object]) -> Result<String> {
     let message = format(format_string, args)?;
     println!("MESSAGE: {message}");
     std::io::stdout().flush()?;
@@ -20,7 +20,7 @@ defvar!(MESSAGE_NAME);
 defvar!(MESSAGE_TYPE, "new message");
 
 #[defun]
-fn format(string: &str, objects: &[GcObj]) -> Result<String> {
+fn format(string: &str, objects: &[Object]) -> Result<String> {
     let mut result = String::new();
     let mut arguments = objects.iter();
     let mut remaining = string;
@@ -51,7 +51,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
                 bail!("Not enough arguments for format string")
             };
             match val.untag() {
-                Object::String(string) => write!(result, "{string}")?,
+                ObjectType::String(string) => write!(result, "{string}")?,
                 obj => write!(result, "{obj}")?,
             }
         }
@@ -63,7 +63,7 @@ fn format(string: &str, objects: &[GcObj]) -> Result<String> {
 }
 
 #[defun]
-fn format_message(string: &str, objects: &[GcObj]) -> Result<String> {
+fn format_message(string: &str, objects: &[Object]) -> Result<String> {
     let formatted = format(string, objects)?;
     // TODO: implement support for `text-quoting-style`.
     Ok(formatted

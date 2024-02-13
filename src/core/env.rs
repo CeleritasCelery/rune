@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use super::gc::{Context, Rt};
 
-use super::object::{GcObj, LispBuffer, OpenBuffer, Symbol, WithLifetime};
+use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;
 use rune_macros::Trace;
@@ -13,14 +13,14 @@ pub(crate) use symbol_map::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {
-    pub(crate) vars: HashMap<Symbol<'a>, GcObj<'a>>,
-    pub(crate) props: HashMap<Symbol<'a>, Vec<(Symbol<'a>, GcObj<'a>)>>,
-    pub(crate) catch_stack: Vec<GcObj<'a>>,
-    exception: (GcObj<'a>, GcObj<'a>),
+    pub(crate) vars: HashMap<Symbol<'a>, Object<'a>>,
+    pub(crate) props: HashMap<Symbol<'a>, Vec<(Symbol<'a>, Object<'a>)>>,
+    pub(crate) catch_stack: Vec<Object<'a>>,
+    exception: (Object<'a>, Object<'a>),
     #[no_trace]
     exception_id: u32,
-    binding_stack: Vec<(Symbol<'a>, Option<GcObj<'a>>)>,
-    pub(crate) match_data: GcObj<'a>,
+    binding_stack: Vec<(Symbol<'a>, Option<Object<'a>>)>,
+    pub(crate) match_data: Object<'a>,
     #[no_trace]
     pub(crate) current_buffer: Option<OpenBuffer<'a>>,
     pub(crate) stack: LispStack<'a>,
@@ -28,7 +28,7 @@ pub(crate) struct Env<'a> {
 
 // RootedEnv created by #[derive(Trace)]
 impl<'a> RootedEnv<'a> {
-    pub(crate) fn set_var(&mut self, sym: Symbol, value: GcObj) -> Result<()> {
+    pub(crate) fn set_var(&mut self, sym: Symbol, value: Object) -> Result<()> {
         if sym.is_const() {
             Err(anyhow!("Attempt to set a constant symbol: {sym}"))
         } else {
@@ -37,7 +37,7 @@ impl<'a> RootedEnv<'a> {
         }
     }
 
-    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: GcObj) {
+    pub(crate) fn set_prop(&mut self, symbol: Symbol, propname: Symbol, value: Object) {
         match self.props.get_mut(symbol) {
             Some(plist) => match plist.iter_mut().find(|x| x.0 == propname) {
                 Some(x) => x.1.set(value),
@@ -49,18 +49,18 @@ impl<'a> RootedEnv<'a> {
         }
     }
 
-    pub(crate) fn set_exception(&mut self, tag: GcObj, data: GcObj) -> u32 {
+    pub(crate) fn set_exception(&mut self, tag: Object, data: Object) -> u32 {
         self.exception.0.set(tag);
         self.exception.1.set(data);
         self.exception_id += 1;
         self.exception_id
     }
 
-    pub(crate) fn get_exception(&self, id: u32) -> Option<(&Rt<GcObj<'a>>, &Rt<GcObj<'a>>)> {
+    pub(crate) fn get_exception(&self, id: u32) -> Option<(&Rt<Object<'a>>, &Rt<Object<'a>>)> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 
-    pub(crate) fn varbind(&mut self, var: Symbol, value: GcObj, cx: &Context) {
+    pub(crate) fn varbind(&mut self, var: Symbol, value: Object, cx: &Context) {
         let prev_value = self.vars.get(var).map(|x| x.bind(cx));
         self.binding_stack.push((var, prev_value));
         self.vars.insert(var, value);
@@ -78,7 +78,7 @@ impl<'a> RootedEnv<'a> {
         }
     }
 
-    pub(crate) fn defvar(&mut self, var: Symbol, value: GcObj) -> Result<()> {
+    pub(crate) fn defvar(&mut self, var: Symbol, value: Object) -> Result<()> {
         // TOOD: Handle `eval-sexp` on defvar, which should always update the
         // value
         if self.vars.get(var).is_none() {

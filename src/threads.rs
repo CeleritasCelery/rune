@@ -2,18 +2,18 @@
 use crate::core::{
     env::Env,
     gc::{Block, Context, RootSet},
-    object::{CloneIn, GcObj},
+    object::{CloneIn, Object},
 };
 use rune_core::macros::root;
 use rune_macros::defun;
 use std::thread::{self, JoinHandle};
 
 #[defun]
-fn go(obj: GcObj) {
+fn go(obj: Object) {
     go_internal(obj);
 }
 
-fn go_internal(obj: GcObj) -> JoinHandle<()> {
+fn go_internal(obj: Object) -> JoinHandle<()> {
     let block = Block::new_local_unchecked();
     let sexp = obj.clone_in(&block);
     let raw = sexp.into_raw();
@@ -22,7 +22,7 @@ fn go_internal(obj: GcObj) -> JoinHandle<()> {
         let roots = &RootSet::default();
         let cx = &mut Context::from_block(block, roots);
         root!(env, new(Env), cx);
-        let obj = unsafe { GcObj::from_raw(raw) };
+        let obj = unsafe { Object::from_raw(raw) };
         root!(obj, cx);
         _ = crate::interpreter::eval(obj, None, env, cx);
     })

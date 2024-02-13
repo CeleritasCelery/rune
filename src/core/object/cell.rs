@@ -1,6 +1,6 @@
 use std::{cell::Cell, fmt};
 
-use super::{GcObj, WithLifetime};
+use super::{Object, WithLifetime};
 
 /// This type represents and immutable view into an Object. The reason we have
 /// an additional type is because there could be other references to this same
@@ -12,14 +12,14 @@ use super::{GcObj, WithLifetime};
 /// be copy or clone.
 #[derive(PartialEq, Eq)]
 #[repr(transparent)]
-pub(crate) struct ObjCell(Cell<GcObj<'static>>);
+pub(crate) struct ObjCell(Cell<Object<'static>>);
 
 impl ObjCell {
-    pub(crate) fn get(&self) -> GcObj {
+    pub(crate) fn get(&self) -> Object {
         unsafe { self.0.get().with_lifetime() }
     }
 
-    pub(in crate::core) unsafe fn new(obj: GcObj) -> Self {
+    pub(in crate::core) unsafe fn new(obj: Object) -> Self {
         Self(Cell::new(obj.with_lifetime()))
     }
 
@@ -59,7 +59,7 @@ impl std::ops::Deref for MutObjCell {
 }
 
 impl MutObjCell {
-    pub(crate) fn set(&self, value: GcObj) {
+    pub(crate) fn set(&self, value: Object) {
         unsafe {
             self.0 .0.set(value.with_lifetime());
         }

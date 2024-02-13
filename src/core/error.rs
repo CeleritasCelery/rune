@@ -63,7 +63,7 @@ impl TypeError {
     /// Get a type error from an object.
     pub(crate) fn new<'ob, T>(expect: Type, obj: T) -> Self
     where
-        T: Into<super::object::Object<'ob>>,
+        T: Into<super::object::ObjectType<'ob>>,
     {
         let obj = obj.into();
         Self { expect, actual: obj.get_type(), print: obj.to_string() }

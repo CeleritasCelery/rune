@@ -6,8 +6,8 @@ use crate::{
         error::{Type, TypeError},
         gc::{Context, IntoRoot, Rt},
         object::{
-            Function, Gc, GcObj, HashTable, HashTableView, IntoObject, LispHashTable, LispString,
-            LispVec, List, Object, Symbol, NIL,
+            Function, Gc, HashTable, HashTableView, IntoObject, LispHashTable, LispString, LispVec,
+            List, ListType, Object, ObjectType, Symbol, NIL,
         },
     },
     data::aref,
@@ -19,23 +19,23 @@ use rune_core::macros::{call, list, rebind, root, rooted_iter};
 use rune_macros::defun;
 
 #[defun]
-fn identity(arg: GcObj) -> GcObj {
+fn identity(arg: Object) -> Object {
     arg
 }
 
 pub(crate) fn slice_into_list<'ob>(
-    slice: &[GcObj<'ob>],
-    tail: Option<GcObj<'ob>>,
+    slice: &[Object<'ob>],
+    tail: Option<Object<'ob>>,
     cx: &'ob Context,
-) -> GcObj<'ob> {
+) -> Object<'ob> {
     let from_end = slice.iter().rev();
     from_end.fold(tail.into(), |acc, obj| Cons::new(*obj, acc, cx).into())
 }
 
 pub(crate) fn build_list<'ob, E>(
-    mut iter: impl Iterator<Item = Result<GcObj<'ob>, E>>,
+    mut iter: impl Iterator<Item = Result<Object<'ob>, E>>,
     cx: &'ob Context,
-) -> Result<GcObj<'ob>, E> {
+) -> Result<Object<'ob>, E> {
     let Some(first) = iter.next() else { return Ok(NIL) };
     let head = Cons::new1(first?, cx);
     let mut prev = head;
@@ -48,32 +48,32 @@ pub(crate) fn build_list<'ob, E>(
 }
 
 #[defun]
-pub(crate) fn eq(obj1: GcObj, obj2: GcObj) -> bool {
+pub(crate) fn eq(obj1: Object, obj2: Object) -> bool {
     obj1.ptr_eq(obj2)
 }
 
 #[defun]
-pub(crate) fn equal<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
+pub(crate) fn equal<'ob>(obj1: Object<'ob>, obj2: Object<'ob>) -> bool {
     obj1 == obj2
 }
 
 #[defun]
-pub(crate) fn eql<'ob>(obj1: GcObj<'ob>, obj2: GcObj<'ob>) -> bool {
+pub(crate) fn eql<'ob>(obj1: Object<'ob>, obj2: Object<'ob>) -> bool {
     match (obj1.untag(), obj2.untag()) {
-        (Object::Float(f1), Object::Float(f2)) => f1.to_bits() == f2.to_bits(),
+        (ObjectType::Float(f1), ObjectType::Float(f2)) => f1.to_bits() == f2.to_bits(),
         _ => obj1.ptr_eq(obj2),
     }
 }
 
 #[defun]
-fn equal_including_properties<'ob>(o1: GcObj<'ob>, o2: GcObj<'ob>) -> bool {
+fn equal_including_properties<'ob>(o1: Object<'ob>, o2: Object<'ob>) -> bool {
     // TODO: implement text properties
     equal(o1, o2)
 }
 
 #[defun]
-fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
-    let Ok(plist) = Gc::<List>::try_from(plist) else { return Ok(NIL) };
+fn plist_get<'ob>(plist: Object<'ob>, prop: Object<'ob>) -> Result<Object<'ob>> {
+    let Ok(plist) = Gc::<ListType>::try_from(plist) else { return Ok(NIL) };
     // TODO: this function should never fail. Need to implement safe iterator
     let mut iter = plist.elements();
     while let Some(cur_prop) = iter.next() {
@@ -87,12 +87,12 @@ fn plist_get<'ob>(plist: GcObj<'ob>, prop: GcObj<'ob>) -> Result<GcObj<'ob>> {
 
 #[defun]
 fn plist_member<'ob>(
-    plist: GcObj<'ob>,
-    prop: GcObj<'ob>,
-    predicate: Option<GcObj>,
-) -> Result<GcObj<'ob>> {
+    plist: Object<'ob>,
+    prop: Object<'ob>,
+    predicate: Option<Object>,
+) -> Result<Object<'ob>> {
     ensure!(predicate.is_none(), "plist-member predicate support not implemented");
-    let plist: Gc<List> = plist.try_into()?;
+    let plist: List = plist.try_into()?;
     for (idx, value) in plist.conses().enumerate() {
         if idx % 2 != 0 {
             continue;
@@ -106,7 +106,7 @@ fn plist_member<'ob>(
 }
 
 #[defun]
-pub(crate) fn prin1_to_string(object: GcObj, _noescape: Option<GcObj>) -> String {
+pub(crate) fn prin1_to_string(object: Object, _noescape: Option<Object>) -> String {
     format!("{object}")
 }
 
@@ -124,15 +124,15 @@ fn string_search(needle: &str, haystack: &str, start_pos: Option<usize>) -> Opti
 
 #[defun]
 pub(crate) fn mapcar<'ob>(
-    function: &Rt<Gc<Function>>,
-    sequence: &Rt<GcObj>,
+    function: &Rt<Function>,
+    sequence: &Rt<Object>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let sequence = sequence.bind(cx);
     match sequence.untag() {
-        Object::NIL => Ok(NIL),
-        Object::Cons(cons) => {
+        ObjectType::NIL => Ok(NIL),
+        ObjectType::Cons(cons) => {
             rooted_iter!(iter, cons, cx);
             root!(outputs, new(Vec), cx);
             while let Some(obj) = iter.next()? {
@@ -142,7 +142,7 @@ pub(crate) fn mapcar<'ob>(
             // TODO: remove this intermediate vector
             Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
         }
-        Object::ByteFn(fun) => {
+        ObjectType::ByteFn(fun) => {
             let len = fun.len();
             root!(fun, cx);
             root!(outputs, new(Vec), cx);
@@ -160,14 +160,14 @@ pub(crate) fn mapcar<'ob>(
 
 #[defun]
 pub(crate) fn mapc<'ob>(
-    function: &Rt<Gc<Function>>,
-    sequence: &Rt<Gc<List>>,
+    function: &Rt<Function>,
+    sequence: &Rt<List>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     match sequence.untag(cx) {
-        List::Nil => Ok(NIL),
-        List::Cons(cons) => {
+        ListType::Nil => Ok(NIL),
+        ListType::Cons(cons) => {
             rooted_iter!(elements, cons, cx);
             while let Some(elem) = elements.next()? {
                 call!(function, elem; env, cx)?;
@@ -179,11 +179,11 @@ pub(crate) fn mapc<'ob>(
 
 #[defun]
 pub(crate) fn mapcan<'ob>(
-    function: &Rt<Gc<Function>>,
-    sequence: &Rt<GcObj>,
+    function: &Rt<Function>,
+    sequence: &Rt<Object>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let mapped = mapcar(function, sequence, env, cx)?;
     let mut lists = Vec::new();
     for list in mapped.as_list()? {
@@ -194,8 +194,8 @@ pub(crate) fn mapcan<'ob>(
 
 #[defun]
 pub(crate) fn mapconcat(
-    function: &Rt<Gc<Function>>,
-    sequence: &Rt<GcObj>,
+    function: &Rt<Function>,
+    sequence: &Rt<Object>,
     seperator: Option<&Rt<Gc<&LispString>>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
@@ -220,7 +220,7 @@ pub(crate) fn mapconcat(
 }
 
 #[defun]
-pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
+pub(crate) fn nreverse(seq: List) -> Result<Object> {
     let mut prev = NIL;
     for tail in seq.conses() {
         let tail = tail?;
@@ -231,7 +231,7 @@ pub(crate) fn nreverse(seq: Gc<List>) -> Result<GcObj> {
 }
 
 #[defun]
-pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+pub(crate) fn reverse<'ob>(seq: List, cx: &'ob Context) -> Result<Object<'ob>> {
     let mut tail = NIL;
     for elem in seq {
         tail = Cons::new(elem?, tail, cx).into();
@@ -240,7 +240,7 @@ pub(crate) fn reverse<'ob>(seq: Gc<List>, cx: &'ob Context) -> Result<GcObj<'ob>
 }
 
 #[defun]
-pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
+pub(crate) fn nconc<'ob>(lists: &[List<'ob>]) -> Result<Object<'ob>> {
     let mut tail: Option<&Cons> = None;
     for list in lists {
         if let Some(cons) = tail {
@@ -251,14 +251,14 @@ pub(crate) fn nconc<'ob>(lists: &[Gc<List<'ob>>]) -> Result<GcObj<'ob>> {
         }
     }
 
-    Ok(match lists.iter().find(|&&x| x != List::empty()) {
+    Ok(match lists.iter().find(|&&x| x != ListType::empty()) {
         Some(x) => (*x).into(),
         None => NIL,
     })
 }
 
-fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
-    if let List::Cons(cons) = seq.untag() {
+fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>) -> Result<()> {
+    if let ListType::Cons(cons) = seq.untag() {
         for elt in cons {
             list.push(elt?);
         }
@@ -267,25 +267,25 @@ fn join<'ob>(list: &mut Vec<GcObj<'ob>>, seq: Gc<List<'ob>>) -> Result<()> {
 }
 
 #[defun]
-fn take<'ob>(n: i64, list: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn take<'ob>(n: i64, list: List<'ob>, cx: &'ob Context) -> Result<Object<'ob>> {
     let Ok(n) = usize::try_from(n) else { return Ok(NIL) };
     Ok(build_list(list.elements().take(n), cx)?)
 }
 
 #[defun]
 pub(crate) fn append<'ob>(
-    append: GcObj<'ob>,
-    sequences: &[GcObj<'ob>],
+    append: Object<'ob>,
+    sequences: &[Object<'ob>],
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let mut list = Vec::new();
     match append.untag() {
-        Object::String(string) => {
+        ObjectType::String(string) => {
             for ch in string.chars() {
                 list.push((ch as i64).into());
             }
         }
-        Object::ByteString(string) => {
+        ObjectType::ByteString(string) => {
             for ch in string.iter() {
                 list.push((*ch as i64).into());
             }
@@ -300,9 +300,9 @@ pub(crate) fn append<'ob>(
 }
 
 #[defun]
-pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
     for elem in alist {
-        if let Object::Cons(cons) = elem?.untag() {
+        if let ObjectType::Cons(cons) = elem?.untag() {
             if eq(key, cons.car()) {
                 return Ok(cons.into());
             }
@@ -312,9 +312,9 @@ pub(crate) fn assq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'
 }
 
 #[defun]
-fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+fn rassq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
     for elem in alist {
-        if let Object::Cons(cons) = elem?.untag() {
+        if let ObjectType::Cons(cons) = elem?.untag() {
             if eq(key, cons.cdr()) {
                 return Ok(cons.into());
             }
@@ -325,19 +325,19 @@ fn rassq<'ob>(key: GcObj<'ob>, alist: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
 
 #[defun]
 pub(crate) fn assoc<'ob>(
-    key: &Rt<GcObj<'ob>>,
-    alist: &Rt<Gc<List<'ob>>>,
-    testfn: Option<&Rt<GcObj>>,
+    key: &Rt<Object<'ob>>,
+    alist: &Rt<List<'ob>>,
+    testfn: Option<&Rt<Object>>,
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     match testfn {
         Some(x) => {
-            let func: Gc<Function> = x.bind(cx).try_into()?;
+            let func: Function = x.bind(cx).try_into()?;
             root!(func, cx);
             rooted_iter!(iter, alist, cx);
             while let Some(elem) = iter.next()? {
-                if let Object::Cons(cons) = elem.bind(cx).untag() {
+                if let ObjectType::Cons(cons) = elem.bind(cx).untag() {
                     let val = cons.car();
                     root!(cons, cx);
                     let result = call!(func, key, val; env, cx)?;
@@ -351,7 +351,7 @@ pub(crate) fn assoc<'ob>(
             let alist = alist.bind(cx);
             let key = key.bind(cx);
             for elem in alist {
-                if let Object::Cons(cons) = elem?.untag() {
+                if let ObjectType::Cons(cons) = elem?.untag() {
                     if equal(key, cons.car()) {
                         return Ok(cons.into());
                     }
@@ -362,13 +362,13 @@ pub(crate) fn assoc<'ob>(
     Ok(NIL)
 }
 
-type EqFunc = for<'ob> fn(GcObj<'ob>, GcObj<'ob>) -> bool;
+type EqFunc = for<'ob> fn(Object<'ob>, Object<'ob>) -> bool;
 
 #[defun]
-fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn copy_alist<'ob>(alist: List<'ob>, cx: &'ob Context) -> Result<Object<'ob>> {
     match alist.untag() {
-        List::Nil => Ok(NIL),
-        List::Cons(cons) => {
+        ListType::Nil => Ok(NIL),
+        ListType::Cons(cons) => {
             let first = copy_alist_elem(cons.car(), cx);
             let head = Cons::new1(first, cx);
             let mut tail = head;
@@ -384,18 +384,14 @@ fn copy_alist<'ob>(alist: Gc<List<'ob>>, cx: &'ob Context) -> Result<GcObj<'ob>>
     }
 }
 
-fn copy_alist_elem<'ob>(elem: GcObj<'ob>, cx: &'ob Context) -> GcObj<'ob> {
+fn copy_alist_elem<'ob>(elem: Object<'ob>, cx: &'ob Context) -> Object<'ob> {
     match elem.untag() {
-        Object::Cons(cons) => Cons::new(cons.car(), cons.cdr(), cx).into(),
+        ObjectType::Cons(cons) => Cons::new(cons.car(), cons.cdr(), cx).into(),
         _ => elem,
     }
 }
 
-fn delete_from_list<'ob>(
-    elt: GcObj<'ob>,
-    list: Gc<List<'ob>>,
-    eq_fn: EqFunc,
-) -> Result<GcObj<'ob>> {
+fn delete_from_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
     let mut head = list.into();
     let mut prev: Option<&'ob Cons> = None;
     for tail in list.conses() {
@@ -414,16 +410,16 @@ fn delete_from_list<'ob>(
 }
 
 #[defun]
-pub(crate) fn delete<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn delete<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     delete_from_list(elt, list, equal)
 }
 
 #[defun]
-pub(crate) fn delq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn delq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     delete_from_list(elt, list, eq)
 }
 
-fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> Result<GcObj<'ob>> {
+fn member_of_list<'ob>(elt: Object<'ob>, list: List<'ob>, eq_fn: EqFunc) -> Result<Object<'ob>> {
     let val = list.conses().fallible().find(|x| Ok(eq_fn(x.car(), elt)))?;
     match val {
         Some(elem) => Ok(elem.into()),
@@ -432,17 +428,17 @@ fn member_of_list<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>, eq_fn: EqFunc) -> R
 }
 
 #[defun]
-pub(crate) fn memq<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn memq<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     member_of_list(elt, list, eq)
 }
 
 #[defun]
-pub(crate) fn memql<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn memql<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     member_of_list(elt, list, eql)
 }
 
 #[defun]
-pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<'ob>> {
+pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'ob>> {
     member_of_list(elt, list, equal)
 }
 
@@ -450,11 +446,11 @@ pub(crate) fn member<'ob>(elt: GcObj<'ob>, list: Gc<List<'ob>>) -> Result<GcObj<
 // TODO: Sort items in place
 #[defun]
 fn sort<'ob>(
-    seq: &Rt<Gc<List>>,
-    predicate: &Rt<Gc<Function>>,
+    seq: &Rt<List>,
+    predicate: &Rt<Function>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let vec: Vec<_> = seq.bind(cx).elements().fallible().collect()?;
     let len = vec.len();
     if len <= 1 {
@@ -531,12 +527,12 @@ pub(crate) fn require<'ob>(
 }
 
 #[defun]
-pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
+pub(crate) fn concat(sequences: &[Object]) -> Result<String> {
     let mut concat = String::new();
     for elt in sequences {
         match elt.untag() {
-            Object::String(string) => concat += string,
-            Object::NIL => continue,
+            ObjectType::String(string) => concat += string,
+            ObjectType::NIL => continue,
             _ => bail!("Currently only concatenating strings are supported"),
         }
     }
@@ -544,27 +540,27 @@ pub(crate) fn concat(sequences: &[GcObj]) -> Result<String> {
 }
 
 #[defun]
-pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&'ob LispVec>> {
-    let mut concated: Vec<GcObj> = Vec::new();
+pub(crate) fn vconcat<'ob>(sequences: &[Object], cx: &'ob Context) -> Result<Gc<&'ob LispVec>> {
+    let mut concated: Vec<Object> = Vec::new();
     for elt in sequences {
         match elt.untag() {
             // TODO: need to correctly handle unibyte strings (no unicode codepoints)
-            Object::String(string) => {
+            ObjectType::String(string) => {
                 for chr in string.chars() {
                     concated.push((chr as i64).into());
                 }
             }
-            Object::Cons(cons) => {
+            ObjectType::Cons(cons) => {
                 for x in cons {
                     concated.push(x?);
                 }
             }
-            Object::Vec(vec) => {
+            ObjectType::Vec(vec) => {
                 for x in vec.iter() {
                     concated.push(x.get());
                 }
             }
-            Object::NIL => {}
+            ObjectType::NIL => {}
             obj => bail!(TypeError::new(Type::Sequence, obj)),
         }
     }
@@ -572,55 +568,55 @@ pub(crate) fn vconcat<'ob>(sequences: &[GcObj], cx: &'ob Context) -> Result<Gc<&
 }
 
 #[defun]
-pub(crate) fn length(sequence: GcObj) -> Result<usize> {
+pub(crate) fn length(sequence: Object) -> Result<usize> {
     let size = match sequence.untag() {
-        Object::Cons(x) => x.elements().len()?,
-        Object::Vec(x) => x.len(),
-        Object::String(x) => x.len(),
-        Object::ByteString(x) => x.len(),
-        Object::ByteFn(x) => x.len(),
-        Object::NIL => 0,
+        ObjectType::Cons(x) => x.elements().len()?,
+        ObjectType::Vec(x) => x.len(),
+        ObjectType::String(x) => x.len(),
+        ObjectType::ByteString(x) => x.len(),
+        ObjectType::ByteFn(x) => x.len(),
+        ObjectType::NIL => 0,
         obj => bail!(TypeError::new(Type::Sequence, obj)),
     };
     Ok(size)
 }
 
 #[defun]
-pub(crate) fn safe_length(sequence: GcObj) -> usize {
+pub(crate) fn safe_length(sequence: Object) -> usize {
     length(sequence).unwrap_or(0)
 }
 
 #[defun]
-pub(crate) fn proper_list_p(object: GcObj) -> Option<usize> {
+pub(crate) fn proper_list_p(object: Object) -> Option<usize> {
     // TODO: Handle dotted list and circular
     match object.untag() {
-        Object::Cons(x) => x.elements().len().ok(),
+        ObjectType::Cons(x) => x.elements().len().ok(),
         _ => None,
     }
 }
 
 #[defun]
-pub(crate) fn nth(n: usize, list: Gc<List>) -> Result<GcObj> {
+pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
     Ok(list.elements().fallible().nth(n)?.unwrap_or_default())
 }
 
 #[defun]
-pub(crate) fn nthcdr(n: usize, list: Gc<List>) -> Result<Gc<List>> {
+pub(crate) fn nthcdr(n: usize, list: List) -> Result<List> {
     match list.conses().fallible().nth(n)? {
         Some(x) => Ok(x.into()),
-        None => Ok(List::empty()),
+        None => Ok(ListType::empty()),
     }
 }
 
 #[defun]
-pub(crate) fn elt<'ob>(sequence: GcObj<'ob>, n: usize, cx: &'ob Context) -> Result<GcObj<'ob>> {
+pub(crate) fn elt<'ob>(sequence: Object<'ob>, n: usize, cx: &'ob Context) -> Result<Object<'ob>> {
     match sequence.untag() {
-        Object::Cons(x) => nth(n, x.into()),
-        Object::NIL => Ok(NIL),
-        Object::Vec(x) => aref(x.into(), n, cx),
-        Object::Record(x) => aref(x.into(), n, cx),
-        Object::String(x) => aref(x.into(), n, cx),
-        Object::ByteFn(x) => aref(x.into(), n, cx),
+        ObjectType::Cons(x) => nth(n, x.into()),
+        ObjectType::NIL => Ok(NIL),
+        ObjectType::Vec(x) => aref(x.into(), n, cx),
+        ObjectType::Record(x) => aref(x.into(), n, cx),
+        ObjectType::String(x) => aref(x.into(), n, cx),
+        ObjectType::ByteFn(x) => aref(x.into(), n, cx),
         other => Err(TypeError::new(Type::Sequence, other).into()),
     }
 }
@@ -634,9 +630,9 @@ defsym!(KW_DOCUMENTATION);
 
 #[defun]
 pub(crate) fn make_hash_table<'ob>(
-    keyword_args: &[GcObj<'ob>],
+    keyword_args: &[Object<'ob>],
     cx: &'ob Context,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     let kw_test_pos = keyword_args.iter().step_by(2).position(|&x| x == sym::KW_TEST);
     if let Some(i) = kw_test_pos {
         let Some(val) = keyword_args.get((i * 2) + 1) else {
@@ -653,17 +649,17 @@ pub(crate) fn make_hash_table<'ob>(
 }
 
 #[defun]
-pub(crate) fn hash_table_p(obj: GcObj) -> bool {
-    matches!(obj.untag(), Object::HashTable(_))
+pub(crate) fn hash_table_p(obj: Object) -> bool {
+    matches!(obj.untag(), ObjectType::HashTable(_))
 }
 
 #[defun]
 pub(crate) fn gethash<'ob>(
-    key: GcObj<'ob>,
+    key: Object<'ob>,
     table: &'ob LispHashTable,
-    dflt: Option<GcObj<'ob>>,
+    dflt: Option<Object<'ob>>,
     cx: &'ob Context,
-) -> Option<GcObj<'ob>> {
+) -> Option<Object<'ob>> {
     match table.borrow().get(&key) {
         Some(x) => Some(cx.bind(x.get())),
         None => dflt,
@@ -672,16 +668,16 @@ pub(crate) fn gethash<'ob>(
 
 #[defun]
 pub(crate) fn puthash<'ob>(
-    key: GcObj<'ob>,
-    value: GcObj<'ob>,
+    key: Object<'ob>,
+    value: Object<'ob>,
     table: &'ob LispHashTable,
-) -> Result<GcObj<'ob>> {
+) -> Result<Object<'ob>> {
     table.try_borrow_mut()?.insert(key, value);
     Ok(value)
 }
 
 #[defun]
-fn remhash(key: GcObj, table: &LispHashTable) -> Result<()> {
+fn remhash(key: Object, table: &LispHashTable) -> Result<()> {
     let mut table = table.try_borrow_mut()?;
     let Some(idx) = table.get_index_of(&key) else { return Ok(()) };
     // If the removed element is before our iterator, then we need to shift the
@@ -696,12 +692,12 @@ fn remhash(key: GcObj, table: &LispHashTable) -> Result<()> {
 
 #[defun]
 fn maphash(
-    function: &Rt<Gc<Function>>,
+    function: &Rt<Function>,
     table: &Rt<Gc<&LispHashTable>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {
-    let get_idx = |table: &mut HashTableView<'_, GcObj>| {
+    let get_idx = |table: &mut HashTableView<'_, Object>| {
         let end = table.len();
         let idx = table.iter_next;
         table.iter_next += 1;
@@ -731,24 +727,24 @@ fn maphash(
 }
 
 #[defun]
-fn copy_sequence<'ob>(arg: GcObj<'ob>, cx: &'ob Context) -> Result<GcObj<'ob>> {
+fn copy_sequence<'ob>(arg: Object<'ob>, cx: &'ob Context) -> Result<Object<'ob>> {
     match arg.untag() {
-        Object::Vec(x) => Ok(cx.add(x.to_vec())),
-        Object::Cons(x) => {
+        ObjectType::Vec(x) => Ok(cx.add(x.to_vec())),
+        ObjectType::Cons(x) => {
             // TODO: remove this temp vector
             let mut elements = Vec::new();
             let mut tail = None;
             for cons in x.conses() {
                 let cons = cons?;
                 elements.push(cons.car());
-                if !matches!(cons.cdr().untag(), Object::Cons(_)) {
+                if !matches!(cons.cdr().untag(), ObjectType::Cons(_)) {
                     tail = Some(cons.cdr());
                 }
             }
             Ok(slice_into_list(&elements, tail, cx))
         }
-        Object::String(x) => Ok(cx.add(x.to_owned())),
-        Object::NIL => Ok(NIL),
+        ObjectType::String(x) => Ok(cx.add(x.to_owned())),
+        ObjectType::NIL => Ok(NIL),
         _ => Err(TypeError::new(Type::Sequence, arg).into()),
     }
 }
@@ -778,7 +774,7 @@ defsym!(SHA384);
 defsym!(SHA512);
 
 #[defun]
-fn secure_hash_algorithms<'ob>(cx: &'ob Context) -> GcObj<'ob> {
+fn secure_hash_algorithms<'ob>(cx: &'ob Context) -> Object<'ob> {
     // https://crates.io/crates/md-5
     // https://crates.io/crates/sha1
     // https://crates.io/crates/sha2
@@ -875,36 +871,36 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         {
-            let res = nconc(&[List::empty()]).unwrap();
+            let res = nconc(&[ListType::empty()]).unwrap();
             assert!(res == NIL);
         }
         {
-            let list: Gc<List> = list![1, 2; cx].try_into().unwrap();
+            let list: List = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
-            let list2: Gc<List> = list![3, 4; cx].try_into().unwrap();
+            let list1: List = list![1, 2; cx].try_into().unwrap();
+            let list2: List = list![3, 4; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2, 3, 4; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
-            let list2: Gc<List> = list![3, 4; cx].try_into().unwrap();
-            let list3: Gc<List> = list![5, 6; cx].try_into().unwrap();
+            let list1: List = list![1, 2; cx].try_into().unwrap();
+            let list2: List = list![3, 4; cx].try_into().unwrap();
+            let list3: List = list![5, 6; cx].try_into().unwrap();
             let res = nconc(&[list1, list2, list3]).unwrap();
             assert_eq!(res, list![1, 2, 3, 4, 5, 6; cx]);
         }
         {
-            let list1: Gc<List> = NIL.try_into().unwrap();
-            let list2: Gc<List> = list![1, 2; cx].try_into().unwrap();
+            let list1: List = NIL.try_into().unwrap();
+            let list2: List = list![1, 2; cx].try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
         {
-            let list1: Gc<List> = list![1, 2; cx].try_into().unwrap();
-            let list2: Gc<List> = NIL.try_into().unwrap();
+            let list1: List = list![1, 2; cx].try_into().unwrap();
+            let list2: List = NIL.try_into().unwrap();
             let res = nconc(&[list1, list2]).unwrap();
             assert_eq!(res, list![1, 2; cx]);
         }
@@ -923,7 +919,7 @@ mod test {
     fn test_assq() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        let element = GcObj::from(Cons::new(5, 6, cx));
+        let element = Object::from(Cons::new(5, 6, cx));
         let list = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), element; cx];
         let list = list.try_into().unwrap();
         let result = assq(5.into(), list).unwrap();
@@ -959,44 +955,44 @@ mod test {
         let func = sym::LESS_THAN.func(cx).unwrap();
         root!(func, cx);
         {
-            root!(list, List::empty(), cx);
+            root!(list, ListType::empty(), cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, NIL);
         }
         {
-            let list: Gc<List> = list![1; cx].try_into().unwrap();
+            let list: List = list![1; cx].try_into().unwrap();
             root!(list, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![1; cx]);
         }
         {
-            let list: Gc<List> = list![2, 1; cx].try_into().unwrap();
+            let list: List = list![2, 1; cx].try_into().unwrap();
             root!(list, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![1, 2; cx]);
         }
         {
-            let list: Gc<List> = list![1, 2, 3; cx].try_into().unwrap();
+            let list: List = list![1, 2, 3; cx].try_into().unwrap();
             root!(list, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![1, 2, 3; cx]);
         }
         {
-            let list: Gc<List> = list![3, 2, 1; cx].try_into().unwrap();
+            let list: List = list![3, 2, 1; cx].try_into().unwrap();
             root!(list, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![1, 2, 3; cx]);
         }
 
         {
-            let list: Gc<List> = list![3, 1, 2; cx].try_into().unwrap();
+            let list: List = list![3, 1, 2; cx].try_into().unwrap();
             root!(list, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
             assert_eq!(res, list![1, 2, 3; cx]);
         }
         {
             let func = sym::GREATER_THAN.func(cx).unwrap();
-            let list: Gc<List> = list![1, 2, 3, 4, 5; cx].try_into().unwrap();
+            let list: List = list![1, 2, 3, 4, 5; cx].try_into().unwrap();
             root!(list, cx);
             root!(func, cx);
             let res = rebind!(sort(list, func, env, cx).unwrap());
@@ -1005,7 +1001,7 @@ mod test {
         {
             // check stable sorting
             let func = sym::CAR_LESS_THAN_CAR.func(cx).unwrap();
-            let list: Gc<List> =
+            let list: List =
                 list![Cons::new(1, 1, cx), Cons::new(1, 2, cx), Cons::new(1, 3, cx); cx]
                     .try_into()
                     .unwrap();

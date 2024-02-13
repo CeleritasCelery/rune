@@ -2,7 +2,7 @@
 use crate::core::{
     env::{sym, Env},
     gc::{Context, Rt},
-    object::GcObj,
+    object::Object,
 };
 use rune_core::macros::list;
 use rune_macros::defun;
@@ -11,7 +11,7 @@ use std::time::SystemTime;
 defvar!(CURRENT_TIME_LIST, true);
 
 #[defun]
-fn current_time<'ob>(cx: &'ob Context, env: &Rt<Env>) -> GcObj<'ob> {
+fn current_time<'ob>(cx: &'ob Context, env: &Rt<Env>) -> Object<'ob> {
     assert!(
         env.vars.get(sym::CURRENT_TIME_LIST).unwrap() == &sym::TRUE,
         "current-time-list is nil"

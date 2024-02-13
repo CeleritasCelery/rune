@@ -2,7 +2,7 @@ use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 
 use super::gc::{Block, Context, GcHeap, Trace};
-use super::object::{CloneIn, Gc, GcObj, IntoObject, ObjCell, Object, RawObj, NIL};
+use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, RawObj, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
 
@@ -44,7 +44,7 @@ impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
     // the stack. Otherwise it could outlive it's objects since it has no
     // lifetimes.
-    unsafe fn new_unchecked(car: GcObj, cdr: GcObj) -> ConsInner {
+    unsafe fn new_unchecked(car: Object, cdr: Object) -> ConsInner {
         ConsInner { mutable: true, car: ObjCell::new(car), cdr: ObjCell::new(cdr) }
     }
 
@@ -56,9 +56,9 @@ impl Cons {
     ) -> &'ob Self
     where
         T: IntoObject<Out<'ob> = Tx>,
-        Gc<Tx>: Into<GcObj<'ob>>,
+        Gc<Tx>: Into<Object<'ob>>,
         U: IntoObject<Out<'ob> = Ux>,
-        Gc<Ux>: Into<GcObj<'ob>>,
+        Gc<Ux>: Into<Object<'ob>>,
     {
         let car = car.into_obj(cx).into();
         let cdr = cdr.into_obj(cx).into();
@@ -70,7 +70,7 @@ impl Cons {
     pub(crate) fn new1<'ob, T, Tx>(car: T, cx: &'ob Context) -> &'ob Self
     where
         T: IntoObject<Out<'ob> = Tx>,
-        Gc<Tx>: Into<GcObj<'ob>>,
+        Gc<Tx>: Into<Object<'ob>>,
     {
         let car = car.into_obj(cx).into();
         let cons = unsafe { Cons::new_unchecked(car, NIL) };
@@ -83,15 +83,15 @@ impl Cons {
 }
 
 impl ConsInner {
-    pub(crate) fn car(&self) -> GcObj {
+    pub(crate) fn car(&self) -> Object {
         self.car.get()
     }
 
-    pub(crate) fn cdr(&self) -> GcObj {
+    pub(crate) fn cdr(&self) -> Object {
         self.cdr.get()
     }
 
-    pub(crate) fn set_car(&self, new_car: GcObj) -> Result<()> {
+    pub(crate) fn set_car(&self, new_car: Object) -> Result<()> {
         if self.mutable {
             unsafe { self.car.as_mut().set(new_car) }
             Ok(())
@@ -100,7 +100,7 @@ impl ConsInner {
         }
     }
 
-    pub(crate) fn set_cdr(&self, new_cdr: GcObj) -> Result<()> {
+    pub(crate) fn set_cdr(&self, new_cdr: Object) -> Result<()> {
         if self.mutable {
             unsafe { self.cdr.as_mut().set(new_cdr) }
             Ok(())
@@ -157,11 +157,11 @@ impl Cons {
         loop {
             cons.car().untag().display_walk(f, seen)?;
             match cons.cdr().untag() {
-                Object::Cons(tail) => {
+                ObjectType::Cons(tail) => {
                     cons = tail;
                     f.write_char(' ')?;
                 }
-                Object::NIL => break,
+                ObjectType::NIL => break,
                 x => {
                     write!(f, " . ")?;
                     x.display_walk(f, seen)?;
@@ -211,15 +211,15 @@ mod test {
         let start2_str = "start2".to_owned();
         assert_eq!(cx.add(start2_str), cons1.car());
 
-        let Object::Cons(cons2) = cons1.cdr().untag() else { unreachable!("Expected cons") };
+        let ObjectType::Cons(cons2) = cons1.cdr().untag() else { unreachable!("Expected cons") };
 
-        let cmp: GcObj = 7.into();
+        let cmp: Object = 7.into();
         assert_eq!(cmp, cons2.car());
 
-        let Object::Cons(cons3) = cons2.cdr().untag() else { unreachable!("Expected cons") };
-        let cmp1: GcObj = 5.into();
+        let ObjectType::Cons(cons3) = cons2.cdr().untag() else { unreachable!("Expected cons") };
+        let cmp1: Object = 5.into();
         assert_eq!(cmp1, cons3.car());
-        let cmp2: GcObj = 9.into();
+        let cmp2: Object = 9.into();
         assert_eq!(cmp2, cons3.cdr());
 
         let lhs = Cons::new(5, "foo", cx);

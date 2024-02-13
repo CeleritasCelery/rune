@@ -2,13 +2,13 @@
 use crate::core::cons::Cons;
 use crate::core::gc::Context;
 use crate::core::object::{
-    ByteFn, ByteString, FnArgs, Gc, GcObj, IntoObject, LispVec, RecordBuilder, Symbol, NIL,
+    ByteFn, ByteString, FnArgs, Gc, IntoObject, LispVec, Object, RecordBuilder, Symbol, NIL,
 };
 use anyhow::{ensure, Result};
 use rune_macros::defun;
 
 #[defun]
-pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> {
+pub(crate) fn list<'ob>(objects: &[Object<'ob>], cx: &'ob Context) -> Object<'ob> {
     let mut head = NIL;
     for object in objects.iter().rev() {
         head = Cons::new(*object, head, cx).into();
@@ -21,7 +21,7 @@ pub(crate) fn list<'ob>(objects: &[GcObj<'ob>], cx: &'ob Context) -> GcObj<'ob> 
 #[defun]
 pub(crate) fn make_closure<'ob>(
     prototype: &ByteFn,
-    closure_vars: &[GcObj<'ob>],
+    closure_vars: &[Object<'ob>],
     cx: &'ob Context,
 ) -> Result<Gc<&'ob ByteFn>> {
     let const_len = prototype.consts().len();
@@ -48,9 +48,9 @@ pub(crate) fn make_byte_code<'ob>(
     byte_code: &'ob ByteString,
     constants: &'ob LispVec,
     depth: usize,
-    _docstring: Option<GcObj>,
-    _interactive_spec: Option<GcObj>,
-    _elements: &[GcObj],
+    _docstring: Option<Object>,
+    _interactive_spec: Option<Object>,
+    _elements: &[Object],
     cx: &'ob Context,
 ) -> Result<&'ob ByteFn> {
     unsafe {
@@ -61,24 +61,24 @@ pub(crate) fn make_byte_code<'ob>(
 }
 
 #[defun]
-fn make_vector(length: usize, init: GcObj) -> Vec<GcObj> {
+fn make_vector(length: usize, init: Object) -> Vec<Object> {
     vec![init; length]
 }
 
 #[defun]
-fn vector<'ob>(objects: &[GcObj<'ob>]) -> Vec<GcObj<'ob>> {
+fn vector<'ob>(objects: &[Object<'ob>]) -> Vec<Object<'ob>> {
     objects.into()
 }
 
 #[defun]
-fn record<'ob>(type_: GcObj<'ob>, slots: &[GcObj<'ob>]) -> RecordBuilder<'ob> {
+fn record<'ob>(type_: Object<'ob>, slots: &[Object<'ob>]) -> RecordBuilder<'ob> {
     let mut record = vec![type_];
     record.extend_from_slice(slots);
     RecordBuilder(record)
 }
 
 #[defun]
-fn purecopy(obj: GcObj) -> GcObj {
+fn purecopy(obj: Object) -> Object {
     obj
 }
 
