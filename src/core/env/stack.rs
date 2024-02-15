@@ -160,24 +160,16 @@ impl<'a> RootedLispStack<'a> {
         self.frames.pop();
     }
 
-    pub(crate) fn get_bytecode_frame(&self, idx: usize) -> Option<(&Rt<&ByteFn>, usize)> {
-        self.frames.get(idx).and_then(|f| {
-            f.bytecode.as_ref().map(|f| {
-                let func = &f.func;
-                let pc = f.pc_offset;
-                (func, pc)
-            })
-        })
+    pub(crate) fn get_bytecode_frame(&self, idx: usize) -> Option<(&Rt<&'a ByteFn>, usize)> {
+        let frame = self.frames.get(idx)?;
+        let bytecode = frame.bytecode.as_ref()?;
+        let func = &bytecode.func;
+        let pc = bytecode.pc_offset;
+        Some((func, pc))
     }
 
-    pub(crate) fn prev_bytecode_frame(&self) -> Option<(&Rt<&ByteFn>, usize)> {
-        self.frames.last().and_then(|f| {
-            f.bytecode.as_ref().map(|f| {
-                let func = &f.func;
-                let pc = f.pc_offset;
-                (func, pc)
-            })
-        })
+    pub(crate) fn prev_bytecode_frame(&self) -> Option<(&Rt<&'a ByteFn>, usize)> {
+        self.get_bytecode_frame(self.frames.len() - 1)
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -278,20 +270,20 @@ impl<'a> RootedLispStack<'a> {
         self.vec.extend_from_within(src);
     }
 
-    pub(crate) fn frame_iter(&self) -> impl Iterator<Item = &Rt<Object>> {
-        self.vec[self.current.start..].iter().rev()
+    pub(crate) fn frames<'b>(&'b self) -> &'b [Rt<Object<'a>>] {
+        &self.vec[self.current.start..]
     }
 
     pub(crate) fn arg_count(&self) -> usize {
         self.len() - self.current.start
     }
 
-    pub(crate) fn current_args(&self) -> &[Rt<Object>] {
+    pub(crate) fn current_args(&self) -> &[Rt<Object<'a>>] {
         // index as vec
         &self.vec[self.current.start..]
     }
 
-    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<Object>] {
+    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<Object<'a>>] {
         // index as stack
         &self[..arg_slice.0]
     }

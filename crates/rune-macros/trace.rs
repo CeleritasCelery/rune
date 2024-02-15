@@ -35,8 +35,11 @@ fn derive_enum(orig: &syn::DeriveInput, data_enum: &syn::DataEnum) -> TokenStrea
     let orig_name = &orig.ident;
     let rooted_name = format_ident!("Rooted{orig_name}");
     let generic_params = &orig.generics;
+    let repr = get_repr(&orig.attrs);
+
     let mut new_fields = TokenStream::new();
     let mut mark_fields = TokenStream::new();
+
     for x in &data_enum.variants {
         let no_trace = no_trace(&x.attrs);
         let ident = &x.ident;
@@ -89,6 +92,7 @@ fn derive_enum(orig: &syn::DeriveInput, data_enum: &syn::DataEnum) -> TokenStrea
         #[automatically_derived]
         #[allow(non_camel_case_types)]
         #[doc = #doc_string]
+        #repr
         #vis enum #rooted_name #generic_params {#new_fields}
     }
 }
@@ -99,9 +103,12 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
     let orig_name = &orig.ident;
     let rooted_name = format_ident!("Rooted{orig_name}");
     let generic_params = &orig.generics;
+    let repr = get_repr(&orig.attrs);
+
     let mut new_fields = TokenStream::new();
     let mut mark_fields = TokenStream::new();
     let mut test_fields = TokenStream::new();
+
     match &data_struct.fields {
         syn::Fields::Named(fields) => {
             for x in &fields.named {
@@ -157,6 +164,7 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
         #[automatically_derived]
         #[allow(non_camel_case_types)]
         #[doc = #doc_string]
+        #repr
         #vis struct #rooted_name #generic_params #new_fields
 
         // This makes sure that the offsets of the fields are the same
@@ -174,6 +182,17 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
             }
         }
     }
+}
+
+fn get_repr(attrs: &[syn::Attribute]) -> TokenStream {
+    for attr in attrs {
+        if let syn::Meta::List(list) = &attr.meta {
+            if list.path.is_ident("repr") {
+                return quote! {#attr};
+            }
+        }
+    }
+    quote! {}
 }
 
 fn no_trace(attrs: &[syn::Attribute]) -> bool {
@@ -221,6 +240,20 @@ mod test {
                 C(String, usize),
                 #[no_trace]
                 D(i32, usize),
+            }
+        );
+        let input: syn::DeriveInput = syn::parse2(stream).unwrap();
+        let result = expand(&input);
+        println!("{result}");
+    }
+
+    #[test]
+    fn test_repr_c() {
+        let stream = quote!(
+            #[repr(C)]
+            struct Foo {
+                a: A,
+                b: B,
             }
         );
         let input: syn::DeriveInput = syn::parse2(stream).unwrap();

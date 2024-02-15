@@ -303,7 +303,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
             if Self::debug_enabled() {
                 println!("[");
-                for (idx, x) in self.env.stack.frame_iter().enumerate() {
+                for (idx, x) in self.env.stack.frames().iter().rev().enumerate() {
                     println!("    {idx}: {x},");
                 }
                 println!("]");

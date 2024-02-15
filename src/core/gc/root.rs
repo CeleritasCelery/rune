@@ -48,7 +48,7 @@ where
     T: WithLifetime<'a, Out = U> + Copy,
 {
     unsafe fn into_root(self) -> U {
-        self.inner.with_lifetime()
+        self.inner().with_lifetime()
     }
 }
 
@@ -164,33 +164,46 @@ pub struct Rt<T: ?Sized> {
 
 impl<T: Debug> Debug for Rt<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.inner, f)
+        Debug::fmt(&self.inner(), f)
     }
 }
 
 impl<T: Display> Display for Rt<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.inner, f)
+        Display::fmt(&self.inner(), f)
     }
 }
 
+// can't use a blanet impl of impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T>
+// due to lifetime restrictions around invariance.
+
 impl PartialEq for Rt<Object<'_>> {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+        self.inner() == other.inner()
     }
 }
 
 impl PartialEq for Rt<Symbol<'_>> {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+        self.inner() == other.inner()
     }
 }
 
-impl Eq for Rt<Symbol<'_>> {}
+impl PartialEq<Symbol<'_>> for Rt<Symbol<'_>> {
+    fn eq(&self, other: &Symbol) -> bool {
+        self.inner() == other
+    }
+}
 
-impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T> {
-    fn eq(&self, other: &U) -> bool {
-        self.inner == *other
+impl PartialEq<Object<'_>> for Rt<Object<'_>> {
+    fn eq(&self, other: &Object) -> bool {
+        self.inner() == other
+    }
+}
+
+impl PartialEq<Symbol<'_>> for Rt<Object<'_>> {
+    fn eq(&self, other: &Symbol) -> bool {
+        self.inner() == other
     }
 }
 
@@ -198,7 +211,7 @@ impl Deref for Rt<Gc<&LispString>> {
     type Target = LispString;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.untag()
+        self.inner().untag()
     }
 }
 
@@ -207,7 +220,7 @@ where
     T: Hash,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.inner.hash(state);
+        self.inner().hash(state);
     }
 }
 
@@ -271,19 +284,35 @@ where
 }
 
 impl<T> Rt<T> {
+    fn inner(&self) -> &T {
+        &self.inner
+    }
+
+    fn inner_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+
+    fn inner_get(&self) -> *const T {
+        &self.inner as *const T
+    }
+
+    fn inner_get_mut(&mut self) -> *mut T {
+        &mut self.inner as *mut T
+    }
+
     pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
     where
         T: WithLifetime<'ob> + Copy,
     {
         // SAFETY: We are holding a reference to the context
-        unsafe { self.inner.with_lifetime() }
+        unsafe { self.inner().with_lifetime() }
     }
 
     pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
     where
         T: WithLifetime<'ob> + Copy,
     {
-        self.inner.with_lifetime()
+        self.inner().with_lifetime()
     }
 
     pub(crate) fn bind_ref<'a, 'ob>(&'a self, _: &'ob Context) -> &'a <T as WithLifetime<'ob>>::Out
@@ -291,7 +320,7 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        unsafe { std::mem::transmute::<&'a T, &'a <T as WithLifetime<'ob>>::Out>(&self.inner) }
+        unsafe { &*self.inner_get().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
     pub(crate) fn bind_mut<'a, 'ob>(
@@ -302,9 +331,7 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        unsafe {
-            std::mem::transmute::<&'a mut T, &'a mut <T as WithLifetime<'ob>>::Out>(&mut self.inner)
-        }
+        unsafe { &mut *self.inner_get_mut().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
     pub(crate) fn bind_slice<'brw, 'ob, U>(slice: &'brw [Rt<T>], _: &'ob Context) -> &'brw [U]
@@ -318,7 +345,7 @@ impl<T> Rt<T> {
     pub(crate) fn set<U: IntoRoot<T>>(&mut self, item: U) {
         // SAFETY: we drop the old type so it never exposed and take the new
         // rooted type and replace it.
-        unsafe { self.inner = item.into_root() }
+        unsafe { *self.inner_mut() = item.into_root() }
     }
 }
 
@@ -326,7 +353,7 @@ impl TryFrom<&Rt<Object<'_>>> for usize {
     type Error = anyhow::Error;
 
     fn try_from(value: &Rt<Object>) -> Result<Self, Self::Error> {
-        value.inner.try_into()
+        (*value.inner()).try_into()
     }
 }
 
@@ -336,7 +363,7 @@ impl<T> Rt<Gc<T>> {
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
     {
-        let _: Gc<U> = self.inner.try_into()?;
+        let _: Gc<U> = (*self.inner()).try_into()?;
         // SAFETY: This is safe because all Gc types have the same representation
         unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
     }
@@ -347,7 +374,7 @@ impl<T> Rt<Gc<T>> {
         Gc<T>: WithLifetime<'ob> + Copy,
         <Gc<T> as WithLifetime<'ob>>::Out: TryInto<U, Error = E> + Copy,
     {
-        unsafe { self.inner.with_lifetime().try_into() }
+        unsafe { self.inner().with_lifetime().try_into() }
     }
 
     /// Like `From`, but needed to due no specialization
@@ -362,7 +389,7 @@ impl<T> Rt<Gc<T>> {
     // TODO: Find a way to remove this method. We should never need to guess
     // if something is cons
     pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
-        match self.inner.as_obj().untag() {
+        match self.inner().as_obj().untag() {
             crate::core::object::ObjectType::Cons(_) => unsafe {
                 &*(self as *const Self).cast::<Rt<Gc<&Cons>>>()
             },
@@ -382,7 +409,7 @@ impl<T> Rt<Gc<T>> {
 
 impl From<&Rt<Object<'_>>> for Option<()> {
     fn from(value: &Rt<Object<'_>>) -> Self {
-        value.inner.is_nil().then_some(())
+        value.inner().is_nil().then_some(())
     }
 }
 
@@ -391,10 +418,10 @@ impl<'a> Rt<Object<'a>> {
     where
         Object<'a>: TryInto<Gc<T>, Error = E>,
     {
-        if self.inner.is_nil() {
+        if self.inner().is_nil() {
             Ok(None)
         } else {
-            let _: Gc<T> = self.inner.try_into()?;
+            let _: Gc<T> = (*self.inner()).try_into()?;
             unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
         }
     }
@@ -404,7 +431,7 @@ impl IntoObject for &Rt<Object<'_>> {
     type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { self.inner.with_lifetime() }
+        unsafe { self.inner().with_lifetime() }
     }
 }
 
@@ -412,7 +439,7 @@ impl IntoObject for &mut Rt<Object<'_>> {
     type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { self.inner.with_lifetime() }
+        unsafe { self.inner().with_lifetime() }
     }
 }
 
@@ -446,14 +473,7 @@ impl<T, U> DerefMut for Rt<(T, U)> {
 impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const Self).cast::<Self::Target>() }
-    }
-}
-
-impl<T> Rt<Option<T>> {
-    pub(crate) fn as_ref(&self) -> Option<&Rt<T>> {
-        let option = self.inner.as_ref();
-        option.map(|x| unsafe { &*(x as *const T).cast::<Rt<T>>() })
+        unsafe { &*self.inner_get().cast::<Self::Target>() }
     }
 }
 
@@ -464,7 +484,7 @@ where
     type Output = <[Rt<T>] as Index<I>>::Output;
 
     fn index(&self, index: I) -> &Self::Output {
-        let slice = unsafe { std::mem::transmute::<&[T], &[Rt<T>]>(&self.inner) };
+        let slice = unsafe { &*self.inner_get().cast::<[Rt<T>; N]>() };
         Index::index(slice, index)
     }
 }
@@ -474,14 +494,14 @@ where
     [Rt<T>]: IndexMut<I>,
 {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        let slice = unsafe { std::mem::transmute::<&mut [T], &mut [Rt<T>]>(&mut self.inner) };
+        let slice = unsafe { &mut *self.inner_get_mut().cast::<[Rt<T>; N]>() };
         IndexMut::index_mut(slice, index)
     }
 }
 
 impl<T, const N: usize> AsRef<[Rt<T>]> for Rt<[T; N]> {
     fn as_ref(&self) -> &[Rt<T>] {
-        unsafe { std::mem::transmute::<&[T], &[Rt<T>]>(&self.inner) }
+        unsafe { &*self.inner_get().cast::<[Rt<T>; N]>() }
     }
 }
 
@@ -494,37 +514,38 @@ impl<T> Rt<Vec<T>> {
     }
 
     pub(crate) fn push<U: IntoRoot<T>>(&mut self, item: U) {
-        self.inner.push(unsafe { item.into_root() });
+        self.inner_mut().push(unsafe { item.into_root() });
     }
 
     pub(crate) fn truncate(&mut self, len: usize) {
-        self.inner.truncate(len);
+        self.inner_mut().truncate(len);
     }
 
     pub(crate) fn pop(&mut self) {
-        self.inner.pop();
+        self.inner_mut().pop();
     }
 
     pub(crate) fn swap_remove(&mut self, index: usize) {
-        self.inner.swap_remove(index);
+        self.inner_mut().swap_remove(index);
     }
 
     pub(crate) fn reserve(&mut self, additional: usize) {
-        self.inner.reserve(additional);
+        self.inner_mut().reserve(additional);
     }
 
     pub(crate) fn capacity(&self) -> usize {
-        self.inner.capacity()
+        self.inner().capacity()
     }
 }
 
 impl<T: Copy> Rt<Vec<T>> {
     pub(crate) fn extend_from_slice<U: IntoRoot<T> + Copy>(&mut self, src: &[U]) {
-        self.inner.extend_from_slice(unsafe { std::mem::transmute::<&[U], &[T]>(src) });
+        self.inner_mut()
+            .extend_from_slice(unsafe { std::mem::transmute::<&[U], &[T]>(src) });
     }
 
     pub(crate) fn extend_from_within(&mut self, src: impl RangeBounds<usize>) {
-        self.inner.extend_from_within(src);
+        self.inner_mut().extend_from_within(src);
     }
 }
 
@@ -563,23 +584,21 @@ where
     K: Eq + Hash,
 {
     pub(crate) fn insert<Kx: IntoRoot<K>, Vx: IntoRoot<V>>(&mut self, k: Kx, v: Vx) {
-        self.inner.insert(unsafe { k.into_root() }, unsafe { v.into_root() });
+        self.inner_mut().insert(unsafe { k.into_root() }, unsafe { v.into_root() });
     }
 
     pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {
-        self.inner
-            .get(unsafe { &k.into_root() })
-            .map(|x| unsafe { &*(x as *const V).cast::<Rt<V>>() })
+        let inner = unsafe { &*self.inner_get().cast::<HashMap<K, Rt<V>>>() };
+        inner.get(unsafe { &k.into_root() })
     }
 
     pub(crate) fn get_mut<Q: IntoRoot<K>>(&mut self, k: Q) -> Option<&mut Rt<V>> {
-        self.inner
-            .get_mut(unsafe { &k.into_root() })
-            .map(|x| unsafe { &mut *(x as *mut V).cast::<Rt<V>>() })
+        let inner = unsafe { &mut *self.inner_get_mut().cast::<HashMap<K, Rt<V>>>() };
+        inner.get_mut(unsafe { &k.into_root() })
     }
 
     pub(crate) fn remove<Q: IntoRoot<K>>(&mut self, k: Q) {
-        self.inner.remove(unsafe { &k.into_root() });
+        self.inner_mut().remove(unsafe { &k.into_root() });
     }
 }
 
@@ -587,7 +606,7 @@ impl<K, V> Deref for Rt<HashMap<K, V>> {
     type Target = HashMap<Rt<K>, Rt<V>>;
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+        unsafe { &*self.inner_get().cast::<Self::Target>() }
     }
 }
 
@@ -595,7 +614,7 @@ impl<T> Deref for Rt<HashSet<T>> {
     type Target = HashSet<Rt<T>>;
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*(self as *const Self).cast::<Self::Target>() }
+        unsafe { &*self.inner_get().cast::<Self::Target>() }
     }
 }
 
