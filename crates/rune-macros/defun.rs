@@ -32,7 +32,8 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
         // a slice.
         let positional_args = (required + optional) as usize;
         quote! {
-            rune_core::macros::root!(args, init([crate::core::object::NIL; #positional_args]), cx);
+            let init: [crate::core::gc::Slot<crate::core::object::Object>; #positional_args] = core::array::from_fn(|x| crate::core::gc::Slot::new(crate::core::object::NIL));
+            rune_core::macros::root!(args, init(init), cx);
             let pos_count = std::cmp::min(arg_cnt, #positional_args);
             let stack_slice = &env.stack[..arg_cnt];
             for i in 0..pos_count {
@@ -115,11 +116,11 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
             // Rt<Gc<..>>
             ArgType::Rt(gc) => match gc {
                 Gc::Obj => quote! {&args[#idx]},
-                Gc::Other => quote! {crate::core::gc::Rt::try_into(&args[#idx])?},
+                Gc::Other => quote! {args[#idx].try_as()?},
             },
             // Gc<..>
             ArgType::Gc(gc) => {
-                let bind = quote! {crate::core::gc::Rt::bind(&args[#idx], cx)};
+                let bind = quote! {args[#idx].bind(cx)};
                 match gc {
                     Gc::Obj => bind,
                     Gc::Other => quote! { std::convert::TryFrom::try_from(#bind)? },
@@ -155,7 +156,7 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
             }
             // Option<T>
             ArgType::Option => {
-                let bind = quote! {crate::core::gc::Rt::bind(x, cx)};
+                let bind = quote! {x.bind(cx)};
                 quote! {
                     match args.get(#idx) {
                         Some(x) => crate::core::object::Gc::try_from_option(#bind)?,
@@ -167,7 +168,7 @@ fn get_arg_conversion(args: &[ArgType]) -> Vec<TokenStream> {
                 if is_mut {
                     quote! { std::convert::TryFrom::try_from(&args[#idx])? }
                 } else {
-                    let bind = quote! {crate::core::gc::Rt::bind(&args[#idx], cx)};
+                    let bind = quote! {args[#idx].bind(cx)};
                     quote! { std::convert::TryFrom::try_from(#bind)? }
                 }
             }
@@ -395,6 +396,11 @@ fn get_object_type(type_path: &syn::TypePath) -> ArgType {
         || outer_type.ident == "List"
     {
         ArgType::Gc(Gc::Other)
+    } else if outer_type.ident == "Slot" {
+        match get_generic_param(outer_type) {
+            Some(syn::Type::Path(inner)) => get_object_type(inner),
+            _ => ArgType::Gc(Gc::Other),
+        }
     } else if outer_type.ident == "Gc" {
         let inner = match get_generic_param(outer_type) {
             Some(syn::Type::Path(generic)) if get_path_ident_name(generic) == "Object" => Gc::Obj,
@@ -465,12 +471,12 @@ mod test {
             (2, 1, false),
         );
         test_sig(
-            quote! { fn foo(a: &Rt<Gc<foo>>, b: &[Rt<Object>], env: &Rt<Env>, cx: &mut Context) -> u8 {0} },
+            quote! { fn foo(a: &Rt<Slot<Gc<foo>>>, b: &[Rt<Slot<Object>>], env: &Rt<Env>, cx: &mut Context) -> u8 {0} },
             None,
             (1, 0, true),
         );
         test_sig(
-            quote! { fn foo(env: &Rt<Env>, a: &Rt<Gc<foo>>, x: Option<u8>, cx: &mut Context, b: &[Rt<Object>]) -> u8 {0} },
+            quote! { fn foo(env: &Rt<Env>, a: &Rt<Slot<Gc<foo>>>, x: Option<u8>, cx: &mut Context, b: &[Rt<Slot<Object>>]) -> u8 {0} },
             None,
             (1, 1, true),
         );
@@ -482,33 +488,32 @@ mod test {
         let function: Function = syn::parse2(stream).unwrap();
         let iter = std::iter::zip(function.args, expect);
         for (cmp, exp) in iter {
-            assert_eq!(cmp, *exp);
+            assert_eq!(cmp, *exp, "input: {args}");
         }
     }
 
     #[test]
     fn test_arguments() {
-        test_args(quote! {x: Gc<Object>}, &[ArgType::Gc(Gc::Obj)]);
         test_args(quote! {x: Object}, &[ArgType::Gc(Gc::Obj)]);
         test_args(quote! {x: Gc<T>}, &[ArgType::Gc(Gc::Other)]);
-        test_args(quote! {x: &Rt<Object>}, &[ArgType::Rt(Gc::Obj)]);
-        test_args(quote! {x: &Rt<Gc<Object>>}, &[ArgType::Rt(Gc::Obj)]);
-        test_args(quote! {x: &Rt<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
+        test_args(quote! {x: &Rt<Slot<Object>>}, &[ArgType::Rt(Gc::Obj)]);
+        test_args(quote! {x: &Rt<Slot<Gc<Object>>>}, &[ArgType::Rt(Gc::Obj)]);
+        test_args(quote! {x: &Rt<Slot<Gc<T>>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
         test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
-        test_args(quote! {x: Option<&Rt<Object>>}, &[ArgType::OptionRt]);
+        test_args(quote! {x: Option<&Rt<Slot<Object>>>}, &[ArgType::OptionRt]);
         test_args(quote! {x: &[Object]}, &[ArgType::Slice(Gc::Obj)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[u8]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: ArgSlice}, &[ArgType::ArgSlice]);
-        test_args(quote! {x: &[Rt<Object>]}, &[ArgType::SliceRt(Gc::Obj)]);
+        test_args(quote! {x: &[Rt<Slot<Object>>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
         test_args(quote! {x: &Rt<Env>}, &[ArgType::Env(false)]);
         test_args(quote! {x: &mut Rt<Env>}, &[ArgType::Env(MUT)]);
         test_args(
-            quote! {x: u8, s: &[Rt<Object>], y: &Context, z: &Rt<Env>},
+            quote! {x: u8, s: &[Rt<Slot<Object>>], y: &Context, z: &Rt<Env>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),
@@ -528,7 +533,7 @@ mod test {
     fn test_error() {
         check_error(quote! {fn foo(a: Object, a: &mut Context) {}});
         check_error(quote! {fn foo(a: &[Rt<T>]) {}});
-        check_error(quote! {fn foo(a: Rt<Object>) {}});
+        check_error(quote! {fn foo(a: Rt<Slot<Object>>) {}});
         check_error(quote! {fn foo(a: u8, b: &[Object], c: &[Object]) {}});
         check_error(quote! {fn foo(a: u8, b: Option<u8>, c: u8) {}});
     }

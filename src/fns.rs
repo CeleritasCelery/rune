@@ -4,10 +4,10 @@ use crate::{
         cons::Cons,
         env::{sym, Env},
         error::{Type, TypeError},
-        gc::{Context, IntoRoot, Rt},
+        gc::{Context, Rt, Slot},
         object::{
             Function, Gc, HashTable, HashTableView, IntoObject, LispHashTable, LispString, LispVec,
-            List, ListType, Object, ObjectType, Symbol, NIL,
+            List, ListType, Object, ObjectType, Symbol, WithLifetime, NIL,
         },
     },
     data::aref,
@@ -124,8 +124,8 @@ fn string_search(needle: &str, haystack: &str, start_pos: Option<usize>) -> Opti
 
 #[defun]
 pub(crate) fn mapcar<'ob>(
-    function: &Rt<Function>,
-    sequence: &Rt<Object>,
+    function: &Rt<Slot<Function>>,
+    sequence: &Rt<Slot<Object>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -140,7 +140,7 @@ pub(crate) fn mapcar<'ob>(
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
-            Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
+            Ok(slice_into_list(outputs.bind_obj_vec(cx), None, cx))
         }
         ObjectType::ByteFn(fun) => {
             let len = fun.len();
@@ -152,7 +152,7 @@ pub(crate) fn mapcar<'ob>(
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
-            Ok(slice_into_list(outputs.bind_ref(cx), None, cx))
+            Ok(slice_into_list(outputs.bind_obj_vec(cx), None, cx))
         }
         _ => Err(TypeError::new(Type::Sequence, sequence).into()),
     }
@@ -160,8 +160,8 @@ pub(crate) fn mapcar<'ob>(
 
 #[defun]
 pub(crate) fn mapc<'ob>(
-    function: &Rt<Function>,
-    sequence: &Rt<List>,
+    function: &Rt<Slot<Function>>,
+    sequence: &Rt<Slot<List>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -179,8 +179,8 @@ pub(crate) fn mapc<'ob>(
 
 #[defun]
 pub(crate) fn mapcan<'ob>(
-    function: &Rt<Function>,
-    sequence: &Rt<Object>,
+    function: &Rt<Slot<Function>>,
+    sequence: &Rt<Slot<Object>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -194,9 +194,9 @@ pub(crate) fn mapcan<'ob>(
 
 #[defun]
 pub(crate) fn mapconcat(
-    function: &Rt<Function>,
-    sequence: &Rt<Object>,
-    seperator: Option<&Rt<Gc<&LispString>>>,
+    function: &Rt<Slot<Function>>,
+    sequence: &Rt<Slot<Object>>,
+    seperator: Option<&Rt<Slot<Gc<&LispString>>>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<String> {
@@ -325,9 +325,9 @@ fn rassq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
 
 #[defun]
 pub(crate) fn assoc<'ob>(
-    key: &Rt<Object<'ob>>,
-    alist: &Rt<List<'ob>>,
-    testfn: Option<&Rt<Object>>,
+    key: &Rt<Slot<Object<'ob>>>,
+    alist: &Rt<Slot<List<'ob>>>,
+    testfn: Option<&Rt<Slot<Object>>>,
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
 ) -> Result<Object<'ob>> {
@@ -446,8 +446,8 @@ pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'o
 // TODO: Sort items in place
 #[defun]
 fn sort<'ob>(
-    seq: &Rt<List>,
-    predicate: &Rt<Function>,
+    seq: &Rt<Slot<List>>,
+    predicate: &Rt<Slot<Function>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -484,7 +484,7 @@ fn sort<'ob>(
         }
         vec[j].set(&*tmp);
     }
-    Ok(slice_into_list(vec.bind_ref(cx), None, cx))
+    Ok(slice_into_list(vec.bind_obj_vec(cx), None, cx))
 }
 
 #[defun]
@@ -503,14 +503,14 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) {}
 
 #[defun]
 pub(crate) fn require<'ob>(
-    feature: &Rt<Gc<Symbol>>,
-    filename: Option<&Rt<Gc<&LispString>>>,
+    feature: &Rt<Slot<Gc<Symbol>>>,
+    filename: Option<&Rt<Slot<Gc<&LispString>>>>,
     noerror: Option<()>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root
-    let feat = unsafe { feature.untag(cx).into_root() };
+    let feat = unsafe { feature.untag(cx).with_lifetime() };
     if crate::data::features().lock().unwrap().contains(&feat) {
         return Ok(feature.untag(cx));
     }
@@ -692,8 +692,8 @@ fn remhash(key: Object, table: &LispHashTable) -> Result<()> {
 
 #[defun]
 fn maphash(
-    function: &Rt<Function>,
-    table: &Rt<Gc<&LispHashTable>>,
+    function: &Rt<Slot<Function>>,
+    table: &Rt<Slot<Gc<&LispHashTable>>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {

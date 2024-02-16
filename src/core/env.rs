@@ -1,5 +1,5 @@
 #![allow(unstable_name_collisions)]
-use super::gc::{Context, Rt};
+use super::gc::{Context, Rt, Slot};
 
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
@@ -13,14 +13,14 @@ pub(crate) use symbol_map::*;
 
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {
-    pub(crate) vars: HashMap<Symbol<'a>, Object<'a>>,
-    pub(crate) props: HashMap<Symbol<'a>, Vec<(Symbol<'a>, Object<'a>)>>,
-    pub(crate) catch_stack: Vec<Object<'a>>,
-    exception: (Object<'a>, Object<'a>),
+    pub(crate) vars: HashMap<Slot<Symbol<'a>>, Slot<Object<'a>>>,
+    pub(crate) props: HashMap<Slot<Symbol<'a>>, Vec<(Slot<Symbol<'a>>, Slot<Object<'a>>)>>,
+    pub(crate) catch_stack: Vec<Slot<Object<'a>>>,
+    exception: (Slot<Object<'a>>, Slot<Object<'a>>),
     #[no_trace]
     exception_id: u32,
-    binding_stack: Vec<(Symbol<'a>, Option<Object<'a>>)>,
-    pub(crate) match_data: Object<'a>,
+    binding_stack: Vec<(Slot<Symbol<'a>>, Option<Slot<Object<'a>>>)>,
+    pub(crate) match_data: Slot<Object<'a>>,
     #[no_trace]
     pub(crate) current_buffer: Option<OpenBuffer<'a>>,
     pub(crate) stack: LispStack<'a>,
@@ -56,7 +56,10 @@ impl<'a> RootedEnv<'a> {
         self.exception_id
     }
 
-    pub(crate) fn get_exception(&self, id: u32) -> Option<(&Rt<Object<'a>>, &Rt<Object<'a>>)> {
+    pub(crate) fn get_exception(
+        &self,
+        id: u32,
+    ) -> Option<(&Rt<Slot<Object<'a>>>, &Rt<Slot<Object<'a>>>)> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 
@@ -70,8 +73,8 @@ impl<'a> RootedEnv<'a> {
         for _ in 0..count {
             match self.binding_stack.bind_mut(cx).pop() {
                 Some((sym, val)) => match val {
-                    Some(val) => self.vars.insert(sym, val),
-                    None => self.vars.remove(sym),
+                    Some(val) => self.vars.insert(*sym, *val),
+                    None => self.vars.remove(*sym),
                 },
                 None => panic!("Binding stack was empty"),
             }

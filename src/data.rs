@@ -3,8 +3,8 @@ use crate::core::{
     cons::Cons,
     env::{interned_symbols, sym, Env},
     error::{Type, TypeError},
-    gc::{Context, IntoRoot, Rt},
-    object::{List, ListType, Number, Object, ObjectType, SubrFn, Symbol, NIL},
+    gc::{Context, Rt},
+    object::{List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL},
 };
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
@@ -414,7 +414,7 @@ pub(crate) fn indirect_function<'ob>(object: Object<'ob>, cx: &'ob Context) -> O
 pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
     let mut features = features().lock().unwrap();
     // TODO: SYMBOL - need to trace this
-    let feat = unsafe { feature.into_root() };
+    let feat = unsafe { feature.with_lifetime() };
     features.insert(feat);
     feature
 }

@@ -99,7 +99,7 @@ impl<'a> Symbol<'a> {
 
 unsafe impl Send for Symbol<'_> {}
 
-// implement withlifetime for symbolx
+// implement withlifetime for symbol
 impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
     type Out = Symbol<'new>;
 

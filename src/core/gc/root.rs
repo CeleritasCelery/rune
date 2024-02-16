@@ -3,10 +3,15 @@ use super::super::{
     object::{Object, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::object::{Gc, IntoObject, LispString, ObjectType, Symbol, Untag, WithLifetime};
+use crate::core::object::{
+    ByteFn, Gc, IntoObject, LispBuffer, LispString, List, ObjectType, Symbol, Untag, WithLifetime,
+};
 use rune_core::hashmap::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds};
 use std::slice::SliceIndex;
+use std::{
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut, Index, IndexMut, RangeBounds},
+};
 use std::{
     collections::VecDeque,
     hash::{Hash, Hasher},
@@ -33,34 +38,95 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'a, T, U> IntoRoot<U> for T
+impl<'new, T, U> IntoRoot<Slot<Gc<U>>> for Gc<T>
 where
-    T: WithLifetime<'a, Out = U>,
-    U: 'a,
+    Gc<T>: WithLifetime<'new, Out = Gc<U>>,
 {
-    unsafe fn into_root(self) -> U {
-        self.with_lifetime()
+    unsafe fn into_root(self) -> Slot<Gc<U>> {
+        Slot::new(self.with_lifetime())
     }
 }
 
-impl<'a, T, U> IntoRoot<U> for &Rt<T>
+impl<T, U> IntoRoot<Option<U>> for Option<T>
+where
+    T: IntoRoot<U>,
+{
+    unsafe fn into_root(self) -> Option<U> {
+        self.map(|x| x.into_root())
+    }
+}
+
+impl<'old, 'new> IntoRoot<Slot<&'new Cons>> for &'old Cons {
+    unsafe fn into_root(self) -> Slot<&'new Cons> {
+        Slot::new(self.with_lifetime())
+    }
+}
+
+impl<'old, 'new> IntoRoot<Slot<&'new ByteFn>> for &'old ByteFn {
+    unsafe fn into_root(self) -> Slot<&'new ByteFn> {
+        Slot::new(self.with_lifetime())
+    }
+}
+
+impl<'old, 'new> IntoRoot<Slot<&'new LispString>> for &'old LispString {
+    unsafe fn into_root(self) -> Slot<&'new LispString> {
+        Slot::new(self.with_lifetime())
+    }
+}
+
+impl<'old, 'new> IntoRoot<Slot<&'new LispBuffer>> for &'old LispBuffer {
+    unsafe fn into_root(self) -> Slot<&'new LispBuffer> {
+        Slot::new(self.with_lifetime())
+    }
+}
+
+impl<'old, 'new> IntoRoot<Slot<Symbol<'new>>> for Symbol<'old> {
+    unsafe fn into_root(self) -> Slot<Symbol<'new>> {
+        Slot::new(self.with_lifetime())
+    }
+}
+
+impl<T, U> IntoRoot<Vec<U>> for Vec<T>
+where
+    T: IntoRoot<U>,
+{
+    unsafe fn into_root(self) -> Vec<U> {
+        let mut new = Vec::with_capacity(self.len());
+        for x in self {
+            new.push(x.into_root());
+        }
+        new
+    }
+}
+
+impl<T, U, Tx, Ux> IntoRoot<(Tx, Ux)> for (T, U)
+where
+    T: IntoRoot<Tx>,
+    U: IntoRoot<Ux>,
+{
+    unsafe fn into_root(self) -> (Tx, Ux) {
+        (self.0.into_root(), self.1.into_root())
+    }
+}
+
+impl<'a, T, U> IntoRoot<Slot<U>> for &Rt<Slot<T>>
 where
     T: WithLifetime<'a, Out = U> + Copy,
 {
-    unsafe fn into_root(self) -> U {
-        self.inner().with_lifetime()
+    unsafe fn into_root(self) -> Slot<U> {
+        Slot::new(self.inner().get().with_lifetime())
     }
 }
 
-impl<'a> IntoRoot<Object<'a>> for bool {
-    unsafe fn into_root(self) -> Object<'a> {
-        self.into()
+impl<'a> IntoRoot<Slot<Object<'a>>> for bool {
+    unsafe fn into_root(self) -> Slot<Object<'a>> {
+        Slot::new(self.into())
     }
 }
 
-impl<'a> IntoRoot<Object<'a>> for i64 {
-    unsafe fn into_root(self) -> Object<'a> {
-        self.into()
+impl<'a> IntoRoot<Slot<Object<'a>>> for i64 {
+    unsafe fn into_root(self) -> Slot<Object<'a>> {
+        Slot::new(self.into())
     }
 }
 
@@ -162,6 +228,70 @@ pub struct Rt<T: ?Sized> {
     inner: T,
 }
 
+/// A Rooted type on the Gc Heap. If a type is wrapped in `Slot`, it is known to
+/// be rooted and hold items past garbage collection. This type is never used as
+/// an owned type, only a reference. This ensures that underlying data does not
+/// move. In order to access the inner data, the [`Slot::bind`] method must be
+/// used. The data that this type points to can be relocated during garbage
+/// collection, but that is transparent to the user.
+#[repr(transparent)]
+#[derive(Default)]
+pub struct Slot<T: ?Sized> {
+    inner: UnsafeCell<T>,
+}
+
+impl<T: Clone> Clone for Slot<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.get().clone())
+    }
+}
+
+impl<'new, T: WithLifetime<'new> + Copy> WithLifetime<'new> for Slot<T> {
+    type Out = Slot<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        Slot::new(self.get().with_lifetime())
+    }
+}
+
+impl<T: Hash> Hash for Slot<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.get().hash(state);
+    }
+}
+
+impl<T: PartialEq> PartialEq for Slot<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.get() == other.get()
+    }
+}
+
+impl<T: Eq> Eq for Slot<T> {}
+
+impl<T> Slot<T> {
+    fn get(&self) -> &T {
+        unsafe { &*self.inner.get() }
+    }
+
+    pub(crate) fn new(val: T) -> Self {
+        Slot { inner: UnsafeCell::new(val) }
+    }
+}
+
+impl<T> Deref for Slot<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+impl<T: Trace> Trace for Slot<T> {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        self.get().trace(stack);
+    }
+}
+
 impl<T: Debug> Debug for Rt<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(&self.inner(), f)
@@ -174,40 +304,57 @@ impl<T: Display> Display for Rt<T> {
     }
 }
 
+impl<T: Debug> Debug for Slot<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.get(), f)
+    }
+}
+
+impl<T: Display> Display for Slot<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self.get(), f)
+    }
+}
+
 // can't use a blanet impl of impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T>
 // due to lifetime restrictions around invariance.
-
-impl PartialEq for Rt<Object<'_>> {
+impl PartialEq for Rt<Slot<Object<'_>>> {
     fn eq(&self, other: &Self) -> bool {
-        self.inner() == other.inner()
+        self.inner().get() == other.inner().get()
     }
 }
 
-impl PartialEq for Rt<Symbol<'_>> {
+impl PartialEq for Rt<Slot<Symbol<'_>>> {
     fn eq(&self, other: &Self) -> bool {
-        self.inner() == other.inner()
+        self.inner().get() == other.inner().get()
     }
 }
 
-impl PartialEq<Symbol<'_>> for Rt<Symbol<'_>> {
+impl PartialEq<Symbol<'_>> for Rt<Slot<Symbol<'_>>> {
     fn eq(&self, other: &Symbol) -> bool {
-        self.inner() == other
+        self.inner().get() == other
     }
 }
 
-impl PartialEq<Object<'_>> for Rt<Object<'_>> {
+impl PartialEq<Object<'_>> for Rt<Slot<Object<'_>>> {
     fn eq(&self, other: &Object) -> bool {
-        self.inner() == other
+        self.inner().get() == other
     }
 }
 
-impl PartialEq<Symbol<'_>> for Rt<Object<'_>> {
+impl PartialEq<Object<'_>> for Slot<Object<'_>> {
+    fn eq(&self, other: &Object) -> bool {
+        self.get() == other
+    }
+}
+
+impl PartialEq<Symbol<'_>> for Rt<Slot<Object<'_>>> {
     fn eq(&self, other: &Symbol) -> bool {
-        self.inner() == other
+        self.inner().get() == other
     }
 }
 
-impl Deref for Rt<Gc<&LispString>> {
+impl Deref for Rt<Slot<Gc<&LispString>>> {
     type Target = LispString;
 
     fn deref(&self) -> &Self::Target {
@@ -300,21 +447,6 @@ impl<T> Rt<T> {
         &mut self.inner as *mut T
     }
 
-    pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
-    where
-        T: WithLifetime<'ob> + Copy,
-    {
-        // SAFETY: We are holding a reference to the context
-        unsafe { self.inner().with_lifetime() }
-    }
-
-    pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
-    where
-        T: WithLifetime<'ob> + Copy,
-    {
-        self.inner().with_lifetime()
-    }
-
     pub(crate) fn bind_ref<'a, 'ob>(&'a self, _: &'ob Context) -> &'a <T as WithLifetime<'ob>>::Out
     where
         T: WithLifetime<'ob>,
@@ -334,12 +466,15 @@ impl<T> Rt<T> {
         unsafe { &mut *self.inner_get_mut().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
-    pub(crate) fn bind_slice<'brw, 'ob, U>(slice: &'brw [Rt<T>], _: &'ob Context) -> &'brw [U]
+    pub(crate) fn bind_slice<'brw, 'ob, U>(
+        slice: &'brw [Rt<Slot<Gc<T>>>],
+        _: &'ob Context,
+    ) -> &'brw [Gc<U>]
     where
-        T: WithLifetime<'ob, Out = U>,
-        U: 'ob,
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
+        Gc<U>: 'ob,
     {
-        unsafe { &*(slice as *const [Rt<T>] as *const [U]) }
+        unsafe { &*(slice as *const [Rt<Slot<Gc<T>>>] as *const [Gc<U>]) }
     }
 
     pub(crate) fn set<U: IntoRoot<T>>(&mut self, item: U) {
@@ -349,101 +484,174 @@ impl<T> Rt<T> {
     }
 }
 
-impl TryFrom<&Rt<Object<'_>>> for usize {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Rt<Object>) -> Result<Self, Self::Error> {
-        (*value.inner()).try_into()
+// TODO: see if we can remove this
+impl<T> Rt<Vec<Slot<Gc<T>>>> {
+    pub(crate) fn bind_obj_vec<'a, 'ob>(&'a self, _: &'ob Context) -> &'a Vec<Gc<T>>
+    where
+        T: WithLifetime<'ob>,
+    {
+        // SAFETY: We are holding a reference to the context
+        unsafe { &*self.inner_get().cast::<Vec<Gc<T>>>() }
     }
 }
 
-impl<T> Rt<Gc<T>> {
+impl<T> Rt<Slot<T>> {
+    // pub(crate) fn set_slot<U: IntoRoot<T>>(&mut self, item: U) {
+    //     self.inner_mut().set(unsafe { item.into_root() })
+    // }
+
+    pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
+    where
+        T: WithLifetime<'ob> + Copy,
+    {
+        // SAFETY: We are holding a reference to the context
+        unsafe { self.inner().get().with_lifetime() }
+    }
+
+    pub(crate) unsafe fn bind_unchecked<'ob>(&'ob self) -> <T as WithLifetime<'ob>>::Out
+    where
+        T: WithLifetime<'ob> + Copy,
+    {
+        self.inner().get().with_lifetime()
+    }
+}
+
+// TODO: Slot look at this again
+impl<T> Rt<Slot<T>> {
     /// Like `try_into`, but needed to due no specialization
-    pub(crate) fn try_into<U, E>(&self) -> Result<&Rt<Gc<U>>, E>
+    pub(crate) unsafe fn try_as_list<'ob, E>(&self) -> Result<List<'ob>, E>
+    where
+        T: TryInto<List<'ob>, Error = E> + Copy,
+    {
+        let list: List = (*self.inner().get()).try_into()?;
+        unsafe { Ok(list.with_lifetime()) }
+    }
+}
+
+impl<T> Gc<T> {
+    /// Like `try_into`, but needed to due no specialization
+    pub(crate) unsafe fn try_as_list<'ob, 'a, E>(self) -> Result<List<'ob>, E>
+    where
+        Gc<T>: TryInto<List<'a>, Error = E> + Copy,
+    {
+        let list: List = self.try_into()?;
+        unsafe { Ok(list.with_lifetime()) }
+    }
+}
+
+impl Cons {
+    /// Like `try_into`, but needed to due no specialization
+    pub(crate) unsafe fn try_as_list<'ob>(&self) -> Result<List<'ob>, anyhow::Error> {
+        let list: List = self.into();
+        unsafe { Ok(list.with_lifetime()) }
+    }
+}
+
+impl<T> Rt<Slot<Gc<T>>> {
+    /// Calls [untag](Untag::untag_erased) on the tagged Gc pointer
+    pub(crate) fn untag<'ob, U>(&self, _cx: &'ob Context) -> U
+    where
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
+        Gc<U>: Untag<U>,
+    {
+        unsafe { self.inner().get().with_lifetime().untag_erased() }
+    }
+
+    /// Like `try_into`, but needed to due no specialization
+    pub(crate) fn try_as<U, E>(&self) -> Result<&Rt<Slot<Gc<U>>>, E>
     where
         Gc<T>: TryInto<Gc<U>, Error = E> + Copy,
     {
-        let _: Gc<U> = (*self.inner()).try_into()?;
+        let _: Gc<U> = (*self.inner().get()).try_into()?;
         // SAFETY: This is safe because all Gc types have the same representation
-        unsafe { Ok(&*((self as *const Self).cast::<Rt<Gc<U>>>())) }
+        unsafe { Ok(&*((self as *const Self).cast::<Rt<Slot<Gc<U>>>>())) }
     }
+}
 
+impl TryFrom<&Rt<Slot<Object<'_>>>> for usize {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Rt<Slot<Object>>) -> Result<Self, Self::Error> {
+        (*value.inner().get()).try_into()
+    }
+}
+
+impl<T> Rt<Slot<Gc<T>>> {
     /// Like `try_into().bind(cx)`, but needed to due no specialization
     pub(crate) fn bind_as<'ob, U, E>(&self, _cx: &'ob Context) -> Result<U, E>
     where
         Gc<T>: WithLifetime<'ob> + Copy,
         <Gc<T> as WithLifetime<'ob>>::Out: TryInto<U, Error = E> + Copy,
     {
-        unsafe { self.inner().with_lifetime().try_into() }
+        unsafe { self.inner().get().with_lifetime().try_into() }
     }
 
     /// Like `From`, but needed to due no specialization
-    pub(crate) fn use_as<U>(&self) -> &Rt<Gc<U>>
+    pub(crate) fn use_as<U>(&self) -> &Rt<Slot<Gc<U>>>
     where
         Gc<T>: Into<Gc<U>> + Copy,
     {
         // SAFETY: This is safe because all Gc types have the same representation
-        unsafe { &*((self as *const Self).cast::<Rt<Gc<U>>>()) }
+        unsafe { &*((self as *const Self).cast::<Rt<Slot<Gc<U>>>>()) }
     }
 
     // TODO: Find a way to remove this method. We should never need to guess
     // if something is cons
-    pub(crate) fn as_cons(&self) -> &Rt<Gc<&Cons>> {
+    pub(crate) fn as_cons(&self) -> &Rt<Slot<Gc<&Cons>>> {
         match self.inner().as_obj().untag() {
             crate::core::object::ObjectType::Cons(_) => unsafe {
-                &*(self as *const Self).cast::<Rt<Gc<&Cons>>>()
+                &*(self as *const Self).cast::<Rt<Slot<Gc<&Cons>>>>()
             },
             x => panic!("attempt to convert type that was not cons: {x}"),
         }
     }
-
-    /// Calls [untag](Untag::untag_erased) on the tagged Gc pointer
-    pub(crate) fn untag<'ob, U>(&self, cx: &'ob Context) -> U
-    where
-        Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
-        Gc<U>: Untag<U>,
-    {
-        self.bind(cx).untag_erased()
-    }
 }
 
-impl From<&Rt<Object<'_>>> for Option<()> {
-    fn from(value: &Rt<Object<'_>>) -> Self {
+impl From<&Rt<Slot<Object<'_>>>> for Option<()> {
+    fn from(value: &Rt<Slot<Object<'_>>>) -> Self {
         value.inner().is_nil().then_some(())
     }
 }
 
-impl<'a> Rt<Object<'a>> {
-    pub(crate) fn try_as_option<T, E>(&self) -> Result<Option<&Rt<Gc<T>>>, E>
+impl<'a> Rt<Slot<Object<'a>>> {
+    pub(crate) fn try_as_option<T, E>(&self) -> Result<Option<&Rt<Slot<Gc<T>>>>, E>
     where
         Object<'a>: TryInto<Gc<T>, Error = E>,
     {
         if self.inner().is_nil() {
             Ok(None)
         } else {
-            let _: Gc<T> = (*self.inner()).try_into()?;
-            unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Gc<T>>>()))) }
+            let _: Gc<T> = (*self.inner().get()).try_into()?;
+            unsafe { Ok(Some(&*((self as *const Self).cast::<Rt<Slot<Gc<T>>>>()))) }
         }
     }
 }
 
-impl IntoObject for &Rt<Object<'_>> {
+impl IntoObject for &Rt<Slot<Object<'_>>> {
     type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { self.inner().with_lifetime() }
+        unsafe { self.inner().get().with_lifetime() }
     }
 }
 
-impl IntoObject for &mut Rt<Object<'_>> {
+impl IntoObject for Slot<Object<'_>> {
     type Out<'ob> = ObjectType<'ob>;
 
     fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe { self.inner().with_lifetime() }
+        unsafe { self.get().with_lifetime() }
     }
 }
 
-impl Rt<&Cons> {
+impl IntoObject for &mut Rt<Slot<Object<'_>>> {
+    type Out<'ob> = ObjectType<'ob>;
+
+    fn into_obj<const C: bool>(self, _block: &Block<C>) -> Gc<Self::Out<'_>> {
+        unsafe { self.inner().get().with_lifetime() }
+    }
+}
+
+impl Rt<Slot<&Cons>> {
     pub(crate) fn car<'ob>(&self, cx: &'ob Context) -> Object<'ob> {
         self.bind(cx).car()
     }
@@ -538,12 +746,17 @@ impl<T> Rt<Vec<T>> {
     }
 }
 
-impl<T: Copy> Rt<Vec<T>> {
+impl<T> Rt<Vec<T>> {
     pub(crate) fn extend_from_slice<U: IntoRoot<T> + Copy>(&mut self, src: &[U]) {
-        self.inner_mut()
-            .extend_from_slice(unsafe { std::mem::transmute::<&[U], &[T]>(src) });
+        // TODO: Slot fix extend_from_slice
+        let inner = self.inner_mut();
+        for x in src {
+            inner.push(unsafe { x.into_root() })
+        }
     }
+}
 
+impl<T: Clone> Rt<Vec<T>> {
     pub(crate) fn extend_from_within(&mut self, src: impl RangeBounds<usize>) {
         self.inner_mut().extend_from_within(src);
     }
@@ -653,6 +866,6 @@ mod test {
         let str2 = cx.add("str2");
         vec.push(str1);
         vec.push(str2);
-        assert_eq!(vec![NIL, str1, str2], vec.bind_ref(cx)[0..3]);
+        assert_eq!(vec.bind_ref(cx)[0..3], vec![NIL, str1, str2]);
     }
 }

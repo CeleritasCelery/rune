@@ -8,13 +8,15 @@ use super::{
 use super::{Object, WithLifetime};
 use crate::core::{
     env::Env,
-    gc::{GcHeap, Rt},
+    gc::{GcHeap, Rt, Slot},
 };
 use anyhow::{bail, ensure, Result};
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
 mod sealed {
+    use crate::core::gc::Slot;
+
     use super::*;
 
     #[derive(PartialEq, Eq, Trace)]
@@ -25,7 +27,7 @@ mod sealed {
         pub(crate) depth: usize,
         #[no_trace]
         pub(super) op_codes: Box<[u8]>,
-        pub(super) constants: Vec<Object<'static>>,
+        pub(super) constants: Vec<Slot<Object<'static>>>,
     }
 }
 
@@ -49,7 +51,9 @@ impl ByteFn {
         depth: usize,
     ) -> ByteFnInner {
         ByteFnInner {
-            constants: unsafe { consts.with_lifetime() },
+            constants: unsafe {
+                std::mem::transmute::<Vec<Object>, Vec<Slot<Object<'static>>>>(consts)
+            },
             op_codes: op_codes.to_vec().into_boxed_slice(),
             args,
             depth,
@@ -64,7 +68,7 @@ impl ByteFnInner {
 
     pub(crate) fn consts<'ob>(&'ob self) -> &'ob [Object<'ob>] {
         unsafe {
-            std::mem::transmute::<&'ob [Object<'static>], &'ob [Object<'ob>]>(&self.constants)
+            std::mem::transmute::<&'ob [Slot<Object<'static>>], &'ob [Object<'ob>]>(&self.constants)
         }
     }
 

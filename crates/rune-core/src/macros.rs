@@ -93,9 +93,9 @@ macro_rules! __rooted_iter {
         let mut root_elem;
         let mut root_cons;
         // use match to ensure that $value is not evaled inside the unsafe block
-        let list: crate::core::object::Gc<crate::core::object::ListType> = match $value {
+        let list: crate::core::object::List = match $value {
             // Convert the value into a list
-            value => unsafe { crate::core::gc::IntoRoot::into_root(value).try_into()? },
+            value => unsafe { value.try_as_list()? },
         };
         #[allow(unused_qualifications, unused_mut)]
         let mut $ident = if let crate::core::object::ListType::Cons(head) = list.untag() {
@@ -103,8 +103,8 @@ macro_rules! __rooted_iter {
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {
-                elem = object::NIL;
-                cons = object::WithLifetime::with_lifetime(head);
+                elem = Slot::new(object::NIL);
+                cons = Slot::new(object::WithLifetime::with_lifetime(head));
                 root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
                 root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
                 cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))
@@ -151,14 +151,14 @@ macro_rules! __call {
     ($fn:ident $(,$args:expr)* ; $env:expr, $cx:expr) => {{
         let frame = &mut crate::core::env::CallFrame::new($env);
         $(frame.push_arg($args);)*
-        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::FunctionType>>::call(
+        crate::core::gc::Rt::<crate::core::gc::Slot<crate::core::object::Gc::<crate::core::object::FunctionType>>>::call(
             $fn, frame, None, $cx
         )
     }};
     ($fn:ident $(,$args:expr)* ; $name:expr, $env:expr, $cx:expr) => {{
         let frame = &mut crate::core::env::CallFrame::new($env);
         $(frame.push_arg($args);)*
-        crate::core::gc::Rt::<crate::core::object::Gc::<crate::core::object::FunctionType>>::call(
+        crate::core::gc::Rt::<crate::core::gc::Slot<crate::core::object::Gc::<crate::core::object::FunctionType>>>::call(
             $fn, frame, Some($name), $cx
         )
     }};

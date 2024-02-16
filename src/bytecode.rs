@@ -2,7 +2,7 @@
 //! The main bytecode interpeter.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
-use crate::core::gc::{Context, IntoRoot, Rt};
+use crate::core::gc::{Context, IntoRoot, Rt, Slot};
 use crate::core::object::{
     ByteFn, ByteString, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
     WithLifetime, NIL,
@@ -90,7 +90,13 @@ struct Handler<'ob> {
     stack_size: usize,
     #[no_trace]
     stack_frame: usize,
-    condition: Object<'ob>,
+    condition: Slot<Object<'ob>>,
+}
+
+impl<'old, 'new> IntoRoot<Handler<'new>> for Handler<'old> {
+    unsafe fn into_root(self) -> Handler<'new> {
+        self.with_lifetime()
+    }
 }
 
 impl<'old, 'new> WithLifetime<'new> for Handler<'old> {
@@ -110,7 +116,7 @@ struct VM<'brw, 'env, 'rt> {
     pc: ProgramCounter,
     /// The current function being executed. Saved to ensure it is preserved by
     /// the garbage collector.
-    func: &'rt ByteFn,
+    func: Slot<&'rt ByteFn>,
     /// All currently active condition-case handlers
     handlers: Vec<Handler<'rt>>,
     /// The runtime environment
@@ -413,7 +419,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                         jump_code: self.pc.arg2(),
                         stack_size: self.env.stack.len(),
                         stack_frame: self.env.stack.current_frame(),
-                        condition,
+                        condition: Slot::new(condition),
                     };
                     self.handlers.push(handler);
                 }
@@ -862,8 +868,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
 #[defun]
 fn byte_code<'ob>(
-    bytestr: &Rt<Gc<&ByteString>>,
-    vector: &Rt<Gc<&LispVec>>,
+    bytestr: &Rt<Slot<Gc<&ByteString>>>,
+    vector: &Rt<Slot<Gc<&LispVec>>>,
     maxdepth: usize,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -888,7 +894,7 @@ fn fetch_bytecode(_object: Object) {
 }
 
 pub(crate) fn call<'ob>(
-    func: &Rt<&ByteFn>,
+    func: &Rt<Slot<&ByteFn>>,
     arg_cnt: usize,
     name: &str,
     frame: &mut CallFrame,
@@ -896,7 +902,12 @@ pub(crate) fn call<'ob>(
 ) -> EvalResult<'ob> {
     frame.stack.set_depth(func.bind(cx).depth);
     let func = func.bind(cx);
-    let vm = VM { pc: ProgramCounter::new(func.codes()), func, env: frame, handlers: Vec::new() };
+    let vm = VM {
+        pc: ProgramCounter::new(func.codes()),
+        func: Slot::new(func),
+        env: frame,
+        handlers: Vec::new(),
+    };
     root!(vm, cx);
     vm.prepare_lisp_args(func, arg_cnt, name, cx)?;
     vm.run(cx).map_err(|e| e.add_trace(name, vm.env.stack.current_args()))
@@ -955,7 +966,7 @@ mod test {
         $expect:expr,
         $cx:expr $(,)?
     ) => ({
-            let bytecode: &Rt<&ByteFn> = $bytecode;
+            let bytecode: &Rt<Slot<&ByteFn>> = $bytecode;
             let cx: &mut Context = $cx;
 
             let args: Vec<Object> = { vec![$(cx.add($args)),*] };
@@ -974,9 +985,9 @@ mod test {
     }
 
     fn check_bytecode_internal(
-        args: &mut Rt<Vec<Object>>,
-        bytecode: &Rt<&ByteFn>,
-        expect: &Rt<Object>,
+        args: &mut Rt<Vec<Slot<Object>>>,
+        bytecode: &Rt<Slot<&ByteFn>>,
+        expect: &Rt<Slot<Object>>,
         cx: &mut Context,
     ) {
         root!(env, new(Env), cx);

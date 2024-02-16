@@ -1,4 +1,4 @@
-use crate::core::object::List;
+use crate::core::{gc::Slot, object::List};
 
 use super::super::{
     gc::Rt,
@@ -104,21 +104,21 @@ impl std::fmt::Display for ConsError {
 impl std::error::Error for ConsError {}
 
 pub(crate) struct ElemStreamIter<'rt> {
-    elem: Option<&'rt mut Rt<Object<'static>>>,
-    cons: Option<Result<&'rt mut Rt<&'static Cons>, ConsError>>,
+    elem: Option<&'rt mut Rt<Slot<Object<'static>>>>,
+    cons: Option<Result<&'rt mut Rt<Slot<&'static Cons>>, ConsError>>,
 }
 
 impl<'rt> ElemStreamIter<'rt> {
     pub(crate) fn new(
-        elem: Option<&'rt mut Rt<Object<'static>>>,
-        cons: Option<&'rt mut Rt<&'static Cons>>,
+        elem: Option<&'rt mut Rt<Slot<Object<'static>>>>,
+        cons: Option<&'rt mut Rt<Slot<&'static Cons>>>,
     ) -> Self {
         Self { elem, cons: cons.map(Ok) }
     }
 }
 
 impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'rt> {
-    type Item = Rt<Object<'static>>;
+    type Item = Rt<Slot<Object<'static>>>;
     type Error = ConsError;
 
     fn advance(&mut self) -> Result<(), ConsError> {

@@ -2,7 +2,7 @@
 use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
 use crate::core::error::{ArgError, Type, TypeError};
-use crate::core::gc::Rt;
+use crate::core::gc::{Rt, Slot};
 use crate::core::object::{display_slice, FnArgs, Function, LispString, ObjectType, Symbol, NIL};
 use crate::core::{
     gc::Context,
@@ -62,13 +62,13 @@ impl EvalError {
         error.into()
     }
 
-    pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<Object>]) -> Self {
+    pub(crate) fn with_trace(error: anyhow::Error, name: &str, args: &[Rt<Slot<Object>>]) -> Self {
         let display = display_slice(args);
         let trace = format!("{name} {display}").into_boxed_str();
         Self { backtrace: vec![trace], error: ErrorType::Err(error) }
     }
 
-    pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<Object>]) -> Self {
+    pub(crate) fn add_trace(mut self, name: &str, args: &[Rt<Slot<Object>>]) -> Self {
         let display = display_slice(args);
         self.backtrace.push(format!("{name} {display}").into_boxed_str());
         self
@@ -129,7 +129,7 @@ pub(crate) type EvalResult<'ob> = Result<Object<'ob>, EvalError>;
 
 #[defun]
 pub(crate) fn apply<'ob>(
-    function: &Rt<Function>,
+    function: &Rt<Slot<Function>>,
     arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -155,7 +155,7 @@ pub(crate) fn apply<'ob>(
 
 #[defun]
 pub(crate) fn funcall<'ob>(
-    function: &Rt<Function>,
+    function: &Rt<Slot<Function>>,
     arguments: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -179,7 +179,7 @@ fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> R
                         ObjectType::Cons(hook_list) => {
                             rooted_iter!(hooks, hook_list, cx);
                             while let Some(hook) = hooks.next()? {
-                                let func = hook.try_into()?;
+                                let func = hook.try_as()?;
                                 call!(func; env, cx)?;
                             }
                         }
@@ -200,7 +200,7 @@ fn run_hooks<'ob>(hooks: ArgSlice, env: &mut Rt<Env>, cx: &'ob mut Context) -> R
 
 #[defun]
 fn run_hook_with_args<'ob>(
-    hook: &Rt<Object>,
+    hook: &Rt<Slot<Object>>,
     args: ArgSlice,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -213,7 +213,7 @@ fn run_hook_with_args<'ob>(
                     ObjectType::Cons(hook_list) => {
                         rooted_iter!(hooks, hook_list, cx);
                         while let Some(hook) = hooks.next()? {
-                            let func: &Rt<Function> = hook.try_into()?;
+                            let func: &Rt<Slot<Function>> = hook.try_as()?;
                             let beg = env.stack.len() - args.len();
                             env.stack.extend_as_vec_from_within(beg..);
                             let frame = &mut CallFrame::new_with_args(env, args.len());
@@ -236,9 +236,9 @@ fn run_hook_with_args<'ob>(
 
 #[defun]
 pub(crate) fn autoload_do_load<'ob>(
-    fundef: &Rt<Object>,
-    funname: Option<&Rt<Gc<Symbol>>>,
-    macro_only: Option<&Rt<Object>>,
+    fundef: &Rt<Slot<Object>>,
+    funname: Option<&Rt<Slot<Gc<Symbol>>>>,
+    macro_only: Option<&Rt<Slot<Object>>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -289,8 +289,8 @@ fn autoload<'ob>(
 
 #[defun]
 pub(crate) fn macroexpand<'ob>(
-    form: &Rt<Object>,
-    environment: Option<&Rt<Object>>,
+    form: &Rt<Slot<Object>>,
+    environment: Option<&Rt<Slot<Object>>>,
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
 ) -> Result<Object<'ob>> {
@@ -417,7 +417,7 @@ fn set_default<'ob>(
     Ok(value)
 }
 
-impl Rt<Gc<FunctionType<'_>>> {
+impl Rt<Slot<Function<'_>>> {
     pub(crate) fn call<'ob>(
         &self,
         frame: &mut CallFrame<'_, '_>,
@@ -439,7 +439,7 @@ impl Rt<Gc<FunctionType<'_>>> {
                 (*f).call(arg_cnt, frame, cx).map_err(|e| add_trace(e, name, frame.arg_slice()))
             }
             FunctionType::Cons(_) => {
-                crate::interpreter::call_closure(self.try_into().unwrap(), arg_cnt, name, frame, cx)
+                crate::interpreter::call_closure(self.try_as().unwrap(), arg_cnt, name, frame, cx)
                     .map_err(|e| e.add_trace(name, frame.arg_slice()))
             }
             FunctionType::Symbol(sym) => {
@@ -468,7 +468,7 @@ impl Rt<Gc<FunctionType<'_>>> {
     }
 }
 
-pub(crate) fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<Object>]) -> EvalError {
+pub(crate) fn add_trace(err: anyhow::Error, name: &str, args: &[Rt<Slot<Object>>]) -> EvalError {
     match err.downcast::<EvalError>() {
         Ok(err) => err.add_trace(name, args),
         Err(e) => EvalError::with_trace(e, name, args),

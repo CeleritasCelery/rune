@@ -2,8 +2,8 @@
 use crate::core::cons::Cons;
 use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
-use crate::core::gc::Context;
 use crate::core::gc::Rt;
+use crate::core::gc::{Context, Slot};
 use crate::core::object::{
     Function, Gc, LispString, Object, ObjectType, Symbol, WithLifetime, NIL, TRUE,
 };
@@ -99,8 +99,8 @@ pub(crate) fn load_internal(contents: &str, cx: &mut Context, env: &mut Rt<Env>)
 }
 
 fn eager_expand<'ob>(
-    obj: &Rt<Object>,
-    macroexpand: &Rt<Function>,
+    obj: &Rt<Slot<Object>>,
+    macroexpand: &Rt<Slot<Function>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>, anyhow::Error> {
@@ -156,7 +156,7 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<Pat
 
 #[defun]
 pub(crate) fn load(
-    file: &Rt<Gc<&LispString>>,
+    file: &Rt<Slot<Gc<&LispString>>>,
     noerror: Option<()>,
     nomessage: Option<()>,
     cx: &mut Context,
