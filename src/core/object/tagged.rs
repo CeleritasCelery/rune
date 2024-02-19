@@ -12,7 +12,7 @@ use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
     SubrFn, Symbol, SymbolCell,
 };
-use crate::core::env::sym;
+use crate::core::{env::sym, gc::Trace};
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -189,7 +189,66 @@ impl<'new, T: WithLifetime<'new>> WithLifetime<'new> for Gc<T> {
     }
 }
 
-macro_rules! with_lifetime_impl {
+impl<'new, T, const N: usize> WithLifetime<'new> for [T; N]
+where
+    T: WithLifetime<'new>,
+{
+    type Out = [<T as WithLifetime<'new>>::Out; N];
+    unsafe fn with_lifetime(self) -> Self::Out {
+        // work around since we can't transmute arrays
+        let ptr = &self as *const [T; N] as *const Self::Out;
+        let value = unsafe { ptr.read() };
+        std::mem::forget(self);
+        value
+    }
+}
+
+impl<'new, T> WithLifetime<'new> for Vec<T>
+where
+    T: WithLifetime<'new>,
+{
+    type Out = Vec<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'new, T> WithLifetime<'new> for std::collections::VecDeque<T>
+where
+    T: WithLifetime<'new>,
+{
+    type Out = std::collections::VecDeque<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute(self)
+    }
+}
+
+impl<'new, T> WithLifetime<'new> for Option<T>
+where
+    T: WithLifetime<'new>,
+{
+    type Out = Option<<T as WithLifetime<'new>>::Out>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        self.map(|x| x.with_lifetime())
+    }
+}
+
+impl<'new, T, U> WithLifetime<'new> for (T, U)
+where
+    T: WithLifetime<'new>,
+    U: WithLifetime<'new>,
+{
+    type Out = (<T as WithLifetime<'new>>::Out, <U as WithLifetime<'new>>::Out);
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        (self.0.with_lifetime(), self.1.with_lifetime())
+    }
+}
+
+macro_rules! object_trait_impls {
     ($ty:ty) => {
         impl<'old, 'new> WithLifetime<'new> for &'old $ty {
             type Out = &'new $ty;
@@ -198,18 +257,23 @@ macro_rules! with_lifetime_impl {
                 std::mem::transmute(self)
             }
         }
+        impl GcPtr for &$ty {}
     };
 }
 
-with_lifetime_impl!(LispFloat);
-with_lifetime_impl!(Cons);
-with_lifetime_impl!(ByteFn);
-with_lifetime_impl!(LispString);
-with_lifetime_impl!(ByteString);
-with_lifetime_impl!(LispVec);
-with_lifetime_impl!(Record);
-with_lifetime_impl!(LispHashTable);
-with_lifetime_impl!(LispBuffer);
+pub(in crate::core) trait GcPtr {}
+impl<T> GcPtr for Gc<T> {}
+impl GcPtr for Symbol<'_> {}
+
+object_trait_impls!(LispFloat);
+object_trait_impls!(Cons);
+object_trait_impls!(ByteFn);
+object_trait_impls!(LispString);
+object_trait_impls!(ByteString);
+object_trait_impls!(LispVec);
+object_trait_impls!(Record);
+object_trait_impls!(LispHashTable);
+object_trait_impls!(LispBuffer);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -1249,6 +1313,12 @@ where
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
+    }
+}
+
+impl<T> Trace for Gc<T> {
+    fn trace(&self, stack: &mut Vec<RawObj>) {
+        self.as_obj().trace_mark(stack);
     }
 }
 

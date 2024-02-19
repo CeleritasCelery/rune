@@ -140,7 +140,7 @@ pub(crate) fn mapcar<'ob>(
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
-            Ok(slice_into_list(outputs.bind_obj_vec(cx), None, cx))
+            Ok(slice_into_list(Rt::bind_slice(outputs, cx), None, cx))
         }
         ObjectType::ByteFn(fun) => {
             let len = fun.len();
@@ -152,7 +152,7 @@ pub(crate) fn mapcar<'ob>(
                 outputs.push(output);
             }
             // TODO: remove this intermediate vector
-            Ok(slice_into_list(outputs.bind_obj_vec(cx), None, cx))
+            Ok(slice_into_list(Rt::bind_slice(outputs, cx), None, cx))
         }
         _ => Err(TypeError::new(Type::Sequence, sequence).into()),
     }
@@ -484,7 +484,7 @@ fn sort<'ob>(
         }
         vec[j].set(&*tmp);
     }
-    Ok(slice_into_list(vec.bind_obj_vec(cx), None, cx))
+    Ok(slice_into_list(Rt::bind_slice(vec, cx), None, cx))
 }
 
 #[defun]

@@ -3,18 +3,14 @@ use super::super::{
     object::{Object, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::object::{
-    ByteFn, Gc, IntoObject, LispBuffer, LispString, List, ObjectType, Symbol, Untag, WithLifetime,
-};
+use crate::core::object::{Gc, GcPtr, IntoObject, List, ObjectType, Untag, WithLifetime};
 use rune_core::hashmap::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::slice::SliceIndex;
 use std::{
     cell::UnsafeCell,
+    fmt,
     ops::{Deref, DerefMut, Index, IndexMut, RangeBounds},
-};
-use std::{
-    collections::VecDeque,
-    hash::{Hash, Hasher},
 };
 use std::{
     fmt::{Debug, Display},
@@ -38,11 +34,11 @@ pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
 
-impl<'new, T, U> IntoRoot<Slot<Gc<U>>> for Gc<T>
+impl<'new, T, U> IntoRoot<Slot<U>> for T
 where
-    Gc<T>: WithLifetime<'new, Out = Gc<U>>,
+    T: WithLifetime<'new, Out = U> + GcPtr,
 {
-    unsafe fn into_root(self) -> Slot<Gc<U>> {
+    unsafe fn into_root(self) -> Slot<U> {
         Slot::new(self.with_lifetime())
     }
 }
@@ -53,36 +49,6 @@ where
 {
     unsafe fn into_root(self) -> Option<U> {
         self.map(|x| x.into_root())
-    }
-}
-
-impl<'old, 'new> IntoRoot<Slot<&'new Cons>> for &'old Cons {
-    unsafe fn into_root(self) -> Slot<&'new Cons> {
-        Slot::new(self.with_lifetime())
-    }
-}
-
-impl<'old, 'new> IntoRoot<Slot<&'new ByteFn>> for &'old ByteFn {
-    unsafe fn into_root(self) -> Slot<&'new ByteFn> {
-        Slot::new(self.with_lifetime())
-    }
-}
-
-impl<'old, 'new> IntoRoot<Slot<&'new LispString>> for &'old LispString {
-    unsafe fn into_root(self) -> Slot<&'new LispString> {
-        Slot::new(self.with_lifetime())
-    }
-}
-
-impl<'old, 'new> IntoRoot<Slot<&'new LispBuffer>> for &'old LispBuffer {
-    unsafe fn into_root(self) -> Slot<&'new LispBuffer> {
-        Slot::new(self.with_lifetime())
-    }
-}
-
-impl<'old, 'new> IntoRoot<Slot<Symbol<'new>>> for Symbol<'old> {
-    unsafe fn into_root(self) -> Slot<Symbol<'new>> {
-        Slot::new(self.with_lifetime())
     }
 }
 
@@ -130,12 +96,6 @@ impl<'a> IntoRoot<Slot<Object<'a>>> for i64 {
     }
 }
 
-impl<T> Trace for Gc<T> {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
-        self.as_obj().trace_mark(stack);
-    }
-}
-
 // Represents an object T rooted on the Stack. This will remove the the object
 // from the root set when dropped.
 #[doc(hidden)]
@@ -151,13 +111,13 @@ impl<T> AsMut<Rt<T>> for __StackRoot<'_, T> {
 }
 
 impl<T: Debug> Debug for __StackRoot<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(self.data, f)
     }
 }
 
 impl<T: Display> Display for __StackRoot<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(self.data, f)
     }
 }
@@ -223,6 +183,7 @@ impl<T: RootedDeref> DerefMut for Rt<T> {
 /// only a reference. This ensures that underlying data does not move. In order
 /// to access the inner data, the [`Rt::bind`] method must be used.
 #[repr(transparent)]
+#[derive(PartialEq, Eq)]
 pub struct Rt<T: ?Sized> {
     _aliasable: PhantomPinned,
     inner: T,
@@ -266,6 +227,20 @@ impl<T: PartialEq> PartialEq for Slot<T> {
     }
 }
 
+// This type signature is so complex due to lifetime restrictions around
+// invariance. deriving PartialEq will provide T == T. But if the lifetime is
+// invariant than two types with different lifetimes will be different types. Using an UnsafeCell makes the lifetime invariant So
+// we have to use WithLifetime to convert the lifetime to the same invariant lifetime 'a.
+impl<'a, T, U> PartialEq<U> for Slot<T>
+where
+    U: WithLifetime<'a> + Copy,
+    T: PartialEq<<U as WithLifetime<'a>>::Out>,
+{
+    fn eq(&self, other: &U) -> bool {
+        *self.get() == unsafe { other.with_lifetime() }
+    }
+}
+
 impl<T: Eq> Eq for Slot<T> {}
 
 impl<T> Slot<T> {
@@ -293,72 +268,35 @@ impl<T: Trace> Trace for Slot<T> {
 }
 
 impl<T: Debug> Debug for Rt<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(&self.inner(), f)
     }
 }
 
 impl<T: Display> Display for Rt<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner(), f)
     }
 }
 
 impl<T: Debug> Debug for Slot<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Debug::fmt(self.get(), f)
     }
 }
 
 impl<T: Display> Display for Slot<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(self.get(), f)
     }
 }
 
-// can't use a blanet impl of impl<T: PartialEq<U>, U> PartialEq<U> for Rt<T>
-// due to lifetime restrictions around invariance.
-impl PartialEq for Rt<Slot<Object<'_>>> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner().get() == other.inner().get()
-    }
-}
-
-impl PartialEq for Rt<Slot<Symbol<'_>>> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner().get() == other.inner().get()
-    }
-}
-
-impl PartialEq<Symbol<'_>> for Rt<Slot<Symbol<'_>>> {
-    fn eq(&self, other: &Symbol) -> bool {
-        self.inner().get() == other
-    }
-}
-
-impl PartialEq<Object<'_>> for Rt<Slot<Object<'_>>> {
-    fn eq(&self, other: &Object) -> bool {
-        self.inner().get() == other
-    }
-}
-
-impl PartialEq<Object<'_>> for Slot<Object<'_>> {
-    fn eq(&self, other: &Object) -> bool {
-        self.get() == other
-    }
-}
-
-impl PartialEq<Symbol<'_>> for Rt<Slot<Object<'_>>> {
-    fn eq(&self, other: &Symbol) -> bool {
-        self.inner().get() == other
-    }
-}
-
-impl Deref for Rt<Slot<Gc<&LispString>>> {
-    type Target = LispString;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner().untag()
+impl<T, U> PartialEq<U> for Rt<Slot<T>>
+where
+    Slot<T>: PartialEq<U>,
+{
+    fn eq(&self, other: &U) -> bool {
+        self.inner() == other
     }
 }
 
@@ -371,65 +309,6 @@ where
     }
 }
 
-impl<'new, T, const N: usize> WithLifetime<'new> for [T; N]
-where
-    T: WithLifetime<'new>,
-{
-    type Out = [<T as WithLifetime<'new>>::Out; N];
-    unsafe fn with_lifetime(self) -> Self::Out {
-        // work around since we can't transmute arrays
-        let ptr = &self as *const [T; N] as *const Self::Out;
-        let value = unsafe { ptr.read() };
-        std::mem::forget(self);
-        value
-    }
-}
-
-impl<'new, T> WithLifetime<'new> for Vec<T>
-where
-    T: WithLifetime<'new>,
-{
-    type Out = Vec<<T as WithLifetime<'new>>::Out>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute(self)
-    }
-}
-
-impl<'new, T> WithLifetime<'new> for VecDeque<T>
-where
-    T: WithLifetime<'new>,
-{
-    type Out = VecDeque<<T as WithLifetime<'new>>::Out>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute(self)
-    }
-}
-
-impl<'new, T> WithLifetime<'new> for Option<T>
-where
-    T: WithLifetime<'new>,
-{
-    type Out = Option<<T as WithLifetime<'new>>::Out>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        self.map(|x| x.with_lifetime())
-    }
-}
-
-impl<'new, T, U> WithLifetime<'new> for (T, U)
-where
-    T: WithLifetime<'new>,
-    U: WithLifetime<'new>,
-{
-    type Out = (<T as WithLifetime<'new>>::Out, <U as WithLifetime<'new>>::Out);
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        (self.0.with_lifetime(), self.1.with_lifetime())
-    }
-}
-
 impl<T> Rt<T> {
     fn inner(&self) -> &T {
         &self.inner
@@ -439,11 +318,11 @@ impl<T> Rt<T> {
         &mut self.inner
     }
 
-    fn inner_get(&self) -> *const T {
+    fn inner_ptr(&self) -> *const T {
         &self.inner as *const T
     }
 
-    fn inner_get_mut(&mut self) -> *mut T {
+    fn inner_mut_ptr(&mut self) -> *mut T {
         &mut self.inner as *mut T
     }
 
@@ -452,7 +331,7 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        unsafe { &*self.inner_get().cast::<<T as WithLifetime<'ob>>::Out>() }
+        unsafe { &*self.inner_ptr().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
     pub(crate) fn bind_mut<'a, 'ob>(
@@ -463,7 +342,7 @@ impl<T> Rt<T> {
         T: WithLifetime<'ob>,
     {
         // SAFETY: We are holding a reference to the context
-        unsafe { &mut *self.inner_get_mut().cast::<<T as WithLifetime<'ob>>::Out>() }
+        unsafe { &mut *self.inner_mut_ptr().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
     pub(crate) fn bind_slice<'brw, 'ob, U>(
@@ -474,6 +353,8 @@ impl<T> Rt<T> {
         Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
         Gc<U>: 'ob,
     {
+        // SAFETY: Gc<T> does not have any niche optimizations, so it is safe to
+        // cast from a Rt<Slot>
         unsafe { &*(slice as *const [Rt<Slot<Gc<T>>>] as *const [Gc<U>]) }
     }
 
@@ -484,22 +365,7 @@ impl<T> Rt<T> {
     }
 }
 
-// TODO: see if we can remove this
-impl<T> Rt<Vec<Slot<Gc<T>>>> {
-    pub(crate) fn bind_obj_vec<'a, 'ob>(&'a self, _: &'ob Context) -> &'a Vec<Gc<T>>
-    where
-        T: WithLifetime<'ob>,
-    {
-        // SAFETY: We are holding a reference to the context
-        unsafe { &*self.inner_get().cast::<Vec<Gc<T>>>() }
-    }
-}
-
 impl<T> Rt<Slot<T>> {
-    // pub(crate) fn set_slot<U: IntoRoot<T>>(&mut self, item: U) {
-    //     self.inner_mut().set(unsafe { item.into_root() })
-    // }
-
     pub(crate) fn bind<'ob>(&self, _: &'ob Context) -> <T as WithLifetime<'ob>>::Out
     where
         T: WithLifetime<'ob> + Copy,
@@ -681,7 +547,7 @@ impl<T, U> DerefMut for Rt<(T, U)> {
 impl<T> Deref for Rt<Option<T>> {
     type Target = Option<Rt<T>>;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.inner_get().cast::<Self::Target>() }
+        unsafe { &*self.inner_ptr().cast::<Self::Target>() }
     }
 }
 
@@ -692,7 +558,7 @@ where
     type Output = <[Rt<T>] as Index<I>>::Output;
 
     fn index(&self, index: I) -> &Self::Output {
-        let slice = unsafe { &*self.inner_get().cast::<[Rt<T>; N]>() };
+        let slice = unsafe { &*self.inner_ptr().cast::<[Rt<T>; N]>() };
         Index::index(slice, index)
     }
 }
@@ -702,14 +568,14 @@ where
     [Rt<T>]: IndexMut<I>,
 {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        let slice = unsafe { &mut *self.inner_get_mut().cast::<[Rt<T>; N]>() };
+        let slice = unsafe { &mut *self.inner_mut_ptr().cast::<[Rt<T>; N]>() };
         IndexMut::index_mut(slice, index)
     }
 }
 
 impl<T, const N: usize> AsRef<[Rt<T>]> for Rt<[T; N]> {
     fn as_ref(&self) -> &[Rt<T>] {
-        unsafe { &*self.inner_get().cast::<[Rt<T>; N]>() }
+        unsafe { &*self.inner_ptr().cast::<[Rt<T>; N]>() }
     }
 }
 
@@ -801,12 +667,12 @@ where
     }
 
     pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {
-        let inner = unsafe { &*self.inner_get().cast::<HashMap<K, Rt<V>>>() };
+        let inner = unsafe { &*self.inner_ptr().cast::<HashMap<K, Rt<V>>>() };
         inner.get(unsafe { &k.into_root() })
     }
 
     pub(crate) fn get_mut<Q: IntoRoot<K>>(&mut self, k: Q) -> Option<&mut Rt<V>> {
-        let inner = unsafe { &mut *self.inner_get_mut().cast::<HashMap<K, Rt<V>>>() };
+        let inner = unsafe { &mut *self.inner_mut_ptr().cast::<HashMap<K, Rt<V>>>() };
         inner.get_mut(unsafe { &k.into_root() })
     }
 
@@ -819,7 +685,7 @@ impl<K, V> Deref for Rt<HashMap<K, V>> {
     type Target = HashMap<Rt<K>, Rt<V>>;
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*self.inner_get().cast::<Self::Target>() }
+        unsafe { &*self.inner_ptr().cast::<Self::Target>() }
     }
 }
 
@@ -827,7 +693,7 @@ impl<T> Deref for Rt<HashSet<T>> {
     type Target = HashSet<Rt<T>>;
     fn deref(&self) -> &Self::Target {
         // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*self.inner_get().cast::<Self::Target>() }
+        unsafe { &*self.inner_ptr().cast::<Self::Target>() }
     }
 }
 

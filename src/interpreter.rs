@@ -189,7 +189,7 @@ impl Interpreter<'_, '_> {
             args.push(result);
         }
         let frame = &mut CallFrame::new(self.env);
-        frame.push_arg_slice(args.bind_obj_vec(cx));
+        frame.push_arg_slice(Rt::bind_slice(args, cx));
         let name = sym.bind(cx).name().to_owned();
         func.call(frame, Some(&name), cx)
     }
