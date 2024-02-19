@@ -1,4 +1,3 @@
-#![allow(unstable_name_collisions)]
 use super::gc::{Context, Rt, Slot};
 
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
@@ -11,10 +10,11 @@ mod symbol_map;
 pub(crate) use stack::*;
 pub(crate) use symbol_map::*;
 
+type PropertyMap<'a> = HashMap<Slot<Symbol<'a>>, Vec<(Slot<Symbol<'a>>, Slot<Object<'a>>)>>;
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {
     pub(crate) vars: HashMap<Slot<Symbol<'a>>, Slot<Object<'a>>>,
-    pub(crate) props: HashMap<Slot<Symbol<'a>>, Vec<(Slot<Symbol<'a>>, Slot<Object<'a>>)>>,
+    pub(crate) props: PropertyMap<'a>,
     pub(crate) catch_stack: Vec<Slot<Object<'a>>>,
     exception: (Slot<Object<'a>>, Slot<Object<'a>>),
     #[no_trace]
@@ -56,6 +56,7 @@ impl<'a> RootedEnv<'a> {
         self.exception_id
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn get_exception(
         &self,
         id: u32,
