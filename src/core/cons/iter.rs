@@ -207,13 +207,44 @@ impl<'ob> Object<'ob> {
     }
 }
 
+#[macro_export]
+macro_rules! rooted_iter {
+    ($ident:ident, $value:expr, $cx:ident) => {
+        // Create roots, but don't initialize them
+        let mut elem;
+        let mut cons;
+        let mut root_elem;
+        let mut root_cons;
+        // use match to ensure that $value is not evaled inside the unsafe block
+        let slot = match $value {
+            value => unsafe { $crate::core::gc::IntoRoot::into_root(value) },
+        };
+        let list: $crate::core::object::List = (*slot).try_into()?;
+        #[allow(unused_qualifications, unused_mut)]
+        let mut $ident = if let $crate::core::object::ListType::Cons(head) = list.untag() {
+            use $crate::core::{cons, gc, object};
+            // If the list is not empty, then initialize the roots and put them
+            // in the stack space reserved
+            unsafe {
+                elem = Slot::new(object::NIL);
+                cons = Slot::new(object::WithLifetime::with_lifetime(head));
+                root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
+                root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
+                cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))
+            }
+        } else {
+            $crate::core::cons::ElemStreamIter::new(None, None)
+        };
+    };
+}
+
 #[cfg(test)]
 mod test {
     use fallible_iterator::FallibleIterator;
     use fallible_streaming_iterator::FallibleStreamingIterator;
 
     use super::super::super::gc::{Context, RootSet};
-    use rune_core::macros::{list, rooted_iter};
+    use rune_core::macros::list;
 
     use super::*;
 

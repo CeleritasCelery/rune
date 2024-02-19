@@ -10,13 +10,14 @@ use crate::{
         },
     },
     eval::{add_trace, ErrorType, EvalError, EvalResult},
+    rooted_iter,
 };
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{bail_err, call, error, rebind, root, rooted_iter};
+use rune_core::macros::{bail_err, call, error, rebind, root};
 use rune_macros::defun;
 
 struct Interpreter<'brw, 'rt> {
@@ -160,7 +161,7 @@ impl Interpreter<'_, '_> {
 
         match func.untag(cx) {
             FunctionType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-                crate::eval::autoload_do_load(func.use_as(), None, None, self.env, cx)
+                crate::eval::autoload_do_load(func.cast(), None, None, self.env, cx)
                     .map_err(|e| add_trace(e, "autoload", &[]))?;
                 func.set(sym.bind(cx).follow_indirect(cx).unwrap());
             }

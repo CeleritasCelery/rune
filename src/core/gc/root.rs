@@ -3,7 +3,7 @@ use super::super::{
     object::{Object, RawObj},
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::object::{Gc, GcPtr, IntoObject, List, ObjectType, Untag, WithLifetime};
+use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, Untag, WithLifetime};
 use rune_core::hashmap::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::slice::SliceIndex;
@@ -229,8 +229,9 @@ impl<T: PartialEq> PartialEq for Slot<T> {
 
 // This type signature is so complex due to lifetime restrictions around
 // invariance. deriving PartialEq will provide T == T. But if the lifetime is
-// invariant than two types with different lifetimes will be different types. Using an UnsafeCell makes the lifetime invariant So
-// we have to use WithLifetime to convert the lifetime to the same invariant lifetime 'a.
+// invariant than two types with different lifetimes will be different types.
+// Using an UnsafeCell makes the lifetime invariant So we have to use
+// WithLifetime to convert the lifetime to the same invariant lifetime 'a.
 impl<'a, T, U> PartialEq<U> for Slot<T>
 where
     U: WithLifetime<'a> + Copy,
@@ -382,45 +383,14 @@ impl<T> Rt<Slot<T>> {
     }
 }
 
-// TODO: Slot look at this again
-impl<T> Rt<Slot<T>> {
-    /// Like `try_into`, but needed to due no specialization
-    pub(crate) unsafe fn try_as_list<'ob, E>(&self) -> Result<List<'ob>, E>
-    where
-        T: TryInto<List<'ob>, Error = E> + Copy,
-    {
-        let list: List = (*self.inner().get()).try_into()?;
-        unsafe { Ok(list.with_lifetime()) }
-    }
-}
-
-impl<T> Gc<T> {
-    /// Like `try_into`, but needed to due no specialization
-    pub(crate) unsafe fn try_as_list<'ob, 'a, E>(self) -> Result<List<'ob>, E>
-    where
-        Gc<T>: TryInto<List<'a>, Error = E> + Copy,
-    {
-        let list: List = self.try_into()?;
-        unsafe { Ok(list.with_lifetime()) }
-    }
-}
-
-impl Cons {
-    /// Like `try_into`, but needed to due no specialization
-    pub(crate) unsafe fn try_as_list<'ob>(&self) -> Result<List<'ob>, anyhow::Error> {
-        let list: List = self.into();
-        unsafe { Ok(list.with_lifetime()) }
-    }
-}
-
 impl<T> Rt<Slot<Gc<T>>> {
     /// Calls [untag](Untag::untag_erased) on the tagged Gc pointer
-    pub(crate) fn untag<'ob, U>(&self, _cx: &'ob Context) -> U
+    pub(crate) fn untag<'ob, U>(&self, cx: &'ob Context) -> U
     where
         Gc<T>: WithLifetime<'ob, Out = Gc<U>> + Copy,
         Gc<U>: Untag<U>,
     {
-        unsafe { self.inner().get().with_lifetime().untag_erased() }
+        cx.bind(*self.inner().get()).untag_erased()
     }
 
     /// Like `try_into`, but needed to due no specialization
@@ -452,8 +422,8 @@ impl<T> Rt<Slot<Gc<T>>> {
         unsafe { self.inner().get().with_lifetime().try_into() }
     }
 
-    /// Like `From`, but needed to due no specialization
-    pub(crate) fn use_as<U>(&self) -> &Rt<Slot<Gc<U>>>
+    /// Like `Into`, but needed to due no specialization
+    pub(crate) fn cast<U>(&self) -> &Rt<Slot<Gc<U>>>
     where
         Gc<T>: Into<Gc<U>> + Copy,
     {

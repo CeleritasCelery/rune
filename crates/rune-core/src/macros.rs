@@ -85,38 +85,6 @@ macro_rules! __root {
 
 #[macro_export]
 #[doc(hidden)]
-macro_rules! __rooted_iter {
-    ($ident:ident, $value:expr, $cx:ident) => {
-        // Create roots, but don't initialize them
-        let mut elem;
-        let mut cons;
-        let mut root_elem;
-        let mut root_cons;
-        // use match to ensure that $value is not evaled inside the unsafe block
-        let list: crate::core::object::List = match $value {
-            // Convert the value into a list
-            value => unsafe { value.try_as_list()? },
-        };
-        #[allow(unused_qualifications, unused_mut)]
-        let mut $ident = if let crate::core::object::ListType::Cons(head) = list.untag() {
-            use crate::core::{cons, gc, object};
-            // If the list is not empty, then initialize the roots and put them
-            // in the stack space reserved
-            unsafe {
-                elem = Slot::new(object::NIL);
-                cons = Slot::new(object::WithLifetime::with_lifetime(head));
-                root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
-                root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
-                cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))
-            }
-        } else {
-            crate::core::cons::ElemStreamIter::new(None, None)
-        };
-    };
-}
-
-#[macro_export]
-#[doc(hidden)]
 macro_rules! __last {
     ($arg:expr) => { $arg };
     ($head:expr, $($rest:expr),+) => {
@@ -211,7 +179,3 @@ pub use __rebind as rebind;
 /// will be unrooted when it goes out of scope.
 #[doc(inline)]
 pub use __root as root;
-
-/// TODO: Document
-#[doc(inline)]
-pub use __rooted_iter as rooted_iter;

@@ -11,11 +11,12 @@ use crate::{
         },
     },
     data::aref,
+    rooted_iter,
 };
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{call, list, rebind, root, rooted_iter};
+use rune_core::macros::{call, list, rebind, root};
 use rune_macros::defun;
 
 #[defun]

@@ -7,12 +7,12 @@ use crate::core::gc::{Context, Slot};
 use crate::core::object::{
     Function, Gc, LispString, Object, ObjectType, Symbol, WithLifetime, NIL, TRUE,
 };
-use crate::interpreter;
 use crate::reader;
+use crate::{interpreter, rooted_iter};
 use anyhow::{anyhow, Context as _};
 use anyhow::{bail, ensure, Result};
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{call, rebind, root, rooted_iter};
+use rune_core::macros::{call, rebind, root};
 use rune_macros::defun;
 use std::fs;
 use std::path::{Path, PathBuf};

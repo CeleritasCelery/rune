@@ -9,10 +9,11 @@ use crate::core::{
     object::{FunctionType, Gc, Object},
 };
 use crate::fns::{assq, eq};
+use crate::rooted_iter;
 use anyhow::{anyhow, bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
-use rune_core::macros::{bail_err, call, list, root, rooted_iter};
+use rune_core::macros::{bail_err, call, list, root};
 use rune_macros::defun;
 use std::fmt::{Display, Formatter};
 
@@ -448,7 +449,7 @@ impl Rt<Slot<Function<'_>>> {
                     FunctionType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
                         // TODO: inifinite loop if autoload does not resolve
                         root!(sym, cx);
-                        crate::eval::autoload_do_load(self.use_as(), None, None, frame, cx)
+                        crate::eval::autoload_do_load(self.cast(), None, None, frame, cx)
                             .map_err(|e| add_trace(e, name, frame.arg_slice()))?;
                         let Some(func) = sym.bind(cx).follow_indirect(cx) else {
                             bail_err!("autoload for {sym} failed to define function")
