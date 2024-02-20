@@ -17,7 +17,7 @@ impl<'ob> Number<'ob> {
     pub(crate) fn val(self) -> NumberValue {
         match self.untag() {
             NumberType::Int(x) => NumberValue::Int(x),
-            NumberType::Float(x) => NumberValue::Float(***x),
+            NumberType::Float(x) => NumberValue::Float(**x),
         }
     }
 }

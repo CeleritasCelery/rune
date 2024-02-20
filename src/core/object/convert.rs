@@ -24,7 +24,7 @@ impl TryFrom<Object<'_>> for f64 {
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.untag() {
             ObjectType::Int(x) => Ok(x as f64),
-            ObjectType::Float(x) => Ok(***x),
+            ObjectType::Float(x) => Ok(**x),
             x => Err(TypeError::new(Type::Number, x).into()),
         }
     }

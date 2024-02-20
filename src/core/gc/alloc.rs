@@ -1,8 +1,8 @@
 use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteFnInner, ByteString, LispBuffer, LispBufferInner, LispFloat, LispFloatInner,
-    LispHashTable, LispHashTableInner, LispString, LispVec, LispVecInner, SymbolCell,
+    ByteFn, ByteFnInner, ByteString, LispBuffer, LispBufferInner, LispFloat, LispHashTable,
+    LispHashTableInner, LispString, LispVec, LispVecInner, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -33,8 +33,8 @@ impl AllocObject for f64 {
     type Output = LispFloat;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let f = LispFloatInner(self);
-        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(GcHeap::new(f, block))));
+        let f = LispFloat::new(self, block);
+        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(f)));
         let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

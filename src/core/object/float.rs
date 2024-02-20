@@ -1,41 +1,36 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap};
+use crate::Markable;
+use macro_attr_2018::macro_attr;
+use newtype_derive_2018::*;
 use std::fmt::{Debug, Display};
-use std::ops::Deref;
 
-mod sealed {
-    #[derive(PartialEq)]
-    #[repr(transparent)]
-    pub(crate) struct LispFloatInner(pub(in crate::core) f64);
+macro_attr! {
+    /// A wrapper type for floats to work around issues with Eq. Rust only allows
+    /// types to be used in match statements if they derive Eq. Even if you never
+    /// actually use that field in a match. So we need a float wrapper that
+    /// implements that trait.
+    #[derive(PartialEq, NewtypeDeref!, Markable!)]
+    pub(crate) struct LispFloat(GcHeap<f64>);
 }
 
-pub(in crate::core) use sealed::LispFloatInner;
-
-impl Eq for LispFloatInner {}
-
-/// A wrapper type for floats to work around issues with Eq. Rust only allows
-/// types to be used in match statements if they derive Eq. Even if you never
-/// actually use that field in a match. So we need a float wrapper that
-/// implements that trait.
-pub(crate) type LispFloat = GcHeap<LispFloatInner>;
-
-impl Deref for LispFloatInner {
-    type Target = f64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl LispFloat {
+    pub fn new<const C: bool>(float: f64, bk: &Block<C>) -> Self {
+        LispFloat(GcHeap::new(float, bk))
     }
 }
+
+impl Eq for LispFloat {}
 
 impl<'new> CloneIn<'new, &'new LispFloat> for LispFloat {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-        (***self).into_obj(bk)
+        (**self).into_obj(bk)
     }
 }
 
-impl Display for LispFloatInner {
+impl Display for LispFloat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let float = self.0;
+        let float = **self;
         if float.fract() == 0.0_f64 {
             write!(f, "{float:.1}")
         } else {
@@ -44,7 +39,7 @@ impl Display for LispFloatInner {
     }
 }
 
-impl Debug for LispFloatInner {
+impl Debug for LispFloat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
     }
