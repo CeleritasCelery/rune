@@ -1,3 +1,4 @@
+use super::Markable;
 use super::OwnedObject;
 use super::Trace;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};

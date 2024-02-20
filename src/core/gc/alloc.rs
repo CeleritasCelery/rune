@@ -1,9 +1,8 @@
 use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteFnInner, ByteString, ByteStringInner, LispBuffer, LispBufferInner, LispFloat,
-    LispFloatInner, LispHashTable, LispHashTableInner, LispString, LispStringInner, LispVec,
-    LispVecInner, SymbolCell,
+    ByteFn, ByteFnInner, ByteString, LispBuffer, LispBufferInner, LispFloat, LispFloatInner,
+    LispHashTable, LispHashTableInner, LispString, LispVec, LispVecInner, SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -64,26 +63,23 @@ impl AllocObject for SymbolCell {
     }
 }
 
-impl AllocObject for LispStringInner {
+impl AllocObject for LispString {
     type Output = LispString;
 
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(&mut objects, OwnedObject::String(Box::new(GcHeap::new(self, block))));
+        Block::<C>::register(&mut objects, OwnedObject::String(Box::new(self)));
         let Some(OwnedObject::String(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }
 }
 
-impl AllocObject for ByteStringInner {
+impl AllocObject for ByteString {
     type Output = ByteString;
 
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        Block::<C>::register(
-            &mut objects,
-            OwnedObject::ByteString(Box::new(GcHeap::new(self, block))),
-        );
+        Block::<C>::register(&mut objects, OwnedObject::ByteString(Box::new(self)));
         let Some(OwnedObject::ByteString(x)) = objects.last_mut() else { unreachable!() };
         x.as_ref()
     }

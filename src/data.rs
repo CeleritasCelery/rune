@@ -360,8 +360,8 @@ pub(crate) fn aref<'ob>(array: Object<'ob>, idx: usize, cx: &'ob Context) -> Res
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         },
-        ObjectType::String(string) => match string.get_char_at(idx) {
-            Some(x) => Ok((i64::from(x)).into()),
+        ObjectType::String(string) => match string.chars().nth(idx) {
+            Some(x) => Ok((i64::from(x as u32)).into()),
             None => {
                 let len = string.len();
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))

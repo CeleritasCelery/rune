@@ -40,16 +40,43 @@ impl<T> GcHeap<T> {
     pub(in crate::core) const fn new_pure(data: T) -> Self {
         Self { header: GcHeader { marked: Cell::new(true) }, data }
     }
+}
 
-    pub(in crate::core) fn is_marked(&self) -> bool {
+pub(in crate::core) trait Markable {
+    fn mark(&self);
+    fn unmark(&self);
+    fn is_marked(&self) -> bool;
+}
+
+#[macro_export]
+macro_rules! Markable {
+    (() $vis:vis struct $name:ident $($tail:tt)+) => {
+        impl $crate::core::gc::Markable for $name {
+            fn is_marked(&self) -> bool {
+                self.0.is_marked()
+            }
+
+            fn mark(&self) {
+                self.0.mark()
+            }
+
+            fn unmark(&self) {
+                self.0.unmark()
+            }
+        }
+    };
+}
+
+impl<T> Markable for GcHeap<T> {
+    fn is_marked(&self) -> bool {
         self.header.marked.get()
     }
 
-    pub(in crate::core) fn mark(&self) {
+    fn mark(&self) {
         self.header.marked.set(true);
     }
 
-    pub(in crate::core) fn unmark(&self) {
+    fn unmark(&self) {
         self.header.marked.set(false);
     }
 }

@@ -1,5 +1,4 @@
 use super::gc::{Context, Rt, Slot};
-
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;

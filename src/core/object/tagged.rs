@@ -5,14 +5,16 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteFnInner, ByteString, ByteStringInner, LispBuffer, LispHashTableInner, LispStringInner,
-    LispVecInner,
+    ByteFnInner, ByteString, LispBuffer, LispHashTableInner, LispVecInner,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
     SubrFn, Symbol, SymbolCell,
 };
-use crate::core::{env::sym, gc::Trace};
+use crate::core::{
+    env::sym,
+    gc::{Markable, Trace},
+};
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -379,7 +381,7 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispStringInner::from_string(self).alloc_obj(block);
+            let ptr = LispString::new(self, block).alloc_obj(block);
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -390,7 +392,7 @@ impl IntoObject for &str {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispStringInner::from_string(self.to_owned()).alloc_obj(block);
+            let ptr = LispString::new(self.to_owned(), block).alloc_obj(block);
             <&LispString>::tag_ptr(ptr)
         }
     }
@@ -401,7 +403,7 @@ impl IntoObject for Vec<u8> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = ByteStringInner::new(self).alloc_obj(block);
+            let ptr = ByteString::new(self, block).alloc_obj(block);
             <&ByteString>::tag_ptr(ptr)
         }
     }

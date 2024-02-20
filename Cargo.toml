@@ -55,6 +55,8 @@ fxhash = { workspace = true }
 text-buffer = { workspace = true }
 rune-macros = { workspace = true }
 rune-core = { workspace = true }
+newtype-derive-2018 = "0.2.2"
+macro-attr-2018 = "3.0.0"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.5"
