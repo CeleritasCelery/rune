@@ -1,8 +1,8 @@
 use super::{Block, GcHeap};
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteFnInner, ByteString, LispBuffer, LispBufferInner, LispFloat, LispHashTable,
-    LispString, LispVec, SymbolCell,
+    ByteFn, ByteFnInner, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec,
+    SymbolCell,
 };
 use std::fmt::Debug;
 
@@ -124,16 +124,13 @@ impl AllocObject for LispHashTable {
     }
 }
 
-impl AllocObject for LispBufferInner {
+impl AllocObject for LispBuffer {
     type Output = LispBuffer;
 
     fn alloc_obj<const CONST: bool>(self, block: &Block<CONST>) -> *const Self::Output {
         assert!(CONST, "Buffers must only be created in the shared block");
         let mut objects = block.objects.borrow_mut();
-        Block::<CONST>::register(
-            &mut objects,
-            OwnedObject::Buffer(Box::new(GcHeap::new(self, block))),
-        );
+        Block::<CONST>::register(&mut objects, OwnedObject::Buffer(Box::new(self)));
         let Some(OwnedObject::Buffer(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

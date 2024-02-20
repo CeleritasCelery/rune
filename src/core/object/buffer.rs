@@ -1,9 +1,15 @@
 use super::{Gc, Object, ObjectType, RawObj, TagType, WithLifetime};
-use crate::core::{
-    error::{Type, TypeError},
-    gc::{AllocObject, Block, Context, GcHeap, Trace},
+use crate::{
+    core::{
+        error::{Type, TypeError},
+        gc::{AllocObject, Block, Context, GcHeap, Trace},
+    },
+    Markable,
 };
 use anyhow::{bail, Result};
+use macro_attr_2018::macro_attr;
+use newtype_derive_2018::*;
+use rune_macros::Trace;
 use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
@@ -94,28 +100,30 @@ pub(crate) struct BufferData {
     pub(crate) text: TextBuffer,
 }
 
-mod sealed {
-    use super::{BufferData, Mutex};
-
-    #[derive(Debug)]
-    pub(crate) struct LispBufferInner {
-        pub(super) text_buffer: Mutex<Option<BufferData>>,
-    }
+#[derive(Debug)]
+pub(crate) struct LispBufferInner {
+    text_buffer: Mutex<Option<BufferData>>,
 }
 
-pub(in crate::core) use sealed::LispBufferInner;
-
+macro_attr! {
 /// A lisp handle to a buffer. This is a just a reference type and does not give
 /// access to the contents until it is locked and a `OpenBuffer` is returned.
-pub(crate) type LispBuffer = GcHeap<LispBufferInner>;
+    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, Markable!)]
+    pub(crate) struct LispBuffer(GcHeap<LispBufferInner>);
+}
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
+        let buffer = unsafe { Self::new(name, block) };
+        let ptr = buffer.alloc_obj(block);
+        unsafe { &*ptr }
+    }
+
+    pub(crate) unsafe fn new(name: String, block: &Block<true>) -> LispBuffer {
         let new = LispBufferInner {
             text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })),
         };
-        let ptr = new.alloc_obj(block);
-        unsafe { &*ptr }
+        Self(GcHeap::new(new, block))
     }
 
     pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {
@@ -135,13 +143,13 @@ impl PartialEq for LispBufferInner {
 
 impl PartialEq<OpenBuffer<'_>> for LispBuffer {
     fn eq(&self, other: &OpenBuffer) -> bool {
-        other.back_ref == &**self
+        other.back_ref == self
     }
 }
 
 impl PartialEq<LispBuffer> for OpenBuffer<'_> {
     fn eq(&self, other: &LispBuffer) -> bool {
-        self.back_ref == &**other
+        self.back_ref == other
     }
 }
 
