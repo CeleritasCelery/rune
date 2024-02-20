@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteFnInner, ByteString, LispBuffer, LispVecInner,
+    ByteFnInner, ByteString, LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -414,7 +414,7 @@ impl<'a> IntoObject for Vec<Object<'a>> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVecInner::new(self).alloc_obj(block);
+            let ptr = LispVec::new(self, block).alloc_obj(block);
             <&LispVec>::tag_ptr(ptr)
         }
     }
@@ -433,7 +433,7 @@ impl<'a> IntoObject for RecordBuilder<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVecInner::new(self.0).alloc_obj(block);
+            let ptr = LispVec::new(self.0, block).alloc_obj(block);
             <&Record>::tag_ptr(ptr)
         }
     }
