@@ -2,7 +2,7 @@
 //! The main bytecode interpeter.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
-use crate::core::gc::{Context, IntoRoot, Rt, Slot};
+use crate::core::gc::{Context, IntoRoot, Rt, Rto, Slot};
 use crate::core::object::{
     ByteFn, ByteString, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
     WithLifetime, NIL,
@@ -868,8 +868,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
 
 #[defun]
 fn byte_code<'ob>(
-    bytestr: &Rt<Slot<Gc<&ByteString>>>,
-    vector: &Rt<Slot<Gc<&LispVec>>>,
+    bytestr: &Rto<Gc<&ByteString>>,
+    vector: &Rto<Gc<&LispVec>>,
     maxdepth: usize,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -894,7 +894,7 @@ fn fetch_bytecode(_object: Object) {
 }
 
 pub(crate) fn call<'ob>(
-    func: &Rt<Slot<&ByteFn>>,
+    func: &Rto<&ByteFn>,
     arg_cnt: usize,
     name: &str,
     frame: &mut CallFrame,
@@ -966,7 +966,7 @@ mod test {
         $expect:expr,
         $cx:expr $(,)?
     ) => ({
-            let bytecode: &Rt<Slot<&ByteFn>> = $bytecode;
+            let bytecode: &Rto<&ByteFn> = $bytecode;
             let cx: &mut Context = $cx;
 
             let args: Vec<Object> = { vec![$(cx.add($args)),*] };
@@ -986,8 +986,8 @@ mod test {
 
     fn check_bytecode_internal(
         args: &mut Rt<Vec<Slot<Object>>>,
-        bytecode: &Rt<Slot<&ByteFn>>,
-        expect: &Rt<Slot<Object>>,
+        bytecode: &Rto<&ByteFn>,
+        expect: &Rto<Object>,
         cx: &mut Context,
     ) {
         root!(env, new(Env), cx);

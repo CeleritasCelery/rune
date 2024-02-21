@@ -4,7 +4,7 @@ use crate::{
         cons::Cons,
         env::{sym, Env},
         error::{Type, TypeError},
-        gc::{Context, Rt, Slot},
+        gc::{Context, Rt, Rto},
         object::{
             Function, Gc, HashTable, HashTableView, IntoObject, LispHashTable, LispString, LispVec,
             List, ListType, Object, ObjectType, Symbol, WithLifetime, NIL,
@@ -125,8 +125,8 @@ fn string_search(needle: &str, haystack: &str, start_pos: Option<usize>) -> Opti
 
 #[defun]
 pub(crate) fn mapcar<'ob>(
-    function: &Rt<Slot<Function>>,
-    sequence: &Rt<Slot<Object>>,
+    function: &Rto<Function>,
+    sequence: &Rto<Object>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -161,8 +161,8 @@ pub(crate) fn mapcar<'ob>(
 
 #[defun]
 pub(crate) fn mapc<'ob>(
-    function: &Rt<Slot<Function>>,
-    sequence: &Rt<Slot<List>>,
+    function: &Rto<Function>,
+    sequence: &Rto<List>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -180,8 +180,8 @@ pub(crate) fn mapc<'ob>(
 
 #[defun]
 pub(crate) fn mapcan<'ob>(
-    function: &Rt<Slot<Function>>,
-    sequence: &Rt<Slot<Object>>,
+    function: &Rto<Function>,
+    sequence: &Rto<Object>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -195,9 +195,9 @@ pub(crate) fn mapcan<'ob>(
 
 #[defun]
 pub(crate) fn mapconcat(
-    function: &Rt<Slot<Function>>,
-    sequence: &Rt<Slot<Object>>,
-    seperator: Option<&Rt<Slot<Gc<&LispString>>>>,
+    function: &Rto<Function>,
+    sequence: &Rto<Object>,
+    seperator: Option<&Rto<Gc<&LispString>>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<String> {
@@ -326,9 +326,9 @@ fn rassq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
 
 #[defun]
 pub(crate) fn assoc<'ob>(
-    key: &Rt<Slot<Object<'ob>>>,
-    alist: &Rt<Slot<List<'ob>>>,
-    testfn: Option<&Rt<Slot<Object>>>,
+    key: &Rto<Object<'ob>>,
+    alist: &Rto<List<'ob>>,
+    testfn: Option<&Rto<Object>>,
     cx: &'ob mut Context,
     env: &mut Rt<Env>,
 ) -> Result<Object<'ob>> {
@@ -447,8 +447,8 @@ pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'o
 // TODO: Sort items in place
 #[defun]
 fn sort<'ob>(
-    seq: &Rt<Slot<List>>,
-    predicate: &Rt<Slot<Function>>,
+    seq: &Rto<List>,
+    predicate: &Rto<Function>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
@@ -504,8 +504,8 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) {}
 
 #[defun]
 pub(crate) fn require<'ob>(
-    feature: &Rt<Slot<Gc<Symbol>>>,
-    filename: Option<&Rt<Slot<Gc<&LispString>>>>,
+    feature: &Rto<Gc<Symbol>>,
+    filename: Option<&Rto<Gc<&LispString>>>,
     noerror: Option<()>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -693,8 +693,8 @@ fn remhash(key: Object, table: &LispHashTable) -> Result<()> {
 
 #[defun]
 fn maphash(
-    function: &Rt<Slot<Function>>,
-    table: &Rt<Slot<Gc<&LispHashTable>>>,
+    function: &Rto<Function>,
+    table: &Rto<Gc<&LispHashTable>>,
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {

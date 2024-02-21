@@ -1,5 +1,5 @@
 use crate::core::{
-    gc::{Context, IntoRoot, Rt, Slot},
+    gc::{Context, IntoRoot, Rt, Rto, Slot},
     object::{ByteFn, Object, WithLifetime, NIL},
 };
 use rune_macros::Trace;
@@ -98,7 +98,7 @@ impl ArgSlice {
 // the vec) instead of the bottom. This is the convention that all the bytecode
 // functions use.
 impl<'a> Index<usize> for RootedLispStack<'a> {
-    type Output = Rt<Slot<Object<'a>>>;
+    type Output = Rto<Object<'a>>;
 
     fn index(&self, index: usize) -> &Self::Output {
         let index = self.offset_end(index);
@@ -118,12 +118,12 @@ impl IndexMut<usize> for RootedLispStack<'_> {
 // This impl is specifically for the Stack. It takes the range from the end of
 // the vector instead of the start. This matches how the lisp stack behaves.
 impl<'a> Index<RangeTo<usize>> for RootedLispStack<'a> {
-    type Output = [Rt<Slot<Object<'a>>>];
+    type Output = [Rto<Object<'a>>];
 
     fn index(&self, index: RangeTo<usize>) -> &Self::Output {
         assert!(index.end <= self.len());
         let end = self.len() - index.end;
-        let vec: &[Rt<Slot<Object>>] = &self.vec;
+        let vec: &[Rto<Object>] = &self.vec;
         &vec[end..]
     }
 }
@@ -166,7 +166,7 @@ impl<'a> RootedLispStack<'a> {
         self.frames.pop();
     }
 
-    pub(crate) fn get_bytecode_frame(&self, idx: usize) -> Option<(&Rt<Slot<&'a ByteFn>>, usize)> {
+    pub(crate) fn get_bytecode_frame(&self, idx: usize) -> Option<(&Rto<&'a ByteFn>, usize)> {
         let frame = self.frames.get(idx)?;
         let bytecode = frame.bytecode.as_ref()?;
         let func = &bytecode.func;
@@ -174,7 +174,7 @@ impl<'a> RootedLispStack<'a> {
         Some((func, pc))
     }
 
-    pub(crate) fn prev_bytecode_frame(&self) -> Option<(&Rt<Slot<&'a ByteFn>>, usize)> {
+    pub(crate) fn prev_bytecode_frame(&self) -> Option<(&Rto<&'a ByteFn>, usize)> {
         self.get_bytecode_frame(self.frames.len() - 1)
     }
 
@@ -226,7 +226,7 @@ impl<'a> RootedLispStack<'a> {
         *self.vec.bind_mut(cx).pop().unwrap()
     }
 
-    pub(crate) fn top(&mut self) -> &mut Rt<Slot<Object<'a>>> {
+    pub(crate) fn top(&mut self) -> &mut Rto<Object<'a>> {
         assert!(self.len() > self.current.start);
         self.vec.last_mut().unwrap()
     }
@@ -276,7 +276,7 @@ impl<'a> RootedLispStack<'a> {
         self.vec.extend_from_within(src);
     }
 
-    pub(crate) fn frames<'b>(&'b self) -> &'b [Rt<Slot<Object<'a>>>] {
+    pub(crate) fn frames<'b>(&'b self) -> &'b [Rto<Object<'a>>] {
         &self.vec[self.current.start..]
     }
 
@@ -284,12 +284,12 @@ impl<'a> RootedLispStack<'a> {
         self.len() - self.current.start
     }
 
-    pub(crate) fn current_args(&self) -> &[Rt<Slot<Object<'a>>>] {
+    pub(crate) fn current_args(&self) -> &[Rto<Object<'a>>] {
         // index as vec
         &self.vec[self.current.start..]
     }
 
-    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rt<Slot<Object<'a>>>] {
+    pub(crate) fn arg_slice(&self, arg_slice: ArgSlice) -> &[Rto<Object<'a>>] {
         // index as stack
         &self[..arg_slice.0]
     }
@@ -335,7 +335,7 @@ impl<'brw, 'rt> CallFrame<'brw, 'rt> {
         count1
     }
 
-    pub(crate) fn arg_slice(&self) -> &[Rt<Slot<Object<'rt>>>] {
+    pub(crate) fn arg_slice(&self) -> &[Rto<Object<'rt>>] {
         &self.env.stack[..self.arg_count()]
     }
 

@@ -198,8 +198,8 @@ fn parse_call_signature(args: &[ArgType], spec_required: Option<u16>) -> (u16, u
     (required, optional, rest)
 }
 
-fn get_path_ident_name(type_path: &syn::TypePath) -> &syn::Ident {
-    &type_path.path.segments.last().unwrap().ident
+fn get_path_ident_name(type_path: &syn::TypePath) -> String {
+    type_path.path.segments.last().unwrap().ident.to_string()
 }
 
 fn map_function_name(name: &str) -> String {
@@ -350,9 +350,9 @@ fn return_type_is_result(output: &syn::ReturnType) -> bool {
 fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
     Ok(match ty {
         syn::Type::Reference(syn::TypeReference { elem, mutability, .. }) => match elem.as_ref() {
-            syn::Type::Path(path) => match get_path_ident_name(path).to_string().as_str() {
+            syn::Type::Path(path) => match &*get_path_ident_name(path) {
                 "Context" => ArgType::Context(mutability.is_some()),
-                "Rt" => get_rt_type(path, mutability.is_some())?,
+                "Rt" | "Rto" => get_rt_type(path, mutability.is_some())?,
                 _ => ArgType::Other,
             },
             syn::Type::Slice(slice) => match get_arg_type(slice.elem.as_ref())? {
@@ -364,23 +364,23 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
         },
         syn::Type::Path(path) => {
             let name = get_path_ident_name(path);
-            if name == "Rt" {
-                get_rt_type(path, false)?
-            } else if name == "ArgSlice" {
-                ArgType::ArgSlice
-            } else if name == "Option" {
-                let outer = path.path.segments.last().unwrap();
-                match get_generic_param(outer) {
-                    Some(syn::Type::Reference(inner)) => match inner.elem.as_ref() {
-                        syn::Type::Path(path) if get_path_ident_name(path) == "Rt" => {
-                            ArgType::OptionRt
-                        }
+            match &*name {
+                "ArgSlice" => ArgType::ArgSlice,
+                "Rt" | "Rto" => get_rt_type(path, false)?,
+                "Option" => {
+                    let outer = path.path.segments.last().unwrap();
+                    match get_generic_param(outer) {
+                        Some(syn::Type::Reference(inner)) => match inner.elem.as_ref() {
+                            syn::Type::Path(path) => match &*get_path_ident_name(path) {
+                                "Rt" | "Rto" => ArgType::OptionRt,
+                                _ => ArgType::Option,
+                            },
+                            _ => ArgType::Option,
+                        },
                         _ => ArgType::Option,
-                    },
-                    _ => ArgType::Option,
+                    }
                 }
-            } else {
-                get_object_type(path)
+                _ => get_object_type(path),
             }
         }
         _ => ArgType::Other,
@@ -488,7 +488,7 @@ mod test {
         let function: Function = syn::parse2(stream).unwrap();
         let iter = std::iter::zip(function.args, expect);
         for (cmp, exp) in iter {
-            assert_eq!(cmp, *exp, "input: {args}");
+            assert_eq!(cmp, *exp, "input: `{args}`");
         }
     }
 
@@ -499,21 +499,36 @@ mod test {
         test_args(quote! {x: &Rt<Slot<Object>>}, &[ArgType::Rt(Gc::Obj)]);
         test_args(quote! {x: &Rt<Slot<Gc<Object>>>}, &[ArgType::Rt(Gc::Obj)]);
         test_args(quote! {x: &Rt<Slot<Gc<T>>>}, &[ArgType::Rt(Gc::Other)]);
+        test_args(quote! {x: &Rto<Object>}, &[ArgType::Rt(Gc::Obj)]);
+        test_args(quote! {x: &Rto<Gc<Object>>}, &[ArgType::Rt(Gc::Obj)]);
+        test_args(quote! {x: &Rto<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
         test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
         test_args(quote! {x: Option<&Rt<Slot<Object>>>}, &[ArgType::OptionRt]);
+        test_args(quote! {x: Option<&Rto<Object>>}, &[ArgType::OptionRt]);
         test_args(quote! {x: &[Object]}, &[ArgType::Slice(Gc::Obj)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[Gc<T>]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: &[u8]}, &[ArgType::Slice(Gc::Other)]);
         test_args(quote! {x: ArgSlice}, &[ArgType::ArgSlice]);
         test_args(quote! {x: &[Rt<Slot<Object>>]}, &[ArgType::SliceRt(Gc::Obj)]);
+        test_args(quote! {x: &[Rto<Object>]}, &[ArgType::SliceRt(Gc::Obj)]);
         test_args(quote! {x: &mut Context}, &[ArgType::Context(MUT)]);
         test_args(quote! {x: &Context}, &[ArgType::Context(false)]);
         test_args(quote! {x: &Rt<Env>}, &[ArgType::Env(false)]);
         test_args(quote! {x: &mut Rt<Env>}, &[ArgType::Env(MUT)]);
         test_args(
             quote! {x: u8, s: &[Rt<Slot<Object>>], y: &Context, z: &Rt<Env>},
+            &[
+                ArgType::Other,
+                ArgType::SliceRt(Gc::Obj),
+                ArgType::Context(false),
+                ArgType::Env(false),
+            ],
+        );
+
+        test_args(
+            quote! {x: u8, s: &[Rto<Object>], y: &Context, z: &Rt<Env>},
             &[
                 ArgType::Other,
                 ArgType::SliceRt(Gc::Obj),

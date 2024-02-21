@@ -4,7 +4,7 @@ use crate::{
         cons::{Cons, ElemStreamIter},
         env::{sym, CallFrame, Env},
         error::{ArgError, Type, TypeError},
-        gc::{Context, Rt, Slot},
+        gc::{Context, Rt, Rto, Slot},
         object::{
             Function, FunctionType, Gc, List, ListType, Object, ObjectType, Symbol, NIL, TRUE,
         },
@@ -27,7 +27,7 @@ struct Interpreter<'brw, 'rt> {
 
 #[defun]
 pub(crate) fn eval<'ob>(
-    form: &Rt<Slot<Object>>,
+    form: &Rto<Object>,
     _lexical: Option<()>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
@@ -39,7 +39,7 @@ pub(crate) fn eval<'ob>(
 }
 
 impl Interpreter<'_, '_> {
-    fn eval_form<'ob>(&mut self, rt: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_form<'ob>(&mut self, rt: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         match rt.untag(cx) {
             ObjectType::Symbol(sym) => self.var_ref(sym, cx),
             ObjectType::Cons(_) => {
@@ -52,7 +52,7 @@ impl Interpreter<'_, '_> {
 
     pub(crate) fn eval_sexp<'ob>(
         &mut self,
-        cons: &Rt<Slot<Gc<&Cons>>>,
+        cons: &Rto<Gc<&Cons>>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let cons = cons.bind(cx);
@@ -90,7 +90,7 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn catch<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn catch<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let Some(tag) = forms.next()? else { bail_err!(ArgError::new(1, 0, "catch")) };
         // push this tag on the catch stack
@@ -132,7 +132,7 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn defvar<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn defvar<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         // (defvar x ...)                 // (defvar)
         let Some(sym) = forms.next()? else { bail_err!(ArgError::new(1, 0, "defvar")) };
@@ -150,8 +150,8 @@ impl Interpreter<'_, '_> {
 
     fn eval_call<'ob>(
         &mut self,
-        sym: &Rt<Slot<Symbol>>,
-        args: &Rt<Slot<Object>>,
+        sym: &Rto<Symbol>,
+        args: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let Some(func) = sym.bind(cx).follow_indirect(cx) else {
@@ -197,7 +197,7 @@ impl Interpreter<'_, '_> {
 
     fn eval_function<'ob>(
         &mut self,
-        obj: &Rt<Slot<Object<'ob>>>,
+        obj: &Rto<Object<'ob>>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let mut forms = obj.bind(cx).as_list()?;
@@ -227,7 +227,7 @@ impl Interpreter<'_, '_> {
         if let Some(closure_fn) = self.env.vars.get(sym::INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION)
         {
             if closure_fn.bind(cx) != sym::NIL {
-                let closure_fn: Result<&Rt<Slot<Function>>, _> = closure_fn.try_as();
+                let closure_fn: Result<&Rto<Function>, _> = closure_fn.try_as();
                 if let Ok(closure_fn) = closure_fn {
                     root!(closure_fn, cx);
                     let lambda = Object::from(Cons::new(sym::LAMBDA, body, cx));
@@ -247,7 +247,7 @@ impl Interpreter<'_, '_> {
     /// dynamically. If the docstring is not of this form, just return the current body.
     fn replace_doc_symbol<'ob>(
         &mut self,
-        quoted: &Rt<Slot<Object>>,
+        quoted: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> Result<Object<'ob>, EvalError> {
         // quoted = ((<args..>) (doc_str) ...)
@@ -284,7 +284,7 @@ impl Interpreter<'_, '_> {
 
     fn eval_progx<'ob>(
         &mut self,
-        obj: &Rt<Slot<Object>>,
+        obj: &Rto<Object>,
         prog_num: u16,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
@@ -311,12 +311,12 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn eval_progn<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_progn<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         self.implicit_progn(forms, cx)
     }
 
-    fn eval_while<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_while<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let (condition, body) = {
             let list: List = obj.bind(cx).try_into()?;
             match list.untag() {
@@ -333,7 +333,7 @@ impl Interpreter<'_, '_> {
         Ok(NIL)
     }
 
-    fn eval_cond<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_cond<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
             rooted_iter!(clause, form, cx);
@@ -351,7 +351,7 @@ impl Interpreter<'_, '_> {
         Ok(NIL)
     }
 
-    fn eval_and<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_and<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         root!(last, TRUE, cx);
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
@@ -364,7 +364,7 @@ impl Interpreter<'_, '_> {
         Ok(last.bind(cx))
     }
 
-    fn eval_or<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_or<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         while let Some(form) = forms.next()? {
             let result = self.eval_form(form, cx)?;
@@ -375,7 +375,7 @@ impl Interpreter<'_, '_> {
         Ok(NIL)
     }
 
-    fn eval_if<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn eval_if<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let Some(condition) = forms.next()? else { bail_err!(ArgError::new(2, 0, "if")) };
         root!(condition, cx);
@@ -389,7 +389,7 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn setq<'ob>(&mut self, obj: &Rt<Slot<Object>>, cx: &'ob mut Context) -> EvalResult<'ob> {
+    fn setq<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let mut arg_cnt = 0;
         root!(last_value, NIL, cx);
@@ -459,7 +459,7 @@ impl Interpreter<'_, '_> {
 
     fn eval_let<'ob>(
         &mut self,
-        form: &Rt<Slot<Object>>,
+        form: &Rto<Object>,
         parallel: bool,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
@@ -479,11 +479,7 @@ impl Interpreter<'_, '_> {
         Ok(obj)
     }
 
-    fn let_bind_serial(
-        &mut self,
-        form: &Rt<Slot<Object>>,
-        cx: &mut Context,
-    ) -> Result<u16, EvalError> {
+    fn let_bind_serial(&mut self, form: &Rto<Object>, cx: &mut Context) -> Result<u16, EvalError> {
         let mut varbind_count = 0;
         rooted_iter!(bindings, form, cx);
         while let Some(binding) = bindings.next()? {
@@ -509,7 +505,7 @@ impl Interpreter<'_, '_> {
 
     fn let_bind_parallel(
         &mut self,
-        form: &Rt<Slot<Object>>,
+        form: &Rto<Object>,
         cx: &mut Context,
     ) -> Result<u16, EvalError> {
         root!(let_bindings, new(Vec<(Slot<Symbol>, Slot<Object>)>), cx);
@@ -552,7 +548,7 @@ impl Interpreter<'_, '_> {
 
     fn let_bind_value<'ob>(
         &mut self,
-        cons: &Rt<Slot<Gc<&Cons>>>,
+        cons: &Rto<Gc<&Cons>>,
         cx: &'ob mut Context,
     ) -> Result<Object<'ob>, EvalError> {
         rooted_iter!(iter, cons.bind(cx).cdr(), cx);
@@ -582,11 +578,7 @@ impl Interpreter<'_, '_> {
         Ok(last.bind(cx))
     }
 
-    fn unwind_protect<'ob>(
-        &mut self,
-        obj: &Rt<Slot<Object>>,
-        cx: &'ob mut Context,
-    ) -> EvalResult<'ob> {
+    fn unwind_protect<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         let Some(body) = forms.next()? else { bail_err!(ArgError::new(1, 0, "unwind-protect")) };
         match self.eval_form(body, cx) {
@@ -602,11 +594,7 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn save_excursion<'ob>(
-        &mut self,
-        form: &Rt<Slot<Object>>,
-        cx: &'ob mut Context,
-    ) -> EvalResult<'ob> {
+    fn save_excursion<'ob>(&mut self, form: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         let point = self.env.current_buffer.as_ref().map(|b| b.text.cursor());
         let buffer = self.env.current_buffer.as_ref().map(|b| (b.lisp_buffer(cx)));
         root!(buffer, cx);
@@ -621,7 +609,7 @@ impl Interpreter<'_, '_> {
 
     fn save_current_buffer<'ob>(
         &mut self,
-        form: &Rt<Slot<Object>>,
+        form: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
         let buffer = self.env.current_buffer.as_ref().map(|x| x.lisp_buffer(cx));
@@ -633,11 +621,7 @@ impl Interpreter<'_, '_> {
         Ok(result)
     }
 
-    fn condition_case<'ob>(
-        &mut self,
-        form: &Rt<Slot<Object>>,
-        cx: &'ob mut Context,
-    ) -> EvalResult<'ob> {
+    fn condition_case<'ob>(&mut self, form: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, form, cx);
         let Some(var) = forms.next()? else { bail_err!(ArgError::new(2, 0, "condition-case")) };
         root!(var, cx);
@@ -702,7 +686,7 @@ impl Interpreter<'_, '_> {
 }
 
 pub(crate) fn call_closure<'ob>(
-    closure: &Rt<Slot<Gc<&Cons>>>,
+    closure: &Rto<Gc<&Cons>>,
     arg_cnt: usize,
     name: &str,
     env: &mut Rt<Env>,

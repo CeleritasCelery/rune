@@ -1,4 +1,4 @@
-use super::gc::{Context, Rt, Slot};
+use super::gc::{Context, Rto, Slot};
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashMap;
@@ -55,11 +55,7 @@ impl<'a> RootedEnv<'a> {
         self.exception_id
     }
 
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn get_exception(
-        &self,
-        id: u32,
-    ) -> Option<(&Rt<Slot<Object<'a>>>, &Rt<Slot<Object<'a>>>)> {
+    pub(crate) fn get_exception(&self, id: u32) -> Option<(&Rto<Object<'a>>, &Rto<Object<'a>>)> {
         (id == self.exception_id).then_some((&self.exception.0, &self.exception.1))
     }
 

@@ -1,10 +1,6 @@
-use crate::core::{gc::Slot, object::List};
-
-use super::super::{
-    gc::Rt,
-    object::{ListType, Object, ObjectType},
-};
+use super::super::object::{List, ListType, Object, ObjectType};
 use super::Cons;
+use crate::core::gc::Rto;
 use anyhow::Result;
 
 #[derive(Clone)]
@@ -104,21 +100,21 @@ impl std::fmt::Display for ConsError {
 impl std::error::Error for ConsError {}
 
 pub(crate) struct ElemStreamIter<'rt> {
-    elem: Option<&'rt mut Rt<Slot<Object<'static>>>>,
-    cons: Option<Result<&'rt mut Rt<Slot<&'static Cons>>, ConsError>>,
+    elem: Option<&'rt mut Rto<Object<'static>>>,
+    cons: Option<Result<&'rt mut Rto<&'static Cons>, ConsError>>,
 }
 
 impl<'rt> ElemStreamIter<'rt> {
     pub(crate) fn new(
-        elem: Option<&'rt mut Rt<Slot<Object<'static>>>>,
-        cons: Option<&'rt mut Rt<Slot<&'static Cons>>>,
+        elem: Option<&'rt mut Rto<Object<'static>>>,
+        cons: Option<&'rt mut Rto<&'static Cons>>,
     ) -> Self {
         Self { elem, cons: cons.map(Ok) }
     }
 }
 
 impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'rt> {
-    type Item = Rt<Slot<Object<'static>>>;
+    type Item = Rto<Object<'static>>;
     type Error = ConsError;
 
     fn advance(&mut self) -> Result<(), ConsError> {
@@ -226,8 +222,8 @@ macro_rules! rooted_iter {
             // If the list is not empty, then initialize the roots and put them
             // in the stack space reserved
             unsafe {
-                elem = Slot::new(object::NIL);
-                cons = Slot::new(object::WithLifetime::with_lifetime(head));
+                elem = $crate::core::gc::Slot::new(object::NIL);
+                cons = $crate::core::gc::Slot::new(object::WithLifetime::with_lifetime(head));
                 root_elem = gc::__StackRoot::new(&mut elem, $cx.get_root_set());
                 root_cons = gc::__StackRoot::new(&mut cons, $cx.get_root_set());
                 cons::ElemStreamIter::new(Some(root_elem.as_mut()), Some(root_cons.as_mut()))

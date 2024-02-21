@@ -178,10 +178,11 @@ impl<T: RootedDeref> DerefMut for Rt<T> {
     }
 }
 
-/// A Rooted type. If a type is wrapped in Rt, it is known to be rooted and hold
-/// items past garbage collection. This type is never used as an owned type,
-/// only a reference. This ensures that underlying data does not move. In order
-/// to access the inner data, the [`Rt::bind`] method must be used.
+/// A "Root Tracable" type. If a type is wrapped in Rt, it is known to be rooted
+/// and hold items past garbage collection. This type is never used as an owned
+/// type, only a reference. This ensures that underlying data does not move. In
+/// order to access the inner data, use [`Rt::bind_ref`] or [`Rt::bind_mut`]
+/// methods.
 #[repr(transparent)]
 #[derive(PartialEq, Eq)]
 pub struct Rt<T: ?Sized> {
@@ -189,11 +190,15 @@ pub struct Rt<T: ?Sized> {
     inner: T,
 }
 
-/// A Rooted type on the Gc Heap. If a type is wrapped in `Slot`, it is known to
-/// be rooted and hold items past garbage collection. This type is never used as
-/// an owned type, only a reference. This ensures that underlying data does not
-/// move. The data that this type points to can be relocated during garbage
-/// collection, but that is transparent to the user.
+/// A "Root Tracable Object". This differs from [`Rt`] by wrapping a [`Slot`]
+/// which allows the underlying data to be moved during garbage collection. GC
+/// owned types will always be wrapped in a `Slot` when rooted. To access the
+/// object, use [`Rto::bind`].
+pub type Rto<T> = Rt<Slot<T>>;
+
+/// A moveable pointer to the GC heap. This is used to wrap [Rooted](`Rt`)
+/// [`Object`]'s so that we don't trigger UB when moving types during
+/// collection.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct Slot<T: ?Sized> {
