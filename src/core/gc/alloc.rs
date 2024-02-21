@@ -1,8 +1,7 @@
 use super::Block;
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec,
-    SymbolCell,
+    ByteFn, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec, SymbolCell,
 };
 use std::fmt::Debug;
 
