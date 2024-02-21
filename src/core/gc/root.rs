@@ -192,8 +192,7 @@ pub struct Rt<T: ?Sized> {
 /// A Rooted type on the Gc Heap. If a type is wrapped in `Slot`, it is known to
 /// be rooted and hold items past garbage collection. This type is never used as
 /// an owned type, only a reference. This ensures that underlying data does not
-/// move. In order to access the inner data, the [`Slot::bind`] method must be
-/// used. The data that this type points to can be relocated during garbage
+/// move. The data that this type points to can be relocated during garbage
 /// collection, but that is transparent to the user.
 #[repr(transparent)]
 #[derive(Default)]
