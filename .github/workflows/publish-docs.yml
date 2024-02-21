@@ -9,8 +9,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       # run docs generation on nightly rather than stable. This enables features like
       # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
       # API be documented as only available in some specific platforms.

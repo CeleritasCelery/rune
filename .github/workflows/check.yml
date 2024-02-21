@@ -1,4 +1,4 @@
-# This workflow runs whenever a PR is opened or updated, or a commit is pushed to main. It runs
+# This workflow runs whenever a PR is opened or updated, or a commit is pushed to master. It runs
 # several checks:
 # - fmt: checks that the code is formatted according to rustfmt
 # - clippy: checks that the code does not contain any clippy warnings
@@ -8,7 +8,7 @@
 permissions:
   contents: read
 # This configuration allows maintainers of this repo to create a branch and pull request based on
-# the new branch. Restricting the push trigger to the main branch ensures that the PR only gets
+# the new branch. Restricting the push trigger to the master branch ensures that the PR only gets
 # built once.
 on:
   push:
@@ -49,8 +49,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@master
         with:
@@ -71,8 +69,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: cargo doc
@@ -92,8 +88,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Install the required system libraries
-        run: sudo apt-get -y install libpango1.0-dev libgtk-3-dev
       - name: Install ${{ matrix.msrv }}
         uses: dtolnay/rust-toolchain@master
         with:
