@@ -1,7 +1,7 @@
-use super::{Block, GcHeap};
+use super::Block;
 use crate::core::cons::Cons;
 use crate::core::object::{
-    ByteFn, ByteFnInner, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec,
+    ByteFn, ByteString, LispBuffer, LispFloat, LispHashTable, LispString, LispVec,
     SymbolCell,
 };
 use std::fmt::Debug;
@@ -85,12 +85,11 @@ impl AllocObject for ByteString {
     }
 }
 
-impl AllocObject for ByteFnInner {
+impl AllocObject for ByteFn {
     type Output = ByteFn;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let boxed = Box::new(GcHeap::new(self, block));
-        Block::<C>::register(&mut objects, OwnedObject::ByteFn(boxed));
+        Block::<C>::register(&mut objects, OwnedObject::ByteFn(Box::new(self)));
         let Some(OwnedObject::ByteFn(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

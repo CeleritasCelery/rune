@@ -6,40 +6,43 @@ use super::{
     display_slice, CloneIn, IntoObject,
 };
 use super::{Object, WithLifetime};
-use crate::core::{
-    env::Env,
-    gc::{GcHeap, Rt, Slot},
+use crate::{
+    core::{
+        env::Env,
+        gc::{GcHeap, Rt, Slot},
+    },
+    Markable,
 };
 use anyhow::{bail, ensure, Result};
+use macro_attr_2018::macro_attr;
+use newtype_derive_2018::*;
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
-mod sealed {
-    use crate::core::gc::Slot;
-
-    use super::*;
-
-    #[derive(PartialEq, Eq, Trace)]
-    pub(crate) struct ByteFnInner {
-        #[no_trace]
-        pub(crate) args: FnArgs,
-        #[no_trace]
-        pub(crate) depth: usize,
-        #[no_trace]
-        pub(super) op_codes: Box<[u8]>,
-        pub(super) constants: Vec<Slot<Object<'static>>>,
-    }
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct ByteFnPrototype {
+    #[no_trace]
+    pub(crate) args: FnArgs,
+    #[no_trace]
+    pub(crate) depth: usize,
+    #[no_trace]
+    pub(super) op_codes: Box<[u8]>,
+    pub(super) constants: Vec<Slot<Object<'static>>>,
 }
 
-pub(in crate::core) use sealed::ByteFnInner;
-
-/// A function implemented in lisp. Note that all functions are byte compiled,
-/// so this contains the byte-code representation of the function.
-pub(crate) type ByteFn = GcHeap<ByteFnInner>;
+macro_attr! {
+    /// A function implemented in lisp. Note that all functions are byte compiled,
+    /// so this contains the byte-code representation of the function.
+    #[derive(PartialEq, Eq, NewtypeDeref!, Markable!, Trace)]
+    pub(crate) struct ByteFn(GcHeap<ByteFnPrototype>);
+}
 
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
+    pub(in crate::core) fn new<const C: bool>(inner: ByteFnPrototype, block: &Block<C>) -> ByteFn {
+        ByteFn(GcHeap::new(inner, block))
+    }
     // SAFETY: The caller must ensure that the constants are part of the same
     // block as the bytecode function. Otherwise they will be collected and we
     // will have a dangling pointer. Also this type must immediatly be put into
@@ -49,8 +52,8 @@ impl ByteFn {
         consts: Vec<Object>,
         args: FnArgs,
         depth: usize,
-    ) -> ByteFnInner {
-        ByteFnInner {
+    ) -> ByteFnPrototype {
+        ByteFnPrototype {
             constants: unsafe {
                 std::mem::transmute::<Vec<Object>, Vec<Slot<Object<'static>>>>(consts)
             },
@@ -61,7 +64,7 @@ impl ByteFn {
     }
 }
 
-impl ByteFnInner {
+impl ByteFnPrototype {
     pub(crate) fn codes(&self) -> &[u8] {
         &self.op_codes
     }

@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteFnInner, ByteString, LispBuffer,
+    ByteFnPrototype, ByteString, LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -357,11 +357,11 @@ impl IntoObject for Cons {
     }
 }
 
-impl IntoObject for ByteFnInner {
+impl IntoObject for ByteFnPrototype {
     type Out<'ob> = &'ob ByteFn;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
+        let ptr = ByteFn::new(self, block).alloc_obj(block);
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
