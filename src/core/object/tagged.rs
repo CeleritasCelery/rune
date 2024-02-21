@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::{AllocObject, Block},
     },
-    ByteFnInner, ByteString, LispBuffer, LispHashTableInner, LispVecInner,
+    ByteFnInner, ByteString, LispBuffer, LispVecInner,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -444,7 +444,7 @@ impl<'a> IntoObject for HashTable<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispHashTableInner::new(self).alloc_obj(block);
+            let ptr = LispHashTable::new(self, block).alloc_obj(block);
             <&LispHashTable>::tag_ptr(ptr)
         }
     }
@@ -1479,13 +1479,13 @@ impl<'ob> Object<'ob> {
             ObjectType::Float(x) => x.mark(),
             ObjectType::String(x) => x.mark(),
             ObjectType::ByteString(x) => x.mark(),
-            ObjectType::Vec(vec) => vec.trace_mark(stack),
-            ObjectType::Record(x) => x.trace_mark(stack),
-            ObjectType::HashTable(x) => x.trace_mark(stack),
-            ObjectType::Cons(x) => x.trace_mark(stack),
-            ObjectType::Symbol(x) => x.trace_mark(stack),
-            ObjectType::ByteFn(x) => x.trace_mark(stack),
-            ObjectType::Buffer(x) => x.trace_mark(stack),
+            ObjectType::Vec(vec) => vec.trace(stack),
+            ObjectType::Record(x) => x.trace(stack),
+            ObjectType::HashTable(x) => x.trace(stack),
+            ObjectType::Cons(x) => x.trace(stack),
+            ObjectType::Symbol(x) => x.trace(stack),
+            ObjectType::ByteFn(x) => x.trace(stack),
+            ObjectType::Buffer(x) => x.trace(stack),
         }
     }
 }

@@ -1,29 +1,43 @@
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object};
-use crate::core::gc::{GcHeap, Trace};
+use crate::core::gc::{Block, GcHeap, Trace};
+use crate::Markable;
+use macro_attr_2018::macro_attr;
+use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
 use rune_core::hashmap::{HashSet, IndexMap};
+use rune_macros::Trace;
 use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
 use std::fmt::{self, Debug, Display, Write};
 
 pub(crate) type HashTable<'ob> = IndexMap<Object<'ob>, Object<'ob>>;
 
-#[derive(PartialEq, Eq)]
 pub(crate) struct HashTableView<'ob, T> {
     pub(crate) iter_next: usize,
     inner: IndexMap<Object<'ob>, T>,
 }
 
-mod sealed {
-    use super::*;
-
-    #[derive(Eq)]
-    pub(crate) struct LispHashTableInner {
-        pub(super) inner: RefCell<HashTableView<'static, ObjCell>>,
-    }
+#[derive(Eq)]
+pub(crate) struct LispHashTableInner {
+    inner: RefCell<HashTableView<'static, ObjCell>>,
 }
 
-pub(in crate::core) use sealed::LispHashTableInner;
+macro_attr! {
+    #[derive(PartialEq, Eq, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, Markable!, Trace)]
+    pub(crate) struct LispHashTable(GcHeap<LispHashTableInner>);
+}
 
-pub(crate) type LispHashTable = GcHeap<LispHashTableInner>;
+impl LispHashTable {
+    pub(in crate::core) unsafe fn new<const C: bool>(table: HashTable, block: &Block<C>) -> Self {
+        Self(GcHeap::new(LispHashTableInner::new(table), block))
+    }
+
+    pub(in crate::core) fn make_const(&mut self) {
+        // TODO: once we have resolved
+        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
+        // that is cannot be borrowed mutabley. In the mean time this will
+        // introduce a race condtion when access from multiple threads.
+        // std::mem::forget(self.inner.borrow());
+    }
+}
 
 impl<'ob, T> std::ops::Deref for HashTableView<'ob, T> {
     type Target = IndexMap<Object<'ob>, T>;
@@ -45,6 +59,14 @@ impl PartialEq for LispHashTableInner {
     }
 }
 
+impl<T: PartialEq> PartialEq for HashTableView<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<T: Eq> Eq for HashTableView<'_, T> {}
+
 impl LispHashTableInner {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to create an owned version in context of the allocator.
@@ -54,14 +76,6 @@ impl LispHashTableInner {
             IndexMap<Object<'static>, ObjCell>,
         >(vec);
         Self { inner: RefCell::new(HashTableView { iter_next: 0, inner: cell }) }
-    }
-
-    pub(in crate::core) fn make_const(&mut self) {
-        // TODO: once we have resolved
-        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
-        // that is cannot be borrowed mutabley. In the mean time this will
-        // introduce a race condtion when access from multiple threads.
-        // std::mem::forget(self.inner.borrow());
     }
 
     pub(crate) fn borrow<'a>(&'a self) -> Ref<'a, HashTableView<'a, ObjCell>> {
@@ -88,7 +102,7 @@ impl LispHashTableInner {
 }
 
 impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
-    fn clone_in<const C: bool>(&self, bk: &'new crate::core::gc::Block<C>) -> Gc<&'new Self> {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
         let mut table = HashTable::default();
         let borrow = self.borrow();
         for (key, value) in &borrow.inner {

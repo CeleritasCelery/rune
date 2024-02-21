@@ -83,12 +83,8 @@ impl<T> Markable for GcHeap<T> {
 
 impl<T: Trace> Trace for GcHeap<T> {
     fn trace(&self, stack: &mut Vec<RawObj>) {
-        self.trace_mark(stack);
-    }
-}
-
-impl<T: Trace> GcHeap<T> {
-    pub(in crate::core) fn trace_mark(&self, stack: &mut Vec<RawObj>) {
+        // This is type is only one that contains mark bits, so it is where we
+        // actually mark the object
         if !self.is_marked() {
             self.mark();
             self.data.trace(stack);
