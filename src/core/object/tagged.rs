@@ -1476,9 +1476,9 @@ impl<'ob> Object<'ob> {
     pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
         match self.untag() {
             ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
-            ObjectType::Float(x) => x.mark(),
-            ObjectType::String(x) => x.mark(),
-            ObjectType::ByteString(x) => x.mark(),
+            ObjectType::Float(x) => x.trace(stack),
+            ObjectType::String(x) => x.trace(stack),
+            ObjectType::ByteString(x) => x.trace(stack),
             ObjectType::Vec(vec) => vec.trace(stack),
             ObjectType::Record(x) => x.trace(stack),
             ObjectType::HashTable(x) => x.trace(stack),

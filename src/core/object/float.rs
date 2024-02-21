@@ -1,8 +1,9 @@
-use super::{CloneIn, IntoObject};
-use crate::core::gc::{Block, GcHeap};
+use super::{CloneIn, IntoObject, RawObj};
+use crate::core::gc::{Block, GcHeap, Trace};
 use crate::Markable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
+use rune_macros::Trace;
 use std::fmt::{Debug, Display};
 
 macro_attr! {
@@ -10,7 +11,7 @@ macro_attr! {
     /// types to be used in match statements if they derive Eq. Even if you never
     /// actually use that field in a match. So we need a float wrapper that
     /// implements that trait.
-    #[derive(PartialEq, NewtypeDeref!, Markable!)]
+    #[derive(PartialEq, NewtypeDeref!, Markable!, Trace)]
     pub(crate) struct LispFloat(GcHeap<f64>);
 }
 
@@ -18,6 +19,10 @@ impl LispFloat {
     pub fn new<const C: bool>(float: f64, bk: &Block<C>) -> Self {
         LispFloat(GcHeap::new(float, bk))
     }
+}
+
+impl Trace for f64 {
+    fn trace(&self, _: &mut Vec<RawObj>) {}
 }
 
 impl Eq for LispFloat {}
