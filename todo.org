@@ -6,9 +6,8 @@ Currently symbol-function of a special form will return nil
 * Allow debugger to be entered on error instead of just printing a back trace
 This means we will need to not unwind the stack, but instead collect the backtrace as we go down the call stack and halt it there.
 * can we make rooted_iter be generic over any iterators?
-* change Gc<Object> to be just object
-This is more common use case
-* make a macro for calls
+* Change the sort function to use rust sort
+We can use the std::panic::catch_unwind to handle any errors that occur during sorting and propogate them up.
 * Steps to add a new object type
 - define the type and implement ~GcManaged~ for it
 - define in gc/alloc.rs
