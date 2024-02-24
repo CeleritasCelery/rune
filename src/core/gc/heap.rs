@@ -1,18 +1,63 @@
+use super::{Block, Trace};
+use crate::core::object::RawObj;
 use std::{
     cell::Cell,
-    fmt::Display,
+    fmt,
+    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
 };
 
-use crate::core::object::RawObj;
+union GcHeader {
+    header: ManuallyDrop<HeaderData>,
+    fwd_ptr: *mut u8,
+}
 
-use super::{Block, Trace};
+unsafe impl Send for GcHeader {}
 
-// align to 64-bit boundaries
-#[repr(align(8))]
+impl GcHeader {
+    const fn new(marked: bool) -> Self {
+        GcHeader { header: ManuallyDrop::new(HeaderData::new(marked)) }
+    }
+
+    fn is_present(&self) -> bool {
+        unsafe { self.header.is_present == HeaderData::PRESENT }
+    }
+
+    fn get_header(&self) -> Result<&HeaderData, *mut u8> {
+        if self.is_present() {
+            Ok(unsafe { &*self.header })
+        } else {
+            Err(unsafe { self.fwd_ptr })
+        }
+    }
+}
+
+impl fmt::Debug for GcHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.get_header() {
+            Ok(header) => write!(f, "GcHeader {{ header: {:?} }}", header),
+            Err(ptr) => write!(f, "GcHeader {{ fwd_ptr: {:?} }}", ptr),
+        }
+    }
+}
+
+// Layout if very important here, we need to make sure that the is_present bit
+// is the first bit in the struct. That way we can use it to check if it is a
+// header data or a forwarding pointer. This works because an object is always
+// aligned to 8 bytes, so the first 3 bits will be 0 if it is a forwarding
+// pointer.
+#[repr(C, align(8))]
 #[derive(Debug)]
-struct GcHeader {
+struct HeaderData {
+    is_present: u8,
     marked: Cell<bool>,
+}
+
+impl HeaderData {
+    const PRESENT: u8 = 1;
+    const fn new(marked: bool) -> Self {
+        Self { is_present: Self::PRESENT, marked: Cell::new(marked) }
+    }
 }
 
 unsafe impl Sync for GcHeader {}
@@ -27,9 +72,10 @@ pub(crate) struct GcHeap<T: ?Sized> {
 
 impl<T> GcHeap<T> {
     pub(in crate::core) fn new<const CONST: bool>(data: T, _: &Block<CONST>) -> Self {
+        assert!(std::mem::size_of::<T>() >= 8, "can't allocate objects smaller than 8 bytes");
         Self {
             // if the block is const, mark the object so it will not be traced
-            header: GcHeader { marked: Cell::new(CONST) },
+            header: GcHeader::new(CONST),
             data,
         }
     }
@@ -38,7 +84,7 @@ impl<T> GcHeap<T> {
     /// is used for "pure" storage of objects that are allocated at the start of
     /// the program and never freed. Only used for the Symbol map at the moment.
     pub(in crate::core) const fn new_pure(data: T) -> Self {
-        Self { header: GcHeader { marked: Cell::new(true) }, data }
+        Self { header: GcHeader::new(true), data }
     }
 }
 
@@ -69,15 +115,15 @@ macro_rules! Markable {
 
 impl<T> Markable for GcHeap<T> {
     fn is_marked(&self) -> bool {
-        self.header.marked.get()
+        self.header.get_header().unwrap().marked.get()
     }
 
     fn mark(&self) {
-        self.header.marked.set(true);
+        self.header.get_header().unwrap().marked.set(true);
     }
 
     fn unmark(&self) {
-        self.header.marked.set(false);
+        self.header.get_header().unwrap().marked.set(false);
     }
 }
 
@@ -120,8 +166,8 @@ impl<T> DerefMut for GcHeap<T> {
     }
 }
 
-impl<T: Display> Display for GcHeap<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: fmt::Display> fmt::Display for GcHeap<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", &self.data)
     }
 }
