@@ -119,11 +119,11 @@ impl LispBuffer {
         unsafe { &*ptr }
     }
 
-    pub(crate) unsafe fn new(name: String, block: &Block<true>) -> LispBuffer {
+    pub(crate) unsafe fn new(name: String, _: &Block<true>) -> LispBuffer {
         let new = LispBufferInner {
             text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })),
         };
-        Self(GcHeap::new(new, block))
+        Self(GcHeap::new(new, true))
     }
 
     pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {

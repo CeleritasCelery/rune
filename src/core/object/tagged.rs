@@ -323,7 +323,7 @@ impl IntoObject for f64 {
     type Out<'ob> = &'ob LispFloat;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
+        let ptr = LispFloat::new(self, C).alloc_obj(block);
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -361,7 +361,7 @@ impl IntoObject for ByteFnPrototype {
     type Out<'ob> = &'ob ByteFn;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = ByteFn::new(self, block).alloc_obj(block);
+        let ptr = ByteFn::new(self, C).alloc_obj(block);
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -381,7 +381,7 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::new(self, block).alloc_obj(block);
+            let ptr = LispString::new(self, C).alloc_obj(block);
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -392,7 +392,7 @@ impl IntoObject for &str {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::new(self.to_owned(), block).alloc_obj(block);
+            let ptr = LispString::new(self.to_owned(), C).alloc_obj(block);
             <&LispString>::tag_ptr(ptr)
         }
     }
@@ -403,7 +403,7 @@ impl IntoObject for Vec<u8> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = ByteString::new(self, block).alloc_obj(block);
+            let ptr = ByteString::new(self, C).alloc_obj(block);
             <&ByteString>::tag_ptr(ptr)
         }
     }
@@ -414,7 +414,7 @@ impl<'a> IntoObject for Vec<Object<'a>> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVec::new(self, block).alloc_obj(block);
+            let ptr = LispVec::new(self, C).alloc_obj(block);
             <&LispVec>::tag_ptr(ptr)
         }
     }
@@ -433,7 +433,7 @@ impl<'a> IntoObject for RecordBuilder<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVec::new(self.0, block).alloc_obj(block);
+            let ptr = LispVec::new(self.0, C).alloc_obj(block);
             <&Record>::tag_ptr(ptr)
         }
     }
@@ -444,7 +444,7 @@ impl<'a> IntoObject for HashTable<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispHashTable::new(self, block).alloc_obj(block);
+            let ptr = LispHashTable::new(self, C).alloc_obj(block);
             <&LispHashTable>::tag_ptr(ptr)
         }
     }

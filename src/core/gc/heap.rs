@@ -1,4 +1,4 @@
-use super::{Block, Trace};
+use super::Trace;
 use crate::core::object::RawObj;
 use std::{
     cell::Cell,
@@ -71,11 +71,10 @@ pub(crate) struct GcHeap<T: ?Sized> {
 }
 
 impl<T> GcHeap<T> {
-    pub(in crate::core) fn new<const CONST: bool>(data: T, _: &Block<CONST>) -> Self {
-        assert!(std::mem::size_of::<T>() >= 8, "can't allocate objects smaller than 8 bytes");
+    pub(in crate::core) fn new(data: T, constant: bool) -> Self {
         Self {
             // if the block is const, mark the object so it will not be traced
-            header: GcHeader::new(CONST),
+            header: GcHeader::new(constant),
             data,
         }
     }

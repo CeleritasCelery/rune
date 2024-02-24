@@ -1,7 +1,7 @@
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 
-use super::gc::{Block, Context, GcHeap, Trace};
+use super::gc::{Block, GcHeap, Trace};
 use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, RawObj, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
@@ -63,18 +63,18 @@ impl Cons {
         let car = car.into_obj(cx).into();
         let cdr = cdr.into_obj(cx).into();
         let cons = unsafe { Cons::new_unchecked(car, cdr) };
-        Cons(GcHeap::new(cons, cx)).into_obj(cx).untag()
+        Cons(GcHeap::new(cons, C)).into_obj(cx).untag()
     }
 
     /// Create a new cons cell with the cdr set to nil
-    pub(crate) fn new1<'ob, T, Tx>(car: T, cx: &'ob Context) -> &'ob Self
+    pub(crate) fn new1<'ob, T, Tx, const C: bool>(car: T, cx: &'ob Block<C>) -> &'ob Self
     where
         T: IntoObject<Out<'ob> = Tx>,
         Gc<Tx>: Into<Object<'ob>>,
     {
         let car = car.into_obj(cx).into();
         let cons = unsafe { Cons::new_unchecked(car, NIL) };
-        Cons(GcHeap::new(cons, cx)).into_obj(cx).untag()
+        Cons(GcHeap::new(cons, C)).into_obj(cx).untag()
     }
 
     pub(in crate::core) fn mark_const(&mut self) {

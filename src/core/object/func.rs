@@ -40,8 +40,8 @@ macro_attr! {
 define_unbox!(ByteFn, Func, &'ob ByteFn);
 
 impl ByteFn {
-    pub(in crate::core) fn new<const C: bool>(inner: ByteFnPrototype, block: &Block<C>) -> ByteFn {
-        ByteFn(GcHeap::new(inner, block))
+    pub(in crate::core) fn new(inner: ByteFnPrototype, constant: bool) -> ByteFn {
+        ByteFn(GcHeap::new(inner, constant))
     }
     // SAFETY: The caller must ensure that the constants are part of the same
     // block as the bytecode function. Otherwise they will be collected and we

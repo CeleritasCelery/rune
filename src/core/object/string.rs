@@ -12,8 +12,8 @@ macro_attr! {
 }
 
 impl LispString {
-    pub(crate) fn new<const C: bool>(string: String, cx: &Block<C>) -> Self {
-        Self(GcHeap::new(string, cx))
+    pub(crate) fn new(string: String, constant: bool) -> Self {
+        Self(GcHeap::new(string, constant))
     }
 }
 
@@ -61,8 +61,8 @@ macro_attr! {
 }
 
 impl ByteString {
-    pub(crate) fn new<const C: bool>(string: Vec<u8>, cx: &Block<C>) -> Self {
-        Self(GcHeap::new(string, cx))
+    pub(crate) fn new(string: Vec<u8>, constant: bool) -> Self {
+        Self(GcHeap::new(string, constant))
     }
 }
 

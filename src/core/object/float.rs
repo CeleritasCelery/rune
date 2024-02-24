@@ -16,8 +16,8 @@ macro_attr! {
 }
 
 impl LispFloat {
-    pub fn new<const C: bool>(float: f64, bk: &Block<C>) -> Self {
-        LispFloat(GcHeap::new(float, bk))
+    pub fn new(float: f64, constant: bool) -> Self {
+        LispFloat(GcHeap::new(float, constant))
     }
 }
 

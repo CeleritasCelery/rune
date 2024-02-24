@@ -20,20 +20,16 @@ pub(super) enum OwnedObject {
     Buffer(Box<LispBuffer>),
 }
 
-pub(in crate::core) trait AllocObject
-where
-    Self: Sized,
-{
+pub(in crate::core) trait AllocObject {
     type Output;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output;
 }
 
-impl AllocObject for f64 {
+impl AllocObject for LispFloat {
     type Output = LispFloat;
     fn alloc_obj<const C: bool>(self, block: &Block<C>) -> *const Self::Output {
         let mut objects = block.objects.borrow_mut();
-        let f = LispFloat::new(self, block);
-        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(f)));
+        Block::<C>::register(&mut objects, OwnedObject::Float(Box::new(self)));
         let Some(OwnedObject::Float(x)) = objects.last() else { unreachable!() };
         x.as_ref()
     }

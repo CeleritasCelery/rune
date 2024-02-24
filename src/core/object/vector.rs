@@ -39,8 +39,8 @@ impl PartialEq for LispVecInner {
 impl LispVec {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to use in context of the allocator.
-    pub(in crate::core) unsafe fn new<const C: bool>(vec: Vec<Object>, bk: &Block<C>) -> Self {
-        Self(GcHeap::new(LispVecInner::new(vec), bk))
+    pub(in crate::core) unsafe fn new(vec: Vec<Object>, constant: bool) -> Self {
+        Self(GcHeap::new(LispVecInner::new(vec), constant))
     }
 
     pub(in crate::core) fn make_const(&mut self) {

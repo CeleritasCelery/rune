@@ -211,7 +211,7 @@ impl SymbolCell {
                     func: Some(Self::EMTPTY),
                     special: AtomicBool::new(false),
                 },
-                block,
+                true,
             )
         }
     }
@@ -237,14 +237,14 @@ impl SymbolCell {
         })
     }
 
-    fn new_const(name: &'static str, block: &Block<true>) -> Self {
+    fn new_const(name: &'static str, _block: &Block<true>) -> Self {
         GcHeap::new(
             SymbolCellInner {
                 name: SymbolName::Interned(name),
                 func: None,
                 special: AtomicBool::new(true),
             },
-            block,
+            true,
         )
     }
 
@@ -256,14 +256,14 @@ impl SymbolCell {
         })
     }
 
-    fn new_uninterned<const C: bool>(name: &str, block: &Block<C>) -> Self {
+    fn new_uninterned<const C: bool>(name: &str, _bk: &Block<C>) -> Self {
         GcHeap::new(
             SymbolCellInner {
                 name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
                 func: Some(Self::EMTPTY),
                 special: AtomicBool::new(false),
             },
-            block,
+            C,
         )
     }
 }

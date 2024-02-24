@@ -26,8 +26,8 @@ macro_attr! {
 }
 
 impl LispHashTable {
-    pub(in crate::core) unsafe fn new<const C: bool>(table: HashTable, block: &Block<C>) -> Self {
-        Self(GcHeap::new(LispHashTableInner::new(table), block))
+    pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
+        Self(GcHeap::new(LispHashTableInner::new(table), constant))
     }
 
     pub(in crate::core) fn make_const(&mut self) {
