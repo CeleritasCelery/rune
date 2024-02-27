@@ -68,7 +68,7 @@ fn derive_enum(orig: &syn::DeriveInput, data_enum: &syn::DataEnum) -> TokenStrea
                         bind_fields.extend(quote! {#binding,});
                         rooted_fields.extend(quote! {#rt<#field>,});
                         trace_fields
-                            .extend(quote! {crate::core::gc::Trace::trace(#binding, stack);});
+                            .extend(quote! {crate::core::gc::Trace::trace(#binding, state);});
                     }
                     new_fields.extend(quote! { #ident (#rooted_fields), });
                     mark_fields
@@ -82,7 +82,7 @@ fn derive_enum(orig: &syn::DeriveInput, data_enum: &syn::DataEnum) -> TokenStrea
     let doc_string = format!("Automatically derived from [{orig_name}] via `#[derive(Trace)]`");
     quote! {
         impl #generic_params crate::core::gc::Trace for #orig_name #generic_params {
-            fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
+            fn trace(&self, state: &mut crate::core::gc::GcState) {
                 match self {
                     #mark_fields
                 }
@@ -126,7 +126,7 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
                 } else {
                     new_fields.extend(quote! {#vis #ident: #rt<#ty>,});
                     mark_fields
-                        .extend(quote! {crate::core::gc::Trace::trace(&self.#ident, stack);});
+                        .extend(quote! {crate::core::gc::Trace::trace(&self.#ident, state);});
                 }
             }
             new_fields = quote! {{#new_fields}};
@@ -145,7 +145,7 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
                     mark_fields.extend(quote! {let _ = &self.#idx;});
                 } else {
                     new_fields.extend(quote! {#vis #rt<#ty>,});
-                    mark_fields.extend(quote! {crate::core::gc::Trace::trace(&self.#idx, stack);});
+                    mark_fields.extend(quote! {crate::core::gc::Trace::trace(&self.#idx, state);});
                 }
             }
             new_fields = quote! {(#new_fields);};
@@ -156,7 +156,7 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
     let doc_string = format!("Automatically derived from [{orig_name}] via `#[derive(Trace)]`");
     quote! {
         impl #generic_params crate::core::gc::Trace for #orig_name #generic_params {
-            fn trace(&self, stack: &mut Vec<crate::core::object::RawObj>) {
+            fn trace(&self, state: &mut crate::core::gc::GcState) {
                 #mark_fields
             }
         }

@@ -1,6 +1,6 @@
-use super::super::{
-    cons::Cons,
-    object::{Object, RawObj},
+use super::{
+    super::{cons::Cons, object::Object},
+    GcState,
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, Untag, WithLifetime};
@@ -267,8 +267,8 @@ impl<T> Deref for Slot<T> {
 }
 
 impl<T: Trace> Trace for Slot<T> {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
-        self.get().trace(stack);
+    fn trace(&self, state: &mut GcState) {
+        self.get().trace(state);
     }
 }
 

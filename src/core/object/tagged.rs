@@ -13,7 +13,7 @@ use super::{
 };
 use crate::core::{
     env::sym,
-    gc::{Markable, Trace},
+    gc::{GcState, Markable, Trace},
 };
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
@@ -1319,8 +1319,8 @@ where
 }
 
 impl<T> Trace for Gc<T> {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
-        self.as_obj().trace_mark(stack);
+    fn trace(&self, state: &mut GcState) {
+        self.as_obj().trace_mark(state);
     }
 }
 
@@ -1473,19 +1473,19 @@ impl<'ob> Object<'ob> {
         }
     }
 
-    pub(crate) fn trace_mark(self, stack: &mut Vec<RawObj>) {
+    pub(crate) fn trace_mark(self, state: &mut GcState) {
         match self.untag() {
             ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
-            ObjectType::Float(x) => x.trace(stack),
-            ObjectType::String(x) => x.trace(stack),
-            ObjectType::ByteString(x) => x.trace(stack),
-            ObjectType::Vec(vec) => vec.trace(stack),
-            ObjectType::Record(x) => x.trace(stack),
-            ObjectType::HashTable(x) => x.trace(stack),
-            ObjectType::Cons(x) => x.trace(stack),
-            ObjectType::Symbol(x) => x.trace(stack),
-            ObjectType::ByteFn(x) => x.trace(stack),
-            ObjectType::Buffer(x) => x.trace(stack),
+            ObjectType::Float(x) => x.trace(state),
+            ObjectType::String(x) => x.trace(state),
+            ObjectType::ByteString(x) => x.trace(state),
+            ObjectType::Vec(vec) => vec.trace(state),
+            ObjectType::Record(x) => x.trace(state),
+            ObjectType::HashTable(x) => x.trace(state),
+            ObjectType::Cons(x) => x.trace(state),
+            ObjectType::Symbol(x) => x.trace(state),
+            ObjectType::ByteFn(x) => x.trace(state),
+            ObjectType::Buffer(x) => x.trace(state),
         }
     }
 }

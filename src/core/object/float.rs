@@ -1,5 +1,5 @@
-use super::{CloneIn, IntoObject, RawObj};
-use crate::core::gc::{Block, GcHeap, Trace};
+use super::{CloneIn, IntoObject};
+use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::Markable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
@@ -22,7 +22,7 @@ impl LispFloat {
 }
 
 impl Trace for f64 {
-    fn trace(&self, _: &mut Vec<RawObj>) {}
+    fn trace(&self, _: &mut GcState) {}
 }
 
 impl Eq for LispFloat {}

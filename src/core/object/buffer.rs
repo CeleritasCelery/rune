@@ -1,8 +1,8 @@
-use super::{Gc, Object, ObjectType, RawObj, TagType, WithLifetime};
+use super::{Gc, Object, ObjectType, TagType, WithLifetime};
 use crate::{
     core::{
         error::{Type, TypeError},
-        gc::{AllocObject, Block, Context, GcHeap, Trace},
+        gc::{AllocObject, Block, Context, GcHeap, GcState, Trace},
     },
     Markable,
 };
@@ -167,7 +167,7 @@ impl Display for LispBufferInner {
 }
 
 impl Trace for LispBufferInner {
-    fn trace(&self, _v: &mut Vec<RawObj>) {
+    fn trace(&self, _v: &mut GcState) {
         // Implement once we hold gc data in the buffer
     }
 }

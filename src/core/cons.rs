@@ -1,8 +1,8 @@
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 
-use super::gc::{Block, GcHeap, Trace};
-use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, RawObj, NIL};
+use super::gc::{Block, GcHeap, GcState, Trace};
+use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
 use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
 
@@ -117,14 +117,14 @@ impl<'new> CloneIn<'new, &'new Cons> for Cons {
 }
 
 impl Trace for ConsInner {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, state: &mut GcState) {
         let cdr = self.cdr();
         if cdr.is_markable() {
-            stack.push(cdr.into_raw());
+            state.push(cdr);
         }
         let car = self.car();
         if car.is_markable() {
-            stack.push(car.into_raw());
+            state.push(car);
         }
     }
 }

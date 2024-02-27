@@ -1,5 +1,4 @@
-use super::Trace;
-use crate::core::object::RawObj;
+use super::{GcState, Trace};
 use std::{
     cell::Cell,
     fmt,
@@ -127,12 +126,12 @@ impl<T> Markable for GcHeap<T> {
 }
 
 impl<T: Trace> Trace for GcHeap<T> {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, state: &mut GcState) {
         // This is type is only one that contains mark bits, so it is where we
         // actually mark the object
         if !self.is_marked() {
             self.mark();
-            self.data.trace(stack);
+            self.data.trace(state);
         }
     }
 }

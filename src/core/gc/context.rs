@@ -1,3 +1,4 @@
+use super::GcState;
 use super::Markable;
 use super::OwnedObject;
 use super::Trace;
@@ -133,18 +134,18 @@ impl<'ob, 'rt> Context<'rt> {
         {
             return;
         }
-        let gray_stack = &mut Vec::new();
+        let state = &mut GcState::new();
         for x in self.root_set.roots.borrow().iter() {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (**x).trace(gray_stack);
+                (**x).trace(state);
             }
         }
-        while let Some(raw) = gray_stack.pop() {
+        while let Some(raw) = state.stack().pop() {
             let obj = unsafe { Object::from_raw(raw) };
             if !obj.is_marked() {
-                obj.trace_mark(gray_stack);
+                obj.trace_mark(state);
             }
         }
 

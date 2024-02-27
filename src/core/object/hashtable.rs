@@ -1,5 +1,5 @@
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object};
-use crate::core::gc::{Block, GcHeap, Trace};
+use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::Markable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
@@ -115,14 +115,14 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
 }
 
 impl Trace for LispHashTableInner {
-    fn trace(&self, stack: &mut Vec<super::RawObj>) {
+    fn trace(&self, state: &mut GcState) {
         let table = self.borrow();
         for (k, v) in &table.inner {
             if k.is_markable() {
-                stack.push(k.into_raw());
+                state.push(*k);
             }
             if v.get().is_markable() {
-                stack.push(v.get().into_raw());
+                state.push(v.get());
             }
         }
     }

@@ -1,6 +1,6 @@
 use super::{CloneIn, Gc, IntoObject, MutObjCell, ObjCell, Object};
 use crate::{
-    core::gc::{Block, GcHeap, Trace},
+    core::gc::{Block, GcHeap, GcState, Trace},
     Markable,
 };
 use anyhow::{anyhow, Result};
@@ -81,9 +81,9 @@ impl<'new> CloneIn<'new, &'new Self> for LispVec {
 }
 
 impl Trace for LispVecInner {
-    fn trace(&self, stack: &mut Vec<super::RawObj>) {
+    fn trace(&self, state: &mut GcState) {
         let unmarked = self.iter().map(ObjCell::get).filter(|x| x.is_markable()).map(Gc::into_raw);
-        stack.extend(unmarked);
+        state.stack().extend(unmarked);
     }
 }
 

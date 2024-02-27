@@ -1,5 +1,5 @@
-use super::{CloneIn, IntoObject, RawObj};
-use crate::core::gc::{Block, GcHeap, Trace};
+use super::{CloneIn, IntoObject};
+use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::Markable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
@@ -18,11 +18,11 @@ impl LispString {
 }
 
 impl Trace for String {
-    fn trace(&self, _: &mut Vec<RawObj>) {}
+    fn trace(&self, _: &mut GcState) {}
 }
 
 impl Trace for Vec<u8> {
-    fn trace(&self, _: &mut Vec<RawObj>) {}
+    fn trace(&self, _: &mut GcState) {}
 }
 
 impl LispString {

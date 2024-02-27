@@ -1,7 +1,7 @@
 #![allow(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::{Block, Context, GcHeap, Trace};
-use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, RawObj, TagType, WithLifetime};
+use crate::core::gc::{Block, Context, GcHeap, GcState, Trace};
+use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
 use std::fmt;
@@ -109,17 +109,17 @@ impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
 }
 
 impl Trace for Symbol<'_> {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
-        self.get().trace(stack);
+    fn trace(&self, state: &mut GcState) {
+        self.get().trace(state);
     }
 }
 
 impl Trace for SymbolCellInner {
-    fn trace(&self, stack: &mut Vec<RawObj>) {
+    fn trace(&self, state: &mut GcState) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
             if let Some(func) = self.get() {
-                func.as_obj().trace_mark(stack);
+                func.as_obj().trace_mark(state);
             }
         }
     }
