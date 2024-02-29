@@ -1,10 +1,10 @@
 use super::{
     super::{cons::Cons, object::Object},
-    GcState,
+    GcState, Markable,
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, Untag, WithLifetime};
-use rune_core::hashmap::{HashMap, HashSet};
+use indexmap::IndexMap;
 use std::hash::{Hash, Hasher};
 use std::slice::SliceIndex;
 use std::{
@@ -253,6 +253,10 @@ impl<T> Slot<T> {
         unsafe { &*self.inner.get() }
     }
 
+    unsafe fn set(&self, new: T) {
+        *self.inner.get() = new
+    }
+
     pub(crate) fn new(val: T) -> Self {
         Slot { inner: UnsafeCell::new(val) }
     }
@@ -266,9 +270,14 @@ impl<T> Deref for Slot<T> {
     }
 }
 
-impl<T: Trace> Trace for Slot<T> {
+impl<T: Trace + Markable<Value = T>> Trace for Slot<T> {
     fn trace(&self, state: &mut GcState) {
-        self.get().trace(state);
+        if let Some((new, moved)) = self.get().move_value(&state.to_space) {
+            unsafe { self.set(new) };
+            if moved {
+                self.get().trace(state);
+            }
+        }
     }
 }
 
@@ -350,19 +359,6 @@ impl<T> Rt<T> {
         unsafe { &mut *self.inner_mut_ptr().cast::<<T as WithLifetime<'ob>>::Out>() }
     }
 
-    pub(crate) fn bind_slice<'brw, 'ob, U>(
-        slice: &'brw [Rt<Slot<Gc<T>>>],
-        _: &'ob Context,
-    ) -> &'brw [Gc<U>]
-    where
-        Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
-        Gc<U>: 'ob,
-    {
-        // SAFETY: Gc<T> does not have any niche optimizations, so it is safe to
-        // cast from a Rt<Slot>
-        unsafe { &*(slice as *const [Rt<Slot<Gc<T>>>] as *const [Gc<U>]) }
-    }
-
     pub(crate) fn set<U: IntoRoot<T>>(&mut self, item: U) {
         // SAFETY: we drop the old type so it never exposed and take the new
         // rooted type and replace it.
@@ -384,6 +380,19 @@ impl<T> Rt<Slot<T>> {
         T: WithLifetime<'ob> + Copy,
     {
         self.inner().get().with_lifetime()
+    }
+
+    pub(crate) fn bind_slice<'brw, 'ob, U>(
+        slice: &'brw [Rt<Slot<Gc<T>>>],
+        _: &'ob Context,
+    ) -> &'brw [Gc<U>]
+    where
+        Gc<T>: WithLifetime<'ob, Out = Gc<U>>,
+        Gc<U>: 'ob,
+    {
+        // SAFETY: Gc<T> does not have any niche optimizations, so it is safe to
+        // cast from a Rt<Slot>
+        unsafe { &*(slice as *const [Rt<Slot<Gc<T>>>] as *const [Gc<U>]) }
     }
 }
 
@@ -632,42 +641,71 @@ impl<T, I: SliceIndex<[Rt<T>]>> IndexMut<I> for Rt<Vec<T>> {
     }
 }
 
-impl<K, V> Rt<HashMap<K, V>>
+#[derive(Debug)]
+#[repr(transparent)]
+/// A HashMap that can hold values past garbage collection.
+///
+/// This type is needed because Garbage Collection can move keys, which changes
+/// their hash value. `ObjectMap` will rehash the keys after collection.
+// It is not safe to Deref into the inner IndexMap type because we will be
+// constructing a mutable reference during garbage collection. So we have to
+// ensure that there cannot exist a &IndexMap to the same location.
+pub(crate) struct ObjectMap<K, V>(UnsafeCell<IndexMap<K, V>>);
+
+impl<K, V> Default for ObjectMap<K, V> {
+    fn default() -> Self {
+        Self(UnsafeCell::new(Default::default()))
+    }
+}
+
+impl<K, V> Rt<ObjectMap<K, V>>
 where
     K: Eq + Hash,
 {
+    // inner function that should not be exposed
+    fn as_ref(&self) -> &IndexMap<K, V> {
+        unsafe { &*self.inner().0.get() }
+    }
+
+    // inner function that should not be exposed
+    fn as_mut(&mut self) -> &mut IndexMap<K, V> {
+        unsafe { &mut *self.inner_mut().0.get() }
+    }
+
     pub(crate) fn insert<Kx: IntoRoot<K>, Vx: IntoRoot<V>>(&mut self, k: Kx, v: Vx) {
-        self.inner_mut().insert(unsafe { k.into_root() }, unsafe { v.into_root() });
+        unsafe {
+            self.as_mut().insert(k.into_root(), v.into_root());
+        }
     }
 
     pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {
-        let inner = unsafe { &*self.inner_ptr().cast::<HashMap<K, Rt<V>>>() };
+        use std::ptr::from_ref;
+        let inner = unsafe { &*from_ref(self.as_ref()).cast::<IndexMap<K, Rt<V>>>() };
         inner.get(unsafe { &k.into_root() })
     }
 
     pub(crate) fn get_mut<Q: IntoRoot<K>>(&mut self, k: Q) -> Option<&mut Rt<V>> {
-        let inner = unsafe { &mut *self.inner_mut_ptr().cast::<HashMap<K, Rt<V>>>() };
+        use std::ptr::from_mut;
+        let inner = unsafe { &mut *from_mut(self.as_mut()).cast::<IndexMap<K, Rt<V>>>() };
         inner.get_mut(unsafe { &k.into_root() })
     }
 
     pub(crate) fn remove<Q: IntoRoot<K>>(&mut self, k: Q) {
-        self.inner_mut().remove(unsafe { &k.into_root() });
+        self.as_mut().swap_remove(unsafe { &k.into_root() });
     }
 }
 
-impl<K, V> Deref for Rt<HashMap<K, V>> {
-    type Target = HashMap<Rt<K>, Rt<V>>;
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*self.inner_ptr().cast::<Self::Target>() }
-    }
-}
-
-impl<T> Deref for Rt<HashSet<T>> {
-    type Target = HashSet<Rt<T>>;
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: `Rt<T>` has the same memory layout as `T`.
-        unsafe { &*self.inner_ptr().cast::<Self::Target>() }
+impl<K, V> Trace for ObjectMap<K, V>
+where
+    K: Trace + Hash + Eq,
+    V: Trace,
+{
+    fn trace(&self, state: &mut GcState) {
+        let map = unsafe { &mut *self.0.get() };
+        map.rehash_keys(|key, val| {
+            key.trace(state);
+            val.trace(state);
+        });
     }
 }
 
@@ -707,5 +745,20 @@ mod test {
         vec.push(str1);
         vec.push(str2);
         assert_eq!(vec.bind_ref(cx)[0..3], vec![NIL, str1, str2]);
+    }
+
+    #[test]
+    fn test_object_map() {
+        type Map<'a> = ObjectMap<Slot<Object<'a>>, Slot<Object<'a>>>;
+        let root = &RootSet::default();
+        let cx = &mut Context::new(root);
+        root!(map, new(Map), cx);
+        let key = cx.add("key");
+
+        map.insert(key, cx.add("val"));
+        root!(key, cx);
+        cx.garbage_collect(true);
+        let val = map.get(key.bind(cx)).unwrap().bind(cx);
+        assert_eq!(val, "val");
     }
 }

@@ -2,9 +2,9 @@ use super::{Gc, Object, ObjectType, TagType, WithLifetime};
 use crate::{
     core::{
         error::{Type, TypeError},
-        gc::{AllocObject, Block, Context, GcHeap, GcState, Trace},
+        gc::{Block, Context, GcHeap, GcState, Trace},
     },
-    Markable,
+    NewtypeMarkable,
 };
 use anyhow::{bail, Result};
 use macro_attr_2018::macro_attr;
@@ -108,15 +108,14 @@ pub(crate) struct LispBufferInner {
 macro_attr! {
 /// A lisp handle to a buffer. This is a just a reference type and does not give
 /// access to the contents until it is locked and a `OpenBuffer` is returned.
-    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, Markable!)]
+    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!)]
     pub(crate) struct LispBuffer(GcHeap<LispBufferInner>);
 }
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
         let buffer = unsafe { Self::new(name, block) };
-        let ptr = buffer.alloc_obj(block);
-        unsafe { &*ptr }
+        block.objects.alloc(buffer)
     }
 
     pub(crate) unsafe fn new(name: String, _: &Block<true>) -> LispBuffer {

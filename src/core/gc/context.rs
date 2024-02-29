@@ -1,6 +1,4 @@
 use super::GcState;
-use super::Markable;
-use super::OwnedObject;
 use super::Trace;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
 use std::cell::{Cell, RefCell};
@@ -19,7 +17,7 @@ pub(crate) struct RootSet {
 /// directly.
 #[derive(Default)]
 pub(crate) struct Block<const CONST: bool> {
-    pub(super) objects: RefCell<Vec<OwnedObject>>,
+    pub(in crate::core) objects: bumpalo::Bump,
     pub(in crate::core) uninterned_symbol_map: UninternedSymbolMap,
 }
 
@@ -35,17 +33,14 @@ pub(crate) struct Context<'rt> {
 impl<'rt> Drop for Context<'rt> {
     fn drop(&mut self) {
         self.garbage_collect(true);
-        if self.block.objects.borrow().is_empty() {
+        if self.block.objects.allocated_bytes() == 0 {
             return;
-        } else {
-            for obj in self.block.objects.borrow().iter() {
-                eprintln!("dropping: {:?}", obj);
-            }
         }
-        assert!(
-            std::thread::panicking() || self.block.objects.borrow().is_empty(),
-            "Error: Context was dropped while still holding data"
-        );
+        if std::thread::panicking() {
+            eprintln!("Error: Context was dropped while still holding data");
+        } else {
+            panic!("Error: Context was dropped while still holding data");
+        }
     }
 }
 
@@ -99,15 +94,11 @@ impl<const CONST: bool> Block<CONST> {
     {
         obj.into_obj(self).into()
     }
-
-    pub(super) fn register(objects: &mut Vec<OwnedObject>, obj: OwnedObject) {
-        objects.push(obj);
-    }
 }
 
 impl<'ob, 'rt> Context<'rt> {
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        Context { block: Block::new_local(), root_set: roots, prev_obj_count: 0 }
+        Self { block: Block::new_local(), root_set: roots, prev_obj_count: 0 }
     }
 
     pub(crate) fn from_block(block: Block<false>, roots: &'rt RootSet) -> Self {
@@ -127,69 +118,27 @@ impl<'ob, 'rt> Context<'rt> {
     }
 
     pub(crate) fn garbage_collect(&mut self, force: bool) {
-        let mut objects = self.block.objects.borrow_mut();
-        if cfg!(not(test))
-            && !force
-            && (objects.len() < 2000 || objects.len() < (self.prev_obj_count * 2))
-        {
+        let bytes = self.block.objects.allocated_bytes();
+        if cfg!(not(test)) && !force && (bytes < 2000 || bytes < (self.prev_obj_count * 2)) {
             return;
         }
-        let state = &mut GcState::new();
+        let mut state = GcState::new();
         for x in self.root_set.roots.borrow().iter() {
             // SAFETY: The contact of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
-                (**x).trace(state);
+                (**x).trace(&mut state);
             }
         }
         while let Some(raw) = state.stack().pop() {
             let obj = unsafe { Object::from_raw(raw) };
             if !obj.is_marked() {
-                obj.trace_mark(state);
+                obj.trace_mark(&mut state);
             }
         }
 
-        // let prev = objects.len();
-        objects.retain_mut(|x| {
-            let marked = x.is_marked();
-            if marked {
-                x.unmark();
-            }
-            marked
-        });
-        // let retained = prev - objects.len();
-        // println!("garbage collected: {retained}/{prev}");
-        self.prev_obj_count = objects.len();
-    }
-}
-
-impl OwnedObject {
-    fn unmark(&self) {
-        match self {
-            OwnedObject::Float(x) => x.unmark(),
-            OwnedObject::Cons(x) => x.unmark(),
-            OwnedObject::Vec(x) => x.unmark(),
-            OwnedObject::HashTable(x) => x.unmark(),
-            OwnedObject::String(x) => x.unmark(),
-            OwnedObject::ByteString(x) => x.unmark(),
-            OwnedObject::Symbol(x) => x.unmark(),
-            OwnedObject::ByteFn(x) => x.unmark(),
-            OwnedObject::Buffer(_) => todo!("unmark buffer"),
-        }
-    }
-
-    fn is_marked(&self) -> bool {
-        match self {
-            OwnedObject::Float(x) => x.is_marked(),
-            OwnedObject::Cons(x) => x.is_marked(),
-            OwnedObject::Vec(x) => x.is_marked(),
-            OwnedObject::HashTable(x) => x.is_marked(),
-            OwnedObject::String(x) => x.is_marked(),
-            OwnedObject::ByteString(x) => x.is_marked(),
-            OwnedObject::Symbol(x) => x.is_marked(),
-            OwnedObject::ByteFn(x) => x.is_marked(),
-            OwnedObject::Buffer(_) => todo!("is_marked buffer"),
-        }
+        self.prev_obj_count = state.to_space.allocated_bytes();
+        self.block.objects = state.to_space;
     }
 }
 
@@ -222,6 +171,11 @@ impl<const CONST: bool> Drop for Block<CONST> {
 mod test {
     use rune_core::macros::{list, rebind, root};
 
+    use crate::core::{
+        cons::Cons,
+        object::{HashTable, ObjectType, Symbol},
+    };
+
     use super::*;
     fn bind_to_mut<'ob>(cx: &'ob mut Context) -> Object<'ob> {
         cx.add("invariant")
@@ -237,7 +191,7 @@ mod test {
     }
 
     #[test]
-    fn garbage_collect() {
+    fn test_garbage_collect() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         root!(vec, new(Vec), cx);
@@ -245,5 +199,44 @@ mod test {
         let cons = list!["foo", 1, false, "end"; cx];
         vec.push(cons);
         cx.garbage_collect(true);
+    }
+
+    #[test]
+    fn test_move_values() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let int = cx.add(1);
+        let float = cx.add(1.5);
+        let cons: Object = Cons::new(int, float, cx).into();
+        let string = cx.add("string");
+        let symbol = cx.add(Symbol::new_uninterned("sym", cx));
+        println!("sym: {:?}", symbol.into_raw());
+        let mut table = HashTable::default();
+        table.insert(symbol, string);
+        let _ = table.get(&symbol).unwrap();
+        root!(symbol, cx);
+        let table = cx.add(table);
+        let vec = vec![cons, table];
+        let vec = cx.add(vec);
+        root!(vec, cx);
+        cx.garbage_collect(true);
+        let vec = vec.bind(cx);
+        let ObjectType::Vec(vec) = vec.untag() else { unreachable!() };
+        let ObjectType::Cons(cons) = vec[0].get().untag() else { unreachable!() };
+        let ObjectType::HashTable(table) = vec[1].get().untag() else { unreachable!() };
+        let table = table.borrow();
+        let key = symbol.bind(cx);
+        println!("key: {:?}", key.into_raw());
+        for (k, v) in table.iter() {
+            println!("k: {:?}", k.into_raw());
+            println!("v: {}", v);
+        }
+        let val = table.get(&symbol.bind(cx)).unwrap();
+        let ObjectType::String(string) = val.get().untag() else { unreachable!() };
+        let ObjectType::Int(int) = cons.car().untag() else { unreachable!() };
+        let ObjectType::Float(float) = cons.cdr().untag() else { unreachable!() };
+        assert_eq!(**string, "string");
+        assert_eq!(**float, 1.5);
+        assert_eq!(int, 1);
     }
 }

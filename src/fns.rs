@@ -698,7 +698,7 @@ fn maphash(
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {
-    let get_idx = |table: &mut HashTableView<'_, Object>| {
+    let get_idx = |table: &mut HashTableView<Object>| {
         let end = table.len();
         let idx = table.iter_next;
         table.iter_next += 1;

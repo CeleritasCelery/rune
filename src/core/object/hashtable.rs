@@ -1,6 +1,6 @@
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object};
-use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::Markable;
+use crate::core::gc::{Block, GcHeap, GcState, Slot, Trace};
+use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
 use rune_core::hashmap::{HashSet, IndexMap};
@@ -21,21 +21,13 @@ pub(crate) struct LispHashTableInner {
 }
 
 macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, Markable!, Trace)]
+    #[derive(PartialEq, Eq, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!, Trace)]
     pub(crate) struct LispHashTable(GcHeap<LispHashTableInner>);
 }
 
 impl LispHashTable {
     pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
-        Self(GcHeap::new(LispHashTableInner::new(table), constant))
-    }
-
-    pub(in crate::core) fn make_const(&mut self) {
-        // TODO: once we have resolved
-        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
-        // that is cannot be borrowed mutabley. In the mean time this will
-        // introduce a race condtion when access from multiple threads.
-        // std::mem::forget(self.inner.borrow());
+        Self(GcHeap::new(LispHashTableInner::new(table, constant), constant))
     }
 }
 
@@ -70,7 +62,11 @@ impl<T: Eq> Eq for HashTableView<'_, T> {}
 impl LispHashTableInner {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to create an owned version in context of the allocator.
-    pub(in crate::core) unsafe fn new(vec: HashTable) -> Self {
+    pub(in crate::core) unsafe fn new(vec: HashTable, _const: bool) -> Self {
+        // TODO: once we have resolved
+        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
+        // that is cannot be borrowed mutabley. In the mean time this will
+        // introduce a race condtion when access from multiple threads.
         let cell = std::mem::transmute::<
             IndexMap<Object, Object>,
             IndexMap<Object<'static>, ObjCell>,
@@ -116,15 +112,18 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
 
 impl Trace for LispHashTableInner {
     fn trace(&self, state: &mut GcState) {
-        let table = self.borrow();
-        for (k, v) in &table.inner {
-            if k.is_markable() {
-                state.push(*k);
-            }
-            if v.get().is_markable() {
-                state.push(v.get());
-            }
-        }
+        let mut table = self.try_borrow_mut().unwrap();
+        // Convert to Slots so the values will get updated inside the map
+        let table = unsafe {
+            std::mem::transmute::<
+                &mut IndexMap<Object, Object>,
+                &mut IndexMap<Slot<Object>, Slot<Object>>,
+            >(&mut **table)
+        };
+        table.rehash_keys(|key, val| {
+            key.trace(state);
+            val.trace(state);
+        });
     }
 }
 

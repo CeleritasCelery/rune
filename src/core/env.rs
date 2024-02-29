@@ -1,7 +1,6 @@
-use super::gc::{Context, Rto, Slot};
+use super::gc::{Context, ObjectMap, Rto, Slot};
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
-use rune_core::hashmap::HashMap;
 use rune_macros::Trace;
 
 mod stack;
@@ -9,10 +8,10 @@ mod symbol_map;
 pub(crate) use stack::*;
 pub(crate) use symbol_map::*;
 
-type PropertyMap<'a> = HashMap<Slot<Symbol<'a>>, Vec<(Slot<Symbol<'a>>, Slot<Object<'a>>)>>;
+type PropertyMap<'a> = ObjectMap<Slot<Symbol<'a>>, Vec<(Slot<Symbol<'a>>, Slot<Object<'a>>)>>;
 #[derive(Debug, Default, Trace)]
 pub(crate) struct Env<'a> {
-    pub(crate) vars: HashMap<Slot<Symbol<'a>>, Slot<Object<'a>>>,
+    pub(crate) vars: ObjectMap<Slot<Symbol<'a>>, Slot<Object<'a>>>,
     pub(crate) props: PropertyMap<'a>,
     pub(crate) catch_stack: Vec<Slot<Object<'a>>>,
     exception: (Slot<Object<'a>>, Slot<Object<'a>>),

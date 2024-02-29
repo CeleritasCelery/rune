@@ -3,7 +3,7 @@ use super::{
     super::{
         cons::Cons,
         error::{Type, TypeError},
-        gc::{AllocObject, Block},
+        gc::Block,
     },
     ByteFnPrototype, ByteString, LispBuffer,
 };
@@ -18,8 +18,8 @@ use crate::core::{
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
-use std::fmt;
 use std::marker::PhantomData;
+use std::{fmt, ptr::NonNull};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RawObj {
@@ -67,7 +67,7 @@ impl<T> Gc<T> {
         Self { ptr, _data: PhantomData }
     }
 
-    fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {
+    unsafe fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {
         use std::mem::size_of;
         assert_eq!(size_of::<*const U>(), size_of::<*const ()>());
         let ptr = ptr.cast::<u8>().map_addr(|x| (x << 8) | tag as usize);
@@ -323,7 +323,7 @@ impl IntoObject for f64 {
     type Out<'ob> = &'ob LispFloat;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = LispFloat::new(self, C).alloc_obj(block);
+        let ptr = block.objects.alloc(LispFloat::new(self, C));
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -352,7 +352,10 @@ impl IntoObject for Cons {
     type Out<'ob> = &'ob Cons;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
+        let ptr = block.objects.alloc(self);
+        if C {
+            ptr.mark_const();
+        }
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -361,7 +364,7 @@ impl IntoObject for ByteFnPrototype {
     type Out<'ob> = &'ob ByteFn;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = ByteFn::new(self, C).alloc_obj(block);
+        let ptr = block.objects.alloc(ByteFn::new(self, C));
         unsafe { Self::Out::tag_ptr(ptr) }
     }
 }
@@ -370,7 +373,7 @@ impl IntoObject for SymbolCell {
     type Out<'ob> = Symbol<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        let ptr = self.alloc_obj(block);
+        let ptr = block.objects.alloc(self);
         let sym = unsafe { Symbol::from_ptr(ptr) };
         unsafe { Self::Out::tag_ptr(sym.get_ptr()) }
     }
@@ -381,7 +384,7 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::new(self, C).alloc_obj(block);
+            let ptr = block.objects.alloc(LispString::new(self, C));
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -392,7 +395,7 @@ impl IntoObject for &str {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispString::new(self.to_owned(), C).alloc_obj(block);
+            let ptr = block.objects.alloc(LispString::new(self.to_owned(), C));
             <&LispString>::tag_ptr(ptr)
         }
     }
@@ -403,7 +406,7 @@ impl IntoObject for Vec<u8> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = ByteString::new(self, C).alloc_obj(block);
+            let ptr = block.objects.alloc(ByteString::new(self, C));
             <&ByteString>::tag_ptr(ptr)
         }
     }
@@ -414,7 +417,7 @@ impl<'a> IntoObject for Vec<Object<'a>> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVec::new(self, C).alloc_obj(block);
+            let ptr = block.objects.alloc(LispVec::new(self, C));
             <&LispVec>::tag_ptr(ptr)
         }
     }
@@ -433,7 +436,8 @@ impl<'a> IntoObject for RecordBuilder<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispVec::new(self.0, C).alloc_obj(block);
+            // record is the same layout as lispvec, just a different newtype wrapper
+            let ptr = block.objects.alloc(LispVec::new(self.0, C));
             <&Record>::tag_ptr(ptr)
         }
     }
@@ -444,7 +448,7 @@ impl<'a> IntoObject for HashTable<'a> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = LispHashTable::new(self, C).alloc_obj(block);
+            let ptr = block.objects.alloc(LispHashTable::new(self, C));
             <&LispHashTable>::tag_ptr(ptr)
         }
     }
@@ -950,27 +954,28 @@ extern "Rust" {
 #[cfg(miri)]
 impl<'ob> FunctionType<'ob> {
     pub(crate) fn set_as_miri_root(self) {
-        match self {
-            FunctionType::ByteFn(x) => {
-                let ptr: *const _ = x;
-                unsafe {
-                    miri_static_root(ptr as _);
-                }
-            }
-            FunctionType::SubrFn(x) => {
-                let ptr: *const _ = x;
-                unsafe {
-                    miri_static_root(ptr as _);
-                }
-            }
-            FunctionType::Cons(x) => {
-                let ptr: *const _ = x;
-                unsafe {
-                    miri_static_root(ptr as _);
-                }
-            }
-            FunctionType::Symbol(_) => {}
-        }
+        // TODO: semispace fix
+        // match self {
+        //     FunctionType::ByteFn(x) => {
+        //         let ptr: *const _ = x;
+        //         unsafe {
+        //             miri_static_root(ptr as _);
+        //         }
+        //     }
+        //     FunctionType::SubrFn(x) => {
+        //         let ptr: *const _ = x;
+        //         unsafe {
+        //             miri_static_root(ptr as _);
+        //         }
+        //     }
+        //     FunctionType::Cons(x) => {
+        //         let ptr: *const _ = x;
+        //         unsafe {
+        //             miri_static_root(ptr as _);
+        //         }
+        //     }
+        //     FunctionType::Symbol(_) => {}
+        // }
     }
 }
 
@@ -1324,6 +1329,148 @@ impl<T> Trace for Gc<T> {
     }
 }
 
+impl<T> Markable for Gc<T>
+where
+    Self: Untag<T> + Copy,
+    T: Markable<Value = T> + TagType<Out = T>,
+{
+    type Value = Self;
+
+    fn mark(&self) {
+        todo!()
+    }
+
+    fn unmark(&self) {
+        todo!()
+    }
+
+    fn is_marked(&self) -> bool {
+        todo!()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        self.untag().move_value(to_space).map(|(x, moved)| (x.tag(), moved))
+    }
+}
+
+impl Markable for Object<'_> {
+    type Value = Self;
+
+    fn mark(&self) {
+        todo!()
+    }
+
+    fn unmark(&self) {
+        todo!()
+    }
+
+    fn is_marked(&self) -> bool {
+        match self.untag() {
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => true,
+            ObjectType::Float(x) => x.is_marked(),
+            ObjectType::Cons(x) => x.is_marked(),
+            ObjectType::Vec(x) => x.is_marked(),
+            ObjectType::Record(x) => x.is_marked(),
+            ObjectType::HashTable(x) => x.is_marked(),
+            ObjectType::String(x) => x.is_marked(),
+            ObjectType::ByteString(x) => x.is_marked(),
+            ObjectType::ByteFn(x) => x.is_marked(),
+            ObjectType::Symbol(x) => x.is_marked(),
+            ObjectType::Buffer(x) => x.is_marked(),
+        }
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        let data = match self.untag() {
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => return None,
+            ObjectType::Float(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Cons(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Vec(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Record(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::HashTable(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::String(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::ByteString(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::ByteFn(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Buffer(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Symbol(x) => {
+                // Need to handle specially because a symbol is not a pointer,
+                // but rather an offset
+                let (sym, moved) = x.move_value(to_space)?;
+                (sym.as_ptr(), moved)
+            }
+        };
+
+        let tag = self.get_tag();
+        unsafe { Some((Object::from_ptr(data.0, tag), data.1)) }
+    }
+}
+
+impl Markable for Function<'_> {
+    type Value = Self;
+
+    fn mark(&self) {
+        todo!()
+    }
+
+    fn unmark(&self) {
+        todo!()
+    }
+
+    fn is_marked(&self) -> bool {
+        match self.untag() {
+            FunctionType::SubrFn(_) => true,
+            FunctionType::Cons(x) => x.is_marked(),
+            FunctionType::ByteFn(x) => x.is_marked(),
+            FunctionType::Symbol(x) => x.is_marked(),
+        }
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        let data = match self.untag() {
+            FunctionType::SubrFn(_) => return None,
+            FunctionType::Cons(x) => cast_pair(x.move_value(to_space)?),
+            FunctionType::ByteFn(x) => cast_pair(x.move_value(to_space)?),
+            FunctionType::Symbol(x) => {
+                let (sym, moved) = x.move_value(to_space)?;
+                cast_pair((NonNull::from(sym.get()), moved))
+            }
+        };
+
+        let tag = self.get_tag();
+        unsafe { Some((Function::from_ptr(data.0, tag), data.1)) }
+    }
+}
+
+impl Markable for List<'_> {
+    type Value = Self;
+
+    fn mark(&self) {
+        todo!()
+    }
+
+    fn unmark(&self) {
+        todo!()
+    }
+
+    fn is_marked(&self) -> bool {
+        todo!()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        let data = match self.untag() {
+            ListType::Cons(x) => cast_pair(x.move_value(to_space)?),
+            ListType::Nil => return None,
+        };
+
+        let tag = self.get_tag();
+        unsafe { Some((List::from_ptr(data.0, tag), data.1)) }
+    }
+}
+
+fn cast_pair<T>((ptr, moved): (NonNull<T>, bool)) -> (*const u8, bool) {
+    (ptr.as_ptr().cast::<u8>(), moved)
+}
+
 impl<'ob> PartialEq<&str> for Object<'ob> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
@@ -1453,10 +1600,6 @@ impl ObjectType<'_> {
 }
 
 impl<'ob> Object<'ob> {
-    pub(crate) fn is_markable(self) -> bool {
-        !matches!(self.untag(), ObjectType::Int(_) | ObjectType::SubrFn(_))
-    }
-
     pub(crate) fn is_marked(self) -> bool {
         match self.untag() {
             ObjectType::Int(_) | ObjectType::SubrFn(_) => true,

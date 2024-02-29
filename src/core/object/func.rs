@@ -11,7 +11,7 @@ use crate::{
         env::Env,
         gc::{GcHeap, Rt, Slot},
     },
-    Markable,
+    NewtypeMarkable,
 };
 use anyhow::{bail, ensure, Result};
 use macro_attr_2018::macro_attr;
@@ -33,7 +33,7 @@ pub(crate) struct ByteFnPrototype {
 macro_attr! {
     /// A function implemented in lisp. Note that all functions are byte compiled,
     /// so this contains the byte-code representation of the function.
-    #[derive(PartialEq, Eq, NewtypeDeref!, Markable!, Trace)]
+    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeMarkable!, Trace)]
     pub(crate) struct ByteFn(GcHeap<ByteFnPrototype>);
 }
 

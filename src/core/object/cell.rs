@@ -14,8 +14,20 @@ use super::{Object, WithLifetime};
 #[repr(transparent)]
 pub(crate) struct ObjCell(Cell<Object<'static>>);
 
+impl std::hash::Hash for ObjCell {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.get().hash(state);
+    }
+}
+
+impl indexmap::Equivalent<ObjCell> for Object<'_> {
+    fn equivalent(&self, other: &ObjCell) -> bool {
+        self.eq(&other.get())
+    }
+}
+
 impl ObjCell {
-    pub(crate) fn get(&self) -> Object {
+    pub(crate) fn get(&self) -> Object<'_> {
         unsafe { self.0.get().with_lifetime() }
     }
 

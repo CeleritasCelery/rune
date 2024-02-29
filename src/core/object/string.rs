@@ -1,13 +1,13 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::Markable;
+use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
 use rune_macros::Trace;
 use std::fmt::{Debug, Display};
 
 macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeDebug!, NewtypeDisplay!, Markable!, Trace)]
+    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeDebug!, NewtypeDisplay!, NewtypeMarkable!, Trace)]
     pub(crate) struct LispString(GcHeap<String>);
 }
 
@@ -56,7 +56,7 @@ impl<'a> From<&'a LispString> for &'a [u8] {
 }
 
 macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDeref!, Markable!, Trace)]
+    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeMarkable!, Trace)]
     pub(crate) struct ByteString(GcHeap<Vec<u8>>);
 }
 

@@ -906,6 +906,11 @@ mod test {
             cx,
         );
         check_interpreter("(eq (make-symbol \"bar\") 'bar)", false, cx);
+        check_interpreter(
+            "(let ((x (make-symbol \"x\"))) (put x 'p t) (garbage-collect) (get x 'p))",
+            true,
+            cx,
+        );
     }
 
     #[test]

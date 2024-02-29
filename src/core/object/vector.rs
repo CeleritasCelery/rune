@@ -1,7 +1,7 @@
 use super::{CloneIn, Gc, IntoObject, MutObjCell, ObjCell, Object};
 use crate::{
-    core::gc::{Block, GcHeap, GcState, Trace},
-    Markable,
+    core::gc::{Block, GcHeap, GcState, Markable, Trace},
+    NewtypeMarkable,
 };
 use anyhow::{anyhow, Result};
 use macro_attr_2018::macro_attr;
@@ -26,7 +26,7 @@ macro_attr! {
     /// This type is represented as slice of [`ObjCell`] which is immutable by
     /// default. However with the [try_mut](LispVecInner::try_mut) method, you can obtain a mutable view
     /// into this slice.
-    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, Markable!)]
+    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!)]
     pub(crate) struct LispVec(GcHeap<LispVecInner>);
 }
 
@@ -40,11 +40,7 @@ impl LispVec {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to use in context of the allocator.
     pub(in crate::core) unsafe fn new(vec: Vec<Object>, constant: bool) -> Self {
-        Self(GcHeap::new(LispVecInner::new(vec), constant))
-    }
-
-    pub(in crate::core) fn make_const(&mut self) {
-        self.0.is_const = true;
+        Self(GcHeap::new(LispVecInner::new(vec, constant), constant))
     }
 
     pub(crate) fn to_vec(&self) -> Vec<Object> {
@@ -82,8 +78,15 @@ impl<'new> CloneIn<'new, &'new Self> for LispVec {
 
 impl Trace for LispVecInner {
     fn trace(&self, state: &mut GcState) {
-        let unmarked = self.iter().map(ObjCell::get).filter(|x| x.is_markable()).map(Gc::into_raw);
-        state.stack().extend(unmarked);
+        let vec = self.try_mut().unwrap();
+        for x in vec {
+            if let Some((new, moved)) = x.get().move_value(&state.to_space) {
+                x.set(new);
+                if moved {
+                    state.push(new);
+                }
+            }
+        }
     }
 }
 
@@ -100,9 +103,9 @@ impl fmt::Debug for LispVecInner {
 }
 
 impl LispVecInner {
-    unsafe fn new(vec: Vec<Object>) -> Self {
+    unsafe fn new(vec: Vec<Object>, is_const: bool) -> Self {
         let cell = mem::transmute::<Vec<Object>, Vec<ObjCell>>(vec);
-        Self { is_const: false, inner: cell.into_boxed_slice() }
+        Self { is_const, inner: cell.into_boxed_slice() }
     }
 
     pub(super) fn display_walk(
@@ -131,7 +134,7 @@ impl LispVecInner {
 pub(crate) struct RecordBuilder<'ob>(pub(crate) Vec<Object<'ob>>);
 
 macro_attr! {
-    #[derive(PartialEq, Eq, Trace, NewtypeDeref!, Markable!)]
+    #[derive(PartialEq, Eq, Trace, NewtypeDeref!, NewtypeMarkable!)]
     pub(crate) struct Record(GcHeap<LispVecInner>);
 }
 

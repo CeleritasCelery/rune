@@ -86,3 +86,9 @@ fn purecopy(obj: Object) -> Object {
 fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
     Symbol::new_uninterned(name, cx)
 }
+
+#[defun]
+fn garbage_collect(cx: &mut Context) -> bool {
+    cx.garbage_collect(true);
+    true
+}

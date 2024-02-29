@@ -1,14 +1,16 @@
 use super::{GcState, Trace};
 use std::{
-    cell::Cell,
+    alloc::Layout,
+    cell::{Cell, UnsafeCell},
     fmt,
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
+    ptr::NonNull,
 };
 
 union GcHeader {
     header: ManuallyDrop<HeaderData>,
-    fwd_ptr: *mut u8,
+    fwd_ptr: NonNull<u8>,
 }
 
 unsafe impl Send for GcHeader {}
@@ -22,7 +24,7 @@ impl GcHeader {
         unsafe { self.header.is_present == HeaderData::PRESENT }
     }
 
-    fn get_header(&self) -> Result<&HeaderData, *mut u8> {
+    fn get_header(&self) -> Result<&HeaderData, NonNull<u8>> {
         if self.is_present() {
             Ok(unsafe { &*self.header })
         } else {
@@ -59,21 +61,21 @@ impl HeaderData {
     }
 }
 
-unsafe impl Sync for GcHeader {}
-
 /// A block of memory allocated on the heap that is managed by the garbage collector.
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct GcHeap<T: ?Sized> {
-    header: GcHeader,
+    header: UnsafeCell<GcHeader>,
     data: T,
 }
 
+unsafe impl<T: Sync> Sync for GcHeap<T> {}
+
 impl<T> GcHeap<T> {
-    pub(in crate::core) fn new(data: T, constant: bool) -> Self {
+    pub(in crate::core) const fn new(data: T, constant: bool) -> Self {
         Self {
             // if the block is const, mark the object so it will not be traced
-            header: GcHeader::new(constant),
+            header: UnsafeCell::new(GcHeader::new(constant)),
             data,
         }
     }
@@ -82,20 +84,55 @@ impl<T> GcHeap<T> {
     /// is used for "pure" storage of objects that are allocated at the start of
     /// the program and never freed. Only used for the Symbol map at the moment.
     pub(in crate::core) const fn new_pure(data: T) -> Self {
-        Self { header: GcHeader::new(true), data }
+        Self::new(data, true)
+    }
+
+    fn header(&self) -> &GcHeader {
+        unsafe { &*self.header.get() }
+    }
+
+    fn forward(&self, fwd_ptr: NonNull<u8>) {
+        let header = unsafe { &mut *self.header.get() };
+        header.fwd_ptr = fwd_ptr;
     }
 }
 
 pub(in crate::core) trait Markable {
+    type Value;
     fn mark(&self);
     fn unmark(&self);
     fn is_marked(&self) -> bool;
+    fn move_value(&self, _to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        None
+    }
+}
+
+impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
+    type Value = &'a T;
+
+    fn mark(&self) {
+        (*self).mark();
+    }
+
+    fn unmark(&self) {
+        (*self).unmark();
+    }
+
+    fn is_marked(&self) -> bool {
+        (*self).is_marked()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        let val = (*self).move_value(to_space);
+        val.map(|(ptr, moved)| (unsafe { ptr.as_ref() }, moved))
+    }
 }
 
 #[macro_export]
-macro_rules! Markable {
+macro_rules! NewtypeMarkable {
     (() $vis:vis struct $name:ident $($tail:tt)+) => {
         impl $crate::core::gc::Markable for $name {
+            type Value = std::ptr::NonNull<Self>;
             fn is_marked(&self) -> bool {
                 self.0.is_marked()
             }
@@ -107,21 +144,55 @@ macro_rules! Markable {
             fn unmark(&self) {
                 self.0.unmark()
             }
+
+            fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+                match self.0.move_value(to_space) {
+                    Some((ptr, moved)) => Some((ptr.cast::<Self>(), moved)),
+                    None => None,
+                }
+            }
         }
     };
 }
 
 impl<T> Markable for GcHeap<T> {
+    type Value = NonNull<Self>;
+
     fn is_marked(&self) -> bool {
-        self.header.get_header().unwrap().marked.get()
+        self.header().get_header().unwrap().marked.get()
     }
 
     fn mark(&self) {
-        self.header.get_header().unwrap().marked.set(true);
+        panic!("GcHeap should not be marked")
     }
 
     fn unmark(&self) {
-        self.header.get_header().unwrap().marked.set(false);
+        panic!("GcHeap should not unmarked")
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        use std::ptr;
+        match self.header().get_header() {
+            Ok(header) => {
+                if header.marked.get() {
+                    // The object is global and should not be moved
+                    return None;
+                }
+                // move to to_space
+                let layout = Layout::for_value(self);
+                let to_ptr = to_space.alloc_layout(layout);
+                unsafe {
+                    let src = ptr::from_ref(self);
+                    let dst = to_ptr.cast::<Self>().as_ptr();
+                    ptr::copy_nonoverlapping(src, dst, 1);
+                }
+                // write forwarding pointer
+                self.forward(to_ptr);
+                // return new address
+                Some((to_ptr.cast::<Self>(), true))
+            }
+            Err(fwd) => Some((fwd.cast::<Self>(), false)),
+        }
     }
 }
 
@@ -130,7 +201,6 @@ impl<T: Trace> Trace for GcHeap<T> {
         // This is type is only one that contains mark bits, so it is where we
         // actually mark the object
         if !self.is_marked() {
-            self.mark();
             self.data.trace(state);
         }
     }

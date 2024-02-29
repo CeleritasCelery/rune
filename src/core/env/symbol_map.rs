@@ -5,16 +5,16 @@ use crate::core::{
 use anyhow::Result;
 use rune_core::hashmap::HashMap;
 
-pub(crate) struct ObjectMap {
-    map: SymbolMap,
+pub(crate) struct SymbolMap {
+    map: SymbolMapCore,
     block: Block<true>,
 }
 
-struct SymbolMap {
+struct SymbolMapCore {
     map: HashMap<&'static str, Symbol<'static>>,
 }
 
-impl SymbolMap {
+impl SymbolMapCore {
     fn with_capacity(cap: usize) -> Self {
         Self {
             map: HashMap::with_capacity_and_hasher(cap, std::hash::BuildHasherDefault::default()),
@@ -51,7 +51,7 @@ impl SymbolMap {
     }
 }
 
-impl ObjectMap {
+impl SymbolMap {
     pub(crate) fn intern<'ob>(&mut self, name: &str, cx: &'ob Context) -> Symbol<'ob> {
         self.map.intern(name, &self.block, cx)
     }

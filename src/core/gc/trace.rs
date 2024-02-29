@@ -8,11 +8,12 @@ pub(crate) trait Trace {
 
 pub(crate) struct GcState {
     stack: Vec<RawObj>,
+    pub(in crate::core) to_space: bumpalo::Bump,
 }
 
 impl GcState {
     pub fn new() -> Self {
-        GcState { stack: Vec::new() }
+        GcState { stack: Vec::new(), to_space: bumpalo::Bump::new() }
     }
 
     pub fn push(&mut self, obj: Object) {

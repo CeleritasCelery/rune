@@ -1,6 +1,6 @@
 #![allow(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::{Block, Context, GcHeap, GcState, Trace};
+use crate::core::gc::{Block, Context, GcHeap, GcState, Markable, Trace};
 use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
@@ -42,8 +42,8 @@ enum SymbolName {
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub(crate) struct Symbol<'a> {
-    // Offset from the start of the symbol table
-    data: *const SymbolCell,
+    // This is *NOT* a pointer but an offset from the start of the symbol table
+    data: *const u8,
     marker: PhantomData<&'a SymbolCell>,
 }
 
@@ -59,7 +59,7 @@ impl<'a> Symbol<'a> {
     pub(crate) fn get(self) -> &'a SymbolCell {
         unsafe {
             let base = BUILTIN_SYMBOLS.as_ptr().addr();
-            let ptr = self.data.map_addr(|x| x.wrapping_add(base));
+            let ptr = self.data.map_addr(|x| x.wrapping_add(base)).cast::<SymbolCell>();
             // If type was a static symbol then we need to give it provenance
             if BUILTIN_SYMBOLS.as_ptr_range().contains(&ptr) {
                 &*BUILTIN_SYMBOLS.as_ptr().with_addr(ptr.addr())
@@ -80,7 +80,7 @@ impl<'a> Symbol<'a> {
     pub(in crate::core) unsafe fn from_ptr(ptr: *const SymbolCell) -> Self {
         let base = BUILTIN_SYMBOLS.as_ptr().addr();
         let ptr = ptr.map_addr(|x| (x.wrapping_sub(base)));
-        Self { data: ptr, marker: PhantomData }
+        Self { data: ptr.cast::<u8>(), marker: PhantomData }
     }
 
     pub(in crate::core) const fn new_builtin(idx: usize) -> Self {
@@ -114,12 +114,33 @@ impl Trace for Symbol<'_> {
     }
 }
 
+impl<'a> Markable for Symbol<'a> {
+    type Value = Symbol<'a>;
+
+    fn mark(&self) {
+        panic!("Attempt to mark a symbol");
+    }
+
+    fn unmark(&self) {
+        self.get().unmark();
+    }
+
+    fn is_marked(&self) -> bool {
+        self.get().is_marked()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        let val = self.get().move_value(to_space);
+        val.map(|(ptr, moved)| (unsafe { Self::from_ptr(ptr.as_ptr()) }, moved))
+    }
+}
+
 impl Trace for SymbolCellInner {
-    fn trace(&self, state: &mut GcState) {
+    fn trace(&self, _state: &mut GcState) {
         // interned symbols are not collected yet
         if matches!(self.name, SymbolName::Uninterned(_)) {
             if let Some(func) = self.get() {
-                func.as_obj().trace_mark(state);
+                assert!(func.as_obj().is_marked());
             }
         }
     }
@@ -175,13 +196,6 @@ impl<'old, 'new> Symbol<'old> {
 impl PartialEq for SymbolCell {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
-    }
-}
-
-impl Hash for SymbolCell {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let ptr: *const Self = self;
-        ptr.hash(state);
     }
 }
 

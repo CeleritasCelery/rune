@@ -1,9 +1,9 @@
+use super::gc::{Block, GcHeap, GcState, Markable, Trace};
+use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
+use crate::NewtypeMarkable;
+use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
-
-use super::gc::{Block, GcHeap, GcState, Trace};
-use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
-use anyhow::{anyhow, Result};
 use std::fmt::{self, Debug, Display, Write};
 
 mod iter;
@@ -24,6 +24,8 @@ pub(in crate::core) use sealed::ConsInner;
 
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct Cons(GcHeap<ConsInner>);
+
+NewtypeMarkable!(() pub(crate) struct Cons());
 
 impl std::ops::Deref for Cons {
     type Target = GcHeap<ConsInner>;
@@ -118,13 +120,17 @@ impl<'new> CloneIn<'new, &'new Cons> for Cons {
 
 impl Trace for ConsInner {
     fn trace(&self, state: &mut GcState) {
-        let cdr = self.cdr();
-        if cdr.is_markable() {
-            state.push(cdr);
+        if let Some((new, moved)) = self.cdr().move_value(&state.to_space) {
+            unsafe { self.cdr.as_mut().set(new) };
+            if moved {
+                state.push(new);
+            }
         }
-        let car = self.car();
-        if car.is_markable() {
-            state.push(car);
+        if let Some((new, moved)) = self.car().move_value(&state.to_space) {
+            unsafe { self.car.as_mut().set(new) };
+            if moved {
+                state.push(new);
+            }
         }
     }
 }

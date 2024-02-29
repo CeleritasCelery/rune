@@ -255,6 +255,7 @@ mod test {
     fn test_load() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
+        sym::init_symbols();
         root!(env, new(Env), cx);
         load_internal("(setq foo 1) (setq bar 2) (setq baz 1.5)", cx, env).unwrap();
 

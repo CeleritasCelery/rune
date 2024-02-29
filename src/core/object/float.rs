@@ -1,6 +1,6 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::Markable;
+use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
 use rune_macros::Trace;
@@ -11,7 +11,7 @@ macro_attr! {
     /// types to be used in match statements if they derive Eq. Even if you never
     /// actually use that field in a match. So we need a float wrapper that
     /// implements that trait.
-    #[derive(PartialEq, NewtypeDeref!, Markable!, Trace)]
+    #[derive(PartialEq, NewtypeDeref!, NewtypeMarkable!, Trace)]
     pub(crate) struct LispFloat(GcHeap<f64>);
 }
 

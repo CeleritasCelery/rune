@@ -425,11 +425,11 @@ impl Rto<Function<'_>> {
         name: Option<&str>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        cx.garbage_collect(false);
+        debug!("calling: {self}");
         let name = name.unwrap_or("lambda");
         frame.finalize_arguments();
         let arg_cnt = frame.arg_count();
-        debug!("calling: {self}");
+        cx.garbage_collect(false);
         match self.untag(cx) {
             FunctionType::ByteFn(f) => {
                 root!(f, cx);
