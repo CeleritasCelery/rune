@@ -23,6 +23,7 @@ mod fileio;
 mod floatfns;
 mod fns;
 mod interpreter;
+mod intervals;
 mod keymap;
 mod lread;
 mod print;
