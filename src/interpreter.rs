@@ -28,12 +28,19 @@ struct Interpreter<'brw, 'rt> {
 #[defun]
 pub(crate) fn eval<'ob>(
     form: &Rto<Object>,
-    _lexical: Option<()>,
+    lexical: Option<&Rto<Object>>,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>, anyhow::Error> {
     cx.garbage_collect(false);
     root!(vars, new(Vec<Slot<&Cons>>), cx);
+    if let Some(ObjectType::Cons(cons)) = lexical.map(|x| x.untag(cx)) {
+        for var in cons.elements() {
+            if let ObjectType::Cons(binding) = var?.untag() {
+                vars.push(binding);
+            }
+        }
+    }
     let mut interpreter = Interpreter { vars, env };
     interpreter.eval_form(form, cx).map_err(Into::into)
 }
