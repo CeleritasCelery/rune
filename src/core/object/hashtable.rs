@@ -1,124 +1,126 @@
-use super::{CloneIn, Gc, IntoObject, ObjCell, Object};
+use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
+use crate::core::env::interned_symbols;
 use crate::core::gc::{Block, GcHeap, GcState, Slot, Trace};
 use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
 use rune_core::hashmap::{HashSet, IndexMap};
 use rune_macros::Trace;
-use std::cell::{BorrowMutError, Ref, RefCell, RefMut};
+use std::cell::RefCell;
 use std::fmt::{self, Debug, Display, Write};
+use std::sync::Mutex;
 
 pub(crate) type HashTable<'ob> = IndexMap<Object<'ob>, Object<'ob>>;
 
-pub(crate) struct HashTableView<'ob, T> {
-    pub(crate) iter_next: usize,
-    inner: IndexMap<Object<'ob>, T>,
-}
-
-#[derive(Eq)]
-pub(crate) struct LispHashTableInner {
-    inner: RefCell<HashTableView<'static, ObjCell>>,
-}
-
 macro_attr! {
     #[derive(PartialEq, Eq, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!, Trace)]
-    pub(crate) struct LispHashTable(GcHeap<LispHashTableInner>);
+    pub(crate) struct LispHashTable(GcHeap<HashTableCore<'static>>);
 }
 
 impl LispHashTable {
     pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
-        Self(GcHeap::new(LispHashTableInner::new(table, constant), constant))
+        Self(GcHeap::new(HashTableCore::new(table, constant), constant))
     }
 }
 
-impl<'ob, T> std::ops::Deref for HashTableView<'ob, T> {
-    type Target = IndexMap<Object<'ob>, T>;
+pub(crate) struct HashTableCore<'ob>(HashTableType<'ob>);
 
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
+enum HashTableType<'a> {
+    Local(RefCell<HashTableInner<'a>>),
+    Global(Mutex<HashTableInner<'a>>),
 }
 
-impl<'ob, T> std::ops::DerefMut for HashTableView<'ob, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
+struct HashTableInner<'ob> {
+    iter_next: usize,
+    inner: HashTable<'ob>,
 }
 
-impl PartialEq for LispHashTableInner {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-}
-
-impl<T: PartialEq> PartialEq for HashTableView<'_, T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-}
-
-impl<T: Eq> Eq for HashTableView<'_, T> {}
-
-impl LispHashTableInner {
-    // SAFETY: Since this type does not have an object lifetime, it is only safe
-    // to create an owned version in context of the allocator.
-    pub(in crate::core) unsafe fn new(vec: HashTable, _const: bool) -> Self {
-        // TODO: once we have resolved
-        // https://github.com/CeleritasCelery/rune/issues/58 Leak the borrow so
-        // that is cannot be borrowed mutabley. In the mean time this will
-        // introduce a race condtion when access from multiple threads.
-        let cell = std::mem::transmute::<
-            IndexMap<Object, Object>,
-            IndexMap<Object<'static>, ObjCell>,
-        >(vec);
-        Self { inner: RefCell::new(HashTableView { iter_next: 0, inner: cell }) }
-    }
-
-    pub(crate) fn borrow<'a>(&'a self) -> Ref<'a, HashTableView<'a, ObjCell>> {
-        unsafe {
-            std::mem::transmute::<
-                Ref<'a, HashTableView<'static, _>>,
-                Ref<'a, HashTableView<'a, ObjCell>>,
-            >(self.inner.borrow())
+impl<'a> HashTableCore<'a> {
+    pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
+        let table = std::mem::transmute::<HashTable<'_>, HashTable<'a>>(table);
+        let inner = HashTableInner { iter_next: 0, inner: table };
+        if constant {
+            HashTableCore(HashTableType::Global(Mutex::new(inner)))
+        } else {
+            HashTableCore(HashTableType::Local(RefCell::new(inner)))
         }
     }
 
-    pub(crate) fn try_borrow_mut(
-        &self,
-    ) -> Result<RefMut<'_, HashTableView<'_, Object<'_>>>, BorrowMutError> {
-        unsafe {
-            self.inner.try_borrow_mut().map(|x| {
-                std::mem::transmute::<
-                    RefMut<'_, HashTableView<'static, ObjCell>>,
-                    RefMut<'_, HashTableView<'_, Object<'_>>>,
-                >(x)
-            })
+    fn with<F, T>(&self, mut f: F) -> T
+    where
+        F: FnMut(&mut HashTable<'a>) -> T,
+    {
+        match &self.0 {
+            HashTableType::Local(table) => f(&mut table.borrow_mut().inner),
+            HashTableType::Global(table) => f(&mut table.lock().unwrap().inner),
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.with(|x| x.len())
+    }
+
+    pub(crate) fn get(&self, key: Object) -> Option<Object<'_>> {
+        self.with(|x| x.get(&key).copied())
+    }
+
+    pub(crate) fn get_index(&self, index: usize) -> Option<(Object, Object)> {
+        self.with(|x| x.get_index(index).map(|(k, v)| (*k, *v)))
+    }
+
+    pub(crate) fn get_index_of(&self, key: Object) -> Option<usize> {
+        self.with(|x| x.get_index_of(&key))
+    }
+
+    pub(crate) fn insert(&self, key: Object, value: Object) {
+        match &self.0 {
+            HashTableType::Local(table) => {
+                let key = unsafe { key.with_lifetime() };
+                let value = unsafe { value.with_lifetime() };
+                table.borrow_mut().inner.insert(key, value)
+            },
+            HashTableType::Global(table) => {
+                let map = interned_symbols().lock().unwrap();
+                let block = map.global_block();
+                // Need to clone these objects in the global block
+                let key = unsafe {key.clone_in(block).with_lifetime()};
+                let value = unsafe {value.clone_in(block).with_lifetime()};
+                table.lock().unwrap().inner.insert(key, value)
+            },
+        };
+    }
+
+    pub(crate) fn shift_remove(&self, key: Object) {
+        let key = unsafe { key.with_lifetime() };
+        self.with(|x| x.shift_remove(&key));
+    }
+
+    pub(crate) fn get_iter_index(&self) -> usize {
+        match &self.0 {
+            HashTableType::Local(table) => table.borrow().iter_next,
+            HashTableType::Global(table) => table.lock().unwrap().iter_next,
+        }
+    }
+
+    pub(crate) fn set_iter_index(&self, index: usize) {
+        match &self.0 {
+            HashTableType::Local(table) => table.borrow_mut().iter_next = index,
+            HashTableType::Global(table) => table.lock().unwrap().iter_next = index,
         }
     }
 }
 
-impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
-    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
-        let mut table = HashTable::default();
-        let borrow = self.borrow();
-        for (key, value) in &borrow.inner {
-            let new_key = key.clone_in(bk);
-            let new_value = value.get().clone_in(bk);
-            table.insert(new_key, new_value);
-        }
-        table.into_obj(bk)
-    }
-}
-
-impl Trace for LispHashTableInner {
+impl Trace for HashTableCore<'_> {
     fn trace(&self, state: &mut GcState) {
-        let mut table = self.try_borrow_mut().unwrap();
-        // Convert to Slots so the values will get updated inside the map
+        let HashTableType::Local(table) = &self.0 else {
+            panic!("Global hash table should not be traced")
+        };
+        let table = &mut table.borrow_mut().inner;
         let table = unsafe {
             std::mem::transmute::<
                 &mut IndexMap<Object, Object>,
                 &mut IndexMap<Slot<Object>, Slot<Object>>,
-            >(&mut **table)
+            >(table)
         };
         table.rehash_keys(|key, val| {
             key.trace(state);
@@ -127,19 +129,40 @@ impl Trace for LispHashTableInner {
     }
 }
 
-impl Debug for LispHashTableInner {
+impl Eq for HashTableCore<'_> {}
+impl PartialEq for HashTableCore<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Debug for HashTableCore<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl Display for LispHashTableInner {
+impl Display for HashTableCore<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
-impl LispHashTableInner {
+impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
+        let mut table = HashTable::default();
+        self.with(|x| {
+            for (key, value) in x {
+                let new_key = key.clone_in(bk);
+                let new_value = value.clone_in(bk);
+                table.insert(new_key, new_value);
+            }
+        });
+        table.into_obj(bk)
+    }
+}
+
+impl HashTableCore<'_> {
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter,
@@ -152,14 +175,17 @@ impl LispHashTableInner {
         seen.insert(ptr);
 
         write!(f, "#s(hash-table (")?;
-        for (i, (k, v)) in self.borrow().inner.iter().enumerate() {
-            if i != 0 {
+        self.with(|x| {
+            for (i, (k, v)) in x.iter().enumerate() {
+                if i != 0 {
+                    f.write_char(' ')?;
+                }
+                k.untag().display_walk(f, seen)?;
                 f.write_char(' ')?;
+                v.untag().display_walk(f, seen)?;
             }
-            k.untag().display_walk(f, seen)?;
-            f.write_char(' ')?;
-            v.get().untag().display_walk(f, seen)?;
-        }
+            Ok(())
+        })?;
         write!(f, "))")
     }
 }

@@ -786,8 +786,8 @@ impl<'ob> RootedVM<'_, '_, '_> {
                         unreachable!("switch table was not a hash table")
                     };
                     let cond = self.env.stack.pop(cx);
-                    if let Some(offset) = table.borrow().get(&cond) {
-                        let ObjectType::Int(offset) = offset.get().untag() else {
+                    if let Some(offset) = table.get(cond) {
+                        let ObjectType::Int(offset) = offset.untag() else {
                             unreachable!("switch value was not a int")
                         };
                         self.pc.goto(offset as u16);

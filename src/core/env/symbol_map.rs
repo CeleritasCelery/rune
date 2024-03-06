@@ -66,6 +66,10 @@ impl SymbolMap {
         unsafe { symbol.set_func(new_func) }
     }
 
+    pub(crate) fn global_block(&self) -> &Block<true> {
+        &self.block
+    }
+
     pub(crate) fn create_buffer(&self, name: &str) -> &LispBuffer {
         LispBuffer::create(name.to_owned(), &self.block)
     }

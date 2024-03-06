@@ -6,8 +6,8 @@ use crate::{
         error::{Type, TypeError},
         gc::{Context, Rt, Rto},
         object::{
-            Function, Gc, HashTable, HashTableView, IntoObject, LispHashTable, LispString, LispVec,
-            List, ListType, Object, ObjectType, Symbol, WithLifetime, NIL,
+            Function, Gc, HashTable, IntoObject, LispHashTable, LispString, LispVec, List,
+            ListType, Object, ObjectType, Symbol, WithLifetime, NIL,
         },
     },
     data::aref,
@@ -659,10 +659,9 @@ pub(crate) fn gethash<'ob>(
     key: Object<'ob>,
     table: &'ob LispHashTable,
     dflt: Option<Object<'ob>>,
-    cx: &'ob Context,
 ) -> Option<Object<'ob>> {
-    match table.borrow().get(&key) {
-        Some(x) => Some(cx.bind(x.get())),
+    match table.get(key) {
+        Some(x) => Some(x),
         None => dflt,
     }
 }
@@ -672,22 +671,23 @@ pub(crate) fn puthash<'ob>(
     key: Object<'ob>,
     value: Object<'ob>,
     table: &'ob LispHashTable,
-) -> Result<Object<'ob>> {
-    table.try_borrow_mut()?.insert(key, value);
-    Ok(value)
+) -> Object<'ob> {
+    table.insert(key, value);
+    value
 }
 
 #[defun]
 fn remhash(key: Object, table: &LispHashTable) -> Result<()> {
-    let mut table = table.try_borrow_mut()?;
-    let Some(idx) = table.get_index_of(&key) else { return Ok(()) };
+    let Some(idx) = table.get_index_of(key) else { return Ok(()) };
     // If the removed element is before our iterator, then we need to shift the
     // iterator back one because the whole map get's shifted when something is
     // removed.
-    if idx < table.iter_next {
-        table.iter_next -= 1;
+    let iter_idx = table.get_iter_index();
+    if idx < iter_idx {
+        table.set_iter_index(iter_idx - 1);
     }
-    table.shift_remove(&key);
+    // TODO: can we use swap_remove?
+    table.shift_remove(key);
     Ok(())
 }
 
@@ -698,10 +698,10 @@ fn maphash(
     env: &mut Rt<Env>,
     cx: &mut Context,
 ) -> Result<bool> {
-    let get_idx = |table: &mut HashTableView<Object>| {
+    let loop_idx = |table: &LispHashTable| {
         let end = table.len();
-        let idx = table.iter_next;
-        table.iter_next += 1;
+        let idx = table.get_iter_index();
+        table.set_iter_index(idx + 1);
         if idx >= end {
             None
         } else {
@@ -710,20 +710,18 @@ fn maphash(
     };
 
     loop {
-        let mut view = table.bind(cx).untag().try_borrow_mut()?;
-        let Some(idx) = get_idx(&mut view) else { break };
-        let (key, val) = view.get_index(idx).unwrap();
-        let key = cx.bind(*key);
-        let val = cx.bind(*val);
-        // Drop the hashtable so that the function can access it.
-        drop(view);
+        let (key, val) = {
+            let table = table.untag(cx);
+            let Some(idx) = loop_idx(table) else { break };
+            table.get_index(idx).unwrap()
+        };
         let result = call!(function, key, val; env, cx);
         if let Err(e) = result {
-            table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
+            table.untag(cx).set_iter_index(0);
             return Err(e.into());
         }
     }
-    table.bind(cx).untag().try_borrow_mut().unwrap().iter_next = 0;
+    table.untag(cx).set_iter_index(0);
     Ok(false)
 }
 

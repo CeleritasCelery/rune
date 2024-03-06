@@ -228,15 +228,10 @@ mod test {
         let ObjectType::Vec(vec) = vec.untag() else { unreachable!() };
         let ObjectType::Cons(cons) = vec[0].get().untag() else { unreachable!() };
         let ObjectType::HashTable(table) = vec[1].get().untag() else { unreachable!() };
-        let table = table.borrow();
         let key = symbol.bind(cx);
         println!("key: {:?}", key.into_raw());
-        for (k, v) in table.iter() {
-            println!("k: {:?}", k.into_raw());
-            println!("v: {}", v);
-        }
-        let val = table.get(&symbol.bind(cx)).unwrap();
-        let ObjectType::String(string) = val.get().untag() else { unreachable!() };
+        let val = table.get(symbol.bind(cx)).unwrap();
+        let ObjectType::String(string) = val.untag() else { unreachable!() };
         let ObjectType::Int(int) = cons.car().untag() else { unreachable!() };
         let ObjectType::Float(float) = cons.cdr().untag() else { unreachable!() };
         assert_eq!(**string, "string");
