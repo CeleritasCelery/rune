@@ -27,7 +27,7 @@ pub(crate) struct Block<const CONST: bool> {
 pub(crate) struct Context<'rt> {
     pub(crate) block: Block<false>,
     root_set: &'rt RootSet,
-    prev_obj_count: usize,
+    next_limit: usize,
 }
 
 impl<'rt> Drop for Context<'rt> {
@@ -97,13 +97,15 @@ impl<const CONST: bool> Block<CONST> {
 }
 
 impl<'ob, 'rt> Context<'rt> {
+    const MIN_GC_BYTES: usize = 2000;
+    const GC_GROWTH_FACTOR: usize = 12; // divide by 10
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
-        Self { block: Block::new_local(), root_set: roots, prev_obj_count: 0 }
+        Self { block: Block::new_local(), root_set: roots, next_limit: Self::MIN_GC_BYTES }
     }
 
     pub(crate) fn from_block(block: Block<false>, roots: &'rt RootSet) -> Self {
         Block::assert_unique();
-        Context { block, root_set: roots, prev_obj_count: 0 }
+        Context { block, root_set: roots, next_limit: Self::MIN_GC_BYTES }
     }
 
     pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime>::Out
@@ -119,9 +121,10 @@ impl<'ob, 'rt> Context<'rt> {
 
     pub(crate) fn garbage_collect(&mut self, force: bool) {
         let bytes = self.block.objects.allocated_bytes();
-        if cfg!(not(test)) && !force && (bytes < 2000 || bytes < (self.prev_obj_count * 2)) {
+        if cfg!(not(test)) && !force && bytes < self.next_limit {
             return;
         }
+
         let mut state = GcState::new();
         for x in self.root_set.roots.borrow().iter() {
             // SAFETY: The contact of root structs will ensure that it removes
@@ -130,6 +133,7 @@ impl<'ob, 'rt> Context<'rt> {
                 (**x).trace(&mut state);
             }
         }
+
         while let Some(raw) = state.stack().pop() {
             let obj = unsafe { Object::from_raw(raw) };
             if !obj.is_marked() {
@@ -137,7 +141,7 @@ impl<'ob, 'rt> Context<'rt> {
             }
         }
 
-        self.prev_obj_count = state.to_space.allocated_bytes();
+        self.next_limit = (state.to_space.allocated_bytes() * Self::GC_GROWTH_FACTOR) / 10;
         self.block.objects = state.to_space;
     }
 }
