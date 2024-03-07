@@ -78,15 +78,15 @@ impl<'a> HashTableCore<'a> {
                 let key = unsafe { key.with_lifetime() };
                 let value = unsafe { value.with_lifetime() };
                 table.borrow_mut().inner.insert(key, value)
-            },
+            }
             HashTableType::Global(table) => {
                 let map = interned_symbols().lock().unwrap();
                 let block = map.global_block();
                 // Need to clone these objects in the global block
-                let key = unsafe {key.clone_in(block).with_lifetime()};
-                let value = unsafe {value.clone_in(block).with_lifetime()};
+                let key = unsafe { key.clone_in(block).with_lifetime() };
+                let value = unsafe { value.clone_in(block).with_lifetime() };
                 table.lock().unwrap().inner.insert(key, value)
-            },
+            }
         };
     }
 
