@@ -20,12 +20,6 @@ impl std::hash::Hash for ObjCell {
     }
 }
 
-impl indexmap::Equivalent<ObjCell> for Object<'_> {
-    fn equivalent(&self, other: &ObjCell) -> bool {
-        self.eq(&other.get())
-    }
-}
-
 impl ObjCell {
     pub(crate) fn get(&self) -> Object<'_> {
         unsafe { self.0.get().with_lifetime() }
