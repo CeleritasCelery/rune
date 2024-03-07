@@ -49,8 +49,6 @@ streaming-iterator = "0.1.9"
 titlecase = "2.2.1"
 fallible-iterator = { workspace = true }
 fallible-streaming-iterator = { workspace = true }
-fxhash = { workspace = true }
-
 text-buffer = { workspace = true }
 rune-macros = { workspace = true }
 rune-core = { workspace = true }
