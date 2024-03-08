@@ -1,3 +1,7 @@
+//! The design of the hashtable is based on the requirments we have. First is we
+//! need it to support being both thread local and global. Second we need
+//! iterate and mutate at the same time. Third we need to be able to clean up
+//! the heap allocation when it is garbage collected.
 use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
 use crate::core::env::interned_symbols;
 use crate::core::gc::{Block, GcHeap, GcState, Slot, Trace};
@@ -25,20 +29,25 @@ impl LispHashTable {
 
 pub(crate) struct HashTableCore<'ob>(HashTableType<'ob>);
 
+// Hashtables are currently the only data structure that can be shared between
+// threads. This is because it is used for caching in some functions in
+// cl-generic.
 enum HashTableType<'a> {
     Local(RefCell<HashTableInner<'a>>),
     Global(Mutex<HashTableInner<'a>>),
 }
 
 struct HashTableInner<'ob> {
-    iter_next: usize,
+    // The current index of a [`maphash`] iterator. This is needed because we
+    // can't hold the hashtable across calls to elisp (it might mutate it).
+    iter_idx: usize,
     inner: HashTable<'ob>,
 }
 
 impl<'a> HashTableCore<'a> {
     pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
         let table = std::mem::transmute::<HashTable<'_>, HashTable<'a>>(table);
-        let inner = HashTableInner { iter_next: 0, inner: table };
+        let inner = HashTableInner { iter_idx: 0, inner: table };
         if constant {
             HashTableCore(HashTableType::Global(Mutex::new(inner)))
         } else {
@@ -82,7 +91,8 @@ impl<'a> HashTableCore<'a> {
             HashTableType::Global(table) => {
                 let map = interned_symbols().lock().unwrap();
                 let block = map.global_block();
-                // Need to clone these objects in the global block
+                // Need to clone these objects in the global block since this
+                // hashtable is globally shared
                 let key = unsafe { key.clone_in(block).with_lifetime() };
                 let value = unsafe { value.clone_in(block).with_lifetime() };
                 table.lock().unwrap().inner.insert(key, value)
@@ -97,15 +107,15 @@ impl<'a> HashTableCore<'a> {
 
     pub(crate) fn get_iter_index(&self) -> usize {
         match &self.0 {
-            HashTableType::Local(table) => table.borrow().iter_next,
-            HashTableType::Global(table) => table.lock().unwrap().iter_next,
+            HashTableType::Local(table) => table.borrow().iter_idx,
+            HashTableType::Global(table) => table.lock().unwrap().iter_idx,
         }
     }
 
     pub(crate) fn set_iter_index(&self, index: usize) {
         match &self.0 {
-            HashTableType::Local(table) => table.borrow_mut().iter_next = index,
-            HashTableType::Global(table) => table.lock().unwrap().iter_next = index,
+            HashTableType::Local(table) => table.borrow_mut().iter_idx = index,
+            HashTableType::Global(table) => table.lock().unwrap().iter_idx = index,
         }
     }
 }
