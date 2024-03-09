@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 use std::{cmp::Ordering, ops::Range};
 
-use crate::core::object::Object;
+use crate::{
+    core::object::{Gc, ListType, Object, NIL},
+    fns::plist_get,
+};
 
 // NOTE test only
 // type Object<'ob> = &'ob usize;
@@ -48,6 +51,19 @@ impl TextRange {
             return Some(Ordering::Greater);
         }
         None
+    }
+    /// split self, return the splitted out interval. This function does not check
+    /// whether position is valid.
+    pub fn split_at(&mut self, position: usize, left: bool) -> Self {
+        if left {
+            let start = self.start;
+            self.start = position;
+            Self::new(start, position)
+        } else {
+            let end = self.end;
+            self.end = position;
+            Self::new(position, end)
+        }
     }
 
     pub fn intersects(&self, other: Self) -> bool {
@@ -99,6 +115,7 @@ impl<'ob> Node<'ob> {
     pub fn new_boxed(key: TextRange, val: Object<'ob>) -> BoxedNode<'ob> {
         Box::new(Self::new(key, val))
     }
+
     pub fn rotate_left<'a>(node: &'a mut BoxedNode<'ob>) -> Option<&'a mut BoxedNode<'ob>> {
         let mut x = node.right.take()?;
         let es = x.left.take();
@@ -180,46 +197,106 @@ impl<'ob> Node<'ob> {
     }
     pub fn insert_at_inner<'a>(
         node: &'a mut BoxedNode<'ob>,
-        key: TextRange,
+        mut key: TextRange,
         val: Object<'ob>,
     ) -> Option<&'a mut BoxedNode<'ob>> {
-        let n = node;
-        let cmp = key.cmp(&n.key);
+        let cmp = key.cmp(&node.key);
+        let intersect = key.intersects(node.key);
+        // TODO too taunting, also, plist should be cloned?
+        if intersect {
+            if key.start < node.key.start {
+                if key.end < node.key.end {
+                    let key_left = key.split_at(node.key.start, true);
+                    let key_right = node.key.split_at(key.end, false);
+                    Node::insert_at(&mut node.left, key_left, val);
+                    Node::insert_at(&mut node.right, key_right, node.val);
+                }
+                if key.end > node.key.end {
+                    let key_left = key.split_at(node.key.start, true);
+                    let key_right = key.split_at(node.key.end, false);
+                    Node::insert_at(&mut node.left, key_left, val);
+                    Node::insert_at(&mut node.right, key_right, val);
+                }
+                if key.end == node.key.end {
+                    let key_left = key.split_at(node.key.start, true);
+                    Node::insert_at(&mut node.left, key_left, val);
+                }
+            } else {
+                if key.end < node.key.end {
+                    let key_left = node.key.split_at(key.start, true);
+                    let key_right = node.key.split_at(key.end, false);
+                    Node::insert_at(&mut node.left, key_left, node.val);
+                    Node::insert_at(&mut node.right, key_right, node.val);
+                }
+                if key.end > node.key.end {
+                    let key_left = node.key.split_at(key.start, true);
+                    let key_right = key.split_at(node.key.end, false);
+                    Node::insert_at(&mut node.left, key_left, node.val);
+                    Node::insert_at(&mut node.right, key_right, val);
+                }
+                if key.end == node.key.end {
+                    let key_left = node.key.split_at(key.start, true);
+                    Node::insert_at(&mut node.left, key_left, node.val);
+                }
+            }
+        }
         match cmp {
             Ordering::Less => {
-                Node::insert_at(&mut n.left, key, val)?;
+                Node::insert_at(&mut node.left, key, val)?;
             }
             Ordering::Equal => {
+                || -> anyhow::Result<Object<'ob>> {
+                    let Ok(new_props) = Gc::<ListType>::try_from(val) else { return Ok(NIL) };
+                    let mut iter = new_props.elements();
+                    while let Some(cur_prop) = iter.next() {
+                        let Some(new_val) = iter.next() else { return Ok(NIL) };
+                        if let Ok(old_val) = plist_get(node.val, cur_prop?) {
+                            todo!()
+                        }
+                    }
+                    Ok(NIL)
+                }().unwrap();
+
                 // TODO add merging plist
             }
             Ordering::Greater => {
-                Node::insert_at(&mut n.right, key, val)?;
+                Node::insert_at(&mut node.right, key, val)?;
             }
         };
 
         // cond1: r_red && !l_red
-        if Node::red(&n.right) && !Node::red(&n.left) {
-            Node::rotate_left(n)?;
+        if Node::red(&node.right) && !Node::red(&node.left) {
+            Node::rotate_left(node)?;
         }
 
         // cond2: l_red && ll_red
-        let cond2 = match n.left {
+        let cond2 = match node.left {
             Some(ref nl) => nl.color == Color::Red && Node::red(&nl.left),
             None => false,
         };
         if cond2 {
-            Node::rotate_right(n)?;
+            Node::rotate_right(node)?;
         }
 
         // cond3: l_red && r_red
-        if Node::red(&n.right) && Node::red(&n.left) {
-            n.left.as_mut().unwrap().color = Color::Black;
-            n.right.as_mut().unwrap().color = Color::Black;
-            n.color = Color::Red;
+        if let (Some(l), Some(r)) = (&mut node.left, &mut node.right) {
+            if l.color == Color::Red && r.color == Color::Red {
+                l.color = Color::Black;
+                r.color = Color::Black;
+                node.color = Color::Red;
+            }
         }
         // update node's size
-        n.n = n.n();
-        Some(n)
+        node.n = node.n();
+        Some(node)
+    }
+    pub fn split_at<'a>(
+        node: &'a mut BoxedNode<'ob>,
+        position: usize,
+        left: bool,
+    ) -> Option<&'a mut BoxedNode<'ob>> {
+        let splitted = node.key.split_at(position, left);
+        Node::insert_at_inner(node, splitted, node.val)
     }
 }
 
@@ -445,16 +522,16 @@ impl<'ob> Node<'ob> {
 }
 
 #[derive(Debug)]
-/// A interval tree using red-black tree, whereas keys are intervals,
-/// and values are plists in elisp.
+/// A interval tree using red-black tree, whereas keys are intervals, and values are
+/// plists in elisp.
 ///
-/// All intervals are half-opened intervals, i.e. `I = [start, end)`.
-/// These intervals are sorted by their starting point, then their ending point.
-/// 
+/// All intervals are half-opened intervals, i.e. `I = [start, end)`.These intervals
+/// are sorted by their starting point, then their ending point.
+///
 /// NOTE When inserting an interval I, if I intersects with some existing interval
-/// J but I != J, then we do not split & merge I and J into sub-intervals(which emacs
-/// does). Instead, we directly stored them, and process these info in
-/// `compute-stop-charpos`.
+/// J but I != J, then we split & merge I and J into sub-intervals. Thus all intervals
+/// inside a interval tree will not overlap. Adjacant intervals with identical props
+/// should be merged afterwards, maybe during redisplay.
 pub struct IntervalTree<'ob> {
     root: MaybeNode<'ob>,
 }
@@ -530,7 +607,6 @@ impl<'ob> IntervalTree<'ob> {
         }
     }
 
-
     pub fn find_intersects(&self, range: TextRange) -> Vec<&Node<'ob>> {
         let mut result = Vec::new();
         if let Some(ref r) = self.root {
@@ -543,8 +619,8 @@ impl<'ob> IntervalTree<'ob> {
 
 #[cfg(test)]
 mod tests {
-    use rune_core::macros::list;
     use crate::core::gc::{Context, RootSet};
+    use rune_core::macros::list;
 
     use super::*;
 
