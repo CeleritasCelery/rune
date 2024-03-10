@@ -2,8 +2,11 @@
 use std::{cmp::Ordering, ops::Range};
 
 use crate::{
-    core::object::{Gc, ListType, Object, NIL},
-    fns::plist_get,
+    core::{
+        gc::Context,
+        object::Object,
+    },
+    textprops::add_properties,
 };
 
 // NOTE test only
@@ -201,9 +204,10 @@ impl<'ob> Node<'ob> {
         node: &'a mut MaybeNode<'ob>,
         key: TextRange,
         val: Object<'ob>,
+        cx: &'ob Context,
     ) -> Option<&'a mut BoxedNode<'ob>> {
         match node {
-            Some(ref mut n) => Node::insert_at_inner(n, key, val),
+            Some(ref mut n) => Node::insert_at_inner(n, key, val, cx),
             None => {
                 node.replace(Node::new_boxed(key, val));
                 node.as_mut()
@@ -214,6 +218,7 @@ impl<'ob> Node<'ob> {
         node: &'a mut BoxedNode<'ob>,
         mut key: TextRange,
         val: Object<'ob>,
+        cx: &'ob Context,
     ) -> Option<&'a mut BoxedNode<'ob>> {
         let cmp = key.cmp(&node.key);
         let intersect = key.intersects(node.key);
@@ -223,59 +228,56 @@ impl<'ob> Node<'ob> {
                 if key.end < node.key.end {
                     let key_left = key.split_at(node.key.start, true);
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.left, key_left, val);
-                    Node::insert_at(&mut node.right, key_right, node.val);
+                    Node::insert_at(&mut node.left, key_left, val, cx);
+                    Node::insert_at(&mut node.right, key_right, node.val, cx);
                 }
                 if key.end > node.key.end {
                     let key_left = key.split_at(node.key.start, true);
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.left, key_left, val);
-                    Node::insert_at(&mut node.right, key_right, val);
+                    Node::insert_at(&mut node.left, key_left, val, cx);
+                    Node::insert_at(&mut node.right, key_right, val, cx);
                 }
                 if key.end == node.key.end {
                     let key_left = key.split_at(node.key.start, true);
-                    Node::insert_at(&mut node.left, key_left, val);
+                    Node::insert_at(&mut node.left, key_left, val, cx);
                 }
             } else {
                 if key.end < node.key.end {
                     let key_left = node.key.split_at(key.start, true);
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.left, key_left, node.val);
-                    Node::insert_at(&mut node.right, key_right, node.val);
+                    Node::insert_at(&mut node.left, key_left, node.val, cx);
+                    Node::insert_at(&mut node.right, key_right, node.val, cx);
                 }
                 if key.end > node.key.end {
                     let key_left = node.key.split_at(key.start, true);
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.left, key_left, node.val);
-                    Node::insert_at(&mut node.right, key_right, val);
+                    Node::insert_at(&mut node.left, key_left, node.val, cx);
+                    Node::insert_at(&mut node.right, key_right, val, cx);
                 }
                 if key.end == node.key.end {
                     let key_left = node.key.split_at(key.start, true);
-                    Node::insert_at(&mut node.left, key_left, node.val);
+                    Node::insert_at(&mut node.left, key_left, node.val, cx);
                 }
             }
         }
         match cmp {
             Ordering::Less => {
-                Node::insert_at(&mut node.left, key, val)?;
+                Node::insert_at(&mut node.left, key, val, cx)?;
             }
             Ordering::Equal => {
-                || -> anyhow::Result<Object<'ob>> {
-                    let Ok(new_props) = Gc::<ListType>::try_from(val) else { return Ok(NIL) };
-                    let mut iter = new_props.elements();
-                    while let Some(cur_prop) = iter.next() {
-                        let Some(new_val) = iter.next() else { return Ok(NIL) };
-                        if let Ok(old_val) = plist_get(node.val, cur_prop?) {
-                            todo!()
-                        }
-                    }
-                    Ok(NIL)
-                }().unwrap();
+                add_properties(
+                    val,
+                    node.val,
+                    crate::textprops::PropertySetType::Replace,
+                    false,
+                    cx,
+                )
+                .ok()?;
 
                 // TODO add merging plist
             }
             Ordering::Greater => {
-                Node::insert_at(&mut node.right, key, val)?;
+                Node::insert_at(&mut node.right, key, val, cx)?;
             }
         };
 
@@ -309,9 +311,10 @@ impl<'ob> Node<'ob> {
         node: &'a mut BoxedNode<'ob>,
         position: usize,
         left: bool,
+        cx: &'ob Context,
     ) -> Option<&'a mut BoxedNode<'ob>> {
         let splitted = node.key.split_at(position, left);
-        Node::insert_at_inner(node, splitted, node.val)
+        Node::insert_at_inner(node, splitted, node.val, cx)
     }
 }
 
@@ -562,8 +565,9 @@ impl<'ob> IntervalTree<'ob> {
         &'a mut self,
         key: TextRange,
         val: Object<'ob>,
+        cx: &'ob Context,
     ) -> Option<&'a mut Box<Node<'ob>>> {
-        Node::insert_at(&mut self.root, key, val)
+        Node::insert_at(&mut self.root, key, val, cx)
     }
 
     pub fn get(&self, key: TextRange) -> Option<Object<'ob>> {
@@ -641,18 +645,18 @@ mod tests {
 
     use super::*;
 
-    fn build_tree<'ob>(val: Object<'ob>) -> IntervalTree<'ob> {
+    fn build_tree<'ob>(val: Object<'ob>, cx: &'ob Context) -> IntervalTree<'ob> {
         let mut tree = IntervalTree::new();
-        tree.insert(TextRange::new(0, 1), val);
-        tree.insert(TextRange::new(1, 2), val);
-        tree.insert(TextRange::new(2, 3), val);
-        tree.insert(TextRange::new(3, 4), val);
-        tree.insert(TextRange::new(4, 5), val);
-        tree.insert(TextRange::new(5, 6), val);
-        tree.insert(TextRange::new(6, 7), val);
-        tree.insert(TextRange::new(7, 8), val);
-        tree.insert(TextRange::new(8, 9), val);
-        tree.insert(TextRange::new(9, 10), val);
+        tree.insert(TextRange::new(0, 1), val, cx);
+        tree.insert(TextRange::new(1, 2), val, cx);
+        tree.insert(TextRange::new(2, 3), val, cx);
+        tree.insert(TextRange::new(3, 4), val, cx);
+        tree.insert(TextRange::new(4, 5), val, cx);
+        tree.insert(TextRange::new(5, 6), val, cx);
+        tree.insert(TextRange::new(6, 7), val, cx);
+        tree.insert(TextRange::new(7, 8), val, cx);
+        tree.insert(TextRange::new(8, 9), val, cx);
+        tree.insert(TextRange::new(9, 10), val, cx);
         tree
     }
 
@@ -698,7 +702,7 @@ mod tests {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let val = list![1, 2; cx];
-        let tree = build_tree(val);
+        let tree = build_tree(val, cx);
         let root = tree.root.as_ref().unwrap();
         assert_eq!(root.key.start, 3);
         let n1 = root.left.as_ref().unwrap();
@@ -717,7 +721,7 @@ mod tests {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let val = list![1, 2; cx];
-        let tree = build_tree(val);
+        let tree = build_tree(val, cx);
         let re = tree.find_intersects(TextRange::new(2, 4));
         let k1 = re[0].key;
         let k2 = re[1].key;
@@ -731,7 +735,7 @@ mod tests {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let val = list![1, 2; cx];
-        let mut tree = build_tree(val);
+        let mut tree = build_tree(val, cx);
         tree.advance(7, 5);
         // let mut tree = dbg!(tree);
         tree.get(TextRange::new(6, 7)).unwrap();
