@@ -1,5 +1,5 @@
 use std::{cell::Cell, fmt};
-
+use crate::core::gc::{Markable, Trace};
 use super::{Object, WithLifetime};
 
 /// This type represents and immutable view into an Object. The reason we have
@@ -45,6 +45,18 @@ impl fmt::Display for ObjCell {
 impl fmt::Debug for ObjCell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
+    }
+}
+
+impl Trace for ObjCell {
+    fn trace(&self, state: &mut crate::core::gc::GcState) {
+        let cell = unsafe { self.as_mut() };
+        if let Some((new, moved)) = cell.get().move_value(&state.to_space) {
+            cell.set(new);
+            if moved {
+                state.push(new);
+            }
+        }
     }
 }
 

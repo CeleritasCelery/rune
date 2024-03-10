@@ -1,6 +1,6 @@
 use super::{CloneIn, Gc, IntoObject, MutObjCell, ObjCell, Object};
 use crate::{
-    core::gc::{Block, GcHeap, GcState, Markable, Trace},
+    core::gc::{Block, GcHeap, GcState, Trace},
     NewtypeMarkable,
 };
 use anyhow::{anyhow, Result};
@@ -78,14 +78,9 @@ impl<'new> CloneIn<'new, &'new Self> for LispVec {
 
 impl Trace for LispVecInner {
     fn trace(&self, state: &mut GcState) {
-        let vec = self.try_mut().unwrap();
-        for x in vec {
-            if let Some((new, moved)) = x.get().move_value(&state.to_space) {
-                x.set(new);
-                if moved {
-                    state.push(new);
-                }
-            }
+        assert!(!self.is_const, "Attempt to trace mutable vector");
+        for x in &**self {
+            x.trace(state);
         }
     }
 }

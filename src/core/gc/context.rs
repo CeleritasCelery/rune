@@ -127,19 +127,14 @@ impl<'ob, 'rt> Context<'rt> {
 
         let mut state = GcState::new();
         for x in self.root_set.roots.borrow().iter() {
-            // SAFETY: The contact of root structs will ensure that it removes
+            // SAFETY: The contract of root structs will ensure that it removes
             // itself from this list before it drops.
             unsafe {
                 (**x).trace(&mut state);
             }
         }
 
-        while let Some(raw) = state.stack().pop() {
-            let obj = unsafe { Object::from_raw(raw) };
-            if !obj.is_marked() {
-                obj.trace_mark(&mut state);
-            }
-        }
+        state.trace_stack();
 
         self.next_limit = (state.to_space.allocated_bytes() * Self::GC_GROWTH_FACTOR) / 10;
         self.block.objects = state.to_space;

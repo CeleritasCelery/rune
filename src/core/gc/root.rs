@@ -270,12 +270,22 @@ impl<T> Deref for Slot<T> {
     }
 }
 
-impl<T: Trace + Markable<Value = T>> Trace for Slot<T> {
+// This is the boundary between the traceable structs, and heap objects. Each
+// heap object that is rooted needs to live in a Slot, so everything below it is
+// also a heap object. We completely trace each object graph before moving to
+// the next slot.
+impl<T> Trace for Slot<T>
+where
+    T: Trace + Markable<Value = T>,
+{
     fn trace(&self, state: &mut GcState) {
         if let Some((new, moved)) = self.get().move_value(&state.to_space) {
             unsafe { self.set(new) };
             if moved {
                 self.get().trace(state);
+                // finish tracing anything connected to this object. This will
+                // help them be co-located in memory.
+                state.trace_stack();
             }
         }
     }

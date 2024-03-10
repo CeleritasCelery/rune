@@ -1,4 +1,4 @@
-use super::gc::{Block, GcHeap, GcState, Markable, Trace};
+use super::gc::{Block, GcHeap, GcState, Trace};
 use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
 use crate::NewtypeMarkable;
 use anyhow::{anyhow, Result};
@@ -120,18 +120,10 @@ impl<'new> CloneIn<'new, &'new Cons> for Cons {
 
 impl Trace for ConsInner {
     fn trace(&self, state: &mut GcState) {
-        if let Some((new, moved)) = self.cdr().move_value(&state.to_space) {
-            unsafe { self.cdr.as_mut().set(new) };
-            if moved {
-                state.push(new);
-            }
-        }
-        if let Some((new, moved)) = self.car().move_value(&state.to_space) {
-            unsafe { self.car.as_mut().set(new) };
-            if moved {
-                state.push(new);
-            }
-        }
+        self.car.trace(state);
+        // We want cdr to be traced second, because that way it will end on top
+        // of the stack and be closer to the current cons cell
+        self.cdr.trace(state);
     }
 }
 

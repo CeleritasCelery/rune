@@ -1325,7 +1325,19 @@ where
 
 impl<T> Trace for Gc<T> {
     fn trace(&self, state: &mut GcState) {
-        self.as_obj().trace_mark(state);
+        match self.as_obj().untag() {
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
+            ObjectType::Float(x) => x.trace(state),
+            ObjectType::String(x) => x.trace(state),
+            ObjectType::ByteString(x) => x.trace(state),
+            ObjectType::Vec(vec) => vec.trace(state),
+            ObjectType::Record(x) => x.trace(state),
+            ObjectType::HashTable(x) => x.trace(state),
+            ObjectType::Cons(x) => x.trace(state),
+            ObjectType::Symbol(x) => x.trace(state),
+            ObjectType::ByteFn(x) => x.trace(state),
+            ObjectType::Buffer(x) => x.trace(state),
+        }
     }
 }
 
@@ -1382,7 +1394,7 @@ impl Markable for Object<'_> {
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let data = match self.untag() {
-            ObjectType::Int(_) | ObjectType::SubrFn(_) => return None,
+            ObjectType::Int(_) | ObjectType::SubrFn(_) | ObjectType::NIL => return None,
             ObjectType::Float(x) => cast_pair(x.move_value(to_space)?),
             ObjectType::Cons(x) => cast_pair(x.move_value(to_space)?),
             ObjectType::Vec(x) => cast_pair(x.move_value(to_space)?),
@@ -1613,22 +1625,6 @@ impl<'ob> Object<'ob> {
             ObjectType::ByteFn(x) => x.is_marked(),
             ObjectType::Symbol(x) => x.is_marked(),
             ObjectType::Buffer(x) => x.is_marked(),
-        }
-    }
-
-    pub(crate) fn trace_mark(self, state: &mut GcState) {
-        match self.untag() {
-            ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
-            ObjectType::Float(x) => x.trace(state),
-            ObjectType::String(x) => x.trace(state),
-            ObjectType::ByteString(x) => x.trace(state),
-            ObjectType::Vec(vec) => vec.trace(state),
-            ObjectType::Record(x) => x.trace(state),
-            ObjectType::HashTable(x) => x.trace(state),
-            ObjectType::Cons(x) => x.trace(state),
-            ObjectType::Symbol(x) => x.trace(state),
-            ObjectType::ByteFn(x) => x.trace(state),
-            ObjectType::Buffer(x) => x.trace(state),
         }
     }
 }

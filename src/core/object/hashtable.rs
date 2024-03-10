@@ -2,9 +2,9 @@
 //! need it to support being both thread local and global. Second we need
 //! iterate and mutate at the same time. Third we need to be able to clean up
 //! the heap allocation when it is garbage collected.
-use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
+use super::{CloneIn, Gc, IntoObject, ObjCell, Object, WithLifetime};
 use crate::core::env::interned_symbols;
-use crate::core::gc::{Block, GcHeap, GcState, Slot, Trace};
+use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
@@ -126,10 +126,12 @@ impl Trace for HashTableCore<'_> {
             panic!("Global hash table should not be traced")
         };
         let table = &mut table.borrow_mut().inner;
+        // ObjCell are updated in place when traced, so casting to ObjCell will
+        // allow all the objects to be updated.
         let table = unsafe {
             std::mem::transmute::<
                 &mut IndexMap<Object, Object>,
-                &mut IndexMap<Slot<Object>, Slot<Object>>,
+                &mut IndexMap<ObjCell, ObjCell>,
             >(table)
         };
         table.rehash_keys(|key, val| {
