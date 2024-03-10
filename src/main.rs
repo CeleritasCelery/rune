@@ -29,6 +29,7 @@ mod lread;
 mod print;
 mod reader;
 mod search;
+mod textprops;
 mod threads;
 mod timefns;
 
