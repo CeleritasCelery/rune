@@ -1,6 +1,6 @@
-use std::{cell::Cell, fmt};
-use crate::core::gc::{Markable, Trace};
 use super::{Object, WithLifetime};
+use crate::core::gc::{Markable, Trace};
+use std::{cell::Cell, fmt};
 
 /// This type represents and immutable view into an Object. The reason we have
 /// an additional type is because there could be other references to this same

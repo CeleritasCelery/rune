@@ -129,10 +129,9 @@ impl Trace for HashTableCore<'_> {
         // ObjCell are updated in place when traced, so casting to ObjCell will
         // allow all the objects to be updated.
         let table = unsafe {
-            std::mem::transmute::<
-                &mut IndexMap<Object, Object>,
-                &mut IndexMap<ObjCell, ObjCell>,
-            >(table)
+            std::mem::transmute::<&mut IndexMap<Object, Object>, &mut IndexMap<ObjCell, ObjCell>>(
+                table,
+            )
         };
         table.rehash_keys(|key, val| {
             key.trace(state);
