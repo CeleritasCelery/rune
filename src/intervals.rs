@@ -116,6 +116,13 @@ impl<'ob> Node<'ob> {
         Box::new(Self::new(key, val))
     }
 
+    /// perform the following operation, \\ is the red link:
+    ///      |            |
+    ///      n            x
+    ///     / \\        // \
+    ///        x    =>  n
+    ///       / \      / \
+    ///      c            c
     pub fn rotate_left<'a>(node: &'a mut BoxedNode<'ob>) -> Option<&'a mut BoxedNode<'ob>> {
         let mut x = node.right.take()?;
         let es = x.left.take();
@@ -130,6 +137,13 @@ impl<'ob> Node<'ob> {
         Some(node)
     }
 
+    /// perform the following operation, \\ is the red link:
+    ///      |            |
+    ///      n            x
+    ///    // \          / \\
+    ///    x       =>       n
+    ///   / \              / \
+    ///      c            c
     pub fn rotate_right<'a>(node: &'a mut BoxedNode<'ob>) -> Option<&'a mut BoxedNode<'ob>> {
         let mut x = node.left.take()?;
         let temp = x.right.take();
@@ -144,6 +158,7 @@ impl<'ob> Node<'ob> {
         Some(node)
     }
 
+    /// total number of items in this sub-tree
     pub fn n(&self) -> usize {
         let l = match self.left {
             Some(ref n) => n.n,
@@ -302,11 +317,13 @@ impl<'ob> Node<'ob> {
 
 // deletion
 impl<'ob> Node<'ob> {
+    /// if node.left and node.right are both red, mark them black turn node to red.
     fn flip_colors(node: &mut MaybeNode) {
         if let Some(ref mut n) = node {
             Node::flip_colors_inner(n)
         };
     }
+    /// if node.left and node.right are both red, mark them black turn node to red.
     fn flip_colors_inner(n: &mut BoxedNode<'ob>) {
         if Node::red(&n.right) && Node::red(&n.left) {
             if let Some(ref mut l) = n.left {
