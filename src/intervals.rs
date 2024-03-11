@@ -2,10 +2,7 @@
 use std::{cmp::Ordering, ops::Range};
 
 use crate::{
-    core::{
-        gc::Context,
-        object::Object,
-    },
+    core::{gc::Context, object::Object},
     textprops::add_properties,
 };
 
@@ -206,6 +203,10 @@ impl<'ob> Node<'ob> {
         val: Object<'ob>,
         cx: &'ob Context,
     ) -> Option<&'a mut BoxedNode<'ob>> {
+        // no empty nodes
+        if key.start == key.end {
+            return node.as_mut();
+        }
         match node {
             Some(ref mut n) => Node::insert_at_inner(n, key, val, cx),
             None => {
@@ -225,38 +226,26 @@ impl<'ob> Node<'ob> {
         // TODO too taunting, also, plist should be cloned?
         if intersect {
             if key.start < node.key.start {
+                let key_left = key.split_at(node.key.start, true);
+                Node::insert_at(&mut node.left, key_left, val, cx);
+
                 if key.end < node.key.end {
-                    let key_left = key.split_at(node.key.start, true);
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.left, key_left, val, cx);
                     Node::insert_at(&mut node.right, key_right, node.val, cx);
-                }
-                if key.end > node.key.end {
-                    let key_left = key.split_at(node.key.start, true);
+                } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.left, key_left, val, cx);
                     Node::insert_at(&mut node.right, key_right, val, cx);
-                }
-                if key.end == node.key.end {
-                    let key_left = key.split_at(node.key.start, true);
-                    Node::insert_at(&mut node.left, key_left, val, cx);
                 }
             } else {
+                let key_left = node.key.split_at(key.start, true);
+                Node::insert_at(&mut node.left, key_left, node.val, cx);
+
                 if key.end < node.key.end {
-                    let key_left = node.key.split_at(key.start, true);
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.left, key_left, node.val, cx);
                     Node::insert_at(&mut node.right, key_right, node.val, cx);
-                }
-                if key.end > node.key.end {
-                    let key_left = node.key.split_at(key.start, true);
+                } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.left, key_left, node.val, cx);
                     Node::insert_at(&mut node.right, key_right, val, cx);
-                }
-                if key.end == node.key.end {
-                    let key_left = node.key.split_at(key.start, true);
-                    Node::insert_at(&mut node.left, key_left, node.val, cx);
                 }
             }
         }
@@ -267,7 +256,7 @@ impl<'ob> Node<'ob> {
             Ordering::Equal => {
                 add_properties(
                     val,
-                    node.val,
+                    &mut node.val,
                     crate::textprops::PropertySetType::Replace,
                     false,
                     cx,
@@ -347,7 +336,7 @@ impl<'ob> Node<'ob> {
         Some(())
     }
 
-    fn move_red_left<'a>(node: &'a mut BoxedNode<'ob>) -> Option<()> {
+    fn move_red_left(node: &mut BoxedNode<'ob>) -> Option<()> {
         Node::flip_colors_inner(node);
         // let n = node.as_mut()?;
         let nr = node.right.as_mut()?;
@@ -358,7 +347,7 @@ impl<'ob> Node<'ob> {
         Some(())
     }
 
-    fn move_red_right<'a>(node: &'a mut BoxedNode<'ob>) -> Option<()> {
+    fn move_red_right(node: &mut BoxedNode<'ob>) -> Option<()> {
         Node::flip_colors_inner(node);
         let nl = node.left.as_mut()?;
         if !Node::red(&nl.left) {
@@ -367,7 +356,7 @@ impl<'ob> Node<'ob> {
         Some(())
     }
 
-    fn delete_min<'a>(node: &'a mut MaybeNode<'ob>) -> MaybeNode<'ob> {
+    fn delete_min(node: &mut MaybeNode<'ob>) -> MaybeNode<'ob> {
         let n = node.as_mut()?;
         match n.left {
             Some(ref mut l) => {
@@ -384,7 +373,7 @@ impl<'ob> Node<'ob> {
         result
     }
 
-    fn delete_max<'a>(node: &'a mut MaybeNode<'ob>) -> MaybeNode<'ob> {
+    fn delete_max(node: &mut MaybeNode<'ob>) -> MaybeNode<'ob> {
         let n = node.as_mut()?;
         if Node::red(&n.left) {
             Node::rotate_right(n);
