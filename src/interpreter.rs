@@ -236,10 +236,8 @@ impl Interpreter<'_, '_> {
             if closure_fn.bind(cx) != sym::NIL {
                 let closure_fn: Result<&Rto<Function>, _> = closure_fn.try_as();
                 if let Ok(closure_fn) = closure_fn {
-                    root!(closure_fn, cx);
                     let lambda = Object::from(Cons::new(sym::LAMBDA, body, cx));
                     let closure_fn: Function = closure_fn.bind(cx);
-                    // TODO: Slot remove
                     root!(closure_fn, cx);
                     return call!(closure_fn, lambda, env; self.env, cx);
                 }
