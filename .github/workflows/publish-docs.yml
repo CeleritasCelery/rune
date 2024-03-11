@@ -19,7 +19,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v2.1
+        uses: nwtgck/actions-netlify@v3.0
         with:
           publish-dir: "./target/doc"
           production-branch: master
