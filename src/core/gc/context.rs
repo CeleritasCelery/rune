@@ -2,6 +2,7 @@ use super::GcState;
 use super::Trace;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
 use bumpalo::collections::String as GcString;
+use bumpalo::collections::Vec as GcVec;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -14,8 +15,11 @@ pub(crate) struct RootSet {
     pub(super) roots: RefCell<Vec<*const dyn Trace>>,
 }
 
+#[allow(dead_code)]
+// These types are only stored here so they can be dropped
 pub(in crate::core) enum DropStackElem {
     String(String),
+    Vec(Vec<Object<'static>>),
 }
 
 /// A block of allocations. This type should be owned by [Context] and not used
@@ -106,6 +110,17 @@ impl<const CONST: bool> Block<CONST> {
     /// (unlike std::string).
     pub(crate) fn string_with_capacity(&self, cap: usize) -> GcString<'_> {
         GcString::with_capacity_in(cap, &self.objects)
+    }
+
+    /// Create a new Vec whose backing storage is already part of the GC
+    /// heap. Does not require dropping when moved during garbage collection
+    /// (unlike std::vec).
+    pub(crate) fn vec_new(&self) -> GcVec<'_, Object<'_>> {
+        GcVec::new_in(&self.objects)
+    }
+
+    pub(crate) fn vec_with_capacity(&self, cap: usize) -> GcVec<'_, Object<'_>> {
+        GcVec::with_capacity_in(cap, &self.objects)
     }
 }
 

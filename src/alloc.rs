@@ -71,8 +71,9 @@ fn vector<'ob>(objects: &[Object<'ob>]) -> Vec<Object<'ob>> {
 }
 
 #[defun]
-fn record<'ob>(type_: Object<'ob>, slots: &[Object<'ob>]) -> RecordBuilder<'ob> {
-    let mut record = vec![type_];
+fn record<'ob>(type_: Object<'ob>, slots: &[Object<'ob>], cx: &'ob Context) -> RecordBuilder<'ob> {
+    let mut record = cx.vec_with_capacity(1 + slots.len());
+    record.push(type_);
     record.extend_from_slice(slots);
     RecordBuilder(record)
 }
@@ -91,4 +92,33 @@ fn make_symbol<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 fn garbage_collect(cx: &mut Context) -> bool {
     cx.garbage_collect(true);
     true
+}
+
+#[cfg(test)]
+mod test {
+    use rune_core::macros::root;
+
+    use crate::core::{env::intern, gc::RootSet, object::ObjectType};
+
+    use super::*;
+
+    #[test]
+    fn build_record() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let type_ = intern("dummy-type", cx);
+        let slots = vec![cx.add("slot1"), cx.add("slot2")];
+        let record = record(type_.into(), &slots, cx);
+        assert_eq!(record.0.len(), 3);
+        assert_eq!(record.0[0], type_);
+        assert_eq!(record.0[1], slots[0]);
+        assert_eq!(record.0[2], slots[1]);
+        let x = cx.add(record);
+        root!(x, cx);
+        cx.garbage_collect(true);
+        let ObjectType::Record(record) = x.bind(cx).untag() else { unreachable!() };
+        assert_eq!(record.len(), 3);
+        assert_eq!(record[1].get(), "slot1");
+        assert_eq!(record[2].get(), "slot2");
+    }
 }

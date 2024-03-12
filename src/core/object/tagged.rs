@@ -16,6 +16,7 @@ use crate::core::{
     gc::{DropStackElem, GcState, Markable, Trace},
 };
 use bumpalo::collections::String as GcString;
+use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -426,9 +427,25 @@ impl IntoObject for Vec<u8> {
 impl<'a> IntoObject for Vec<Object<'a>> {
     type Out<'ob> = &'ob LispVec;
 
+    fn into_obj<const C: bool>(mut self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        unsafe {
+            // having the reference implicity cast a ptr triggers UB
+            let ptr = self.as_mut_slice() as *mut [Object];
+            block.drop_stack.borrow_mut().push(DropStackElem::Vec(self.with_lifetime()));
+            let ptr = block.objects.alloc(LispVec::new(ptr, C));
+            <&LispVec>::tag_ptr(ptr)
+        }
+    }
+}
+
+impl<'a> IntoObject for GcVec<'_, Object<'a>> {
+    type Out<'ob> = &'ob LispVec;
+
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = block.objects.alloc(LispVec::new(self, C));
+            // having the reference implicity cast a ptr triggers UB
+            let ptr = self.into_bump_slice_mut() as *mut [Object];
+            let ptr = block.objects.alloc(LispVec::new(ptr, C));
             <&LispVec>::tag_ptr(ptr)
         }
     }
@@ -438,7 +455,9 @@ impl<'a> IntoObject for &[Object<'a>] {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        self.to_vec().into_obj(block)
+        let mut vec = GcVec::with_capacity_in(self.len(), &block.objects);
+        vec.extend_from_slice(self);
+        vec.into_obj(block)
     }
 }
 
@@ -448,7 +467,8 @@ impl<'a> IntoObject for RecordBuilder<'a> {
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
             // record is the same layout as lispvec, just a different newtype wrapper
-            let ptr = block.objects.alloc(LispVec::new(self.0, C));
+            let ptr = self.0.into_bump_slice_mut() as *mut [Object];
+            let ptr = block.objects.alloc(LispVec::new(ptr, C));
             <&Record>::tag_ptr(ptr)
         }
     }

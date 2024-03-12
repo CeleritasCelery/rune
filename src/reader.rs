@@ -431,7 +431,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     }
 
     fn read_vec(&mut self, delim: usize) -> Result<Object<'ob>> {
-        let mut objects = Vec::new();
+        let mut objects = self.cx.vec_new();
         while let Some(token) = self.tokens.next() {
             match token {
                 Token::CloseBracket(_) => return Ok(self.cx.add(objects)),
