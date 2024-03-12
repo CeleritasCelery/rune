@@ -29,26 +29,26 @@ pub enum PropertySetType {
 //    are actually added to I's plist)
 pub fn add_properties<'ob>(
     plist: Object<'ob>,
-    obj_i: &mut Object<'ob>,
+    mut obj_i: Object<'ob>,
     _set_type: PropertySetType,
     _destructive: bool,
     cx: &'ob Context,
-) -> Result<bool> {
+) -> Result<(Object<'ob>, bool)> {
     // TODO return type
     let mut changed = false;
-    let Ok(plist) = Gc::<ListType>::try_from(plist) else { return Ok(false) };
-    let Ok(plist_i) = Gc::<ListType>::try_from(*obj_i) else { return Ok(false) };
+    let Ok(plist) = Gc::<ListType>::try_from(plist) else { return Ok((obj_i, false)) };
+    let Ok(plist_i) = Gc::<ListType>::try_from(obj_i) else { return Ok((obj_i, false)) };
     let mut iter = plist.elements();
     // iterate through plist, finding key1 and val1
     while let Some(key1) = iter.next() {
         let key1 = key1?;
-        let Some(val1) = iter.next() else { return Ok(changed) };
+        let Some(val1) = iter.next() else { return Ok((obj_i, changed)) };
         let mut found = false;
 
         let mut iter_i = plist_i.conses();
         // iterate through i's plist, finding (key2, val2) and set val2 if key2 == key1;
         while let Some(key2_cons) = iter_i.next() {
-            let Some(val2_cons) = iter_i.next() else { return Ok(changed) };
+            let Some(val2_cons) = iter_i.next() else { return Ok((obj_i, changed)) };
             if eq(key1, key2_cons?.car()) {
                 // TODO this should depend on set_type
                 val2_cons?.set_car(val1?)?;
@@ -62,10 +62,10 @@ pub fn add_properties<'ob>(
             let pl = plist_i.untag();
             changed = true;
             let new_cons = Cons::new(key1, Cons::new(val1?, pl, cx), cx);
-            *obj_i = new_cons.into(); // TODO this does not work
+            obj_i = new_cons.into(); // TODO this does not work
         }
     }
-    Ok(changed)
+    Ok((obj_i, changed))
 }
 
 #[cfg(test)]
@@ -89,8 +89,8 @@ mod tests {
         // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
         let mut plist_1 = list![intern(":a", cx), 1, intern(":b", cx), 2; cx];
         let plist_2 = list![intern(":a", cx), 4, intern(":c", cx), 5; cx];
-        let changed =
-            add_properties(plist_2, &mut plist_1, PropertySetType::Replace, false, cx).unwrap();
+        let (plist_1, changed) =
+            add_properties(plist_2, plist_1, PropertySetType::Replace, false, cx).unwrap();
         let plist_1 = dbg!(plist_1);
         let a = plist_get(plist_1, intern(":a", cx).into()).unwrap();
         let b = plist_get(plist_1, intern(":b", cx).into()).unwrap();
