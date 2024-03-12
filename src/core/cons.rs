@@ -203,11 +203,9 @@ mod test {
         // assert_eq!(16, size_of::<Cons>());
         let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
 
-        let start_str = "start".to_owned();
-        assert_eq!(cx.add(start_str), cons1.car());
+        assert_eq!(cx.add("start"), cons1.car());
         cons1.set_car(cx.add("start2")).unwrap();
-        let start2_str = "start2".to_owned();
-        assert_eq!(cx.add(start2_str), cons1.car());
+        assert_eq!(cx.add("start2"), cons1.car());
 
         let ObjectType::Cons(cons2) = cons1.cdr().untag() else { unreachable!("Expected cons") };
 

@@ -1,19 +1,76 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::NewtypeMarkable;
+use bumpalo::collections::String as GcString;
 use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
 use rune_macros::Trace;
+use std::cell::Cell;
 use std::fmt::{Debug, Display};
+use std::ops::Deref;
 
 macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeDebug!, NewtypeDisplay!, NewtypeMarkable!, Trace)]
-    pub(crate) struct LispString(GcHeap<String>);
+    #[derive(NewtypeMarkable!, Trace)]
+    pub(crate) struct LispString(GcHeap<LispStringInner>);
+}
+
+struct LispStringInner(Cell<*mut str>);
+
+impl LispStringInner {
+    fn get_str(&self) -> &str {
+        unsafe { &*self.0.get() }
+    }
+}
+
+impl Trace for LispStringInner {
+    fn trace(&self, state: &mut GcState) {
+        let slice = self.get_str();
+        let new = state.to_space.alloc_str(slice);
+        self.0.set(new);
+    }
+}
+
+impl Debug for LispString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.inner(), f)
+    }
+}
+
+impl Display for LispString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self.inner(), f)
+    }
+}
+
+impl PartialEq for LispString {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner() == other.inner()
+    }
+}
+
+impl Eq for LispString {}
+
+impl PartialEq<str> for LispString {
+    fn eq(&self, other: &str) -> bool {
+        self.inner() == other
+    }
+}
+
+impl Deref for LispString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
 }
 
 impl LispString {
-    pub(crate) fn new(string: String, constant: bool) -> Self {
-        Self(GcHeap::new(string, constant))
+    pub(in crate::core) unsafe fn new(string: *const str, constant: bool) -> Self {
+        Self(GcHeap::new(LispStringInner(Cell::new(string as *mut str)), constant))
+    }
+
+    pub(crate) fn inner(&self) -> &str {
+        self.0.get_str()
     }
 }
 
@@ -33,7 +90,7 @@ impl LispString {
 
 impl<'new> CloneIn<'new, &'new Self> for LispString {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-        (**self).clone().into_obj(bk)
+        GcString::from_str_in(self.inner(), &bk.objects).into_obj(bk)
     }
 }
 

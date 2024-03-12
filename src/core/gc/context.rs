@@ -1,6 +1,7 @@
 use super::GcState;
 use super::Trace;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
+use bumpalo::collections::String as GcString;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -13,11 +14,16 @@ pub(crate) struct RootSet {
     pub(super) roots: RefCell<Vec<*const dyn Trace>>,
 }
 
+pub(in crate::core) enum DropStackElem {
+    String(String),
+}
+
 /// A block of allocations. This type should be owned by [Context] and not used
 /// directly.
 #[derive(Default)]
 pub(crate) struct Block<const CONST: bool> {
     pub(in crate::core) objects: bumpalo::Bump,
+    pub(in crate::core) drop_stack: RefCell<Vec<DropStackElem>>,
     pub(in crate::core) uninterned_symbol_map: UninternedSymbolMap,
 }
 
@@ -94,6 +100,13 @@ impl<const CONST: bool> Block<CONST> {
     {
         obj.into_obj(self).into()
     }
+
+    /// Create a new String whose backing storage is already part of the GC
+    /// heap. Does not require dropping when moved during garbage collection
+    /// (unlike std::string).
+    pub(crate) fn string_with_capacity(&self, cap: usize) -> GcString<'_> {
+        GcString::with_capacity_in(cap, &self.objects)
+    }
 }
 
 impl<'ob, 'rt> Context<'rt> {
@@ -137,6 +150,7 @@ impl<'ob, 'rt> Context<'rt> {
         state.trace_stack();
 
         self.next_limit = (state.to_space.allocated_bytes() * Self::GC_GROWTH_FACTOR) / 10;
+        self.block.drop_stack.borrow_mut().clear();
         self.block.objects = state.to_space;
     }
 }
@@ -229,7 +243,7 @@ mod test {
         let ObjectType::String(string) = val.untag() else { unreachable!() };
         let ObjectType::Int(int) = cons.car().untag() else { unreachable!() };
         let ObjectType::Float(float) = cons.cdr().untag() else { unreachable!() };
-        assert_eq!(**string, "string");
+        assert_eq!(string, "string");
         assert_eq!(**float, 1.5);
         assert_eq!(int, 1);
     }

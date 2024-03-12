@@ -13,8 +13,9 @@ use super::{
 };
 use crate::core::{
     env::sym,
-    gc::{GcState, Markable, Trace},
+    gc::{DropStackElem, GcState, Markable, Trace},
 };
+use bumpalo::collections::String as GcString;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
 use sptr::Strict;
@@ -384,7 +385,20 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = block.objects.alloc(LispString::new(self, C));
+            let ptr = self.as_str() as *const str;
+            block.drop_stack.borrow_mut().push(DropStackElem::String(self));
+            let ptr = block.objects.alloc(LispString::new(ptr, C));
+            Self::Out::tag_ptr(ptr)
+        }
+    }
+}
+
+impl IntoObject for GcString<'_> {
+    type Out<'ob> = <String as IntoObject>::Out<'ob>;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        unsafe {
+            let ptr = block.objects.alloc(LispString::new(self.into_bump_str(), C));
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -394,10 +408,7 @@ impl IntoObject for &str {
     type Out<'ob> = <String as IntoObject>::Out<'ob>;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe {
-            let ptr = block.objects.alloc(LispString::new(self.to_owned(), C));
-            <&LispString>::tag_ptr(ptr)
-        }
+        GcString::from_str_in(self, &block.objects).into_obj(block)
     }
 }
 
@@ -1486,7 +1497,7 @@ fn cast_pair<T>((ptr, moved): (NonNull<T>, bool)) -> (*const u8, bool) {
 impl<'ob> PartialEq<&str> for Object<'ob> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
-            ObjectType::String(x) => ***x == **other,
+            ObjectType::String(x) => **x == **other,
             _ => false,
         }
     }

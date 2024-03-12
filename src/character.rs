@@ -47,7 +47,11 @@ fn make_string<'ob>(
 ) -> Result<Object<'ob>> {
     if multibyte.is_some() {
         let chr = int_to_char(i64::try_from(init)?)?;
-        let string: String = (0..length).map(|_| chr).collect();
+        let size = chr.len_utf8();
+        let mut string = cx.string_with_capacity(length * size);
+        for _ in 0..length {
+            string.push(chr);
+        }
         Ok(cx.add(string))
     } else {
         let chr = u8::try_from(init)?;

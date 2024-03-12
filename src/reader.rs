@@ -339,7 +339,7 @@ fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> Object<'a> {
 
 /// process escape characters in the string slice and return the resulting
 /// string.
-fn unescape_string(string: &str) -> String {
+fn unescape_string<'a>(string: &str, cx: &'a Context) -> Object<'a> {
     let mut escaped = false;
     let unescape = |c: char| {
         if escaped {
@@ -359,7 +359,11 @@ fn unescape_string(string: &str) -> String {
             Some(c)
         }
     };
-    string.chars().filter_map(unescape).collect()
+    let mut new = cx.string_with_capacity(string.len());
+    for c in string.chars().filter_map(unescape) {
+        new.push(c);
+    }
+    cx.add(new)
 }
 
 /// Return true if `chr` is a valid symbol character.
@@ -493,7 +497,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::Sharp(i) => self.read_sharp(i),
             Token::QuestionMark(_, c) => Ok((c as i64).into()),
             Token::Ident(x) => Ok(parse_symbol(x, self.cx)),
-            Token::String(x) => Ok(self.cx.add(unescape_string(x))),
+            Token::String(x) => Ok(unescape_string(x, self.cx)),
             Token::Error(e) => Err(e),
         }
     }
