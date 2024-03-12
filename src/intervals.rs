@@ -3,6 +3,7 @@ use std::{cmp::Ordering, ops::Range};
 
 use crate::{
     core::{gc::Context, object::Object},
+    fns::eq,
     textprops::add_properties,
 };
 
@@ -171,7 +172,7 @@ impl<'ob> Node<'ob> {
         1 + l + r
     }
 
-    fn min(&self) -> &Node {
+    fn min(&self) -> &Node<'ob> {
         if let Some(ref l) = self.left {
             l.min()
         } else {
@@ -215,6 +216,7 @@ impl<'ob> Node<'ob> {
             }
         }
     }
+
     pub fn insert_at_inner<'a>(
         node: &'a mut BoxedNode<'ob>,
         mut key: TextRange,
@@ -227,46 +229,47 @@ impl<'ob> Node<'ob> {
         if intersect {
             if key.start < node.key.start {
                 let key_left = key.split_at(node.key.start, true);
-                Node::insert_at(&mut node.left, key_left, val, cx);
+                Node::insert_at(&mut node.left, key_left, val, cx, ptr, false);
 
                 if key.end < node.key.end {
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.right, key_right, node.val, cx);
+                    Node::insert_at(&mut node.right, key_right, node.val, cx, ptr, true);
                 } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.right, key_right, val, cx);
+                    Node::insert_at(&mut node.right, key_right, val, cx, ptr, true);
                 }
             } else {
                 let key_left = node.key.split_at(key.start, true);
-                Node::insert_at(&mut node.left, key_left, node.val, cx);
+                Node::insert_at(&mut node.left, key_left, node.val, cx, ptr, false);
 
                 if key.end < node.key.end {
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(&mut node.right, key_right, node.val, cx);
+                    Node::insert_at(&mut node.right, key_right, node.val, cx, ptr, true);
                 } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.right, key_right, val, cx);
+                    Node::insert_at(&mut node.right, key_right, val, cx, ptr, true);
                 }
             }
         }
         match cmp {
             Ordering::Less => {
-                Node::insert_at(&mut node.left, key, val, cx)?;
+                Node::insert_at(&mut node.left, key, val, cx, ptr, false)?;
             }
             Ordering::Equal => {
-                add_properties(
+                let (val, changed) = add_properties(
                     val,
-                    &mut node.val,
+                    node.val,
                     crate::textprops::PropertySetType::Replace,
                     false,
                     cx,
                 )
                 .ok()?;
-
-                // TODO add merging plist
+                if changed {
+                    node.val = val;
+                }
             }
             Ordering::Greater => {
-                Node::insert_at(&mut node.right, key, val, cx)?;
+                Node::insert_at(&mut node.right, key, val, cx, ptr, true)?;
             }
         };
 
@@ -317,15 +320,13 @@ impl<'ob> Node<'ob> {
     }
     /// if node.left and node.right are both red, mark them black turn node to red.
     fn flip_colors_inner(n: &mut BoxedNode<'ob>) {
-        if Node::red(&n.right) && Node::red(&n.left) {
-            if let Some(ref mut l) = n.left {
-                l.color = Color::Black;
-            }
-            if let Some(ref mut r) = n.right {
-                r.color = Color::Black;
-            }
-            n.color = Color::Red;
+        if let Some(ref mut l) = n.left {
+            l.color = Color::Black;
         }
+        if let Some(ref mut r) = n.right {
+            r.color = Color::Black;
+        }
+        n.color = Color::Red;
     }
 
     fn balance(node: &mut BoxedNode<'ob>) -> Option<()> {
@@ -338,20 +339,25 @@ impl<'ob> Node<'ob> {
 
     fn move_red_left(node: &mut BoxedNode<'ob>) -> Option<()> {
         Node::flip_colors_inner(node);
-        // let n = node.as_mut()?;
         let nr = node.right.as_mut()?;
         if Node::red(&nr.left) {
             Node::rotate_right(nr)?;
             Node::rotate_left(node)?;
+            Node::flip_colors_inner(node);
         }
         Some(())
     }
 
     fn move_red_right(node: &mut BoxedNode<'ob>) -> Option<()> {
         Node::flip_colors_inner(node);
-        let nl = node.left.as_mut()?;
-        if !Node::red(&nl.left) {
+        // h.left.left == Red
+        let cond = match node.left {
+            Some(ref l) => Node::red(&l.left),
+            None => false,
+        };
+        if cond {
             Node::rotate_right(node)?;
+            Node::flip_colors_inner(node);
         }
         Some(())
     }
@@ -397,6 +403,7 @@ impl<'ob> Node<'ob> {
     fn delete(node: &mut MaybeNode<'ob>, key: TextRange) -> MaybeNode<'ob> {
         let n = node.as_mut()?;
         let result = if key < n.key {
+            // n.left != red && n.left.left != red
             if let Some(ref mut l) = n.left {
                 if l.color == Color::Black && !Node::red(&l.left) {
                     Node::move_red_left(n).unwrap();
@@ -408,7 +415,7 @@ impl<'ob> Node<'ob> {
                 Node::rotate_right(n).unwrap();
             }
             if key == n.key && n.right.is_none() {
-                return None;
+                return node.take();
             }
             // NOTE n.right will not be none
             let r = n.right.as_mut().unwrap();
@@ -416,16 +423,12 @@ impl<'ob> Node<'ob> {
                 Node::move_red_right(n).unwrap();
             }
 
-            let r = n.right.as_mut().unwrap();
             if key == n.key {
-                // n.val = r.get(r.min().key).unwrap();
-                let r_min = r.min_mut();
+                let mut result = Node::delete_min(&mut n.right);
+                let r_min = result.as_mut().unwrap();
                 std::mem::swap(&mut n.val, &mut r_min.val);
-                // we can just memswap, since all nodes on right is bigger than
-                // node, that is, n.key is still r.min() after swap
                 std::mem::swap(&mut n.key, &mut r_min.key);
-                // n.key = r_min.key; // NOTE this need copy
-                Node::delete_min(&mut n.right)
+                result
             } else {
                 Node::delete(&mut n.right, key)
             }
@@ -556,7 +559,10 @@ impl<'ob> IntervalTree<'ob> {
         val: Object<'ob>,
         cx: &'ob Context,
     ) -> Option<&'a mut Box<Node<'ob>>> {
-        Node::insert_at(&mut self.root, key, val, cx)
+        if key.start == key.end {
+            return None;
+        }
+        Node::insert_at(&mut self.root, key, val, cx, std::ptr::null(), true)
     }
 
     pub fn get(&self, key: TextRange) -> Option<Object<'ob>> {
@@ -706,6 +712,31 @@ mod tests {
     }
 
     #[test]
+    fn delete() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let val = list![1, 2; cx];
+        let mut tree = build_tree(val, cx);
+        // let mut tree = dbg!(tree);
+        for k in vec![8, 4, 5, 7, 3, 6].into_iter() {
+            let i = TextRange::new(k, k + 1);
+            let a = tree.delete(i).unwrap();
+            assert_eq!(a.key, i);
+        }
+    }
+
+    #[test]
+    fn delete_min() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let val = list![1, 2; cx];
+        let mut tree = build_tree(val, cx);
+        // let mut tree = dbg!(tree);
+        let a = tree.delete_min().unwrap();
+        assert_eq!(a.key.start, 0);
+    }
+
+    #[test]
     fn find_intersect() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
@@ -731,5 +762,18 @@ mod tests {
         tree.get(TextRange::new(7, 13)).unwrap();
         tree.get(TextRange::new(13, 14)).unwrap();
         tree.get(TextRange::new(14, 15)).unwrap();
+    }
+
+    #[test]
+    fn intersect_mut() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let val = list![1, 2; cx];
+        let mut tree = build_tree(val, cx);
+        let mut tree_iter = TreeIter::new(&mut tree, TextRange::new(0, 20));
+        tree_iter.find_insersects();
+        let re = tree_iter.result;
+        dbg!(re);
+        panic!()
     }
 }
