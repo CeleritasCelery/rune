@@ -99,6 +99,8 @@ pub struct Node<'ob> {
     left: MaybeNode<'ob>,
     right: MaybeNode<'ob>,
     color: Color,
+    parent: *const Node<'ob>,
+    is_right_child: bool,
     n: usize,
 }
 pub type BoxedNode<'ob> = Box<Node<'ob>>;
@@ -110,11 +112,39 @@ impl<'ob> Node<'ob> {
         node.as_ref().map(|n| n.color == Color::Red).unwrap_or(false)
     }
 
+    #[inline]
     pub fn new(key: TextRange, val: Object<'ob>) -> Self {
-        Self { key, val, left: None, right: None, color: Color::Red, n: 1 }
+        Self::new_with_parent(key, val, std::ptr::null(), false)
     }
+
+    #[inline]
+    pub fn new_with_parent(
+        key: TextRange,
+        val: Object<'ob>,
+        parent: *const Node<'ob>,
+        is_right_child: bool
+    ) -> Node<'ob> {
+        Self { key, val, left: None, right: None, color: Color::Red, n: 1, parent, is_right_child }
+    }
+
+    #[inline]
     pub fn new_boxed(key: TextRange, val: Object<'ob>) -> BoxedNode<'ob> {
         Box::new(Self::new(key, val))
+    }
+
+    #[inline]
+    pub fn new_boxed_with_parent(
+        key: TextRange,
+        val: Object<'ob>,
+        parent: *const Node<'ob>,
+        is_right_child: bool
+    ) -> BoxedNode<'ob> {
+        Box::new(Self::new_with_parent(key, val, parent, is_right_child))
+    }
+
+    #[inline]
+    pub fn set_parent(&mut self, parent: &Node<'ob>) {
+        self.parent = parent
     }
 
     /// perform the following operation, \\ is the red link:
@@ -126,9 +156,17 @@ impl<'ob> Node<'ob> {
     ///      c            c
     pub fn rotate_left<'a>(node: &'a mut BoxedNode<'ob>) -> Option<&'a mut BoxedNode<'ob>> {
         let mut x = node.right.take()?;
-        let es = x.left.take();
-        node.right = es;
+        let mut c = x.left.take();
+        if let Some(ref mut c) = c {
+            c.parent = node.as_ref();
+            c.is_right_child = true;
+        }
+        node.right = c;
         x.color = node.color;
+        x.parent = node.parent;
+        x.is_right_child = node.is_right_child;
+        node.parent = x.as_ref();
+        node.is_right_child = false;
         x.n = node.n;
         node.color = Color::Red;
         node.n = node.n();
@@ -147,9 +185,17 @@ impl<'ob> Node<'ob> {
     ///      c            c
     pub fn rotate_right<'a>(node: &'a mut BoxedNode<'ob>) -> Option<&'a mut BoxedNode<'ob>> {
         let mut x = node.left.take()?;
-        let temp = x.right.take();
-        node.left = temp;
+        let mut c = x.right.take();
+        if let Some(ref mut c) = c {
+            c.parent = node.as_ref();
+            c.is_right_child = false;
+        }
+        node.left = c;
         x.color = node.color;
+        x.parent = node.parent;
+        x.is_right_child = node.is_right_child;
+        node.parent = x.as_ref();
+        node.is_right_child = true;
         node.color = Color::Red;
         x.n = node.n;
         node.n = node.n();
@@ -160,6 +206,7 @@ impl<'ob> Node<'ob> {
     }
 
     /// total number of items in this sub-tree
+    #[inline]
     pub fn n(&self) -> usize {
         let l = match self.left {
             Some(ref n) => n.n,
@@ -188,6 +235,13 @@ impl<'ob> Node<'ob> {
         }
     }
 
+    #[inline]
+    fn parent(&self) -> Option<&Node<'ob>> {
+        unsafe {
+            self.parent.as_ref()
+        }
+    }
+
     fn get(&self, key: TextRange) -> Option<Object<'ob>> {
         match key.cmp(&self.key) {
             std::cmp::Ordering::Equal => Some(self.val),
@@ -203,15 +257,13 @@ impl<'ob> Node<'ob> {
         key: TextRange,
         val: Object<'ob>,
         cx: &'ob Context,
+        parent: *const Node<'ob>,
+        is_right_child: bool,
     ) -> Option<&'a mut BoxedNode<'ob>> {
-        // no empty nodes
-        if key.start == key.end {
-            return node.as_mut();
-        }
         match node {
             Some(ref mut n) => Node::insert_at_inner(n, key, val, cx),
             None => {
-                node.replace(Node::new_boxed(key, val));
+                node.replace(Node::new_boxed_with_parent(key, val, parent, is_right_child));
                 node.as_mut()
             }
         }
@@ -223,9 +275,9 @@ impl<'ob> Node<'ob> {
         val: Object<'ob>,
         cx: &'ob Context,
     ) -> Option<&'a mut BoxedNode<'ob>> {
-        let cmp = key.cmp(&node.key);
         let intersect = key.intersects(node.key);
         // TODO too taunting, also, plist should be cloned?
+        let ptr: *const Node<'ob> = node.as_ref();
         if intersect {
             if key.start < node.key.start {
                 let key_left = key.split_at(node.key.start, true);
@@ -251,6 +303,7 @@ impl<'ob> Node<'ob> {
                 }
             }
         }
+        let cmp = key.cmp(&node.key);
         match cmp {
             Ordering::Less => {
                 Node::insert_at(&mut node.left, key, val, cx, ptr, false)?;
@@ -299,15 +352,6 @@ impl<'ob> Node<'ob> {
         node.n = node.n();
         Some(node)
     }
-    pub fn split_at<'a>(
-        node: &'a mut BoxedNode<'ob>,
-        position: usize,
-        left: bool,
-        cx: &'ob Context,
-    ) -> Option<&'a mut BoxedNode<'ob>> {
-        let splitted = node.key.split_at(position, left);
-        Node::insert_at_inner(node, splitted, node.val, cx)
-    }
 }
 
 // deletion
@@ -329,8 +373,8 @@ impl<'ob> Node<'ob> {
         n.color = Color::Red;
     }
 
+    /// rotate left if node.right is red
     fn balance(node: &mut BoxedNode<'ob>) -> Option<()> {
-        // let n = node.as_mut()?;
         if Node::red(&node.right) {
             Node::rotate_left(node)?;
         }
@@ -441,6 +485,24 @@ impl<'ob> Node<'ob> {
 
 // intersection
 impl<'ob> Node<'ob> {
+    pub fn next(&self) -> Option<&Node<'ob>> {
+        let mut n = self;
+        if let Some(ref r) = self.right {
+            n = r;
+            while let Some(ref l) = n.left {
+                n = l;
+            }
+            return Some(n)
+        }
+        while let Some(parent) = n.parent() {
+            if !n.is_right_child {
+                return Some(parent)
+            }
+            n = parent;
+        }
+        None
+    }
+
     pub fn find_intersects<'a, 'b>(
         &'a self,
         range: TextRange,
@@ -470,31 +532,6 @@ impl<'ob> Node<'ob> {
         }
     }
 
-    // /// a non-lazy iterator
-    // pub fn iter(&self, result: &mut Vec<*const Node<TextRange, V>>) {
-    //     if let Some(ref l) = self.left {
-    //         l.iter(result);
-    //     }
-    //     result.push(self);
-    //     if let Some(ref r) = self.right {
-    //         r.iter(result);
-    //     }
-    // }
-    // /// a non-lazy iterator
-    // pub fn satisfy<F>(&self, f: &F, result: &mut Vec<*const Node<TextRange, V>>)
-    // where
-    //     F: Fn(&Node<TextRange, V>) -> bool,
-    // {
-    //     if let Some(ref l) = self.left {
-    //         l.satisfy(f, result);
-    //     }
-    //     if f(self) {
-    //         result.push(self);
-    //     }
-    //     if let Some(ref r) = self.right {
-    //         r.satisfy(f, result);
-    //     }
-    // }
     pub fn map<F>(&mut self, f: &mut F)
     where
         F: FnMut(&mut Node<'ob>),
@@ -562,7 +599,7 @@ impl<'ob> IntervalTree<'ob> {
         if key.start == key.end {
             return None;
         }
-        Node::insert_at(&mut self.root, key, val, cx, std::ptr::null(), true)
+        Node::insert_at(&mut self.root, key, val, cx, std::ptr::null(), false)
     }
 
     pub fn get(&self, key: TextRange) -> Option<Object<'ob>> {
@@ -584,9 +621,7 @@ impl<'ob> IntervalTree<'ob> {
             None => None,
         };
         if let Some(ref mut root) = self.root {
-            if root.n >= 1 {
-                root.color = Color::Black;
-            }
+            root.color = Color::Black;
         }
         result
     }
@@ -597,8 +632,7 @@ impl<'ob> IntervalTree<'ob> {
             root.color = Color::Red;
         }
         let result = Node::delete_min(&mut self.root);
-        let root = self.root.as_mut()?;
-        if root.n >= 1 {
+        if let Some(ref mut root) = self.root {
             root.color = Color::Black;
         }
         result
@@ -610,8 +644,7 @@ impl<'ob> IntervalTree<'ob> {
             root.color = Color::Red;
         }
         let result = Node::delete_max(&mut self.root);
-        let root = self.root.as_mut()?;
-        if root.n >= 1 {
+        if let Some(ref mut root) = self.root {
             root.color = Color::Black;
         }
         result
@@ -630,6 +663,39 @@ impl<'ob> IntervalTree<'ob> {
             // r.satisfy(&|n| n.key.intersects(range), &mut result);
         }
         result
+    }
+
+    pub fn min(&self) -> Option<&Node<'ob>> {
+        self.root.as_ref().map(|n| n.min())
+    }
+
+    fn print(&self) {
+
+        fn print_inner(node: &Node<'_>) {
+            println!("key: {:?}, val: {:?}, color: {:?}", node.key, node.val, node.color);
+            if let Some(parent) = unsafe {node.parent.as_ref()} {
+                let direction = if node.is_right_child {
+                    "right"
+                } else {
+                    "left"
+                };
+                println!("parent({} child): {:?}", direction, parent.key);
+            } else {
+                println!("parent: not found");
+            }
+            if let Some(ref l) = node.left {
+                println!("left: ");
+                print_inner(l);
+                println!("left end for {:?}", node.key);
+            }
+            if let Some(ref r) = node.right {
+                println!("right: ");
+                print_inner(r);
+                println!("right end for {:?}", node.key);
+            }
+        }
+        let Some(ref root) = self.root else {return};
+        print_inner(root);
     }
 }
 
@@ -764,16 +830,25 @@ mod tests {
         tree.get(TextRange::new(14, 15)).unwrap();
     }
 
+
     #[test]
-    fn intersect_mut() {
+    fn find_next() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);
         let val = list![1, 2; cx];
         let mut tree = build_tree(val, cx);
-        let mut tree_iter = TreeIter::new(&mut tree, TextRange::new(0, 20));
-        tree_iter.find_insersects();
-        let re = tree_iter.result;
-        dbg!(re);
-        panic!()
+        // tree.print();
+        tree.delete(TextRange::new(5, 6));
+        let mut n = tree.min().unwrap();
+
+        loop {
+            match n.next() {
+                Some(ne) => {
+                    n = ne;
+                    println!("{:?}", ne.key);
+                }
+                None => break
+            }
+        }
     }
 }
