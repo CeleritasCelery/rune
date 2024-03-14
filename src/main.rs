@@ -23,11 +23,13 @@ mod fileio;
 mod floatfns;
 mod fns;
 mod interpreter;
+mod intervals;
 mod keymap;
 mod lread;
 mod print;
 mod reader;
 mod search;
+mod textprops;
 mod threads;
 mod timefns;
 
