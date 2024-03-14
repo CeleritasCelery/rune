@@ -99,7 +99,7 @@ pub struct Node<'ob> {
     left: MaybeNode<'ob>,
     right: MaybeNode<'ob>,
     color: Color,
-    parent: *const Node<'ob>,
+    parent: *mut Node<'ob>,
     is_right_child: bool,
     n: usize,
 }
@@ -114,14 +114,14 @@ impl<'ob> Node<'ob> {
 
     #[inline]
     pub fn new(key: TextRange, val: Object<'ob>) -> Self {
-        Self::new_with_parent(key, val, std::ptr::null(), false)
+        Self::new_with_parent(key, val, std::ptr::null_mut(), false)
     }
 
     #[inline]
     pub fn new_with_parent(
         key: TextRange,
         val: Object<'ob>,
-        parent: *const Node<'ob>,
+        parent: *mut Node<'ob>,
         is_right_child: bool
     ) -> Node<'ob> {
         Self { key, val, left: None, right: None, color: Color::Red, n: 1, parent, is_right_child }
@@ -136,14 +136,14 @@ impl<'ob> Node<'ob> {
     pub fn new_boxed_with_parent(
         key: TextRange,
         val: Object<'ob>,
-        parent: *const Node<'ob>,
+        parent: *mut Node<'ob>,
         is_right_child: bool
     ) -> BoxedNode<'ob> {
         Box::new(Self::new_with_parent(key, val, parent, is_right_child))
     }
 
     #[inline]
-    pub fn set_parent(&mut self, parent: &Node<'ob>) {
+    pub fn set_parent(&mut self, parent: &mut Node<'ob>) {
         self.parent = parent
     }
 
@@ -158,14 +158,14 @@ impl<'ob> Node<'ob> {
         let mut x = node.right.take()?;
         let mut c = x.left.take();
         if let Some(ref mut c) = c {
-            c.parent = node.as_ref();
+            c.parent = node.as_mut();
             c.is_right_child = true;
         }
         node.right = c;
         x.color = node.color;
         x.parent = node.parent;
         x.is_right_child = node.is_right_child;
-        node.parent = x.as_ref();
+        node.parent = x.as_mut();
         node.is_right_child = false;
         x.n = node.n;
         node.color = Color::Red;
@@ -187,14 +187,14 @@ impl<'ob> Node<'ob> {
         let mut x = node.left.take()?;
         let mut c = x.right.take();
         if let Some(ref mut c) = c {
-            c.parent = node.as_ref();
+            c.parent = node.as_mut();
             c.is_right_child = false;
         }
         node.left = c;
         x.color = node.color;
         x.parent = node.parent;
         x.is_right_child = node.is_right_child;
-        node.parent = x.as_ref();
+        node.parent = x.as_mut();
         node.is_right_child = true;
         node.color = Color::Red;
         x.n = node.n;
@@ -242,6 +242,13 @@ impl<'ob> Node<'ob> {
         }
     }
 
+    #[inline]
+    fn parent_mut(&self) -> Option<&mut Node<'ob>> {
+        unsafe {
+            self.parent.as_mut()
+        }
+    }
+
     fn get(&self, key: TextRange) -> Option<Object<'ob>> {
         match key.cmp(&self.key) {
             std::cmp::Ordering::Equal => Some(self.val),
@@ -257,7 +264,7 @@ impl<'ob> Node<'ob> {
         key: TextRange,
         val: Object<'ob>,
         cx: &'ob Context,
-        parent: *const Node<'ob>,
+        parent: *mut Node<'ob>,
         is_right_child: bool,
     ) -> Option<&'a mut BoxedNode<'ob>> {
         match node {
@@ -277,7 +284,7 @@ impl<'ob> Node<'ob> {
     ) -> Option<&'a mut BoxedNode<'ob>> {
         let intersect = key.intersects(node.key);
         // TODO too taunting, also, plist should be cloned?
-        let ptr: *const Node<'ob> = node.as_ref();
+        let ptr: *mut Node<'ob> = node.as_mut();
         if intersect {
             if key.start < node.key.start {
                 let key_left = key.split_at(node.key.start, true);
@@ -494,8 +501,31 @@ impl<'ob> Node<'ob> {
             }
             return Some(n)
         }
-        while let Some(parent) = n.parent() {
+        while let Some(parent) = n.parent_mut() {
             if !n.is_right_child {
+                return Some(parent)
+            }
+            n = parent;
+        }
+        None
+    }
+
+    pub fn next_mut(&mut self) -> Option<&mut Node<'ob>> {
+        fn safe_mut<'a, T>(n: *mut T) -> &'a mut T {
+            unsafe {
+                n.as_mut().unwrap()
+            }
+        }
+        let mut n: *mut Node<'ob> = self;
+        if let Some(r) = self.right.as_mut() {
+            n = r.as_mut();
+            while let Some(ref mut l) = safe_mut(n).left {
+                n = l.as_mut();
+            }
+            return Some(safe_mut(n))
+        }
+        while let Some(parent) = (safe_mut(n)).parent_mut() {
+            if !(safe_mut(n)).is_right_child {
                 return Some(parent)
             }
             n = parent;
@@ -599,7 +629,7 @@ impl<'ob> IntervalTree<'ob> {
         if key.start == key.end {
             return None;
         }
-        Node::insert_at(&mut self.root, key, val, cx, std::ptr::null(), false)
+        Node::insert_at(&mut self.root, key, val, cx, std::ptr::null_mut(), false)
     }
 
     pub fn get(&self, key: TextRange) -> Option<Object<'ob>> {
@@ -845,10 +875,11 @@ mod tests {
             match n.next() {
                 Some(ne) => {
                     n = ne;
-                    println!("{:?}", ne.key);
+                    // println!("{:?}", ne.key);
                 }
                 None => break
             }
         }
+        assert_eq!(n.key.start, 9)
     }
 }
