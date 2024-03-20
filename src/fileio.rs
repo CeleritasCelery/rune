@@ -7,7 +7,7 @@ use crate::core::{
 };
 use anyhow::Result;
 use rune_macros::defun;
-use std::path::Path;
+use std::path::{Component, Path, MAIN_SEPARATOR};
 
 defvar!(FILE_NAME_HANDLER_ALIST);
 
@@ -46,11 +46,10 @@ fn car_less_than_car(a: &Cons, b: &Cons) -> Result<bool> {
 
 #[defun]
 fn file_name_as_directory(filename: &str) -> String {
-    use std::path::MAIN_SEPARATOR as SEPARATOR;
-    if filename.ends_with(SEPARATOR) {
+    if filename.ends_with(MAIN_SEPARATOR) {
         filename.to_owned()
     } else {
-        format!("{filename}{SEPARATOR}")
+        format!("{filename}{MAIN_SEPARATOR}")
     }
 }
 
@@ -62,3 +61,73 @@ fn file_directory_p(filename: &str) -> bool {
         Path::new(filename).is_dir()
     }
 }
+
+/// Return dirname sans final path separator, unless the string consists entirely of separators.
+#[defun]
+fn directory_file_name(dirname: &str) -> String {
+    let path = Path::new(dirname);
+    let mut path_components = path.components();
+    if path_components.clone().next().is_none() {
+        return "".into();
+    }
+
+    if path_components.all(|c| c == Component::RootDir || c == Component::Normal("".as_ref())) {
+        return "/".into();
+    }
+
+    return dirname.strip_suffix(MAIN_SEPARATOR).unwrap_or(dirname).into();
+}
+
+/// Returns true if the path is absolute
+#[defun]
+fn file_name_absolute_p(filename: &str) -> bool {
+    let path = Path::new(filename);
+    // TODO: GNU Emacs has special handling for ~user directories, where the user exists.
+    //   so as per example in the manual, ~rms/foo is considered absolute if user `rms` exists
+    //   doing this here would require "knowing" the list of valid users and looking for ~path
+    //   components.
+    path.is_absolute()
+}
+
+/// Returns the directory part of `filename`, as a directory name, or nil if filename does not include a directory part.
+#[defun]
+fn file_name_directory(filename: &str) -> Option<String> {
+    // TODO: GNU Emacs docs stipulate that "On MS-DOS [ed: presumably windows, too] it can also end in a colon."
+    if !filename.contains(MAIN_SEPARATOR) {
+        return None;
+    }
+
+    if filename.ends_with(MAIN_SEPARATOR) {
+        return Some(filename.into());
+    }
+
+    let path = Path::new(filename);
+    let parent = path.parent()?;
+
+    // Special case for root path so we don't end up returning '//'
+    if parent.parent().is_none() {
+        return Some(format!("{MAIN_SEPARATOR}"));
+    }
+    let parent_path = parent.to_str()?;
+    Some(format!("{parent_path}{MAIN_SEPARATOR}"))
+}
+
+/// Returns the non-directory part of `filename`
+#[defun]
+fn file_name_nondirectory(filename: &str) -> String {
+    if filename.ends_with(MAIN_SEPARATOR) {
+        return "".into();
+    }
+
+    let path = Path::new(filename);
+    let Some(file_name) = path.file_name() else {
+        return "".into();
+    };
+
+    file_name.to_str().unwrap_or("").into()
+}
+
+// TODO: file-relative-name -- requires knowing the current buffer's default directory
+// TODO: file-name-sans-versions
+// TODO: find-file-name-handler: https://www.gnu.org/software/emacs/manual/html_node/elisp/Magic-File-Names.html
+//   required by file-name-extension  & file-name-sans-extension library & file-relative-name functions (among others)
