@@ -1379,14 +1379,6 @@ where
 {
     type Value = Self;
 
-    fn mark(&self) {
-        todo!()
-    }
-
-    fn unmark(&self) {
-        todo!()
-    }
-
     fn is_marked(&self) -> bool {
         todo!()
     }
@@ -1398,14 +1390,6 @@ where
 
 impl Markable for Object<'_> {
     type Value = Self;
-
-    fn mark(&self) {
-        todo!()
-    }
-
-    fn unmark(&self) {
-        todo!()
-    }
 
     fn is_marked(&self) -> bool {
         match self.untag() {
@@ -1451,14 +1435,6 @@ impl Markable for Object<'_> {
 impl Markable for Function<'_> {
     type Value = Self;
 
-    fn mark(&self) {
-        todo!()
-    }
-
-    fn unmark(&self) {
-        todo!()
-    }
-
     fn is_marked(&self) -> bool {
         match self.untag() {
             FunctionType::SubrFn(_) => true,
@@ -1486,14 +1462,6 @@ impl Markable for Function<'_> {
 
 impl Markable for List<'_> {
     type Value = Self;
-
-    fn mark(&self) {
-        todo!()
-    }
-
-    fn unmark(&self) {
-        todo!()
-    }
 
     fn is_marked(&self) -> bool {
         todo!()

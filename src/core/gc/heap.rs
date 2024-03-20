@@ -99,8 +99,6 @@ impl<T> GcHeap<T> {
 
 pub(in crate::core) trait Markable {
     type Value;
-    fn mark(&self);
-    fn unmark(&self);
     fn is_marked(&self) -> bool;
     fn move_value(&self, _to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         None
@@ -109,14 +107,6 @@ pub(in crate::core) trait Markable {
 
 impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
     type Value = &'a T;
-
-    fn mark(&self) {
-        (*self).mark();
-    }
-
-    fn unmark(&self) {
-        (*self).unmark();
-    }
 
     fn is_marked(&self) -> bool {
         (*self).is_marked()
@@ -137,14 +127,6 @@ macro_rules! NewtypeMarkable {
                 self.0.is_marked()
             }
 
-            fn mark(&self) {
-                self.0.mark()
-            }
-
-            fn unmark(&self) {
-                self.0.unmark()
-            }
-
             fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
                 match self.0.move_value(to_space) {
                     Some((ptr, moved)) => Some((ptr.cast::<Self>(), moved)),
@@ -160,14 +142,6 @@ impl<T> Markable for GcHeap<T> {
 
     fn is_marked(&self) -> bool {
         self.header().get_header().unwrap().marked.get()
-    }
-
-    fn mark(&self) {
-        panic!("GcHeap should not be marked")
-    }
-
-    fn unmark(&self) {
-        panic!("GcHeap should not unmarked")
     }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {

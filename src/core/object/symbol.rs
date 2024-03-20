@@ -117,14 +117,6 @@ impl Trace for Symbol<'_> {
 impl<'a> Markable for Symbol<'a> {
     type Value = Symbol<'a>;
 
-    fn mark(&self) {
-        panic!("Attempt to mark a symbol");
-    }
-
-    fn unmark(&self) {
-        self.get().unmark();
-    }
-
     fn is_marked(&self) -> bool {
         self.get().is_marked()
     }

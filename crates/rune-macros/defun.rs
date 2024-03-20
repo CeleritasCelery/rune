@@ -1,3 +1,5 @@
+#![allow(unused_qualifications)]
+// Issue with darling ^
 use darling::FromMeta;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};

@@ -157,7 +157,7 @@ mod test {
     use crate::core::object::NIL;
     use crate::{
         buffer::{get_buffer_create, set_buffer},
-        core::gc::{Context, RootSet},
+        core::gc::RootSet,
     };
     use rune_core::macros::root;
 

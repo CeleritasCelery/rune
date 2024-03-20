@@ -20,8 +20,8 @@ use str_indices::chars;
 pub struct Buffer {
     /// The buffer data
     data: Box<[u8]>,
-    /// start of the gap. Both gap_start and gap_end are the same point, but
-    /// gap_start is never a valid byte index, and gap_end is always used
+    /// start of the gap. Both `gap_start` and `gap_end` are the same point, but
+    /// `gap_start` is never a valid byte index, and `gap_end` is always used
     /// instead.
     gap_start: usize,
     /// The end of the gap in bytes
@@ -36,7 +36,7 @@ pub struct Buffer {
 }
 
 impl Debug for Buffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let start = self.to_str(..self.gap_start);
         let end = self.to_str(self.gap_end..);
         // repeat _ for the gap length
@@ -55,7 +55,7 @@ impl Debug for Buffer {
 }
 
 impl Display for Buffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.read(0..self.len()))
     }
 }

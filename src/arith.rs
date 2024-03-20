@@ -2,7 +2,7 @@
 use crate::core::object::{Gc, IntoObject, Number, NumberType, ObjectType};
 use float_cmp::ApproxEq;
 use rune_macros::defun;
-use std::cmp::{PartialEq, PartialOrd};
+use std::cmp::PartialEq;
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 /// Similar to the object type [NumberType], but contains a float instead of a

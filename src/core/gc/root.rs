@@ -724,7 +724,6 @@ mod test {
     use crate::core::object::NIL;
     use rune_core::macros::root;
 
-    use super::super::RootSet;
     use super::*;
 
     #[test]

@@ -90,7 +90,7 @@ pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::core::gc::{Context, RootSet};
+    use crate::core::gc::RootSet;
     use crate::core::object::FunctionType;
     use crate::core::{cons::Cons, env::Env, object::Object};
     use rune_core::macros::{list, root};
