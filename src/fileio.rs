@@ -3,9 +3,9 @@ use crate::core::{
     cons::Cons,
     env::{sym, Env},
     gc::{Context, Rt},
-    object::{Number, ObjectType},
+    object::{Number, Object, ObjectType},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rune_macros::defun;
 use std::path::{Component, Path, MAIN_SEPARATOR};
 
@@ -125,6 +125,28 @@ fn file_name_nondirectory(filename: &str) -> String {
     };
 
     file_name.to_str().unwrap_or("").into()
+}
+
+/// Concatenate components to directory, inserting path separators as required.
+#[defun]
+fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<String> {
+    let mut path: String = directory.into();
+
+    // All components must be stringp...
+    for r_c in rest_components {
+        let ObjectType::String(s) = r_c.untag() else {
+            bail!("Wrong type argument, stringp, 2");
+        };
+
+        // Append separator before adding the new element, but only if the existing path isn't already terminated with a "/"
+        if !path.ends_with(MAIN_SEPARATOR) {
+            path.push(MAIN_SEPARATOR)
+        }
+
+        path.push_str(s.as_ref());
+    }
+
+    Ok(path)
 }
 
 // TODO: file-relative-name -- requires knowing the current buffer's default directory
