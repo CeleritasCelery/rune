@@ -2,6 +2,7 @@
 use crate::core::{
     cons::Cons,
     env::{sym, Env},
+    error::{Type, TypeError},
     gc::{Context, Rt},
     object::{Number, Object, ObjectType},
 };
@@ -64,18 +65,18 @@ fn file_directory_p(filename: &str) -> bool {
 
 /// Return dirname sans final path separator, unless the string consists entirely of separators.
 #[defun]
-fn directory_file_name(dirname: &str) -> String {
+fn directory_file_name(dirname: &str) -> &str {
     let path = Path::new(dirname);
     let mut path_components = path.components();
     if path_components.clone().next().is_none() {
-        return "".into();
+        return "";
     }
 
     if path_components.all(|c| c == Component::RootDir || c == Component::Normal("".as_ref())) {
-        return "/".into();
+        return "/";
     }
 
-    return dirname.strip_suffix(MAIN_SEPARATOR).unwrap_or(dirname).into();
+    dirname.strip_suffix(MAIN_SEPARATOR).unwrap_or(dirname)
 }
 
 /// Returns true if the path is absolute
@@ -92,7 +93,8 @@ fn file_name_absolute_p(filename: &str) -> bool {
 /// Returns the directory part of `filename`, as a directory name, or nil if filename does not include a directory part.
 #[defun]
 fn file_name_directory(filename: &str) -> Option<String> {
-    // TODO: GNU Emacs docs stipulate that "On MS-DOS [ed: presumably windows, too] it can also end in a colon."
+    // TODO: GNU Emacs docs stipulate that "On MS-DOS [ed: presumably windows,
+    // too] it can also end in a colon."
     if !filename.contains(MAIN_SEPARATOR) {
         return None;
     }
@@ -114,31 +116,32 @@ fn file_name_directory(filename: &str) -> Option<String> {
 
 /// Returns the non-directory part of `filename`
 #[defun]
-fn file_name_nondirectory(filename: &str) -> String {
+fn file_name_nondirectory(filename: &str) -> &str {
     if filename.ends_with(MAIN_SEPARATOR) {
-        return "".into();
+        return "";
     }
 
     let path = Path::new(filename);
     let Some(file_name) = path.file_name() else {
-        return "".into();
+        return "";
     };
 
-    file_name.to_str().unwrap_or("").into()
+    file_name.to_str().unwrap()
 }
 
 /// Concatenate components to directory, inserting path separators as required.
 #[defun]
 fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<String> {
-    let mut path: String = directory.into();
+    let mut path = String::from(directory);
 
     // All components must be stringp...
     for r_c in rest_components {
         let ObjectType::String(s) = r_c.untag() else {
-            bail!("Wrong type argument, stringp, 2");
+            bail!(TypeError::new(Type::String, r_c));
         };
 
-        // Append separator before adding the new element, but only if the existing path isn't already terminated with a "/"
+        // Append separator before adding the new element, but only if the
+        // existing path isn't already terminated with a "/"
         if !path.ends_with(MAIN_SEPARATOR) {
             path.push(MAIN_SEPARATOR)
         }

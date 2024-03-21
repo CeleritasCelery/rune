@@ -168,6 +168,12 @@ impl<'a, T: 'a + Copy> From<Gc<T>> for ObjectType<'a> {
     }
 }
 
+impl<'a, T: 'a + Copy> From<&Gc<T>> for ObjectType<'a> {
+    fn from(x: &Gc<T>) -> Self {
+        Gc::new(x.ptr).untag()
+    }
+}
+
 ////////////////////////
 // Traits for Objects //
 ////////////////////////
