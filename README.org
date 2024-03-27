@@ -3,7 +3,13 @@
 
 [[https://rune-rs.netlify.app/rune/][Docs]]
 
-This project is an experimental Emacs lisp interpreter written in rust. The project is still at a very early phase and explores using Rust as a host language. See the [[file:design.org][design doc]] for more details.
+This project is an experimental Emacs core written in Rust. The project is still at a very early phase but has the following goals:
+
+- Bring multi-threaded elisp to Emacs
+- Be "bug-compatible" with existing Emacs Lisp packages (everything should still work)
+- Enable performance improvements (including faster GC, regex, and JSON) by leveraging the Rust Ecosystem.
+
+See the [[file:design.org][design doc]] for more details.
 ** Status
 The current goal of this project is to create an editor MVP. We have a basic elisp runtime, and we are working on adding basic editing functionality in a minimal GUI. This will include:
 
@@ -43,6 +49,8 @@ The project is defined by a main package =rune=, which depends on the crates inc
 - [[file:src/fns.rs][fns]], [[file:src/data.rs][data]], [[file:src/alloc.rs][alloc]] :: These modules contain definitions of builtin in functions. Some of these are just stubbed out until the functionality is actually needed.
 
 ** Contributing
+See the [[file:architecture.org][architecture]] doc for more info on the structure of Rust Emacs internals.
+
 This project is moved forward by trying to load new elisp files and seeing what breaks. The best way to do that is with ~cargo run~, which will load the currently bootstrapped files. The bootstrapped files are located in [[file:src/main.rs][main.rs]] as part of the ~load~ function.
 
 Usually what is needed is to implement more primitive functions. This is done with the [[file:rune-macros/lib.rs][defun]] macro. For example, if we wanted to implement the  ~substring~ function, we would first look at the lisp signature.
@@ -51,7 +59,7 @@ Usually what is needed is to implement more primitive functions. This is done wi
 (substring STRING &optional FROM TO)
 #+end_src
 
-Then we would translate the types to their rust equivalent. If the correct type is not known we can use ~Object~. In this example we would write our Rust signature as follows:
+Then we would translate the types to their Rust equivalent. If the correct type is not known we can use ~Object~. In this example we would write our Rust signature as follows:
 #+begin_src rust
   #[defun]
   fn substring(string: &str, from: Option<i64>, to: Option<i64>) -> String {...}
@@ -60,12 +68,12 @@ Then we would translate the types to their rust equivalent. If the correct type 
 If you run with ~cargo run -- --load --repl~ that will load the current bootstrapped files and then open the REPL. From there you can run ~(load "/path/to/elisp/file.el")~ to try loading a new file. Files that are not bootstrapped are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
 
 ** Blog posts
-- [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in rust. It serves as in intro to this project.
+- [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in Rust. It serves as in intro to this project.
 - [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]] :: An overview of the garbage collector used in this project and how Rust enables safe GC abstractions.
 - [[https://coredumped.dev/2022/05/19/a-vision-of-a-multi-threaded-emacs/][A vision of a multi-threaded Emacs ]]:: Some ideas about how to add multi-threading to the existing language.
 - [[https://coredumped.dev/2023/01/17/design-of-emacs-in-rust/][Design of Emacs in Rust]] :: Some of the unique benefits that Rust could bring to Emacs.
 ** Further exploration
-- [[https://github.com/remacs/remacs][Remacs]] :: The original rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained but is a big inspiration for Rune.
-- [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more mature ecosystem (which is part of the promise of rust).
+- [[https://github.com/remacs/remacs][Remacs]] :: The original Rust and Emacs project. Remacs took the approach of enabling interop between Emacs C core and Rust, enabling them to replace parts of Emacs piecemeal. The project is currently unmaintained but is a big inspiration for Rune.
+- [[https://github.com/emacs-ng/emacs-ng][emacs-ng]] :: The spiritual successor to remacs. This project integrates the Deno runtime into emacs, allowing you to write extensions in elisp or javascript. Which sounds cool if you happen to be a web developer. It really shows the power of integrating Emacs with a more modern ecosystem (which is part of the promise of Rust).
 - [[https://github.com/helix-editor/helix][helix]] :: A fast modern text editor written in Rust.
 - [[http://craftinginterpreters.com/][crafting interpreters]] :: This was a big inspiration for this project, and it's probably one of the best introductions to programming language implementations.

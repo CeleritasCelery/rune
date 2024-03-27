@@ -1,3 +1,5 @@
+This document describes how the Basic systems of the Rust core work and how to use them.
+
 * Object Hierarchy
 The type ~Object~ is equivalent to ~LispObject~ in the C core. It is a tagged pointer that is a superset of all possible concrete types. It is always 64 bits. There are other Sum types that represent a different group of concrete types, such as ~Number~ which is all numeric types, or ~Function~ which is all callable types. These can be matched into the different concrete types by using the ~untag~ method.
 
@@ -12,7 +14,7 @@ We strive for good interop with Rust native types. Many primitive types can be c
 Lisp lists can be created using the ~list!~ macro. This accepts a variable number of arguments and converts each one into an object. To create just a single ~Cons~, use ~Cons::new~ or ~Cons::new1~ (when the cdr is ~nil~).
 
 ** Symbols
-Builtin symbols that are defined in the Rust source are Given constant values and definitions. For example to reference the lisp symbol ~lambda~, you would use ~sym::LAMBDA~. These constants can be used in match statements. For example to check if an object is a symbol and also is ~lambda~, you could use ~matches!(x, ObjectType::Symbol(sym::LAMBDA))~. This can also be used to create objects from symbols like ~sym::LAMBDA.into()~. All read symbols are interned. Uninterned symbols can be created with ~Symbol::new_uninterned~.
+Builtin symbols that are defined in the Rust source are given constant values and definitions. For example to reference the lisp symbol ~lambda~, you would use ~sym::LAMBDA~. These constants can be used in match statements. For example to check if an object is the symbol ~lambda~, you could use ~matches!(x, ObjectType::Symbol(sym::LAMBDA))~. This can also be used to create objects from symbols like ~sym::LAMBDA.into()~. All read symbols are interned. Uninterned symbols can be created with ~Symbol::new_uninterned~.
 
 ** Nil
 ~nil~ is an important value and has special support. Since it is a just a regular symbol, you could just check for ~nil~ by looking for that symbol with ~matches!(x, ObjectType::Symbol(sym::NIL))~. ~nil~ has a special constant for the ~ObjectType~ enum, so you could write that as ~matches!(x, ObjectType::NIL)~. But you can also just use ~x.is_nil()~ or ~x == NIL~. To create a ~nil~ object, just use the constant value ~NIL~. Same goes for value ~t~ via ~TRUE~.
@@ -24,7 +26,7 @@ Just like in GNU Emacs, ints are represented as a unboxed fixnum. This means tha
 The ~Context~ type is singleton that is passed through out the call graph and contains GC heap and other state. Creating any GC managed object requires using the ~Context~. This type is normally named ~cx~, and is passed as the last argument to functions that consume it. Calling ~garbage_collect~ requires *mutable* access to the context. This ensures that no object that is created with the ~Context~ can survive pass garbage collection (unless it is rooted). There can only be one instance of ~Context~ per thread.
 
 ** Rooting
-All objects created with a particular context cannot be accessed past garbage collection. To continue accessing an object, it needs to be rooted. This is done via the ~root!~ macro. It either takes an existing object an shadows the name with a rooted version (~root!(obj, cx)~), or takes an initializer (~root!(x, new(Vec), cx)~ or ~root!(x, init(Vec::new()), cx)~). Rust structures that are rooted have the type ~Rt<T>~.  Objects that are rooted have the type ~Rto<T>~ which is a type alias for ~Rt<Slot<T>>~. The ~Slot~ type allows object pointers to be updated during garbage collection.
+All objects created with a particular context cannot be accessed past garbage collection. To continue accessing an object, it needs to be rooted. This is done via the ~root!~ macro. It either takes an existing object and shadows the name with a rooted version (~root!(obj, cx)~), or takes an initializer (~root!(x, new(Vec), cx)~ or ~root!(x, init(Vec::new()), cx)~). Rust structures that are rooted have the type ~Rt<T>~ (which stands for "Root Traceable").  Objects that are rooted have the type ~Rto<T>~ (Root Traceable Object) which is a type alias for ~Rt<Slot<T>>~. The ~Slot~ type allows object pointers to be updated during garbage collection.
 
 ** Environment
 The type ~Env~ represents the lisp thread environment. Is passed as the second to last argument when ~Context~ is also used, and passed as the last argument when ~Context~ is not present in a function signature. All Lisp state should be stored in ~Env~.
@@ -33,7 +35,7 @@ The type ~Env~ represents the lisp thread environment. Is passed as the second t
 New lisp variables are created using the ~defvar!~ macro, which optionally takes a default value. A coresponding symbol with a uppercase /SNAKE_CASE/ name is also created.
 
 * Defining lisp functions
-Lisp functions are normal Rust functions that are annotated with the ~#[defun]~ proc macro. This macro will create a wrapper that converts ~Objects~ into the requested types and also converts the return value back into an ~Object~. This allows functions to move much of their type checking out of the function body for cleaner implementations. For example a function that accepts a string and returns a int could be written like this
+Lisp functions are normal Rust functions that are annotated with the ~#[defun]~ proc macro. This macro will create a wrapper that converts ~Objects~ into the requested types and also converts the return value back into an ~Object~. This allows functions to move much of their type checking out of the function body for cleaner implementations. For example a function that accepts a string and returns a usize could be written like this:
 
 #+begin_src rust
   #[defun]
@@ -75,7 +77,7 @@ If a function needs to call ~garbage_collect~ or calls a function that does (via
 * Common errors
 
 ** cannot borrow `*cx` as immutable
-When calling a function that takes a mutable context (~&mut Context~), Rust will lengthen the borrow mutable borrow for as long as the returned value is accessed. This can be fixed by wrapping the call in the ~rebind!~ macro.
+When calling a function that takes a mutable context (~&mut Context~), Rust will lengthen the mutable borrow for as long as the returned value is accessed. This can be fixed by wrapping the call in the ~rebind!~ macro.
 
 #+begin_src rust
   let x = rebind!(my_func(x, &mut cx));
