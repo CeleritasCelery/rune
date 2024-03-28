@@ -1,6 +1,9 @@
+use crate::intervals::IntervalTree;
+
 use super::gc::{Context, ObjectMap, Rto, Slot};
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
+use rune_core::hashmap::IndexMap;
 use rune_macros::Trace;
 use std::cell::OnceCell;
 
@@ -23,6 +26,8 @@ pub(crate) struct Env<'a> {
     #[no_trace]
     pub(crate) current_buffer: CurrentBuffer<'a>,
     pub(crate) stack: LispStack<'a>,
+    #[no_trace]
+    pub buffer_textprops: IndexMap<Object<'a>, IntervalTree<'a>>,
 }
 
 #[derive(Debug)]

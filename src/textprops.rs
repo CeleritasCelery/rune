@@ -1,11 +1,10 @@
 use crate::{
     core::{
-        cons::Cons,
-        gc::Context,
-        object::{Gc, ListType, Object},
+        cons::Cons, env::Env, gc::{Context, ObjectMap, Rt}, object::{Gc, ListType, Object, ObjectType, WithLifetime, NIL, TRUE}
     },
-    fns::eq,
+    fns::{eq, plist_get}, intervals::IntervalTree,
 };
+use rune_macros::defun;
 use anyhow::Result;
 
 #[allow(dead_code)]
@@ -62,10 +61,97 @@ pub fn add_properties<'ob>(
             let pl = plist_i.untag();
             changed = true;
             let new_cons = Cons::new(key1, Cons::new(val1?, pl, cx), cx);
-            obj_i = new_cons.into(); // TODO this does not work
+            obj_i = new_cons.into();
         }
     }
     Ok((obj_i, changed))
+}
+
+pub fn plist_get_str<'ob>(plist: Object<'ob>, prop: &str) -> Result<Object<'ob>> {
+    let Ok(plist) = Gc::<ListType>::try_from(plist) else { return Ok(NIL) };
+    
+    // TODO: this function should never fail. Need to implement safe iterator
+    let mut iter = plist.elements();
+    while let Some(cur_prop) = iter.next() {
+        let Some(value) = iter.next() else { return Ok(NIL) };
+        if let ObjectType::Symbol(sym) = cur_prop?.untag() {
+            if sym.to_string() == prop {
+                return Ok(value?)
+            }
+        }
+    }
+    Ok(NIL)
+}
+
+
+/// Return the list of properties of the character at POSITION in OBJECT.
+/// If the optional second argument OBJECT is a buffer (or nil, which means
+/// the current buffer), POSITION is a buffer position (integer or marker).
+///
+/// If OBJECT is a string, POSITION is a 0-based index into it.
+///
+/// If POSITION is at the end of OBJECT, the value is nil, but note that
+/// buffer narrowing does not affect the value.  That is, if OBJECT is a
+/// buffer or nil, and the buffer is narrowed and POSITION is at the end
+/// of the narrowed buffer, the result may be non-nil.
+///
+/// If you want to display the text properties at point in a human-readable
+/// form, use the `describe-text-properties' command.
+#[defun]
+pub fn text_properties_at<'ob>(position: usize, object: Object<'ob>, env: &Rt<Env>) -> Object<'ob> {
+    if let Some(tree) = env.buffer_textprops.get(&object) {
+        if let Some(prop) = tree.find(position) {
+            // TODO lifetimes don't match; don't know why yet
+            unsafe {
+                return prop.val.with_lifetime();
+            }
+        }
+    }
+    NIL
+}
+/// Return the value of POSITION's property PROP, in OBJECT.
+/// OBJECT should be a buffer or a string; if omitted or nil, it defaults
+/// to the current buffer.
+///
+/// If POSITION is at the end of OBJECT, the value is nil, but note that
+/// buffer narrowing does not affect the value.  That is, if the buffer is
+/// narrowed and POSITION is at the end of the narrowed buffer, the result
+/// may be non-nil.
+#[defun]
+pub fn get_text_property<'ob>(position: usize, prop: Object<'ob>, object: Object<'ob>, env: &Rt<Env>) -> Result<Object<'ob>> {
+    let props = text_properties_at(position, object, env);
+    // TODO see lookup_char_property, should also lookup
+    // 1. category
+    // 2. char_property_alias_alist
+    // 3.  default_text_properties
+    plist_get(props, prop)
+}
+
+
+#[defun]
+pub fn put_text_property<'ob>(start: usize, end: usize, property: Object<'ob>, value: Object<'ob>, object: Object<'ob>, env: &mut Rt<Env>) {
+    // let props = env.buffer_textprops(object);
+    // env.buffer_textprops.entry(object).or_insert(IntervalTree::new());
+    
+}
+
+#[defun]
+pub fn next_property_change<'ob>(position: usize, object: Object<'ob>, limit: Object<'ob>, env: &mut Rt<Env>) -> Result<usize> {
+    let env = &mut **env;
+    let tree = if object.is_nil() {
+        todo!()
+    } else {
+        // env.buffer_textprops(object).ok_or(anyhow::Error::msg("no property tree for buffer"))?
+    };
+    // let node = tree.find(position);
+
+    if eq(limit, TRUE) {
+        todo!()
+
+    }
+
+    todo!()
+    
 }
 
 #[cfg(test)]
@@ -87,7 +173,7 @@ mod tests {
         let mut context = Context::new(roots);
         let cx = &mut context;
         // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
-        let mut plist_1 = list![intern(":a", cx), 1, intern(":b", cx), 2; cx];
+        let plist_1 = list![intern(":a", cx), 1, intern(":b", cx), 2; cx];
         let plist_2 = list![intern(":a", cx), 4, intern(":c", cx), 5; cx];
         let (plist_1, changed) =
             add_properties(plist_2, plist_1, PropertySetType::Replace, false, cx).unwrap();
