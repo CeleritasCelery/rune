@@ -1,14 +1,10 @@
 #![allow(dead_code)]
-use std::{cmp::Ordering, ops::Range};
+use std::{cmp::Ordering, ops::{Bound, Range, RangeBounds}};
 
 use crate::{
     core::{gc::Context, object::Object},
-    fns::eq,
     textprops::add_properties,
 };
-
-// NOTE test only
-// type Object<'ob> = &'ob usize;
 
 /// a half-open interval in ℕ, [start, end)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
@@ -16,6 +12,7 @@ pub struct TextRange {
     pub start: usize,
     pub end: usize,
 }
+
 impl Ord for TextRange {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.start.cmp(&other.start) {
@@ -25,6 +22,16 @@ impl Ord for TextRange {
         }
     }
 }
+
+impl RangeBounds<usize> for TextRange {
+    fn start_bound(&self) -> Bound<&usize> {
+        Bound::Included(&self.start)
+    }
+
+    fn end_bound(&self) -> Bound<&usize> {
+        Bound::Excluded(&self.start)
+    }
+} 
 
 impl TextRange {
     /// caller should check that start < end
@@ -94,8 +101,8 @@ pub enum Color {
 
 #[derive(Debug, Clone)]
 pub struct Node<'ob> {
-    key: TextRange,
-    val: Object<'ob>,
+    pub key: TextRange,
+    pub val: Object<'ob>,
     left: MaybeNode<'ob>,
     right: MaybeNode<'ob>,
     color: Color,
@@ -600,7 +607,7 @@ impl<'ob> Node<'ob> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// A interval tree using red-black tree, whereas keys are intervals, and values are
 /// plists in elisp.
 ///
@@ -684,6 +691,12 @@ impl<'ob> IntervalTree<'ob> {
         if let Some(ref mut node) = self.root {
             node.advance(position, length);
         }
+    }
+
+    pub fn find(&self, position: usize) -> Option<&Node<'ob>> {
+        let range = TextRange::new(position, position + 1);
+        let res = self.find_intersects(range);
+        res.first().copied()
     }
 
     pub fn find_intersects(&self, range: TextRange) -> Vec<&Node<'ob>> {
