@@ -117,10 +117,6 @@ impl Trace for Symbol<'_> {
 impl<'a> Markable for Symbol<'a> {
     type Value = Symbol<'a>;
 
-    fn is_marked(&self) -> bool {
-        self.get().is_marked()
-    }
-
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let val = self.get().move_value(to_space);
         val.map(|(ptr, moved)| (unsafe { Self::from_ptr(ptr.as_ptr()) }, moved))
@@ -129,12 +125,8 @@ impl<'a> Markable for Symbol<'a> {
 
 impl Trace for SymbolCellInner {
     fn trace(&self, _state: &mut GcState) {
-        // interned symbols are not collected yet
-        if matches!(self.name, SymbolName::Uninterned(_)) {
-            if let Some(func) = self.get() {
-                assert!(func.as_obj().is_marked());
-            }
-        }
+        // The function cell of the symbol is always cloned in the global symbol
+        // map
     }
 }
 

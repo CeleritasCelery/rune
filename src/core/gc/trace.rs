@@ -23,10 +23,7 @@ impl GcState {
     pub fn trace_stack(&mut self) {
         while let Some(raw) = self.stack.pop() {
             let obj = unsafe { Object::from_raw(raw) };
-            // TODO: Can we just not push marked objects?
-            if !obj.is_marked() {
-                obj.trace(self);
-            }
+            obj.trace(self);
         }
     }
 }

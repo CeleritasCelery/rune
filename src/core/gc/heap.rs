@@ -108,6 +108,10 @@ impl<T> GcHeap<T> {
             Err(fwd) => AllocState::Forwarded(fwd),
         }
     }
+
+    fn is_marked(&self) -> bool {
+        self.header().get_header().unwrap().marked.get()
+    }
 }
 
 pub(in crate::core) enum AllocState {
@@ -118,7 +122,6 @@ pub(in crate::core) enum AllocState {
 
 pub(in crate::core) trait Markable {
     type Value;
-    fn is_marked(&self) -> bool;
     fn move_value(&self, _to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         None
     }
@@ -126,10 +129,6 @@ pub(in crate::core) trait Markable {
 
 impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
     type Value = &'a T;
-
-    fn is_marked(&self) -> bool {
-        (*self).is_marked()
-    }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let val = (*self).move_value(to_space);
@@ -142,9 +141,6 @@ macro_rules! NewtypeMarkable {
     (() $vis:vis struct $name:ident $($tail:tt)+) => {
         impl $crate::core::gc::Markable for $name {
             type Value = std::ptr::NonNull<Self>;
-            fn is_marked(&self) -> bool {
-                self.0.is_marked()
-            }
 
             fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
                 match self.0.move_value(to_space) {
@@ -158,10 +154,6 @@ macro_rules! NewtypeMarkable {
 
 impl<T> Markable for GcHeap<T> {
     type Value = NonNull<Self>;
-
-    fn is_marked(&self) -> bool {
-        self.header().get_header().unwrap().marked.get()
-    }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         use std::ptr;

@@ -21,10 +21,6 @@ struct LispStringInner(Cell<*mut str>);
 impl Markable for LispString {
     type Value = std::ptr::NonNull<LispString>;
 
-    fn is_marked(&self) -> bool {
-        self.0.is_marked()
-    }
-
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         match self.0.allocation_state() {
             AllocState::Forwarded(f) => Some((f.cast::<Self>(), false)),
@@ -143,10 +139,6 @@ impl Deref for ByteString {
 
 impl Markable for ByteString {
     type Value = std::ptr::NonNull<ByteString>;
-
-    fn is_marked(&self) -> bool {
-        self.0.is_marked()
-    }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         match self.0.allocation_state() {

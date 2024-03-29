@@ -1388,10 +1388,6 @@ where
 {
     type Value = Self;
 
-    fn is_marked(&self) -> bool {
-        todo!()
-    }
-
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         self.untag().move_value(to_space).map(|(x, moved)| (x.tag(), moved))
     }
@@ -1399,22 +1395,6 @@ where
 
 impl Markable for Object<'_> {
     type Value = Self;
-
-    fn is_marked(&self) -> bool {
-        match self.untag() {
-            ObjectType::Int(_) | ObjectType::SubrFn(_) => true,
-            ObjectType::Float(x) => x.is_marked(),
-            ObjectType::Cons(x) => x.is_marked(),
-            ObjectType::Vec(x) => x.is_marked(),
-            ObjectType::Record(x) => x.is_marked(),
-            ObjectType::HashTable(x) => x.is_marked(),
-            ObjectType::String(x) => x.is_marked(),
-            ObjectType::ByteString(x) => x.is_marked(),
-            ObjectType::ByteFn(x) => x.is_marked(),
-            ObjectType::Symbol(x) => x.is_marked(),
-            ObjectType::Buffer(x) => x.is_marked(),
-        }
-    }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let data = match self.untag() {
@@ -1444,15 +1424,6 @@ impl Markable for Object<'_> {
 impl Markable for Function<'_> {
     type Value = Self;
 
-    fn is_marked(&self) -> bool {
-        match self.untag() {
-            FunctionType::SubrFn(_) => true,
-            FunctionType::Cons(x) => x.is_marked(),
-            FunctionType::ByteFn(x) => x.is_marked(),
-            FunctionType::Symbol(x) => x.is_marked(),
-        }
-    }
-
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let data = match self.untag() {
             FunctionType::SubrFn(_) => return None,
@@ -1471,10 +1442,6 @@ impl Markable for Function<'_> {
 
 impl Markable for List<'_> {
     type Value = Self;
-
-    fn is_marked(&self) -> bool {
-        todo!()
-    }
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         let data = match self.untag() {
@@ -1615,24 +1582,6 @@ impl ObjectType<'_> {
             ObjectType::SubrFn(x) => D::fmt(x, f),
             ObjectType::Float(x) => D::fmt(x, f),
             ObjectType::Buffer(x) => D::fmt(x, f),
-        }
-    }
-}
-
-impl<'ob> Object<'ob> {
-    pub(crate) fn is_marked(self) -> bool {
-        match self.untag() {
-            ObjectType::Int(_) | ObjectType::SubrFn(_) => true,
-            ObjectType::Float(x) => x.is_marked(),
-            ObjectType::Cons(x) => x.is_marked(),
-            ObjectType::Vec(x) => x.is_marked(),
-            ObjectType::Record(x) => x.is_marked(),
-            ObjectType::HashTable(x) => x.is_marked(),
-            ObjectType::String(x) => x.is_marked(),
-            ObjectType::ByteString(x) => x.is_marked(),
-            ObjectType::ByteFn(x) => x.is_marked(),
-            ObjectType::Symbol(x) => x.is_marked(),
-            ObjectType::Buffer(x) => x.is_marked(),
         }
     }
 }
