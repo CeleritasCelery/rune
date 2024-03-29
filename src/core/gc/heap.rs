@@ -91,10 +91,29 @@ impl<T> GcHeap<T> {
         unsafe { &*self.header.get() }
     }
 
-    fn forward(&self, fwd_ptr: NonNull<u8>) {
+    pub(in crate::core) fn forward(&self, fwd_ptr: NonNull<u8>) {
         let header = unsafe { &mut *self.header.get() };
         header.fwd_ptr = fwd_ptr;
     }
+
+    pub(in crate::core) fn allocation_state(&self) -> AllocState {
+        match self.header().get_header() {
+            Ok(header) => {
+                if header.marked.get() {
+                    AllocState::Global
+                } else {
+                    AllocState::Unmoved
+                }
+            }
+            Err(fwd) => AllocState::Forwarded(fwd),
+        }
+    }
+}
+
+pub(in crate::core) enum AllocState {
+    Forwarded(NonNull<u8>),
+    Global,
+    Unmoved,
 }
 
 pub(in crate::core) trait Markable {

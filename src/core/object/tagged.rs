@@ -392,9 +392,10 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = self.as_str() as *const str;
-            block.drop_stack.borrow_mut().push(DropStackElem::String(self));
+            let mut x = self;
+            let ptr = x.as_mut_str();
             let ptr = block.objects.alloc(LispString::new(ptr, C));
+            block.drop_stack.borrow_mut().push(DropStackElem::String(x));
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -405,7 +406,9 @@ impl IntoObject for GcString<'_> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = block.objects.alloc(LispString::new(self.into_bump_str(), C));
+            let mut x = self;
+            let ptr = block.objects.alloc(LispString::new(x.as_mut_str(), C));
+            std::mem::forget(x);
             Self::Out::tag_ptr(ptr)
         }
     }

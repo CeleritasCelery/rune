@@ -1,5 +1,5 @@
 use super::{CloneIn, IntoObject};
-use crate::core::gc::{Block, GcHeap, GcState, Trace};
+use crate::core::gc::{AllocState, Block, GcHeap, GcState, Markable, Trace};
 use crate::NewtypeMarkable;
 use bumpalo::collections::String as GcString;
 use macro_attr_2018::macro_attr;
@@ -8,26 +8,47 @@ use rune_macros::Trace;
 use std::cell::Cell;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
+use std::ptr::NonNull;
 
-macro_attr! {
-    #[derive(NewtypeMarkable!, Trace)]
-    pub(crate) struct LispString(GcHeap<LispStringInner>);
-}
+pub(crate) struct LispString(GcHeap<LispStringInner>);
 
+// This type needs to be this complex due to to string mutation.
+//
+// Case 1: The new char is the same utf8 size as the old one:
+// We can update the string in place using the mutable pointer.
+//
+// Case 2: The new char is a different size:
+// Need to allocate a new string and update the cell to point to that.
 struct LispStringInner(Cell<*mut str>);
 
-impl LispStringInner {
-    fn get_str(&self) -> &str {
-        unsafe { &*self.0.get() }
+impl Markable for LispString {
+    type Value = std::ptr::NonNull<LispString>;
+
+    fn is_marked(&self) -> bool {
+        self.0.is_marked()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        match self.0.allocation_state() {
+            AllocState::Forwarded(f) => Some((f.cast::<Self>(), false)),
+            AllocState::Global => None,
+            AllocState::Unmoved => {
+                let ptr = {
+                    let mut new = GcString::from_str_in(self, to_space);
+                    let lisp_str = unsafe { LispString::new(new.as_mut_str(), false) };
+                    std::mem::forget(new);
+                    let alloc = to_space.alloc(lisp_str);
+                    NonNull::from(alloc)
+                };
+                self.0.forward(ptr.cast::<u8>());
+                Some((ptr, true))
+            }
+        }
     }
 }
 
-impl Trace for LispStringInner {
-    fn trace(&self, state: &mut GcState) {
-        let slice = self.get_str();
-        let new = state.to_space.alloc_str(slice);
-        self.0.set(new);
-    }
+impl Trace for LispString {
+    fn trace(&self, _state: &mut GcState) {}
 }
 
 impl Debug for LispString {
@@ -65,12 +86,12 @@ impl Deref for LispString {
 }
 
 impl LispString {
-    pub(in crate::core) unsafe fn new(string: *const str, constant: bool) -> Self {
-        Self(GcHeap::new(LispStringInner(Cell::new(string as *mut str)), constant))
+    pub(in crate::core) unsafe fn new(string: *mut str, constant: bool) -> Self {
+        Self(GcHeap::new(LispStringInner(Cell::new(string)), constant))
     }
 
     pub(crate) fn inner(&self) -> &str {
-        self.0.get_str()
+        unsafe { &*self.0 .0.get() }
     }
 }
 
@@ -145,5 +166,27 @@ impl Display for ByteString {
 impl Debug for ByteString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::core::gc::{Context, RootSet};
+    use rune_core::macros::root;
+
+    #[test]
+    fn test_string_aliasing() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let s1 = cx.add(String::from("hello"));
+        let mut s2 = cx.string_with_capacity(5);
+        s2.push_str("hello");
+        let s2 = cx.add(s2);
+        assert_eq!(s1, s2);
+        root!(s1, cx);
+        root!(s2, cx);
+        cx.garbage_collect(true);
+        assert_eq!(s1, s2);
     }
 }
