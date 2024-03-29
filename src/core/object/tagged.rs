@@ -5,7 +5,7 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, LispBuffer,
+    ByteFnPrototype, ByteString, GcString, LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
@@ -15,7 +15,6 @@ use crate::core::{
     env::sym,
     gc::{DropStackElem, GcState, Markable, Trace},
 };
-use bumpalo::collections::String as GcString;
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
@@ -392,10 +391,10 @@ impl IntoObject for String {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let mut x = self;
-            let ptr = x.as_mut_str();
+            let mut this = self;
+            let ptr = this.as_mut_str();
             let ptr = block.objects.alloc(LispString::new(ptr, C));
-            block.drop_stack.borrow_mut().push(DropStackElem::String(x));
+            block.drop_stack.borrow_mut().push(DropStackElem::String(this));
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -406,9 +405,9 @@ impl IntoObject for GcString<'_> {
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let mut x = self;
-            let ptr = block.objects.alloc(LispString::new(x.as_mut_str(), C));
-            std::mem::forget(x);
+            let mut this = self;
+            let ptr = block.objects.alloc(LispString::new(this.as_mut_str(), C));
+            std::mem::forget(this);
             Self::Out::tag_ptr(ptr)
         }
     }
@@ -426,10 +425,11 @@ impl IntoObject for Vec<u8> {
     type Out<'ob> = &'ob ByteString;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        unsafe {
-            let ptr = block.objects.alloc(ByteString::new(self, C));
-            <&ByteString>::tag_ptr(ptr)
-        }
+        let mut this = self;
+        let slice = this.as_mut_slice();
+        let ptr = block.objects.alloc(ByteString::new(slice, C));
+        block.drop_stack.borrow_mut().push(DropStackElem::ByteString(this));
+        unsafe { <&ByteString>::tag_ptr(ptr) }
     }
 }
 

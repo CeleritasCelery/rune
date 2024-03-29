@@ -1,7 +1,7 @@
 use super::GcState;
 use super::Trace;
+use crate::core::object::GcString;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
-use bumpalo::collections::String as GcString;
 use bumpalo::collections::Vec as GcVec;
 use std::cell::{Cell, RefCell};
 use std::fmt::Debug;
@@ -19,6 +19,7 @@ pub(crate) struct RootSet {
 // These types are only stored here so they can be dropped
 pub(in crate::core) enum DropStackElem {
     String(String),
+    ByteString(Vec<u8>),
     Vec(Vec<Object<'static>>),
 }
 

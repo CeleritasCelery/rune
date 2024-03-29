@@ -1,15 +1,12 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{AllocState, Block, GcHeap, GcState, Markable, Trace};
-use crate::NewtypeMarkable;
-use bumpalo::collections::String as GcString;
-use macro_attr_2018::macro_attr;
 use newtype_derive_2018::*;
-use rune_macros::Trace;
 use std::cell::Cell;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::ptr::NonNull;
 
+pub(crate) type GcString<'a> = bumpalo::collections::String<'a>;
 pub(crate) struct LispString(GcHeap<LispStringInner>);
 
 // This type needs to be this complex due to to string mutation.
@@ -133,19 +130,69 @@ impl<'a> From<&'a LispString> for &'a [u8] {
     }
 }
 
-macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeMarkable!, Trace)]
-    pub(crate) struct ByteString(GcHeap<Vec<u8>>);
+pub(crate) struct ByteString(GcHeap<*mut [u8]>);
+type ByteVec<'a> = bumpalo::collections::Vec<'a, u8>;
+
+impl Deref for ByteString {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.inner()
+    }
+}
+
+impl Markable for ByteString {
+    type Value = std::ptr::NonNull<ByteString>;
+
+    fn is_marked(&self) -> bool {
+        self.0.is_marked()
+    }
+
+    fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
+        match self.0.allocation_state() {
+            AllocState::Forwarded(f) => Some((f.cast::<Self>(), false)),
+            AllocState::Global => None,
+            AllocState::Unmoved => {
+                let ptr = {
+                    let mut new = ByteVec::new_in(to_space);
+                    new.extend_from_slice(self.inner());
+                    let byte_string = ByteString::new(new.as_mut_slice(), false);
+                    std::mem::forget(new);
+                    let alloc = to_space.alloc(byte_string);
+                    NonNull::from(alloc)
+                };
+                self.0.forward(ptr.cast::<u8>());
+                Some((ptr, true))
+            }
+        }
+    }
+}
+
+impl PartialEq for ByteString {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner() == other.inner()
+    }
+}
+
+impl Eq for ByteString {}
+
+impl Trace for ByteString {
+    fn trace(&self, _state: &mut GcState) {}
 }
 
 impl ByteString {
-    pub(crate) fn new(string: Vec<u8>, constant: bool) -> Self {
+    pub(in crate::core) fn new(string: *mut [u8], constant: bool) -> Self {
         Self(GcHeap::new(string, constant))
+    }
+
+    pub(crate) fn inner(&self) -> &[u8] {
+        unsafe { &**self.0 }
     }
 }
 
 impl<'new> CloneIn<'new, &'new Self> for ByteString {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+        // TODO: Allocate in the non-gc heap here
         (**self).to_vec().into_obj(bk)
     }
 }
@@ -182,6 +229,20 @@ mod test {
         let s1 = cx.add(String::from("hello"));
         let mut s2 = cx.string_with_capacity(5);
         s2.push_str("hello");
+        let s2 = cx.add(s2);
+        assert_eq!(s1, s2);
+        root!(s1, cx);
+        root!(s2, cx);
+        cx.garbage_collect(true);
+        assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn test_byte_string_aliasing() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let s1 = cx.add(vec![1u8, 2, 3]);
+        let s2 = cx.add(vec![1u8, 2, 3]);
         let s2 = cx.add(s2);
         assert_eq!(s1, s2);
         root!(s1, cx);
