@@ -19,7 +19,7 @@ use std::{
 #[derive(Eq)]
 pub(crate) struct LispVecInner {
     is_const: bool,
-    inner: Cell<*mut [ObjCell]>,
+    inner: Cell<*const [ObjCell]>,
 }
 
 macro_attr! {
@@ -40,7 +40,7 @@ impl PartialEq for LispVecInner {
 impl LispVec {
     // SAFETY: Since this type does not have an object lifetime, it is only safe
     // to use in context of the allocator.
-    pub(in crate::core) unsafe fn new(ptr: *mut [Object], constant: bool) -> Self {
+    pub(in crate::core) unsafe fn new(ptr: *const [Object], constant: bool) -> Self {
         Self(GcHeap::new(LispVecInner::new(ptr, constant), constant))
     }
 

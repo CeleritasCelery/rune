@@ -440,8 +440,8 @@ impl<'a> IntoObject for Vec<Object<'a>> {
         unsafe {
             // having the reference implicity cast a ptr triggers UB
             let ptr = self.as_mut_slice() as *mut [Object];
-            block.drop_stack.borrow_mut().push(DropStackElem::Vec(self.with_lifetime()));
             let ptr = block.objects.alloc(LispVec::new(ptr, C));
+            block.drop_stack.borrow_mut().push(DropStackElem::Vec(self.with_lifetime()));
             <&LispVec>::tag_ptr(ptr)
         }
     }
