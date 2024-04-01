@@ -1,6 +1,7 @@
 use super::GcState;
 use super::Trace;
 use crate::core::object::GcString;
+use crate::core::object::LispHashTable;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
 use bumpalo::collections::Vec as GcVec;
 use std::cell::{Cell, RefCell};
@@ -28,9 +29,20 @@ pub(in crate::core) enum DropStackElem {
 #[derive(Default)]
 pub(crate) struct Block<const CONST: bool> {
     pub(in crate::core) objects: bumpalo::Bump,
+    // Allocations that will be dropped when the objects are moved. At that time
+    // the allocation will get copied into the GC heap. This let's us avoid an
+    // extra copy of memory when a vector is first made an object. The
+    // allocation can continue to live outside of the GC heap until we copy the
+    // object.
     pub(in crate::core) drop_stack: RefCell<Vec<DropStackElem>>,
+    // We don't yet have a hashmap that supports allocators, so we need to keep
+    // track of the memory and free it only after the table is garbage
+    // collected. Kind of a hack.
+    pub(in crate::core) lisp_hashtables: RefCell<Vec<*const LispHashTable>>,
     pub(in crate::core) uninterned_symbol_map: UninternedSymbolMap,
 }
+
+unsafe impl<const C: bool> Send for Block<C> {}
 
 /// Owns all allocations and creates objects. All objects have
 /// a lifetime tied to the borrow of their `Context`. When the
@@ -167,6 +179,19 @@ impl<'ob, 'rt> Context<'rt> {
 
         self.next_limit = (state.to_space.allocated_bytes() * Self::GC_GROWTH_FACTOR) / 10;
         self.block.drop_stack.borrow_mut().clear();
+        // Find all hashtables that have not been moved (i.e. They are no longer
+        // accessible) and drop them. Otherwise, update the object pointer.
+        self.block.lisp_hashtables.borrow_mut().retain_mut(|ptr| {
+            let table = unsafe { &**ptr };
+            if let Some(fwd) = table.forwarding_ptr() {
+                *ptr = fwd.as_ptr().cast::<LispHashTable>();
+                true
+            } else {
+                unsafe { std::ptr::drop_in_place(*ptr as *mut LispHashTable) };
+                false
+            }
+        });
+
         self.block.objects = state.to_space;
     }
 }

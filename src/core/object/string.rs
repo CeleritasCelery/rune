@@ -88,14 +88,6 @@ impl LispString {
     }
 }
 
-impl Trace for String {
-    fn trace(&self, _: &mut GcState) {}
-}
-
-impl Trace for Vec<u8> {
-    fn trace(&self, _: &mut GcState) {}
-}
-
 impl LispString {
     pub(crate) fn len(&self) -> usize {
         self.chars().count()

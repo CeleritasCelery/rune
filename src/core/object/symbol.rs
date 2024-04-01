@@ -4,6 +4,7 @@ use crate::core::gc::{Block, Context, GcHeap, GcState, Markable, Trace};
 use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use sptr::Strict;
+use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -37,8 +38,10 @@ pub(crate) type SymbolCell = GcHeap<SymbolCellInner>;
 #[derive(Debug)]
 enum SymbolName {
     Interned(&'static str),
-    Uninterned(Box<str>),
+    Uninterned(Cell<&'static str>),
 }
+
+unsafe impl Sync for SymbolName {}
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub(crate) struct Symbol<'a> {
@@ -124,7 +127,12 @@ impl<'a> Markable for Symbol<'a> {
 }
 
 impl Trace for SymbolCellInner {
-    fn trace(&self, _state: &mut GcState) {
+    fn trace(&self, state: &mut GcState) {
+        if let SymbolName::Uninterned(name) = &self.name {
+            let new = state.to_space.alloc_str(name.get());
+            let new = unsafe { std::mem::transmute::<&str, &'static str>(new) };
+            name.set(new);
+        }
         // The function cell of the symbol is always cloned in the global symbol
         // map
     }
@@ -157,7 +165,7 @@ impl<'old, 'new> Symbol<'old> {
             match bk.uninterned_symbol_map.get(self) {
                 Some(new) => new.tag(),
                 None => {
-                    let sym = Symbol::new_uninterned(name, bk);
+                    let sym = Symbol::new_uninterned(name.get(), bk);
                     if let Some(old_func) = self.get().get() {
                         let new_func = old_func.clone_in(bk);
                         unsafe {
@@ -254,10 +262,13 @@ impl SymbolCell {
         })
     }
 
-    fn new_uninterned<const C: bool>(name: &str, _bk: &Block<C>) -> Self {
+    fn new_uninterned<const C: bool>(name: &str, bk: &Block<C>) -> Self {
+        let mut owned_name = bk.string_with_capacity(name.len());
+        owned_name.push_str(name);
+        let name = unsafe { std::mem::transmute::<&str, &'static str>(owned_name.into_bump_str()) };
         GcHeap::new(
             SymbolCellInner {
-                name: SymbolName::Uninterned(name.to_owned().into_boxed_str()),
+                name: SymbolName::Uninterned(Cell::new(name)),
                 func: Some(Self::EMTPTY),
                 special: AtomicBool::new(false),
             },
@@ -272,7 +283,7 @@ impl SymbolCellInner {
     pub(crate) fn name(&self) -> &str {
         match &self.name {
             SymbolName::Interned(x) => x,
-            SymbolName::Uninterned(x) => x,
+            SymbolName::Uninterned(x) => x.get(),
         }
     }
 

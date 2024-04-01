@@ -3,7 +3,7 @@ use super::{
         error::ArgError,
         gc::{Block, Context},
     },
-    display_slice, CloneIn, IntoObject,
+    display_slice, CloneIn, IntoObject, LispVec, ObjCell,
 };
 use super::{Object, WithLifetime};
 use crate::{
@@ -27,7 +27,8 @@ pub(crate) struct ByteFnPrototype {
     pub(crate) depth: usize,
     #[no_trace]
     pub(super) op_codes: Box<[u8]>,
-    pub(super) constants: Vec<Slot<Object<'static>>>,
+    // TODO: remove a level of pointer indirection here.
+    pub(super) constants: Slot<&'static LispVec>,
 }
 
 macro_attr! {
@@ -49,15 +50,25 @@ impl ByteFn {
     // the GC heap, because holding it past garbage collections is unsafe.
     pub(crate) unsafe fn make(
         op_codes: &[u8],
-        consts: Vec<Object>,
+        consts: &LispVec,
         args: FnArgs,
         depth: usize,
     ) -> ByteFnPrototype {
+        let op_codes = op_codes.to_vec().into_boxed_slice();
+        #[cfg(miri)]
+        unsafe {
+            // TODO: the opcodes live outside of the heap because we are relying
+            // on them having a stable address. Therefore they get leaked. We
+            // need to find some way to address this.
+            extern "Rust" {
+                fn miri_static_root(ptr: *const u8);
+            }
+            let ptr: *const u8 = op_codes.as_ptr();
+            miri_static_root(ptr)
+        }
         ByteFnPrototype {
-            constants: unsafe {
-                std::mem::transmute::<Vec<Object>, Vec<Slot<Object<'static>>>>(consts)
-            },
-            op_codes: op_codes.to_vec().into_boxed_slice(),
+            constants: unsafe { Slot::new(consts.with_lifetime()) },
+            op_codes,
             args,
             depth,
         }
@@ -70,9 +81,7 @@ impl ByteFnPrototype {
     }
 
     pub(crate) fn consts<'ob>(&'ob self) -> &'ob [Object<'ob>] {
-        unsafe {
-            std::mem::transmute::<&'ob [Slot<Object<'static>>], &'ob [Object<'ob>]>(&self.constants)
-        }
+        unsafe { std::mem::transmute::<&'ob [ObjCell], &'ob [Object<'ob>]>(&self.constants) }
     }
 
     pub(crate) fn index<'ob>(&self, index: usize, cx: &'ob Context) -> Option<Object<'ob>> {
@@ -92,8 +101,9 @@ impl ByteFnPrototype {
 
 impl<'new> CloneIn<'new, &'new Self> for ByteFn {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-        let constants = self.constants.iter().map(|x| x.clone_in(bk)).collect();
-        let byte_fn = unsafe { ByteFn::make(&self.op_codes, constants, self.args, self.depth) };
+        let constants = self.constants.clone_in(bk);
+        let byte_fn =
+            unsafe { ByteFn::make(&self.op_codes, constants.untag(), self.args, self.depth) };
         byte_fn.into_obj(bk)
     }
 }

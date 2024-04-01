@@ -489,6 +489,7 @@ impl<'a> IntoObject for HashTable<'a> {
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
             let ptr = block.objects.alloc(LispHashTable::new(self, C));
+            block.lisp_hashtables.borrow_mut().push(ptr);
             <&LispHashTable>::tag_ptr(ptr)
         }
     }
@@ -983,39 +984,6 @@ impl<'old, 'new> WithLifetime<'new> for FunctionType<'old> {
 
     unsafe fn with_lifetime(self) -> Self::Out {
         std::mem::transmute::<FunctionType<'old>, FunctionType<'new>>(self)
-    }
-}
-
-#[cfg(miri)]
-extern "Rust" {
-    fn miri_static_root(ptr: *const u8);
-}
-
-#[cfg(miri)]
-impl<'ob> FunctionType<'ob> {
-    pub(crate) fn set_as_miri_root(self) {
-        // TODO: semispace fix
-        // match self {
-        //     FunctionType::ByteFn(x) => {
-        //         let ptr: *const _ = x;
-        //         unsafe {
-        //             miri_static_root(ptr as _);
-        //         }
-        //     }
-        //     FunctionType::SubrFn(x) => {
-        //         let ptr: *const _ = x;
-        //         unsafe {
-        //             miri_static_root(ptr as _);
-        //         }
-        //     }
-        //     FunctionType::Cons(x) => {
-        //         let ptr: *const _ = x;
-        //         unsafe {
-        //             miri_static_root(ptr as _);
-        //         }
-        //     }
-        //     FunctionType::Symbol(_) => {}
-        // }
     }
 }
 

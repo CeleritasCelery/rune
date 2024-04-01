@@ -12,6 +12,7 @@ use rune_core::hashmap::{HashSet, IndexMap};
 use rune_macros::Trace;
 use std::cell::RefCell;
 use std::fmt::{self, Debug, Display, Write};
+use std::ptr::NonNull;
 use std::sync::Mutex;
 
 pub(crate) type HashTable<'ob> = IndexMap<Object<'ob>, Object<'ob>>;
@@ -24,6 +25,15 @@ macro_attr! {
 impl LispHashTable {
     pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
         Self(GcHeap::new(HashTableCore::new(table, constant), constant))
+    }
+
+    pub(in crate::core) fn forwarding_ptr(&self) -> Option<NonNull<u8>> {
+        use crate::core::gc::AllocState as A;
+        match self.0.allocation_state() {
+            A::Forwarded(f) => Some(f),
+            A::Global => panic!("global hashtable allocation found in local heap"),
+            A::Unmoved => None,
+        }
     }
 }
 
