@@ -46,7 +46,7 @@ paste = "1.0.12"
 rand = "0.8.5"
 sptr = { workspace = true }
 streaming-iterator = "0.1.9"
-titlecase = "2.2.1"
+titlecase = "3.0.0"
 fallible-iterator = { workspace = true }
 fallible-streaming-iterator = { workspace = true }
 text-buffer = { workspace = true }
