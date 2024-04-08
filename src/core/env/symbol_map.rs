@@ -59,8 +59,6 @@ impl SymbolMap {
     pub(crate) fn set_func(&self, symbol: Symbol, func: Function) -> Result<()> {
         let new_func = func.clone_in(&self.block);
         self.block.uninterned_symbol_map.clear();
-        #[cfg(miri)]
-        new_func.untag().set_as_miri_root();
         // SAFETY: The object is marked read-only, we have cloned in the map's
         // context, and it is const, so calling this function is safe.
         unsafe { symbol.set_func(new_func) }
