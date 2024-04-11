@@ -39,8 +39,29 @@ fn main() {
             .unwrap();
 
         run_gnu_emacs();
+        compare_output();
     } else {
         println!("no command");
+    }
+}
+
+fn compare_output() {
+    // go through eprop-out.el and eprop-ref.el and find any differences
+    let ref_file = fs::read_to_string("eprop-ref.el").unwrap();
+    let out_file = fs::read_to_string("eprop-out.el").unwrap();
+
+    let ref_lines = ref_file.lines();
+    let out_lines = out_file.lines();
+
+    let mut tag = String::new();
+    for (ref_line, out_line) in ref_lines.zip(out_lines) {
+        if let Some(this_tag) = ref_line.strip_prefix(";; ") {
+            tag = this_tag.to_string();
+        }
+        if ref_line != out_line {
+            eprintln!("mismatch for {tag}:\nref: {ref_line}\nout: {out_line}");
+            return;
+        }
     }
 }
 
