@@ -34,7 +34,7 @@ impl GcHeader {
 }
 
 impl fmt::Debug for GcHeader {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.get_header() {
             Ok(header) => write!(f, "GcHeader {{ header: {:?} }}", header),
             Err(ptr) => write!(f, "GcHeader {{ fwd_ptr: {:?} }}", ptr),
@@ -220,7 +220,7 @@ impl<T> DerefMut for GcHeap<T> {
 }
 
 impl<T: fmt::Display> fmt::Display for GcHeap<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", &self.data)
     }
 }

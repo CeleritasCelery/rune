@@ -111,13 +111,13 @@ impl<T> AsMut<Rt<T>> for __StackRoot<'_, T> {
 }
 
 impl<T: Debug> Debug for __StackRoot<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(self.data, f)
     }
 }
 
 impl<T: Display> Display for __StackRoot<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt(self.data, f)
     }
 }
@@ -292,25 +292,25 @@ where
 }
 
 impl<T: Debug> Debug for Rt<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(&self.inner(), f)
     }
 }
 
 impl<T: Display> Display for Rt<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt(&self.inner(), f)
     }
 }
 
 impl<T: Debug> Debug for Slot<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Debug::fmt(self.get(), f)
     }
 }
 
 impl<T: Display> Display for Slot<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt(self.get(), f)
     }
 }

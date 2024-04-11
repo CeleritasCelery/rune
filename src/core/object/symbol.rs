@@ -139,13 +139,13 @@ impl Trace for SymbolCellInner {
 }
 
 impl fmt::Display for Symbol<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
 impl fmt::Debug for Symbol<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
@@ -350,13 +350,13 @@ impl SymbolCellInner {
 }
 
 impl fmt::Display for SymbolCellInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
 impl fmt::Debug for SymbolCellInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }

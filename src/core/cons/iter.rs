@@ -89,7 +89,7 @@ pub(crate) enum ConsError {
 }
 
 impl std::fmt::Display for ConsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ConsError::NonNilCdr => write!(f, "non-nil cdr at end of list"),
             ConsError::CircularList => write!(f, "Circular list"),

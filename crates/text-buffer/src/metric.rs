@@ -960,7 +960,7 @@ impl Default for Node {
 }
 
 impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // print the children level by level by adding them to a pair of
         // alternating arrays for each level
         let mut current = Vec::new();
@@ -1022,7 +1022,7 @@ impl Metric {
 }
 
 impl fmt::Display for Metric {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "b:{}, c:{}", self.bytes, self.chars)
     }
 }

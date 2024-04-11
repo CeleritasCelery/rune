@@ -109,7 +109,7 @@ impl<'new> CloneIn<'new, &'new Self> for ByteFn {
 }
 
 impl Display for ByteFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let spec = self.args.into_arg_spec();
         let code = display_slice(&self.op_codes);
         let consts = display_slice(&self.constants);
@@ -119,7 +119,7 @@ impl Display for ByteFn {
 }
 
 impl Debug for ByteFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ByteFn")
             .field("args", &self.args)
             .field("op_code", &self.op_codes)
@@ -214,13 +214,13 @@ impl<'new> WithLifetime<'new> for &SubrFn {
 }
 
 impl Display for SubrFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "#<subr {}>", &self.name)
     }
 }
 
 impl Debug for SubrFn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{self}")
     }
 }

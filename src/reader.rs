@@ -114,7 +114,7 @@ enum Token<'a> {
 }
 
 impl<'a> Display for Token<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::OpenParen(_) => write!(f, "("),
             Token::CloseParen(_) => write!(f, ")"),

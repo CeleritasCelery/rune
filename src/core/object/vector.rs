@@ -101,13 +101,13 @@ impl Trace for LispVecInner {
 }
 
 impl fmt::Display for LispVecInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
 impl fmt::Debug for LispVecInner {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
@@ -120,7 +120,7 @@ impl LispVecInner {
 
     pub(super) fn display_walk(
         &self,
-        f: &mut fmt::Formatter<'_>,
+        f: &mut fmt::Formatter,
         seen: &mut HashSet<*const u8>,
     ) -> fmt::Result {
         let ptr = (self as *const Self).cast();
@@ -157,17 +157,13 @@ impl<'new> CloneIn<'new, &'new Self> for Record {
 }
 
 impl fmt::Display for Record {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.display_walk(f, &mut HashSet::default())
     }
 }
 
 impl Record {
-    fn display_walk(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        seen: &mut HashSet<*const u8>,
-    ) -> fmt::Result {
+    fn display_walk(&self, f: &mut fmt::Formatter, seen: &mut HashSet<*const u8>) -> fmt::Result {
         let ptr = (self as *const Self).cast();
         if seen.contains(&ptr) {
             return write!(f, "#0");

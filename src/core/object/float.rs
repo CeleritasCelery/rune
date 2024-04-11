@@ -34,7 +34,7 @@ impl<'new> CloneIn<'new, &'new LispFloat> for LispFloat {
 }
 
 impl Display for LispFloat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let float = **self;
         if float.fract() == 0.0_f64 {
             write!(f, "{float:.1}")
@@ -45,7 +45,7 @@ impl Display for LispFloat {
 }
 
 impl Debug for LispFloat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{self}")
     }
 }

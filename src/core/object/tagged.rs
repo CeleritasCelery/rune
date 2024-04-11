@@ -1492,13 +1492,13 @@ impl Default for List<'_> {
 }
 
 impl<T> fmt::Display for Gc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.as_obj().untag())
     }
 }
 
 impl<T> fmt::Debug for Gc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{self}")
     }
 }

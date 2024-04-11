@@ -45,13 +45,13 @@ impl Trace for LispString {
 }
 
 impl Debug for LispString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Debug::fmt(self.inner(), f)
     }
 }
 
 impl Display for LispString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(self.inner(), f)
     }
 }
@@ -182,7 +182,7 @@ impl<'new> CloneIn<'new, &'new Self> for ByteString {
 }
 
 impl Display for ByteString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         for byte in &**self {
             if byte.is_ascii() {
                 write!(f, "{}", *byte as char)?;
@@ -195,7 +195,7 @@ impl Display for ByteString {
 }
 
 impl Debug for ByteString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{self}")
     }
 }

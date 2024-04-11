@@ -36,7 +36,7 @@ pub struct Buffer {
 }
 
 impl Debug for Buffer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let start = self.to_str(..self.gap_start);
         let end = self.to_str(self.gap_end..);
         // repeat _ for the gap length
@@ -55,7 +55,7 @@ impl Debug for Buffer {
 }
 
 impl Display for Buffer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.read(0..self.len()))
     }
 }
@@ -114,7 +114,7 @@ impl std::ops::Sub for GapMetric {
 }
 
 impl Display for GapMetric {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", Metric { bytes: self.bytes, chars: self.chars })
     }
 }

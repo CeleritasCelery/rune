@@ -155,7 +155,7 @@ impl PartialEq<LispBuffer> for OpenBuffer<'_> {
 impl Eq for LispBufferInner {}
 
 impl Display for LispBufferInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let data = self.text_buffer.lock().unwrap();
         let name = match data.as_ref() {
             Some(buf) => &buf.name,
