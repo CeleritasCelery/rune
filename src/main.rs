@@ -37,23 +37,39 @@ use crate::core::{
     object::{Gc, LispString, NIL},
 };
 use crate::eval::EvalError;
+use clap::Parser;
 use rune_core::macros::root;
 use std::io::{self, Write};
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, value_name = "FILE")]
+    load: Vec<String>,
+    #[arg(short, long)]
+    repl: bool,
+    #[arg(short, long)]
+    no_boostrap: bool,
+}
+
 fn main() {
+    let args = Args::parse();
+
     let roots = &RootSet::default();
     let cx = &mut Context::new(roots);
     root!(env, new(Env), cx);
-
-    let args = Args::parse();
 
     sym::init_symbols();
     crate::core::env::init_variables(cx, env);
     crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
         .expect("null should be defined");
 
-    if args.load {
-        load(env, cx);
+    if !args.no_boostrap {
+        bootstrap(env, cx);
+    }
+
+    for file in args.load {
+        load(&file, cx, env);
     }
 
     if args.repl {
@@ -68,7 +84,6 @@ fn parens_closed(buffer: &str) -> bool {
 }
 
 fn repl(env: &mut Rt<Env>, cx: &mut Context) {
-    println!("Hello, world!");
     let mut buffer = String::new();
     let stdin = io::stdin();
     loop {
@@ -107,11 +122,10 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
     }
 }
 
-fn load(env: &mut Rt<Env>, cx: &mut Context) {
-    buffer::get_buffer_create(cx.add("*scratch*"), Some(NIL), cx).unwrap();
-    let bootstrap: Gc<&LispString> = cx.add_as("lisp/bootstrap.el");
-    root!(bootstrap, cx);
-    match crate::lread::load(bootstrap, None, None, cx, env) {
+fn load(file: &str, cx: &mut Context, env: &mut Rt<Env>) {
+    let file: Gc<&LispString> = cx.add_as(file);
+    root!(file, cx);
+    match crate::lread::load(file, None, None, cx, env) {
         Ok(val) => print!("{val}"),
         Err(e) => {
             print!("Error: {e}");
@@ -122,29 +136,13 @@ fn load(env: &mut Rt<Env>, cx: &mut Context) {
     }
 }
 
-#[derive(Default)]
-struct Args {
-    load: bool,
-    repl: bool,
+fn bootstrap(env: &mut Rt<Env>, cx: &mut Context) {
+    buffer::get_buffer_create(cx.add("*scratch*"), Some(NIL), cx).unwrap();
+    load("bootstrap.el", cx, env);
 }
 
-impl Args {
-    fn empty(&self) -> bool {
-        !self.load && !self.repl
-    }
-
-    fn parse() -> Self {
-        let mut args = Args::default();
-        for arg in std::env::args() {
-            match arg.as_str() {
-                "--repl" => args.repl = true,
-                "--load" => args.load = true,
-                x => println!("unknown arg: {x}"),
-            }
-        }
-        if args.empty() {
-            args.load = true;
-        }
-        args
-    }
+#[test]
+fn verify_cli() {
+    use clap::CommandFactory;
+    Args::command().debug_assert()
 }
