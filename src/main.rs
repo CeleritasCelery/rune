@@ -16,6 +16,7 @@ mod bytecode;
 mod casefiddle;
 mod character;
 mod data;
+mod dired;
 mod editfns;
 mod emacs;
 mod eval;
