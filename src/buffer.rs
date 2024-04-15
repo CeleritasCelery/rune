@@ -1,9 +1,12 @@
 //! Buffer operations.
-use crate::core::{
-    env::{interned_symbols, Env},
-    error::{Type, TypeError},
-    gc::{Context, Rt},
-    object::{Gc, LispBuffer, Object, ObjectType, NIL},
+use crate::{
+    core::{
+        env::{interned_symbols, Env},
+        error::{Type, TypeError},
+        gc::{Context, Rt},
+        object::{Gc, LispBuffer, Object, ObjectType, NIL},
+    },
+    fns::slice_into_list,
 };
 use anyhow::{bail, Result};
 use rune_core::hashmap::HashMap;
@@ -174,6 +177,17 @@ fn buffer_base_buffer(_buffer: Option<()>) -> bool {
 fn get_file_buffer(_filename: &str) -> bool {
     // TODO: implement file buffers
     false
+}
+
+#[defun]
+fn buffer_list<'ob>(_frame: Option<()>, cx: &'ob Context) -> Object<'ob> {
+    // TODO: implement frame parameter
+    // TODO: remove this temp vector
+    let mut buffer_list: Vec<Object> = Vec::new();
+    for buffer in buffers().lock().unwrap().values() {
+        buffer_list.push(cx.add(*buffer));
+    }
+    slice_into_list(&buffer_list, None, cx)
 }
 
 // TODO: buffer local
