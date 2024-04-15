@@ -129,6 +129,61 @@ fn file_name_nondirectory(filename: &str) -> &str {
     file_name.to_str().unwrap()
 }
 
+/// Return non-nil if NAME ends with a directory separator character.
+#[defun]
+fn directory_name_p(name: &str) -> bool {
+    name.ends_with(MAIN_SEPARATOR)
+}
+
+#[defun]
+fn find_file_name_handler(_filename: &str, _operation: Object) {
+    // TODO: implement file-name-handler-alist
+}
+
+#[defun]
+fn file_symlink_p(filename: &str) -> bool {
+    Path::new(filename).is_symlink()
+}
+
+#[defun]
+fn file_name_case_insensitive_p(filename: &str) -> bool {
+    if !Path::new(filename).exists() {
+        return false;
+    }
+    if cfg!(target_os = "macos") {
+        // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.1.5.sdk/usr/include/sys/unistd.h#L127
+        const _PC_CASE_SENSITIVE: libc::c_int = 11;
+        let result = unsafe {
+            let filename = std::ffi::CString::new(filename).unwrap();
+            libc::pathconf(filename.as_ptr(), _PC_CASE_SENSITIVE)
+        };
+        if result == -1 {
+            panic!(
+                "file-name-case-insensitive-p pathconf failed: {}",
+                std::io::Error::last_os_error()
+            )
+        }
+        result == 0
+    } else if cfg!(windows) {
+        // https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity#inspect-current-case-sensitivity
+        let output = std::process::Command::new("fsutil.exe")
+            .arg("file")
+            .arg("queryCaseSensitiveInfo")
+            .arg(filename)
+            .output()
+            .unwrap()
+            .stdout;
+        std::str::from_utf8(&output).unwrap().contains("disabled")
+    } else {
+        false
+    }
+}
+
+#[test]
+fn test_case_sensative_call() {
+    let _ = file_name_case_insensitive_p("/");
+}
+
 /// Concatenate components to directory, inserting path separators as required.
 #[defun]
 fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<String> {
