@@ -21,6 +21,7 @@ mod editfns;
 mod emacs;
 mod eval;
 mod fileio;
+mod filelock;
 mod floatfns;
 mod fns;
 mod interpreter;
