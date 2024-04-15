@@ -13,7 +13,7 @@ categories = ["text-editors"]
 
 [dependencies]
 get-size = {version = "0.1.4", git = "https://github.com/CeleritasCelery/get-size.git", branch = "boxed_slice_fix", features = ["derive"]}
-smallvec = {version = "1.11.0", features = ["union"]}
+smallvec = {version = "^1.11", features = ["union"]}
 str_indices = "0.4.3"
 
 [dev-dependencies]
