@@ -164,6 +164,18 @@ fn kill_buffer(buffer_or_name: Option<Object>, cx: &Context, env: &mut Rt<Env>) 
     state
 }
 
+#[defun]
+fn buffer_base_buffer(_buffer: Option<()>) -> bool {
+    // TODO: implement indirect buffers
+    false
+}
+
+#[defun]
+fn get_file_buffer(_filename: &str) -> bool {
+    // TODO: implement file buffers
+    false
+}
+
 // TODO: buffer local
 defvar!(FILL_COLUMN, 70);
 defvar!(INDENT_TABS_MODE);
@@ -174,6 +186,7 @@ defvar!(TAB_WIDTH, 8);
 defvar!(TRUNCATE_LINES);
 defvar!(WORD_WRAP);
 defvar!(BIDI_DISPLAY_REORDERING);
+defvar!(BUFFER_FILE_NAME);
 
 #[cfg(test)]
 mod test {
