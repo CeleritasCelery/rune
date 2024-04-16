@@ -150,36 +150,46 @@ fn file_name_case_insensitive_p(filename: &str) -> bool {
     if !Path::new(filename).exists() {
         return false;
     }
-    if cfg!(target_os = "macos") {
-        // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.1.5.sdk/usr/include/sys/unistd.h#L127
-        const _PC_CASE_SENSITIVE: libc::c_int = 11;
-        let result = unsafe {
-            let filename = std::ffi::CString::new(filename).unwrap();
-            libc::pathconf(filename.as_ptr(), _PC_CASE_SENSITIVE)
-        };
-        if result == -1 {
-            panic!(
-                "file-name-case-insensitive-p pathconf failed: {}",
-                std::io::Error::last_os_error()
-            )
-        }
-        result == 0
-    } else if cfg!(windows) {
-        // https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity#inspect-current-case-sensitivity
-        let output = std::process::Command::new("fsutil.exe")
-            .arg("file")
-            .arg("queryCaseSensitiveInfo")
-            .arg(filename)
-            .output()
-            .unwrap()
-            .stdout;
-        std::str::from_utf8(&output).unwrap().contains("disabled")
-    } else {
-        false
+    case_insensitive(filename)
+}
+
+#[cfg(target_os = "macos")]
+fn case_insensitive(filename: &str) -> bool {
+    // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.1.5.sdk/usr/include/sys/unistd.h#L127
+    const _PC_CASE_SENSITIVE: libc::c_int = 11;
+    let result = unsafe {
+        let filename = std::ffi::CString::new(filename).unwrap();
+        libc::pathconf(filename.as_ptr(), _PC_CASE_SENSITIVE)
+    };
+    if result == -1 {
+        panic!(
+            "file-name-case-insensitive-p pathconf failed: {}",
+            std::io::Error::last_os_error()
+        )
     }
+    result == 0
+}
+
+#[cfg(windows)]
+fn case_insensitive(filename: &str) -> bool {
+    // https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity#inspect-current-case-sensitivity
+    let output = std::process::Command::new("fsutil.exe")
+        .arg("file")
+        .arg("queryCaseSensitiveInfo")
+        .arg(filename)
+        .output()
+        .unwrap()
+        .stdout;
+    std::str::from_utf8(&output).unwrap().contains("disabled")
+}
+
+#[cfg(target_os = "linux")]
+fn case_insensitive(_filename: &str) -> bool {
+    false
 }
 
 #[test]
+#[cfg(not(miri))]
 fn test_case_sensative_call() {
     let _ = file_name_case_insensitive_p("/");
 }
