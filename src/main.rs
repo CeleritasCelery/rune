@@ -51,10 +51,10 @@ struct Args {
     #[arg(short, long)]
     repl: bool,
     #[arg(short, long)]
-    no_boostrap: bool,
+    no_bootstrap: bool,
 }
 
-fn main() {
+fn main() -> Result<(), ()> {
     let args = Args::parse();
 
     let roots = &RootSet::default();
@@ -66,17 +66,18 @@ fn main() {
     crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
         .expect("null should be defined");
 
-    if !args.no_boostrap {
-        bootstrap(env, cx);
+    if !args.no_bootstrap {
+        bootstrap(env, cx)?;
     }
 
     for file in args.load {
-        load(&file, cx, env);
+        load(&file, cx, env)?;
     }
 
     if args.repl {
         repl(env, cx);
     }
+    Ok(())
 }
 
 fn parens_closed(buffer: &str) -> bool {
@@ -104,7 +105,7 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
         let (obj, _) = match reader::read(&buffer, cx) {
             Ok(obj) => obj,
             Err(e) => {
-                println!("Error: {e}");
+                eprintln!("Error: {e}");
                 buffer.clear();
                 continue;
             }
@@ -114,7 +115,7 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
         match interpreter::eval(obj, None, env, cx) {
             Ok(val) => println!("{val}"),
             Err(e) => {
-                print!("Error: {e}");
+                eprintln!("Error: {e}");
                 if let Ok(e) = e.downcast::<EvalError>() {
                     e.print_backtrace();
                 }
@@ -124,23 +125,27 @@ fn repl(env: &mut Rt<Env>, cx: &mut Context) {
     }
 }
 
-fn load(file: &str, cx: &mut Context, env: &mut Rt<Env>) {
+fn load(file: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
     let file: Gc<&LispString> = cx.add_as(file);
     root!(file, cx);
     match crate::lread::load(file, None, None, cx, env) {
-        Ok(val) => print!("{val}"),
+        Ok(val) => {
+            println!("{val}");
+            Ok(())
+        }
         Err(e) => {
-            print!("Error: {e}");
+            eprintln!("Error: {e}");
             if let Ok(e) = e.downcast::<EvalError>() {
                 e.print_backtrace();
             }
+            Err(())
         }
     }
 }
 
-fn bootstrap(env: &mut Rt<Env>, cx: &mut Context) {
+fn bootstrap(env: &mut Rt<Env>, cx: &mut Context) -> Result<(), ()> {
     buffer::get_buffer_create(cx.add("*scratch*"), Some(NIL), cx).unwrap();
-    load("bootstrap.el", cx, env);
+    load("bootstrap.el", cx, env)
 }
 
 #[test]
