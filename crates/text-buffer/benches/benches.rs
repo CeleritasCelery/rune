@@ -44,7 +44,7 @@ fn realworld(c: &mut Criterion) {
                     }
                 }
 
-                assert_eq!(buffer.len(), test_data.end_content.len());
+                assert_eq!(buffer.len_bytes(), test_data.end_content.len());
                 black_box(buffer.len_chars());
             });
         });

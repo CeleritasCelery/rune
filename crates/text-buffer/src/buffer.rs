@@ -7,7 +7,6 @@ use crate::{
 };
 use get_size::GetSize;
 use std::{
-    borrow::Cow,
     cmp,
     fmt::{self, Debug, Display},
     ops::{Bound, Deref, Range, RangeBounds},
@@ -56,7 +55,9 @@ impl Debug for Buffer {
 
 impl Display for Buffer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.read(0..self.len()))
+        let (s1, s2) = self.slice(..);
+        write!(f, "{s1}")?;
+        write!(f, "{s2}")
     }
 }
 
@@ -203,7 +204,7 @@ where
 
 impl PartialEq<str> for Buffer {
     fn eq(&self, other: &str) -> bool {
-        if self.len() != other.len() {
+        if self.len_bytes() != other.len() {
             return false;
         }
         self.to_str(..self.gap_start) == &other[..self.gap_start]
@@ -233,7 +234,7 @@ impl Buffer {
     fn grow(&mut self, slice: &str) {
         // If the string being inserted is large, we want to grow the gap faster
         if slice.len() >= self.new_gap_size {
-            let len = slice.len() + self.len();
+            let len = slice.len() + self.len_bytes();
             self.new_gap_size =
                 cmp::max(len / 20, cmp::min(slice.len().next_power_of_two(), Self::MAX_GAP));
         }
@@ -277,7 +278,7 @@ impl Buffer {
         self.gap_start = self.gap_end - self.new_gap_size;
         self.total += new;
         self.new_gap_size =
-            cmp::max(self.len() / 20, cmp::min(self.new_gap_size * 2, Self::MAX_GAP));
+            cmp::max(self.len_bytes() / 20, cmp::min(self.new_gap_size * 2, Self::MAX_GAP));
     }
 
     #[inline]
@@ -488,7 +489,7 @@ impl Buffer {
             return;
         }
 
-        let Range { start, end } = Self::bounds_to_range(range);
+        let Range { start, end } = Self::bounds_to_range(range, self.len_bytes());
 
         let pos = if self.gap_chars - start < end - self.gap_chars {
             GapMetric { bytes: self.char_to_byte(start), chars: start }
@@ -498,7 +499,8 @@ impl Buffer {
         self.move_gap(pos);
     }
 
-    fn bounds_to_range(bounds: impl RangeBounds<usize>) -> Range<usize> {
+    #[inline]
+    fn bounds_to_range(bounds: impl RangeBounds<usize>, max: usize) -> Range<usize> {
         let start = match bounds.start_bound() {
             Bound::Included(x) => *x,
             Bound::Excluded(_) => unreachable!(),
@@ -508,7 +510,7 @@ impl Buffer {
         let end = match bounds.end_bound() {
             Bound::Included(_) => unimplemented!("inclusive end bound not supported"),
             Bound::Excluded(x) => *x,
-            Bound::Unbounded => usize::MAX,
+            Bound::Unbounded => max,
         };
 
         start..end
@@ -598,7 +600,7 @@ impl Buffer {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn len_bytes(&self) -> usize {
         debug_assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
         self.total.bytes
     }
@@ -613,10 +615,12 @@ impl Buffer {
         self.total.chars == 0
     }
 
+    #[inline]
     const fn gap_len(&self) -> usize {
         self.gap_end - self.gap_start
     }
 
+    #[inline]
     fn char_to_byte(&self, pos: usize) -> usize {
         if pos == self.gap_chars {
             return self.gap_end;
@@ -658,6 +662,7 @@ impl Buffer {
         }
     }
 
+    #[inline]
     fn to_str(&self, range: impl std::slice::SliceIndex<[u8], Output = [u8]>) -> &str {
         if cfg!(debug_assertions) {
             std::str::from_utf8(&self.data[range]).unwrap()
@@ -674,50 +679,22 @@ impl Buffer {
         } else {
             self.to_str(..self.gap_start)
         };
-        assert_eq!(slice.len(), self.len());
+        assert_eq!(slice.len(), self.len_bytes());
         slice
     }
 
     #[inline]
-    pub fn read(&self, bounds: impl RangeBounds<usize>) -> Cow<'_, str> {
-        // if past gap_start, add gap_len to range
-        let mut range = Self::bounds_to_range(bounds);
-        let orig_len = range.len();
-        if range.end >= self.total.bytes {
-            range.end = self.total.bytes;
-        }
-        if range.start >= self.gap_start {
-            range.start += self.gap_len();
-        }
-        if range.end >= self.gap_start {
-            range.end += self.gap_len();
-        }
-        assert!(range.start <= self.data.len(), "range start out of bounds");
-        for i in 0..4 {
-            if self.is_char_boundary(range.end - i) {
-                range.end -= i;
-                break;
-            }
-        }
-        for i in 0..4 {
-            if self.is_char_boundary(range.start + i) {
-                range.start += i;
-                break;
-            }
-        }
-        // assert the range does not overlap with the gap
-        assert!(range.start >= self.gap_end || range.start < self.gap_start);
-        assert!(range.end >= self.gap_end || range.end < self.gap_start);
-
+    pub fn slice(&self, bounds: impl RangeBounds<usize>) -> (&str, &str) {
+        let mut range = Self::bounds_to_range(bounds, self.total.chars);
+        range.end = self.char_to_byte(range.end);
+        range.start = self.char_to_byte(range.start);
         // the range straddles the gap, so we need to copy the two halves
         if range.start < self.gap_start && self.gap_start < range.end {
-            let mut string = String::with_capacity(range.len());
-            string += self.to_str(range.start..self.gap_start);
-            string += self.to_str(self.gap_end..range.end);
-            assert_eq!(string.len(), orig_len);
-            Cow::Owned(string)
+            let before = self.to_str(range.start..self.gap_start);
+            let after = self.to_str(self.gap_end..range.end);
+            (before, after)
         } else {
-            Cow::Borrowed(self.to_str(range))
+            (self.to_str(range), "")
         }
     }
 
@@ -786,9 +763,9 @@ mod test {
     fn insert() {
         let string = "hello buffer";
         let mut buffer = Buffer::from(string);
-        buffer.len();
+        buffer.len_bytes();
         buffer.insert_char('x');
-        buffer.len();
+        buffer.len_bytes();
         assert_eq!(buffer.data.len(), string.len() + Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_end, Buffer::GAP_SIZE);
         assert_eq!(buffer.gap_start, 1);
@@ -877,11 +854,11 @@ mod test {
     #[test]
     fn edge_cases() {
         let mut buffer = Buffer::from(":?abdix7");
-        assert_eq!(buffer.len(), 8);
+        assert_eq!(buffer.len_bytes(), 8);
         buffer.delete_range(2, 5);
-        assert_eq!(buffer.len(), 5);
+        assert_eq!(buffer.len_bytes(), 5);
         buffer.delete_range(5, 4);
-        assert_eq!(buffer.len(), 4);
+        assert_eq!(buffer.len_bytes(), 4);
         buffer.delete_range(0, 3);
 
         let mut buffer = Buffer::from("xyz");
@@ -945,14 +922,19 @@ mod test {
     }
 
     #[test]
-    fn test_read() {
+    fn test_slice() {
         let mut buffer = Buffer::from("hello world");
-        assert_eq!(buffer.read(..), Cow::Borrowed("hello world"));
+        assert_eq!(buffer.slice(..), ("hello world", ""));
         buffer.set_cursor(5);
-        assert_eq!(buffer.read(0..0), Cow::Borrowed(""));
-        assert_eq!(buffer.read(0..5), Cow::Borrowed("hello"));
-        assert_eq!(buffer.read(5..11), Cow::Borrowed(" world"));
-        assert_eq!(buffer.read(4..6), Cow::<str>::Owned(String::from("o ")));
+        buffer.insert("\u{B5}");
+        assert_eq!(buffer.slice(0..0), ("", ""));
+        assert_eq!(buffer.slice(..6), ("hello\u{B5}", ""));
+        assert_eq!(buffer.slice(6..), (" world", ""));
+        assert_eq!(buffer.slice(6..6), ("", ""));
+        assert_eq!(buffer.slice(5..11), ("\u{B5}", " worl"));
+        assert_eq!(buffer.slice(5..11), ("\u{B5}", " worl"));
+        assert_eq!(buffer.slice(4..6), ("o\u{B5}", ""));
+        assert_eq!(buffer.slice(..), ("hello\u{B5}", " world"));
     }
 
     #[test]

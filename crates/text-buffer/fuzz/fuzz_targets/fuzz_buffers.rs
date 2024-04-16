@@ -9,14 +9,14 @@ fuzz_target!(|transactions: Vec<Result<(usize, &str), (usize, usize)>>| {
         match trans {
             // Insert
             Ok((pos, text)) => {
-                let pos = pos % (buffer.len() + 2);
+                let pos = pos % (buffer.len_bytes() + 2);
                 buffer.set_cursor(pos);
                 buffer.insert(text)
             }
             // Delete
             Err((start, end)) => {
-                let start = start % (buffer.len() + 2);
-                let end = end % (buffer.len() + 2);
+                let start = start % (buffer.len_bytes() + 2);
+                let end = end % (buffer.len_bytes() + 2);
                 buffer.delete_range(start, end)
             }
         }
@@ -31,7 +31,7 @@ fn create_repo(transactions: &[Result<(usize, &str), (usize, usize)>]) {
         match trans {
             // Insert
             Ok((pos, text)) => {
-                let pos = pos % (buffer.len() + 2);
+                let pos = pos % (buffer.len_bytes() + 2);
                 println!("buffer.set_cursor({pos});");
                 buffer.set_cursor(pos);
                 println!("buffer.insert({text:?});");
@@ -39,8 +39,8 @@ fn create_repo(transactions: &[Result<(usize, &str), (usize, usize)>]) {
             }
             // Delete
             Err((start, end)) => {
-                let start = start % (buffer.len() + 2);
-                let end = end % (buffer.len() + 2);
+                let start = start % (buffer.len_bytes() + 2);
+                let end = end % (buffer.len_bytes() + 2);
                 println!("buffer.delete_range({start}, {end});");
                 buffer.delete_range(start, end)
             }
