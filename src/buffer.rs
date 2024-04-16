@@ -14,13 +14,14 @@ use rune_macros::defun;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
+type BufferMap = HashMap<String, &'static LispBuffer>;
 // static hashmap containing all the buffers
-static BUFFERS: OnceLock<Mutex<HashMap<String, &'static LispBuffer>>> = OnceLock::new();
+static BUFFERS: OnceLock<Mutex<BufferMap>> = OnceLock::new();
 
 /// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
 ///
 /// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
-fn buffers() -> &'static Mutex<HashMap<String, &'static LispBuffer>> {
+fn buffers() -> &'static Mutex<BufferMap> {
     BUFFERS.get_or_init(Mutex::default)
 }
 
@@ -66,6 +67,34 @@ fn buffer_live_p(buffer: Object, env: &Rt<Env>) -> bool {
 #[defun]
 fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Option<String> {
     env.with_buffer(buffer.map(Gc::untag), |b| b.name.to_string())
+}
+
+#[defun]
+fn rename_buffer(newname: &str, unique: Option<()>, env: &mut Rt<Env>) -> Result<String> {
+    env.with_buffer_mut(None, |b| {
+        if b.name == newname {
+            return Ok(newname.to_string());
+        }
+        let mut buffer_list = buffers().lock().unwrap();
+        let mut replace_buffer = |buffer_list: &mut HashMap<_, _>, newname: &str| {
+            let buffer = buffer_list.remove(&b.name).unwrap();
+            buffer_list.insert(newname.into(), buffer);
+            b.name = newname.to_string();
+        };
+        if buffer_list.contains_key(newname) {
+            // there is already a buffer with newname
+            if unique.is_none() {
+                bail!("rename-buffer failed: Buffer name {newname} is in use");
+            }
+            let newname = unique_buffer_name(newname, None, &buffer_list);
+            replace_buffer(&mut buffer_list, &newname);
+            Ok(newname)
+        } else {
+            replace_buffer(&mut buffer_list, newname);
+            Ok(newname.to_string())
+        }
+    })
+    .unwrap()
 }
 
 #[defun]
@@ -130,14 +159,21 @@ pub(crate) fn get_buffer<'ob>(
 /// is first appended to NAME, to speed up finding a non-existent buffer.
 #[defun]
 fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
-    // check if the name exists
-    let buffer_list = buffers().lock().unwrap();
+    unique_buffer_name(name, ignore, &buffers().lock().unwrap())
+}
+
+fn unique_buffer_name(
+    name: &str,
+    ignore: Option<&str>,
+    buffer_list: &BufferMap,
+) -> String {
     let valid_name =
         |name: &str| ignore.is_some_and(|x| x == name) || !buffer_list.contains_key(name);
 
     let mut new_name = name.to_string();
     let mut number = 2;
 
+    // check if the name exists
     while !valid_name(&new_name) {
         if name.starts_with(' ') {
             // use rand to find uniq names faster
