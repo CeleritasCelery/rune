@@ -162,11 +162,7 @@ fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
     unique_buffer_name(name, ignore, &buffers().lock().unwrap())
 }
 
-fn unique_buffer_name(
-    name: &str,
-    ignore: Option<&str>,
-    buffer_list: &BufferMap,
-) -> String {
+fn unique_buffer_name(name: &str, ignore: Option<&str>, buffer_list: &BufferMap) -> String {
     let valid_name =
         |name: &str| ignore.is_some_and(|x| x == name) || !buffer_list.contains_key(name);
 

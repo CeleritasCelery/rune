@@ -6,7 +6,7 @@ use crate::core::{
     gc::{Context, Rt},
     object::{Number, Object, ObjectType},
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use rune_macros::defun;
 use std::path::{Component, Path, MAIN_SEPARATOR};
 
@@ -182,6 +182,39 @@ fn file_name_case_insensitive_p(filename: &str) -> bool {
 #[test]
 fn test_case_sensative_call() {
     let _ = file_name_case_insensitive_p("/");
+}
+
+#[defun]
+fn write_region(
+    start: i64,
+    end: i64,
+    filename: &str,
+    append: Option<()>,
+    visit: Option<()>,
+    lockname: Option<()>,
+    mustbenew: Option<()>,
+    env: &Rt<Env>,
+) -> Result<()> {
+    use std::io::Write;
+    ensure!(append.is_none(), "append not implemented");
+    ensure!(visit.is_none(), "visit not implemented");
+    ensure!(lockname.is_none(), "lockname not implemented");
+    ensure!(mustbenew.is_none(), "mustbenew not implemented");
+    // Open filename for writing
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(filename)
+        .unwrap();
+    env.with_buffer(None, |b| -> Result<()> {
+        let (s1, s2) = b.slice_with_gap(start as usize, end as usize)?;
+        write!(file, "{s1}").unwrap();
+        write!(file, "{s2}").unwrap();
+        Ok(())
+    })
+    .unwrap()?;
+    Ok(())
 }
 
 /// Concatenate components to directory, inserting path separators as required.

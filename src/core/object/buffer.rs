@@ -59,8 +59,24 @@ impl<'a> OpenBuffer<'a> {
         Ok(())
     }
 
-    pub(crate) fn delete(&mut self, beg: usize, end: usize) {
+    pub(crate) fn slice_with_gap(&self, beg: usize, end: usize) -> Result<(&str, &str)> {
+        let beg = self.in_range(beg)?;
+        let end = self.in_range(end)?;
+        Ok(self.get().text.slice(beg..end))
+    }
+
+    pub(crate) fn delete(&mut self, beg: usize, end: usize) -> Result<()> {
+        let beg = self.in_range(beg)?;
+        let end = self.in_range(end)?;
         self.get_mut().text.delete_range(beg, end);
+        Ok(())
+    }
+
+    fn in_range(&self, pos: usize) -> Result<usize> {
+        if pos == 0 || pos > self.get().text.len_chars() + 1 {
+            bail!("Position {pos} out of range in {}", self.get().name);
+        }
+        Ok(pos - 1)
     }
 }
 

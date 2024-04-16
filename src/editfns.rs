@@ -114,20 +114,25 @@ pub(crate) fn point_max(env: &mut Rt<Env>) -> Result<usize> {
     Ok(buffer.text.len_chars() + 1)
 }
 
-// TODO: this should not throw and error. Buffer will always be present.
+#[defun]
+pub(crate) fn point_min() -> usize {
+    // TODO: Handle narrowing
+    1
+}
+
 #[defun]
 pub(crate) fn point_marker(env: &mut Rt<Env>) -> Result<usize> {
+    // TODO: this should not throw and error. Buffer will always be present.
     let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
     // TODO: Implement marker objects
     Ok(buffer.text.cursor().chars())
 }
 
-// TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
+    // TODO: this should not throw and error. Buffer will always be present.
     let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
-    buffer.delete(start, end);
-    Ok(())
+    buffer.delete(start, end)
 }
 
 #[defun]
@@ -209,7 +214,7 @@ mod test {
         insert(ArgSlice::new(2), env, cx).unwrap();
 
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hello world");
-        delete_region(1, 3, env).unwrap();
+        delete_region(2, 4, env).unwrap();
         assert_eq!(env.current_buffer.as_ref().unwrap(), "hlo world");
     }
 }

@@ -110,7 +110,7 @@ impl<'a> RootedEnv<'a> {
     pub(crate) fn with_buffer<T>(
         &self,
         buffer: Option<&LispBuffer>,
-        func: impl Fn(&OpenBuffer) -> T,
+        mut func: impl FnMut(&OpenBuffer) -> T,
     ) -> Option<T> {
         match (&self.current_buffer, buffer) {
             (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
@@ -131,7 +131,7 @@ impl<'a> RootedEnv<'a> {
     pub(crate) fn with_buffer_mut<T>(
         &mut self,
         buffer: Option<&LispBuffer>,
-        func: impl Fn(&mut OpenBuffer) -> T,
+        mut func: impl FnMut(&mut OpenBuffer) -> T,
     ) -> Option<T> {
         match (&self.current_buffer, buffer) {
             (Some(current), Some(buffer)) if current == buffer => {
