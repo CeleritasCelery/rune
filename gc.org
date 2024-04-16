@@ -1,0 +1,27 @@
+* Overview
+This is copying semi-space GC. The normal way to do this would be to copy an object than go back to the mark stack. But that could leave items far apart in memory. So we have two methods, move_value and trace. The move_value will normally just blindly copy the bits to the new area. Then trace is called on the new value and that will let it move it's children.
+
+But why couldn't we just rely on the stack behavior? When we are processing an item it is the top of the stack. We will push on all of its children in the order we choose. Then as we process the stack again, we can remove the children one at a time.
+* how does it work?
+However this means that we need to put all references to other heap allocation in cells, because we will move them afterwards. This isn't normally a problem. But for something like ByteString it adds an extra cell we would not normally need.
+
+[[file:src/core/object/cell.rs::impl Trace for ObjCell {][objcell trace]]
+
+[[file:src/core/object/vector.rs::impl Trace for LispVecInner {][vector trace]]
+For vectors we copy the existing memory and then copy each child. We have to do it this way because can only push moved objects onto the stack. So basically we are going to copy one level deep of the vector.
+* Slot vs gcObj trace (when to move things)
+They both call move_value and update their own pointer, but ~ObjCell~ does not trace the moved value, instead pushing it on the ~trace_stack~. This means it will get traced and it's children copied in a later step. This is different than ~Slot~ which will call trace on the child and then call ~trace_stack~. This means that Slot will copy the entire object graph below it before it returns. If we did this in ObjCell than we would have issues with recursion depth.
+
+However this means that if we have a string off of an object, it may not have it's data actually copied next to it. It will have be pushed on the stack and wait until the it get's popped before the string data is moved. We can fix this by overriding ~move_value~ directly and copying the string data and container at the same time.
+
+This is implemented for strings, but not yet for vectors.
+
+So there are really two ways of doing it, either copying everything over when it get's first moved, or wait until we get put on the trace stack. Waiting for the trace stack is most important for things like cons cells, which can be very long.
+
+We make sure the cdr is traced second so that it ends on top of the stack. That means that it's children will be traced before the cars.
+* Why do we not need a mark bit
+We don't need a mark bit because every object is being traced as a ~ObjCell~, which will call move_value. Move_value will check if it has been forwarded (marked) or global (actually marked) and do the right thing. But what happens if we push the same object onto the mark stack twice?
+
+[[file:src/core/gc/trace.rs::pub fn push(&mut self, obj: Object) {][push fn]]
+
+That can't happen because we only push things onto the trace_stack /after/ they have been copied. This means that there will only be a single unique copy of each object.
