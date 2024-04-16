@@ -26,19 +26,28 @@ fn main() {
         let functions = get_all_functions(&rust_src);
 
         // write out a file with the function names
-        let run_dir = root.join("target").join("eprop");
+        let run_dir = root.join("target/eprop");
         fs::create_dir_all(&run_dir).unwrap();
-        std::env::set_current_dir(run_dir).unwrap();
+        std::env::set_current_dir(&run_dir).unwrap();
 
         let mut file = fs::File::create("eprop-in.el").unwrap();
         writeln!(file, ";;; -*- lexical-binding: t; -*-").unwrap();
         for name in functions {
             writeln!(file, "(eprop-runner \"{name}\" (functionp '{name}))").unwrap();
         }
-        writeln!(file, "(with-current-buffer eprop-output-buffer (write-file \"eprop-out.el\"))")
+        writeln!(file, "(with-current-buffer eprop-output-buffer (write-region (point-min) (point-max) \"eprop-out.el\"))")
             .unwrap();
 
+        fs::create_dir_all("emacs").unwrap();
+        std::env::set_current_dir("emacs").unwrap();
         run_gnu_emacs();
+        std::env::set_current_dir(&run_dir).unwrap();
+
+        fs::create_dir_all("rune").unwrap();
+        std::env::set_current_dir("rune").unwrap();
+        run_rune(root);
+        std::env::set_current_dir(&run_dir).unwrap();
+
         compare_output();
     } else {
         println!("no command");
@@ -47,8 +56,8 @@ fn main() {
 
 fn compare_output() {
     // go through eprop-out.el and eprop-ref.el and find any differences
-    let ref_file = fs::read_to_string("eprop-ref.el").unwrap();
-    let out_file = fs::read_to_string("eprop-out.el").unwrap();
+    let ref_file = fs::read_to_string("emacs/eprop-out.el").unwrap();
+    let out_file = fs::read_to_string("rune/eprop-out.el").unwrap();
 
     let ref_lines = ref_file.lines();
     let out_lines = out_file.lines();
@@ -60,7 +69,6 @@ fn compare_output() {
         }
         if ref_line != out_line {
             eprintln!("mismatch for {tag}:\nref: {ref_line}\nout: {out_line}");
-            return;
         }
     }
 }
@@ -83,11 +91,31 @@ fn run_gnu_emacs() {
         .arg("--load")
         .arg(runner)
         .arg("--load")
-        .arg("eprop-in.el")
+        .arg("../eprop-in.el")
         .output()
         .unwrap();
     if !output.status.success() {
         eprintln!("emacs failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+}
+
+fn run_rune(root: &Path) {
+    let runner = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runner.el");
+    let exe = root.join("target/release/rune");
+    let min_bootstrap = root.join("lisp/min-bootstrap.el");
+
+    let output = std::process::Command::new(exe)
+        .arg("--no-bootstrap")
+        .arg("--load")
+        .arg(min_bootstrap)
+        .arg("--load")
+        .arg(runner)
+        .arg("--load")
+        .arg("../eprop-in.el")
+        .output()
+        .unwrap();
+    if !output.status.success() {
+        eprintln!("rune failed: {}", String::from_utf8_lossy(&output.stderr));
     }
 }
 
