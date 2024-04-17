@@ -73,8 +73,8 @@ fn equal_including_properties<'ob>(o1: Object<'ob>, o2: Object<'ob>) -> bool {
 }
 
 #[defun]
-fn plist_get<'ob>(plist: Object<'ob>, prop: Object<'ob>) -> Result<Object<'ob>> {
-    let Ok(plist) = List::try_from(plist) else { return Ok(NIL) };
+pub fn plist_get<'ob>(plist: Object<'ob>, prop: Object<'ob>) -> Result<Object<'ob>> {
+    let Ok(plist) = Gc::<ListType>::try_from(plist) else { return Ok(NIL) };
     // TODO: this function should never fail. Need to implement safe iterator
     let mut iter = plist.elements();
     while let Some(cur_prop) = iter.next() {
