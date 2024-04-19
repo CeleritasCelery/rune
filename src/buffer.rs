@@ -21,7 +21,7 @@ static BUFFERS: OnceLock<Mutex<BufferMap>> = OnceLock::new();
 /// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
 ///
 /// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
-fn buffers() -> &'static Mutex<BufferMap> {
+pub(crate) fn buffers() -> &'static Mutex<BufferMap> {
     BUFFERS.get_or_init(Mutex::default)
 }
 
@@ -32,7 +32,7 @@ pub(crate) fn set_buffer<'ob>(
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
     let buffer = resolve_buffer(buffer_or_name, cx)?;
-    env.set_buffer(buffer)?;
+    env.set_buffer(buffer);
     Ok(cx.add(buffer))
 }
 
@@ -59,42 +59,43 @@ fn set_buffer_modified_p(flag: Object) -> Object {
 #[defun]
 fn buffer_live_p(buffer: Object, env: &Rt<Env>) -> bool {
     match buffer.untag() {
-        ObjectType::Buffer(b) => env.with_buffer(Some(b), |_| {}).is_some(),
+        ObjectType::Buffer(b) => env.with_buffer(b, |_| {}).is_ok(),
         _ => false,
     }
 }
 
 #[defun]
-fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Option<String> {
-    env.with_buffer(buffer.map(Gc::untag), |b| b.name.to_string())
+fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Result<String> {
+    match buffer {
+        Some(buffer) => env.with_buffer(buffer.untag(), |b| b.name.to_string()),
+        None => Ok(env.current_buffer.get().name.to_string()),
+    }
 }
 
 #[defun]
 fn rename_buffer(newname: &str, unique: Option<()>, env: &mut Rt<Env>) -> Result<String> {
-    env.with_buffer_mut(None, |b| {
-        if b.name == newname {
-            return Ok(newname.to_string());
+    let buf = env.current_buffer.get_mut();
+    if buf.name == newname {
+        return Ok(newname.to_string());
+    }
+    let mut buffer_list = buffers().lock().unwrap();
+    let mut replace_buffer = |buffer_list: &mut HashMap<_, _>, newname: &str| {
+        let buffer = buffer_list.remove(&buf.name).unwrap();
+        buffer_list.insert(newname.into(), buffer);
+        buf.name = newname.to_string();
+    };
+    if buffer_list.contains_key(newname) {
+        // there is already a buffer with newname
+        if unique.is_none() {
+            bail!("rename-buffer failed: Buffer name {newname} is in use");
         }
-        let mut buffer_list = buffers().lock().unwrap();
-        let mut replace_buffer = |buffer_list: &mut HashMap<_, _>, newname: &str| {
-            let buffer = buffer_list.remove(&b.name).unwrap();
-            buffer_list.insert(newname.into(), buffer);
-            b.name = newname.to_string();
-        };
-        if buffer_list.contains_key(newname) {
-            // there is already a buffer with newname
-            if unique.is_none() {
-                bail!("rename-buffer failed: Buffer name {newname} is in use");
-            }
-            let newname = unique_buffer_name(newname, None, &buffer_list);
-            replace_buffer(&mut buffer_list, &newname);
-            Ok(newname)
-        } else {
-            replace_buffer(&mut buffer_list, newname);
-            Ok(newname.to_string())
-        }
-    })
-    .unwrap()
+        let newname = unique_buffer_name(newname, None, &buffer_list);
+        replace_buffer(&mut buffer_list, &newname);
+        Ok(newname)
+    } else {
+        replace_buffer(&mut buffer_list, newname);
+        Ok(newname.to_string())
+    }
 }
 
 #[defun]
@@ -158,7 +159,7 @@ pub(crate) fn get_buffer<'ob>(
 /// visible to users), then if buffer NAME already exists a random number
 /// is first appended to NAME, to speed up finding a non-existent buffer.
 #[defun]
-fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
+pub(crate) fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
     unique_buffer_name(name, ignore, &buffers().lock().unwrap())
 }
 
@@ -185,18 +186,18 @@ fn unique_buffer_name(name: &str, ignore: Option<&str>, buffer_list: &BufferMap)
 
 #[defun]
 fn kill_buffer(buffer_or_name: Option<Object>, cx: &Context, env: &mut Rt<Env>) -> bool {
-    let buffer = match buffer_or_name {
+    match buffer_or_name {
         Some(buffer) => match resolve_buffer(buffer, cx) {
-            Ok(b) => Some(b),
-            Err(_) => return false,
+            Ok(b) => env.with_buffer_mut(b, |b| b.kill()).unwrap_or(false),
+            Err(_) => false,
         },
-        None => None,
-    };
-    // todo, we need to select a new buffer
-    #[allow(clippy::redundant_closure_for_method_calls)]
-    let state = env.with_buffer_mut(buffer, |b| b.kill()).unwrap_or(false);
-    env.current_buffer = None;
-    state
+        None => {
+            let killed = env.current_buffer.get_mut().kill();
+            // todo, we need to select a new buffer
+            env.current_buffer.release();
+            killed
+        }
+    }
 }
 
 #[defun]

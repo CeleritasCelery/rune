@@ -218,13 +218,10 @@ fn write_region(
         .truncate(true)
         .open(filename)
         .unwrap();
-    env.with_buffer(None, |b| -> Result<()> {
-        let (s1, s2) = b.slice_with_gap(start as usize, end as usize)?;
-        write!(file, "{s1}").unwrap();
-        write!(file, "{s2}").unwrap();
-        Ok(())
-    })
-    .unwrap()?;
+    let b = env.current_buffer.get();
+    let (s1, s2) = b.slice_with_gap(start as usize, end as usize)?;
+    write!(file, "{s1}")?;
+    write!(file, "{s2}")?;
     Ok(())
 }
 

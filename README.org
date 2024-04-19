@@ -35,7 +35,7 @@ The easiest way to run the interpreter is with ~cargo run --profile=release~. Ru
 *** MIRI
 Run the test suite with MIRI
 #+begin_src sh
-MIRIFLAGS='-Zmiri-strict-provenance -Zmiri-ignore-leaks' cargo +nightly miri test
+MIRIFLAGS='-Zmiri-strict-provenance' cargo +nightly miri test
 #+end_src
 ** Exploring this repo
 The project is defined by a main package =rune=, which depends on the crates included in the =crates= directory. One of those is the =rune-macros= crate, which defines the ~defun~ proc macro for defining builtin functions. The rest of the code is contained in ~src/~. The modules are described below.

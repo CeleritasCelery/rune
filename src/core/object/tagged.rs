@@ -71,6 +71,9 @@ impl<T> Gc<T> {
     unsafe fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {
         use std::mem::size_of;
         assert_eq!(size_of::<*const U>(), size_of::<*const ()>());
+        // TODO: add an ensure! here to tell the compiler that top byte of the
+        // number is zero (basically unimportant). This will let it optimize
+        // away the shifts when we tag and untag together.
         let ptr = ptr.cast::<u8>().map_addr(|x| (x << 8) | tag as usize);
         Self::new(ptr)
     }

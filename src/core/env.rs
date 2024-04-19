@@ -2,6 +2,7 @@ use super::gc::{Context, ObjectMap, Rto, Slot};
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, Result};
 use rune_macros::Trace;
+use std::cell::OnceCell;
 
 mod stack;
 mod symbol_map;
@@ -20,8 +21,62 @@ pub(crate) struct Env<'a> {
     binding_stack: Vec<(Slot<Symbol<'a>>, Option<Slot<Object<'a>>>)>,
     pub(crate) match_data: Slot<Object<'a>>,
     #[no_trace]
-    pub(crate) current_buffer: Option<OpenBuffer<'a>>,
+    pub(crate) current_buffer: CurrentBuffer<'a>,
     pub(crate) stack: LispStack<'a>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CurrentBuffer<'a> {
+    buffer: OnceCell<OpenBuffer<'a>>,
+    buf_ref: &'a LispBuffer,
+}
+
+impl<'a> Default for CurrentBuffer<'a> {
+    fn default() -> Self {
+        let name = crate::buffer::generate_new_buffer_name("*scratch*", None);
+        let buffer = {
+            // // need to drop global to avoid deadlocks
+            let global = interned_symbols().lock().unwrap();
+            unsafe { global.create_buffer(&name).with_lifetime() }
+        };
+        crate::buffer::buffers().lock().unwrap().insert(name, buffer);
+        Self { buffer: Default::default(), buf_ref: buffer }
+    }
+}
+
+impl<'a> CurrentBuffer<'a> {
+    fn lock(&self) -> OpenBuffer<'a> {
+        unsafe { self.buf_ref.lock().unwrap().with_lifetime() }
+    }
+
+    pub(crate) fn get(&self) -> &OpenBuffer<'a> {
+        self.buffer.get_or_init(|| self.lock())
+    }
+
+    pub(crate) fn get_mut(&mut self) -> &mut OpenBuffer<'a> {
+        // there is no get_or_init_mut
+        if self.buffer.get().is_none() {
+            let locked = self.lock();
+            let _ = self.buffer.set(locked);
+        }
+        self.buffer.get_mut().unwrap()
+    }
+
+    pub(crate) fn set(&mut self, buffer: &LispBuffer) {
+        let buffer = unsafe { buffer.with_lifetime() };
+        self.buf_ref = buffer;
+        self.release();
+    }
+
+    pub(crate) fn release(&mut self) {
+        self.buffer.take();
+    }
+}
+
+impl PartialEq<LispBuffer> for CurrentBuffer<'_> {
+    fn eq(&self, other: &LispBuffer) -> bool {
+        self.buf_ref == other
+    }
 }
 
 // RootedEnv created by #[derive(Trace)]
@@ -94,58 +149,36 @@ impl<'a> RootedEnv<'a> {
         Ok(())
     }
 
-    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer) -> Result<()> {
-        if let Some(current) = &self.current_buffer {
-            if buffer == current {
-                return Ok(());
-            }
+    pub(crate) fn set_buffer(&mut self, buffer: &LispBuffer) {
+        if buffer == self.current_buffer.buf_ref {
+            return;
         }
-        // SAFETY: We are not dropping the buffer until we have can trace it
-        // with the garbage collector
-        let lock = unsafe { buffer.lock()?.with_lifetime() };
-        self.current_buffer = Some(lock);
-        Ok(())
+        self.current_buffer.set(buffer);
     }
 
     pub(crate) fn with_buffer<T>(
         &self,
-        buffer: Option<&LispBuffer>,
+        buffer: &LispBuffer,
         mut func: impl FnMut(&OpenBuffer) -> T,
-    ) -> Option<T> {
-        match (&self.current_buffer, buffer) {
-            (Some(_), None) => Some(func(self.current_buffer.as_ref().unwrap())),
-            (Some(current), Some(buffer)) if current == buffer => {
-                Some(func(self.current_buffer.as_ref().unwrap()))
-            }
-            (_, Some(buffer)) => {
-                if let Ok(buffer) = buffer.lock().as_mut() {
-                    Some(func(buffer))
-                } else {
-                    None
-                }
-            }
-            (None, None) => None,
+    ) -> Result<T> {
+        if self.current_buffer == *buffer {
+            Ok(func(self.current_buffer.get()))
+        } else {
+            let buffer = buffer.lock()?;
+            Ok(func(&buffer))
         }
     }
 
     pub(crate) fn with_buffer_mut<T>(
         &mut self,
-        buffer: Option<&LispBuffer>,
+        buffer: &LispBuffer,
         mut func: impl FnMut(&mut OpenBuffer) -> T,
-    ) -> Option<T> {
-        match (&self.current_buffer, buffer) {
-            (Some(current), Some(buffer)) if current == buffer => {
-                Some(func(self.current_buffer.as_mut().unwrap()))
-            }
-            (Some(_), None) => Some(func(self.current_buffer.as_mut().unwrap())),
-            (_, Some(buffer)) => {
-                if let Ok(buffer) = buffer.lock().as_mut() {
-                    Some(func(buffer))
-                } else {
-                    None
-                }
-            }
-            (None, None) => None,
+    ) -> Result<T> {
+        if self.current_buffer == *buffer {
+            Ok(func(self.current_buffer.get_mut()))
+        } else {
+            let mut buffer = buffer.lock()?;
+            Ok(func(&mut buffer))
         }
     }
 }

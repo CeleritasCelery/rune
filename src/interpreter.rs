@@ -600,15 +600,13 @@ impl Interpreter<'_, '_> {
     }
 
     fn save_excursion<'ob>(&mut self, form: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
-        let point = self.env.current_buffer.as_ref().map(|b| b.text.cursor());
-        let buffer = self.env.current_buffer.as_ref().map(|b| (b.lisp_buffer(cx)));
+        let point = self.env.current_buffer.get().text.cursor();
+        let buffer = self.env.current_buffer.get().lisp_buffer(cx);
         root!(buffer, cx);
         let result = rebind!(self.eval_progn(form, cx)?);
-        if let Some(buffer) = buffer.bind_ref(cx) {
-            self.env.set_buffer(buffer)?;
-            let buf = self.env.current_buffer.as_mut().unwrap();
-            buf.text.set_cursor(point.unwrap().chars());
-        }
+        self.env.set_buffer(buffer.bind(cx));
+        let buf = self.env.current_buffer.get_mut();
+        buf.text.set_cursor(point.chars());
         Ok(result)
     }
 
@@ -617,12 +615,10 @@ impl Interpreter<'_, '_> {
         form: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let buffer = self.env.current_buffer.as_ref().map(|x| x.lisp_buffer(cx));
+        let buffer = self.env.current_buffer.get().lisp_buffer(cx);
         root!(buffer, cx);
         let result = rebind!(self.eval_progn(form, cx)?);
-        if let Some(buffer) = buffer.bind_ref(cx) {
-            self.env.set_buffer(buffer)?;
-        }
+        self.env.set_buffer(buffer.bind(cx));
         Ok(result)
     }
 

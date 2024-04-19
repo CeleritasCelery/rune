@@ -85,23 +85,21 @@ fn char_to_string(chr: u64) -> Result<String> {
     Ok(format!("{chr}"))
 }
 
-// TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 pub(crate) fn insert(args: ArgSlice, env: &mut Rt<Env>, cx: &Context) -> Result<()> {
     let env = &mut **env; // Deref into rooted type so we can split the borrow
-    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    let buffer = env.current_buffer.get_mut();
     let args = Rt::bind_slice(env.stack.arg_slice(args), cx);
     for arg in args {
         buffer.insert(*arg)?;
     }
-
     Ok(())
 }
 
 // TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 pub(crate) fn goto_char(position: usize, env: &mut Rt<Env>) -> Result<()> {
-    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    let buffer = env.current_buffer.get_mut();
     buffer.text.set_cursor(position);
     Ok(())
 }
@@ -109,7 +107,7 @@ pub(crate) fn goto_char(position: usize, env: &mut Rt<Env>) -> Result<()> {
 // TODO: this should not throw and error. Buffer will always be present.
 #[defun]
 pub(crate) fn point_max(env: &mut Rt<Env>) -> Result<usize> {
-    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+    let buffer = env.current_buffer.get_mut();
     // TODO: Handle narrowing
     Ok(buffer.text.len_chars() + 1)
 }
@@ -121,32 +119,26 @@ pub(crate) fn point_min() -> usize {
 }
 
 #[defun]
-pub(crate) fn point_marker(env: &mut Rt<Env>) -> Result<usize> {
-    // TODO: this should not throw and error. Buffer will always be present.
-    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
+pub(crate) fn point_marker(env: &mut Rt<Env>) -> usize {
     // TODO: Implement marker objects
-    Ok(buffer.text.cursor().chars())
+    env.current_buffer.get_mut().text.cursor().chars()
 }
 
 #[defun]
 fn delete_region(start: usize, end: usize, env: &mut Rt<Env>) -> Result<()> {
-    // TODO: this should not throw and error. Buffer will always be present.
-    let Some(buffer) = env.current_buffer.as_mut() else { bail!("No current buffer") };
-    buffer.delete(start, end)
+    env.current_buffer.get_mut().delete(start, end)
 }
 
 #[defun]
 fn bolp(env: &Rt<Env>) -> bool {
-    env.with_buffer(None, |b| {
-        let chars = b.text.cursor().chars();
-        chars == 0 || b.text.char_at(chars - 1).unwrap() == '\n'
-    })
-    .unwrap_or(false)
+    let buf = env.current_buffer.get();
+    let chars = buf.text.cursor().chars();
+    chars == 0 || buf.text.char_at(chars - 1).unwrap() == '\n'
 }
 
 #[defun]
 fn point(env: &Rt<Env>) -> usize {
-    env.with_buffer(None, |b| b.text.cursor().chars()).unwrap_or(0)
+    env.current_buffer.get().text.cursor().chars()
 }
 
 #[defun]
@@ -198,7 +190,7 @@ mod test {
         env.stack.push(108);
         env.stack.push(111);
         insert(ArgSlice::new(5), env, cx).unwrap();
-        assert_eq!(env.current_buffer.as_ref().unwrap(), "hello");
+        assert_eq!(env.current_buffer.get(), "hello");
     }
 
     #[test]
@@ -213,8 +205,8 @@ mod test {
         env.stack.push(cx.add(" world"));
         insert(ArgSlice::new(2), env, cx).unwrap();
 
-        assert_eq!(env.current_buffer.as_ref().unwrap(), "hello world");
+        assert_eq!(env.current_buffer.get(), "hello world");
         delete_region(2, 4, env).unwrap();
-        assert_eq!(env.current_buffer.as_ref().unwrap(), "hlo world");
+        assert_eq!(env.current_buffer.get(), "hlo world");
     }
 }
