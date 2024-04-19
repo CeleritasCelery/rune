@@ -816,6 +816,21 @@ pub(crate) fn parse_arg_list(
     Ok((required, optional, rest))
 }
 
+pub(crate) fn assert_lisp(compare: &str, expect: &str) {
+    let roots = &crate::core::gc::RootSet::default();
+    let cx = &mut Context::new(roots);
+    sym::init_symbols();
+    root!(env, new(Env), cx);
+    println!("Test String: {compare}");
+    let compare = {
+        let obj = crate::reader::read(compare, cx).unwrap().0;
+        root!(obj, cx);
+        rebind!(eval(obj, None, env, cx).unwrap())
+    };
+    let expect = crate::reader::read(expect, cx).unwrap().0;
+    assert_eq!(compare, expect);
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::{env::intern, gc::RootSet, object::IntoObject};

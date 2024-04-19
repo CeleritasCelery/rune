@@ -25,13 +25,14 @@ pub(crate) struct LispStack<'a> {
 /// display backtraces as well as return.
 #[derive(Debug, Clone, Copy)]
 struct Frame {
-    /// The start of the call frame, as a index from the start of the stack (not the end).
+    /// The start of the call frame, as a index from the bottom of the stack
+    /// (not the top).
     start: usize,
     /// The maximum size this stack frame can grow.
     end: usize,
     /// Number of arguments in this call frame. The first is the count and the
-    /// second is boolean indicating if the last argument is a cons cell with
-    /// the remaining variadic arguments.
+    /// second is boolean indicating if the last argument is a cons with the
+    /// remaining variadic arguments.
     arg_cnt: (u16, bool),
 }
 

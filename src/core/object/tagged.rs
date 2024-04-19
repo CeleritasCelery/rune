@@ -1557,16 +1557,6 @@ impl ObjectType<'_> {
     }
 }
 
-impl<'ob> ListType<'ob> {
-    #[cfg(test)]
-    pub(crate) fn car(self) -> Object<'ob> {
-        match self {
-            ListType::Nil => NIL,
-            ListType::Cons(x) => x.car(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::{TagType, MAX_FIXNUM, MIN_FIXNUM};

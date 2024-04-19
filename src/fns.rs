@@ -800,227 +800,81 @@ fn disable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::core::{gc::RootSet, object::TRUE};
-    use rune_core::macros::root;
-
-    use super::*;
+    use crate::interpreter::assert_lisp;
 
     #[test]
     fn test_take() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let list = list![1, 2, 3, 4; cx];
-        let res = take(2, list.try_into().unwrap(), cx).unwrap();
-        assert_eq!(res, list![1, 2; cx]);
+        assert_lisp("(take 2 '(1 2 3 4))", "(1 2)");
     }
 
     #[test]
     fn test_delq() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        {
-            let list = list![1, 2, 3, 1, 4, 1; cx];
-            let res = delq(1.into(), list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![2, 3, 4; cx]);
-        }
-        {
-            let list = list![true, true, true; cx];
-            let res = delq(TRUE, list.try_into().unwrap()).unwrap();
-            assert_eq!(res, NIL);
-        }
+        assert_lisp("(delq 1 '(1 2 3 1 4 1))", "(2 3 4)");
+        assert_lisp("(delq t '(t t t))", "nil");
     }
 
     #[test]
     fn test_nthcdr() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let list = list![1, 2, 3; cx];
-        let res = nthcdr(1, list.try_into().unwrap()).unwrap();
-        assert_eq!(res.untag().car(), 2);
+        assert_lisp("(nthcdr 1 '(1 2 3))", "(2 3)");
+        assert_lisp("(nthcdr 0 '(1 2 3))", "(1 2 3)");
+        assert_lisp("(nthcdr 3 '(1 2 3))", "nil");
     }
 
     #[test]
     fn test_reverse() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        {
-            let list = list![1, 2, 3, 4; cx];
-            let res = nreverse(list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![4, 3, 2, 1; cx]);
-        }
-        {
-            let list = list![1, 2,; cx];
-            let res = nreverse(list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![2, 1; cx]);
-        }
-        {
-            let list = list![1; cx];
-            let res = nreverse(list.try_into().unwrap()).unwrap();
-            assert_eq!(res, list![1; cx]);
-        }
-        {
-            let list = list![1, 2, 3; cx];
-            let res = reverse(list.try_into().unwrap(), cx).unwrap();
-            assert_eq!(res, list![3, 2, 1; cx]);
-        }
+        assert_lisp("(nreverse nil)", "nil");
+        assert_lisp("(nreverse '(1))", "(1)");
+        assert_lisp("(nreverse '(1 2))", "(2 1)");
+        assert_lisp("(nreverse '(1 2 3))", "(3 2 1)");
+        assert_lisp("(nreverse '(1 2 3 4))", "(4 3 2 1)");
     }
 
     #[test]
     fn test_nconc() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        {
-            let res = nconc(&[ListType::empty()]).unwrap();
-            assert!(res == NIL);
-        }
-        {
-            let list: List = list![1, 2; cx].try_into().unwrap();
-            let res = nconc(&[list]).unwrap();
-            assert_eq!(res, list![1, 2; cx]);
-        }
-        {
-            let list1: List = list![1, 2; cx].try_into().unwrap();
-            let list2: List = list![3, 4; cx].try_into().unwrap();
-            let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2, 3, 4; cx]);
-        }
-        {
-            let list1: List = list![1, 2; cx].try_into().unwrap();
-            let list2: List = list![3, 4; cx].try_into().unwrap();
-            let list3: List = list![5, 6; cx].try_into().unwrap();
-            let res = nconc(&[list1, list2, list3]).unwrap();
-            assert_eq!(res, list![1, 2, 3, 4, 5, 6; cx]);
-        }
-        {
-            let list1: List = NIL.try_into().unwrap();
-            let list2: List = list![1, 2; cx].try_into().unwrap();
-            let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2; cx]);
-        }
-        {
-            let list1: List = list![1, 2; cx].try_into().unwrap();
-            let list2: List = NIL.try_into().unwrap();
-            let res = nconc(&[list1, list2]).unwrap();
-            assert_eq!(res, list![1, 2; cx]);
-        }
+        assert_lisp("(nconc nil)", "nil");
+        assert_lisp("(nconc '(1 2))", "(1 2)");
+        assert_lisp("(nconc '(1 2) '(3 4))", "(1 2 3 4)");
+        assert_lisp("(nconc '(1 2) '(3 4) '(5 6))", "(1 2 3 4 5 6)");
+        assert_lisp("(nconc nil '(1 2))", "(1 2)");
+        assert_lisp("(nconc '(1 2) nil)", "(1 2)");
     }
 
     #[test]
     fn test_append() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let expect = list![104, 101, 108, 108, 111; cx];
-        let result = append(cx.add("hello"), &[], cx).unwrap();
-        assert_eq!(result, expect);
+        assert_lisp("(append \"hello\")", "(104 101 108 108 111)");
     }
 
     #[test]
     fn test_assq() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let element = Object::from(Cons::new(5, 6, cx));
-        let list = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), element; cx];
-        let list = list.try_into().unwrap();
-        let result = assq(5.into(), list).unwrap();
-        assert_eq!(result, element);
+        assert_lisp("(assq 5 '((1 . 2) (3 . 4) (5 . 6)))", "(5 . 6)");
+        assert_lisp("(assq 6 '((1 . 2) (3 . 4) (5 . 6)))", "nil");
     }
 
     #[test]
+    #[cfg(miri)]
     fn test_maphash() {
-        sym::init_symbols();
-        let roots = &RootSet::default();
-        let cx = &mut Context::new(roots);
-        let mut table = HashTable::default();
-        table.insert(1.into(), 6.into());
-        table.insert(2.into(), 8.into());
-        table.insert(3.into(), 10.into());
-        let table = table.into_obj(cx);
-        let func = sym::EQ.func(cx).unwrap();
-        root!(env, new(Env), cx);
-        root!(table, cx);
-        root!(func, cx);
         // This test does not assert anything, but allows this to be checked by
         // miri
-        maphash(func, table, env, cx).unwrap();
+        assert_lisp("(let ((h (make-hash-table))) (puthash 1 6 h) (puthash 2 8 h) (puthash 3 10 h) (maphash 'eq h))", "nil");
     }
 
     #[test]
-    #[allow(clippy::needless_borrow)]
     fn test_sort() {
-        sym::init_symbols();
-        let roots = &RootSet::default();
-        let cx = &mut Context::new(roots);
-        root!(env, new(Env), cx);
-        let func = sym::LESS_THAN.func(cx).unwrap();
-        root!(func, cx);
-        {
-            root!(list, ListType::empty(), cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, NIL);
-        }
-        {
-            let list: List = list![1; cx].try_into().unwrap();
-            root!(list, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![1; cx]);
-        }
-        {
-            let list: List = list![2, 1; cx].try_into().unwrap();
-            root!(list, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![1, 2; cx]);
-        }
-        {
-            let list: List = list![1, 2, 3; cx].try_into().unwrap();
-            root!(list, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![1, 2, 3; cx]);
-        }
-        {
-            let list: List = list![3, 2, 1; cx].try_into().unwrap();
-            root!(list, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![1, 2, 3; cx]);
-        }
-
-        {
-            let list: List = list![3, 1, 2; cx].try_into().unwrap();
-            root!(list, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![1, 2, 3; cx]);
-        }
-        {
-            let func = sym::GREATER_THAN.func(cx).unwrap();
-            let list: List = list![1, 2, 3, 4, 5; cx].try_into().unwrap();
-            root!(list, cx);
-            root!(func, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(res, list![5, 4, 3, 2, 1; cx]);
-        }
-        {
-            // check stable sorting
-            let func = sym::CAR_LESS_THAN_CAR.func(cx).unwrap();
-            let list: List =
-                list![Cons::new(1, 1, cx), Cons::new(1, 2, cx), Cons::new(1, 3, cx); cx]
-                    .try_into()
-                    .unwrap();
-            root!(list, cx);
-            root!(func, cx);
-            let res = rebind!(sort(list, func, env, cx).unwrap());
-            assert_eq!(
-                res,
-                list![Cons::new(1, 1, cx), Cons::new(1, 2, cx), Cons::new(1, 3, cx); cx]
-            );
-        }
+        assert_lisp("(sort nil '<)", "nil");
+        assert_lisp("(sort '(1) '<)", "(1)");
+        assert_lisp("(sort '(2 1) '<)", "(1 2)");
+        assert_lisp("(sort '(1 2 3) '<)", "(1 2 3)");
+        assert_lisp("(sort '(3 2 1) '<)", "(1 2 3)");
+        assert_lisp("(sort '(3 1 2) '<)", "(1 2 3)");
+        assert_lisp("(sort '(1 2 3 4 5) '>)", "(5 4 3 2 1)");
+        assert_lisp(
+            "(sort '((1 . 1) (1 . 2) (1 . 3)) 'car-less-than-car)",
+            "((1 . 1) (1 . 2) (1 . 3))",
+        );
     }
 
     #[test]
     fn test_copy_alist() {
-        let roots = &RootSet::default();
-        let cx = &Context::new(roots);
-        let alist = list![Cons::new(1, 2, cx), Cons::new(3, 4, cx), Cons::new(5, 6, cx); cx];
-        let list = alist.try_into().unwrap();
-        let result = copy_alist(list, cx).unwrap();
-        assert_eq!(alist, result);
+        assert_lisp("(copy-alist '((1 . 2) (3 . 4) (5 . 6)))", "((1 . 2) (3 . 4) (5 . 6))");
     }
 }
