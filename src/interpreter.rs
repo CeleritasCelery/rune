@@ -816,6 +816,7 @@ pub(crate) fn parse_arg_list(
     Ok((required, optional, rest))
 }
 
+#[cfg(test)]
 pub(crate) fn assert_lisp(compare: &str, expect: &str) {
     let roots = &crate::core::gc::RootSet::default();
     let cx = &mut Context::new(roots);
