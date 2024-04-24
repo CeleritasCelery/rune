@@ -117,7 +117,7 @@ fn eager_expand<'ob>(
             return Ok(val.bind(cx));
         }
     }
-    let result = call!(macroexpand, obj, TRUE; name, env, cx)?;
+    let result = call!(macroexpand, val, TRUE; name, env, cx)?;
     root!(result, cx);
     interpreter::eval(result, None, env, cx)
 }

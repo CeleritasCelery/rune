@@ -670,11 +670,12 @@ Each element is (INDEX . VALUE)")
       (list 'defconst opname opcode)))
 
 (defmacro byte-extrude-byte-code-vectors ()
-  ;; RUNE-BOOTSTRAP
-  (list 'setq 'byte-code-vector
-        (get 'byte-code-vector 'tmp-compile-time-value)
-        'byte-stack+-info
-        (get 'byte-stack+-info 'tmp-compile-time-value)))
+  (prog1 (list 'setq 'byte-code-vector
+             (get 'byte-code-vector 'tmp-compile-time-value)
+             'byte-stack+-info
+             (get 'byte-stack+-info 'tmp-compile-time-value))
+    (put 'byte-code-vector 'tmp-compile-time-value nil)
+    (put 'byte-stack+-info 'tmp-compile-time-value nil)))
 
 
 ;; The following opcodes (1-47) use the 3 lowest bits for an immediate
@@ -881,9 +882,6 @@ the address the value maps to, if any.")
 (defconst byte-goto-always-pop-ops '(byte-goto-if-nil byte-goto-if-not-nil))
 
 (byte-extrude-byte-code-vectors)
-;; RUNE-BOOTSTRAP
-(put 'byte-code-vector 'tmp-compile-time-value nil)
-(put 'byte-stack+-info 'tmp-compile-time-value nil)
 
 ;;; lapcode generator
 ;;
