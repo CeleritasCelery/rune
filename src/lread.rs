@@ -4,7 +4,7 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Context, Rt, Rto};
 use crate::core::object::{
-    Function, Gc, LispString, Object, ObjectType, Symbol, WithLifetime, NIL, TRUE,
+    Function, Gc, LispString, Object, ObjectType, Symbol, TagType, WithLifetime, NIL, TRUE,
 };
 use crate::reader;
 use crate::{interpreter, rooted_iter};
@@ -106,16 +106,14 @@ fn eager_expand<'ob>(
     let name = "internal-macroexpand-for-load";
     let val = call!(macroexpand, obj, NIL; name, env, cx)?;
     let val = rebind!(val, cx);
-    if let ObjectType::Cons(top) = val.untag() {
-        if top.car() == sym::PROGN {
-            root!(val, NIL, cx);
-            rooted_iter!(forms, top.cdr(), cx);
-            while let Some(form) = forms.next()? {
-                let result = eager_expand(form, macroexpand, env, cx)?;
-                val.set(result);
-            }
-            return Ok(val.bind(cx));
+    if let Ok((sym::PROGN, forms)) = val.as_cons_pair() {
+        root!(val, NIL, cx);
+        rooted_iter!(forms, forms.tag(), cx);
+        while let Some(form) = forms.next()? {
+            let result = eager_expand(form, macroexpand, env, cx)?;
+            val.set(result);
         }
+        return Ok(val.bind(cx));
     }
     let result = call!(macroexpand, val, TRUE; name, env, cx)?;
     root!(result, cx);

@@ -1476,9 +1476,34 @@ impl<'ob> PartialEq<bool> for Object<'ob> {
     }
 }
 
+#[cfg(test)]
 impl<'ob> Object<'ob> {
     pub(crate) fn as_cons(self) -> &'ob Cons {
         self.try_into().unwrap()
+    }
+}
+
+impl<'ob> Object<'ob> {
+    /// Convience method to easily match against cons cells that are the start
+    /// of a list of values.
+    pub(crate) fn as_cons_pair(self) -> Result<(Symbol<'ob>, ObjectType<'ob>), TypeError> {
+        let cons: &Cons = self.try_into()?;
+        let sym = cons.car().try_into()?;
+        Ok((sym, cons.cdr().untag()))
+    }
+}
+
+impl<'ob> Function<'ob> {
+    /// Convience method to easily match against cons cells that are the start
+    /// of a list of values.
+    pub(crate) fn as_cons_pair(self) -> Result<(Symbol<'ob>, FunctionType<'ob>), TypeError> {
+        if let FunctionType::Cons(cons) = self.untag() {
+            let sym = cons.car().try_into()?;
+            let fun: Function = cons.cdr().try_into()?;
+            Ok((sym, fun.untag()))
+        } else {
+            Err(TypeError::new(Type::Cons, self))
+        }
     }
 }
 

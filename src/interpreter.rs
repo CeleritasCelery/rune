@@ -5,9 +5,7 @@ use crate::{
         env::{sym, CallFrame, Env},
         error::{ArgError, Type, TypeError},
         gc::{Context, Rt, Rto, Slot},
-        object::{
-            Function, FunctionType, Gc, List, ListType, Object, ObjectType, Symbol, NIL, TRUE,
-        },
+        object::{Function, Gc, List, ListType, Object, ObjectType, Symbol, TagType, NIL, TRUE},
     },
     eval::{add_trace, ErrorType, EvalError, EvalResult},
     rooted_iter,
@@ -166,28 +164,26 @@ impl Interpreter<'_, '_> {
         };
         root!(func, cx);
 
-        match func.untag(cx) {
-            FunctionType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
+        match func.bind(cx).as_cons_pair() {
+            Ok((sym::AUTOLOAD, _)) => {
                 crate::eval::autoload_do_load(func.cast(), None, None, self.env, cx)
                     .map_err(|e| add_trace(e, "autoload", &[]))?;
                 func.set(sym.bind(cx).follow_indirect(cx).unwrap());
             }
-            FunctionType::Cons(form) if form.car() == sym::MACRO => {
-                let mcro: Function = form.cdr().try_into()?;
-
+            Ok((sym::MACRO, mcro)) => {
                 let mut iter = args.bind(cx).as_list()?.fallible();
                 let mut frame = CallFrame::new(self.env);
                 while let Some(arg) = iter.next()? {
                     frame.push_arg(arg);
                 }
-                root!(mcro, cx);
+                root!(mcro, mcro.tag(), cx);
                 let name = sym.bind(cx).name().to_owned();
                 let value = mcro.call(&mut frame, Some(&name), cx)?;
                 drop(frame);
                 root!(value, cx);
                 return self.eval_form(value, cx);
             }
-            _ => (),
+            _ => {}
         }
 
         rooted_iter!(iter, args, cx);
@@ -215,11 +211,10 @@ impl Interpreter<'_, '_> {
 
         let form = forms.next().unwrap()?;
         root!(form, cx); // Polonius
-        let ObjectType::Cons(cons) = form.bind(cx).untag() else { return Ok(form.bind(cx)) };
-        if cons.car() != sym::LAMBDA {
+        let Ok((sym::LAMBDA, doc)) = form.bind(cx).as_cons_pair() else {
             return Ok(form.bind(cx));
-        }
-        root!(doc, cons.cdr(), cx);
+        };
+        root!(doc, doc.tag(), cx);
         let body = rebind!(self.replace_doc_symbol(doc, cx)?);
         let env = {
             let vars = self.vars.bind_ref(cx);
@@ -255,28 +250,21 @@ impl Interpreter<'_, '_> {
         quoted: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> Result<Object<'ob>, EvalError> {
+        let ret = |cx| Ok(quoted.bind(cx));
         // quoted = ((<args..>) (doc_str) ...)
         let docstring = {
-            let Ok(list) = quoted.bind(cx).as_list() else { return Ok(quoted.bind(cx)) };
-            let Some(doc) = list.fallible().nth(1)? else { return Ok(quoted.bind(cx)) };
-            let ObjectType::Cons(doc_cons) = doc.untag() else { return Ok(quoted.bind(cx)) };
-            if doc_cons.car() != sym::KW_DOCUMENTATION {
-                return Ok(quoted.bind(cx));
-            }
-            let ObjectType::Cons(doc_cons) = doc_cons.cdr().untag() else {
-                return Ok(quoted.bind(cx));
+            let Ok(list) = quoted.bind(cx).as_list() else { return ret(cx) };
+            let Some(doc) = list.fallible().nth(1)? else { return ret(cx) };
+            let Ok((sym::KW_DOCUMENTATION, ObjectType::Cons(doc))) = doc.as_cons_pair() else {
+                return ret(cx);
             };
-            root!(doc_form, doc_cons.car(), cx);
+            root!(doc_form, doc.car(), cx);
             let docstring = rebind!(self.eval_form(doc_form, cx)?);
             // Handle the special case of oclosure docstrings being a symbol
-            if let ObjectType::Symbol(sym) = docstring.untag() {
-                if sym != sym::NIL {
-                    cx.add(sym.name())
-                } else {
-                    docstring
-                }
-            } else {
-                docstring
+            match docstring.untag() {
+                ObjectType::NIL => docstring,
+                ObjectType::Symbol(sym) => cx.add(sym.name()),
+                _ => docstring,
             }
         };
         // ((<args..>) (:documentation <form>) body)

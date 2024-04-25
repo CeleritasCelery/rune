@@ -1,5 +1,6 @@
 //! Search utilities.
 use crate::core::{
+    cons::Cons,
     env::Env,
     gc::{Context, Rt},
     object::{List, Object, ObjectType, NIL},
@@ -33,7 +34,8 @@ fn string_match<'ob>(
         }
         let match_data = crate::fns::slice_into_list(&all, None, cx);
         env.match_data.set(match_data);
-        Ok(match_data.as_cons().car())
+        let head: &Cons = match_data.try_into().unwrap();
+        Ok(head.car())
     } else {
         Ok(NIL)
     }

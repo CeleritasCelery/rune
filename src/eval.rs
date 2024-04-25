@@ -3,7 +3,9 @@ use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
 use crate::core::error::{ArgError, Type, TypeError};
 use crate::core::gc::{Rt, Rto};
-use crate::core::object::{display_slice, FnArgs, Function, LispString, ObjectType, Symbol, NIL};
+use crate::core::object::{
+    display_slice, FnArgs, Function, LispString, ObjectType, Symbol, TagType, NIL,
+};
 use crate::core::{
     gc::Context,
     object::{FunctionType, Gc, Object},
@@ -244,30 +246,27 @@ pub(crate) fn autoload_do_load<'ob>(
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
     // TODO: want to handle the case where the file is already loaded.
-    match fundef.untag(cx) {
-        ObjectType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-            ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
-            let mut iter = cons.elements();
-            iter.next(); // autoload
-            let file: Gc<&LispString> = match iter.next() {
-                Some(x) => x?.try_into()?,
-                None => bail!("Malformed autoload"),
-            };
-            ensure!(
-                iter.fallible().all(|x| Ok(x.is_nil()))?,
-                "autoload arguments are not yet implemented"
-            );
-            root!(file, cx);
-            crate::lread::load(file, None, None, cx, env)?;
-            match funname {
-                Some(func) => match func.untag(cx).func(cx) {
-                    Some(x) => Ok(x.into()),
-                    None => Err(anyhow!("autoload of {func} did not provide a definition")),
-                },
-                _ => Ok(NIL),
-            }
-        }
-        _ => Ok(fundef.bind(cx)),
+    let Ok((sym::AUTOLOAD, ObjectType::Cons(body))) = fundef.bind(cx).as_cons_pair() else {
+        return Ok(fundef.bind(cx));
+    };
+    ensure!(macro_only.is_none(), "autoload-do-load macro-only is not yet implemented");
+    let mut iter = body.elements();
+    let file: Gc<&LispString> = match iter.next() {
+        Some(x) => x?.try_into()?,
+        None => bail!("Malformed autoload"),
+    };
+    ensure!(
+        iter.fallible().all(|x| Ok(x.is_nil()))?,
+        "autoload arguments are not yet implemented"
+    );
+    root!(file, cx);
+    crate::lread::load(file, None, None, cx, env)?;
+    match funname {
+        Some(func) => match func.untag(cx).func(cx) {
+            Some(x) => Ok(x.into()),
+            None => Err(anyhow!("autoload of {func} did not provide a definition")),
+        },
+        _ => Ok(NIL),
     }
 }
 
@@ -326,10 +325,8 @@ pub(crate) fn macroexpand<'ob>(
 
 fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Function<'ob>> {
     if let Some(callable) = name.follow_indirect(cx) {
-        if let FunctionType::Cons(cons) = callable.untag() {
-            if cons.car() == sym::MACRO {
-                return cons.cdr().try_into().ok();
-            }
+        if let Ok((sym::MACRO, cdr)) = callable.as_cons_pair() {
+            return Some(cdr.tag());
         }
     }
     None
@@ -445,24 +442,21 @@ impl Rto<Function<'_>> {
             }
             FunctionType::Symbol(sym) => {
                 let Some(func) = sym.follow_indirect(cx) else { bail_err!("Void Function: {sym}") };
-                match func.untag() {
-                    FunctionType::Cons(cons) if cons.car() == sym::AUTOLOAD => {
-                        // TODO: inifinite loop if autoload does not resolve
-                        root!(sym, cx);
-                        crate::eval::autoload_do_load(self.cast(), None, None, frame, cx)
-                            .map_err(|e| add_trace(e, name, frame.arg_slice()))?;
-                        let Some(func) = sym.bind(cx).follow_indirect(cx) else {
-                            bail_err!("autoload for {sym} failed to define function")
-                        };
-                        root!(func, cx);
-                        let name = sym.bind(cx).name().to_owned();
-                        func.call(frame, Some(&name), cx)
-                    }
-                    _ => {
-                        root!(func, cx);
-                        let name = sym.name().to_owned();
-                        func.call(frame, Some(&name), cx)
-                    }
+                if let Ok((sym::AUTOLOAD, _)) = func.as_cons_pair() {
+                    // TODO: inifinite loop if autoload does not resolve
+                    root!(sym, cx);
+                    crate::eval::autoload_do_load(self.cast(), None, None, frame, cx)
+                        .map_err(|e| add_trace(e, name, frame.arg_slice()))?;
+                    let Some(func) = sym.bind(cx).follow_indirect(cx) else {
+                        bail_err!("autoload for {sym} failed to define function")
+                    };
+                    root!(func, cx);
+                    let name = sym.bind(cx).name().to_owned();
+                    func.call(frame, Some(&name), cx)
+                } else {
+                    root!(func, cx);
+                    let name = sym.name().to_owned();
+                    func.call(frame, Some(&name), cx)
                 }
             }
         }
