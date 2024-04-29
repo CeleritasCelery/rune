@@ -444,7 +444,6 @@ pub(crate) fn member<'ob>(elt: Object<'ob>, list: List<'ob>) -> Result<Object<'o
 }
 
 // TODO: Handle sorting vectors
-// TODO: Sort items in place
 #[defun]
 fn sort<'ob>(
     seq: &Rto<List>,
@@ -453,39 +452,33 @@ fn sort<'ob>(
     cx: &'ob mut Context,
 ) -> Result<Object<'ob>> {
     let vec: Vec<_> = seq.bind(cx).elements().fallible().collect()?;
-    let len = vec.len();
-    if len <= 1 {
+    if vec.len() <= 1 {
         return Ok(seq.bind(cx).into());
     }
-
-    root!(tmp, NIL, cx);
     root!(vec, cx);
-    // A simple insertion sort
-    // TODO: use a better sort like tim sort
-    for i in 1..len {
-        tmp.set(&vec[i]);
-        let mut j = i;
-        while j > 0 {
-            let result = call!(predicate, &*tmp, &vec[j - 1]; env, cx);
-            // check if elements are out of order
-            match result {
-                Ok(cmp) => {
-                    if cmp == NIL {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    vec[j].set(&*tmp);
-                    return Err(e.into());
-                }
-            }
-            let left = vec[j - 1].bind(cx);
-            vec[j].set(left);
-            j -= 1;
+    let mut err = None;
+    // TODO: Should we specialize some common predicates (<, >, string<, etc)?
+    vec.sort_by(|a, b| {
+        use std::cmp::Ordering;
+        if err.is_some() {
+            // We previously hit an error and don't want to call predicate
+            // anymore, but still need to wait for sort to finish.
+            return Ordering::Equal;
         }
-        vec[j].set(&*tmp);
+        let result = call!(predicate, a, b; env, cx);
+        match result {
+            Ok(x) if x == NIL => Ordering::Greater,
+            Ok(_) => Ordering::Less,
+            Err(e) => {
+                err = Some(e.into());
+                Ordering::Equal
+            }
+        }
+    });
+    match err {
+        Some(e) => Err(e),
+        None => Ok(slice_into_list(Rt::bind_slice(vec, cx), None, cx)),
     }
-    Ok(slice_into_list(Rt::bind_slice(vec, cx), None, cx))
 }
 
 #[defun]
@@ -871,6 +864,7 @@ mod test {
             "(sort '((1 . 1) (1 . 2) (1 . 3)) 'car-less-than-car)",
             "((1 . 1) (1 . 2) (1 . 3))",
         );
+        assert_lisp("(condition-case nil (sort '(3 2 1) 'length) (error 7))", "7");
     }
 
     #[test]
