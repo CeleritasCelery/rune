@@ -1,5 +1,3 @@
-#![allow(clippy::manual_unwrap_or_default)]
-// Issue with darling ^
 use darling::FromMeta;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};

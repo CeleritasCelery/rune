@@ -1,1 +1,1 @@
-allowed-duplicate-crates = ["syn"]
+allowed-duplicate-crates = ["syn", "bitflags"]
