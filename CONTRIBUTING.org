@@ -1,6 +1,7 @@
-This document describes how the Basic systems of the Rust core work and how to use them.
+The easiest way to contribute to the Emacs Rust core is to help port C functions over to Rust. In the process of doing so it will often expose gaps where new data structures or functionality is needed. See the list at the end of this document for examples of functions that still need to be ported.
 
-* Object Hierarchy
+The following sections describe the basic types used in Rune and how they interact with each other.
+* Overview of the Object Hierarchy
 The type ~Object~ is equivalent to ~LispObject~ in the C core. It is a tagged pointer that is a superset of all possible concrete types. It is always 64 bits. There are other Sum types that represent a different group of concrete types, such as ~Number~ which is all numeric types, or ~Function~ which is all callable types. These can be matched into the different concrete types by using the ~untag~ method.
 
 The ~Gc<T>~ type represents a generic tagged pointer. ~Object~ is actually just a type alias for ~Gc<ObjectType>~. All ~Gc<T>~ types share the same layout and bit patterns, meaning that any tagged pointer can be cast back to an ~Object~ with ~into()~ or ~as_obj()~.
@@ -93,3 +94,188 @@ This is usually a sign that you need to root an object.
   // access the variable again
   let x = x.bind(cx);
 #+end_src
+
+* C functions to port to Rust
+
+** casefiddle.c
+Functions to manipulate case
+
+- upcase
+- downcase
+- upcase-initials
+- upcase-region
+- downcase-region
+- capitalize-region
+- upcase-initials-region
+- upcase-word
+- downcase-word
+- capitalize-word
+
+** character.c
+Functions that operate on characters
+
+- unibyte-char-to-multibyte
+- multibyte-char-to-unibyte
+- char-width
+- string-width
+- unibyte-string
+- get-byte
+
+
+** fns.c (string)
+Functions that operate on strings
+
+- string-bytes
+- string-distance
+- string-equal
+- compare-strings
+- string-lessp
+- string-version-lessp
+- string-collate-lessp
+- string-collate-equalp
+- string-make-multibyte
+- string-make-unibyte
+- string-as-unibyte
+- string-as-multibyte
+- string-to-unibyte
+- substring
+- clear-string
+- base64-encode-string
+- base64url-encode-string
+- base64-decode-string
+- base64-encode-region
+- base64url-encode-region
+- base64-decode-region
+
+
+** timefns.c
+Functions that operate on time formats
+
+- time-add
+- time-subtract
+- time-less-p
+- time-equal-p
+- float-time
+- format-time-string
+- decode-time
+- encode-time
+- time-convert
+- current-cpu-time
+- current-time-string
+- current-time-zone
+- set-time-zone-rule
+
+** dired.c
+Functions for working with directories
+
+- directory-files
+- directory-files-and-attributes
+- file-name-completion
+- file-name-all-completions
+- file-attributes-lessp
+- system-users
+- system-groups
+
+** fileio.c
+Functions that operate on files
+
+- make-temp-file-internal
+- make-temp-name
+- substitute-in-file-name
+- copy-file
+- make-directory-internal
+- delete-directory-internal
+- delete-file
+- rename-file
+- add-name-to-file
+- make-symbolic-link
+- file-name-absolute-p
+- file-exists-p
+- file-executable-p
+- file-readable-p
+- file-writable-p
+- access-file
+- file-accessible-directory-p
+- file-regular-p
+- file-selinux-context
+- set-file-selinux-context
+- file-acl
+- set-file-acl
+- file-modes
+- set-file-modes
+- set-default-file-modes
+- default-file-modes
+- set-file-times
+- unix-sync
+- file-newer-than-file-p
+- insert-file-contents
+- write-region
+- verify-visited-file-modtime
+- visited-file-modtime
+- set-visited-file-modtime
+- do-auto-save
+- set-buffer-auto-saved
+- clear-buffer-auto-save-failure
+- recent-auto-save-p
+- next-read-file-uses-dialog-p
+- set-binary-mode
+- file-system-info
+
+** editfns.c
+Function to edit buffers and manipulate text.
+
+- byte-to-string
+- pos-bol
+- line-beginning-position
+- pos-eol
+- line-end-position
+- buffer-size
+- point-min
+- point-max
+- gap-position
+- gap-size
+- position-bytes
+- byte-to-position
+- following-char
+- preceding-char
+- bobp
+- eobp
+- bolp
+- eolp
+- char-after
+- char-before
+- user-login-name
+- user-real-login-name
+- user-uid
+- user-real-uid
+- group-name
+- group-gid
+- group-real-gid
+- user-full-name
+- system-name
+- emacs-pid
+- insert
+- insert-and-inherit
+- insert-char
+- insert-byte
+- buffer-substring
+- buffer-string
+- insert-buffer-substring
+- compare-buffer-substrings
+- replace-buffer-contents
+- subst-char-in-region
+- translate-region-internal
+- delete-region
+- delete-and-extract-region
+- internal--unlabel-restriction
+- save-restriction
+- ngettext
+- message
+- message-box
+- message-or-box
+- current-message
+- propertize
+- format
+- format-message
+- char-equal
+- transpose-regions
