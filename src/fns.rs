@@ -615,6 +615,191 @@ pub(crate) fn elt<'ob>(sequence: Object<'ob>, n: usize, cx: &'ob Context) -> Res
     }
 }
 
+#[defun]
+pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<Option<bool>> {
+    let s1 = match s1.untag() {
+	ObjectType::String(x) => x.as_bytes(),
+	ObjectType::ByteString(x) => x.as_bytes(),
+	ObjectType::Symbol(x) => x.get().as_bytes(),
+	_ => bail!("Wrong type argument: stringp, {s1}"),
+    };
+    let s2 = match s2.untag() {
+	ObjectType::String(x) => x.as_bytes(),
+	ObjectType::ByteString(x) => x.as_bytes(),
+	ObjectType::Symbol(x) => (x.get()).as_bytes(),
+	_ => bail!("Wrong type argument: stringp, {s2}"),
+    };
+
+    if s1.len() != s2.len() {
+	return Ok(None);
+    }
+    if s1 == s2 {
+	Ok(Some(true))
+    } else {
+	Ok(None)
+    }
+}
+
+#[defun]
+pub(crate) fn compare_strings<'ob>(
+    string1: Object<'ob>,
+    start1: Object<'ob>,
+    end1: Object<'ob>,
+    string2: Object<'ob>,
+    start2: Object<'ob>,
+    end2: Object<'ob>,
+    ignore_case: Option<Object<'ob>>,
+) -> Result<Object<'ob>> {
+    let start1 = match start1.untag() {
+        ObjectType::Int(x) => x,
+        ObjectType::NIL => 0,
+        _ => bail!("Wrong type argument: integerp, {start1}"),
+    };
+    let end1 = match end1.untag() {
+        ObjectType::Int(x) => x,
+        ObjectType::NIL => match string1.untag() {
+            ObjectType::String(x) => x.len() as i64,
+            _ => bail!("Wrong type argument: stringp, {string1}"),
+        },
+        _ => bail!("Wrong type argument: integerp, {end1}"),
+    };
+
+    if end1 < start1 {
+	    bail!("Args out of range: {string1}, {start1}, {end1}");
+    }
+    
+    // TODO: check if byte strings are supported
+    let s1 = match string1.untag() {
+        ObjectType::String(x) => x.chars().skip(start1 as usize).take((end1 - start1) as usize),
+        _ => bail!("Wrong type argument: stringp, {string1}"),
+    };
+
+    let start2 = match start2.untag() {
+        ObjectType::Int(x) => x,
+        ObjectType::NIL => 0,
+        _ => bail!("Wrong type argument: integerp, {start2}"),
+    };
+    let end2 = match end2.untag() {
+        ObjectType::Int(x) => x,
+        ObjectType::NIL => match string2.untag() {
+            ObjectType::String(x) => x.len() as i64,
+            _ => bail!("Wrong type argument: stringp, {string2}"),
+	    },
+	    _ => bail!("Wrong type argument: integerp, {end2}"),
+    };
+
+    if end2 < start2 || start2 > end2 {
+	    bail!("Args out of range: {string2}, {start2}, {end2}");
+    }
+    // TODO: check if byte strings are supported
+    let s2 = match string2.untag() {
+        ObjectType::String(x) => x.chars().skip(start2 as usize).take((end2 - start2) as usize),
+        _ => bail!("Wrong type argument: stringp, {string2}"),
+    };
+
+    let ignore_case = if let Some(x) = ignore_case {
+        match x.untag() {
+            ObjectType::NIL => false,
+            _ => true,
+        }
+    } else {
+	    false
+    };
+    
+    let mut leading = 1;
+    for (c1, c2) in s1.zip(s2) {
+        let (c1, c2) = if ignore_case {
+            //TODO: use case-table to determine the uppercase of a character
+            (c1.to_uppercase().next().unwrap(), c2.to_uppercase().next().unwrap())
+        } else {
+            (c1, c2)
+        };
+
+        if c1 < c2 {
+            return Ok((-leading).into())
+        } else if c1 > c2 {
+            return Ok(leading.into())
+        }
+        leading += 1;
+    }
+
+    Ok(true.into())
+}
+
+#[defun]
+pub(crate) fn string_distance<'ob>(
+    string1: Object<'ob>,
+    string2: Object<'ob>,
+    bytecompare: Option<Object<'ob>>
+) -> Result<Object<'ob>> {
+
+    let bytecompare = if let Some(x) = bytecompare {
+        match x.untag() {
+            ObjectType::NIL => false,
+            _ => true,
+        }
+    } else {
+	    false
+    };
+
+    let distance = if !bytecompare {
+        let s1 = match string1.untag() {
+            ObjectType::String(x) => x,
+            _ => bail!("Wrong type argument: stringp, {string1}"),
+	    };
+
+        let s2 = match string2.untag() {
+            ObjectType::String(x) => x,
+            _ => bail!("Wrong type argument: stringp, {string2}"),
+        };
+
+            levenshtein_distance(&mut s1.chars(), &mut s2.chars())
+    } else {
+        let s1 = match string1.untag() {
+            ObjectType::String(x) => x.as_bytes(),
+            ObjectType::ByteString(x) => x.as_bytes(),
+            _ => bail!("Wrong type argument: stringp, {string1}"),
+        };
+
+        let s2 = match string2.untag() {
+            ObjectType::String(x) => x.as_bytes(),
+            ObjectType::ByteString(x) => x.as_bytes(),
+            _ => bail!("Wrong type argument: stringp, {string2}"),
+        };
+
+        levenshtein_distance(&mut s1.iter(), &mut s2.iter())
+    };
+
+    Ok(distance.into())
+}
+
+#[inline]
+pub(crate) fn levenshtein_distance<T: PartialEq>(s1: &mut dyn Iterator<Item = T>, s2: &mut dyn Iterator<Item = T>) -> i64 {
+    let s = s1.collect::<Vec<_>>();
+    let t = s2.collect::<Vec<_>>();
+    let mut v0 = vec![0; s.len() + 1];
+    let mut v1 = vec![0; t.len() + 1];
+
+    for i in 0..v0.len() {
+	    v0[i] = i as i64;
+    }
+
+    for i in 0..s.len() {
+        v1[0] = i as i64 + 1;
+
+        for j in 0..t.len() {
+            let deletion_cost = v0[j + 1] + 1;
+            let insertion_cost = v1[j] + 1;
+            let substitution_cost = v0[j] + if s[i] == t[j] { 0 } else { 1 };
+            v1[j + 1] = std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
+        }
+
+        std::mem::swap(&mut v0, &mut v1);
+    }
+    return v0[t.len()];
+}
+
+
 ///////////////
 // HashTable //
 ///////////////
@@ -793,7 +978,7 @@ fn disable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::interpreter::assert_lisp;
+    use crate::{interpreter::assert_lisp, fns::levenshtein_distance};
 
     #[test]
     fn test_take() {
@@ -843,6 +1028,34 @@ mod test {
         assert_lisp("(assq 6 '((1 . 2) (3 . 4) (5 . 6)))", "nil");
     }
 
+    #[test]
+    fn test_string_equal() {
+	assert_lisp("(string-equal \"hello\" \"hello\")", "t");
+	assert_lisp("(string-equal \"hello\" \"world\")", "nil");
+    }
+
+    #[test]
+    fn test_compare_strings() {
+	assert_lisp("(compare-strings \"hello\" 0 6 \"hello\" 0 6)", "t");
+	assert_lisp("(compare-strings \"hello\" 0 6 \"world\" 0 6)", "-1");
+	assert_lisp("(compare-strings \"hello\" 0 6 \"HELLO\" 0 6 t)", "t");
+    }
+
+    #[test]
+    fn test_string_distance() {
+	assert_lisp("(string-distance \"hello\" \"hello\")", "0");
+	assert_lisp("(string-distance \"hello\" \"jello\")", "1");
+	assert_lisp("(string-distance \"hello\" \"world\")", "4");
+    }
+
+    #[test]
+    fn test_levenstein_distance() {
+	let s1 = "hello";
+	let s2 = "world";
+	let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
+	assert_eq!(distance, 4);
+    }
+    
     #[test]
     #[cfg(miri)]
     fn test_maphash() {

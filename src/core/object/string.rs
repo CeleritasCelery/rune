@@ -121,6 +121,12 @@ impl<'a> From<&'a LispString> for &'a [u8] {
 pub(crate) struct ByteString(GcHeap<*mut [u8]>);
 type ByteVec<'a> = bumpalo::collections::Vec<'a, u8>;
 
+impl ByteString {
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+	unsafe { &**self.0 }
+    }
+}
+
 impl Deref for ByteString {
     type Target = [u8];
 

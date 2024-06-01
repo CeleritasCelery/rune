@@ -172,10 +172,10 @@ fn match_data__translate(n: i64, env: &Rt<Env>, cx: &Context) -> Result<()> {
     Ok(())
 }
 
-#[defun]
+/*#[defun]
 fn string_equal(s1: &str, s2: &str) -> bool {
     s1 == s2
-}
+}*/
 
 #[cfg(test)]
 mod test {
