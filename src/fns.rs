@@ -631,12 +631,12 @@ pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<Opti
     };
 
     if s1.len() != s2.len() {
-	    return Ok(None);
+        return Ok(None);
     }
     if s1 == s2 {
-	    Ok(Some(true))
+        Ok(Some(true))
     } else {
-	    Ok(None)
+        Ok(None)
     }
 }
 
@@ -667,7 +667,7 @@ pub(crate) fn compare_strings<'ob>(
     if end1 < start1 || start1 < end1 {
         bail!("Args out of range: {string1}, {start1}, {end1}");
     }
-    
+
     // TODO: check if byte strings are supported
     let s1 = match string1.untag() {
         ObjectType::String(x) => x.chars().skip(start1 as usize).take((end1 - start1) as usize),
@@ -700,9 +700,9 @@ pub(crate) fn compare_strings<'ob>(
     let ignore_case = if let Some(x) = ignore_case {
         !matches!(x.untag(), ObjectType::NIL)
     } else {
-	    false
+        false
     };
-    
+
     let mut leading = 1;
     for (c1, c2) in s1.zip(s2) {
         let (c1, c2) = if ignore_case {
@@ -727,7 +727,7 @@ pub(crate) fn compare_strings<'ob>(
 pub(crate) fn string_distance<'ob>(
     string1: Object<'ob>,
     string2: Object<'ob>,
-    bytecompare: Option<Object<'ob>>
+    bytecompare: Option<Object<'ob>>,
 ) -> Result<Object<'ob>> {
     let bytecompare = if let Some(x) = bytecompare {
         !matches!(x.untag(), ObjectType::NIL)
@@ -769,14 +769,14 @@ pub(crate) fn string_distance<'ob>(
 #[inline]
 pub(crate) fn levenshtein_distance<T: PartialEq>(
     s1: &mut dyn Iterator<Item = T>,
-    s2: &mut dyn Iterator<Item = T>
+    s2: &mut dyn Iterator<Item = T>,
 ) -> i64 {
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
     let mut v0 = vec![0; s.len() + 1];
     let mut v1 = vec![0; t.len() + 1];
 
-    for (i, v0i)  in v0.iter_mut().enumerate() {
+    for (i, v0i) in v0.iter_mut().enumerate() {
         *v0i = i as i64;
     }
 
@@ -787,7 +787,7 @@ pub(crate) fn levenshtein_distance<T: PartialEq>(
             let deletion_cost = v0[j + 1] + 1;
             let insertion_cost = v1[j] + 1;
             let substitution_cost = v0[j] + if si == tj { 0 } else { 1 };
-            v1[j + 1] = 
+            v1[j + 1] =
                 std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
         }
 
@@ -795,7 +795,6 @@ pub(crate) fn levenshtein_distance<T: PartialEq>(
     }
     v0[t.len()]
 }
-
 
 ///////////////
 // HashTable //
@@ -1052,7 +1051,7 @@ mod test {
         let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
         assert_eq!(distance, 4);
     }
-    
+
     #[test]
     #[cfg(miri)]
     fn test_maphash() {

@@ -22,9 +22,9 @@ mod sealed {
     }
 
     impl SymbolCellInner {
-	    pub(crate) fn as_bytes(&self) -> &[u8] {
-	        self.name.as_bytes()
-	    }
+        pub(crate) fn as_bytes(&self) -> &[u8] {
+            self.name.as_bytes()
+        }
     }
 }
 
@@ -49,10 +49,10 @@ enum SymbolName {
 
 impl SymbolName {
     fn as_bytes(&self) -> &[u8] {
-	match self {
-	    SymbolName::Interned(x) => x.as_bytes(),
-	    SymbolName::Uninterned(x) => x.get().as_bytes(),
-	}
+        match self {
+            SymbolName::Interned(x) => x.as_bytes(),
+            SymbolName::Uninterned(x) => x.get().as_bytes(),
+        }
     }
 }
 
