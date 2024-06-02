@@ -616,36 +616,32 @@ pub(crate) fn elt<'ob>(sequence: Object<'ob>, n: usize, cx: &'ob Context) -> Res
 }
 
 #[defun]
-pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<Option<bool>> {
+pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<bool> {
     let s1 = match s1.untag() {
         ObjectType::String(x) => x.as_bytes(),
         ObjectType::ByteString(x) => x.inner(),
         ObjectType::Symbol(x) => x.get().as_bytes(),
-        _ => bail!("Wrong type argument: stringp, {s1}"),
+        _ => bail!(TypeError::new(Type::String, s1)),
     };
     let s2 = match s2.untag() {
         ObjectType::String(x) => x.as_bytes(),
         ObjectType::ByteString(x) => x.inner(),
         ObjectType::Symbol(x) => (x.get()).as_bytes(),
-        _ => bail!("Wrong type argument: stringp, {s2}"),
+        _ => bail!(TypeError::new(Type::String, s2)),
     };
 
     if s1.len() != s2.len() {
-        return Ok(None);
+        return Ok(false);
     }
-    if s1 == s2 {
-        Ok(Some(true))
-    } else {
-        Ok(None)
-    }
+    Ok(s1 == s2)
 }
 
 #[defun]
 pub(crate) fn compare_strings<'ob>(
-    string1: Object<'ob>,
+    string1: &str,
     start1: Object<'ob>,
     end1: Object<'ob>,
-    string2: Object<'ob>,
+    string2: &str,
     start2: Object<'ob>,
     end2: Object<'ob>,
     ignore_case: Option<Object<'ob>>,
@@ -653,55 +649,38 @@ pub(crate) fn compare_strings<'ob>(
     let start1 = match start1.untag() {
         ObjectType::Int(x) => x,
         ObjectType::NIL => 0,
-        _ => bail!("Wrong type argument: integerp, {start1}"),
+        _ => bail!(TypeError::new(Type::Int, start1)),
     };
     let end1 = match end1.untag() {
         ObjectType::Int(x) => x,
-        ObjectType::NIL => match string1.untag() {
-            ObjectType::String(x) => x.len() as i64,
-            _ => bail!("Wrong type argument: stringp, {string1}"),
-        },
-        _ => bail!("Wrong type argument: integerp, {end1}"),
+        ObjectType::NIL => string1.chars().count() as i64,
+        _ => bail!(TypeError::new(Type::Int, end1)),
     };
 
-    if end1 < start1 || start1 < end1 {
+    if end1 < start1 {
         bail!("Args out of range: {string1}, {start1}, {end1}");
     }
 
-    // TODO: check if byte strings are supported
-    let s1 = match string1.untag() {
-        ObjectType::String(x) => x.chars().skip(start1 as usize).take((end1 - start1) as usize),
-        _ => bail!("Wrong type argument: stringp, {string1}"),
-    };
+    let s1 = string1.chars().skip(start1 as usize).take((end1 - start1) as usize);
 
     let start2 = match start2.untag() {
         ObjectType::Int(x) => x,
         ObjectType::NIL => 0,
-        _ => bail!("Wrong type argument: integerp, {start2}"),
+        _ => bail!(TypeError::new(Type::Int, start2)),
     };
     let end2 = match end2.untag() {
         ObjectType::Int(x) => x,
-        ObjectType::NIL => match string2.untag() {
-            ObjectType::String(x) => x.len() as i64,
-            _ => bail!("Wrong type argument: stringp, {string2}"),
-        },
-        _ => bail!("Wrong type argument: integerp, {end2}"),
+        ObjectType::NIL => string2.chars().count() as i64,
+        _ => bail!(TypeError::new(Type::Int, end2)),
     };
 
-    if end2 < start2 || start2 < end2 {
+    if end2 < start2 {
         bail!("Args out of range: {string2}, {start2}, {end2}");
     }
     // TODO: check if byte strings are supported
-    let s2 = match string2.untag() {
-        ObjectType::String(x) => x.chars().skip(start2 as usize).take((end2 - start2) as usize),
-        _ => bail!("Wrong type argument: stringp, {string2}"),
-    };
+    let s2 = string2.chars().skip(start2 as usize).take((end2 - start2) as usize);
 
-    let ignore_case = if let Some(x) = ignore_case {
-        !matches!(x.untag(), ObjectType::NIL)
-    } else {
-        false
-    };
+    let ignore_case = if let Some(x) = ignore_case { x != NIL } else { false };
 
     let mut leading = 1;
     for (c1, c2) in s1.zip(s2) {
@@ -725,8 +704,8 @@ pub(crate) fn compare_strings<'ob>(
 
 #[defun]
 pub(crate) fn string_distance<'ob>(
-    string1: Object<'ob>,
-    string2: Object<'ob>,
+    string1: &str,
+    string2: &str,
     bytecompare: Option<Object<'ob>>,
 ) -> Result<Object<'ob>> {
     let bytecompare = if let Some(x) = bytecompare {
@@ -736,31 +715,9 @@ pub(crate) fn string_distance<'ob>(
     };
 
     let distance = if !bytecompare {
-        let s1 = match string1.untag() {
-            ObjectType::String(x) => x,
-            _ => bail!("Wrong type argument: stringp, {string1}"),
-        };
-
-        let s2 = match string2.untag() {
-            ObjectType::String(x) => x,
-            _ => bail!("Wrong type argument: stringp, {string2}"),
-        };
-
-        levenshtein_distance(&mut s1.chars(), &mut s2.chars())
+        levenshtein_distance(string1.chars(), string2.chars())
     } else {
-        let s1 = match string1.untag() {
-            ObjectType::String(x) => x.as_bytes(),
-            ObjectType::ByteString(x) => x.inner(),
-            _ => bail!("Wrong type argument: stringp, {string1}"),
-        };
-
-        let s2 = match string2.untag() {
-            ObjectType::String(x) => x.as_bytes(),
-            ObjectType::ByteString(x) => x.inner(),
-            _ => bail!("Wrong type argument: stringp, {string2}"),
-        };
-
-        levenshtein_distance(&mut s1.iter(), &mut s2.iter())
+        levenshtein_distance(string1.as_bytes().iter(), string2.as_bytes().iter())
     };
 
     Ok(distance.into())
@@ -768,8 +725,8 @@ pub(crate) fn string_distance<'ob>(
 
 #[inline]
 pub(crate) fn levenshtein_distance<T: PartialEq>(
-    s1: &mut dyn Iterator<Item = T>,
-    s2: &mut dyn Iterator<Item = T>,
+    s1: impl Iterator<Item = T>,
+    s2: impl Iterator<Item = T>,
 ) -> i64 {
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
