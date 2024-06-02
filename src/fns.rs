@@ -618,25 +618,25 @@ pub(crate) fn elt<'ob>(sequence: Object<'ob>, n: usize, cx: &'ob Context) -> Res
 #[defun]
 pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<Option<bool>> {
     let s1 = match s1.untag() {
-	ObjectType::String(x) => x.as_bytes(),
-	ObjectType::ByteString(x) => x.as_bytes(),
-	ObjectType::Symbol(x) => x.get().as_bytes(),
-	_ => bail!("Wrong type argument: stringp, {s1}"),
+        ObjectType::String(x) => x.as_bytes(),
+        ObjectType::ByteString(x) => x.inner(),
+        ObjectType::Symbol(x) => x.get().as_bytes(),
+        _ => bail!("Wrong type argument: stringp, {s1}"),
     };
     let s2 = match s2.untag() {
-	ObjectType::String(x) => x.as_bytes(),
-	ObjectType::ByteString(x) => x.as_bytes(),
-	ObjectType::Symbol(x) => (x.get()).as_bytes(),
-	_ => bail!("Wrong type argument: stringp, {s2}"),
+        ObjectType::String(x) => x.as_bytes(),
+        ObjectType::ByteString(x) => x.inner(),
+        ObjectType::Symbol(x) => (x.get()).as_bytes(),
+        _ => bail!("Wrong type argument: stringp, {s2}"),
     };
 
     if s1.len() != s2.len() {
-	return Ok(None);
+	    return Ok(None);
     }
     if s1 == s2 {
-	Ok(Some(true))
+	    Ok(Some(true))
     } else {
-	Ok(None)
+	    Ok(None)
     }
 }
 
@@ -664,8 +664,8 @@ pub(crate) fn compare_strings<'ob>(
         _ => bail!("Wrong type argument: integerp, {end1}"),
     };
 
-    if end1 < start1 {
-	    bail!("Args out of range: {string1}, {start1}, {end1}");
+    if end1 < start1 || start1 < end1 {
+        bail!("Args out of range: {string1}, {start1}, {end1}");
     }
     
     // TODO: check if byte strings are supported
@@ -684,12 +684,12 @@ pub(crate) fn compare_strings<'ob>(
         ObjectType::NIL => match string2.untag() {
             ObjectType::String(x) => x.len() as i64,
             _ => bail!("Wrong type argument: stringp, {string2}"),
-	    },
-	    _ => bail!("Wrong type argument: integerp, {end2}"),
+        },
+        _ => bail!("Wrong type argument: integerp, {end2}"),
     };
 
-    if end2 < start2 || start2 > end2 {
-	    bail!("Args out of range: {string2}, {start2}, {end2}");
+    if end2 < start2 || start2 < end2 {
+        bail!("Args out of range: {string2}, {start2}, {end2}");
     }
     // TODO: check if byte strings are supported
     let s2 = match string2.untag() {
@@ -698,10 +698,7 @@ pub(crate) fn compare_strings<'ob>(
     };
 
     let ignore_case = if let Some(x) = ignore_case {
-        match x.untag() {
-            ObjectType::NIL => false,
-            _ => true,
-        }
+        !matches!(x.untag(), ObjectType::NIL)
     } else {
 	    false
     };
@@ -715,10 +712,10 @@ pub(crate) fn compare_strings<'ob>(
             (c1, c2)
         };
 
-        if c1 < c2 {
-            return Ok((-leading).into())
-        } else if c1 > c2 {
-            return Ok(leading.into())
+        match c1.cmp(&c2) {
+            std::cmp::Ordering::Less => return Ok((-leading).into()),
+            std::cmp::Ordering::Greater => return Ok(leading.into()),
+            _ => {}
         }
         leading += 1;
     }
@@ -732,38 +729,34 @@ pub(crate) fn string_distance<'ob>(
     string2: Object<'ob>,
     bytecompare: Option<Object<'ob>>
 ) -> Result<Object<'ob>> {
-
     let bytecompare = if let Some(x) = bytecompare {
-        match x.untag() {
-            ObjectType::NIL => false,
-            _ => true,
-        }
+        !matches!(x.untag(), ObjectType::NIL)
     } else {
-	    false
+        false
     };
 
     let distance = if !bytecompare {
         let s1 = match string1.untag() {
             ObjectType::String(x) => x,
             _ => bail!("Wrong type argument: stringp, {string1}"),
-	    };
+        };
 
         let s2 = match string2.untag() {
             ObjectType::String(x) => x,
             _ => bail!("Wrong type argument: stringp, {string2}"),
         };
 
-            levenshtein_distance(&mut s1.chars(), &mut s2.chars())
+        levenshtein_distance(&mut s1.chars(), &mut s2.chars())
     } else {
         let s1 = match string1.untag() {
             ObjectType::String(x) => x.as_bytes(),
-            ObjectType::ByteString(x) => x.as_bytes(),
+            ObjectType::ByteString(x) => x.inner(),
             _ => bail!("Wrong type argument: stringp, {string1}"),
         };
 
         let s2 = match string2.untag() {
             ObjectType::String(x) => x.as_bytes(),
-            ObjectType::ByteString(x) => x.as_bytes(),
+            ObjectType::ByteString(x) => x.inner(),
             _ => bail!("Wrong type argument: stringp, {string2}"),
         };
 
@@ -774,29 +767,33 @@ pub(crate) fn string_distance<'ob>(
 }
 
 #[inline]
-pub(crate) fn levenshtein_distance<T: PartialEq>(s1: &mut dyn Iterator<Item = T>, s2: &mut dyn Iterator<Item = T>) -> i64 {
+pub(crate) fn levenshtein_distance<T: PartialEq>(
+    s1: &mut dyn Iterator<Item = T>,
+    s2: &mut dyn Iterator<Item = T>
+) -> i64 {
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
     let mut v0 = vec![0; s.len() + 1];
     let mut v1 = vec![0; t.len() + 1];
 
-    for i in 0..v0.len() {
-	    v0[i] = i as i64;
+    for (i, v0i)  in v0.iter_mut().enumerate() {
+        *v0i = i as i64;
     }
 
-    for i in 0..s.len() {
+    for (i, si) in s.iter().enumerate() {
         v1[0] = i as i64 + 1;
 
-        for j in 0..t.len() {
+        for (j, tj) in t.iter().enumerate() {
             let deletion_cost = v0[j + 1] + 1;
             let insertion_cost = v1[j] + 1;
-            let substitution_cost = v0[j] + if s[i] == t[j] { 0 } else { 1 };
-            v1[j + 1] = std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
+            let substitution_cost = v0[j] + if si == tj { 0 } else { 1 };
+            v1[j + 1] = 
+                std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
         }
 
         std::mem::swap(&mut v0, &mut v1);
     }
-    return v0[t.len()];
+    v0[t.len()]
 }
 
 
@@ -978,7 +975,7 @@ fn disable_debug() -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{interpreter::assert_lisp, fns::levenshtein_distance};
+    use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
 
     #[test]
     fn test_take() {
@@ -1030,30 +1027,30 @@ mod test {
 
     #[test]
     fn test_string_equal() {
-	assert_lisp("(string-equal \"hello\" \"hello\")", "t");
-	assert_lisp("(string-equal \"hello\" \"world\")", "nil");
+        assert_lisp("(string-equal \"hello\" \"hello\")", "t");
+        assert_lisp("(string-equal \"hello\" \"world\")", "nil");
     }
 
     #[test]
     fn test_compare_strings() {
-	assert_lisp("(compare-strings \"hello\" 0 6 \"hello\" 0 6)", "t");
-	assert_lisp("(compare-strings \"hello\" 0 6 \"world\" 0 6)", "-1");
-	assert_lisp("(compare-strings \"hello\" 0 6 \"HELLO\" 0 6 t)", "t");
+        assert_lisp("(compare-strings \"hello\" 0 6 \"hello\" 0 6)", "t");
+        assert_lisp("(compare-strings \"hello\" 0 6 \"world\" 0 6)", "-1");
+        assert_lisp("(compare-strings \"hello\" 0 6 \"HELLO\" 0 6 t)", "t");
     }
 
     #[test]
     fn test_string_distance() {
-	assert_lisp("(string-distance \"hello\" \"hello\")", "0");
-	assert_lisp("(string-distance \"hello\" \"jello\")", "1");
-	assert_lisp("(string-distance \"hello\" \"world\")", "4");
+        assert_lisp("(string-distance \"hello\" \"hello\")", "0");
+        assert_lisp("(string-distance \"hello\" \"jello\")", "1");
+        assert_lisp("(string-distance \"hello\" \"world\")", "4");
     }
 
     #[test]
     fn test_levenstein_distance() {
-	let s1 = "hello";
-	let s2 = "world";
-	let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
-	assert_eq!(distance, 4);
+        let s1 = "hello";
+        let s2 = "world";
+        let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
+        assert_eq!(distance, 4);
     }
     
     #[test]

@@ -22,9 +22,9 @@ mod sealed {
     }
 
     impl SymbolCellInner {
-	pub(crate) fn as_bytes(&self) -> &[u8] {
-	    self.name.as_bytes()
-	}
+	    pub(crate) fn as_bytes(&self) -> &[u8] {
+	        self.name.as_bytes()
+	    }
     }
 }
 
