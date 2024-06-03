@@ -630,9 +630,6 @@ pub(crate) fn string_equal<'ob>(s1: Object<'ob>, s2: Object<'ob>) -> Result<bool
         _ => bail!(TypeError::new(Type::String, s2)),
     };
 
-    if s1.len() != s2.len() {
-        return Ok(false);
-    }
     Ok(s1 == s2)
 }
 
@@ -644,7 +641,7 @@ pub(crate) fn compare_strings<'ob>(
     string2: &str,
     start2: Object<'ob>,
     end2: Object<'ob>,
-    ignore_case: Option<Object<'ob>>,
+    ignore_case: Option<()>,
 ) -> Result<Object<'ob>> {
     let start1 = match start1.untag() {
         ObjectType::Int(x) => x,
@@ -680,11 +677,9 @@ pub(crate) fn compare_strings<'ob>(
     // TODO: check if byte strings are supported
     let s2 = string2.chars().skip(start2 as usize).take((end2 - start2) as usize);
 
-    let ignore_case = if let Some(x) = ignore_case { x != NIL } else { false };
-
     let mut leading = 1;
     for (c1, c2) in s1.zip(s2) {
-        let (c1, c2) = if ignore_case {
+        let (c1, c2) = if ignore_case.is_some() {
             //TODO: use case-table to determine the uppercase of a character
             (c1.to_uppercase().next().unwrap(), c2.to_uppercase().next().unwrap())
         } else {
@@ -694,7 +689,7 @@ pub(crate) fn compare_strings<'ob>(
         match c1.cmp(&c2) {
             std::cmp::Ordering::Less => return Ok((-leading).into()),
             std::cmp::Ordering::Greater => return Ok(leading.into()),
-            _ => {}
+            std::cmp::Ordering::Equal => {}
         }
         leading += 1;
     }
@@ -703,31 +698,17 @@ pub(crate) fn compare_strings<'ob>(
 }
 
 #[defun]
-pub(crate) fn string_distance<'ob>(
-    string1: &str,
-    string2: &str,
-    bytecompare: Option<Object<'ob>>,
-) -> Result<Object<'ob>> {
-    let bytecompare = if let Some(x) = bytecompare {
-        !matches!(x.untag(), ObjectType::NIL)
-    } else {
-        false
-    };
-
-    let distance = if !bytecompare {
+pub(crate) fn string_distance(string1: &str, string2: &str, bytecompare: Option<()>) -> i64 {
+    if bytecompare.is_none() {
         levenshtein_distance(string1.chars(), string2.chars())
     } else {
         levenshtein_distance(string1.as_bytes().iter(), string2.as_bytes().iter())
-    };
-
-    Ok(distance.into())
+    }
 }
 
 #[inline]
-pub(crate) fn levenshtein_distance<T: PartialEq>(
-    s1: impl Iterator<Item = T>,
-    s2: impl Iterator<Item = T>,
-) -> i64 {
+pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s2: I) -> i64 {
+    use std::cmp::min;
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
     let mut v0 = vec![0; s.len() + 1];
@@ -744,8 +725,7 @@ pub(crate) fn levenshtein_distance<T: PartialEq>(
             let deletion_cost = v0[j + 1] + 1;
             let insertion_cost = v1[j] + 1;
             let substitution_cost = v0[j] + if si == tj { 0 } else { 1 };
-            v1[j + 1] =
-                std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
+            v1[j + 1] = min(deletion_cost, min(insertion_cost, substitution_cost));
         }
 
         std::mem::swap(&mut v0, &mut v1);
