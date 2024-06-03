@@ -20,6 +20,12 @@ mod sealed {
         pub(super) func: Option<AtomicPtr<u8>>,
         pub(super) special: AtomicBool,
     }
+
+    impl SymbolCellInner {
+        pub(crate) fn as_bytes(&self) -> &[u8] {
+            self.name.as_bytes()
+        }
+    }
 }
 
 pub(in crate::core) use sealed::SymbolCellInner;
@@ -39,6 +45,15 @@ pub(crate) type SymbolCell = GcHeap<SymbolCellInner>;
 enum SymbolName {
     Interned(&'static str),
     Uninterned(Cell<&'static str>),
+}
+
+impl SymbolName {
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            SymbolName::Interned(x) => x.as_bytes(),
+            SymbolName::Uninterned(x) => x.get().as_bytes(),
+        }
+    }
 }
 
 unsafe impl Sync for SymbolName {}
