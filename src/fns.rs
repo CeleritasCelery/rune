@@ -707,10 +707,8 @@ pub(crate) fn string_distance(string1: &str, string2: &str, bytecompare: Option<
 }
 
 #[inline]
-pub(crate) fn levenshtein_distance<T: PartialEq>(
-    s1: impl Iterator<Item = T>,
-    s2: impl Iterator<Item = T>,
-) -> i64 {
+pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s2: I) -> i64 {
+    use std::cmp::min;
     // Initialize work vectors
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
@@ -733,8 +731,7 @@ pub(crate) fn levenshtein_distance<T: PartialEq>(
             let deletion_cost = v0[j + 1] + 1;
             let insertion_cost = v1[j] + 1;
             let substitution_cost = v0[j] + if si == tj { 0 } else { 1 };
-            v1[j + 1] =
-                std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
+            v1[j + 1] = min(deletion_cost, min(insertion_cost, substitution_cost));
         }
 
         // Swap v1 and v0
