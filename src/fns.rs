@@ -707,29 +707,40 @@ pub(crate) fn string_distance(string1: &str, string2: &str, bytecompare: Option<
 }
 
 #[inline]
-pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s2: I) -> i64 {
-    use std::cmp::min;
+pub(crate) fn levenshtein_distance<T: PartialEq>(
+    s1: impl Iterator<Item = T>,
+    s2: impl Iterator<Item = T>,
+) -> i64 {
+    // Initialize work vectors
     let s = s1.collect::<Vec<_>>();
     let t = s2.collect::<Vec<_>>();
-    let mut v0 = vec![0; s.len() + 1];
+    let mut v0 = vec![0; t.len() + 1];
     let mut v1 = vec![0; t.len() + 1];
 
+    // Initialize v0
     for (i, v0i) in v0.iter_mut().enumerate() {
         *v0i = i as i64;
     }
 
+    // Calculate v1 from previous row v0
     for (i, si) in s.iter().enumerate() {
+        // First element of v1 is A[i+1][0]
+        // Edit distance is delete (i+1) chars from s to match empty t
         v1[0] = i as i64 + 1;
 
+        // fills in the rest of the row
         for (j, tj) in t.iter().enumerate() {
             let deletion_cost = v0[j + 1] + 1;
             let insertion_cost = v1[j] + 1;
             let substitution_cost = v0[j] + if si == tj { 0 } else { 1 };
-            v1[j + 1] = min(deletion_cost, min(insertion_cost, substitution_cost));
+            v1[j + 1] =
+                std::cmp::min(deletion_cost, std::cmp::min(insertion_cost, substitution_cost));
         }
 
+        // Swap v1 and v0
         std::mem::swap(&mut v0, &mut v1);
     }
+    // Return the final result
     v0[t.len()]
 }
 
