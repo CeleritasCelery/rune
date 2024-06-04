@@ -746,6 +746,18 @@ pub(crate) fn string_bytes(string: &str) -> i64 {
     string.len() as i64
 }
 
+#[defun]
+pub(crate) fn string_lessp(string1: &str, string2: &str) -> bool {
+    for (c1, c2) in string1.chars().zip(string2.chars()) {
+        if c1 < c2 {
+            return true;
+        } else if c1 > c2 {
+            return false;
+        }
+    }
+    return false;
+}
+
 ///////////////
 // HashTable //
 ///////////////
