@@ -793,6 +793,7 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
                 return false;
             }
         }
+        _ => {},
     }
     
     return string1.len() < string2.len();
