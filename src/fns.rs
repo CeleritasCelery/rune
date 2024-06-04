@@ -741,6 +741,11 @@ pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s
     v0[t.len()]
 }
 
+#[defun]
+pub(crate) fn string_bytes(string: &str) -> i64 {
+    string.len() as i64
+}
+
 ///////////////
 // HashTable //
 ///////////////
