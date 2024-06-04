@@ -755,7 +755,82 @@ pub(crate) fn string_lessp(string1: &str, string2: &str) -> bool {
             return false;
         }
     }
-    return false;
+    return string1.len() < string2.len();
+}
+
+#[defun]
+pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
+    let mut iter1 = string1.chars();
+    let mut iter2 = string2.chars();
+    while let (Some(mut c1), Some(mut c2)) = (iter1.next(), iter2.next()) {
+        let num1 = create_number(c1, &mut iter1, &mut |c| c1 = c);
+        let num2 = create_number(c2, &mut iter2, &mut |c| c2 = c);
+
+        match (num1, num2) {
+            (Some(n1), Some(n2)) => {
+                if n1 < n2 {
+                    return true;
+                } else if n1 > n2 {
+                    return false;
+                }
+            }
+            (Some(n), None) => {
+                if n < c2 as usize {
+                    return true;
+                } else if n > c2 as usize {
+                    return false;
+                }
+            }
+            (None, Some(n)) => {
+                if (c1 as usize) < n {
+                    return true;
+                } else if c1 as usize > n {
+                    return false;
+                }
+            }
+            (None, None) => {
+                if c1 < c2 {
+                    return true;
+                } else if c1 > c2 {
+                    return false;
+                }
+            }
+        }
+        
+    }
+    return string1.len() < string2.len();
+}
+/// Helper function to create a number from a string iterator
+/// c: the current character
+/// iter: the iterator
+/// f: a function to update the current character. This is a callback.
+/// Returns the number if it was created, otherwise None
+/// This function is used to parse version numbers in `string-version-lessp`
+#[inline]
+fn create_number<I: Iterator<Item = char>, F: FnMut(char) -> ()>(
+    mut c: char,
+    iter: &mut I,
+    f: &mut F
+) -> Option<usize> {
+    let mut num = 0;
+    if c.is_ascii_digit() {
+        loop {
+            num = num * 10 + c.to_digit(10).unwrap() as usize;
+            if let Some(c_next) = iter.next() {
+                if c_next.is_ascii_digit() {
+                    c = c_next;
+                } else {
+                    f(c);
+                    break Some(num);
+                }
+            } else {
+                break Some(num);
+            }
+        }
+    } else {
+        f(c);
+        None
+    }
 }
 
 ///////////////
