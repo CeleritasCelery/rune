@@ -804,6 +804,8 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
 /// f: a function to update the current character. This is a callback.
 /// Returns the number if it was created, otherwise None
 /// This function is used to parse version numbers in `string-version-lessp`
+/// The callback is so that we can update the length of the string - numbers
+/// and to update the next non-ascii-numeric char
 #[inline]
 fn create_number<I: Iterator<Item = char>, F: FnMut(char) -> ()>(
     mut c: char,
@@ -1085,6 +1087,38 @@ mod test {
         let s2 = "world";
         let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
         assert_eq!(distance, 4);
+    }
+
+    #[test]
+    fn test_string_lessp() {
+        // Test Equality
+        assert_lisp("(string-lessp \"less\" \"less\")", "nil");
+        // Test Length
+        assert_lisp("(string-lessp \"les\" \"less\")", "t");
+        assert_lisp("(string-lessp \"less\" \"les\")", "nil");
+        // Check for less than
+        assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+    }
+
+    #[test]
+    fn test_string_version_lessp() {
+        // Test Equality
+        assert_lisp("(string-version-lessp \"less\" \"less\")", "nil");
+        // Test Length 
+        assert_lisp("(string-version-lessp \"les\" \"less\")", "t");
+        assert_lisp("(string-version-lessp \"less\" \"les\")", "nil");
+        // Test for less than
+        assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+        // Test Equality with number
+        assert_lisp("(string-version-lessp \"less1\" \"less1\")", "nil");
+        // Test Differing numeric position doesn't matter
+        assert_lisp("(string-version-lessp \"1less\" \"less1\")", "nil");
+        // Test Greater than numericaly
+        assert_lisp("(string-version-lessp \"less12\" \"less1\")", "nil");
+        // Test Less than numericaly
+        assert_lisp("(string-version-lessp \"less1\" \"less12\")", "t");
+        // Test that later numbers override previous ones
+        assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
     }
 
     #[test]
