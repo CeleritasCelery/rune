@@ -796,7 +796,7 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
         _ => {},
     }
     
-    return string1.len() < string2.len();
+    return char_len1 < char_len2;
 }
 /// Helper function to create a number from a string iterator
 /// c: the current character
