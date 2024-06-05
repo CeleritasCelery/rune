@@ -749,54 +749,73 @@ pub(crate) fn string_bytes(string: &str) -> i64 {
 #[defun]
 pub(crate) fn string_lessp(string1: &str, string2: &str) -> bool {
     for (c1, c2) in string1.chars().zip(string2.chars()) {
-        if c1 < c2 {
-            return true;
-        } else if c1 > c2 {
-            return false;
+        match std::cmp::Ord::cmp(&c1, &c2) {
+            std::cmp::Ordering::Less => return true,
+            std::cmp::Ordering::Greater => return false,
+            _ => {}
         }
     }
-    return string1.len() < string2.len();
+    string1.len() < string2.len()
 }
 
 #[defun]
 pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
-    let mut iter1 = string1.chars();
+    let mut iter1 = string1.chars().peekable();
     let mut char_len1 = 0;
-    let mut iter2 = string2.chars();
+    let mut iter2 = string2.chars().peekable();
     let mut char_len2 = 0;
     let mut num1 = None;
     let mut num2 = None;
-    while let (Some(mut c1), Some(mut c2)) = (iter1.next(), iter2.next()) {
-        char_len1 += 1;
-        char_len2 += 1;
-        num1 = create_number(c1, &mut iter1, &mut |c| {
+    //Peeking in order to try to match a pattern without progressing the iterator
+    while let (Some(_), Some(_)) = (iter1.peek(), iter2.peek()) {
+        let (Some(mut c1), Some(mut c2)) = (iter1.next(), iter2.next()) else {
+            panic!("Somehow despite checking beforehand, the pattern is invalid");
+        };
+        if c1.is_ascii_digit() {
+            num1 = create_number(c1, &mut iter1, &mut |c| {
+                char_len1 += 1;
+                c1 = c
+            });
+        } else {
             char_len1 += 1;
-            c1 = c
-        });
-        num2 = create_number(c2, &mut iter2, &mut |c| {
+        }
+        if c2.is_ascii_digit() {
+            num2 = create_number(c2, &mut iter2, &mut |c| {
+                char_len2 += 1;
+                c2 = c
+            });
+        } else {
             char_len2 += 1;
-            c2 = c
-        });
+        }
 
-        if c1 < c2 {
-            return true;
-        } else if c1 > c2 {
-            return false;
+        match std::cmp::Ord::cmp(&c1, &c2) {
+            std::cmp::Ordering::Less => return true,
+            std::cmp::Ordering::Greater => return false,
+            _ => {}
         }
     }
 
-    match (num1, num2) {
-        (Some(n1), Some(n2)) => {
-            if n1 < n2 {
-                return true;
-            } else if n1 > n2 {
-                return false;
-            }
+    if let (Some(n1), Some(n2)) = (num1, num2) {
+        match n1.cmp(&n2) {
+            std::cmp::Ordering::Less => return true,
+            std::cmp::Ordering::Greater => return false,
+            _ => {}
         }
-        _ => {},
     }
-    
-    return char_len1 < char_len2;
+
+    // These loops are for getting the full count if one of the iterators is empty
+    for c in iter1 {
+        if !c.is_ascii_digit() {
+            char_len1 += 1;
+        }
+    }
+    for c in iter2 {
+        if !c.is_ascii_digit() {
+            char_len2 += 1;
+        }
+    }
+
+    char_len1 < char_len2
 }
 /// Helper function to create a number from a string iterator
 /// c: the current character
@@ -807,10 +826,10 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
 /// The callback is so that we can update the length of the string - numbers
 /// and to update the next non-ascii-numeric char
 #[inline]
-fn create_number<I: Iterator<Item = char>, F: FnMut(char) -> ()>(
+fn create_number<I: Iterator<Item = char>, F: FnMut(char)>(
     mut c: char,
     iter: &mut I,
-    f: &mut F
+    f: &mut F,
 ) -> Option<usize> {
     let mut num = 0;
     if c.is_ascii_digit() {
@@ -1104,15 +1123,15 @@ mod test {
     fn test_string_version_lessp() {
         // Test Equality
         assert_lisp("(string-version-lessp \"less\" \"less\")", "nil");
-        // Test Length 
+        // Test Length
         assert_lisp("(string-version-lessp \"les\" \"less\")", "t");
         assert_lisp("(string-version-lessp \"less\" \"les\")", "nil");
         // Test for less than
-        assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+        assert_lisp("(string-version-lessp \"abc\" \"bcd\")", "t");
         // Test Equality with number
         assert_lisp("(string-version-lessp \"less1\" \"less1\")", "nil");
-        // Test Differing numeric position doesn't matter
-        assert_lisp("(string-version-lessp \"1less\" \"less1\")", "nil");
+        // Test Differing numeric position does matter
+        assert_lisp("(string-version-lessp \"1less\" \"less1\")", "t");
         // Test Greater than numericaly
         assert_lisp("(string-version-lessp \"less12\" \"less1\")", "nil");
         // Test Less than numericaly
