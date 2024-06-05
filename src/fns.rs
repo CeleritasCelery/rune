@@ -1111,7 +1111,6 @@ mod test {
         assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
         // Test that digits don't disappear
         assert_lisp("(string-version-lessp \"112a\" \"512a\")", "t");
-        
     }
 
     #[test]
