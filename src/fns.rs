@@ -768,18 +768,21 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
     let mut num2 = None;
     //Peeking in order to try to match a pattern without progressing the iterator
     while let (Some(c1), Some(c2)) = (iter1.peek(), iter2.peek()) {
+        // Copying the characters to avoid borrowing the iterator
         let (c1, c2) = (*c1, *c2);
-        iter1.next();
-        iter2.next();
         if c1.is_ascii_digit() {
             num1 = Some(create_number(&mut iter1));
         } else {
             char_len1 += 1;
+            // Progressing the iterator because it wasn't a number
+            iter1.next();
         }
         if c2.is_ascii_digit() {
             num2 = Some(create_number(&mut iter2));
         } else {
             char_len2 += 1;
+            // Progressing the iterator because it wasn't a number
+            iter2.next();
         }
 
         if c1 != c2 {
@@ -1106,6 +1109,9 @@ mod test {
         assert_lisp("(string-version-lessp \"less1\" \"less12\")", "t");
         // Test that later numbers override previous ones
         assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
+        // Test that digits don't disappear
+        assert_lisp("(string-version-lessp \"112a\" \"512a\")", "t");
+        
     }
 
     #[test]
