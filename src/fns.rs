@@ -741,6 +741,87 @@ pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s
     v0[t.len()]
 }
 
+#[defun]
+pub(crate) fn string_bytes(string: &str) -> i64 {
+    string.len() as i64
+}
+
+#[defun]
+pub(crate) fn string_lessp(string1: &str, string2: &str) -> bool {
+    for (c1, c2) in string1.chars().zip(string2.chars()) {
+        match std::cmp::Ord::cmp(&c1, &c2) {
+            std::cmp::Ordering::Less => return true,
+            std::cmp::Ordering::Greater => return false,
+            _ => {}
+        }
+    }
+    string1.len() < string2.len()
+}
+
+#[defun]
+pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
+    let mut iter1 = string1.chars().peekable();
+    let mut char_len1 = 0;
+    let mut iter2 = string2.chars().peekable();
+    let mut char_len2 = 0;
+    let mut num1 = None;
+    let mut num2 = None;
+    //Peeking in order to try to match a pattern without progressing the iterator
+    while let (Some(c1), Some(c2)) = (iter1.peek(), iter2.peek()) {
+        // Copying the characters to avoid borrowing the iterator
+        let (c1, c2) = (*c1, *c2);
+        if c1.is_ascii_digit() {
+            num1 = Some(create_number(&mut iter1));
+        } else {
+            char_len1 += 1;
+            // Progressing the iterator because it wasn't a number
+            iter1.next();
+        }
+        if c2.is_ascii_digit() {
+            num2 = Some(create_number(&mut iter2));
+        } else {
+            char_len2 += 1;
+            // Progressing the iterator because it wasn't a number
+            iter2.next();
+        }
+
+        if c1 != c2 {
+            return c1 < c2;
+        }
+    }
+
+    if let (Some(n1), Some(n2)) = (num1, num2) {
+        if n1 != n2 {
+            return n1 < n2;
+        }
+    }
+
+    // These loops are for getting the full count if one of the iterators is empty
+    for c in iter1 {
+        if !c.is_ascii_digit() {
+            char_len1 += 1;
+        }
+    }
+    for c in iter2 {
+        if !c.is_ascii_digit() {
+            char_len2 += 1;
+        }
+    }
+
+    char_len1 < char_len2
+}
+/// Helper function to create a number from a string iterator
+#[inline]
+fn create_number<I: Iterator<Item = char>>(iter: &mut std::iter::Peekable<I>) -> usize {
+    let mut num = 0;
+
+    while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
+        num = num * 10 + digit.to_digit(10).unwrap() as usize;
+    }
+
+    num
+}
+
 ///////////////
 // HashTable //
 ///////////////
@@ -995,6 +1076,41 @@ mod test {
         let s2 = "world";
         let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
         assert_eq!(distance, 4);
+    }
+
+    #[test]
+    fn test_string_lessp() {
+        // Test Equality
+        assert_lisp("(string-lessp \"less\" \"less\")", "nil");
+        // Test Length
+        assert_lisp("(string-lessp \"les\" \"less\")", "t");
+        assert_lisp("(string-lessp \"less\" \"les\")", "nil");
+        // Check for less than
+        assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+    }
+
+    #[test]
+    fn test_string_version_lessp() {
+        // Test Equality
+        assert_lisp("(string-version-lessp \"less\" \"less\")", "nil");
+        // Test Length
+        assert_lisp("(string-version-lessp \"les\" \"less\")", "t");
+        assert_lisp("(string-version-lessp \"less\" \"les\")", "nil");
+        // Test for less than
+        assert_lisp("(string-version-lessp \"abc\" \"bcd\")", "t");
+        // Test Equality with number
+        assert_lisp("(string-version-lessp \"less1\" \"less1\")", "nil");
+        assert_lisp("(string-version-lessp \"100a\" \"100b\")", "t");
+        // Test Differing numeric position does matter
+        assert_lisp("(string-version-lessp \"1less\" \"less1\")", "t");
+        // Test Greater than numericaly
+        assert_lisp("(string-version-lessp \"less12\" \"less1\")", "nil");
+        // Test Less than numericaly
+        assert_lisp("(string-version-lessp \"less1\" \"less12\")", "t");
+        // Test that later numbers override previous ones
+        assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
+        // Test that digits don't disappear
+        assert_lisp("(string-version-lessp \"112a\" \"512a\")", "t");
     }
 
     #[test]
