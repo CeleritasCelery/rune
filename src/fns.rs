@@ -767,39 +767,29 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
     let mut num1 = None;
     let mut num2 = None;
     //Peeking in order to try to match a pattern without progressing the iterator
-    while let (Some(_), Some(_)) = (iter1.peek(), iter2.peek()) {
-        let (Some(mut c1), Some(mut c2)) = (iter1.next(), iter2.next()) else {
-            panic!("Somehow despite checking beforehand, the pattern is invalid");
-        };
+    while let (Some(c1), Some(c2)) = (iter1.peek(), iter2.peek()) {
+        let (c1, c2) = (*c1, *c2);
+        iter1.next();
+        iter2.next();
         if c1.is_ascii_digit() {
-            num1 = create_number(c1, &mut iter1, &mut |c| {
-                char_len1 += 1;
-                c1 = c
-            });
+            num1 = Some(create_number(&mut iter1));
         } else {
             char_len1 += 1;
         }
         if c2.is_ascii_digit() {
-            num2 = create_number(c2, &mut iter2, &mut |c| {
-                char_len2 += 1;
-                c2 = c
-            });
+            num2 = Some(create_number(&mut iter2));
         } else {
             char_len2 += 1;
         }
 
-        match std::cmp::Ord::cmp(&c1, &c2) {
-            std::cmp::Ordering::Less => return true,
-            std::cmp::Ordering::Greater => return false,
-            _ => {}
+        if c1 != c2 {
+            return c1 < c2;
         }
     }
 
     if let (Some(n1), Some(n2)) = (num1, num2) {
-        match n1.cmp(&n2) {
-            std::cmp::Ordering::Less => return true,
-            std::cmp::Ordering::Greater => return false,
-            _ => {}
+        if n1 != n2 {
+            return n1 < n2;
         }
     }
 
@@ -818,38 +808,17 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
     char_len1 < char_len2
 }
 /// Helper function to create a number from a string iterator
-/// c: the current character
-/// iter: the iterator
-/// f: a function to update the current character. This is a callback.
-/// Returns the number if it was created, otherwise None
-/// This function is used to parse version numbers in `string-version-lessp`
-/// The callback is so that we can update the length of the string - numbers
-/// and to update the next non-ascii-numeric char
 #[inline]
-fn create_number<I: Iterator<Item = char>, F: FnMut(char)>(
-    mut c: char,
-    iter: &mut I,
-    f: &mut F,
-) -> Option<usize> {
+fn create_number<I: Iterator<Item = char>>(
+    iter: &mut std::iter::Peekable<I>,
+) -> usize {
     let mut num = 0;
-    if c.is_ascii_digit() {
-        loop {
-            num = num * 10 + c.to_digit(10).unwrap() as usize;
-            if let Some(c_next) = iter.next() {
-                if c_next.is_ascii_digit() {
-                    c = c_next;
-                } else {
-                    f(c);
-                    break Some(num);
-                }
-            } else {
-                break Some(num);
-            }
-        }
-    } else {
-        f(c);
-        None
+
+    while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
+        num = num * 10 + digit.to_digit(10).unwrap() as usize;
     }
+    
+    num
 }
 
 ///////////////
@@ -1130,6 +1099,7 @@ mod test {
         assert_lisp("(string-version-lessp \"abc\" \"bcd\")", "t");
         // Test Equality with number
         assert_lisp("(string-version-lessp \"less1\" \"less1\")", "nil");
+        assert_lisp("(string-version-lessp \"100a\" \"100b\")", "nil");
         // Test Differing numeric position does matter
         assert_lisp("(string-version-lessp \"1less\" \"less1\")", "t");
         // Test Greater than numericaly
