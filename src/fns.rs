@@ -809,15 +809,13 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
 }
 /// Helper function to create a number from a string iterator
 #[inline]
-fn create_number<I: Iterator<Item = char>>(
-    iter: &mut std::iter::Peekable<I>,
-) -> usize {
+fn create_number<I: Iterator<Item = char>>(iter: &mut std::iter::Peekable<I>) -> usize {
     let mut num = 0;
 
     while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
         num = num * 10 + digit.to_digit(10).unwrap() as usize;
     }
-    
+
     num
 }
 
@@ -1099,7 +1097,7 @@ mod test {
         assert_lisp("(string-version-lessp \"abc\" \"bcd\")", "t");
         // Test Equality with number
         assert_lisp("(string-version-lessp \"less1\" \"less1\")", "nil");
-        assert_lisp("(string-version-lessp \"100a\" \"100b\")", "nil");
+        assert_lisp("(string-version-lessp \"100a\" \"100b\")", "t");
         // Test Differing numeric position does matter
         assert_lisp("(string-version-lessp \"1less\" \"less1\")", "t");
         // Test Greater than numericaly
