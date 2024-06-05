@@ -786,9 +786,19 @@ pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
         }
 
         if c1 != c2 {
-            return c1 < c2;
+            if let (Some(n1), Some(n2)) = (num1, num2) {
+                if n1 != n2 {
+                    return n1 < n2;
+                } else {
+                    return c1 < c2;
+                }
+            } else {
+                return c1 < c2;
+            }
         }
     }
+
+    println!("{:?} {:?}", num1, num2);
 
     if let (Some(n1), Some(n2)) = (num1, num2) {
         if n1 != n2 {
@@ -1121,6 +1131,13 @@ mod test {
         assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
         // Test that digits don't disappear
         assert_lisp("(string-version-lessp \"112a\" \"512a\")", "t");
+        // Test Numbers take higher precedence over characters
+        assert_lisp("(string-version-lessp \"101a\" \"100b\")", "nil");
+        // Test Numbers that leading zeros are ignored
+        assert_lisp("(string-version-lessp \"10\" \"0100\")", "t");
+        // Test that that the first number is compared immediately at a char comparison
+        assert_lisp("(string-version-lessp \"10a100\" \"0100a\")", "t");
+        assert_lisp("(string-version-lessp \"a100\" \"0100a\")", "nil");
     }
 
     #[test]
