@@ -1072,10 +1072,20 @@ mod test {
 
     #[test]
     fn test_levenstein_distance() {
-        let s1 = "hello";
-        let s2 = "world";
-        let distance = levenshtein_distance(&mut s1.chars(), &mut s2.chars());
-        assert_eq!(distance, 4);
+        assert_eq!(4, levenshtein_distance("hello".chars(), "world".chars()));
+        assert_eq!(3, levenshtein_distance("kitten".chars(), "sitting".chars()));
+        assert_eq!(2, levenshtein_distance("book".chars(), "back".chars()));
+        assert_eq!(5, levenshtein_distance("table".chars(), "dinner".chars()));
+        assert_eq!(2, levenshtein_distance("person".chars(), "pardon".chars()));
+        assert_eq!(1, levenshtein_distance("person".chars(), "persons".chars()));
+        assert_eq!(4, levenshtein_distance("book".chars(), "".chars()));
+        assert_eq!(4, levenshtein_distance("".chars(), "book".chars()));
+        assert_eq!(0, levenshtein_distance("".chars(), "".chars()));
+        assert_eq!(2, levenshtein_distance("Späße".chars(), "Spaß".chars()));
+        assert_eq!(5, levenshtein_distance("さようなら".chars(), "こんにちは".chars()));
+        assert_eq!(1, levenshtein_distance("さようなら".chars(), "さようなう".chars()));
+        assert_eq!(4, levenshtein_distance("こんにちは".chars(), "こんにちは abc".chars()));
+        assert_eq!(1, levenshtein_distance("༆༃ʘ".chars(), "༆˥ʘ".chars()));
     }
 
     #[test]
