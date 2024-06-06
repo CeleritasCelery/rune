@@ -25,10 +25,6 @@ mod sealed {
         pub(crate) fn as_bytes(&self) -> &[u8] {
             self.name.as_bytes()
         }
-
-        pub(crate) fn as_str(&self) -> &str {
-            self.name.as_str()
-        }
     }
 }
 
@@ -56,13 +52,6 @@ impl SymbolName {
         match self {
             SymbolName::Interned(x) => x.as_bytes(),
             SymbolName::Uninterned(x) => x.get().as_bytes(),
-        }
-    }
-
-    fn as_str(&self) -> &str {
-        match self {
-            SymbolName::Interned(x) => x,
-            SymbolName::Uninterned(x) => x.get(),
         }
     }
 }

@@ -749,23 +749,18 @@ pub(crate) fn string_bytes(string: &str) -> i64 {
 #[defun]
 pub(crate) fn string_lessp<'ob>(string1: Object<'ob>, string2: Object<'ob>) -> Result<bool> {
     let string1 = match string1.untag() {
-        ObjectType::String(x) => x.chars().collect::<Vec<_>>(),
-        ObjectType::Symbol(x) => x.as_str().chars().collect::<Vec<_>>(),
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
         _ => bail!(TypeError::new(Type::String, string1)),
     };
     let string2 = match string2.untag() {
-        ObjectType::String(x) => x.chars().collect::<Vec<_>>(),
-        ObjectType::Symbol(x) => x.as_str().chars().collect::<Vec<_>>(),
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
         _ => bail!(TypeError::new(Type::String, string2)),
     };
-    let string1_len = string1.len();
-    let string2_len = string2.len();
-    Ok(string_lessp_logic(
-        string1.into_iter(),
-        string1_len,
-        string2.into_iter(),
-        string2_len,
-    ))
+    let string1_len = string1.chars().count();
+    let string2_len = string2.chars().count();
+    Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
 }
 
 #[inline]
@@ -776,6 +771,9 @@ fn string_lessp_logic<I: Iterator<Item = char>>(
     s2_len: usize,
 ) -> bool {
     let len_comp = s1_len < s2_len;
+    if s1_len != s2_len {
+        return len_comp;
+    }
     for (c1, c2) in s1.zip(s2) {
         match std::cmp::Ord::cmp(&c1, &c2) {
             std::cmp::Ordering::Less => return true,
@@ -792,27 +790,27 @@ pub(crate) fn string_version_lessp<'ob>(
     string2: Object<'ob>,
 ) -> Result<bool> {
     let string1 = match string1.untag() {
-        ObjectType::String(x) => x.chars().collect::<Vec<_>>(),
-        ObjectType::Symbol(x) => x.as_str().chars().collect::<Vec<_>>(),
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
         _ => bail!(TypeError::new(Type::String, string1)),
     };
     let string2 = match string2.untag() {
-        ObjectType::String(x) => x.chars().collect::<Vec<_>>(),
-        ObjectType::Symbol(x) => x.as_str().chars().collect::<Vec<_>>(),
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
         _ => bail!(TypeError::new(Type::String, string2)),
     };
-    let mut iter1 = string1.iter().peekable();
-    let mut iter2 = string2.iter().peekable();
+    let mut iter1 = string1.chars().peekable();
+    let mut iter2 = string2.chars().peekable();
     let mut prefix1 = Vec::new();
     let mut prefix2 = Vec::new();
 
     while let Some(c) = iter1.next_if(|c| !c.is_ascii_digit()) {
-        prefix1.push(*c);
+        prefix1.push(c);
     }
     let num1 = create_number(&mut iter1);
 
     while let Some(c) = iter2.next_if(|c| !c.is_ascii_digit()) {
-        prefix2.push(*c);
+        prefix2.push(c);
     }
     let num2 = create_number(&mut iter2);
 
@@ -831,21 +829,14 @@ pub(crate) fn string_version_lessp<'ob>(
         return Ok(num1 < num2);
     }
 
-    let string1_len = string1.len();
-    let string2_len = string2.len();
+    let string1_len = string1.chars().count();
+    let string2_len = string2.chars().count();
 
-    Ok(string_lessp_logic(
-        string1.into_iter(),
-        string1_len,
-        string2.into_iter(),
-        string2_len,
-    ))
+    Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
 }
 /// Helper function to create a number from a string iterator
 #[inline]
-fn create_number<'ob, I: Iterator<Item = &'ob char>>(
-    iter: &'ob mut std::iter::Peekable<I>,
-) -> usize {
+fn create_number<I: Iterator<Item = char>>(iter: &mut std::iter::Peekable<I>) -> usize {
     let mut num = 0;
 
     while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
@@ -1176,6 +1167,7 @@ mod test {
         // Test that that the first number is compared immediately at a char comparison
         assert_lisp("(string-version-lessp \"10a100\" \"0100a\")", "t");
         assert_lisp("(string-version-lessp \"a100\" \"0100a\")", "nil");
+        assert_lisp("(string-version-lessp \"01\" \"1\")", "nil");
 
         // Symbol Tests
         // Test Equality
