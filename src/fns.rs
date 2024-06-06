@@ -802,10 +802,9 @@ pub(crate) fn string_version_lessp<'ob>(
 
     let cmp = crate::filevercmp::filevercmp(string1, string2);
 
-    if cmp < 0 {
-        Ok(true)
-    } else {
-        Ok(false)
+    match cmp {
+        std::cmp::Ordering::Less => Ok(true),
+        _ => Ok(false),
     }
 }
 

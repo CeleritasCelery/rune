@@ -1,3 +1,11 @@
+///Return the length of a prefix of S that corresponds to the suffix
+///defined by this extended regular expression in the C locale:
+///  (\.[A-Za-z~][A-Za-z0-9~]*)*$
+///Use the longest suffix matching this regular expression,
+///except do not use all of S as a suffix if S is nonempty.
+///If *LEN is -1, S is a string; set *LEN to S's length.
+///Otherwise, *LEN should be nonnegative, S is a char array,
+///and *LEN does not change.
 fn prefix_len(s: &[u8]) -> (usize, usize) {
     let mut prefix_len = 0;
 
@@ -22,6 +30,8 @@ fn prefix_len(s: &[u8]) -> (usize, usize) {
     }
 }
 
+///Return a version sort comparison value for S's byte at position POS.
+///S has length LEN.  If POS == LEN, sort before all non-'~' bytes.
 fn order(s: &[u8], pos: usize) -> i32 {
     if pos == s.len() {
         return -1;
@@ -40,6 +50,16 @@ fn order(s: &[u8], pos: usize) -> i32 {
     }
 }
 
+///slightly modified verrevcmp function from dpkg
+///S1, S2 - compared char array
+///S1_LEN, S2_LEN - length of arrays to be scanned
+///
+///This implements the algorithm for comparison of version strings
+///specified by Debian and now widely adopted.  The detailed
+///specification can be found in the Debian Policy Manual in the
+///section on the 'Version' control field.  This version of the code
+///implements that from s5.6.12 of Debian Policy v3.8.0.1
+///https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version
 fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
     let mut s1_pos = 0;
     let mut s2_pos = 0;
@@ -133,55 +153,44 @@ fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
 ///the remaining string is nonempty.
 ///
 ///This function is intended to be a replacement for strverscmp.
-pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> i32 {
+pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
     if a.is_empty() && b.is_empty() {
-        return 0;
+        return Ordering::Equal;
     } else if a.is_empty() {
-        return -1;
+        return Ordering::Less;
     } else if b.is_empty() {
-        return 1;
+        return Ordering::Greater;
     }
 
     if a[0] == b'.' {
         if b[0] != b'.' {
-            return -1;
+            return Ordering::Less;
         }
 
-        let a_dot = if a.len() >= 0 {
-            if a.len() == 1 {
-                1
-            } else {
-                0
-            }
+        let a_dot = if a.len() == 1 {
+            1
+        } else if a[1] != 0 {
+            0
         } else {
-            if a[1] != 0 {
-                0
-            } else {
-                1
-            }
+            1
         };
-        let b_dot = if b.len() >= 0 {
-            if b.len() == 1 {
-                1
-            } else {
-                0
-            }
+        let b_dot = if b.len() == 1 {
+            1
+        } else if b[1] != 0 {
+            0
         } else {
-            if b[1] != 0 {
-                0
-            } else {
-                1
-            }
+            1
         };
 
         if a_dot != 0 {
-            return if b_dot != 0 { 0 } else { -1 };
+            return if b_dot != 0 { Ordering::Equal } else { Ordering::Less };
         }
         if b_dot != 0 {
-            return 1;
+            return Ordering::Greater;
         }
 
-        let a_dot_dot = if a[1] == b'.' &&a.len() >= 0 {
+        let a_dot_dot = if a[1] == b'.' {
             if a.len() == 2 {
                 1
             } else {
@@ -197,7 +206,7 @@ pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> i32 {
             0
         };
 
-        let b_dot_dot = if b[1] == b'.' && b.len() >= 0 {
+        let b_dot_dot = if b[1] == b'.' {
             if b.len() == 2 {
                 1
             } else {
@@ -214,13 +223,13 @@ pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> i32 {
         };
 
         if a_dot_dot != 0 {
-            return if b_dot_dot != 0 { 0 } else { -1 };
+            return if b_dot_dot != 0 { Ordering::Equal } else { Ordering::Less };
         }
         if b_dot_dot != 0 {
-            return 1;
+            return Ordering::Greater;
         }
     } else if b[0] == b'.' {
-        return 1;
+        return Ordering::Greater;
     }
 
     let (a_prefix_len, a_len) = prefix_len(a);
@@ -231,8 +240,9 @@ pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> i32 {
     let result = verrevcmp(&a[..a_prefix_len], &b[..b_prefix_len]);
 
     if result != 0 || one_pass_only {
-        result
+        std::cmp::Ord::cmp(&result, &0)
     } else {
-        verrevcmp(&a[..a_len], &b[..b_len])
+        let result = verrevcmp(&a[..a_len], &b[..b_len]);
+        std::cmp::Ord::cmp(&result, &0)
     }
 }
