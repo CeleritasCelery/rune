@@ -26,6 +26,7 @@ mod floatfns;
 mod fns;
 mod interpreter;
 mod keymap;
+mod library;
 mod lread;
 mod print;
 mod reader;
