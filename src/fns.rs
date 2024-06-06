@@ -1133,6 +1133,8 @@ mod test {
         assert_lisp("(string-version-lessp \"01\" \"1\")", "nil");
         assert_lisp("(string-version-lessp \"a1a10aa\" \"a1a0100\")", "t");
         assert_lisp("(string-version-lessp \"a1b2\" \"a1a3\")", "nil");
+        assert_lisp("(string-version-lessp \".\" \".\")", "nil");
+        assert_lisp("(string-version-lessp \"..\" \"..\")", "nil");
 
         // Symbol Tests
         // Test Equality
