@@ -1,11 +1,11 @@
-///Return the length of a prefix of S that corresponds to the suffix
-///defined by this extended regular expression in the C locale:
-///  (\.[A-Za-z~][A-Za-z0-9~]*)*$
-///Use the longest suffix matching this regular expression,
-///except do not use all of S as a suffix if S is nonempty.
-///If *LEN is -1, S is a string; set *LEN to S's length.
-///Otherwise, *LEN should be nonnegative, S is a char array,
-///and *LEN does not change.
+/// Return the length of a prefix of S that corresponds to the suffix
+/// defined by this extended regular expression in the C locale:
+///   (\.[A-Za-z~][A-Za-z0-9~]*)*$
+/// Use the longest suffix matching this regular expression,
+/// except do not use all of S as a suffix if S is nonempty.
+/// If *LEN is -1, S is a string; set *LEN to S's length.
+/// Otherwise, *LEN should be nonnegative, S is a char array,
+/// and *LEN does not change.
 fn prefix_len(s: &[u8]) -> (usize, usize) {
     let mut prefix_len = 0;
 
@@ -30,8 +30,8 @@ fn prefix_len(s: &[u8]) -> (usize, usize) {
     }
 }
 
-///Return a version sort comparison value for S's byte at position POS.
-///S has length LEN.  If POS == LEN, sort before all non-'~' bytes.
+/// Return a version sort comparison value for S's byte at position POS.
+/// S has length LEN.  If POS == LEN, sort before all non-'~' bytes.
 fn order(s: &[u8], pos: usize) -> i32 {
     if pos == s.len() {
         return -1;
@@ -50,16 +50,15 @@ fn order(s: &[u8], pos: usize) -> i32 {
     }
 }
 
-///slightly modified verrevcmp function from dpkg
-///S1, S2 - compared char array
-///S1_LEN, S2_LEN - length of arrays to be scanned
+/// slightly modified verrevcmp function from dpkg
+/// S1, S2 - compared char array
+/// S1_LEN, S2_LEN - length of arrays to be scanned
 ///
-///This implements the algorithm for comparison of version strings
-///specified by Debian and now widely adopted.  The detailed
-///specification can be found in the Debian Policy Manual in the
-///section on the 'Version' control field.  This version of the code
-///implements that from s5.6.12 of Debian Policy v3.8.0.1
-///https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version
+/// This implements the algorithm for comparison of version strings
+/// specified by Debian and now widely adopted.  The detailed
+/// specification can be found in the Debian Policy Manual in the
+/// section on the 'Version' control field.  This version of the code
+/// implements that from s5.6.12 of [Debian Policy v3.8.0.1](https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version)
 fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
     let mut s1_pos = 0;
     let mut s2_pos = 0;
@@ -109,50 +108,50 @@ fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
     0
 }
 
-///Compare strings A and B as file names containing version numbers,
-///and return an integer that is negative, zero, or positive depending
-///on whether A compares less than, equal to, or greater than B.
+/// Compare strings A and B as file names containing version numbers,
+/// and return an integer that is negative, zero, or positive depending
+/// on whether A compares less than, equal to, or greater than B.
 ///
-///Use the following version sort algorithm:
+/// Use the following version sort algorithm:
 ///
-///  1. Compare the strings' maximal-length non-digit prefixes lexically.
-///     If there is a difference return that difference.
-///     Otherwise discard the prefixes and continue with the next step.
+///   1. Compare the strings' maximal-length non-digit prefixes lexically.
+///      If there is a difference return that difference.
+///      Otherwise discard the prefixes and continue with the next step.
 ///
-///  2. Compare the strings' maximal-length digit prefixes, using
-///     numeric comparison of the numbers represented by each prefix.
-///     (Treat an empty prefix as zero; this can happen only at string end.)
-///     If there is a difference, return that difference.
-///     Otherwise discard the prefixes and continue with the next step.
+///   2. Compare the strings' maximal-length digit prefixes, using
+///      numeric comparison of the numbers represented by each prefix.
+///      (Treat an empty prefix as zero; this can happen only at string end.)
+///      If there is a difference, return that difference.
+///      Otherwise discard the prefixes and continue with the next step.
 ///
-///  3. If both strings are empty, return 0.  Otherwise continue with step 1.
+///   3. If both strings are empty, return 0.  Otherwise continue with step 1.
 ///
-///In version sort, lexical comparison is left to right, byte by byte,
-///using the byte's numeric value (0-255), except that:
+/// In version sort, lexical comparison is left to right, byte by byte,
+/// using the byte's numeric value (0-255), except that:
 ///
-///  1. ASCII letters sort before other bytes.
-///  2. A tilde sorts before anything, even an empty string.
+///   1. ASCII letters sort before other bytes.
+///   2. A tilde sorts before anything, even an empty string.
 ///
-///In addition to the version sort rules, the following strings have
-///special priority and sort before all other strings (listed in order):
+/// In addition to the version sort rules, the following strings have
+/// special priority and sort before all other strings (listed in order):
 ///
-///  1. The empty string.
-///  2. ".".
-///  3. "..".
-///  4. Strings starting with "." sort before other strings.
+///   1. The empty string.
+///   2. ".".
+///   3. "..".
+///   4. Strings starting with "." sort before other strings.
 ///
-///Before comparing two strings where both begin with non-".",
-///or where both begin with "." but neither is "." or "..",
-///suffixes matching the C-locale extended regular expression
-///(\.[A-Za-z~][A-Za-z0-9~]*)*$ are removed and the strings compared
-///without them, using version sort without special priority;
-///if they do not compare equal, this comparison result is used and
-///the suffixes are effectively ignored.  Otherwise, the entire
-///strings are compared using version sort.  When removing a suffix
-///from a nonempty string, remove the maximal-length suffix such that
-///the remaining string is nonempty.
+/// Before comparing two strings where both begin with non-".",
+/// or where both begin with "." but neither is "." or "..",
+/// suffixes matching the C-locale extended regular expression
+/// (\.[A-Za-z~][A-Za-z0-9~]*)*$ are removed and the strings compared
+/// without them, using version sort without special priority;
+/// if they do not compare equal, this comparison result is used and
+/// the suffixes are effectively ignored.  Otherwise, the entire
+/// strings are compared using version sort.  When removing a suffix
+/// from a nonempty string, remove the maximal-length suffix such that
+/// the remaining string is nonempty.
 ///
-///This function is intended to be a replacement for strverscmp.
+/// This function is intended to be a replacement for strverscmp.
 pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     if a.is_empty() && b.is_empty() {
