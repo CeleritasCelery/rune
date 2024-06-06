@@ -747,79 +747,137 @@ pub(crate) fn string_bytes(string: &str) -> i64 {
 }
 
 #[defun]
-pub(crate) fn string_lessp(string1: &str, string2: &str) -> bool {
-    for (c1, c2) in string1.chars().zip(string2.chars()) {
+pub(crate) fn string_lessp<'ob>(string1: Object<'ob>, string2: Object<'ob>) -> Result<bool> {
+    let string1 = match string1.untag() {
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
+        _ => bail!(TypeError::new(Type::String, string1)),
+    };
+    let string2 = match string2.untag() {
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
+        _ => bail!(TypeError::new(Type::String, string2)),
+    };
+    let string1_len = string1.chars().count();
+    let string2_len = string2.chars().count();
+    Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
+}
+
+#[inline]
+fn string_lessp_logic<I: Iterator<Item = char>>(
+    s1: I,
+    s1_len: usize,
+    s2: I,
+    s2_len: usize,
+) -> bool {
+    let len_comp = s1_len < s2_len;
+    if s1_len != s2_len {
+        return len_comp;
+    }
+    for (c1, c2) in s1.zip(s2) {
         match std::cmp::Ord::cmp(&c1, &c2) {
             std::cmp::Ordering::Less => return true,
             std::cmp::Ordering::Greater => return false,
             _ => {}
         }
     }
-    string1.len() < string2.len()
+    len_comp
+}
+
+struct Version(Vec<usize>);
+
+impl std::cmp::PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        for (a, b) in self.0.iter().zip(other.0.iter()) {
+            if a != b {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl std::cmp::PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        for (a, b) in self.0.iter().zip(other.0.iter()) {
+            match a.cmp(b) {
+                std::cmp::Ordering::Equal => continue,
+                x => return Some(x),
+            }
+        }
+        None
+    }
 }
 
 #[defun]
-pub(crate) fn string_version_lessp(string1: &str, string2: &str) -> bool {
+pub(crate) fn string_version_lessp<'ob>(
+    string1: Object<'ob>,
+    string2: Object<'ob>,
+) -> Result<bool> {
+    let string1 = match string1.untag() {
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
+        _ => bail!(TypeError::new(Type::String, string1)),
+    };
+    let string2 = match string2.untag() {
+        ObjectType::String(x) => x,
+        ObjectType::Symbol(x) => x.get().name(),
+        _ => bail!(TypeError::new(Type::String, string2)),
+    };
     let mut iter1 = string1.chars().peekable();
-    let mut char_len1 = 0;
     let mut iter2 = string2.chars().peekable();
-    let mut char_len2 = 0;
-    let mut num1 = None;
-    let mut num2 = None;
-    //Peeking in order to try to match a pattern without progressing the iterator
-    while let (Some(c1), Some(c2)) = (iter1.peek(), iter2.peek()) {
-        // Copying the characters to avoid borrowing the iterator
-        let (c1, c2) = (*c1, *c2);
-        if c1.is_ascii_digit() {
-            num1 = Some(create_number(&mut iter1));
-        } else {
-            char_len1 += 1;
-            // Progressing the iterator because it wasn't a number
-            iter1.next();
-        }
-        if c2.is_ascii_digit() {
-            num2 = Some(create_number(&mut iter2));
-        } else {
-            char_len2 += 1;
-            // Progressing the iterator because it wasn't a number
-            iter2.next();
-        }
+    let mut prefix1 = Vec::new();
+    let mut prefix2 = Vec::new();
 
-        if c1 != c2 {
-            return c1 < c2;
-        }
+    while let Some(c) = iter1.next_if(|c| !c.is_ascii_digit()) {
+        prefix1.push(c);
+    }
+    let ver1 = create_version(string1.chars().peekable());
+
+    while let Some(c) = iter2.next_if(|c| !c.is_ascii_digit()) {
+        prefix2.push(c);
+    }
+    let ver2 = create_version(string2.chars().peekable());
+
+    if prefix1 != prefix2 {
+        let prefix1_len = prefix1.len();
+        let prefix2_len = prefix2.len();
+        return Ok(string_lessp_logic(
+            prefix1.into_iter(),
+            prefix1_len,
+            prefix2.into_iter(),
+            prefix2_len,
+        ));
     }
 
-    if let (Some(n1), Some(n2)) = (num1, num2) {
-        if n1 != n2 {
-            return n1 < n2;
-        }
+    if ver1 != ver2 {
+        return Ok(ver1 < ver2);
     }
 
-    // These loops are for getting the full count if one of the iterators is empty
-    for c in iter1 {
-        if !c.is_ascii_digit() {
-            char_len1 += 1;
-        }
-    }
-    for c in iter2 {
-        if !c.is_ascii_digit() {
-            char_len2 += 1;
-        }
-    }
+    let string1_len = string1.chars().count();
+    let string2_len = string2.chars().count();
 
-    char_len1 < char_len2
+    Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
 }
-/// Helper function to create a number from a string iterator
+/// Helper function to create a version from a string iterator
 #[inline]
-fn create_number<I: Iterator<Item = char>>(iter: &mut std::iter::Peekable<I>) -> usize {
-    let mut num = 0;
+fn create_version<I: Iterator<Item = char>>(mut iter: std::iter::Peekable<I>) -> Version {
+    let mut buf = Vec::new();
+    loop {
+        let mut num = 0;
 
-    while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
-        num = num * 10 + digit.to_digit(10).unwrap() as usize;
+        while iter.next_if(|c| !c.is_ascii_digit()).is_some() {}
+
+        while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
+            num = num * 10 + digit.to_digit(10).unwrap() as usize;
+        }
+        buf.push(num);
+
+        if iter.peek().is_none() {
+            break;
+        }
     }
-
-    num
+    Version(buf)
 }
 
 ///////////////
@@ -1090,6 +1148,7 @@ mod test {
 
     #[test]
     fn test_string_lessp() {
+        // String Tests
         // Test Equality
         assert_lisp("(string-lessp \"less\" \"less\")", "nil");
         // Test Length
@@ -1097,10 +1156,24 @@ mod test {
         assert_lisp("(string-lessp \"less\" \"les\")", "nil");
         // Check for less than
         assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+
+        // Symbol Tests
+        // Test Equality
+        assert_lisp("(string-lessp 'less 'less)", "nil");
+        // Test Length
+        assert_lisp("(string-lessp 'les 'less)", "t");
+        assert_lisp("(string-lessp 'less 'les)", "nil");
+        // Check for less than
+        assert_lisp("(string-lessp 'abc 'bcd)", "t");
+
+        // Mixed Tests
+        assert_lisp("(string-lessp 'less \"less\")", "nil");
+        assert_lisp("(string-lessp 'les \"less\")", "t");
     }
 
     #[test]
     fn test_string_version_lessp() {
+        // String Tests
         // Test Equality
         assert_lisp("(string-version-lessp \"less\" \"less\")", "nil");
         // Test Length
@@ -1121,6 +1194,45 @@ mod test {
         assert_lisp("(string-version-lessp \"133less1\" \"less12\")", "t");
         // Test that digits don't disappear
         assert_lisp("(string-version-lessp \"112a\" \"512a\")", "t");
+        // Test Numbers take higher precedence over characters
+        assert_lisp("(string-version-lessp \"101a\" \"100b\")", "nil");
+        // Test Numbers that leading zeros are ignored
+        assert_lisp("(string-version-lessp \"10\" \"0100\")", "t");
+        // Test that that the first number is compared immediately at a char comparison
+        assert_lisp("(string-version-lessp \"10a100\" \"0100a\")", "t");
+        assert_lisp("(string-version-lessp \"a100\" \"0100a\")", "nil");
+        assert_lisp("(string-version-lessp \"01\" \"1\")", "nil");
+        assert_lisp("(string-version-lessp \"a1a10aa\" \"a1a0100\")", "t");
+
+        // Symbol Tests
+        // Test Equality
+        assert_lisp("(string-version-lessp 'less 'less)", "nil");
+        // Test Length
+        assert_lisp("(string-version-lessp 'les 'less)", "t");
+        assert_lisp("(string-version-lessp 'less 'les)", "nil");
+        // Check for less than
+        assert_lisp("(string-version-lessp 'abc 'bcd)", "t");
+        // Test Equality with number
+        assert_lisp("(string-version-lessp 'less1 'less1)", "nil");
+        assert_lisp("(string-version-lessp '100a '100b)", "t");
+        // Test Differing numeric position does matter
+        assert_lisp("(string-version-lessp '1less 'less1)", "t");
+        // Test Greater than numericaly
+        assert_lisp("(string-version-lessp 'less12 'less1)", "nil");
+        // Test Less than numericaly
+        assert_lisp("(string-version-lessp 'less1 'less12)", "t");
+        // Test that later numbers override previous ones
+        assert_lisp("(string-version-lessp '133less1 'less12)", "t");
+        // Test Numbers take higher precedence over characters
+        assert_lisp("(string-version-lessp '101a '100b)", "nil");
+        // Test Numbers that leading zeros are ignored
+        // Test that that the first number is compared immediately at a char comparison
+        assert_lisp("(string-version-lessp '10a100 '0100a)", "t");
+        assert_lisp("(string-version-lessp 'a100 '0100a)", "nil");
+
+        // Mixed Tests
+        assert_lisp("(string-version-lessp 'less \"less\")", "nil");
+        assert_lisp("(string-version-lessp 'less1 \"less10\")", "t");
     }
 
     #[test]
