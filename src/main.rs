@@ -22,6 +22,7 @@ mod emacs;
 mod eval;
 mod fileio;
 mod filelock;
+mod filevercmp;
 mod floatfns;
 mod fns;
 mod interpreter;
