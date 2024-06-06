@@ -784,6 +784,31 @@ fn string_lessp_logic<I: Iterator<Item = char>>(
     len_comp
 }
 
+struct Version(Vec<usize>);
+
+impl std::cmp::PartialEq for Version {
+    fn eq(&self, other: &Self) -> bool {
+        for (a, b) in self.0.iter().zip(other.0.iter()) {
+            if a != b {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl std::cmp::PartialOrd for Version {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        for (a, b) in self.0.iter().zip(other.0.iter()) {
+            match a.cmp(b) {
+                std::cmp::Ordering::Equal => continue,
+                x => return Some(x),
+            }
+        }
+        None
+    }
+}
+
 #[defun]
 pub(crate) fn string_version_lessp<'ob>(
     string1: Object<'ob>,
@@ -807,12 +832,12 @@ pub(crate) fn string_version_lessp<'ob>(
     while let Some(c) = iter1.next_if(|c| !c.is_ascii_digit()) {
         prefix1.push(c);
     }
-    let num1 = create_number(&mut iter1);
+    let ver1 = create_version(string1.chars().peekable());
 
     while let Some(c) = iter2.next_if(|c| !c.is_ascii_digit()) {
         prefix2.push(c);
     }
-    let num2 = create_number(&mut iter2);
+    let ver2 = create_version(string2.chars().peekable());
 
     if prefix1 != prefix2 {
         let prefix1_len = prefix1.len();
@@ -825,8 +850,8 @@ pub(crate) fn string_version_lessp<'ob>(
         ));
     }
 
-    if num1 != num2 {
-        return Ok(num1 < num2);
+    if ver1 != ver2 {
+        return Ok(ver1 < ver2);
     }
 
     let string1_len = string1.chars().count();
@@ -834,16 +859,25 @@ pub(crate) fn string_version_lessp<'ob>(
 
     Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
 }
-/// Helper function to create a number from a string iterator
+/// Helper function to create a version from a string iterator
 #[inline]
-fn create_number<I: Iterator<Item = char>>(iter: &mut std::iter::Peekable<I>) -> usize {
-    let mut num = 0;
+fn create_version<I: Iterator<Item = char>>(mut iter: std::iter::Peekable<I>) -> Version {
+    let mut buf = Vec::new();
+    loop {
+        let mut num = 0;
 
-    while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
-        num = num * 10 + digit.to_digit(10).unwrap() as usize;
+        while iter.next_if(|c| !c.is_ascii_digit()).is_some() {}
+
+        while let Some(digit) = iter.next_if(|c| c.is_ascii_digit()) {
+            num = num * 10 + digit.to_digit(10).unwrap() as usize;
+        }
+        buf.push(num);
+
+        if iter.peek().is_none() {
+            break;
+        }
     }
-
-    num
+    Version(buf)
 }
 
 ///////////////
@@ -1168,6 +1202,7 @@ mod test {
         assert_lisp("(string-version-lessp \"10a100\" \"0100a\")", "t");
         assert_lisp("(string-version-lessp \"a100\" \"0100a\")", "nil");
         assert_lisp("(string-version-lessp \"01\" \"1\")", "nil");
+        assert_lisp("(string-version-lessp \"a1a10aa\" \"a1a0100\")", "t");
 
         // Symbol Tests
         // Test Equality
