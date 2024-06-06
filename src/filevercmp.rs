@@ -147,16 +147,76 @@ pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> i32 {
             return -1;
         }
 
-        if a.len() == 1 {
-            return 0;
-        } else if b.len() == 1 {
+        let a_dot = if a.len() >= 0 {
+            if a.len() == 1 {
+                1
+            } else {
+                0
+            }
+        } else {
+            if a[1] != 0 {
+                0
+            } else {
+                1
+            }
+        };
+        let b_dot = if b.len() >= 0 {
+            if b.len() == 1 {
+                1
+            } else {
+                0
+            }
+        } else {
+            if b[1] != 0 {
+                0
+            } else {
+                1
+            }
+        };
+
+        if a_dot != 0 {
+            return if b_dot != 0 { 0 } else { -1 };
+        }
+        if b_dot != 0 {
             return 1;
         }
 
-        if a[1] == b'.' && a.len() == 2 {
-            return 0;
+        let a_dot_dot = if a[1] == b'.' &&a.len() >= 0 {
+            if a.len() == 2 {
+                1
+            } else {
+                0
+            }
+        } else if a.len() > 2 {
+            if a[2] != 0 {
+                0
+            } else {
+                1
+            }
+        } else {
+            0
+        };
+
+        let b_dot_dot = if b[1] == b'.' && b.len() >= 0 {
+            if b.len() == 2 {
+                1
+            } else {
+                0
+            }
+        } else if b.len() > 2 {
+            if b[2] != 0 {
+                0
+            } else {
+                1
+            }
+        } else {
+            0
+        };
+
+        if a_dot_dot != 0 {
+            return if b_dot_dot != 0 { 0 } else { -1 };
         }
-        if b[1] == b'.' && b.len() == 2 {
+        if b_dot_dot != 0 {
             return 1;
         }
     } else if b[0] == b'.' {

@@ -1135,6 +1135,7 @@ mod test {
         assert_lisp("(string-version-lessp \"a1b2\" \"a1a3\")", "nil");
         assert_lisp("(string-version-lessp \".\" \".\")", "nil");
         assert_lisp("(string-version-lessp \"..\" \"..\")", "nil");
+        assert_lisp("(string-version-lessp \"..\" \".a\")", "t");
 
         // Symbol Tests
         // Test Equality
