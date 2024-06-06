@@ -800,7 +800,7 @@ pub(crate) fn string_version_lessp<'ob>(
         _ => bail!(TypeError::new(Type::String, string2)),
     };
 
-    let cmp = crate::filevercmp::filevercmp(string1, string2);
+    let cmp = crate::library::filevercmp::filevercmp(string1, string2);
 
     match cmp {
         std::cmp::Ordering::Less => Ok(true),
