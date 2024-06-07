@@ -1,3 +1,5 @@
+use std::cmp::{Ord, Ordering};
+
 /// Return the length of a prefix of S that corresponds to the suffix
 /// defined by this extended regular expression in the C locale:
 ///   (\.[A-Za-z~][A-Za-z0-9~]*)*$
@@ -10,11 +12,7 @@ fn prefix_len(s: &[u8]) -> (usize, usize) {
     let mut prefix_len = 0;
 
     let mut i = 0;
-    loop {
-        if i == s.len() {
-            return (prefix_len, i);
-        }
-
+    while i < s.len() {
         i += 1;
         prefix_len = i;
 
@@ -28,10 +26,11 @@ fn prefix_len(s: &[u8]) -> (usize, usize) {
             }
         }
     }
+    (prefix_len, i)
 }
 
-/// Return a version sort comparison value for S's byte at position POS.
-/// S has length LEN.  If POS == LEN, sort before all non-'~' bytes.
+/// Return a version sort comparison value for S's byte at position POS. If POS
+/// == LEN, sort before all non-'~' bytes.
 fn order(s: &[u8], pos: usize) -> i32 {
     if pos == s.len() {
         return -1;
@@ -39,20 +38,16 @@ fn order(s: &[u8], pos: usize) -> i32 {
 
     let c = s[pos];
 
-    if c.is_ascii_digit() {
-        0
-    } else if c.is_ascii_alphabetic() {
-        c as i32
-    } else if c == b'~' {
-        -2
-    } else {
-        c as i32 + 256
+    match c {
+        b'0'..=b'9' => 0,
+        b'A'..=b'Z' | b'a'..=b'z' => c as i32,
+        b'~' => -2,
+        _ => c as i32 + 256,
     }
 }
 
 /// slightly modified verrevcmp function from dpkg
 /// S1, S2 - compared char array
-/// S1_LEN, S2_LEN - length of arrays to be scanned
 ///
 /// This implements the algorithm for comparison of version strings
 /// specified by Debian and now widely adopted.  The detailed
@@ -152,83 +147,13 @@ fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
 /// the remaining string is nonempty.
 ///
 /// This function is intended to be a replacement for strverscmp.
-pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
-    if a.is_empty() && b.is_empty() {
-        return Ordering::Equal;
-    } else if a.is_empty() {
-        return Ordering::Less;
-    } else if b.is_empty() {
-        return Ordering::Greater;
-    }
-
-    if a[0] == b'.' {
-        if b[0] != b'.' {
-            return Ordering::Less;
-        }
-
-        let a_dot = if a.len() == 1 {
-            1
-        } else if a[1] != 0 {
-            0
-        } else {
-            1
-        };
-        let b_dot = if b.len() == 1 {
-            1
-        } else if b[1] != 0 {
-            0
-        } else {
-            1
-        };
-
-        if a_dot != 0 {
-            return if b_dot != 0 { Ordering::Equal } else { Ordering::Less };
-        }
-        if b_dot != 0 {
-            return Ordering::Greater;
-        }
-
-        let a_dot_dot = if a[1] == b'.' {
-            if a.len() == 2 {
-                1
-            } else {
-                0
-            }
-        } else if a.len() > 2 {
-            if a[2] != 0 {
-                0
-            } else {
-                1
-            }
-        } else {
-            0
-        };
-
-        let b_dot_dot = if b[1] == b'.' {
-            if b.len() == 2 {
-                1
-            } else {
-                0
-            }
-        } else if b.len() > 2 {
-            if b[2] != 0 {
-                0
-            } else {
-                1
-            }
-        } else {
-            0
-        };
-
-        if a_dot_dot != 0 {
-            return if b_dot_dot != 0 { Ordering::Equal } else { Ordering::Less };
-        }
-        if b_dot_dot != 0 {
-            return Ordering::Greater;
-        }
-    } else if b[0] == b'.' {
-        return Ordering::Greater;
+pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> Ordering {
+    const D: u8 = b'.';
+    match (a, b) {
+        ([], []) | ([D], [D]) | ([D, D], [D, D]) => return Ordering::Equal,
+        ([], [..]) | ([D], [_, ..]) | ([D, D], [_, _, ..]) => return Ordering::Less,
+        ([..], []) | ([_, ..], [D]) | ([_, _, ..], [D, D]) => return Ordering::Greater,
+        _ => {}
     }
 
     let (a_prefix_len, a_len) = prefix_len(a);
@@ -239,9 +164,9 @@ pub(crate) fn filevercmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
     let result = verrevcmp(&a[..a_prefix_len], &b[..b_prefix_len]);
 
     if result != 0 || one_pass_only {
-        std::cmp::Ord::cmp(&result, &0)
+        result.cmp(&0)
     } else {
         let result = verrevcmp(&a[..a_len], &b[..b_len]);
-        std::cmp::Ord::cmp(&result, &0)
+        result.cmp(&0)
     }
 }

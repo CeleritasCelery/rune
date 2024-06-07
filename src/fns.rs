@@ -11,6 +11,7 @@ use crate::{
         },
     },
     data::aref,
+    library::filevercmp::filevercmp,
     rooted_iter,
 };
 use anyhow::{bail, ensure, Result};
@@ -742,70 +743,44 @@ pub(crate) fn levenshtein_distance<T: PartialEq, I: Iterator<Item = T>>(s1: I, s
 }
 
 #[defun]
-pub(crate) fn string_bytes(string: &str) -> i64 {
-    string.len() as i64
+pub(crate) fn string_bytes(string: &str) -> usize {
+    string.len()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StringOrSymbol<'ob>(&'ob str);
+
+impl<'ob> TryFrom<Object<'ob>> for StringOrSymbol<'ob> {
+    type Error = TypeError;
+
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj.untag() {
+            ObjectType::String(x) => Ok(Self(x)),
+            ObjectType::Symbol(x) => Ok(Self(x.get().name())),
+            _ => Err(TypeError::new(Type::String, obj)),
+        }
+    }
 }
 
 #[defun]
-pub(crate) fn string_lessp<'ob>(string1: Object<'ob>, string2: Object<'ob>) -> Result<bool> {
-    let string1 = match string1.untag() {
-        ObjectType::String(x) => x,
-        ObjectType::Symbol(x) => x.get().name(),
-        _ => bail!(TypeError::new(Type::String, string1)),
-    };
-    let string2 = match string2.untag() {
-        ObjectType::String(x) => x,
-        ObjectType::Symbol(x) => x.get().name(),
-        _ => bail!(TypeError::new(Type::String, string2)),
-    };
-    let string1_len = string1.chars().count();
-    let string2_len = string2.chars().count();
-    Ok(string_lessp_logic(string1.chars(), string1_len, string2.chars(), string2_len))
-}
-
-#[inline]
-fn string_lessp_logic<I: Iterator<Item = char>>(
-    s1: I,
-    s1_len: usize,
-    s2: I,
-    s2_len: usize,
-) -> bool {
-    let len_comp = s1_len < s2_len;
-    if s1_len != s2_len {
-        return len_comp;
-    }
-    for (c1, c2) in s1.zip(s2) {
-        match std::cmp::Ord::cmp(&c1, &c2) {
-            std::cmp::Ordering::Less => return true,
-            std::cmp::Ordering::Greater => return false,
-            _ => {}
+pub(crate) fn string_lessp<'ob>(
+    string1: StringOrSymbol<'ob>,
+    string2: StringOrSymbol<'ob>,
+) -> Result<bool> {
+    for (c1, c2) in string1.0.chars().zip(string2.0.chars()) {
+        if c1 != c2 {
+            return Ok(c1 < c2);
         }
     }
-    len_comp
+    Ok(string1.0.len() < string2.0.len())
 }
 
 #[defun]
 pub(crate) fn string_version_lessp<'ob>(
-    string1: Object<'ob>,
-    string2: Object<'ob>,
+    string1: StringOrSymbol<'ob>,
+    string2: StringOrSymbol<'ob>,
 ) -> Result<bool> {
-    let string1 = match string1.untag() {
-        ObjectType::String(x) => x.as_bytes(),
-        ObjectType::Symbol(x) => x.get().name().as_bytes(),
-        _ => bail!(TypeError::new(Type::String, string1)),
-    };
-    let string2 = match string2.untag() {
-        ObjectType::String(x) => x.as_bytes(),
-        ObjectType::Symbol(x) => x.get().name().as_bytes(),
-        _ => bail!(TypeError::new(Type::String, string2)),
-    };
-
-    let cmp = crate::library::filevercmp::filevercmp(string1, string2);
-
-    match cmp {
-        std::cmp::Ordering::Less => Ok(true),
-        _ => Ok(false),
-    }
+    Ok(filevercmp(string1.0.as_bytes(), string2.0.as_bytes()) == std::cmp::Ordering::Less)
 }
 
 ///////////////
@@ -1084,6 +1059,7 @@ mod test {
         assert_lisp("(string-lessp \"less\" \"les\")", "nil");
         // Check for less than
         assert_lisp("(string-lessp \"abc\" \"bcd\")", "t");
+        assert_lisp("(string-lessp \"abx\" \"abcd\")", "nil");
 
         // Symbol Tests
         // Test Equality
@@ -1135,6 +1111,16 @@ mod test {
         assert_lisp("(string-version-lessp \".\" \".\")", "nil");
         assert_lisp("(string-version-lessp \"..\" \"..\")", "nil");
         assert_lisp("(string-version-lessp \"..\" \".a\")", "t");
+        assert_lisp("(string-version-lessp \"101a\" \"100b\")", "nil");
+        assert_lisp("(string-version-lessp \"10\" \"0100\")", "t");
+        assert_lisp("(string-version-lessp \"001\" \"01\")", "nil");
+        assert_lisp("(string-version-lessp \"a1a10\" \"a1a0100\")", "t");
+        assert_lisp("(string-version-lessp \"A\" \":\")", "t");
+        assert_lisp("(string-version-lessp \"\" \"\")", "nil");
+        assert_lisp("(string-version-lessp \"\" \".\")", "t");
+        assert_lisp("(string-version-lessp \".\" \".\")", "nil");
+        assert_lisp("(string-version-lessp \".\" \"~\")", "t");
+        assert_lisp("(string-version-lessp \"~\" \"a\")", "t");
 
         // Symbol Tests
         // Test Equality
