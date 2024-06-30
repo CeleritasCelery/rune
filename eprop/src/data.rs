@@ -10,6 +10,7 @@ pub enum ObjectType {
     Integer,
     Boolean,
     Unknown,
+    Function,
     
 }
 
@@ -25,6 +26,7 @@ impl Into<ArbitraryObjectType> for ObjectType {
             ObjectType::Integer => ArbitraryObjectType::Integer(i64::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Boolean => ArbitraryObjectType::Boolean(bool::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Unknown => ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap())),
+            ObjectType::Function => todo!(),
         }
     }
 }
@@ -195,6 +197,46 @@ impl Function {
                     "bool" => {
                         return Some(Type::Object(vec![ObjectType::Boolean]));
                     },
+                    "String" => {
+                        return Some(Type::Object(vec![ObjectType::String]));
+                    },
+                    "f64" => {
+                        return Some(Type::Object(vec![ObjectType::Float]));
+                    },
+                    "i64" => {
+                        return Some(Type::Object(vec![ObjectType::Integer]));
+                    },
+                    "LispString" => {
+                        return Some(Type::Object(vec![ObjectType::String]));
+                    },
+                    "Function" => {
+                        return Some(Type::Object(vec![ObjectType::Function]));
+                    },
+                    "Rto" | "Rt" | "Gc" => {
+                        let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
+                            panic!("Expected angle bracketed arguments");
+                        };
+                        let mut type_argument = None;
+                        for arg in args {
+                            match arg {
+                                syn::GenericArgument::Type(ty) => {
+                                    type_argument = Some(ty);
+                                },
+                                _ => continue,
+                            }
+                        }
+
+                        let Some(ty) = type_argument else {
+                            panic!("Expected type argument");
+                        };
+
+                        let ty = Function::process_arg(ty)?;
+
+                        Some(ty)
+                    },
+                    "Env" | "Context" => {
+                        return None;
+                    },
                     _ => {
                         panic!("Unknown type: {}", last);
                     }
@@ -264,7 +306,7 @@ impl From<&ItemFn> for Function {
             c => c,
         }).collect();
 
-        let args = item.sig.inputs.iter().map(|arg| {
+        let args = item.sig.inputs.iter().filter_map(|arg| {
             let ty = match arg {
                 syn::FnArg::Receiver(syn::Receiver { ty, .. }) => {
                     ty
@@ -289,28 +331,107 @@ impl From<&ItemFn> for Function {
                     match ty {
                         Type::Object(ref obj) => {
                             if obj.contains(&ObjectType::Boolean) {
-                                ArgType::Required(ty)
+                                Some(ArgType::Required(ty))
                             } else {
                                 if optional {
-                                    ArgType::Optional(ty)
+                                    Some(ArgType::Optional(ty))
                                 } else {
-                                    ArgType::Required(ty)
+                                    Some(ArgType::Required(ty))
                                 }
                             }
                         },
                         _ => {
                             if optional {
-                                ArgType::Optional(ty)
+                                Some(ArgType::Optional(ty))
                             } else {
-                                ArgType::Required(ty)
+                                Some(ArgType::Required(ty))
+                            }
+                        }
+                    }
+                },
+                syn::Type::Path(syn::TypePath { path, .. }) => {
+                    let segments = &path.segments;
+                    let last = segments.last().unwrap().ident.to_string();
+                    let optional = match last.as_str() {
+                        "Result" => {
+                            true
+                        },
+                        "Option" => {
+                            true
+                        },
+                        _ => {
+                            false
+                        }
+                    };
+                    if optional {
+                        let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
+                            panic!("Expected angle bracketed arguments");
+                        };
+                        let mut type_argument = None;
+                        for arg in args {
+                            match arg {
+                                syn::GenericArgument::Type(ty) => {
+                                    type_argument = Some(ty);
+                                },
+                                _ => continue,
+                            }
+                        }
+
+                        let Some(ty) = type_argument else {
+                            panic!("Expected type argument");
+                        };
+
+                        let ty = Function::process_arg(ty)?;
+
+                        match ty {
+                            Type::Object(ref obj) => {
+                                if obj.contains(&ObjectType::Boolean) {
+                                    Some(ArgType::Required(ty))
+                                } else {
+                                    if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                            },
+                            _ => {
+                                if optional {
+                                    Some(ArgType::Optional(ty))
+                                } else {
+                                    Some(ArgType::Required(ty))
+                                }
+                            }
+                        }
+                    } else {
+                        let ty = Function::process_arg(ty)?;
+
+                        match ty {
+                            Type::Object(ref obj) => {
+                                if obj.contains(&ObjectType::Boolean) {
+                                    Some(ArgType::Required(ty))
+                                } else {
+                                    if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                            },
+                            _ => {
+                                if optional {
+                                    Some(ArgType::Optional(ty))
+                                } else {
+                                    Some(ArgType::Required(ty))
+                                }
                             }
                         }
                     }
                 },
                 x => {
-                    let ty = Function::process_arg(x).unwrap();
+                    let ty = Function::process_arg(x)?;
 
-                    ArgType::Required(ty)
+                    Some(ArgType::Required(ty))
                 },
             }
 
@@ -324,6 +445,7 @@ impl From<&ItemFn> for Function {
                         let syn::token::Group { span } = group_token;
 
                         let source_text = span.source_text().unwrap();
+                        println!("{}", source_text);
                         let fallible = match source_text.as_str() {
                             "Option" => true,
                             "Result" => true,
@@ -333,7 +455,39 @@ impl From<&ItemFn> for Function {
                         let ty = Function::process_arg(elem).unwrap();
                         (ty, fallible)
                     },
+                    syn::Type::Path(syn::TypePath { path, .. }) => {
+                        let segments = &path.segments;
+                        let last = segments.last().unwrap().ident.to_string();
+                        match last.as_str() {
+                            "Result" | "Option" => {
+                                let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
+                                    panic!("Expected angle bracketed arguments");
+                                };
+                                let mut type_argument = None;
+                                for arg in args {
+                                    match arg {
+                                        syn::GenericArgument::Type(ty) => {
+                                            type_argument = Some(ty);
+                                        },
+                                        _ => continue,
+                                    }
+                                }
+
+                                let Some(ty) = type_argument else {
+                                    panic!("Expected type argument");
+                                };
+
+                                let ty = Function::process_arg(ty).unwrap();
+                                (ty, true)
+                            },
+                            _ => {
+                                let ty = Function::process_arg(ty).unwrap();
+                                (ty, false)
+                            }
+                        }
+                    },
                     x => {
+                        println!("return type");
                         let ty = Function::process_arg(x).unwrap();
 
                         (ty, false)
