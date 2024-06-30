@@ -2,7 +2,7 @@ use arbitrary::Arbitrary;
 use syn::ItemFn;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ObjectType {
+pub(crate) enum ObjectType {
     String,
     Float,
     Cons,
@@ -11,6 +11,14 @@ pub enum ObjectType {
     Boolean,
     Unknown,
     Function,
+    UnibyteString,
+    Vector,
+    HashTable,
+    Record,
+    ByteFn,
+    Subr,
+    Buffer,
+    Nil,
     
 }
 
@@ -27,12 +35,20 @@ impl Into<ArbitraryObjectType> for ObjectType {
             ObjectType::Boolean => ArbitraryObjectType::Boolean(bool::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Unknown => ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap())),
             ObjectType::Function => todo!(),
+            ObjectType::UnibyteString => ArbitraryObjectType::UnibyteString(String::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::Vector => ArbitraryObjectType::Vector(Vec::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::HashTable => ArbitraryObjectType::HashTable(Vec::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::Record => ArbitraryObjectType::Record(Vec::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::ByteFn => todo!(),
+            ObjectType::Subr => todo!(),
+            ObjectType::Buffer => todo!(),
+            ObjectType::Nil => ArbitraryObjectType::Nil,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Arbitrary)]
-pub enum ArbitraryObjectType {
+pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
     Cons(Box<ArbitraryObjectType>, Box<ArbitraryObjectType>),
@@ -40,6 +56,13 @@ pub enum ArbitraryObjectType {
     Integer(i64),
     Boolean(bool),
     Unknown(Box<ArbitraryObjectType>),
+    UnibyteString(String),
+    Vector(Vec<ArbitraryObjectType>),
+    HashTable(Vec<(ArbitraryObjectType, ArbitraryObjectType)>),
+    Record(Vec<(String, ArbitraryObjectType)>),
+    Nil,
+
+
 }
 
 impl std::fmt::Display for ArbitraryObjectType {
@@ -70,18 +93,27 @@ impl std::fmt::Display for ArbitraryObjectType {
             ArbitraryObjectType::Unknown(obj) => {
                 write!(f, "{}", obj)
             },
+            ArbitraryObjectType::UnibyteString(s) => {
+                write!(f, "{}", s)
+            },
+            ArbitraryObjectType::Nil => {
+                write!(f, "nil")
+            },
+            _ => {
+                todo!()
+            },
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Type {
+pub(crate) enum Type {
     Object(Vec<ObjectType>),
     Nil,
 }
 
 #[derive(Debug, Clone, PartialEq, Arbitrary)]
-pub enum ArbitraryType {
+pub(crate) enum ArbitraryType {
     Object(ArbitraryObjectType),
     Nil,
 }
@@ -113,12 +145,12 @@ impl std::fmt::Display for ArbitraryType {
 }
 
 #[derive(Debug, Clone)]
-pub enum ArgType {
+pub(crate) enum ArgType {
     Required(Type),
     Optional(Type),
 }
 
-pub enum ArbitraryArgType {
+pub(crate) enum ArbitraryArgType {
     Required(ArbitraryType),
     Optional(ArbitraryType),
 }
@@ -137,7 +169,7 @@ impl Into<ArbitraryArgType> for ArgType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
+pub(crate) struct Function {
     name: String,
     args: Vec<ArgType>,
     ret: Type,
@@ -150,29 +182,29 @@ impl Function {
 
         match ty {
             syn::Type::Array(_) => {
-                todo!()
+                todo!("Array")
             },
             syn::Type::BareFn(_) => {
-                todo!()
+                todo!("BareFn")
             },
             syn::Type::Group(syn::TypeGroup{ elem, ..}) => {
 
                 Function::process_arg(elem)
             },
             syn::Type::ImplTrait(_) => {
-                todo!()
+                todo!("Impl Trait")
             },
             syn::Type::Infer(_) => {
-                todo!()
+                todo!("Infer")
             },
             syn::Type::Macro(_) => {
-                todo!()
+                todo!("Macro")
             },
             syn::Type::Never(_) => {
-                todo!()
+                todo!("Never")
             },
             syn::Type::Paren(_) => {
-                todo!()
+                todo!("Paren")
             },
             syn::Type::Path(syn::TypePath { path, .. }) => {
                 let segments = &path.segments;
@@ -182,13 +214,16 @@ impl Function {
                     "StringOrSymbol" => {
                         return Some(Type::Object(vec![ObjectType::String, ObjectType::Symbol]));
                     },
+                    "Symbol" => {
+                        return Some(Type::Object(vec![ObjectType::Symbol]));
+                    },
                     "Number" => {
                         return Some(Type::Object(vec![ObjectType::Integer, ObjectType::Float]));
                     },
                     "Object" => {
                         return Some(Type::Object(vec![ObjectType::Unknown]));
                     },
-                    "usize" => {
+                    "usize" | "isize" | "i64" => {
                         return Some(Type::Object(vec![ObjectType::Integer]));
                     },
                     "str" => {
@@ -203,14 +238,14 @@ impl Function {
                     "f64" => {
                         return Some(Type::Object(vec![ObjectType::Float]));
                     },
-                    "i64" => {
-                        return Some(Type::Object(vec![ObjectType::Integer]));
-                    },
                     "LispString" => {
                         return Some(Type::Object(vec![ObjectType::String]));
                     },
                     "Function" => {
                         return Some(Type::Object(vec![ObjectType::Function]));
+                    },
+                    "Cons" | "List" => {
+                        return Some(Type::Object(vec![ObjectType::Cons]));
                     },
                     "Rto" | "Rt" | "Gc" => {
                         let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
@@ -243,19 +278,20 @@ impl Function {
                 }
             },
             syn::Type::Ptr(_) => {
-                todo!()
+                todo!("Ptr")
             },
             syn::Type::Reference(syn::TypeReference { elem, .. }) => {
                 Function::process_arg(elem)
             },
-            syn::Type::Slice(_) => {
-                todo!()
+            syn::Type::Slice(syn::TypeSlice {..}) => {
+                Some(Type::Object(vec![ObjectType::Cons, ObjectType::Nil]))
+
             },
             syn::Type::TraitObject(_) => {
-                todo!()
+                todo!("TraitObject")
             },
             syn::Type::Tuple(_) => {
-                todo!()
+                tdo!("Tuple")
             },
             syn::Type::Verbatim(stream) => {
                 for token in stream.clone().into_iter() {
@@ -292,7 +328,7 @@ impl Function {
                 None
             },
             _ => {
-                todo!()
+                todo!("Catch all")
             },
         }
     }
@@ -507,7 +543,7 @@ impl From<&ItemFn> for Function {
     }
 }
 
-pub struct ArbitraryFunction {
+pub(crate) struct ArbitraryFunction {
     name: String,
     args: Vec<ArbitraryArgType>,
     ret: ArbitraryType,
