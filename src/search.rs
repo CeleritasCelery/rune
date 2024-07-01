@@ -3,7 +3,7 @@ use crate::core::{
     cons::Cons,
     env::Env,
     gc::{Context, Rt},
-    object::{List, Object, ObjectType, NIL},
+    object::{List, Object, ObjectType, OptionalFlag, NIL},
 };
 use anyhow::{bail, ensure, Result};
 use fallible_iterator::FallibleIterator;
@@ -15,7 +15,7 @@ fn string_match<'ob>(
     regexp: &str,
     string: &str,
     start: Option<i64>,
-    _inhibit_modify: Option<()>,
+    _inhibit_modify: OptionalFlag,
     env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
@@ -44,8 +44,8 @@ fn string_match<'ob>(
 #[defun]
 fn replace_match(
     newtext: &str,
-    _fixedcase: Option<()>,
-    _literal: Option<()>,
+    _fixedcase: OptionalFlag,
+    _literal: OptionalFlag,
     string: Option<&str>,
     subexp: Option<usize>,
     env: &Rt<Env>,
@@ -125,9 +125,9 @@ fn lisp_regex_to_rust(regexp: &str) -> String {
 
 #[defun]
 fn match_data<'ob>(
-    integer: Option<()>,
-    reuse: Option<()>,
-    reseat: Option<()>,
+    integer: OptionalFlag,
+    reuse: OptionalFlag,
+    reseat: OptionalFlag,
     env: &Rt<Env>,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
@@ -138,7 +138,7 @@ fn match_data<'ob>(
 }
 
 #[defun]
-fn set_match_data<'ob>(list: List, _reseat: Option<()>, env: &mut Rt<Env>) -> Object<'ob> {
+fn set_match_data<'ob>(list: List, _reseat: OptionalFlag, env: &mut Rt<Env>) -> Object<'ob> {
     // TODO: add reseat when markers implemented
     let obj: Object = list.into();
     env.match_data.set(obj);

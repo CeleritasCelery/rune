@@ -381,6 +381,7 @@ fn get_arg_type(ty: &syn::Type) -> Result<ArgType, Error> {
                         _ => ArgType::Option,
                     }
                 }
+                "OptionalFlag" => ArgType::Option,
                 _ => get_object_type(path),
             }
         }
@@ -505,6 +506,8 @@ mod test {
         test_args(quote! {x: &Rto<Gc<T>>}, &[ArgType::Rt(Gc::Other)]);
         test_args(quote! {x: u8}, &[ArgType::Other]);
         test_args(quote! {x: Option<u8>}, &[ArgType::Option]);
+        test_args(quote! {x: Option<()>}, &[ArgType::Option]);
+        test_args(quote! {x: OptionalFlag}, &[ArgType::Option]);
         test_args(quote! {x: Option<&Rt<Slot<Object>>>}, &[ArgType::OptionRt]);
         test_args(quote! {x: Option<&Rto<Object>>}, &[ArgType::OptionRt]);
         test_args(quote! {x: &[Object]}, &[ArgType::Slice(Gc::Obj)]);

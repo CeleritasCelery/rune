@@ -4,7 +4,8 @@ use crate::core::env::{sym, Env};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Context, Rt, Rto};
 use crate::core::object::{
-    Function, Gc, LispString, Object, ObjectType, Symbol, TagType, WithLifetime, NIL, TRUE,
+    Function, Gc, LispString, Object, ObjectType, OptionalFlag, Symbol, TagType, WithLifetime, NIL,
+    TRUE,
 };
 use crate::reader;
 use crate::{interpreter, rooted_iter};
@@ -154,8 +155,8 @@ fn find_file_in_load_path(file: &str, cx: &Context, env: &Rt<Env>) -> Result<Pat
 #[defun]
 pub(crate) fn load(
     file: &Rto<Gc<&LispString>>,
-    noerror: Option<()>,
-    nomessage: Option<()>,
+    noerror: OptionalFlag,
+    nomessage: OptionalFlag,
     cx: &mut Context,
     env: &mut Rt<Env>,
 ) -> Result<bool> {
@@ -210,7 +211,7 @@ pub(crate) fn intern<'ob>(string: &str, cx: &'ob Context) -> Symbol<'ob> {
 }
 
 #[defun]
-pub(crate) fn intern_soft(string: Object, obarray: Option<()>) -> Result<Symbol> {
+pub(crate) fn intern_soft(string: Object, obarray: OptionalFlag) -> Result<Symbol> {
     ensure!(obarray.is_none(), "intern-soft obarray not implemented");
     match string.untag() {
         ObjectType::Symbol(sym) => {

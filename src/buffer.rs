@@ -4,7 +4,7 @@ use crate::{
         env::{interned_symbols, Env},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{Gc, LispBuffer, Object, ObjectType, NIL},
+        object::{Gc, LispBuffer, Object, ObjectType, OptionalFlag, NIL},
     },
     fns::slice_into_list,
 };
@@ -73,7 +73,7 @@ fn buffer_name(buffer: Option<Gc<&LispBuffer>>, env: &Rt<Env>) -> Result<String>
 }
 
 #[defun]
-fn rename_buffer(newname: &str, unique: Option<()>, env: &mut Rt<Env>) -> Result<String> {
+fn rename_buffer(newname: &str, unique: OptionalFlag, env: &mut Rt<Env>) -> Result<String> {
     let buf = env.current_buffer.get_mut();
     if buf.name == newname {
         return Ok(newname.to_string());
@@ -201,7 +201,7 @@ fn kill_buffer(buffer_or_name: Option<Object>, cx: &Context, env: &mut Rt<Env>) 
 }
 
 #[defun]
-fn buffer_base_buffer(_buffer: Option<()>) -> bool {
+fn buffer_base_buffer(_buffer: OptionalFlag) -> bool {
     // TODO: implement indirect buffers
     false
 }
@@ -213,7 +213,7 @@ fn get_file_buffer(_filename: &str) -> bool {
 }
 
 #[defun]
-fn buffer_list<'ob>(_frame: Option<()>, cx: &'ob Context) -> Object<'ob> {
+fn buffer_list<'ob>(_frame: OptionalFlag, cx: &'ob Context) -> Object<'ob> {
     // TODO: implement frame parameter
     // TODO: remove this temp vector
     let mut buffer_list: Vec<Object> = Vec::new();

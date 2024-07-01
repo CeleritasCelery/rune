@@ -1130,6 +1130,8 @@ impl From<Object<'_>> for () {
     fn from(_: Object) {}
 }
 
+pub(crate) type OptionalFlag = Option<()>;
+
 impl<'ob> TryFrom<Object<'ob>> for Number<'ob> {
     type Error = TypeError;
 

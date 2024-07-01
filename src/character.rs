@@ -1,7 +1,7 @@
 //! Character and string utilities.
 use crate::core::{
     gc::Context,
-    object::{int_to_char, Gc, Object, ObjectType},
+    object::{int_to_char, Gc, Object, ObjectType, OptionalFlag},
 };
 use anyhow::Result;
 use rune_macros::defun;
@@ -13,7 +13,7 @@ fn unibyte_string(bytes: &[Gc<i64>]) -> Result<Vec<u8>> {
 }
 
 #[defun]
-fn max_char(unicode: Option<()>) -> u32 {
+fn max_char(unicode: OptionalFlag) -> u32 {
     if unicode.is_some() {
         std::char::MAX as u32
     } else {
@@ -42,7 +42,7 @@ fn string(characters: &[Gc<i64>]) -> Result<String> {
 fn make_string<'ob>(
     length: usize,
     init: usize,
-    multibyte: Option<()>,
+    multibyte: OptionalFlag,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
     if multibyte.is_some() {

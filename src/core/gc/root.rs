@@ -3,7 +3,7 @@ use super::{
     GcState, Markable,
 };
 use super::{Block, Context, RootSet, Trace};
-use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, Untag, WithLifetime};
+use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, OptionalFlag, Untag, WithLifetime};
 use rune_core::hashmap::IndexMap;
 use std::hash::{Hash, Hasher};
 use std::slice::SliceIndex;
@@ -466,7 +466,7 @@ impl<T> Rt<Slot<Gc<T>>> {
     }
 }
 
-impl From<&Rt<Slot<Object<'_>>>> for Option<()> {
+impl From<&Rt<Slot<Object<'_>>>> for OptionalFlag {
     fn from(value: &Rt<Slot<Object<'_>>>) -> Self {
         value.inner().is_nil().then_some(())
     }

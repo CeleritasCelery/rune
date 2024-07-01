@@ -4,7 +4,7 @@
 
 use super::{
     super::error::{ArgError, Type, TypeError},
-    ByteString, LispHashTable, LispString, LispVec, NIL, TRUE,
+    ByteString, LispHashTable, LispString, LispVec, OptionalFlag, NIL, TRUE,
 };
 use super::{Gc, LispFloat, Object, ObjectType, Symbol};
 use anyhow::Context;
@@ -86,7 +86,7 @@ impl<'ob> TryFrom<Object<'ob>> for bool {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Option<()> {
+impl<'ob> TryFrom<Object<'ob>> for OptionalFlag {
     type Error = ArgError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil().then_some(()))

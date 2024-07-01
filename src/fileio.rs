@@ -4,7 +4,7 @@ use crate::core::{
     env::{sym, Env},
     error::{Type, TypeError},
     gc::{Context, Rt},
-    object::{Number, Object, ObjectType},
+    object::{Number, Object, ObjectType, OptionalFlag},
 };
 use anyhow::{bail, ensure, Result};
 use rune_macros::defun;
@@ -200,10 +200,10 @@ fn write_region(
     start: i64,
     end: i64,
     filename: &str,
-    append: Option<()>,
-    visit: Option<()>,
-    lockname: Option<()>,
-    mustbenew: Option<()>,
+    append: OptionalFlag,
+    visit: OptionalFlag,
+    lockname: OptionalFlag,
+    mustbenew: OptionalFlag,
     env: &Rt<Env>,
 ) -> Result<()> {
     use std::io::Write;

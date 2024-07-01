@@ -1,7 +1,9 @@
 use rune_macros::defun;
 
+use crate::core::object::OptionalFlag;
+
 #[defun]
-fn lock_buffer(_file: Option<()>) {
+fn lock_buffer(_file: OptionalFlag) {
     // TODO: implement
 }
 
