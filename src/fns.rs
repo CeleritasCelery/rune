@@ -7,7 +7,7 @@ use crate::{
         gc::{Context, Rt, Rto},
         object::{
             Function, Gc, HashTable, IntoObject, LispHashTable, LispString, LispVec, List,
-            ListType, Object, ObjectType, Symbol, WithLifetime, NIL,
+            ListType, Object, ObjectType, OptionalFlag, Symbol, WithLifetime, NIL,
         },
     },
     data::aref,
@@ -500,7 +500,7 @@ pub(crate) fn featurep(_feature: Symbol, _subfeature: Option<Symbol>) {}
 pub(crate) fn require<'ob>(
     feature: &Rto<Gc<Symbol>>,
     filename: Option<&Rto<Gc<&LispString>>>,
-    noerror: Option<()>,
+    noerror: OptionalFlag,
     env: &mut Rt<Env>,
     cx: &'ob mut Context,
 ) -> Result<Symbol<'ob>> {
@@ -642,7 +642,7 @@ pub(crate) fn compare_strings<'ob>(
     string2: &str,
     start2: Object<'ob>,
     end2: Object<'ob>,
-    ignore_case: Option<()>,
+    ignore_case: OptionalFlag,
 ) -> Result<Object<'ob>> {
     let start1 = match start1.untag() {
         ObjectType::Int(x) => x,
@@ -699,7 +699,7 @@ pub(crate) fn compare_strings<'ob>(
 }
 
 #[defun]
-pub(crate) fn string_distance(string1: &str, string2: &str, bytecompare: Option<()>) -> i64 {
+pub(crate) fn string_distance(string1: &str, string2: &str, bytecompare: OptionalFlag) -> i64 {
     if bytecompare.is_none() {
         levenshtein_distance(string1.chars(), string2.chars())
     } else {
