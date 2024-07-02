@@ -1,9 +1,9 @@
-use crate::data::{self, ArbitraryFunction};
+use crate::data;
 
 
 
 
-pub fn generate_sigs(string: &str) -> Vec<data::Function> {
+pub(crate) fn generate_sigs(string: &str) -> Vec<data::Function> {
     let file = syn::parse_file(string).unwrap();
 
     let functions = file.items.iter().filter_map(|item| {
@@ -31,7 +31,7 @@ pub fn generate_sigs(string: &str) -> Vec<data::Function> {
 }
 
 
-pub fn generate_tests(function: &data::Function, test_count: usize) -> Vec<data::ArbitraryFunction> {
+pub(crate) fn generate_tests(function: &data::Function, test_count: usize) -> Vec<data::ArbitraryFunction> {
     let mut tests: Vec<data::ArbitraryFunction> = Vec::new();
     for _ in 0..test_count {
         let function = function.clone();
@@ -40,10 +40,11 @@ pub fn generate_tests(function: &data::Function, test_count: usize) -> Vec<data:
     tests
 }
 
-pub fn generate_test_string(tests: Vec<data::ArbitraryFunction>) -> String {
+pub(crate) fn generate_test_string(tests: Vec<data::ArbitraryFunction>) -> String {
     let mut test_string = String::new();
     for test in tests {
         test_string.push_str(&test.to_string());
+        test_string.push_str("\n");
     }
     test_string
 }

@@ -29,17 +29,17 @@ impl Into<ArbitraryObjectType> for ObjectType {
         match self {
             ObjectType::String => ArbitraryObjectType::String(String::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Float => ArbitraryObjectType::Float(f64::arbitrary(&mut unstructured).unwrap()),
-            ObjectType::Cons => ArbitraryObjectType::Cons(Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap()), Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap())),
+            ObjectType::Cons => ArbitraryObjectType::Cons(Vec::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Symbol => ArbitraryObjectType::Symbol(String::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Integer => ArbitraryObjectType::Integer(i64::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Boolean => ArbitraryObjectType::Boolean(bool::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Unknown => ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap())),
-            ObjectType::Function => todo!(),
+            ObjectType::Function => ArbitraryObjectType::Function(u8::arbitrary(&mut unstructured).unwrap() % 10),
             ObjectType::UnibyteString => ArbitraryObjectType::UnibyteString(String::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Vector => ArbitraryObjectType::Vector(Vec::arbitrary(&mut unstructured).unwrap()),
             ObjectType::HashTable => ArbitraryObjectType::HashTable(Vec::arbitrary(&mut unstructured).unwrap()),
-            ObjectType::Record => ArbitraryObjectType::Record(Vec::arbitrary(&mut unstructured).unwrap()),
-            ObjectType::ByteFn => todo!(),
+            ObjectType::Record => ArbitraryObjectType::Record(String::arbitrary(&mut &mut unstructured).unwrap(), Vec::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::ByteFn => ArbitraryObjectType::ByteFn(u8::arbitrary(&mut unstructured).unwrap() % 10),
             ObjectType::Subr => todo!(),
             ObjectType::Buffer => todo!(),
             ObjectType::Nil => ArbitraryObjectType::Nil,
@@ -47,11 +47,11 @@ impl Into<ArbitraryObjectType> for ObjectType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Arbitrary)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
-    Cons(Box<ArbitraryObjectType>, Box<ArbitraryObjectType>),
+    Cons(Vec<ArbitraryObjectType>),
     Symbol(String),
     Integer(i64),
     Boolean(bool),
@@ -59,10 +59,63 @@ pub(crate) enum ArbitraryObjectType {
     UnibyteString(String),
     Vector(Vec<ArbitraryObjectType>),
     HashTable(Vec<(ArbitraryObjectType, ArbitraryObjectType)>),
-    Record(Vec<(String, ArbitraryObjectType)>),
+    Record(String, Vec<ArbitraryObjectType>),
     Nil,
+    Function(u8),
+    ByteFn(u8),
+}
 
-
+impl<'a> Arbitrary<'a> for ArbitraryObjectType {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let choice = u.int_in_range(0..=13)?;
+        match choice {
+            0 => {
+                Ok(ArbitraryObjectType::String(String::arbitrary(u)?))
+            },
+            1 => {
+                Ok(ArbitraryObjectType::Float(f64::arbitrary(u)?))
+            },
+            2 => {
+                Ok(ArbitraryObjectType::Cons(Vec::arbitrary(u)?))
+            },
+            3 => {
+                Ok(ArbitraryObjectType::Symbol(String::arbitrary(u)?))
+            },
+            4 => {
+                Ok(ArbitraryObjectType::Integer(i64::arbitrary(u)?))
+            },
+            5 => {
+                Ok(ArbitraryObjectType::Boolean(bool::arbitrary(u)?))
+            },
+            6 => {
+                Ok(ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(u)?)))
+            },
+            7 => {
+                Ok(ArbitraryObjectType::UnibyteString(String::arbitrary(u)?))
+            },
+            8 => {
+                Ok(ArbitraryObjectType::Vector(Vec::arbitrary(u)?))
+            },
+            9 => {
+                Ok(ArbitraryObjectType::HashTable(Vec::arbitrary(u)?))
+            },
+            10 => {
+                Ok(ArbitraryObjectType::Record(String::arbitrary(u)?, Vec::arbitrary(u)?))
+            },
+            11 => {
+                Ok(ArbitraryObjectType::Function(u8::arbitrary(u)? % 10))
+            },
+            12 => {
+                Ok(ArbitraryObjectType::ByteFn(u8::arbitrary(u)? % 10))
+            },
+            13 => {
+                Ok(ArbitraryObjectType::Nil)
+            },
+            _ => {
+                todo!()
+            },
+        }
+    }
 }
 
 impl std::fmt::Display for ArbitraryObjectType {
@@ -74,11 +127,18 @@ impl std::fmt::Display for ArbitraryObjectType {
             ArbitraryObjectType::Float(n) => {
                 write!(f, "{}", n)
             },
-            ArbitraryObjectType::Cons(car, cdr) => {
-                write!(f, "({} . {})", car, cdr)
+            ArbitraryObjectType::Cons(list) => {
+                write!(f, "'(")?;
+                for i in 0..list.len() {
+                    write!(f, "{}", list[i])?;
+                    if i < list.len() - 1 {
+                        write!(f, " ")?;
+                    }
+                }
+                write!(f, ")")
             },
             ArbitraryObjectType::Symbol(s) => {
-                write!(f, "{}", s)
+                write!(f, "'{}", s)
             },
             ArbitraryObjectType::Integer(n) => {
                 write!(f, "{}", n)
@@ -98,6 +158,37 @@ impl std::fmt::Display for ArbitraryObjectType {
             },
             ArbitraryObjectType::Nil => {
                 write!(f, "nil")
+            },
+            ArbitraryObjectType::Vector(vec) => {
+                write!(f, "{:?}", vec)
+            },
+            ArbitraryObjectType::HashTable(vec) => {
+                write!(f, "#s(hash-table data (")?;
+                for (key, value) in vec {
+                    write!(f, "{} {} ", key, value)?;
+                }
+                write!(f, "))")
+            },
+            ArbitraryObjectType::Record(name, members) => {
+                write!(f, "(record '{} ", name)?;
+                for member in members {
+                    write!(f, "{} ", member)?;
+                }
+                write!(f, ")")
+            },
+            ArbitraryObjectType::Function(arity) => {
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{} ", i)?;
+                }
+                write!(f, ") nil)")
+            },
+            ArbitraryObjectType::ByteFn(arity) => {
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{} ", i)?;
+                }
+                write!(f, ") nil)")
             },
             _ => {
                 todo!()
@@ -247,6 +338,15 @@ impl Function {
                     "Cons" | "List" => {
                         return Some(Type::Object(vec![ObjectType::Cons]));
                     },
+                    "OptionalFlag" => {
+                        return Some(Type::Object(vec![ObjectType::Boolean, ObjectType::Nil, ObjectType::Unknown]));
+                    },
+                    "LispVec" | "LispVector" => {
+                        return Some(Type::Object(vec![ObjectType::Vector]));
+                    },
+                    "LispHashTable" => {
+                        return Some(Type::Object(vec![ObjectType::HashTable]));
+                    },
                     "Rto" | "Rt" | "Gc" => {
                         let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
                             panic!("Expected angle bracketed arguments");
@@ -291,7 +391,7 @@ impl Function {
                 todo!("TraitObject")
             },
             syn::Type::Tuple(_) => {
-                tdo!("Tuple")
+                return Some(Type::Object(vec![ObjectType::Nil]));
             },
             syn::Type::Verbatim(stream) => {
                 for token in stream.clone().into_iter() {
