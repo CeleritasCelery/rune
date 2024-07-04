@@ -40,11 +40,9 @@ pub(crate) fn generate_tests(function: &data::Function, test_count: usize) -> Ve
     tests
 }
 
-pub(crate) fn generate_test_string(tests: Vec<data::ArbitraryFunction>) -> String {
-    let mut test_string = String::new();
+pub(crate) fn generate_test_string<I: std::io::Write>(output: &mut I, tests: Vec<data::ArbitraryFunction>) {
     for test in tests {
-        test_string.push_str(&test.to_string());
-        test_string.push_str("\n");
+        output.write_all(test.to_string().as_bytes()).unwrap();
+        output.write_all(b"\n").unwrap();
     }
-    test_string
 }

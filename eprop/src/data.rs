@@ -29,8 +29,24 @@ impl Into<ArbitraryObjectType> for ObjectType {
         match self {
             ObjectType::String => ArbitraryObjectType::String(String::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Float => ArbitraryObjectType::Float(f64::arbitrary(&mut unstructured).unwrap()),
-            ObjectType::Cons => ArbitraryObjectType::Cons(Vec::arbitrary(&mut unstructured).unwrap()),
-            ObjectType::Symbol => ArbitraryObjectType::Symbol(String::arbitrary(&mut unstructured).unwrap()),
+            ObjectType::Cons => {
+                let choice = rand::random::<usize>() % 20;
+                let mut list = Vec::new();
+                for _ in 0..choice {
+                    list.push(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap());
+                }
+                ArbitraryObjectType::Cons(list)
+            },
+            ObjectType::Symbol => {
+                let mut string: String = String::arbitrary(&mut unstructured).unwrap().chars().map(|c| match c {
+                    c if c.is_whitespace() => '_',
+                    c => c,
+                }).collect();
+                if string.len() == 0 {
+                    string.push('_');
+                }
+                ArbitraryObjectType::Symbol(string)
+            },
             ObjectType::Integer => ArbitraryObjectType::Integer(i64::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Boolean => ArbitraryObjectType::Boolean(bool::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Unknown => ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap())),
@@ -40,14 +56,14 @@ impl Into<ArbitraryObjectType> for ObjectType {
             ObjectType::HashTable => ArbitraryObjectType::HashTable(Vec::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Record => ArbitraryObjectType::Record(String::arbitrary(&mut &mut unstructured).unwrap(), Vec::arbitrary(&mut unstructured).unwrap()),
             ObjectType::ByteFn => ArbitraryObjectType::ByteFn(u8::arbitrary(&mut unstructured).unwrap() % 10),
-            ObjectType::Subr => todo!(),
-            ObjectType::Buffer => todo!(),
+            ObjectType::Subr => ArbitraryObjectType::Subr(u8::arbitrary(&mut unstructured).unwrap() % 10),
+            ObjectType::Buffer => ArbitraryObjectType::Buffer(String::arbitrary(&mut unstructured).unwrap()),
             ObjectType::Nil => ArbitraryObjectType::Nil,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
@@ -63,11 +79,13 @@ pub(crate) enum ArbitraryObjectType {
     Nil,
     Function(u8),
     ByteFn(u8),
+    Buffer(String),
+    Subr(u8),
 }
 
 impl<'a> Arbitrary<'a> for ArbitraryObjectType {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let choice = u.int_in_range(0..=13)?;
+        let choice = u.int_in_range(0..=15)?;
         match choice {
             0 => {
                 Ok(ArbitraryObjectType::String(String::arbitrary(u)?))
@@ -76,10 +94,22 @@ impl<'a> Arbitrary<'a> for ArbitraryObjectType {
                 Ok(ArbitraryObjectType::Float(f64::arbitrary(u)?))
             },
             2 => {
-                Ok(ArbitraryObjectType::Cons(Vec::arbitrary(u)?))
+                let choice = u.int_in_range(0..=20)?;
+                let mut list = Vec::new();
+                for _ in 0..choice {
+                    list.push(ArbitraryObjectType::arbitrary(u)?);
+                }
+                Ok(ArbitraryObjectType::Cons(list))
             },
             3 => {
-                Ok(ArbitraryObjectType::Symbol(String::arbitrary(u)?))
+                let mut string: String = String::arbitrary(u)?.chars().map(|c| match c {
+                    c if c.is_whitespace() => '_',
+                    c => c,
+                }).collect();
+                if string.len() == 0 {
+                    string.push('_');
+                }
+                Ok(ArbitraryObjectType::Symbol(string))
             },
             4 => {
                 Ok(ArbitraryObjectType::Integer(i64::arbitrary(u)?))
@@ -100,7 +130,12 @@ impl<'a> Arbitrary<'a> for ArbitraryObjectType {
                 Ok(ArbitraryObjectType::HashTable(Vec::arbitrary(u)?))
             },
             10 => {
-                Ok(ArbitraryObjectType::Record(String::arbitrary(u)?, Vec::arbitrary(u)?))
+                let choice = u.int_in_range(0..=10)?;
+                let mut list = Vec::new();
+                for _ in 0..choice {
+                    list.push(ArbitraryObjectType::arbitrary(u)?);
+                }
+                Ok(ArbitraryObjectType::Record(String::arbitrary(u)?, list))
             },
             11 => {
                 Ok(ArbitraryObjectType::Function(u8::arbitrary(u)? % 10))
@@ -110,6 +145,12 @@ impl<'a> Arbitrary<'a> for ArbitraryObjectType {
             },
             13 => {
                 Ok(ArbitraryObjectType::Nil)
+            },
+            14 => {
+                Ok(ArbitraryObjectType::Buffer(String::arbitrary(u)?))
+            },
+            15 => {
+                Ok(ArbitraryObjectType::Subr(u8::arbitrary(u)? % 10))
             },
             _ => {
                 todo!()
@@ -122,7 +163,18 @@ impl std::fmt::Display for ArbitraryObjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ArbitraryObjectType::String(s) => {
-                write!(f, "\"{}\"", s)
+                write!(f, "\"")?;
+                for c in s.chars() {
+                    match c {
+                        '\n' => write!(f, "\\n")?,
+                        '\t' => write!(f, "\\t")?,
+                        '\r' => write!(f, "\\r")?,
+                        '\\' => write!(f, "\\\\")?,
+                        '"' => write!(f, "\\\"")?,
+                        c => write!(f, "{}", c)?,
+                    }
+                }
+                write!(f, "\"")
             },
             ArbitraryObjectType::Float(n) => {
                 write!(f, "{}", n)
@@ -154,7 +206,18 @@ impl std::fmt::Display for ArbitraryObjectType {
                 write!(f, "{}", obj)
             },
             ArbitraryObjectType::UnibyteString(s) => {
-                write!(f, "{}", s)
+                write!(f, "\"")?;
+                for c in s.chars() {
+                    match c {
+                        '\n' => write!(f, "\\n")?,
+                        '\t' => write!(f, "\\t")?,
+                        '\r' => write!(f, "\\r")?,
+                        '\\' => write!(f, "\\\\")?,
+                        '"' => write!(f, "\\\"")?,
+                        c => write!(f, "{}", c)?,
+                    }
+                }
+                write!(f, "\"")
             },
             ArbitraryObjectType::Nil => {
                 write!(f, "nil")
@@ -190,10 +253,23 @@ impl std::fmt::Display for ArbitraryObjectType {
                 }
                 write!(f, ") nil)")
             },
-            _ => {
-                todo!()
+            ArbitraryObjectType::Buffer(name) => {
+                write!(f, "(generate-new-buffer {})", name)
+            },
+            ArbitraryObjectType::Subr(arity) => {
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{} ", i)?;
+                }
+                write!(f, ") nil)")
             },
         }
+    }
+}
+
+impl std::fmt::Debug for ArbitraryObjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -347,6 +423,21 @@ impl Function {
                     "LispHashTable" => {
                         return Some(Type::Object(vec![ObjectType::HashTable]));
                     },
+                    "ByteString" => {
+                        return Some(Type::Object(vec![ObjectType::UnibyteString]));
+                    },
+                    "Record" => {
+                        return Some(Type::Object(vec![ObjectType::Record]));
+                    },
+                    "ByteFn" => {
+                        return Some(Type::Object(vec![ObjectType::ByteFn]));
+                    },
+                    "SubrFn" => {
+                        return Some(Type::Object(vec![ObjectType::Subr]));
+                    },
+                    "Buffer" => {
+                        return Some(Type::Object(vec![ObjectType::Buffer]));
+                    },
                     "Rto" | "Rt" | "Gc" => {
                         let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) = &segments.last().unwrap().arguments else {
                             panic!("Expected angle bracketed arguments");
@@ -393,38 +484,7 @@ impl Function {
             syn::Type::Tuple(_) => {
                 return Some(Type::Object(vec![ObjectType::Nil]));
             },
-            syn::Type::Verbatim(stream) => {
-                for token in stream.clone().into_iter() {
-                    match token {
-                        proc_macro2::TokenTree::Ident(ident) => {
-                            let source_text = ident.span().source_text().unwrap();
-                            match source_text.as_str() {
-                                "StringOrSymbol" => {
-                                    return Some(Type::Object(vec![ObjectType::String, ObjectType::Symbol]));
-                                },
-                                "Number" => {
-                                    return Some(Type::Object(vec![ObjectType::Integer, ObjectType::Float]));
-                                },
-                                "Object" => {
-                                    return Some(Type::Object(vec![ObjectType::Unknown]));
-                                },
-                                "usize" => {
-                                    return Some(Type::Object(vec![ObjectType::Integer]));
-                                },
-                                "str" => {
-                                    return Some(Type::Object(vec![ObjectType::String]));
-                                },
-                                _ => {
-                                    panic!("Unknown type: {}", source_text);
-                                }
-                            }
-                        },
-                        proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ')' => {
-                            return Some(Type::Object(vec![ObjectType::Boolean]));
-                        }, 
-                        _ => continue,
-                    }
-                }
+            syn::Type::Verbatim(_) => {
                 None
             },
             _ => {
@@ -436,7 +496,7 @@ impl Function {
 
 impl From<&ItemFn> for Function {
     fn from(item: &ItemFn) -> Self {
-        println!("{}", item.sig.ident.to_string());
+        //println!("{}", item.sig.ident.to_string());
         let name = item.sig.ident.to_string().chars().map(|c| match c {
             '_' => '-',
             c => c,
@@ -581,7 +641,7 @@ impl From<&ItemFn> for Function {
                         let syn::token::Group { span } = group_token;
 
                         let source_text = span.source_text().unwrap();
-                        println!("{}", source_text);
+                        //println!("{}", source_text);
                         let fallible = match source_text.as_str() {
                             "Option" => true,
                             "Result" => true,
@@ -623,7 +683,7 @@ impl From<&ItemFn> for Function {
                         }
                     },
                     x => {
-                        println!("return type");
+                        //println!("return type");
                         let ty = Function::process_arg(x).unwrap();
 
                         (ty, false)
@@ -643,6 +703,7 @@ impl From<&ItemFn> for Function {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct ArbitraryFunction {
     name: String,
     args: Vec<ArbitraryArgType>,
