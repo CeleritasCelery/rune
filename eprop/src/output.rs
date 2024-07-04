@@ -1,9 +1,6 @@
 use std::fs::File;
 use std::io::Write;
 
-
-
-
 pub(crate) enum Output {
     Stdout(String),
     File(File),
@@ -29,22 +26,18 @@ impl Write for Output {
                 string.push_str(buf);
                 Ok(buf.len())
             }
-            Output::File(file) => {
-                file.write(buf)
-            }
+            Output::File(file) => file.write(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             Output::Stdout(buf) => {
-                print!("{}", buf);
+                print!("{buf}");
                 std::io::stdout().flush()?;
                 Ok(())
             }
-            Output::File(file) => {
-                file.flush()
-            }
+            Output::File(file) => file.flush(),
         }
     }
 }

@@ -23,7 +23,10 @@ fn main() {
     let functions = generate::generate_sigs(&fs::read_to_string(cli.file).unwrap());
     eprintln!("Generating Tests");
     let test_count = cli.test_count.unwrap_or(10);
-    let tests = functions.iter().flat_map(|function| generate::generate_tests(function, test_count)).collect();
+    let tests = functions
+        .iter()
+        .flat_map(|function| generate::generate_tests(function, test_count))
+        .collect();
 
     eprintln!("Generating Test String");
     let mut output = output::Output::new(cli.output);
