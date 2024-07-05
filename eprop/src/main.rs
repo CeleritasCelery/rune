@@ -13,6 +13,8 @@ struct Cli {
     test_count: Option<usize>,
     #[arg(short, long)]
     output: Option<PathBuf>,
+    #[arg(short, long)]
+    function: Option<String>,
 }
 
 fn main() {
@@ -20,7 +22,7 @@ fn main() {
 
     eprintln!("Generating tests for {}", cli.file);
     eprintln!("Generating Functions");
-    let functions = generate::generate_sigs(&fs::read_to_string(cli.file).unwrap());
+    let functions = generate::generate_sigs(&fs::read_to_string(cli.file).unwrap(), &cli.function);
     eprintln!("Generating Tests");
     let test_count = cli.test_count.unwrap_or(10);
     let tests = functions

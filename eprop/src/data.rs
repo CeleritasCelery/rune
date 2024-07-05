@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use arbitrary::Arbitrary;
 use syn::ItemFn;
 
@@ -26,74 +28,29 @@ impl From<ObjectType> for ArbitraryObjectType {
         let list = rand::random::<[u8; 32]>();
         let mut unstructured = arbitrary::Unstructured::new(&list);
         match val {
-            ObjectType::String => {
-                ArbitraryObjectType::String(String::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Float => {
-                ArbitraryObjectType::Float(f64::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Cons => {
-                let choice = rand::random::<usize>() % 20;
-                let mut list = Vec::new();
-                for _ in 0..choice {
-                    list.push(ArbitraryObjectType::arbitrary(&mut unstructured).unwrap());
-                }
-                ArbitraryObjectType::Cons(list)
-            }
-            ObjectType::Symbol => {
-                let mut string: String = String::arbitrary(&mut unstructured)
-                    .unwrap()
-                    .chars()
-                    .map(|c| match c {
-                        c if c.is_whitespace() => '_',
-                        c => c,
-                    })
-                    .collect();
-                if string.is_empty() {
-                    string.push('_');
-                }
-                ArbitraryObjectType::Symbol(string)
-            }
-            ObjectType::Integer => {
-                ArbitraryObjectType::Integer(i64::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Boolean => {
-                ArbitraryObjectType::Boolean(bool::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Unknown => ArbitraryObjectType::Unknown(Box::new(
-                ArbitraryObjectType::arbitrary(&mut unstructured).unwrap(),
-            )),
-            ObjectType::Function => {
-                ArbitraryObjectType::Function(u8::arbitrary(&mut unstructured).unwrap() % 10)
-            }
+            ObjectType::String => ArbitraryObjectType::generate_string(&mut unstructured),
+            ObjectType::Float => ArbitraryObjectType::generate_float(&mut unstructured),
+            ObjectType::Cons => ArbitraryObjectType::generate_cons(&mut unstructured),
+            ObjectType::Symbol => ArbitraryObjectType::generate_symbol(&mut unstructured),
+            ObjectType::Integer => ArbitraryObjectType::generate_integer(&mut unstructured),
+            ObjectType::Boolean => ArbitraryObjectType::generate_boolean(&mut unstructured),
+            ObjectType::Unknown => ArbitraryObjectType::generate_unknown(&mut unstructured),
+            ObjectType::Function => ArbitraryObjectType::generate_function(&mut unstructured),
             ObjectType::UnibyteString => {
-                ArbitraryObjectType::UnibyteString(String::arbitrary(&mut unstructured).unwrap())
+                ArbitraryObjectType::generate_unibyte_string(&mut unstructured)
             }
-            ObjectType::Vector => {
-                ArbitraryObjectType::Vector(Vec::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::HashTable => {
-                ArbitraryObjectType::HashTable(Vec::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Record => ArbitraryObjectType::Record(
-                String::arbitrary(&mut unstructured).unwrap(),
-                Vec::arbitrary(&mut unstructured).unwrap(),
-            ),
-            ObjectType::ByteFn => {
-                ArbitraryObjectType::ByteFn(u8::arbitrary(&mut unstructured).unwrap() % 10)
-            }
-            ObjectType::Subr => {
-                ArbitraryObjectType::Subr(u8::arbitrary(&mut unstructured).unwrap() % 10)
-            }
-            ObjectType::Buffer => {
-                ArbitraryObjectType::Buffer(String::arbitrary(&mut unstructured).unwrap())
-            }
-            ObjectType::Nil => ArbitraryObjectType::Nil,
+            ObjectType::Vector => ArbitraryObjectType::generate_vector(&mut unstructured),
+            ObjectType::HashTable => ArbitraryObjectType::generate_hash_table(&mut unstructured),
+            ObjectType::Record => ArbitraryObjectType::generate_record(&mut unstructured),
+            ObjectType::ByteFn => ArbitraryObjectType::generate_byte_fn(&mut unstructured),
+            ObjectType::Subr => ArbitraryObjectType::generate_subr(&mut unstructured),
+            ObjectType::Buffer => ArbitraryObjectType::generate_buffer(&mut unstructured),
+            ObjectType::Nil => ArbitraryObjectType::generate_nil(),
         }
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
@@ -113,52 +70,141 @@ pub(crate) enum ArbitraryObjectType {
     Subr(u8),
 }
 
+impl ArbitraryObjectType {
+    fn generate_string(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::String(String::arbitrary(u).unwrap())
+    }
+    fn generate_float(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Float(f64::arbitrary(u).unwrap())
+    }
+    fn generate_cons(u: &mut arbitrary::Unstructured) -> Self {
+        let choice = rand::random::<usize>() % 20;
+        let mut list = Vec::new();
+        for _ in 0..choice {
+            list.push(ArbitraryObjectType::arbitrary(u).unwrap());
+        }
+        ArbitraryObjectType::Cons(list)
+    }
+    fn generate_symbol(u: &mut arbitrary::Unstructured) -> Self {
+        let mut string: String = String::arbitrary(u)
+            .unwrap()
+            .chars()
+            .map(|c| match c {
+                c if c.is_whitespace() => '_',
+                c => c,
+            })
+            .collect();
+        if string.is_empty() {
+            string.push('_');
+        }
+        ArbitraryObjectType::Symbol(string)
+    }
+    fn generate_integer(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Integer(i64::arbitrary(u).unwrap())
+    }
+    fn generate_boolean(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Boolean(bool::arbitrary(u).unwrap())
+    }
+    fn generate_unknown(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(u).unwrap()))
+    }
+    fn generate_unibyte_string(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::UnibyteString(String::arbitrary(u).unwrap())
+    }
+    fn generate_vector(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Vector(Vec::arbitrary(u).unwrap())
+    }
+    fn generate_hash_table(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::HashTable(Vec::arbitrary(u).unwrap())
+    }
+    fn generate_record(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Record(String::arbitrary(u).unwrap(), Vec::arbitrary(u).unwrap())
+    }
+    fn generate_nil() -> Self {
+        ArbitraryObjectType::Nil
+    }
+    fn generate_function(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Function(u8::arbitrary(u).unwrap() % 10)
+    }
+    fn generate_byte_fn(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::ByteFn(u8::arbitrary(u).unwrap() % 10)
+    }
+    fn generate_buffer(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Buffer(String::arbitrary(u).unwrap())
+    }
+    fn generate_subr(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Subr(u8::arbitrary(u).unwrap() % 10)
+    }
+}
+
+impl Hash for ArbitraryObjectType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            ArbitraryObjectType::String(s)
+            | ArbitraryObjectType::Symbol(s)
+            | ArbitraryObjectType::UnibyteString(s) => {
+                s.hash(state);
+            }
+            ArbitraryObjectType::Float(f) => {
+                f.to_bits().hash(state);
+            }
+            ArbitraryObjectType::Cons(list) => {
+                list.hash(state);
+            }
+            ArbitraryObjectType::Integer(i) => {
+                i.hash(state);
+            }
+            ArbitraryObjectType::Boolean(b) => {
+                b.hash(state);
+            }
+            ArbitraryObjectType::Unknown(obj) => {
+                obj.hash(state);
+            }
+            ArbitraryObjectType::Vector(vec) => {
+                vec.hash(state);
+            }
+            ArbitraryObjectType::HashTable(vec) => {
+                vec.hash(state);
+            }
+            ArbitraryObjectType::Record(name, members) => {
+                name.hash(state);
+                members.hash(state);
+            }
+            ArbitraryObjectType::Nil => {
+                0.hash(state);
+            }
+            ArbitraryObjectType::Function(arity)
+            | ArbitraryObjectType::ByteFn(arity)
+            | ArbitraryObjectType::Subr(arity) => {
+                arity.hash(state);
+            }
+            ArbitraryObjectType::Buffer(name) => {
+                name.hash(state);
+            }
+        }
+    }
+}
+
 impl<'a> Arbitrary<'a> for ArbitraryObjectType {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let choice = u.int_in_range(0..=15)?;
         match choice {
-            0 => Ok(ArbitraryObjectType::String(String::arbitrary(u)?)),
-            1 => Ok(ArbitraryObjectType::Float(f64::arbitrary(u)?)),
-            2 => {
-                let choice = u.int_in_range(0..=20)?;
-                let mut list = Vec::new();
-                for _ in 0..choice {
-                    list.push(ArbitraryObjectType::arbitrary(u)?);
-                }
-                Ok(ArbitraryObjectType::Cons(list))
-            }
-            3 => {
-                let mut string: String = String::arbitrary(u)?
-                    .chars()
-                    .map(|c| match c {
-                        c if c.is_whitespace() => '_',
-                        c => c,
-                    })
-                    .collect();
-                if string.is_empty() {
-                    string.push('_');
-                }
-                Ok(ArbitraryObjectType::Symbol(string))
-            }
-            4 => Ok(ArbitraryObjectType::Integer(i64::arbitrary(u)?)),
-            5 => Ok(ArbitraryObjectType::Boolean(bool::arbitrary(u)?)),
-            6 => Ok(ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(u)?))),
-            7 => Ok(ArbitraryObjectType::UnibyteString(String::arbitrary(u)?)),
-            8 => Ok(ArbitraryObjectType::Vector(Vec::arbitrary(u)?)),
-            9 => Ok(ArbitraryObjectType::HashTable(Vec::arbitrary(u)?)),
-            10 => {
-                let choice = u.int_in_range(0..=10)?;
-                let mut list = Vec::new();
-                for _ in 0..choice {
-                    list.push(ArbitraryObjectType::arbitrary(u)?);
-                }
-                Ok(ArbitraryObjectType::Record(String::arbitrary(u)?, list))
-            }
-            11 => Ok(ArbitraryObjectType::Function(u8::arbitrary(u)? % 10)),
-            12 => Ok(ArbitraryObjectType::ByteFn(u8::arbitrary(u)? % 10)),
-            13 => Ok(ArbitraryObjectType::Nil),
-            14 => Ok(ArbitraryObjectType::Buffer(String::arbitrary(u)?)),
-            15 => Ok(ArbitraryObjectType::Subr(u8::arbitrary(u)? % 10)),
+            0 => Ok(ArbitraryObjectType::generate_string(u)),
+            1 => Ok(ArbitraryObjectType::generate_float(u)),
+            2 => Ok(ArbitraryObjectType::generate_cons(u)),
+            3 => Ok(ArbitraryObjectType::generate_symbol(u)),
+            4 => Ok(ArbitraryObjectType::generate_integer(u)),
+            5 => Ok(ArbitraryObjectType::generate_boolean(u)),
+            6 => Ok(ArbitraryObjectType::generate_unknown(u)),
+            7 => Ok(ArbitraryObjectType::generate_unibyte_string(u)),
+            8 => Ok(ArbitraryObjectType::generate_vector(u)),
+            9 => Ok(ArbitraryObjectType::generate_hash_table(u)),
+            10 => Ok(ArbitraryObjectType::generate_record(u)),
+            11 => Ok(ArbitraryObjectType::generate_function(u)),
+            12 => Ok(ArbitraryObjectType::generate_byte_fn(u)),
+            13 => Ok(ArbitraryObjectType::generate_nil()),
+            14 => Ok(ArbitraryObjectType::generate_buffer(u)),
+            15 => Ok(ArbitraryObjectType::generate_subr(u)),
             _ => {
                 todo!()
             }
@@ -287,7 +333,7 @@ pub(crate) enum Type {
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq, Arbitrary)]
+#[derive(Debug, Clone, PartialEq, Arbitrary, PartialOrd, Hash)]
 pub(crate) enum ArbitraryType {
     Object(ArbitraryObjectType),
     Nil,
@@ -325,6 +371,7 @@ pub(crate) enum ArgType {
     Optional(Type),
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) enum ArbitraryArgType {
     Required(ArbitraryType),
     Optional(ArbitraryType),
@@ -352,25 +399,32 @@ impl Function {
     fn process_arg(ty: &syn::Type) -> Option<Type> {
         match ty {
             syn::Type::Array(_) => {
-                todo!("Array")
+                eprintln!("Array not supported");
+                None
             }
             syn::Type::BareFn(_) => {
-                todo!("BareFn")
+                eprintln!("BareFn not supported");
+                None
             }
             syn::Type::ImplTrait(_) => {
-                todo!("Impl Trait")
+                eprintln!("Impl Trait not supported");
+                None
             }
             syn::Type::Infer(_) => {
-                todo!("Infer")
+                eprintln!("Infer not supported");
+                None
             }
             syn::Type::Macro(_) => {
-                todo!("Macro")
+                eprintln!("Macro not supported");
+                None
             }
             syn::Type::Never(_) => {
-                todo!("Never")
+                eprintln!("Never not supported");
+                None
             }
             syn::Type::Paren(_) => {
-                todo!("Paren")
+                eprintln!("Paren not supported");
+                None
             }
             syn::Type::Path(syn::TypePath { path, .. }) => {
                 let segments = &path.segments;
@@ -406,7 +460,8 @@ impl Function {
                             syn::AngleBracketedGenericArguments { args, .. },
                         ) = &segments.last().unwrap().arguments
                         else {
-                            panic!("Expected angle bracketed arguments");
+                            eprintln!("Expected angle bracketed arguments");
+                            return None;
                         };
                         let mut type_argument = None;
                         for arg in args {
@@ -419,7 +474,8 @@ impl Function {
                         }
 
                         let Some(ty) = type_argument else {
-                            panic!("Expected type argument");
+                            eprintln!("Expected type argument");
+                            return None;
                         };
 
                         let ty = Function::process_arg(ty)?;
@@ -428,12 +484,14 @@ impl Function {
                     }
                     "Env" | "Context" => None,
                     _ => {
-                        panic!("Unknown type: {last}");
+                        eprintln!("Unknown type: {last}");
+                        None
                     }
                 }
             }
             syn::Type::Ptr(_) => {
-                todo!("Ptr")
+                eprintln!("Ptr not supported");
+                None
             }
             syn::Type::Reference(syn::TypeReference { elem, .. })
             | syn::Type::Group(syn::TypeGroup { elem, .. }) => Function::process_arg(elem),
@@ -441,20 +499,20 @@ impl Function {
                 Some(Type::Object(vec![ObjectType::Cons, ObjectType::Nil]))
             }
             syn::Type::TraitObject(_) => {
-                todo!("TraitObject")
+                eprintln!("TraitObject not supported");
+                None
             }
             syn::Type::Tuple(_) => Some(Type::Object(vec![ObjectType::Nil])),
             syn::Type::Verbatim(_) => None,
             _ => {
-                todo!("Catch all")
+                eprintln!("Unknown type");
+                None
             }
         }
     }
-}
 
-impl From<&ItemFn> for Function {
     #[allow(clippy::too_many_lines)]
-    fn from(item: &ItemFn) -> Self {
+    pub(crate) fn from_item(item: &ItemFn) -> Option<Self> {
         //println!("{}", item.sig.ident.to_string());
         let name = item
             .sig
@@ -513,7 +571,8 @@ impl From<&ItemFn> for Function {
                                 syn::AngleBracketedGenericArguments { args, .. },
                             ) = &segments.last().unwrap().arguments
                             else {
-                                panic!("Expected angle bracketed arguments");
+                                eprintln!("Expected angle bracketed arguments");
+                                return None;
                             };
                             let mut type_argument = None;
                             for arg in args {
@@ -526,7 +585,8 @@ impl From<&ItemFn> for Function {
                             }
 
                             let Some(ty) = type_argument else {
-                                panic!("Expected type argument");
+                                eprintln!("Expected type argument");
+                                return None;
                             };
 
                             let ty = Function::process_arg(ty)?;
@@ -617,7 +677,8 @@ impl From<&ItemFn> for Function {
                                 }
 
                                 let Some(ty) = type_argument else {
-                                    panic!("Expected type argument");
+                                    eprintln!("Expected type argument");
+                                    return None;
                                 };
 
                                 let ty = Function::process_arg(ty).unwrap();
@@ -639,11 +700,12 @@ impl From<&ItemFn> for Function {
             }
         };
 
-        Function { name, args, ret, fallible }
+        Some(Function { name, args, ret, fallible })
     }
 }
 
 #[allow(dead_code)]
+#[derive(Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) struct ArbitraryFunction {
     name: String,
     args: Vec<ArbitraryArgType>,

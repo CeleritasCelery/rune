@@ -1,6 +1,6 @@
 use crate::data;
 
-pub(crate) fn generate_sigs(string: &str) -> Vec<data::Function> {
+pub(crate) fn generate_sigs(string: &str, function_name: &Option<String>) -> Vec<data::Function> {
     let file = syn::parse_file(string).unwrap();
 
     let functions = file
@@ -21,7 +21,12 @@ pub(crate) fn generate_sigs(string: &str) -> Vec<data::Function> {
                 if !is_defun {
                     return None;
                 }
-                Some(data::Function::from(func))
+                if let Some(name) = function_name {
+                    if func.sig.ident != *name {
+                        return None;
+                    }
+                }
+                data::Function::from_item(func)
             } else {
                 None
             }
