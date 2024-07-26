@@ -506,7 +506,7 @@ pub(crate) fn require<'ob>(
 ) -> Result<Symbol<'ob>> {
     // TODO: Fix this unsafe into_root
     let feat = unsafe { feature.untag(cx).with_lifetime() };
-    if crate::data::features().lock().unwrap().contains(&feat) {
+    if crate::data::FEATURES.lock().unwrap().contains(&feat) {
         return Ok(feature.untag(cx));
     }
     let file = match filename {

@@ -1,7 +1,7 @@
 //! Utilities for variables and values.
 use crate::core::{
     cons::Cons,
-    env::{interned_symbols, sym, Env},
+    env::{sym, Env, INTERNED_SYMBOLS},
     error::{Type, TypeError},
     gc::{Context, Rt},
     object::{List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL},
@@ -9,20 +9,14 @@ use crate::core::{
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
 use rune_macros::defun;
+use std::sync::LazyLock;
 use std::sync::Mutex;
-use std::sync::OnceLock;
-
-static FEATURES: OnceLock<Mutex<HashSet<Symbol<'static>>>> = OnceLock::new();
 
 /// Rust translation of the `features` variable: A list of symbols are the features
 /// of the executing Emacs. Used by [`featurep`](`crate::fns::featurep`) and [`require`](`crate::fns::require`),
-/// altered by [`provide`]. Vended through a helper function to avoid calling `get_or_init` on each of the calls
-/// to `lock()` on the Mutex.
-///
-/// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
-pub(crate) fn features() -> &'static Mutex<HashSet<Symbol<'static>>> {
-    FEATURES.get_or_init(Mutex::default)
-}
+/// altered by [`provide`].
+pub(crate) static FEATURES: LazyLock<Mutex<HashSet<Symbol<'static>>>> =
+    LazyLock::new(Mutex::default);
 
 #[defun]
 pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: Object) -> Result<Symbol<'ob>> {
@@ -30,7 +24,7 @@ pub(crate) fn fset<'ob>(symbol: Symbol<'ob>, definition: Object) -> Result<Symbo
         symbol.unbind_func();
     } else {
         let func = definition.try_into()?;
-        let map = interned_symbols().lock().unwrap();
+        let map = INTERNED_SYMBOLS.lock().unwrap();
         map.set_func(symbol, func)?;
     }
     Ok(symbol)
@@ -412,7 +406,7 @@ pub(crate) fn indirect_function<'ob>(object: Object<'ob>, cx: &'ob Context) -> O
 
 #[defun]
 pub(crate) fn provide<'ob>(feature: Symbol<'ob>, _subfeatures: Option<&Cons>) -> Symbol<'ob> {
-    let mut features = features().lock().unwrap();
+    let mut features = FEATURES.lock().unwrap();
     // TODO: SYMBOL - need to trace this
     let feat = unsafe { feature.with_lifetime() };
     features.insert(feat);

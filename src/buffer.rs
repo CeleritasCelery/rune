@@ -1,7 +1,7 @@
 //! Buffer operations.
 use crate::{
     core::{
-        env::{interned_symbols, Env},
+        env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
         object::{Gc, LispBuffer, Object, ObjectType, OptionalFlag, NIL},
@@ -11,19 +11,12 @@ use crate::{
 use anyhow::{bail, Result};
 use rune_core::hashmap::HashMap;
 use rune_macros::defun;
+use std::sync::LazyLock;
 use std::sync::Mutex;
-use std::sync::OnceLock;
 
 type BufferMap = HashMap<String, &'static LispBuffer>;
 // static hashmap containing all the buffers
-static BUFFERS: OnceLock<Mutex<BufferMap>> = OnceLock::new();
-
-/// Helper function to avoid calling `get_or_init` on each of the calls to `lock()` on the Mutex.
-///
-/// TODO: Use `LazyLock`: <https://github.com/CeleritasCelery/rune/issues/34>
-pub(crate) fn buffers() -> &'static Mutex<BufferMap> {
-    BUFFERS.get_or_init(Mutex::default)
-}
+pub(crate) static BUFFERS: LazyLock<Mutex<BufferMap>> = LazyLock::new(Mutex::default);
 
 #[defun]
 pub(crate) fn set_buffer<'ob>(
@@ -40,7 +33,7 @@ fn resolve_buffer<'ob>(buffer_or_name: Object, cx: &'ob Context) -> Result<&'ob 
     match buffer_or_name.untag() {
         ObjectType::Buffer(b) => Ok(b),
         ObjectType::String(name) => {
-            let buffer_list = buffers().lock().unwrap();
+            let buffer_list = BUFFERS.lock().unwrap();
             let Some(buffer) = buffer_list.get(name.as_ref()) else {
                 bail!("No buffer named {}", name);
             };
@@ -78,7 +71,7 @@ fn rename_buffer(newname: &str, unique: OptionalFlag, env: &mut Rt<Env>) -> Resu
     if buf.name == newname {
         return Ok(newname.to_string());
     }
-    let mut buffer_list = buffers().lock().unwrap();
+    let mut buffer_list = BUFFERS.lock().unwrap();
     let mut replace_buffer = |buffer_list: &mut HashMap<_, _>, newname: &str| {
         let buffer = buffer_list.remove(&buf.name).unwrap();
         buffer_list.insert(newname.into(), buffer);
@@ -106,14 +99,14 @@ pub(crate) fn get_buffer_create<'ob>(
 ) -> Result<Object<'ob>> {
     match buffer_or_name.untag() {
         ObjectType::String(name) => {
-            let mut buffer_list = buffers().lock().unwrap();
+            let mut buffer_list = BUFFERS.lock().unwrap();
             match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
                 None => {
                     // If not already in the global buffer list, create a new
                     // buffer and add it
                     let buffer: &'static _ = {
-                        let global = interned_symbols().lock().unwrap();
+                        let global = INTERNED_SYMBOLS.lock().unwrap();
                         let buffer = global.create_buffer(name);
                         // SAFETY: This can be 'static because it is stored in the
                         // global block. Eventually it will be garbage collected
@@ -136,7 +129,7 @@ pub(crate) fn get_buffer<'ob>(
 ) -> Result<Object<'ob>> {
     match buffer_or_name.untag() {
         ObjectType::String(name) => {
-            let buffer_list = buffers().lock().unwrap();
+            let buffer_list = BUFFERS.lock().unwrap();
             match buffer_list.get(name.as_ref()) {
                 Some(b) => Ok(cx.add(*b)),
                 None => Ok(NIL),
@@ -160,7 +153,7 @@ pub(crate) fn get_buffer<'ob>(
 /// is first appended to NAME, to speed up finding a non-existent buffer.
 #[defun]
 pub(crate) fn generate_new_buffer_name(name: &str, ignore: Option<&str>) -> String {
-    unique_buffer_name(name, ignore, &buffers().lock().unwrap())
+    unique_buffer_name(name, ignore, &BUFFERS.lock().unwrap())
 }
 
 fn unique_buffer_name(name: &str, ignore: Option<&str>, buffer_list: &BufferMap) -> String {
@@ -217,7 +210,7 @@ fn buffer_list<'ob>(_frame: OptionalFlag, cx: &'ob Context) -> Object<'ob> {
     // TODO: implement frame parameter
     // TODO: remove this temp vector
     let mut buffer_list: Vec<Object> = Vec::new();
-    for buffer in buffers().lock().unwrap().values() {
+    for buffer in BUFFERS.lock().unwrap().values() {
         buffer_list.push(cx.add(*buffer));
     }
     slice_into_list(&buffer_list, None, cx)

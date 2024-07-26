@@ -222,7 +222,7 @@ pub(crate) fn intern_soft(string: Object, obarray: OptionalFlag) -> Result<Symbo
             }
         }
         ObjectType::String(string) => {
-            let map = crate::core::env::interned_symbols().lock().unwrap();
+            let map = crate::core::env::INTERNED_SYMBOLS.lock().unwrap();
             match map.get(string) {
                 Some(sym) => Ok(unsafe { sym.with_lifetime() }),
                 None => Ok(sym::NIL),

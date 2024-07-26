@@ -36,10 +36,10 @@ impl<'a> Default for CurrentBuffer<'a> {
         let name = crate::buffer::generate_new_buffer_name("*scratch*", None);
         let buffer = {
             // // need to drop global to avoid deadlocks
-            let global = interned_symbols().lock().unwrap();
+            let global = INTERNED_SYMBOLS.lock().unwrap();
             unsafe { global.create_buffer(&name).with_lifetime() }
         };
-        crate::buffer::buffers().lock().unwrap().insert(name, buffer);
+        crate::buffer::BUFFERS.lock().unwrap().insert(name, buffer);
         Self { buffer: Default::default(), buf_ref: buffer }
     }
 }

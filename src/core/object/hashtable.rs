@@ -3,7 +3,7 @@
 //! iterate and mutate at the same time. Third we need to be able to clean up
 //! the heap allocation when it is garbage collected.
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object, WithLifetime};
-use crate::core::env::interned_symbols;
+use crate::core::env::INTERNED_SYMBOLS;
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::NewtypeMarkable;
 use macro_attr_2018::macro_attr;
@@ -99,7 +99,7 @@ impl<'a> HashTableCore<'a> {
                 table.borrow_mut().inner.insert(key, value)
             }
             HashTableType::Global(table) => {
-                let map = interned_symbols().lock().unwrap();
+                let map = INTERNED_SYMBOLS.lock().unwrap();
                 let block = map.global_block();
                 // Need to clone these objects in the global block since this
                 // hashtable is globally shared

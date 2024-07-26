@@ -82,7 +82,7 @@ include!(concat!(env!("OUT_DIR"), "/sym.rs"));
 
 /// Intern a new symbol based on `name`
 pub(crate) fn intern<'ob>(name: &str, cx: &'ob Context) -> Symbol<'ob> {
-    interned_symbols().lock().unwrap().intern(name, cx)
+    INTERNED_SYMBOLS.lock().unwrap().intern(name, cx)
 }
 
 #[cfg(test)]

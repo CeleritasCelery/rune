@@ -224,12 +224,8 @@ pub(crate) fn init_symbols() {{
     writeln!(
         f,
         "
-/// TODO: Use `LazyLock`: https://github.com/CeleritasCelery/rune/issues/34
-use std::sync::OnceLock;
-static INTERNED_SYMBOLS: OnceLock<std::sync::Mutex<SymbolMap>> = OnceLock::new();
-
-pub(crate) fn interned_symbols() -> &'static std::sync::Mutex<SymbolMap> {{
-    INTERNED_SYMBOLS.get_or_init(|| std::sync::Mutex::new({{
+use std::sync::LazyLock;
+pub(crate) static INTERNED_SYMBOLS: LazyLock<std::sync::Mutex<SymbolMap>> = LazyLock::new(|| std::sync::Mutex::new({{
         let size: usize = {symbol_len};
         let mut map = SymbolMapCore::with_capacity(size);
         for sym in &sym::BUILTIN_SYMBOLS {{
@@ -239,8 +235,7 @@ pub(crate) fn interned_symbols() -> &'static std::sync::Mutex<SymbolMap> {{
             map,
             block: Block::new_global(),
         }}
-    }}))
-}}
+    }}));
 "
     )
     .unwrap();
