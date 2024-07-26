@@ -48,7 +48,7 @@ pub(crate) const NIL: Object<'static> = unsafe { std::mem::transmute(0u64) };
 pub(crate) const TRUE: Object<'static> =
     // offset from 0 by size of SymbolCell and then shift 8 to account for
     // tagging
-    unsafe { std::mem::transmute(std::mem::size_of::<SymbolCell>() << 8) };
+    unsafe { std::mem::transmute(size_of::<SymbolCell>() << 8) };
 
 /// This type has two meanings, it is both a value that is tagged as well as
 /// something that is managed by the GC. It is intended to be pointer sized, and
@@ -69,7 +69,6 @@ impl<T> Gc<T> {
     }
 
     unsafe fn from_ptr<U>(ptr: *const U, tag: Tag) -> Self {
-        use std::mem::size_of;
         assert_eq!(size_of::<*const U>(), size_of::<*const ()>());
         // TODO: Adding this check can result in better code gen when tagging
         // and untagging

@@ -102,7 +102,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub(in crate::core) const fn new_builtin(idx: usize) -> Self {
-        let ptr = sptr::invalid(idx * std::mem::size_of::<SymbolCell>());
+        let ptr = sptr::invalid(idx * size_of::<SymbolCell>());
         Self { data: ptr, marker: PhantomData }
     }
 

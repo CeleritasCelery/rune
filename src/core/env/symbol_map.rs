@@ -92,7 +92,6 @@ mod test {
     use crate::core::object::FunctionType;
     use crate::core::{cons::Cons, env::Env, object::Object};
     use rune_core::macros::{list, root};
-    use std::mem::size_of;
 
     #[test]
     fn size() {
