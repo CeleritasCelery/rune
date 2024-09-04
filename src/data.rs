@@ -2,12 +2,14 @@
 use crate::core::{
     cons::Cons,
     env::{sym, Env, INTERNED_SYMBOLS},
-    error::{Type, TypeError},
+    error::{LispError, Type, TypeError},
     gc::{Context, Rt},
-    object::{List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL},
+    object::{
+        IntoObject, List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL,
+    },
 };
 use anyhow::{anyhow, Result};
-use rune_core::hashmap::HashSet;
+use rune_core::{hashmap::HashSet, macros::list};
 use rune_macros::defun;
 use std::sync::LazyLock;
 use std::sync::Mutex;
@@ -473,6 +475,18 @@ fn bare_symbol(sym: Symbol) -> Symbol {
 fn symbol_with_pos_p(_sym: Object) -> bool {
     // TODO: implement
     false
+}
+
+defsym!(WRONG_NUMBER_OF_ARGUMENTS);
+pub(crate) fn arg_error<'ob, T>(
+    func: impl IntoObject<Out<'ob> = T>,
+    expected: u16,
+    actual: u16,
+    cx: &'ob Context,
+) -> LispError {
+    let func = func.into_obj(cx);
+    let list = list![sym::WRONG_NUMBER_OF_ARGUMENTS, func, expected, actual; cx];
+    LispError::new(list.try_into().unwrap())
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! Lisp evaluation primitives.
 use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
-use crate::core::error::{ArgError, Type, TypeError};
+use crate::core::error::{LispError, Type, TypeError};
 use crate::core::gc::{Rt, Rto};
 use crate::core::object::{
     display_slice, FnArgs, Function, LispString, ObjectType, Symbol, TagType, NIL,
@@ -116,8 +116,8 @@ impl From<TypeError> for EvalError {
     }
 }
 
-impl From<ArgError> for EvalError {
-    fn from(e: ArgError) -> Self {
+impl From<LispError> for EvalError {
+    fn from(e: LispError) -> Self {
         Self::new_error(e.into())
     }
 }

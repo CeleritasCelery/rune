@@ -3,10 +3,11 @@ use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
         env::{sym, CallFrame, Env},
-        error::{ArgError, Type, TypeError},
+        error::{Type, TypeError},
         gc::{Context, Rt, Rto, Slot},
         object::{Function, Gc, List, ListType, Object, ObjectType, Symbol, TagType, NIL, TRUE},
     },
+    data::arg_error,
     eval::{add_trace, ErrorType, EvalError, EvalResult},
     rooted_iter,
 };
@@ -65,7 +66,7 @@ impl Interpreter<'_, '_> {
         root!(forms, cx);
         match cons.car().untag() {
             ObjectType::Symbol(sym) => match sym {
-                sym::QUOTE => self.quote(forms.bind(cx)),
+                sym::QUOTE => self.quote(forms.bind(cx), cx),
                 sym::LET => self.eval_let(forms, true, cx),
                 sym::LET_STAR => self.eval_let(forms, false, cx),
                 sym::IF => self.eval_if(forms, cx),
@@ -97,7 +98,7 @@ impl Interpreter<'_, '_> {
 
     fn catch<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(tag) = forms.next()? else { bail_err!(ArgError::new(1, 0, "catch")) };
+        let Some(tag) = forms.next()? else { bail_err!(arg_error(sym::CATCH, 1, 0, cx)) };
         // push this tag on the catch stack
         self.env.catch_stack.push(tag);
         let result = match self.implicit_progn(forms, cx) {
@@ -124,7 +125,7 @@ impl Interpreter<'_, '_> {
         let mut forms = obj.as_list()?;
         let len = forms.len()? as u16;
         if len != 2 {
-            bail_err!(ArgError::new(2, len, "throw"));
+            bail_err!(arg_error(sym::THROW, 2, len, cx));
         }
         let tag = forms.next().unwrap()?;
         let value = forms.next().unwrap()?;
@@ -140,7 +141,7 @@ impl Interpreter<'_, '_> {
     fn defvar<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
         // (defvar x ...)                 // (defvar)
-        let Some(sym) = forms.next()? else { bail_err!(ArgError::new(1, 0, "defvar")) };
+        let Some(sym) = forms.next()? else { bail_err!(arg_error(sym::DEFVAR, 1, 0, cx)) };
         let name: Symbol = sym.bind(cx).try_into()?;
         root!(name, cx);
         let value = match forms.next()? {
@@ -206,7 +207,7 @@ impl Interpreter<'_, '_> {
         let mut forms = obj.bind(cx).as_list()?;
         let len = forms.len()? as u16;
         if len != 1 {
-            bail_err!(ArgError::new(1, len, "function"))
+            bail_err!(arg_error(sym::FUNCTION, 1, len, cx))
         }
 
         let form = forms.next().unwrap()?;
@@ -295,11 +296,11 @@ impl Interpreter<'_, '_> {
             Some(x) => Ok(x.bind(cx)),
             None => {
                 let name = match prog_num {
-                    1 => "prog1",
-                    2 => "prog2",
-                    _ => "progn",
+                    1 => sym::PROG1,
+                    2 => sym::PROG2,
+                    _ => sym::PROGN,
                 };
-                Err(ArgError::new(prog_num, count, name).into())
+                Err(arg_error(name, prog_num, count, cx).into())
             }
         }
     }
@@ -313,7 +314,7 @@ impl Interpreter<'_, '_> {
         let (condition, body) = {
             let list: List = obj.bind(cx).try_into()?;
             match list.untag() {
-                ListType::Nil => bail_err!(ArgError::new(1, 0, "while")),
+                ListType::Nil => bail_err!(arg_error(sym::WHILE, 1, 0, cx)),
                 ListType::Cons(cons) => (cons.car(), cons.cdr()),
             }
         };
@@ -370,9 +371,9 @@ impl Interpreter<'_, '_> {
 
     fn eval_if<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(condition) = forms.next()? else { bail_err!(ArgError::new(2, 0, "if")) };
+        let Some(condition) = forms.next()? else { bail_err!(arg_error(sym::IF, 2, 0, cx)) };
         root!(condition, cx);
-        let Some(true_branch) = forms.next()? else { bail_err!(ArgError::new(2, 1, "if")) };
+        let Some(true_branch) = forms.next()? else { bail_err!(arg_error(sym::IF, 2, 1, cx)) };
         root!(true_branch, cx);
         #[allow(clippy::if_not_else)]
         if self.eval_form(condition, cx)? != NIL {
@@ -396,12 +397,12 @@ impl Interpreter<'_, '_> {
                     last_value.set(val);
                 }
                 (_, Some(_)) => bail_err!(TypeError::new(Type::Symbol, var)),
-                (_, None) => bail_err!(ArgError::new(arg_cnt, arg_cnt + 1, "setq")),
+                (_, None) => bail_err!(arg_error(sym::SETQ, arg_cnt, arg_cnt + 1, cx)),
             }
             arg_cnt += 2;
         }
         if arg_cnt < 2 {
-            Err(ArgError::new(2, 0, "setq").into())
+            Err(arg_error(sym::SETQ, 2, arg_cnt, cx).into())
         } else {
             Ok(last_value.bind(cx))
         }
@@ -442,11 +443,11 @@ impl Interpreter<'_, '_> {
         }
     }
 
-    fn quote<'ob>(&self, value: Object<'ob>) -> EvalResult<'ob> {
+    fn quote<'ob>(&self, value: Object<'ob>, cx: &Context) -> EvalResult<'ob> {
         let mut forms = value.as_list()?;
         match forms.len()? {
             1 => Ok(forms.next().unwrap()?),
-            x => Err(ArgError::new(1, x as u16, "quote").into()),
+            x => Err(arg_error(sym::QUOTE, 1, x as u16, cx).into()),
         }
     }
 
@@ -459,7 +460,7 @@ impl Interpreter<'_, '_> {
         rooted_iter!(iter, form, cx);
         let prev_len = self.vars.len();
         // (let x ...)                   // (let)
-        let Some(obj) = iter.next()? else { bail_err!(ArgError::new(1, 0, "let")) };
+        let Some(obj) = iter.next()? else { bail_err!(arg_error(sym::LET, 1, 0, cx)) };
         let varbind_count = if parallel {
             self.let_bind_parallel(obj, cx)
         } else {
@@ -573,7 +574,9 @@ impl Interpreter<'_, '_> {
 
     fn unwind_protect<'ob>(&mut self, obj: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, obj, cx);
-        let Some(body) = forms.next()? else { bail_err!(ArgError::new(1, 0, "unwind-protect")) };
+        let Some(body) = forms.next()? else {
+            bail_err!(arg_error(sym::UNWIND_PROTECT, 1, 0, cx))
+        };
         match self.eval_form(body, cx) {
             Ok(x) => {
                 root!(x, cx);
@@ -612,10 +615,12 @@ impl Interpreter<'_, '_> {
 
     fn condition_case<'ob>(&mut self, form: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
         rooted_iter!(forms, form, cx);
-        let Some(var) = forms.next()? else { bail_err!(ArgError::new(2, 0, "condition-case")) };
+        let Some(var) = forms.next()? else {
+            bail_err!(arg_error(sym::CONDITION_CASE, 2, 0, cx))
+        };
         root!(var, cx);
         let Some(bodyform) = forms.next()? else {
-            bail_err!(ArgError::new(2, 1, "condition-case"))
+            bail_err!(arg_error(sym::CONDITION_CASE, 2, 1, cx))
         };
         let err = match self.eval_form(bodyform, cx) {
             Ok(x) => return Ok(rebind!(x, cx)),
@@ -749,7 +754,7 @@ fn bind_args<'a>(
     // Ensure the minimum number of arguments is present
     ensure!(
         num_actual_args >= num_required_args,
-        ArgError::new(num_required_args, num_actual_args, name)
+        arg_error(name, num_required_args, num_actual_args, cx)
     );
 
     let mut arg_values = args.iter().copied();
@@ -772,7 +777,7 @@ fn bind_args<'a>(
         // Ensure too many args were not provided
         ensure!(
             arg_values.next().is_none(),
-            ArgError::new(num_required_args + num_optional_args, num_actual_args, name)
+            arg_error(name, num_required_args + num_optional_args, num_actual_args, cx)
         );
     }
     Ok(())

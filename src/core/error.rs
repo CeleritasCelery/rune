@@ -1,27 +1,29 @@
 use std::fmt::{Display, Formatter};
 
-/// The function or form has the wrong number of arguments.
+use super::{cons::Cons, object::WithLifetime};
+
 #[derive(Debug, PartialEq)]
-pub(crate) struct ArgError {
-    expect: u16,
-    actual: u16,
-    name: String,
+pub(crate) struct LispError {
+    message: &'static Cons,
 }
 
-impl std::error::Error for ArgError {}
+impl std::error::Error for LispError {}
 
-impl Display for ArgError {
+impl Display for LispError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let Self { expect, actual, name } = self;
-        write!(f, "Expected {expect} argument(s) for `{name}', but found {actual}")
+        let Self { message } = self;
+        write!(f, "Error: {message}")
     }
 }
 
-impl ArgError {
-    pub(crate) fn new(expect: u16, actual: u16, name: impl AsRef<str>) -> ArgError {
-        Self { expect, actual, name: name.as_ref().to_owned() }
+impl LispError {
+    pub(crate) fn new(message: &Cons) -> Self {
+        Self { message: unsafe { message.with_lifetime() } }
     }
 }
+
+unsafe impl Send for LispError {}
+unsafe impl Sync for LispError {}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Type {

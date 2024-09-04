@@ -1,8 +1,5 @@
 use super::{
-    super::{
-        error::ArgError,
-        gc::{Block, Context},
-    },
+    super::gc::{Block, Context},
     display_slice, CloneIn, IntoObject, LispVec, ObjCell,
 };
 use super::{Object, WithLifetime};
@@ -165,21 +162,6 @@ impl FnArgs {
         spec |= max << 8;
         spec |= u16::from(self.rest) << 7;
         u64::from(spec)
-    }
-
-    /// Number of arguments needed to fill out the remaining slots on the stack.
-    /// If a function has 3 required args and 2 optional, and it is called with
-    /// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
-    /// argument should be added to the stack.
-    pub(crate) fn num_of_fill_args(self, args: u16, name: &str) -> Result<u16> {
-        if args < self.required {
-            bail!(ArgError::new(self.required, args, name));
-        }
-        let total = self.required + self.optional;
-        if !self.rest && (args > total) {
-            bail!(ArgError::new(total, args, name));
-        }
-        Ok(total.saturating_sub(args))
     }
 }
 

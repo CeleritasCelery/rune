@@ -4,9 +4,10 @@ use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
 use crate::core::gc::{Context, IntoRoot, Rt, Rto, Slot};
 use crate::core::object::{
-    ByteFn, ByteString, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
+    ByteFn, ByteString, FnArgs, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
     WithLifetime, NIL,
 };
+use crate::data::arg_error;
 use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
 use rune_core::macros::{bail_err, rebind, root};
@@ -202,7 +203,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
         cx: &'ob Context,
     ) -> Result<()> {
         let arg_cnt = arg_cnt as u16;
-        let fill_args = func.args.num_of_fill_args(arg_cnt, name)?;
+        let fill_args = num_of_fill_args(func.args, arg_cnt, name, cx)?;
         self.env.stack.fill_extra_args(fill_args);
         let total_args = arg_cnt + fill_args;
         let rest_size = total_args - (func.args.required + func.args.optional);
@@ -886,6 +887,21 @@ fn byte_code<'ob>(
     )?;
     root!(fun, cx);
     Ok(call(fun, 0, "unnamed", &mut CallFrame::new(env), cx)?)
+}
+
+/// Number of arguments needed to fill out the remaining slots on the stack.
+/// If a function has 3 required args and 2 optional, and it is called with
+/// 4 arguments, then 1 will be returned. Indicating that 1 additional `nil`
+/// argument should be added to the stack.
+fn num_of_fill_args(spec: FnArgs, args: u16, name: &str, cx: &Context) -> Result<u16> {
+    if args < spec.required {
+        bail!(arg_error(name, spec.required, args, cx));
+    }
+    let total = spec.required + spec.optional;
+    if !spec.rest && (args > total) {
+        bail!(arg_error(name, total, args, cx));
+    }
+    Ok(total.saturating_sub(args))
 }
 
 #[defun]

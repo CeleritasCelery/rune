@@ -2,8 +2,10 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
+use crate::core::error::LispError;
+
 use super::{
-    super::error::{ArgError, Type, TypeError},
+    super::error::{Type, TypeError},
     ByteString, LispHashTable, LispString, LispVec, OptionalFlag, NIL, TRUE,
 };
 use super::{Gc, LispFloat, Object, ObjectType, Symbol};
@@ -80,14 +82,14 @@ impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
 }
 
 impl<'ob> TryFrom<Object<'ob>> for bool {
-    type Error = ArgError;
+    type Error = LispError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil())
     }
 }
 
 impl<'ob> TryFrom<Object<'ob>> for OptionalFlag {
-    type Error = ArgError;
+    type Error = LispError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil().then_some(()))
     }
