@@ -372,7 +372,7 @@ fn func_arity<'ob>(function: Function, cx: &'ob Context) -> Result<&'ob Cons> {
 }
 
 #[defun]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn internal__define_uninitialized_variable<'ob>(
     _symbol: Symbol<'ob>,
     _doc: Option<Object>,

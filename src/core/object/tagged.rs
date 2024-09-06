@@ -1,4 +1,4 @@
-#![allow(unstable_name_collisions)]
+#![expect(unstable_name_collisions)]
 use super::{
     super::{
         cons::Cons,

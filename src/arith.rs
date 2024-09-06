@@ -179,7 +179,6 @@ pub(crate) fn num_eq(number: Number, numbers: &[Number]) -> bool {
 }
 
 #[defun(name = "/=")]
-#[allow(clippy::float_cmp)] // This is a bug in clippy, we are not comparing floats directly
 pub(crate) fn num_ne(number: Number, numbers: &[Number]) -> bool {
     match number.val() {
         NumberValue::Int(num) => numbers.iter().all(|&x| x != num),
@@ -235,7 +234,7 @@ pub(crate) fn remainder(x: i64, y: i64) -> i64 {
     x % y
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn max_val(x: NumberValue, y: &Number) -> NumberValue {
     let y = y.val();
     if x > y {
@@ -245,7 +244,7 @@ fn max_val(x: NumberValue, y: &Number) -> NumberValue {
     }
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn min_val(x: NumberValue, y: &Number) -> NumberValue {
     let y = y.val();
     if x < y {

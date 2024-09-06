@@ -375,7 +375,7 @@ impl Interpreter<'_, '_> {
         root!(condition, cx);
         let Some(true_branch) = forms.next()? else { bail_err!(arg_error(sym::IF, 2, 1, cx)) };
         root!(true_branch, cx);
-        #[allow(clippy::if_not_else)]
+        #[expect(clippy::if_not_else)]
         if self.eval_form(condition, cx)? != NIL {
             self.eval_form(true_branch, cx)
         } else {

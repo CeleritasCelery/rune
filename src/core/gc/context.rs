@@ -16,7 +16,7 @@ pub(crate) struct RootSet {
     pub(super) roots: RefCell<Vec<*const dyn Trace>>,
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 // These types are only stored here so they can be dropped
 pub(in crate::core) enum DropStackElem {
     String(String),

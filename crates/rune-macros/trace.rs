@@ -1,7 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-#[allow(clippy::too_many_lines)]
 pub(crate) fn expand(orig: &syn::DeriveInput) -> TokenStream {
     let orig_name = &orig.ident;
     let rooted_name = format_ident!("Rooted{orig_name}");

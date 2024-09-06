@@ -158,7 +158,7 @@ fn match_end<'ob>(subexp: usize, env: &Rt<Env>, cx: &'ob Context) -> Result<Obje
 }
 
 #[defun]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn match_data__translate(n: i64, env: &Rt<Env>, cx: &Context) -> Result<()> {
     let search_regs: List = env.match_data.bind(cx).try_into()?;
     for reg in search_regs.conses() {

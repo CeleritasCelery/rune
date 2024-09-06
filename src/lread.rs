@@ -250,7 +250,6 @@ mod test {
     use rune_core::macros::root;
 
     #[test]
-    #[allow(clippy::float_cmp)] // Bug in Clippy
     fn test_load() {
         let roots = &RootSet::default();
         let cx = &mut Context::new(roots);

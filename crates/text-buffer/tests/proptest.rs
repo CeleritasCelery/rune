@@ -1,4 +1,4 @@
-#![allow(unused_qualifications)]
+#![expect(unused_qualifications)]
 #![cfg(not(miri))]
 use proptest::prelude::*;
 use proptest_derive::Arbitrary;

@@ -1,4 +1,4 @@
-#![allow(unstable_name_collisions)]
+#![expect(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::{Block, Context, GcHeap, GcState, Markable, Trace};
 use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, TagType, WithLifetime};
@@ -218,7 +218,7 @@ impl<'ob> Symbol<'ob> {
 
 impl SymbolCell {
     const NULL: *mut u8 = std::ptr::null_mut();
-    #[allow(clippy::declare_interior_mutable_const)]
+    #[expect(clippy::declare_interior_mutable_const)]
     const EMTPTY: AtomicPtr<u8> = AtomicPtr::new(Self::NULL);
 
     fn new_normal(name: &'static str, block: &Block<true>) -> Self {

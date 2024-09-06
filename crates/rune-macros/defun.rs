@@ -484,7 +484,7 @@ mod test {
         );
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn test_args(args: TokenStream, expect: &[ArgType]) {
         let stream = quote! {fn foo(#args) -> u8 {0}};
         let function: Function = syn::parse2(stream).unwrap();

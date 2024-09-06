@@ -195,7 +195,7 @@ fn test_case_sensative_call() {
 }
 
 #[defun]
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn write_region(
     start: i64,
     end: i64,

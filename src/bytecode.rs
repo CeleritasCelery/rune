@@ -1,4 +1,4 @@
-#![allow(unstable_name_collisions)]
+#![expect(unstable_name_collisions)]
 //! The main bytecode interpeter.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
@@ -261,7 +261,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
             };
 
             // we will fix this once we can handle different error types
-            #[allow(clippy::never_loop)]
+            #[expect(clippy::never_loop)]
             while let Some(handler) = self.handlers.bind_mut(cx).pop() {
                 match handler.condition.untag() {
                     ObjectType::Symbol(sym::ERROR) => {}
@@ -297,7 +297,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     /// The main bytecode execution loop.
     fn execute_bytecode(&mut self, cx: &'ob mut Context) -> EvalResult<'ob> {
         use crate::{alloc, arith, data, fns};

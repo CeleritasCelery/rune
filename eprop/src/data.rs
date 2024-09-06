@@ -213,7 +213,7 @@ impl<'a> Arbitrary<'a> for ArbitraryObjectType {
 }
 
 impl std::fmt::Display for ArbitraryObjectType {
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ArbitraryObjectType::String(s) => {
@@ -395,7 +395,7 @@ pub(crate) struct Function {
 }
 
 impl Function {
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn process_arg(ty: &syn::Type) -> Option<Type> {
         match ty {
             syn::Type::Array(_) => {
@@ -511,7 +511,7 @@ impl Function {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     pub(crate) fn from_item(item: &ItemFn) -> Option<Self> {
         //println!("{}", item.sig.ident.to_string());
         let name = item
@@ -704,7 +704,6 @@ impl Function {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) struct ArbitraryFunction {
     name: String,

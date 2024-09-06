@@ -103,7 +103,7 @@ impl Internal {
             return false;
         }
 
-        #[allow(clippy::borrowed_box)]
+        #[expect(clippy::borrowed_box)]
         let free_nodes = |x: &Box<Node>| x.len().saturating_sub(MIN);
 
         let left_free = if idx == 0 { 0 } else { free_nodes(&self.children[idx - 1]) };

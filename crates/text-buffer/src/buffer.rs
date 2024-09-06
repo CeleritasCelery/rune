@@ -1,6 +1,6 @@
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::missing_panics_doc)]
+#![expect(clippy::must_use_candidate)]
+#![expect(clippy::missing_panics_doc)]
 use crate::{
     metric::{BufferMetrics, Metric},
     Position,
@@ -245,7 +245,7 @@ impl Buffer {
         };
         let mut buffer = Vec::with_capacity(new_capacity);
         let bytes;
-        #[allow(clippy::comparison_chain)]
+        #[expect(clippy::comparison_chain)]
         if self.cursor.chars < self.gap_chars {
             buffer.extend_from_slice(&self.data[..self.cursor.bytes]); // pre cursor
             buffer.extend_from_slice(slice.as_bytes()); // new text
@@ -720,7 +720,7 @@ fn metrics(slice: &str) -> Metric {
     Metric { bytes: slice.len(), chars }
 }
 
-#[allow(clippy::cast_possible_wrap)]
+#[expect(clippy::cast_possible_wrap)]
 const fn is_char_boundary(byte: u8) -> bool {
     // This is bit magic equivalent to: b < 128 || b >= 192
     (byte as i8) >= -0x40

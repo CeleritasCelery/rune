@@ -152,7 +152,6 @@ impl<'rt> ElemStreamIter<'rt> {
     }
 }
 
-#[allow(clippy::multiple_inherent_impl)]
 impl Cons {
     pub(crate) fn elements(&self) -> ElemIter {
         ElemIter(self.conses())

@@ -55,7 +55,7 @@ enum DefvarType {
     Other,
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn main() {
     let mut all_defun = Vec::new();
     let mut all_defvar = Vec::new();

@@ -208,7 +208,7 @@ impl Debug for SubrFn {
 }
 
 impl PartialEq for SubrFn {
-    #[allow(clippy::fn_to_numeric_cast_any)]
+    #[expect(clippy::fn_to_numeric_cast_any)]
     fn eq(&self, other: &Self) -> bool {
         let lhs = self.subr as *const BuiltInFn;
         let rhs = other.subr as *const BuiltInFn;

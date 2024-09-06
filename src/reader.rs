@@ -562,7 +562,7 @@ mod test {
     }
 
     #[test]
-    #[allow(clippy::non_ascii_literal)]
+    #[expect(clippy::non_ascii_literal)]
     fn test_read_char() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
