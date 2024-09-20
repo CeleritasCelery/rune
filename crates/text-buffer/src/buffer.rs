@@ -5,7 +5,7 @@ use crate::{
     metric::{BufferMetrics, Metric},
     Position,
 };
-use get_size::GetSize;
+use get_size2::GetSize;
 use std::{
     cmp,
     fmt::{self, Debug, Display},
