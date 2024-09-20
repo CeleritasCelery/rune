@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use super::{cons::Cons, object::WithLifetime};
+use super::{cons::Cons, gc::Context, object::WithLifetime};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct LispError {
@@ -19,6 +19,10 @@ impl Display for LispError {
 impl LispError {
     pub(crate) fn new(message: &Cons) -> Self {
         Self { message: unsafe { message.with_lifetime() } }
+    }
+
+    pub(crate) fn bind<'ob>(&self, cx: &'ob Context) -> &'ob Cons {
+        cx.bind(self.message)
     }
 }
 

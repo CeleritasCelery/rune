@@ -3,7 +3,7 @@ use crate::{
     core::{
         cons::{Cons, ElemStreamIter},
         env::{sym, CallFrame, Env},
-        error::{Type, TypeError},
+        error::{LispError, Type, TypeError},
         gc::{Context, Rt, Rto, Slot},
         object::{Function, Gc, List, ListType, Object, ObjectType, Symbol, TagType, NIL, TRUE},
     },
@@ -649,18 +649,29 @@ impl Interpreter<'_, '_> {
                         }
                         _ => bail_err!("Invalid condition handler: {condition}"),
                     }
+
                     // Call handlers with error
-                    let error = if let ErrorType::Signal(id) = err.error {
-                        let Some((sym, data)) = self.env.get_exception(id) else {
-                            unreachable!("Exception not found")
-                        };
-                        Cons::new(sym, data, cx)
-                    } else {
-                        // TODO: Need to remove the anyhow branch once
-                        // full errors are implemented
-                        Cons::new(sym::ERROR, format!("{err}"), cx)
+                    let error = match err.error {
+                        ErrorType::Signal(id) => {
+                            let Some((sym, data)) = self.env.get_exception(id) else {
+                                unreachable!("Exception not found")
+                            };
+                            Cons::new(sym, data, cx)
+                        }
+                        ErrorType::Err(err) => {
+                            let err_str = format!("{err}");
+                            if let Ok(lisp_error) = err.downcast::<LispError>() {
+                                lisp_error.bind(cx)
+                            } else {
+                                // TODO: Need to remove the anyhow branch once
+                                // full errors are implemented
+                                Cons::new(sym::ERROR, err_str, cx)
+                            }
+                        }
+                        _ => unreachable!("Error type throw was not handled"),
                     };
-                    let binding = Cons::new(var, Cons::new1(error, cx), cx);
+
+                    let binding = Cons::new(var, error, cx);
                     self.vars.push(binding);
                     let list: List = match cons.cdr().try_into() {
                         Ok(x) => x,
@@ -1076,6 +1087,8 @@ mod test {
         check_interpreter("(condition-case nil (if) (error 7 9 11))", 11, cx);
         check_interpreter("(condition-case nil (if) (error . 7))", false, cx);
         check_interpreter("(condition-case nil (if) ((debug error) 7))", 7, cx);
+        // Ensure that errors don't get garbage collected
+        check_interpreter("(condition-case e (if t) (error (progn (garbage-collect) (nth 2 e))))", 2, cx);
         check_error("(condition-case nil (if))", cx);
         check_error("(condition-case nil (if) nil)", cx);
         check_error("(condition-case nil (if) 5 (error 7))", cx);
