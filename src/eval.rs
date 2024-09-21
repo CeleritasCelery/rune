@@ -1,7 +1,7 @@
 //! Lisp evaluation primitives.
 use crate::core::cons::{Cons, ConsError};
 use crate::core::env::{sym, ArgSlice, CallFrame, Env};
-use crate::core::error::{LispError, Type, TypeError};
+use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Rt, Rto};
 use crate::core::object::{
     display_slice, FnArgs, Function, LispString, ObjectType, Symbol, TagType, NIL,
@@ -10,6 +10,7 @@ use crate::core::{
     gc::Context,
     object::{FunctionType, Gc, Object},
 };
+use crate::data::LispError;
 use crate::fns::{assq, eq};
 use crate::rooted_iter;
 use anyhow::{anyhow, bail, ensure, Result};

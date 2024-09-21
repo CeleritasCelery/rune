@@ -7,7 +7,7 @@ use crate::core::object::{
     ByteFn, ByteString, FnArgs, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
     WithLifetime, NIL,
 };
-use crate::data::arg_error;
+use crate::data::LispError;
 use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
 use rune_core::macros::{bail_err, rebind, root};
@@ -895,11 +895,11 @@ fn byte_code<'ob>(
 /// argument should be added to the stack.
 fn num_of_fill_args(spec: FnArgs, args: u16, name: &str, cx: &Context) -> Result<u16> {
     if args < spec.required {
-        bail!(arg_error(name, spec.required, args, cx));
+        bail!(LispError::arg_cnt(name, spec.required, args, cx));
     }
     let total = spec.required + spec.optional;
     if !spec.rest && (args > total) {
-        bail!(arg_error(name, total, args, cx));
+        bail!(LispError::arg_cnt(name, total, args, cx));
     }
     Ok(total.saturating_sub(args))
 }

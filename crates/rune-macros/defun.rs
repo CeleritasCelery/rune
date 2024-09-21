@@ -83,7 +83,7 @@ pub(crate) fn expand(function: Function, spec: Spec) -> TokenStream {
             if #arg_count_guard {
                 let upper = #required + #optional;
                 let expected = if arg_cnt > upper as usize {upper} else {#required};
-                return Err(crate::data::arg_error(#lisp_name, expected, arg_cnt as u16, cx).into());
+                return Err(crate::data::LispError::arg_cnt(#lisp_name, expected, arg_cnt as u16, cx).into());
             }
             #create_args
             #subr_call

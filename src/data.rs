@@ -2,7 +2,7 @@
 use crate::core::{
     cons::Cons,
     env::{sym, Env, INTERNED_SYMBOLS},
-    error::{LispError, Type, TypeError},
+    error::{Type, TypeError},
     gc::{Context, Rt},
     object::{
         IntoObject, List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL,
@@ -477,17 +477,44 @@ fn symbol_with_pos_p(_sym: Object) -> bool {
     false
 }
 
-defsym!(WRONG_NUMBER_OF_ARGUMENTS);
-pub(crate) fn arg_error<'ob, T>(
-    func: impl IntoObject<Out<'ob> = T>,
-    expected: u16,
-    actual: u16,
-    cx: &'ob Context,
-) -> LispError {
-    let func = func.into_obj(cx);
-    let list = list![sym::WRONG_NUMBER_OF_ARGUMENTS, func, expected, actual; cx];
-    LispError::new(list.try_into().unwrap())
+#[derive(Debug, PartialEq)]
+pub(crate) struct LispError {
+    message: &'static Cons,
 }
+
+impl std::error::Error for LispError {}
+
+impl std::fmt::Display for LispError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let Self { message } = self;
+        write!(f, "Error: {message}")
+    }
+}
+
+defsym!(WRONG_NUMBER_OF_ARGUMENTS);
+impl LispError {
+    pub(crate) fn new(message: &Cons) -> Self {
+        Self { message: unsafe { message.with_lifetime() } }
+    }
+
+    pub(crate) fn bind<'ob>(&self, cx: &'ob Context) -> &'ob Cons {
+        cx.bind(self.message)
+    }
+
+    pub(crate) fn arg_cnt<'ob, T>(
+        func: impl IntoObject<Out<'ob> = T>,
+        expected: u16,
+        actual: u16,
+        cx: &'ob Context,
+    ) -> Self {
+        let func = func.into_obj(cx);
+        let list = list![sym::WRONG_NUMBER_OF_ARGUMENTS, func, expected, actual; cx];
+        Self::new(list.try_into().unwrap())
+    }
+}
+
+unsafe impl Send for LispError {}
+unsafe impl Sync for LispError {}
 
 #[cfg(test)]
 mod test {

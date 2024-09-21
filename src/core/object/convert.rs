@@ -2,7 +2,7 @@
 //! this code could be replaced with macros or specialized generics if
 //! those are ever stabalized.
 
-use crate::core::error::LispError;
+use crate::data::LispError;
 
 use super::{
     super::error::{Type, TypeError},
