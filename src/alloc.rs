@@ -47,7 +47,7 @@ pub(crate) fn make_closure<'ob>(
 #[defun]
 #[expect(clippy::too_many_arguments)]
 pub(crate) fn make_byte_code<'ob>(
-    arglist: u64,
+    arglist: i64,
     byte_code: &'ob ByteString,
     constants: &'ob LispVec,
     depth: usize,

@@ -139,12 +139,13 @@ pub(crate) struct FnArgs {
 }
 
 impl FnArgs {
-    pub(crate) fn from_arg_spec(spec: u64) -> Result<Self> {
+    pub(crate) fn from_arg_spec(spec: i64) -> Result<Self> {
         // The spec is an integer of the form NNNNNNNRMMMMMMM where the 7bit
         // MMMMMMM specifies the minimum number of arguments, the 7-bit NNNNNNN
         // specifies the maximum number of arguments (ignoring &rest) and the R
         // bit specifies whether there is a &rest argument to catch the
         // left-over arguments.
+        ensure!(spec >= 0, "Invalid bytecode argument spec: bits out of range");
         ensure!(spec <= 0x7FFF, "Invalid bytecode argument spec: bits out of range");
         let spec = spec as u16;
         let required = spec & 0x7F;
@@ -220,8 +221,8 @@ impl PartialEq for SubrFn {
 mod test {
     use super::*;
 
-    fn check_arg_spec(spec: u64) {
-        assert_eq!(spec, FnArgs::from_arg_spec(spec).unwrap().into_arg_spec());
+    fn check_arg_spec(spec: i64) {
+        assert_eq!(spec, FnArgs::from_arg_spec(spec).unwrap().into_arg_spec().try_into().unwrap());
     }
 
     #[test]

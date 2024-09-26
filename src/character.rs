@@ -1,7 +1,7 @@
 //! Character and string utilities.
 use crate::core::{
     gc::Context,
-    object::{int_to_char, Gc, Object, ObjectType, OptionalFlag},
+    object::{int_to_char, Gc, Object, OptionalFlag},
 };
 use anyhow::Result;
 use rune_macros::defun;
@@ -23,13 +23,7 @@ fn max_char(unicode: OptionalFlag) -> u32 {
 
 #[defun]
 fn characterp(obj: Object) -> bool {
-    match obj.untag() {
-        ObjectType::Int(c) => match u32::try_from(c) {
-            Ok(c) => char::from_u32(c).is_some(),
-            Err(_) => false,
-        },
-        _ => false,
-    }
+    char::try_from(obj).is_ok()
 }
 
 #[defun]

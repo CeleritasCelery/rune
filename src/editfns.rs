@@ -78,11 +78,8 @@ fn string_to_char(string: &str) -> char {
 }
 
 #[defun]
-fn char_to_string(chr: u64) -> Result<String> {
-    let Some(chr) = std::char::from_u32(u32::try_from(chr)?) else {
-        bail!("Invalid character")
-    };
-    Ok(format!("{chr}"))
+fn char_to_string(chr: char) -> String {
+    format!("{chr}")
 }
 
 #[defun]

@@ -22,23 +22,23 @@ impl<'ob> TryFrom<Object<'ob>> for &'ob str {
 }
 
 impl TryFrom<Object<'_>> for f64 {
-    type Error = anyhow::Error;
+    type Error = TypeError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         match obj.untag() {
             ObjectType::Int(x) => Ok(x as f64),
             ObjectType::Float(x) => Ok(**x),
-            x => Err(TypeError::new(Type::Number, x).into()),
+            x => Err(TypeError::new(Type::Number, x)),
         }
     }
 }
 
 impl<'ob> TryFrom<Object<'ob>> for Option<&'ob str> {
-    type Error = anyhow::Error;
+    type Error = TypeError;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
             ObjectType::NIL => Ok(None),
             ObjectType::String(x) => Ok(Some(x)),
-            x => Err(TypeError::new(Type::String, x).into()),
+            x => Err(TypeError::new(Type::String, x)),
         }
     }
 }
@@ -55,15 +55,13 @@ impl<'ob> TryFrom<Object<'ob>> for usize {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for u64 {
-    type Error = anyhow::Error;
+impl<'ob> TryFrom<Object<'ob>> for char {
+    type Error = TypeError;
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
-        match obj.untag() {
-            ObjectType::Int(x) => {
-                x.try_into().with_context(|| format!("Integer must be positive, but was {x}"))
-            }
-            x => Err(TypeError::new(Type::Int, x).into()),
-        }
+        let err = || TypeError::new(Type::Char, obj);
+        let ObjectType::Int(x) = obj.untag() else { Err(err())? };
+        let Ok(x) = u32::try_from(x) else { Err(err())? };
+        std::char::from_u32(x).ok_or_else(err)
     }
 }
 
