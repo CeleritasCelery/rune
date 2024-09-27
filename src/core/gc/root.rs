@@ -30,6 +30,12 @@ use std::{
 ///
 /// On top of scrubbing the lifetimes, this trait can also do a transformation
 /// of the underlying type for convenience, similar to calling `Into::into`.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not implement `Trace`",
+    label = "cannot be rooted",
+    note = "Use #[derive(Trace)] to make `{Self}` Rootable",
+    note = "If this is a foreign type, implement `Trace` and `IntoRoot` manually"
+)]
 pub(crate) trait IntoRoot<T> {
     unsafe fn into_root(self) -> T;
 }
