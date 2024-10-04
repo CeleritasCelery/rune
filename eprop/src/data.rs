@@ -21,6 +21,7 @@ pub(crate) enum ObjectType {
     Subr,
     Buffer,
     Nil,
+    Char,
 }
 
 impl From<ObjectType> for ArbitraryObjectType {
@@ -46,6 +47,7 @@ impl From<ObjectType> for ArbitraryObjectType {
             ObjectType::Subr => ArbitraryObjectType::generate_subr(&mut unstructured),
             ObjectType::Buffer => ArbitraryObjectType::generate_buffer(&mut unstructured),
             ObjectType::Nil => ArbitraryObjectType::generate_nil(),
+            ObjectType::Char => ArbitraryObjectType::generate_char(&mut unstructured),
         }
     }
 }
@@ -66,6 +68,7 @@ pub(crate) enum ArbitraryObjectType {
     Nil,
     Function(u8),
     ByteFn(u8),
+    Char(char),
     Buffer(String),
     Subr(u8),
 }
@@ -101,6 +104,9 @@ impl ArbitraryObjectType {
     }
     fn generate_integer(u: &mut arbitrary::Unstructured) -> Self {
         ArbitraryObjectType::Integer(i64::arbitrary(u).unwrap())
+    }
+    fn generate_char(u: &mut arbitrary::Unstructured) -> Self {
+        ArbitraryObjectType::Char(char::arbitrary(u).unwrap())
     }
     fn generate_boolean(u: &mut arbitrary::Unstructured) -> Self {
         ArbitraryObjectType::Boolean(bool::arbitrary(u).unwrap())
@@ -181,6 +187,7 @@ impl Hash for ArbitraryObjectType {
             ArbitraryObjectType::Buffer(name) => {
                 name.hash(state);
             }
+            ArbitraryObjectType::Char(chr) => chr.hash(state),
         }
     }
 }
@@ -317,6 +324,9 @@ impl std::fmt::Display for ArbitraryObjectType {
                 }
                 write!(f, ") nil)")
             }
+            ArbitraryObjectType::Char(chr) => {
+                write!(f, "?{chr}")
+            }
         }
     }
 }
@@ -388,7 +398,7 @@ impl From<ArgType> for ArbitraryArgType {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Function {
-    name: String,
+    pub(crate) name: String,
     args: Vec<ArgType>,
     ret: Type,
     fallible: bool,
@@ -435,20 +445,26 @@ impl Function {
                         Some(Type::Object(vec![ObjectType::String, ObjectType::Symbol]))
                     }
                     "Symbol" => Some(Type::Object(vec![ObjectType::Symbol])),
-                    "Number" => Some(Type::Object(vec![ObjectType::Integer, ObjectType::Float])),
+                    "Number" | "NumberValue" => {
+                        Some(Type::Object(vec![ObjectType::Integer, ObjectType::Float]))
+                    }
                     "Object" => Some(Type::Object(vec![ObjectType::Unknown])),
                     "usize" | "isize" | "i64" => Some(Type::Object(vec![ObjectType::Integer])),
                     "str" | "String" | "LispString" => Some(Type::Object(vec![ObjectType::String])),
                     "bool" => Some(Type::Object(vec![ObjectType::Boolean])),
                     "f64" => Some(Type::Object(vec![ObjectType::Float])),
+                    "char" => Some(Type::Object(vec![ObjectType::Char])),
                     "Function" => Some(Type::Object(vec![ObjectType::Function])),
-                    "Cons" | "List" => Some(Type::Object(vec![ObjectType::Cons])),
+                    "Cons" | "List" | "Error" => Some(Type::Object(vec![ObjectType::Cons])),
                     "OptionalFlag" => Some(Type::Object(vec![
                         ObjectType::Boolean,
                         ObjectType::Nil,
                         ObjectType::Unknown,
                     ])),
-                    "LispVec" | "LispVector" => Some(Type::Object(vec![ObjectType::Vector])),
+                    "ArgSlice" => Some(Type::Object(vec![ObjectType::Cons, ObjectType::Nil])),
+                    "LispVec" | "LispVector" | "Vec" | "RecordBuilder" => {
+                        Some(Type::Object(vec![ObjectType::Vector]))
+                    }
                     "LispHashTable" => Some(Type::Object(vec![ObjectType::HashTable])),
                     "ByteString" => Some(Type::Object(vec![ObjectType::UnibyteString])),
                     "Record" => Some(Type::Object(vec![ObjectType::Record])),

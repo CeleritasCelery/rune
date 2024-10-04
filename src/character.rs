@@ -13,9 +13,9 @@ fn unibyte_string(bytes: &[Gc<i64>]) -> Result<Vec<u8>> {
 }
 
 #[defun]
-fn max_char(unicode: OptionalFlag) -> u32 {
+fn max_char(unicode: OptionalFlag) -> usize {
     if unicode.is_some() {
-        std::char::MAX as u32
+        std::char::MAX as usize
     } else {
         0x3F_FFFF
     }
