@@ -221,6 +221,21 @@ Seems like either low-zero or sign ext is the way to go. The biggest problem
 with sign ext is the expensive ~is~ test. But is also doesn't have a cost to
 wrapping and unwrapping. But with low-zero we can do arithmetic without
 unwrapping, which could make up for it.
+**** type layout
+We want to switch to using alignment bit tagging based off of our recent deep dive. This has the following advantages:
+- we have fast untagging of tag 0.
+- it is easier to elide the tag
+- we don't have to worry about future compatibly
+- we get cheaper untagging when we are accessing an offset
+
+That last point is interesting because if we assume that all pointers point to the header of an object there will be 8 bytes of offset for every load (except for cons). Meaning that we can fold the untagging into the load of the data. If we grew the tag to 4 bits and 16 values by requiring 16-byte alignment this would not work unless the header was 2 words as well.
+
+But one thing that we could do is have the ~Object~ enum return the already pointing to the actually data instead of the header. Essentially handle that in the ~untag()~ method. However this would remove the ability to retag a value. Well we could still do it, but we would loose pointer provenance over the tag. So we would have to leak the provenance of all heap values. How much will that really matter? Also re-tagging will be complex when we have a sum type like ~Object~ or ~Function~. Because ~ObjectType~ is no longer just an unpacked representation of ~Gc<ObjectType>~. The pointer part of the data will be different.
+
+The only place we really use re-tagging now is when cloning shared types like buffer or symbol and trying to get a value fit for ~call~. For call we could just have a tagged and untagged version. We could also special case the cloning of the other types.
+
+The real question is if we want to use a more complex mapping from tagged pointer to Rust enum or keep it as simple as possible. If we want to use anything more complex then low byte tagging, we will need to make the ~untag()~ function less straight forward. But that might leave more room for bad code gen. We really want the enum to be optimized away and rust will match on the tag directly. If it creates an intermediate enum then we failed.
+
 *** CDR coding
 [2020-08-17 Mon 13:25]
 [[https://cpsc.yale.edu/sites/default/files/files/tr362.pdf][original paper]]
