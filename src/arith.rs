@@ -13,7 +13,7 @@ pub(crate) enum NumberValue {
     Float(f64),
 }
 
-impl<'ob> Number<'ob> {
+impl Number<'_> {
     pub(crate) fn val(self) -> NumberValue {
         match self.untag() {
             NumberType::Int(x) => NumberValue::Int(x),
@@ -97,7 +97,7 @@ impl Rem for NumberValue {
     }
 }
 
-impl<'ob> PartialEq<i64> for Number<'ob> {
+impl PartialEq<i64> for Number<'_> {
     fn eq(&self, other: &i64) -> bool {
         match self.val() {
             NumberValue::Int(num) => num == *other,
@@ -106,7 +106,7 @@ impl<'ob> PartialEq<i64> for Number<'ob> {
     }
 }
 
-impl<'ob> PartialEq<f64> for Number<'ob> {
+impl PartialEq<f64> for Number<'_> {
     fn eq(&self, other: &f64) -> bool {
         match self.val() {
             NumberValue::Int(num) => num as f64 == *other,

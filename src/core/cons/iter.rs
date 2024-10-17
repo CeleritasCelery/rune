@@ -113,7 +113,7 @@ impl<'rt> ElemStreamIter<'rt> {
     }
 }
 
-impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'rt> {
+impl fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamIter<'_> {
     type Item = Rto<Object<'static>>;
     type Error = ConsError;
 
@@ -146,7 +146,7 @@ impl<'rt> fallible_streaming_iterator::FallibleStreamingIterator for ElemStreamI
     }
 }
 
-impl<'rt> ElemStreamIter<'rt> {
+impl ElemStreamIter<'_> {
     pub(crate) fn is_empty(&self) -> bool {
         self.cons.is_none()
     }

@@ -5,7 +5,7 @@ use std::io::{BufReader, Read};
 
 /// This file contains some simple helpers for loading test data. Its used by benchmarking and
 /// testing code.
-
+///
 /// (position, delete length, insert content).
 #[derive(Debug, Clone, Deserialize)]
 pub struct TestPatch(pub usize, pub usize, pub String);

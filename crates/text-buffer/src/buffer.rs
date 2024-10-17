@@ -74,7 +74,7 @@ impl<'a> MetricBuilder<'a> {
     }
 }
 
-impl<'a> Iterator for MetricBuilder<'a> {
+impl Iterator for MetricBuilder<'_> {
     type Item = Metric;
 
     fn next(&mut self) -> Option<Self::Item> {

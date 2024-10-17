@@ -53,7 +53,7 @@ pub(crate) struct Context<'rt> {
     next_limit: usize,
 }
 
-impl<'rt> Drop for Context<'rt> {
+impl Drop for Context<'_> {
     fn drop(&mut self) {
         self.garbage_collect(true);
         if self.block.objects.allocated_bytes() == 0 {
@@ -102,7 +102,7 @@ impl Block<false> {
 }
 
 impl<const CONST: bool> Block<CONST> {
-    pub(crate) fn add<'ob, T, Tx>(&'ob self, obj: T) -> Object
+    pub(crate) fn add<'ob, T, Tx>(&'ob self, obj: T) -> Object<'ob>
     where
         T: IntoObject<Out<'ob> = Tx>,
         Gc<Tx>: Into<Object<'ob>>,
@@ -149,7 +149,7 @@ impl<'ob, 'rt> Context<'rt> {
         Context { block, root_set: roots, next_limit: Self::MIN_GC_BYTES }
     }
 
-    pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime>::Out
+    pub(crate) fn bind<T>(&'ob self, obj: T) -> <T as WithLifetime<'ob>>::Out
     where
         T: WithLifetime<'ob>,
     {
@@ -196,7 +196,7 @@ impl<'ob, 'rt> Context<'rt> {
     }
 }
 
-impl<'rt> Deref for Context<'rt> {
+impl Deref for Context<'_> {
     type Target = Block<false>;
 
     fn deref(&self) -> &Self::Target {
@@ -204,7 +204,7 @@ impl<'rt> Deref for Context<'rt> {
     }
 }
 
-impl<'rt> AsRef<Block<false>> for Context<'rt> {
+impl AsRef<Block<false>> for Context<'_> {
     fn as_ref(&self) -> &Block<false> {
         &self.block
     }

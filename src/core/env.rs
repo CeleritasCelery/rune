@@ -31,7 +31,7 @@ pub(crate) struct CurrentBuffer<'a> {
     buf_ref: &'a LispBuffer,
 }
 
-impl<'a> Default for CurrentBuffer<'a> {
+impl Default for CurrentBuffer<'_> {
     fn default() -> Self {
         let name = crate::buffer::generate_new_buffer_name("*scratch*", None);
         let buffer = {

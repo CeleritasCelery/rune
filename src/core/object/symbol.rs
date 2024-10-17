@@ -118,7 +118,7 @@ impl<'a> Symbol<'a> {
 unsafe impl Send for Symbol<'_> {}
 
 // implement withlifetime for symbol
-impl<'old, 'new> WithLifetime<'new> for Symbol<'old> {
+impl<'new> WithLifetime<'new> for Symbol<'_> {
     type Out = Symbol<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
@@ -171,7 +171,7 @@ impl Hash for Symbol<'_> {
     }
 }
 
-impl<'old, 'new> Symbol<'old> {
+impl<'new> Symbol<'_> {
     pub(in crate::core) fn clone_in<const C: bool>(
         self,
         bk: &'new crate::core::gc::Block<C>,

@@ -113,7 +113,7 @@ enum Token<'a> {
     Error(Error),
 }
 
-impl<'a> Display for Token<'a> {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Token::OpenParen(_) => write!(f, "("),

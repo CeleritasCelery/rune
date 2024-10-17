@@ -438,7 +438,7 @@ impl IntoObject for Vec<u8> {
     }
 }
 
-impl<'a> IntoObject for Vec<Object<'a>> {
+impl IntoObject for Vec<Object<'_>> {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(mut self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -452,7 +452,7 @@ impl<'a> IntoObject for Vec<Object<'a>> {
     }
 }
 
-impl<'a> IntoObject for GcVec<'_, Object<'a>> {
+impl IntoObject for GcVec<'_, Object<'_>> {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -465,7 +465,7 @@ impl<'a> IntoObject for GcVec<'_, Object<'a>> {
     }
 }
 
-impl<'a> IntoObject for &[Object<'a>] {
+impl IntoObject for &[Object<'_>] {
     type Out<'ob> = &'ob LispVec;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -475,7 +475,7 @@ impl<'a> IntoObject for &[Object<'a>] {
     }
 }
 
-impl<'a> IntoObject for RecordBuilder<'a> {
+impl IntoObject for RecordBuilder<'_> {
     type Out<'ob> = &'ob Record;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -488,7 +488,7 @@ impl<'a> IntoObject for RecordBuilder<'a> {
     }
 }
 
-impl<'a> IntoObject for HashTable<'a> {
+impl IntoObject for HashTable<'_> {
     type Out<'ob> = &'ob LispHashTable;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
@@ -1062,7 +1062,7 @@ impl<'old, 'new> WithLifetime<'new> for ObjectType<'old> {
     }
 }
 
-impl<'new> WithLifetime<'new> for i64 {
+impl WithLifetime<'_> for i64 {
     type Out = i64;
 
     unsafe fn with_lifetime(self) -> Self::Out {
@@ -1070,7 +1070,7 @@ impl<'new> WithLifetime<'new> for i64 {
     }
 }
 
-impl<'ob> From<usize> for Object<'ob> {
+impl From<usize> for Object<'_> {
     fn from(x: usize) -> Self {
         let ptr = sptr::invalid(x);
         unsafe { i64::tag_ptr(ptr).into() }
@@ -1119,7 +1119,7 @@ impl TagType for u16 {
     }
 }
 
-impl<'ob> From<i32> for Object<'ob> {
+impl From<i32> for Object<'_> {
     fn from(x: i32) -> Self {
         i64::from(x).into()
     }
@@ -1433,7 +1433,7 @@ fn cast_pair<T>((ptr, moved): (NonNull<T>, bool)) -> (*const u8, bool) {
     (ptr.as_ptr().cast::<u8>(), moved)
 }
 
-impl<'ob> PartialEq<&str> for Object<'ob> {
+impl PartialEq<&str> for Object<'_> {
     fn eq(&self, other: &&str) -> bool {
         match self.untag() {
             ObjectType::String(x) => **x == **other,
@@ -1442,7 +1442,7 @@ impl<'ob> PartialEq<&str> for Object<'ob> {
     }
 }
 
-impl<'ob> PartialEq<Symbol<'_>> for Object<'ob> {
+impl PartialEq<Symbol<'_>> for Object<'_> {
     fn eq(&self, other: &Symbol) -> bool {
         match self.untag() {
             ObjectType::Symbol(x) => x == *other,
@@ -1451,7 +1451,7 @@ impl<'ob> PartialEq<Symbol<'_>> for Object<'ob> {
     }
 }
 
-impl<'ob> PartialEq<f64> for Object<'ob> {
+impl PartialEq<f64> for Object<'_> {
     fn eq(&self, other: &f64) -> bool {
         use float_cmp::ApproxEq;
         match self.untag() {
@@ -1461,7 +1461,7 @@ impl<'ob> PartialEq<f64> for Object<'ob> {
     }
 }
 
-impl<'ob> PartialEq<i64> for Object<'ob> {
+impl PartialEq<i64> for Object<'_> {
     fn eq(&self, other: &i64) -> bool {
         match self.untag() {
             ObjectType::Int(x) => x == *other,
@@ -1470,7 +1470,7 @@ impl<'ob> PartialEq<i64> for Object<'ob> {
     }
 }
 
-impl<'ob> PartialEq<bool> for Object<'ob> {
+impl PartialEq<bool> for Object<'_> {
     fn eq(&self, other: &bool) -> bool {
         if *other {
             matches!(self.untag(), ObjectType::Symbol(sym::TRUE))

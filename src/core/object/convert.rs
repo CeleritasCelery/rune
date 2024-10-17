@@ -79,14 +79,14 @@ impl<'ob> TryFrom<Object<'ob>> for Option<usize> {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for bool {
+impl TryFrom<Object<'_>> for bool {
     type Error = LispError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil())
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for OptionalFlag {
+impl TryFrom<Object<'_>> for OptionalFlag {
     type Error = LispError;
     fn try_from(obj: Object) -> Result<Self, Self::Error> {
         Ok(obj.is_nil().then_some(()))
@@ -112,7 +112,7 @@ where
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-impl<'ob> From<bool> for Object<'ob> {
+impl From<bool> for Object<'_> {
     fn from(b: bool) -> Self {
         if b {
             TRUE

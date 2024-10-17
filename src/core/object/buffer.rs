@@ -24,7 +24,7 @@ pub(crate) struct OpenBuffer<'a> {
     back_ref: &'a LispBuffer,
 }
 
-impl<'a> OpenBuffer<'a> {
+impl OpenBuffer<'_> {
     fn get(&self) -> &BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_ref().unwrap()
@@ -80,7 +80,7 @@ impl<'a> OpenBuffer<'a> {
     }
 }
 
-impl<'old, 'new> WithLifetime<'new> for OpenBuffer<'old> {
+impl<'new> WithLifetime<'new> for OpenBuffer<'_> {
     type Out = OpenBuffer<'new>;
 
     unsafe fn with_lifetime(self) -> Self::Out {
@@ -187,9 +187,9 @@ impl Trace for LispBufferInner {
     }
 }
 
-impl<'old, 'new> LispBuffer {
+impl<'new> LispBuffer {
     pub(in crate::core) fn clone_in<const C: bool>(
-        &'old self,
+        &self,
         _: &'new Block<C>,
     ) -> Gc<&'new LispBuffer> {
         unsafe { self.with_lifetime().tag() }

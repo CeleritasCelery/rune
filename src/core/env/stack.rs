@@ -56,7 +56,7 @@ struct FrameStore<'a> {
     bytecode: Option<ByteFrame<'a>>,
 }
 
-impl<'old, 'new> IntoRoot<FrameStore<'new>> for FrameStore<'old> {
+impl<'new> IntoRoot<FrameStore<'new>> for FrameStore<'_> {
     unsafe fn into_root(self) -> FrameStore<'new> {
         self.with_lifetime()
     }
@@ -360,7 +360,7 @@ impl<'rt> Deref for CallFrame<'_, 'rt> {
     }
 }
 
-impl<'b> DerefMut for CallFrame<'_, 'b> {
+impl DerefMut for CallFrame<'_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.env
     }

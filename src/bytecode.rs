@@ -94,7 +94,7 @@ struct Handler<'ob> {
     condition: Slot<Object<'ob>>,
 }
 
-impl<'old, 'new> IntoRoot<Handler<'new>> for Handler<'old> {
+impl<'new> IntoRoot<Handler<'new>> for Handler<'_> {
     unsafe fn into_root(self) -> Handler<'new> {
         self.with_lifetime()
     }
