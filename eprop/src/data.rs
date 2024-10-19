@@ -1,6 +1,6 @@
+#![allow(unused_qualifications)]
+use proptest::prelude::*;
 use std::hash::Hash;
-
-use arbitrary::Arbitrary;
 use syn::ItemFn;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,35 +24,77 @@ pub(crate) enum ObjectType {
     Char,
 }
 
-impl From<ObjectType> for ArbitraryObjectType {
-    fn from(val: ObjectType) -> Self {
-        let list = rand::random::<[u8; 32]>();
-        let mut unstructured = arbitrary::Unstructured::new(&list);
-        match val {
-            ObjectType::String => ArbitraryObjectType::generate_string(&mut unstructured),
-            ObjectType::Float => ArbitraryObjectType::generate_float(&mut unstructured),
-            ObjectType::Cons => ArbitraryObjectType::generate_cons(&mut unstructured),
-            ObjectType::Symbol => ArbitraryObjectType::generate_symbol(&mut unstructured),
-            ObjectType::Integer => ArbitraryObjectType::generate_integer(&mut unstructured),
-            ObjectType::Boolean => ArbitraryObjectType::generate_boolean(&mut unstructured),
-            ObjectType::Unknown => ArbitraryObjectType::generate_unknown(&mut unstructured),
-            ObjectType::Function => ArbitraryObjectType::generate_function(&mut unstructured),
+impl ObjectType {
+    const SYMBOL_CHARS: &'static str = "[a-zA-Z][a-zA-Z0-9-]*";
+    // New function to create a strategy for a specific type
+    fn strategy(self) -> BoxedStrategy<ArbitraryObjectType> {
+        match self {
+            ObjectType::String => any::<String>().prop_map(ArbitraryObjectType::String).boxed(),
+            ObjectType::Float => any::<f64>().prop_map(ArbitraryObjectType::Float).boxed(),
+            ObjectType::Cons => todo!("Strategy for Cons not implemented"),
+            ObjectType::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryObjectType::Symbol).boxed(),
+            ObjectType::Integer => any::<i64>().prop_map(ArbitraryObjectType::Integer).boxed(),
+            ObjectType::Boolean => any::<bool>().prop_map(ArbitraryObjectType::Boolean).boxed(),
+            ObjectType::Unknown => Self::any_object_strategy(),
             ObjectType::UnibyteString => {
-                ArbitraryObjectType::generate_unibyte_string(&mut unstructured)
+                "[a-zA-Z0-9 ]*".prop_map(ArbitraryObjectType::UnibyteString).boxed()
             }
-            ObjectType::Vector => ArbitraryObjectType::generate_vector(&mut unstructured),
-            ObjectType::HashTable => ArbitraryObjectType::generate_hash_table(&mut unstructured),
-            ObjectType::Record => ArbitraryObjectType::generate_record(&mut unstructured),
-            ObjectType::ByteFn => ArbitraryObjectType::generate_byte_fn(&mut unstructured),
-            ObjectType::Subr => ArbitraryObjectType::generate_subr(&mut unstructured),
-            ObjectType::Buffer => ArbitraryObjectType::generate_buffer(&mut unstructured),
-            ObjectType::Nil => ArbitraryObjectType::generate_nil(),
-            ObjectType::Char => ArbitraryObjectType::generate_char(&mut unstructured),
+            ObjectType::Vector => todo!("Strategy for Vector not implemented"),
+            ObjectType::HashTable => todo!("Strategy for HashTable not implemented"),
+            ObjectType::Record => todo!("Strategy for Record not implemented"),
+            ObjectType::ByteFn => any::<u8>().prop_map(ArbitraryObjectType::ByteFn).boxed(),
+            ObjectType::Subr => todo!("Strategy for Subr not implemented"),
+            ObjectType::Buffer => any::<String>().prop_map(ArbitraryObjectType::Buffer).boxed(),
+            ObjectType::Nil => Just(ArbitraryObjectType::Nil).boxed(),
+            ObjectType::Char => any::<char>().prop_map(ArbitraryObjectType::Char).boxed(),
+            ObjectType::Function => todo!("Strategy for Function not implemented"),
         }
+    }
+
+    pub(crate) fn any_object_strategy() -> BoxedStrategy<ArbitraryObjectType> {
+        prop_oneof![
+            Just(ArbitraryObjectType::Nil),
+            any::<bool>().prop_map(ArbitraryObjectType::Boolean),
+            any::<i64>().prop_map(ArbitraryObjectType::Integer),
+            any::<f64>().prop_map(ArbitraryObjectType::Float),
+            any::<String>().prop_map(ArbitraryObjectType::String),
+            Self::SYMBOL_CHARS.prop_map(ArbitraryObjectType::Symbol),
+            "[a-zA-Z0-9 ]*".prop_map(ArbitraryObjectType::UnibyteString),
+            any::<char>().prop_map(ArbitraryObjectType::Char),
+        ]
+        .boxed()
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+// New function to create a combined strategy from multiple types
+pub(crate) fn combined_strategy(types: &[ObjectType]) -> BoxedStrategy<ArbitraryObjectType> {
+    // Combine all strategies using prop_oneof!
+    match types.len() {
+        0 => panic!("At least one type must be provided"),
+        1 => types[0].strategy(),
+        2 => prop_oneof![types[0].strategy(), types[1].strategy()].boxed(),
+        3 => prop_oneof![types[0].strategy(), types[1].strategy(), types[2].strategy()].boxed(),
+        4 => prop_oneof![
+            types[0].strategy(),
+            types[1].strategy(),
+            types[2].strategy(),
+            types[3].strategy()
+        ]
+        .boxed(),
+        5 => prop_oneof![
+            types[0].strategy(),
+            types[1].strategy(),
+            types[2].strategy(),
+            types[3].strategy(),
+            types[4].strategy()
+        ]
+        .boxed(),
+        n => panic!("Currently supporting up to 5 combined types, got {n}"),
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
+#[expect(dead_code)]
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
@@ -71,152 +113,6 @@ pub(crate) enum ArbitraryObjectType {
     Char(char),
     Buffer(String),
     Subr(u8),
-}
-
-impl ArbitraryObjectType {
-    fn generate_string(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::String(String::arbitrary(u).unwrap())
-    }
-    fn generate_float(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Float(f64::arbitrary(u).unwrap())
-    }
-    fn generate_cons(u: &mut arbitrary::Unstructured) -> Self {
-        let choice = rand::random::<usize>() % 20;
-        let mut list = Vec::new();
-        for _ in 0..choice {
-            list.push(ArbitraryObjectType::arbitrary(u).unwrap());
-        }
-        ArbitraryObjectType::Cons(list)
-    }
-    fn generate_symbol(u: &mut arbitrary::Unstructured) -> Self {
-        let mut string: String = String::arbitrary(u)
-            .unwrap()
-            .chars()
-            .map(|c| match c {
-                c if c.is_whitespace() => '_',
-                c => c,
-            })
-            .collect();
-        if string.is_empty() {
-            string.push('_');
-        }
-        ArbitraryObjectType::Symbol(string)
-    }
-    fn generate_integer(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Integer(i64::arbitrary(u).unwrap())
-    }
-    fn generate_char(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Char(char::arbitrary(u).unwrap())
-    }
-    fn generate_boolean(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Boolean(bool::arbitrary(u).unwrap())
-    }
-    fn generate_unknown(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Unknown(Box::new(ArbitraryObjectType::arbitrary(u).unwrap()))
-    }
-    fn generate_unibyte_string(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::UnibyteString(String::arbitrary(u).unwrap())
-    }
-    fn generate_vector(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Vector(Vec::arbitrary(u).unwrap())
-    }
-    fn generate_hash_table(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::HashTable(Vec::arbitrary(u).unwrap())
-    }
-    fn generate_record(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Record(String::arbitrary(u).unwrap(), Vec::arbitrary(u).unwrap())
-    }
-    fn generate_nil() -> Self {
-        ArbitraryObjectType::Nil
-    }
-    fn generate_function(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Function(u8::arbitrary(u).unwrap() % 10)
-    }
-    fn generate_byte_fn(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::ByteFn(u8::arbitrary(u).unwrap() % 10)
-    }
-    fn generate_buffer(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Buffer(String::arbitrary(u).unwrap())
-    }
-    fn generate_subr(u: &mut arbitrary::Unstructured) -> Self {
-        ArbitraryObjectType::Subr(u8::arbitrary(u).unwrap() % 10)
-    }
-}
-
-impl Hash for ArbitraryObjectType {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            ArbitraryObjectType::String(s)
-            | ArbitraryObjectType::Symbol(s)
-            | ArbitraryObjectType::UnibyteString(s) => {
-                s.hash(state);
-            }
-            ArbitraryObjectType::Float(f) => {
-                f.to_bits().hash(state);
-            }
-            ArbitraryObjectType::Cons(list) => {
-                list.hash(state);
-            }
-            ArbitraryObjectType::Integer(i) => {
-                i.hash(state);
-            }
-            ArbitraryObjectType::Boolean(b) => {
-                b.hash(state);
-            }
-            ArbitraryObjectType::Unknown(obj) => {
-                obj.hash(state);
-            }
-            ArbitraryObjectType::Vector(vec) => {
-                vec.hash(state);
-            }
-            ArbitraryObjectType::HashTable(vec) => {
-                vec.hash(state);
-            }
-            ArbitraryObjectType::Record(name, members) => {
-                name.hash(state);
-                members.hash(state);
-            }
-            ArbitraryObjectType::Nil => {
-                0.hash(state);
-            }
-            ArbitraryObjectType::Function(arity)
-            | ArbitraryObjectType::ByteFn(arity)
-            | ArbitraryObjectType::Subr(arity) => {
-                arity.hash(state);
-            }
-            ArbitraryObjectType::Buffer(name) => {
-                name.hash(state);
-            }
-            ArbitraryObjectType::Char(chr) => chr.hash(state),
-        }
-    }
-}
-
-impl<'a> Arbitrary<'a> for ArbitraryObjectType {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let choice = u.int_in_range(0..=15)?;
-        match choice {
-            0 => Ok(ArbitraryObjectType::generate_string(u)),
-            1 => Ok(ArbitraryObjectType::generate_float(u)),
-            2 => Ok(ArbitraryObjectType::generate_cons(u)),
-            3 => Ok(ArbitraryObjectType::generate_symbol(u)),
-            4 => Ok(ArbitraryObjectType::generate_integer(u)),
-            5 => Ok(ArbitraryObjectType::generate_boolean(u)),
-            6 => Ok(ArbitraryObjectType::generate_unknown(u)),
-            7 => Ok(ArbitraryObjectType::generate_unibyte_string(u)),
-            8 => Ok(ArbitraryObjectType::generate_vector(u)),
-            9 => Ok(ArbitraryObjectType::generate_hash_table(u)),
-            10 => Ok(ArbitraryObjectType::generate_record(u)),
-            11 => Ok(ArbitraryObjectType::generate_function(u)),
-            12 => Ok(ArbitraryObjectType::generate_byte_fn(u)),
-            13 => Ok(ArbitraryObjectType::generate_nil()),
-            14 => Ok(ArbitraryObjectType::generate_buffer(u)),
-            15 => Ok(ArbitraryObjectType::generate_subr(u)),
-            _ => {
-                todo!()
-            }
-        }
-    }
 }
 
 impl std::fmt::Display for ArbitraryObjectType {
@@ -331,46 +227,17 @@ impl std::fmt::Display for ArbitraryObjectType {
     }
 }
 
-impl std::fmt::Debug for ArbitraryObjectType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Type {
     Object(Vec<ObjectType>),
     Nil,
 }
 
-#[derive(Debug, Clone, PartialEq, Arbitrary, PartialOrd, Hash)]
-pub(crate) enum ArbitraryType {
-    Object(ArbitraryObjectType),
-    Nil,
-}
-
-impl From<Type> for ArbitraryType {
-    fn from(val: Type) -> Self {
-        match val {
-            Type::Object(obj) => {
-                let choice = rand::random::<usize>() % obj.len();
-                let obj = obj[choice];
-                ArbitraryType::Object(obj.into())
-            }
-            Type::Nil => ArbitraryType::Nil,
-        }
-    }
-}
-
-impl std::fmt::Display for ArbitraryType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Type {
+    fn strategy(&self) -> BoxedStrategy<ArbitraryObjectType> {
         match self {
-            ArbitraryType::Object(obj) => {
-                write!(f, "{obj}")
-            }
-            ArbitraryType::Nil => {
-                write!(f, "nil")
-            }
+            Type::Object(types) => combined_strategy(types),
+            Type::Nil => Just(ArbitraryObjectType::Nil).boxed(),
         }
     }
 }
@@ -381,102 +248,176 @@ pub(crate) enum ArgType {
     Optional(Type),
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash)]
-pub(crate) enum ArbitraryArgType {
-    Required(ArbitraryType),
-    Optional(ArbitraryType),
-}
-
-impl From<ArgType> for ArbitraryArgType {
-    fn from(val: ArgType) -> Self {
-        match val {
-            ArgType::Required(ty) => ArbitraryArgType::Required(ty.into()),
-            ArgType::Optional(ty) => ArbitraryArgType::Optional(ty.into()),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
+#[expect(dead_code)]
 pub(crate) struct Function {
     pub(crate) name: String,
-    args: Vec<ArgType>,
-    ret: Type,
-    fallible: bool,
+    pub(crate) args: Vec<ArgType>,
+    pub(crate) ret: Type,
+    pub(crate) fallible: bool,
 }
 
 impl Function {
+    pub(crate) fn strategy(&self) -> Vec<BoxedStrategy<Option<ArbitraryObjectType>>> {
+        self.args
+            .iter()
+            .map(|arg| match arg {
+                ArgType::Required(ty) => ty.strategy().prop_map(Some).boxed(),
+                ArgType::Optional(ty) => {
+                    prop_oneof![1 => Just(None), 3 => ty.strategy().prop_map(Some)].boxed()
+                }
+            })
+            .collect::<Vec<_>>()
+    }
+
     #[expect(clippy::too_many_lines)]
-    fn process_arg(ty: &syn::Type) -> Option<Type> {
+    fn process_arg(ty: &syn::Type) -> Result<Type, String> {
         match ty {
-            syn::Type::Array(_) => {
-                eprintln!("Array not supported");
-                None
-            }
-            syn::Type::BareFn(_) => {
-                eprintln!("BareFn not supported");
-                None
-            }
-            syn::Type::ImplTrait(_) => {
-                eprintln!("Impl Trait not supported");
-                None
-            }
-            syn::Type::Infer(_) => {
-                eprintln!("Infer not supported");
-                None
-            }
-            syn::Type::Macro(_) => {
-                eprintln!("Macro not supported");
-                None
-            }
-            syn::Type::Never(_) => {
-                eprintln!("Never not supported");
-                None
-            }
-            syn::Type::Paren(_) => {
-                eprintln!("Paren not supported");
-                None
-            }
+            syn::Type::Array(_) => Err("Array not supported".to_string()),
+            syn::Type::BareFn(_) => Err("BareFn not supported".to_string()),
+            syn::Type::ImplTrait(_) => Err("Impl Trait not supported".to_string()),
+            syn::Type::Infer(_) => Err("Infer not supported".to_string()),
+            syn::Type::Macro(_) => Err("Macro not supported".to_string()),
+            syn::Type::Never(_) => Err("Never not supported".to_string()),
+            syn::Type::Paren(_) => Err("Paren not supported".to_string()),
             syn::Type::Path(syn::TypePath { path, .. }) => {
                 let segments = &path.segments;
                 let last = segments.last().unwrap().ident.to_string();
 
                 match last.as_str() {
                     "StringOrSymbol" => {
-                        Some(Type::Object(vec![ObjectType::String, ObjectType::Symbol]))
+                        Ok(Type::Object(vec![ObjectType::String, ObjectType::Symbol]))
                     }
-                    "Symbol" => Some(Type::Object(vec![ObjectType::Symbol])),
+                    "Symbol" => Ok(Type::Object(vec![ObjectType::Symbol])),
                     "Number" | "NumberValue" => {
-                        Some(Type::Object(vec![ObjectType::Integer, ObjectType::Float]))
+                        Ok(Type::Object(vec![ObjectType::Integer, ObjectType::Float]))
                     }
-                    "Object" => Some(Type::Object(vec![ObjectType::Unknown])),
-                    "usize" | "isize" | "i64" => Some(Type::Object(vec![ObjectType::Integer])),
-                    "str" | "String" | "LispString" => Some(Type::Object(vec![ObjectType::String])),
-                    "bool" => Some(Type::Object(vec![ObjectType::Boolean])),
-                    "f64" => Some(Type::Object(vec![ObjectType::Float])),
-                    "char" => Some(Type::Object(vec![ObjectType::Char])),
-                    "Function" => Some(Type::Object(vec![ObjectType::Function])),
-                    "Cons" | "List" | "Error" => Some(Type::Object(vec![ObjectType::Cons])),
-                    "OptionalFlag" => Some(Type::Object(vec![
+                    "Object" => Ok(Type::Object(vec![ObjectType::Unknown])),
+                    "usize" | "isize" | "i64" => Ok(Type::Object(vec![ObjectType::Integer])),
+                    "str" | "String" | "LispString" => Ok(Type::Object(vec![ObjectType::String])),
+                    "bool" => Ok(Type::Object(vec![ObjectType::Boolean])),
+                    "f64" => Ok(Type::Object(vec![ObjectType::Float])),
+                    "char" => Ok(Type::Object(vec![ObjectType::Char])),
+                    "Function" => Ok(Type::Object(vec![ObjectType::Function])),
+                    "Cons" | "List" | "Error" => Ok(Type::Object(vec![ObjectType::Cons])),
+                    "OptionalFlag" => Ok(Type::Object(vec![
                         ObjectType::Boolean,
                         ObjectType::Nil,
                         ObjectType::Unknown,
                     ])),
-                    "ArgSlice" => Some(Type::Object(vec![ObjectType::Cons, ObjectType::Nil])),
+                    "ArgSlice" => Ok(Type::Object(vec![ObjectType::Cons, ObjectType::Nil])),
                     "LispVec" | "LispVector" | "Vec" | "RecordBuilder" => {
-                        Some(Type::Object(vec![ObjectType::Vector]))
+                        Ok(Type::Object(vec![ObjectType::Vector]))
                     }
-                    "LispHashTable" => Some(Type::Object(vec![ObjectType::HashTable])),
-                    "ByteString" => Some(Type::Object(vec![ObjectType::UnibyteString])),
-                    "Record" => Some(Type::Object(vec![ObjectType::Record])),
-                    "ByteFn" => Some(Type::Object(vec![ObjectType::ByteFn])),
-                    "SubrFn" => Some(Type::Object(vec![ObjectType::Subr])),
-                    "Buffer" => Some(Type::Object(vec![ObjectType::Buffer])),
+                    "LispHashTable" => Ok(Type::Object(vec![ObjectType::HashTable])),
+                    "ByteString" => Ok(Type::Object(vec![ObjectType::UnibyteString])),
+                    "Record" => Ok(Type::Object(vec![ObjectType::Record])),
+                    "ByteFn" => Ok(Type::Object(vec![ObjectType::ByteFn])),
+                    "SubrFn" => Ok(Type::Object(vec![ObjectType::Subr])),
+                    "LispBuffer" => Ok(Type::Object(vec![ObjectType::Buffer])),
                     "Rto" | "Rt" | "Gc" => {
                         let syn::PathArguments::AngleBracketed(
                             syn::AngleBracketedGenericArguments { args, .. },
                         ) = &segments.last().unwrap().arguments
                         else {
-                            eprintln!("Expected angle bracketed arguments");
+                            return Err("Expected angle bracketed arguments".to_string());
+                        };
+                        let mut type_argument = None;
+                        for arg in args {
+                            match arg {
+                                syn::GenericArgument::Type(ty) => {
+                                    type_argument = Some(ty);
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        let Some(ty) = type_argument else {
+                            return Err("Expected type argument".to_string());
+                        };
+
+                        Function::process_arg(ty)
+                    }
+                    "Env" | "Context" => {
+                        Err("Environment or Context type not supported".to_string())
+                    }
+                    _ => Err(format!("Unknown type: {last}")),
+                }
+            }
+            syn::Type::Ptr(_) => Err("Ptr not supported".to_string()),
+            syn::Type::Reference(syn::TypeReference { elem, .. })
+            | syn::Type::Group(syn::TypeGroup { elem, .. }) => Function::process_arg(elem),
+            syn::Type::Slice(syn::TypeSlice { .. }) => {
+                Ok(Type::Object(vec![ObjectType::Cons, ObjectType::Nil]))
+            }
+            syn::Type::TraitObject(_) => Err("TraitObject not supported".to_string()),
+            syn::Type::Tuple(_) => Ok(Type::Object(vec![ObjectType::Nil])),
+            syn::Type::Verbatim(_) => Err("Verbatim type not supported".to_string()),
+            _ => Err("Unknown type".to_string()),
+        }
+    }
+
+    #[expect(clippy::too_many_lines)]
+pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
+    let name = item
+        .sig
+        .ident
+        .to_string()
+        .chars()
+        .map(|c| match c {
+            '_' => '-',
+            c => c,
+        })
+        .collect();
+
+    let args = item
+        .sig
+        .inputs
+        .iter()
+        .filter_map(|arg| {
+            let ty = match arg {
+                syn::FnArg::Receiver(syn::Receiver { ty, .. })
+                | syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
+            };
+
+            match ty.as_ref() {
+                syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
+                    let syn::token::Group { span } = group_token;
+
+                    let source_text = span.source_text()
+                        .ok_or_else(|| "Failed to get source text".to_string())
+                        .ok()?;
+                    let optional = matches!(source_text.as_str(), "Option");
+                    let ty = Function::process_arg(elem).ok()?;
+
+                    match ty {
+                        Type::Object(ref obj) => {
+                            if obj.contains(&ObjectType::Boolean) {
+                                Some(ArgType::Required(ty))
+                            } else if optional {
+                                Some(ArgType::Optional(ty))
+                            } else {
+                                Some(ArgType::Required(ty))
+                            }
+                        }
+                        Type::Nil => {
+                            if optional {
+                                Some(ArgType::Optional(ty))
+                            } else {
+                                Some(ArgType::Required(ty))
+                            }
+                        }
+                    }
+                }
+                syn::Type::Path(syn::TypePath { path, .. }) => {
+                    let segments = &path.segments;
+                    let last = segments.last().unwrap().ident.to_string();
+                    let optional = matches!(last.as_str(), "Result" | "Option");
+                    if optional {
+                        let syn::PathArguments::AngleBracketed(
+                            syn::AngleBracketedGenericArguments { args, .. },
+                        ) = &segments.last().unwrap().arguments
+                        else {
                             return None;
                         };
                         let mut type_argument = None;
@@ -490,74 +431,31 @@ impl Function {
                         }
 
                         let Some(ty) = type_argument else {
-                            eprintln!("Expected type argument");
                             return None;
                         };
 
-                        let ty = Function::process_arg(ty)?;
+                        let ty = Function::process_arg(ty).ok()?;
 
-                        Some(ty)
-                    }
-                    "Env" | "Context" => None,
-                    _ => {
-                        eprintln!("Unknown type: {last}");
-                        None
-                    }
-                }
-            }
-            syn::Type::Ptr(_) => {
-                eprintln!("Ptr not supported");
-                None
-            }
-            syn::Type::Reference(syn::TypeReference { elem, .. })
-            | syn::Type::Group(syn::TypeGroup { elem, .. }) => Function::process_arg(elem),
-            syn::Type::Slice(syn::TypeSlice { .. }) => {
-                Some(Type::Object(vec![ObjectType::Cons, ObjectType::Nil]))
-            }
-            syn::Type::TraitObject(_) => {
-                eprintln!("TraitObject not supported");
-                None
-            }
-            syn::Type::Tuple(_) => Some(Type::Object(vec![ObjectType::Nil])),
-            syn::Type::Verbatim(_) => None,
-            _ => {
-                eprintln!("Unknown type");
-                None
-            }
-        }
-    }
-
-    #[expect(clippy::too_many_lines)]
-    pub(crate) fn from_item(item: &ItemFn) -> Option<Self> {
-        //println!("{}", item.sig.ident.to_string());
-        let name = item
-            .sig
-            .ident
-            .to_string()
-            .chars()
-            .map(|c| match c {
-                '_' => '-',
-                c => c,
-            })
-            .collect();
-
-        let args = item
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|arg| {
-                let ty = match arg {
-                    syn::FnArg::Receiver(syn::Receiver { ty, .. })
-                    | syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
-                };
-
-                match ty.as_ref() {
-                    syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
-                        let syn::token::Group { span } = group_token;
-
-                        let source_text = span.source_text().unwrap();
-                        let optional = matches!(source_text.as_str(), "Option");
-                        let ty = Function::process_arg(elem).unwrap();
+                        match ty {
+                            Type::Object(ref obj) => {
+                                if obj.contains(&ObjectType::Boolean) {
+                                    Some(ArgType::Required(ty))
+                                } else if optional {
+                                    Some(ArgType::Optional(ty))
+                                } else {
+                                    Some(ArgType::Required(ty))
+                                }
+                            }
+                            Type::Nil => {
+                                if optional {
+                                    Some(ArgType::Optional(ty))
+                                } else {
+                                    Some(ArgType::Required(ty))
+                                }
+                            }
+                        }
+                    } else {
+                        let ty = Function::process_arg(ty).ok()?;
 
                         match ty {
                             Type::Object(ref obj) => {
@@ -578,17 +476,39 @@ impl Function {
                             }
                         }
                     }
-                    syn::Type::Path(syn::TypePath { path, .. }) => {
-                        let segments = &path.segments;
-                        let last = segments.last().unwrap().ident.to_string();
-                        let optional = matches!(last.as_str(), "Result" | "Option");
-                        if optional {
+                }
+                x => {
+                    let ty = Function::process_arg(x).ok()?;
+                    Some(ArgType::Required(ty))
+                }
+            }
+        })
+        .collect();
+
+    let (ret, fallible) = match &item.sig.output {
+        syn::ReturnType::Default => (Type::Nil, false),
+        syn::ReturnType::Type(_, ty) => {
+            match ty.as_ref() {
+                syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
+                    let syn::token::Group { span } = group_token;
+
+                    let source_text = span.source_text()
+                        .ok_or_else(|| "Failed to get source text".to_string())?;
+                    let fallible = matches!(source_text.as_str(), "Option" | "Result");
+
+                    let ty = Function::process_arg(elem)?;
+                    (ty, fallible)
+                }
+                syn::Type::Path(syn::TypePath { path, .. }) => {
+                    let segments = &path.segments;
+                    let last = segments.last().unwrap().ident.to_string();
+                    match last.as_str() {
+                        "Result" | "Option" => {
                             let syn::PathArguments::AngleBracketed(
                                 syn::AngleBracketedGenericArguments { args, .. },
                             ) = &segments.last().unwrap().arguments
                             else {
-                                eprintln!("Expected angle bracketed arguments");
-                                return None;
+                                return Err("Expected angle bracketed arguments".to_string());
                             };
                             let mut type_argument = None;
                             for arg in args {
@@ -601,160 +521,26 @@ impl Function {
                             }
 
                             let Some(ty) = type_argument else {
-                                eprintln!("Expected type argument");
-                                return None;
+                                return Err("Expected type argument".to_string());
                             };
 
                             let ty = Function::process_arg(ty)?;
-
-                            match ty {
-                                Type::Object(ref obj) => {
-                                    if obj.contains(&ObjectType::Boolean) {
-                                        Some(ArgType::Required(ty))
-                                    } else if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                                Type::Nil => {
-                                    if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                            }
-                        } else {
+                            (ty, true)
+                        }
+                        _ => {
                             let ty = Function::process_arg(ty)?;
-
-                            match ty {
-                                Type::Object(ref obj) => {
-                                    if obj.contains(&ObjectType::Boolean) {
-                                        Some(ArgType::Required(ty))
-                                    } else if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                                Type::Nil => {
-                                    if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                            }
+                            (ty, false)
                         }
                     }
-                    x => {
-                        let ty = Function::process_arg(x)?;
-
-                        Some(ArgType::Required(ty))
-                    }
                 }
-            })
-            .collect();
-
-        let (ret, fallible) = match &item.sig.output {
-            syn::ReturnType::Default => (Type::Nil, false),
-            syn::ReturnType::Type(_, ty) => {
-                match ty.as_ref() {
-                    syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
-                        let syn::token::Group { span } = group_token;
-
-                        let source_text = span.source_text().unwrap();
-                        //println!("{}", source_text);
-                        let fallible = matches!(source_text.as_str(), "Option" | "Result");
-
-                        let ty = Function::process_arg(elem).unwrap();
-                        (ty, fallible)
-                    }
-                    syn::Type::Path(syn::TypePath { path, .. }) => {
-                        let segments = &path.segments;
-                        let last = segments.last().unwrap().ident.to_string();
-                        match last.as_str() {
-                            "Result" | "Option" => {
-                                let syn::PathArguments::AngleBracketed(
-                                    syn::AngleBracketedGenericArguments { args, .. },
-                                ) = &segments.last().unwrap().arguments
-                                else {
-                                    panic!("Expected angle bracketed arguments");
-                                };
-                                let mut type_argument = None;
-                                for arg in args {
-                                    match arg {
-                                        syn::GenericArgument::Type(ty) => {
-                                            type_argument = Some(ty);
-                                        }
-                                        _ => continue,
-                                    }
-                                }
-
-                                let Some(ty) = type_argument else {
-                                    eprintln!("Expected type argument");
-                                    return None;
-                                };
-
-                                let ty = Function::process_arg(ty).unwrap();
-                                (ty, true)
-                            }
-                            _ => {
-                                let ty = Function::process_arg(ty).unwrap();
-                                (ty, false)
-                            }
-                        }
-                    }
-                    x => {
-                        //println!("return type");
-                        let ty = Function::process_arg(x).unwrap();
-
-                        (ty, false)
-                    }
-                }
-            }
-        };
-
-        Some(Function { name, args, ret, fallible })
-    }
-}
-
-#[derive(Clone, PartialEq, PartialOrd, Hash)]
-pub(crate) struct ArbitraryFunction {
-    name: String,
-    args: Vec<ArbitraryArgType>,
-    ret: ArbitraryType,
-    fallible: bool,
-}
-
-impl From<Function> for ArbitraryFunction {
-    fn from(val: Function) -> Self {
-        ArbitraryFunction {
-            name: val.name,
-            args: val.args.into_iter().map(Into::into).collect(),
-            ret: val.ret.into(),
-            fallible: val.fallible,
-        }
-    }
-}
-
-impl std::fmt::Display for ArbitraryFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({} ", self.name)?;
-        let optionals = rand::random::<bool>();
-        for arg in &self.args {
-            match arg {
-                ArbitraryArgType::Required(ty) => {
-                    write!(f, "{ty} ")?;
-                }
-                ArbitraryArgType::Optional(ty) => {
-                    if optionals {
-                        write!(f, "{ty} ")?;
-                    }
+                x => {
+                    let ty = Function::process_arg(x)?;
+                    (ty, false)
                 }
             }
         }
-        write!(f, ")")
-    }
+    };
+
+    Ok(Function { name, args, ret, fallible })
+}
 }

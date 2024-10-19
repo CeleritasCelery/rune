@@ -2,3 +2,4 @@
 /stash
 /crates/**/target/
 Cargo.lock
+.aider*
