@@ -1,4 +1,3 @@
-#![allow(unused_qualifications)]
 use proptest::prelude::*;
 use std::hash::Hash;
 use syn::ItemFn;
@@ -270,7 +269,6 @@ impl Function {
             .collect::<Vec<_>>()
     }
 
-    #[expect(clippy::too_many_lines)]
     fn process_arg(ty: &syn::Type) -> Result<Type, String> {
         match ty {
             syn::Type::Array(_) => Err("Array not supported".to_string()),
@@ -358,104 +356,38 @@ impl Function {
     }
 
     #[expect(clippy::too_many_lines)]
-pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
-    let name = item
-        .sig
-        .ident
-        .to_string()
-        .chars()
-        .map(|c| match c {
-            '_' => '-',
-            c => c,
-        })
-        .collect();
+    pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
+        let name = item
+            .sig
+            .ident
+            .to_string()
+            .chars()
+            .map(|c| match c {
+                '_' => '-',
+                c => c,
+            })
+            .collect();
 
-    let args = item
-        .sig
-        .inputs
-        .iter()
-        .filter_map(|arg| {
-            let ty = match arg {
-                syn::FnArg::Receiver(syn::Receiver { ty, .. })
-                | syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
-            };
+        let args = item
+            .sig
+            .inputs
+            .iter()
+            .filter_map(|arg| {
+                let ty = match arg {
+                    syn::FnArg::Receiver(syn::Receiver { ty, .. })
+                    | syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
+                };
 
-            match ty.as_ref() {
-                syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
-                    let syn::token::Group { span } = group_token;
+                match ty.as_ref() {
+                    syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
+                        let syn::token::Group { span } = group_token;
 
-                    let source_text = span.source_text()
-                        .ok_or_else(|| "Failed to get source text".to_string())
-                        .ok()?;
-                    let optional = matches!(source_text.as_str(), "Option");
-                    let ty = Function::process_arg(elem).ok()?;
-
-                    match ty {
-                        Type::Object(ref obj) => {
-                            if obj.contains(&ObjectType::Boolean) {
-                                Some(ArgType::Required(ty))
-                            } else if optional {
-                                Some(ArgType::Optional(ty))
-                            } else {
-                                Some(ArgType::Required(ty))
-                            }
-                        }
-                        Type::Nil => {
-                            if optional {
-                                Some(ArgType::Optional(ty))
-                            } else {
-                                Some(ArgType::Required(ty))
-                            }
-                        }
-                    }
-                }
-                syn::Type::Path(syn::TypePath { path, .. }) => {
-                    let segments = &path.segments;
-                    let last = segments.last().unwrap().ident.to_string();
-                    let optional = matches!(last.as_str(), "Result" | "Option");
-                    if optional {
-                        let syn::PathArguments::AngleBracketed(
-                            syn::AngleBracketedGenericArguments { args, .. },
-                        ) = &segments.last().unwrap().arguments
-                        else {
-                            return None;
-                        };
-                        let mut type_argument = None;
-                        for arg in args {
-                            match arg {
-                                syn::GenericArgument::Type(ty) => {
-                                    type_argument = Some(ty);
-                                }
-                                _ => continue,
-                            }
-                        }
-
-                        let Some(ty) = type_argument else {
-                            return None;
-                        };
-
-                        let ty = Function::process_arg(ty).ok()?;
-
-                        match ty {
-                            Type::Object(ref obj) => {
-                                if obj.contains(&ObjectType::Boolean) {
-                                    Some(ArgType::Required(ty))
-                                } else if optional {
-                                    Some(ArgType::Optional(ty))
-                                } else {
-                                    Some(ArgType::Required(ty))
-                                }
-                            }
-                            Type::Nil => {
-                                if optional {
-                                    Some(ArgType::Optional(ty))
-                                } else {
-                                    Some(ArgType::Required(ty))
-                                }
-                            }
-                        }
-                    } else {
-                        let ty = Function::process_arg(ty).ok()?;
+                        let source_text = span
+                            .source_text()
+                            .ok_or_else(|| "Failed to get source text".to_string())
+                            .ok()?;
+                        let optional = matches!(source_text.as_str(), "Option");
+                        let ty = Function::process_arg(elem).ok()?;
 
                         match ty {
                             Type::Object(ref obj) => {
@@ -476,23 +408,88 @@ pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
                             }
                         }
                     }
-                }
-                x => {
-                    let ty = Function::process_arg(x).ok()?;
-                    Some(ArgType::Required(ty))
-                }
-            }
-        })
-        .collect();
+                    syn::Type::Path(syn::TypePath { path, .. }) => {
+                        let segments = &path.segments;
+                        let last = segments.last().unwrap().ident.to_string();
+                        let optional = matches!(last.as_str(), "Result" | "Option");
+                        if optional {
+                            let syn::PathArguments::AngleBracketed(
+                                syn::AngleBracketedGenericArguments { args, .. },
+                            ) = &segments.last().unwrap().arguments
+                            else {
+                                return None;
+                            };
+                            let mut type_argument = None;
+                            for arg in args {
+                                match arg {
+                                    syn::GenericArgument::Type(ty) => {
+                                        type_argument = Some(ty);
+                                    }
+                                    _ => continue,
+                                }
+                            }
 
-    let (ret, fallible) = match &item.sig.output {
-        syn::ReturnType::Default => (Type::Nil, false),
-        syn::ReturnType::Type(_, ty) => {
-            match ty.as_ref() {
+                            let ty = type_argument?;
+
+                            let ty = Function::process_arg(ty).ok()?;
+
+                            match ty {
+                                Type::Object(ref obj) => {
+                                    if obj.contains(&ObjectType::Boolean) {
+                                        Some(ArgType::Required(ty))
+                                    } else if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                                Type::Nil => {
+                                    if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                            }
+                        } else {
+                            let ty = Function::process_arg(ty).ok()?;
+
+                            match ty {
+                                Type::Object(ref obj) => {
+                                    if obj.contains(&ObjectType::Boolean) {
+                                        Some(ArgType::Required(ty))
+                                    } else if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                                Type::Nil => {
+                                    if optional {
+                                        Some(ArgType::Optional(ty))
+                                    } else {
+                                        Some(ArgType::Required(ty))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    x => {
+                        let ty = Function::process_arg(x).ok()?;
+                        Some(ArgType::Required(ty))
+                    }
+                }
+            })
+            .collect();
+
+        let (ret, fallible) = match &item.sig.output {
+            syn::ReturnType::Default => (Type::Nil, false),
+            syn::ReturnType::Type(_, ty) => match ty.as_ref() {
                 syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
                     let syn::token::Group { span } = group_token;
 
-                    let source_text = span.source_text()
+                    let source_text = span
+                        .source_text()
                         .ok_or_else(|| "Failed to get source text".to_string())?;
                     let fallible = matches!(source_text.as_str(), "Option" | "Result");
 
@@ -537,10 +534,9 @@ pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
                     let ty = Function::process_arg(x)?;
                     (ty, false)
                 }
-            }
-        }
-    };
+            },
+        };
 
-    Ok(Function { name, args, ret, fallible })
-}
+        Ok(Function { name, args, ret, fallible })
+    }
 }
