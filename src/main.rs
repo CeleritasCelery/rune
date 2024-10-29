@@ -1,8 +1,3 @@
-#[cfg(all(not(target_env = "msvc"), not(miri)))]
-#[global_allocator]
-#[doc(hidden)]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-
 #[macro_use]
 mod macros;
 #[macro_use]
