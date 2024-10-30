@@ -46,6 +46,24 @@ fn car_less_than_car(a: &Cons, b: &Cons) -> Result<bool> {
 }
 
 #[defun]
+/* Return t if FILENAME names a directory you can open.
+This means that FILENAME must specify the name of a directory, and the
+directory must allow you to open files in it.  If this isn't the case,
+return nil.
+
+FILENAME can either be a directory name (eg. \"/tmp/foo/\") or the
+file name of a file which is a directory (eg. \"/tmp/foo\", without
+the final slash).
+
+In order to use a directory as a buffer's current directory, this
+predicate must return true.  */
+fn file_accessible_directory_p(filename: &str) -> bool {
+  let path = Path::new(filename);
+  path.exists() && path.is_dir()
+}
+
+
+#[defun]
 fn file_name_as_directory(filename: &str) -> String {
     if filename.ends_with(MAIN_SEPARATOR) {
         filename.to_owned()
