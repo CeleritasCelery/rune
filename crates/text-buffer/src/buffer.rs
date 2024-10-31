@@ -30,6 +30,7 @@ pub struct Buffer {
     /// The current cursor.
     cursor: GapMetric,
     total: Metric,
+    /// A mapping between byte and character positions. Doesn't account for the gap.
     metrics: BufferMetrics,
     new_gap_size: usize,
 }
@@ -621,7 +622,7 @@ impl Buffer {
     }
 
     #[inline]
-    fn char_to_byte(&self, pos: usize) -> usize {
+    pub fn char_to_byte(&self, pos: usize) -> usize {
         if pos == self.gap_chars {
             return self.gap_end;
         }
@@ -659,6 +660,46 @@ impl Buffer {
         } else {
             let string = self.to_str(base.bytes..);
             chars::to_byte_idx(string, offset) + base.bytes
+        }
+    }
+
+    #[inline]
+    pub fn byte_to_char(&self, pos: usize) -> usize {
+        if pos == self.gap_end {
+            return self.gap_chars;
+        }
+
+        if pos == self.gap_start {
+            return self.gap_chars;
+        }
+
+        assert!(pos >= self.gap_end || pos < self.gap_start, "position ({pos}) inside gap");
+
+        let raw_pos = if pos > self.gap_end { pos - self.gap_len() } else { pos };
+
+        let (base, offset) = self.metrics.search_byte(raw_pos);
+        debug_assert_eq!(base.bytes + offset, raw_pos);
+
+        let base = self.to_gapped_pos(base);
+
+        if offset == 0 {
+            return base.chars;
+        }
+
+        self.assert_char_boundary(base.bytes);
+
+        if base.bytes < self.gap_start {
+            if pos < self.gap_start {
+                let string = self.to_str(base.bytes..self.gap_start);
+                base.chars + chars::count(&string[..offset])
+            } else {
+                // the char crosses the gap
+                let string = self.to_str(self.gap_end..);
+                self.gap_chars + chars::count(&string[..pos - self.gap_end])
+            }
+        } else {
+            let string = self.to_str(base.bytes..);
+            base.chars + chars::count(&string[..offset])
         }
     }
 
@@ -935,6 +976,26 @@ mod test {
         assert_eq!(buffer.slice(5..11), ("\u{B5}", " worl"));
         assert_eq!(buffer.slice(4..6), ("o\u{B5}", ""));
         assert_eq!(buffer.slice(..), ("hello\u{B5}", " world"));
+    }
+
+    #[test]
+    fn test_byte_to_char_conversion() {
+        let buffer = Buffer::from("hello world");
+        for i in 0..buffer.len_chars() {
+            assert_eq!(buffer.byte_to_char(buffer.char_to_byte(i)), i);
+        }
+        let buffer = Buffer::from("hello\u{B5} world");
+        for i in 0..buffer.len_chars() {
+            assert_eq!(buffer.byte_to_char(buffer.char_to_byte(i)), i);
+        }
+        let mut buffer = Buffer::from("\u{B5}\u{45}hello world");
+        buffer.set_cursor(5);
+        buffer.insert("\u{B9}");
+        buffer.set_cursor(10);
+        buffer.insert("\u{A0}x");
+        for i in 0..buffer.len_chars() {
+            assert_eq!(buffer.byte_to_char(buffer.char_to_byte(i)), i);
+        }
     }
 
     #[test]

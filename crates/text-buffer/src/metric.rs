@@ -252,6 +252,10 @@ impl BufferMetrics {
         self.root.search_char(chars)
     }
 
+    pub(crate) fn search_byte(&self, bytes: usize) -> (Metric, usize) {
+        self.root.search_byte(bytes)
+    }
+
     pub(crate) fn len(&self) -> Metric {
         self.root.metrics()
     }
@@ -853,6 +857,10 @@ impl Node {
 
     fn search_char(&self, chars: usize) -> (Metric, usize) {
         self.search_impl(chars, |x| x.chars)
+    }
+
+    fn search_byte(&self, bytes: usize) -> (Metric, usize) {
+        self.search_impl(bytes, |x| x.bytes)
     }
 
     fn search_impl(&self, needle: usize, getter: impl Fn(&Metric) -> usize) -> (Metric, usize) {
