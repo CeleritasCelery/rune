@@ -10,6 +10,9 @@ fuzz_target!(|transactions: Vec<Result<(usize, &str), (usize, usize)>>| {
             // Insert
             Ok((pos, text)) => {
                 let pos = pos % (buffer.len_bytes() + 2);
+                if (pos <= buffer.len_chars()) {
+                    assert_eq!(pos, buffer.byte_to_char(buffer.char_to_byte(pos)));
+                }
                 buffer.set_cursor(pos);
                 buffer.insert(text)
             }
@@ -17,6 +20,12 @@ fuzz_target!(|transactions: Vec<Result<(usize, &str), (usize, usize)>>| {
             Err((start, end)) => {
                 let start = start % (buffer.len_bytes() + 2);
                 let end = end % (buffer.len_bytes() + 2);
+                if (start <= buffer.len_chars()) {
+                    assert_eq!(start, buffer.byte_to_char(buffer.char_to_byte(start)));
+                }
+                if (end <= buffer.len_chars()) {
+                    assert_eq!(end, buffer.byte_to_char(buffer.char_to_byte(end)));
+                }
                 buffer.delete_range(start, end)
             }
         }

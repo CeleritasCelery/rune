@@ -34,6 +34,8 @@ fn slice(buffer: &Buffer, string: &str, char_beg: usize, char_end: usize) {
     if beg > end {
         std::mem::swap(&mut beg, &mut end);
     }
+    assert_eq!(beg, buffer.byte_to_char(buffer.char_to_byte(beg)));
+    assert_eq!(end, buffer.byte_to_char(buffer.char_to_byte(end)));
     let (s1, s2) = buffer.slice(beg..end);
     let string_slice = string_slice(string, beg, end);
     let buffer_slice = s1.to_owned() + s2;
@@ -42,9 +44,11 @@ fn slice(buffer: &Buffer, string: &str, char_beg: usize, char_end: usize) {
 
 fn insert(buffer: &mut Buffer, string: &mut String, pos: usize, ins_text: &str) {
     let len = buffer.len_chars();
-    buffer.set_cursor(pos % (len + 1));
+    let point = pos % (len + 1);
+    assert_eq!(point, buffer.byte_to_char(buffer.char_to_byte(point)));
+    buffer.set_cursor(point);
     buffer.insert(ins_text);
-    string_insert(string, pos % (len + 1), ins_text);
+    string_insert(string, point, ins_text);
 
     assert_eq!(buffer, string);
 }
@@ -53,6 +57,8 @@ fn delete(buffer: &mut Buffer, string: &mut String, beg: usize, end: usize) {
     let len = buffer.len_chars();
     let beg = beg % (len + 1);
     let end = end % (len + 1);
+    assert_eq!(beg, buffer.byte_to_char(buffer.char_to_byte(beg)));
+    assert_eq!(end, buffer.byte_to_char(buffer.char_to_byte(end)));
     buffer.delete_range(beg, end);
     string_remove(string, beg, end);
 
