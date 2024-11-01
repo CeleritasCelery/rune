@@ -805,30 +805,31 @@ See `find-function-on-key'."
     (when (and symb (not (equal symb 0)))
       (find-variable-other-window symb))))
 
-;;;###autoload
-(define-minor-mode find-function-mode
-  "Enable some key bindings for the `find-function' family of functions."
-  :group 'find-function :version "31.1" :global t :lighter nil
-  ;; For compatibility with the historical behavior of the old
-  ;; `find-function-setup-keys', define our bindings at the precedence
-  ;; level of the global map.
-  :keymap nil
-  (pcase-dolist (`(,map ,key ,cmd)
-                 `((,ctl-x-map   "F" find-function)
-                   (,ctl-x-4-map "F" find-function-other-window)
-                   (,ctl-x-5-map "F" find-function-other-frame)
-                   (,ctl-x-map   "K" find-function-on-key)
-                   (,ctl-x-4-map "K" find-function-on-key-other-window)
-                   (,ctl-x-5-map "K" find-function-on-key-other-frame)
-                   (,ctl-x-map   "V" find-variable)
-                   (,ctl-x-4-map "V" find-variable-other-window)
-                   (,ctl-x-5-map "V" find-variable-other-frame)
-                   (,ctl-x-map   "L" find-library)
-                   (,ctl-x-4-map "L" find-library-other-window)
-                   (,ctl-x-5-map "L" find-library-other-frame)))
-    (if find-function-mode
-        (keymap-set map key cmd)
-      (keymap-unset map key t))))
+;; RUNE-BOOTSTRAP
+;; ;;;###autoload
+;; (define-minor-mode find-function-mode
+;;   "Enable some key bindings for the `find-function' family of functions."
+;;   :group 'find-function :version "31.1" :global t :lighter nil
+;;   ;; For compatibility with the historical behavior of the old
+;;   ;; `find-function-setup-keys', define our bindings at the precedence
+;;   ;; level of the global map.
+;;   :keymap nil
+;;   (pcase-dolist (`(,map ,key ,cmd)
+;;                  `((,ctl-x-map   "F" find-function)
+;;                    (,ctl-x-4-map "F" find-function-other-window)
+;;                    (,ctl-x-5-map "F" find-function-other-frame)
+;;                    (,ctl-x-map   "K" find-function-on-key)
+;;                    (,ctl-x-4-map "K" find-function-on-key-other-window)
+;;                    (,ctl-x-5-map "K" find-function-on-key-other-frame)
+;;                    (,ctl-x-map   "V" find-variable)
+;;                    (,ctl-x-4-map "V" find-variable-other-window)
+;;                    (,ctl-x-5-map "V" find-variable-other-frame)
+;;                    (,ctl-x-map   "L" find-library)
+;;                    (,ctl-x-4-map "L" find-library-other-window)
+;;                    (,ctl-x-5-map "L" find-library-other-frame)))
+;;     (if find-function-mode
+;;         (keymap-set map key cmd)
+;;       (keymap-unset map key t))))
 
 ;;;###autoload
 (defun find-function-setup-keys ()
