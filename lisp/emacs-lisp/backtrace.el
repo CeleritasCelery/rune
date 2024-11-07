@@ -1,6 +1,6 @@
 ;;; backtrace.el --- generic major mode for Elisp backtraces -*- lexical-binding: t -*-
 
-;; Copyright (C) 2018-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2018-2023 Free Software Foundation, Inc.
 
 ;; Author: Gemini Lasswell
 ;; Keywords: lisp, tools, maint
@@ -135,7 +135,8 @@ frames before its nearest activation frame are discarded."
 ;; Font Locking support
 
 (defconst backtrace--font-lock-keywords
-  '()
+  '((backtrace--match-ellipsis-in-string
+     (1 'button prepend)))
   "Expressions to fontify in Backtrace mode.
 Fontify these in addition to the expressions Emacs Lisp mode
 fontifies.")
@@ -152,6 +153,16 @@ fontifies.")
   (append lisp-el-font-lock-keywords-for-backtraces-2
           backtrace--font-lock-keywords)
   "Gaudy level highlighting for Backtrace mode.")
+
+(defun backtrace--match-ellipsis-in-string (bound)
+  ;; Fontify ellipses within strings as buttons.
+  ;; This is necessary because ellipses are text property buttons
+  ;; instead of overlay buttons, which is done because there could
+  ;; be a large number of them.
+  (when (re-search-forward "\\(\\.\\.\\.\\)\"" bound t)
+    (and (get-text-property (- (point) 2) 'cl-print-ellipsis)
+         (get-text-property (- (point) 3) 'cl-print-ellipsis)
+         (get-text-property (- (point) 4) 'cl-print-ellipsis))))
 
 ;;; Xref support
 
@@ -413,12 +424,12 @@ the buffer."
       (overlay-put o 'evaporate t))))
 
 (defun backtrace--change-button-skip (beg end value)
-  "Change the `skip' property on all buttons between BEG and END.
-Set it to VALUE unless the button is a `cl-print-ellipsis' button."
+  "Change the skip property on all buttons between BEG and END.
+Set it to VALUE unless the button is a `backtrace-ellipsis' button."
   (let ((inhibit-read-only t))
     (setq beg (next-button beg))
     (while (and beg (< beg end))
-      (unless (eq (button-type beg) 'cl-print-ellipsis)
+      (unless (eq (button-type beg) 'backtrace-ellipsis)
           (button-put beg 'skip value))
       (setq beg (next-button beg)))))
 
@@ -486,15 +497,34 @@ Reprint the frame with the new view plist."
                          `(backtrace-index ,index backtrace-view ,view))
     (goto-char min)))
 
-(defun backtrace--expand-ellipsis (orig-fun begin end val _length &rest args)
-  "Wrapper to expand an ellipsis.
-For use on `cl-print-expand-ellipsis-function'."
-  (let* ((props (backtrace-get-text-properties begin))
+(defun backtrace-expand-ellipsis (button)
+  "Expand display of the elided form at BUTTON."
+  (interactive)
+  (goto-char (button-start button))
+  (unless (get-text-property (point) 'cl-print-ellipsis)
+    (if (and (> (point) (point-min))
+             (get-text-property (1- (point)) 'cl-print-ellipsis))
+        (backward-char)
+      (user-error "No ellipsis to expand here")))
+  (let* ((end (next-single-property-change (point) 'cl-print-ellipsis))
+         (begin (previous-single-property-change end 'cl-print-ellipsis))
+         (value (get-text-property begin 'cl-print-ellipsis))
+         (props (backtrace-get-text-properties begin))
          (inhibit-read-only t))
     (backtrace--with-output-variables (backtrace-get-view)
-      (let ((end (apply orig-fun begin end val backtrace-line-length args)))
-        (add-text-properties begin end props)
-        end))))
+      (delete-region begin end)
+      (insert (cl-print-to-string-with-limit #'cl-print-expand-ellipsis value
+                                          backtrace-line-length))
+      (setq end (point))
+      (goto-char begin)
+      (while (< (point) end)
+        (let ((next (next-single-property-change (point) 'cl-print-ellipsis
+                                                 nil end)))
+          (when (get-text-property (point) 'cl-print-ellipsis)
+            (make-text-button (point) next :type 'backtrace-ellipsis))
+          (goto-char next)))
+      (goto-char begin)
+      (add-text-properties begin end props))))
 
 (defun backtrace-expand-ellipses (&optional no-limit)
   "Expand display of all \"...\"s in the backtrace frame at point.
@@ -667,6 +697,13 @@ line and recenter window line accordingly."
                  (recenter window-line)))
       (goto-char (point-min)))))
 
+;; Define button type used for ...'s.
+;; Set skip property so you don't have to TAB through 100 of them to
+;; get to the next function name.
+(define-button-type 'backtrace-ellipsis
+  'skip t 'action #'backtrace-expand-ellipsis
+  'help-echo "mouse-2, RET: expand this ellipsis")
+
 (defun backtrace-print-to-string (obj &optional limit)
   "Return a printed representation of OBJ formatted for backtraces.
 Attempt to get the length of the returned string under LIMIT
@@ -678,10 +715,21 @@ characters with appropriate settings of `print-level' and
 (defun backtrace--print-to-string (sexp &optional limit)
   ;; This is for use by callers who wrap the call with
   ;; backtrace--with-output-variables.
-  (propertize (cl-print-to-string-with-limit #'backtrace--print sexp
-                                             (or limit backtrace-line-length))
-              ;; Add a unique backtrace-form property.
-              'backtrace-form (gensym)))
+  (setq limit (or limit backtrace-line-length))
+  (with-temp-buffer
+    (insert (cl-print-to-string-with-limit #'backtrace--print sexp limit))
+    ;; Add a unique backtrace-form property.
+    (put-text-property (point-min) (point) 'backtrace-form (gensym))
+    ;; Make buttons from all the "..."s.  Since there might be many of
+    ;; them, use text property buttons.
+    (goto-char (point-min))
+    (while (< (point) (point-max))
+      (let ((end (next-single-property-change (point) 'cl-print-ellipsis
+                                              nil (point-max))))
+        (when (get-text-property (point) 'cl-print-ellipsis)
+          (make-text-button (point) end :type 'backtrace-ellipsis))
+        (goto-char end)))
+    (buffer-string)))
 
 (defun backtrace-print-frame (frame view)
   "Insert a backtrace FRAME at point formatted according to VIEW.
@@ -720,10 +768,9 @@ Format it according to VIEW."
          (def   (find-function-advised-original fun))
          (fun-file (or (symbol-file fun 'defun)
                        (and (subrp def)
-                            (not (special-form-p def))
+                            (not (eq 'unevalled (cdr (subr-arity def))))
                             (find-lisp-object-file-name fun def))))
-         (fun-beg (point))
-         (fun-end nil))
+         (fun-pt (point)))
     (cond
      ((and evald (not debugger-stack-frame-as-list))
       (if (atom fun)
@@ -733,7 +780,6 @@ Format it according to VIEW."
           fun
           (when (and args (backtrace--line-length-or-nil))
             (/ backtrace-line-length 2)))))
-      (setq fun-end (point))
       (if args
           (insert (backtrace--print-to-string
                    args
@@ -749,16 +795,10 @@ Format it according to VIEW."
      (t
       (let ((fun-and-args (cons fun args)))
         (insert (backtrace--print-to-string fun-and-args)))
-      ;; Skip the open-paren.
-      (cl-incf fun-beg)))
+      (cl-incf fun-pt)))
     (when fun-file
-      (make-text-button fun-beg
-                        (or fun-end
-                            (+ fun-beg
-                               ;; FIXME: `backtrace--print-to-string' will
-                               ;; not necessarily print FUN in the same way
-                               ;; as it did when it was in FUN-AND-ARGS!
-                               (length (backtrace--print-to-string fun))))
+      (make-text-button fun-pt (+ fun-pt
+                                  (length (backtrace--print-to-string fun)))
                         :type 'help-function-def
                         'help-args (list fun fun-file)))
     ;; After any frame that uses eval-buffer, insert a comment that
@@ -879,8 +919,6 @@ followed by `backtrace-print-frame', once for each stack frame."
   (setq-local filter-buffer-substring-function #'backtrace--filter-visible)
   (setq-local indent-line-function 'lisp-indent-line)
   (setq-local indent-region-function 'lisp-indent-region)
-  (add-function :around (local 'cl-print-expand-ellipsis-function)
-                #'backtrace--expand-ellipsis)
   (add-hook 'xref-backend-functions #'backtrace--xref-backend nil t))
 
 (put 'backtrace-mode 'mode-class 'special)
