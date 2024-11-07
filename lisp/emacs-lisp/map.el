@@ -1,15 +1,12 @@
 ;;; map.el --- Map manipulation functions  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2015-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2015-2023 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Petton <nicolas@petton.fr>
 ;; Maintainer: emacs-devel@gnu.org
 ;; Keywords: extensions, lisp
 ;; Version: 3.3.1
 ;; Package-Requires: ((emacs "26"))
-
-;; This is a GNU ELPA :core package.  Avoid functionality that is not
-;; compatible with the version of Emacs recorded above.
 
 ;; This file is part of GNU Emacs.
 
@@ -53,20 +50,18 @@
 
 ARGS is a list of elements to be matched in the map.
 
-Each element of ARGS can be of the form (KEY PAT [DEFAULT]),
-which looks up KEY in the map and matches the associated value
-against `pcase' pattern PAT.  DEFAULT specifies the fallback
-value to use when KEY is not present in the map.  If omitted, it
-defaults to nil.  Both KEY and DEFAULT are evaluated.
+Each element of ARGS can be of the form (KEY PAT), in which case KEY is
+evaluated and searched for in the map.  The match fails if for any KEY
+found in the map, the corresponding PAT doesn't match the value
+associated with the KEY.
 
 Each element can also be a SYMBOL, which is an abbreviation of
 a (KEY PAT) tuple of the form (\\='SYMBOL SYMBOL).  When SYMBOL
 is a keyword, it is an abbreviation of the form (:SYMBOL SYMBOL),
 useful for binding plist values.
 
-An element of ARGS fails to match if PAT does not match the
-associated value or the default value.  The overall pattern fails
-to match if any element of ARGS fails to match."
+Keys in ARGS not found in the map are ignored, and the match doesn't
+fail."
   `(and (pred mapp)
         ,@(map--make-pcase-bindings args)))
 
@@ -76,13 +71,12 @@ to match if any element of ARGS fails to match."
 KEYS can be a list of symbols, in which case each element will be
 bound to the looked up value in MAP.
 
-KEYS can also be a list of (KEY VARNAME [DEFAULT]) sublists, in
-which case KEY and DEFAULT are unquoted forms.
+KEYS can also be a list of (KEY VARNAME) pairs, in which case
+KEY is an unquoted form.
 
 MAP can be an alist, plist, hash-table, or array."
   (declare (indent 2)
-           (debug ((&rest &or symbolp ([form symbolp &optional form]))
-                   form body)))
+           (debug ((&rest &or symbolp ([form symbolp])) form body)))
   `(pcase-let ((,(map--make-pcase-patterns keys) ,map))
      ,@body))
 
@@ -601,37 +595,15 @@ Example:
     (map-into \\='((1 . 3)) \\='(hash-table :test eql))"
   (map--into-hash map (cdr type)))
 
-(defmacro map--pcase-map-elt (key default map)
-  "A macro to make MAP the last argument to `map-elt'.
-
-This allows using default values for `map-elt', which can't be
-done using `pcase--flip'.
-
-KEY is the key sought in the map.  DEFAULT is the default value."
-  ;; It's obsolete in Emacs>29, but `map.el' is distributed via GNU ELPA
-  ;; for earlier Emacsen.
-  (declare (obsolete _ "30.1"))
-  `(map-elt ,map ,key ,default))
-
 (defun map--make-pcase-bindings (args)
   "Return a list of pcase bindings from ARGS to the elements of a map."
-  (mapcar (if (< emacs-major-version 30)
-              (lambda (elt)
-                (cond ((consp elt)
-                       `(app (map--pcase-map-elt ,(car elt) ,(caddr elt))
-                             ,(cadr elt)))
-                      ((keywordp elt)
-                       (let ((var (intern (substring (symbol-name elt) 1))))
-                         `(app (pcase--flip map-elt ,elt) ,var)))
-                      (t `(app (pcase--flip map-elt ',elt) ,elt))))
-            (lambda (elt)
-              (cond ((consp elt)
-                     `(app (map-elt _ ,(car elt) ,(caddr elt))
-                           ,(cadr elt)))
-                    ((keywordp elt)
-                     (let ((var (intern (substring (symbol-name elt) 1))))
-                       `(app (map-elt _ ,elt) ,var)))
-                    (t `(app (map-elt _ ',elt) ,elt)))))
+  (mapcar (lambda (elt)
+            (cond ((consp elt)
+                   `(app (pcase--flip map-elt ,(car elt)) ,(cadr elt)))
+                  ((keywordp elt)
+                   (let ((var (intern (substring (symbol-name elt) 1))))
+                     `(app (pcase--flip map-elt ,elt) ,var)))
+                  (t `(app (pcase--flip map-elt ',elt) ,elt))))
           args))
 
 (defun map--make-pcase-patterns (args)

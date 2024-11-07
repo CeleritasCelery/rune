@@ -1,6 +1,6 @@
 ;;; ert.el --- Emacs Lisp Regression Testing  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2007-2024 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2023 Free Software Foundation, Inc.
 
 ;; Author: Christian Ohler <ohler@gnu.org>
 ;; Keywords: lisp, tools
@@ -34,18 +34,17 @@
 ;; `ert-run-tests-batch-and-exit' for non-interactive use.
 ;;
 ;; The body of `ert-deftest' forms resembles a function body, but the
-;; additional operators `should', `should-not', `should-error',
-;; `skip-when' and `skip-unless' are available.  `should' is similar
-;; to cl's `assert', but signals a different error when its condition
-;; is violated that is caught and processed by ERT.  In addition, it
-;; analyzes its argument form and records information that helps
-;; debugging (`cl-assert' tries to do something similar when its
-;; second argument SHOW-ARGS is true, but `should' is more
-;; sophisticated).  For information on `should-not' and
-;; `should-error', see their docstrings.  The `skip-when' and
-;; `skip-unless' forms skip the test immediately, which is useful for
-;; checking the test environment (like availability of features,
-;; external binaries, etc).
+;; additional operators `should', `should-not', `should-error' and
+;; `skip-unless' are available.  `should' is similar to cl's `assert',
+;; but signals a different error when its condition is violated that
+;; is caught and processed by ERT.  In addition, it analyzes its
+;; argument form and records information that helps debugging
+;; (`cl-assert' tries to do something similar when its second argument
+;; SHOW-ARGS is true, but `should' is more sophisticated).  For
+;; information on `should-not' and `should-error', see their
+;; docstrings.  `skip-unless' skips the test immediately without
+;; processing further, this is useful for checking the test
+;; environment (like availability of features, external binaries, etc).
 ;;
 ;; See ERT's Info manual `(ert) Top' as well as the docstrings for
 ;; more details.  To see some examples of tests written in ERT, see
@@ -99,7 +98,7 @@ Even modest settings for `print-length' and `print-level' can
 produce extremely long lines in backtraces and lengthy delays in
 forming them.  This variable governs the target maximum line
 length by manipulating these two variables while printing stack
-traces.  Setting this variable to t will reuse the value of
+traces.  Setting this variable to t will re-use the value of
 `backtrace-line-length' while printing stack traces in ERT batch
 mode.  Any other value will be temporarily bound to
 `backtrace-line-length' when producing stack traces in batch
@@ -152,7 +151,7 @@ mode.")
   (when (and noninteractive (get symbol 'ert--test))
     ;; Make sure duplicated tests are discovered since the older test would
     ;; be ignored silently otherwise.
-    (error "Test `%s' redefined (or loaded twice)" symbol))
+    (error "Test `%s' redefined" symbol))
   (define-symbol-prop symbol 'ert--test definition)
   definition)
 
@@ -195,8 +194,8 @@ and the body."
 BODY is evaluated as a `progn' when the test is run.  It should
 signal a condition on failure or just return if the test passes.
 
-`should', `should-not', `should-error', `skip-when', and
-`skip-unless' are useful for assertions in BODY.
+`should', `should-not', `should-error' and `skip-unless' are
+useful for assertions in BODY.
 
 Use `ert' to run tests interactively.
 
@@ -228,8 +227,7 @@ in batch mode, an error is signaled.
                (tags nil tags-supplied-p))
          body)
         (ert--parse-keys-and-body docstring-keys-and-body)
-      `(cl-macrolet ((skip-when (form) `(ert--skip-when ,form))
-                     (skip-unless (form) `(ert--skip-unless ,form)))
+      `(cl-macrolet ((skip-unless (form) `(ert--skip-unless ,form)))
          (ert-set-test ',name
                        (make-ert-test
                         :name ',name
@@ -239,9 +237,7 @@ in batch mode, an error is signaled.
                             `(:expected-result-type ,expected-result))
                         ,@(when tags-supplied-p
                             `(:tags ,tags))
-                        ;; Add `nil' after the body to enable compiler warnings
-                        ;; about unused computations at the end.
-                        :body (lambda () ,@body nil)
+                        :body (lambda () ,@body)
                         :file-name ,(or (macroexp-file-name) buffer-file-name)))
          ',name))))
 
@@ -277,6 +273,14 @@ DATA is displayed to the user and should state the reason for skipping."
   "Tell the current `should' form observer (if any) about FORM-DESCRIPTION."
   (when ert--should-execution-observer
     (funcall ert--should-execution-observer form-description)))
+
+;; See Bug#24402 for why this exists
+(defun ert--should-signal-hook (error-symbol data)
+  "Stupid hack to stop `condition-case' from catching ert signals.
+It should only be stopped when ran from inside `ert--run-test-internal'."
+  (when (and (not (symbolp debugger))   ; only run on anonymous debugger
+             (memq error-symbol '(ert-test-failed ert-test-skipped)))
+    (funcall debugger 'error (cons error-symbol data))))
 
 (defun ert--special-operator-p (thing)
   "Return non-nil if THING is a symbol naming a special operator."
@@ -316,7 +320,8 @@ DATA is displayed to the user and should state the reason for skipping."
               (default-value (gensym "ert-form-evaluation-aborted-")))
           `(let* ((,fn (function ,fn-name))
                   (,args (condition-case err
-                             (list ,@arg-forms)
+                             (let ((signal-hook-function #'ert--should-signal-hook))
+                               (list ,@arg-forms))
                            (error (progn (setq ,fn #'signal)
                                          (list (car err)
                                                (cdr err)))))))
@@ -456,15 +461,6 @@ failed."
                        (funcall ,form-description-fn)
                        (list
                         :fail-reason "did not signal an error")))))))))
-
-(cl-defmacro ert--skip-when (form)
-  "Evaluate FORM.  If it returns t, skip the current test.
-Errors during evaluation are caught and handled like t."
-  (declare (debug t))
-  (ert--expand-should `(skip-when ,form) form
-                      (lambda (inner-form form-description-form _value-var)
-                        `(when (condition-case nil ,inner-form (t t))
-                           (ert-skip ,form-description-form)))))
 
 (cl-defmacro ert--skip-unless (form)
   "Evaluate FORM.  If it returns nil, skip the current test.
@@ -719,68 +715,78 @@ in front of the value of MESSAGE-FORM."
   ;; value and test execution should be terminated.  Should not
   ;; return.
   (exit-continuation (cl-assert nil))
+  ;; The binding of `debugger' outside of the execution of the test.
+  next-debugger
   ;; The binding of `ert-debug-on-error' that is in effect for the
   ;; execution of the current test.  We store it to avoid being
   ;; affected by any new bindings the test itself may establish.  (I
   ;; don't remember whether this feature is important.)
   ert-debug-on-error)
 
-(defun ert--run-test-debugger (info condition debugfun)
-  "Error handler used during the test run.
+(defun ert--run-test-debugger (info args)
+  "During a test run, `debugger' is bound to a closure that calls this function.
 
 This function records failures and errors and either terminates
 the test silently or calls the interactive debugger, as
 appropriate.
 
-INFO is the `ert--test-execution-info' corresponding to this test run.
-ERR is the error object."
-  (let* ((type (cl-case (car condition)
-                 ((quit) 'quit)
-		 ((ert-test-skipped) 'skipped)
-                 (otherwise 'failed)))
-         ;; We store the backtrace in the result object for
-         ;; `ert-results-pop-to-backtrace-for-test-at-point'.
-         ;; This means we have to limit `print-level' and
-         ;; `print-length' when printing result objects.  That
-         ;; might not be worth while when we can also use
-         ;; `ert-results-rerun-test-at-point-debugging-errors',
-         ;; (i.e., when running interactively) but having the
-         ;; backtrace ready for printing is important for batch
-         ;; use.
-         ;;
-         ;; Grab the frames above ourselves.
-         (backtrace (cdr (backtrace-get-frames debugfun)))
-         (infos (reverse ert--infos)))
-    (setf (ert--test-execution-info-result info)
-          (cl-ecase type
-            (quit
-             (make-ert-test-quit :condition condition
-                                 :backtrace backtrace
-                                 :infos infos))
-            (skipped
-             (make-ert-test-skipped :condition condition
-                                    :backtrace backtrace
-                                    :infos infos))
-            (failed
-             (make-ert-test-failed :condition condition
-                                   :backtrace backtrace
-                                   :infos infos))))
-    ;; FIXME: We should probably implement more fine-grained
-    ;; control a la non-t `debug-on-error' here.
-    (cond
-     ((ert--test-execution-info-ert-debug-on-error info)
-      ;; The `debugfun' arg tells `debug' which backtrace frame starts
-      ;; the "entering the debugger" code so it can hide those frames
-      ;; from the backtrace.
-      (funcall debugger 'error condition :backtrace-base debugfun))
-     (t))
-    (funcall (ert--test-execution-info-exit-continuation info))))
+INFO is the ert--test-execution-info corresponding to this test
+run.  ARGS are the arguments to `debugger'."
+  (cl-destructuring-bind (first-debugger-arg &rest more-debugger-args)
+      args
+    (cl-ecase first-debugger-arg
+      ((lambda debug t exit nil)
+       (apply (ert--test-execution-info-next-debugger info) args))
+      (error
+       (let* ((condition (car more-debugger-args))
+              (type (cl-case (car condition)
+                      ((quit) 'quit)
+		      ((ert-test-skipped) 'skipped)
+                      (otherwise 'failed)))
+              ;; We store the backtrace in the result object for
+              ;; `ert-results-pop-to-backtrace-for-test-at-point'.
+              ;; This means we have to limit `print-level' and
+              ;; `print-length' when printing result objects.  That
+              ;; might not be worth while when we can also use
+              ;; `ert-results-rerun-test-at-point-debugging-errors',
+              ;; (i.e., when running interactively) but having the
+              ;; backtrace ready for printing is important for batch
+              ;; use.
+              ;;
+              ;; Grab the frames above the debugger.
+              (backtrace (cdr (backtrace-get-frames debugger)))
+              (infos (reverse ert--infos)))
+         (setf (ert--test-execution-info-result info)
+               (cl-ecase type
+                 (quit
+                  (make-ert-test-quit :condition condition
+                                      :backtrace backtrace
+                                      :infos infos))
+                 (skipped
+                  (make-ert-test-skipped :condition condition
+                                        :backtrace backtrace
+                                        :infos infos))
+                 (failed
+                  (make-ert-test-failed :condition condition
+                                        :backtrace backtrace
+                                        :infos infos))))
+         ;; Work around Emacs's heuristic (in eval.c) for detecting
+         ;; errors in the debugger.
+         (cl-incf num-nonmacro-input-events)
+         ;; FIXME: We should probably implement more fine-grained
+         ;; control a la non-t `debug-on-error' here.
+         (cond
+          ((ert--test-execution-info-ert-debug-on-error info)
+           (apply (ert--test-execution-info-next-debugger info) args))
+          (t))
+         (funcall (ert--test-execution-info-exit-continuation info)))))))
 
 (defun ert--run-test-internal (test-execution-info)
   "Low-level function to run a test according to TEST-EXECUTION-INFO.
 
 This mainly sets up debugger-related bindings."
-  (setf (ert--test-execution-info-ert-debug-on-error test-execution-info)
+  (setf (ert--test-execution-info-next-debugger test-execution-info) debugger
+        (ert--test-execution-info-ert-debug-on-error test-execution-info)
         ert-debug-on-error)
   (catch 'ert--pass
     ;; For now, each test gets its own temp buffer and its own
@@ -788,14 +794,26 @@ This mainly sets up debugger-related bindings."
     ;; too expensive, we can remove it.
     (with-temp-buffer
       (save-window-excursion
-        (let ((lexical-binding t) ;;FIXME: Why?
+        ;; FIXME: Use `signal-hook-function' instead of `debugger' to
+        ;; handle ert errors. Once that's done, remove
+        ;; `ert--should-signal-hook'.  See Bug#24402 and Bug#11218 for
+        ;; details.
+        (let ((lexical-binding t)
+              (debugger (lambda (&rest args)
+                          (ert--run-test-debugger test-execution-info
+                                                  args)))
+              (debug-on-error t)
+              ;; Don't infloop if the error being called is erroring
+              ;; out, and we have `debug-on-error' bound to nil inside
+              ;; the test.
+              (backtrace-on-error-noninteractive nil)
+              (debug-on-quit t)
+              ;; FIXME: Do we need to store the old binding of this
+              ;; and consider it in `ert--run-test-debugger'?
+              (debug-ignored-errors nil)
               (ert--infos '()))
-          (letrec ((debugfun (lambda (err)
-                               (ert--run-test-debugger test-execution-info
-                                                       err debugfun))))
-            (handler-bind (((error quit) debugfun))
-              (funcall (ert-test-body (ert--test-execution-info-test
-                                       test-execution-info))))))))
+          (funcall (ert-test-body (ert--test-execution-info-test
+                                   test-execution-info))))))
     (ert-pass))
   (setf (ert--test-execution-info-result test-execution-info)
         (make-ert-test-passed))
@@ -932,14 +950,14 @@ of tests, or t, which refers to all tests named by symbols in `obarray'.
 Valid SELECTORs:
 
 nil  -- Selects the empty set.
-t    -- Selects all of UNIVERSE.  If UNIVERSE is t, selects all tests.
+t    -- Selects UNIVERSE.
 :new -- Selects all tests that have not been run yet.
 :failed, :passed       -- Select tests according to their most recent result.
 :expected, :unexpected -- Select tests according to their most recent result.
 a string -- A regular expression selecting all tests with matching names.
-a test   -- (i.e., an object of the `ert-test' data-type) Selects that test.
-a symbol -- Selects the test named by the symbol, signals an
-    `ert-test-unbound' error if no such test.
+a test   -- (i.e., an object of the ert-test data-type) Selects that test.
+a symbol -- Selects the test that the symbol names, signals an
+    `ert-test-unbound' error if none.
 \(member TESTS...) -- Selects the elements of TESTS, a list of tests
     or symbols naming tests.
 \(eql TEST) -- Selects TEST, a test or a symbol naming a test.
@@ -1316,9 +1334,14 @@ empty string."
 (defun ert--pp-with-indentation-and-newline (object)
   "Pretty-print OBJECT, indenting it to the current column of point.
 Ensures a final newline is inserted."
-  (let ((pp-escape-newlines t)
+  (let ((begin (point))
+        (pp-escape-newlines t)
         (print-escape-control-characters t))
-    (pp object (current-buffer))))
+    (pp object (current-buffer))
+    (unless (bolp) (insert "\n"))
+    (save-excursion
+      (goto-char begin)
+      (indent-sexp))))
 
 (defun ert--insert-infos (result)
   "Insert `ert-info' infos from RESULT into current buffer.
@@ -1370,10 +1393,10 @@ RESULT must be an `ert-test-result-with-condition'."
 (defun ert-run-tests-batch (&optional selector)
   "Run the tests specified by SELECTOR, printing results to the terminal.
 
-SELECTOR selects which tests to run as described in `ert-select-tests' when
-called with its second argument t, except if SELECTOR is nil, in which case
-all tests rather than none will be run; this makes the command line
- \"emacs -batch -l my-tests.el -f ert-run-tests-batch-and-exit\" useful.
+SELECTOR works as described in `ert-select-tests', except if
+SELECTOR is nil, in which case all tests rather than none will be
+run; this makes the command line \"emacs -batch -l my-tests.el -f
+ert-run-tests-batch-and-exit\" useful.
 
 Returns the stats object."
   (unless selector (setq selector 't))
@@ -2235,9 +2258,7 @@ STATS is the stats object; LISTENER is the results listener."
 (defun ert-run-tests-interactively (selector)
   "Run the tests specified by SELECTOR and display the results in a buffer.
 
-SELECTOR selects which tests to run as described in `ert-select-tests'
-when called with its second argument t.  Interactively, prompt for
-SELECTOR; the default t means run all the defined tests."
+SELECTOR works as described in `ert-select-tests'."
   (interactive
    (list (let ((default (if ert--selector-history
                             ;; Can't use `first' here as this form is
@@ -2813,7 +2834,8 @@ To be used in the ERT results buffer."
               (insert (format-message " defined in `%s'"
                                       (file-name-nondirectory file-name)))
               (save-excursion
-                (re-search-backward (substitute-command-keys "`\\([^`']+\\)'"))
+                (re-search-backward (substitute-command-keys "`\\([^`']+\\)'")
+                                    nil t)
                 (help-xref-button 1 'help-function-def test-name file-name)))
             (insert ".")
             (fill-region-as-paragraph (point-min) (point))
