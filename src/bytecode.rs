@@ -718,7 +718,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 op::Nthcdr => {
                     let list = self.env.stack.pop(cx);
                     let top = self.env.stack.top();
-                    top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.copy_as_obj(cx));
+                    top.set(fns::nthcdr(top.bind_as(cx)?, list.try_into()?)?.as_obj_copy());
                 }
                 op::Elt => {
                     let n = self.env.stack.pop(cx);

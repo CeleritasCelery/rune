@@ -47,10 +47,9 @@ fn car_less_than_car(a: &Cons, b: &Cons) -> Result<bool> {
 
 #[defun]
 fn file_accessible_directory_p(filename: &str) -> bool {
-  let path = Path::new(filename);
-  path.exists() && path.is_dir()
+    let path = Path::new(filename);
+    path.exists() && path.is_dir()
 }
-
 
 #[defun]
 fn file_name_as_directory(filename: &str) -> String {

@@ -861,7 +861,7 @@ mod test {
         let obj = crate::reader::read(test_str, cx).unwrap().0;
         root!(obj, cx);
         let compare = rebind!(eval(obj, None, env, cx).unwrap());
-        let expect: Object = expect.into_obj(cx).copy_as_obj(cx);
+        let expect: Object = expect.into_obj(cx).as_obj_copy();
         assert_eq!(compare, expect);
     }
 
