@@ -578,7 +578,10 @@ pub(crate) fn length(sequence: Object) -> Result<usize> {
 
 #[defun]
 pub(crate) fn safe_length(sequence: Object) -> usize {
-    length(sequence).unwrap_or(0)
+    match sequence.untag() {
+        ObjectType::Cons(cons) => cons.elements().take_while(|x| x.is_ok()).count(),
+        _ => 0,
+    }
 }
 
 #[defun]
@@ -1159,6 +1162,17 @@ mod test {
         // This test does not assert anything, but allows this to be checked by
         // miri
         assert_lisp("(let ((h (make-hash-table))) (puthash 1 6 h) (puthash 2 8 h) (puthash 3 10 h) (maphash 'eq h))", "nil");
+    }
+
+    #[test]
+    fn test_legnth() {
+        assert_lisp("(length nil)", "0");
+        assert_lisp("(length '(1 2 3))", "3");
+        assert_lisp("(length \"hello\")", "5");
+        assert_lisp("(length [1 2 3])", "3");
+        assert_lisp("(safe-length '(1 . 2))", "1");
+        assert_lisp("(safe-length '(1 2 3 . 4))", "3");
+        assert_lisp("(safe-length 'foo)", "0");
     }
 
     #[test]
