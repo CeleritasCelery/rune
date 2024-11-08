@@ -110,11 +110,17 @@ impl<T> Gc<T> {
         self.ptr == other.ptr
     }
 
-    pub(crate) fn copy_as_obj<const C: bool>(self, _: &Block<C>) -> Object {
+    pub(crate) fn as_obj(&self) -> Object<'_> {
         Gc::new(self.ptr)
     }
+}
 
-    pub(crate) fn as_obj(&self) -> Object<'_> {
+#[expect(clippy::wrong_self_convention)]
+impl<'ob, T> Gc<T>
+where
+    T: 'ob,
+{
+    pub(crate) fn as_obj_copy(self) -> Object<'ob> {
         Gc::new(self.ptr)
     }
 }
@@ -314,7 +320,7 @@ where
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         match self {
-            Some(x) => x.into_obj(block).copy_as_obj(block),
+            Some(x) => unsafe { cast_gc(x.into_obj(block)) },
             None => NIL,
         }
     }

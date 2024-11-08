@@ -599,11 +599,18 @@ pub(crate) fn nth(n: usize, list: List) -> Result<Object> {
 }
 
 #[defun]
-pub(crate) fn nthcdr(n: usize, list: List) -> Result<List> {
-    match list.conses().fallible().nth(n)? {
-        Some(x) => Ok(x.into()),
-        None => Ok(ListType::empty()),
+pub(crate) fn nthcdr(n: usize, list: List) -> Result<Object> {
+    let ListType::Cons(mut cons) = list.untag() else { return Ok(NIL) };
+    let mut tail = list.as_obj_copy();
+    for _ in 0..n {
+        tail = cons.cdr();
+        if let ObjectType::Cons(next) = tail.untag() {
+            cons = next;
+        } else {
+            break;
+        }
     }
+    Ok(tail)
 }
 
 #[defun]
@@ -979,9 +986,14 @@ mod test {
 
     #[test]
     fn test_nthcdr() {
-        assert_lisp("(nthcdr 1 '(1 2 3))", "(2 3)");
+        assert_lisp("(nthcdr 0 nil)", "nil");
+        assert_lisp("(nthcdr 3 nil)", "nil");
         assert_lisp("(nthcdr 0 '(1 2 3))", "(1 2 3)");
+        assert_lisp("(nthcdr 1 '(1 2 3))", "(2 3)");
+        assert_lisp("(nthcdr 2 '(1 2 3))", "(3)");
         assert_lisp("(nthcdr 3 '(1 2 3))", "nil");
+        assert_lisp("(nthcdr 1 '(1 . 2))", "2");
+        assert_lisp("(nthcdr 2 '(1 2 . 3))", "3");
     }
 
     #[test]
