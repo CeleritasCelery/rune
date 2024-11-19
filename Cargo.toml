@@ -11,7 +11,7 @@ members = [
   "crates/text-buffer",
   "crates/rune-macros",
   "crates/rune-core",
-  "eprop",
+  "elprop",
 ]
 
 [workspace.package]
