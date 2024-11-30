@@ -114,9 +114,15 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
                 #[rustfmt::skip]
                 let syn::Field { vis, ident, ty, attrs, .. } = &x;
                 let ident = ident.as_ref().expect("named fields should have an identifer");
+                let panic_string = format!(
+                    "Field '{}' of struct '{}' is incorrectly aligned in #[derive(Trace)]",
+                    stringify!(#ident),
+                    stringify!(#rooted_name),
+                );
                 test_fields.extend(quote! {
-                    assert_eq!(memoffset::offset_of!(super::#orig_name, #ident),
-                               memoffset::offset_of!(super::#rooted_name, #ident));
+                    if std::mem::offset_of!(#orig_name, #ident) != std::mem::offset_of!(#rooted_name, #ident) {
+                        panic!(#panic_string);
+                    }
                 });
                 if no_trace(attrs) {
                     new_fields.extend(quote! {#vis #ident: #ty,});
@@ -134,9 +140,15 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
             for (i, x) in fields.unnamed.iter().enumerate() {
                 let syn::Field { vis, ty, attrs, .. } = &x;
                 let idx = syn::Index::from(i);
+                let panic_string = format!(
+                    "Field '{}' of struct '{}' is incorrectly aligned in #[derive(Trace)]",
+                    stringify!(#idx),
+                    stringify!(#rooted_name),
+                );
                 test_fields.extend(quote! {
-                    assert_eq!(memoffset::offset_of!(super::#orig_name, #idx),
-                               memoffset::offset_of!(super::#rooted_name, #idx));
+                    if std::mem::offset_of!(#orig_name, #idx) != std::mem::offset_of!(#rooted_name, #idx) {
+                        panic!(#panic_string);
+                    }
                 });
                 if no_trace(attrs) {
                     new_fields.extend(quote! {#vis #ty,});
@@ -166,20 +178,12 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
         #repr
         #vis struct #rooted_name #generic_params #new_fields
 
-        // This makes sure that the offsets of the fields are the same
-        // between the derived and orignal structs. Once
-        // https://github.com/rust-lang/rust/issues/80384 is stabilized
-        // or we switch to nightly, this can be moved into a const
-        // assertion.
-        #[cfg(test)]
+        #[allow(dead_code)]
         #[allow(non_snake_case)]
-        mod #test_mod {
-            #[test]
-            #[doc(hidden)]
-            fn offsets() {
-                #test_fields
-            }
-        }
+        // Ensure at compile time that all fields are at the same offset
+        const #test_mod: () = {
+            #test_fields
+        };
     }
 }
 
