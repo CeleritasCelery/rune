@@ -1,8 +1,9 @@
 use proptest::prelude::*;
+use serde::{Serialize, Deserialize};
 use std::hash::Hash;
 use syn::ItemFn;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub(crate) enum ObjectType {
     String,
     Float,
@@ -226,7 +227,7 @@ impl std::fmt::Display for ArbitraryObjectType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Type {
     Object(Vec<ObjectType>),
     Nil,
@@ -241,14 +242,13 @@ impl Type {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum ArgType {
     Required(Type),
     Optional(Type),
 }
 
-#[derive(Debug, Clone)]
-#[expect(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Function {
     pub(crate) name: String,
     pub(crate) args: Vec<ArgType>,

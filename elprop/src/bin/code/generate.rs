@@ -1,4 +1,4 @@
-use crate::data;
+use crate::code::data;
 
 pub(crate) fn generate_sigs(string: &str, function_name: Option<&str>) -> Vec<data::Function> {
     let file = syn::parse_file(string).unwrap();

@@ -1,5 +1,4 @@
-mod data;
-mod generate;
+mod code;
 use clap::Parser;
 use proptest::test_runner::{Config, TestError, TestRunner};
 use std::path::Path;
@@ -13,8 +12,6 @@ struct Cli {
     test_count: Option<usize>,
     #[arg(short, long)]
     output: Option<PathBuf>,
-    // #[arg(short, long)]
-    // function: String,
 }
 
 fn main() {
@@ -66,13 +63,13 @@ fn main() {
     }
 }
 
-fn get_all_functions(pathbuf: &Path) -> Vec<data::Function> {
+fn get_all_functions(pathbuf: &Path) -> Vec<code::data::Function> {
     let mut functions = Vec::new();
     for entry in fs::read_dir(pathbuf).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|ex| ex == "rs") {
             let contents = fs::read_to_string(&path).unwrap();
-            let names = generate::generate_sigs(&contents, None);
+            let names = code::generate::generate_sigs(&contents, None);
             functions.extend(names);
         }
     }
