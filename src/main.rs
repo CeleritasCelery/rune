@@ -48,6 +48,8 @@ struct Args {
     repl: bool,
     #[arg(short, long)]
     no_bootstrap: bool,
+    #[arg(long)]
+    eval_stdin: bool,
 }
 
 fn main() -> Result<(), ()> {
@@ -61,6 +63,10 @@ fn main() -> Result<(), ()> {
     crate::core::env::init_variables(cx, env);
     crate::data::defalias(intern("not", cx), (sym::NULL).into(), None)
         .expect("null should be defined");
+
+    if args.eval_stdin {
+       return eval_stdin(cx, env);
+    }
 
     if !args.no_bootstrap {
         bootstrap(env, cx)?;
@@ -137,6 +143,40 @@ fn load(file: &str, cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
             Err(())
         }
     }
+}
+
+fn eval_stdin(cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
+    let mut buffer = String::new();
+    let mut point = 0;
+    let mut count = 0;
+    loop {
+        io::stdin().read_line(&mut buffer).unwrap();
+        let obj = match reader::read(&buffer[point..], cx) {
+            Ok((obj, offset)) => {
+                point += offset;
+                obj
+            }
+            Err(reader::Error::EmptyStream) => continue,
+            Err(e) => {
+                eprintln!("Error: {e}");
+                break;
+            }
+        };
+
+        root!(obj, cx);
+        match interpreter::eval(obj, None, env, cx) {
+            Ok(val) => println!(";; ELPROP_START:{count}\n{val}\n;; ELPROP_END\n"),
+            Err(e) => {
+                eprintln!("Error: {e}");
+                if let Ok(e) = e.downcast::<EvalError>() {
+                    e.print_backtrace();
+                }
+                break;
+            }
+        }
+        count += 1;
+    }
+    Err(())
 }
 
 fn bootstrap(env: &mut Rt<Env>, cx: &mut Context) -> Result<(), ()> {

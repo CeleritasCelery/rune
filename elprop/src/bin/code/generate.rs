@@ -1,5 +1,6 @@
 use crate::code::data;
 
+#[allow(dead_code)]
 pub(crate) fn generate_sigs(string: &str, function_name: Option<&str>) -> Vec<data::Function> {
     let file = syn::parse_file(string).unwrap();
 

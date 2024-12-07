@@ -1,9 +1,8 @@
 use proptest::prelude::*;
-use serde::{Serialize, Deserialize};
-use std::hash::Hash;
+use serde::{Deserialize, Serialize};
 use syn::ItemFn;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) enum ObjectType {
     String,
     Float,
@@ -93,8 +92,7 @@ pub(crate) fn combined_strategy(types: &[ObjectType]) -> BoxedStrategy<Arbitrary
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Debug)]
-#[expect(dead_code)]
+#[derive(Clone, PartialEq, PartialOrd, Debug, Serialize, Deserialize)]
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
@@ -113,6 +111,16 @@ pub(crate) enum ArbitraryObjectType {
     Char(char),
     Buffer(String),
     Subr(u8),
+}
+
+pub(crate) fn print_args(args: &[Option<ArbitraryObjectType>]) -> String {
+    args.iter()
+        .map(|x| match x {
+            Some(x) => format!("{x}"),
+            None => "nil".to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl std::fmt::Display for ArbitraryObjectType {
@@ -256,6 +264,13 @@ pub(crate) struct Function {
     pub(crate) fallible: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Config {
+    pub(crate) test_count: u32,
+    pub(crate) functions: Vec<Function>,
+}
+
+#[allow(dead_code)]
 impl Function {
     pub(crate) fn strategy(&self) -> Vec<BoxedStrategy<Option<ArbitraryObjectType>>> {
         self.args
