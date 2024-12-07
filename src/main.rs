@@ -65,7 +65,7 @@ fn main() -> Result<(), ()> {
         .expect("null should be defined");
 
     if args.eval_stdin {
-       return eval_stdin(cx, env);
+        return eval_stdin(cx, env);
     }
 
     if !args.no_bootstrap {
