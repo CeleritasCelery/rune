@@ -1,3 +1,4 @@
+use prop::collection::VecStrategy;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use syn::ItemFn;
@@ -30,7 +31,7 @@ impl ObjectType {
         match self {
             ObjectType::String => any::<String>().prop_map(ArbitraryObjectType::String).boxed(),
             ObjectType::Float => any::<f64>().prop_map(ArbitraryObjectType::Float).boxed(),
-            ObjectType::Cons => todo!("Strategy for Cons not implemented"),
+            ObjectType::Cons => Self::cons_strategy().prop_map(ArbitraryObjectType::Cons).boxed(),
             ObjectType::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryObjectType::Symbol).boxed(),
             ObjectType::Integer => any::<i64>().prop_map(ArbitraryObjectType::Integer).boxed(),
             ObjectType::Boolean => any::<bool>().prop_map(ArbitraryObjectType::Boolean).boxed(),
@@ -38,9 +39,12 @@ impl ObjectType {
             ObjectType::UnibyteString => {
                 "[a-zA-Z0-9 ]*".prop_map(ArbitraryObjectType::UnibyteString).boxed()
             }
-            ObjectType::Vector => todo!("Strategy for Vector not implemented"),
+            ObjectType::Vector | ObjectType::Record => {
+                prop::collection::vec(Self::any_object_strategy(), 0..10)
+                    .prop_map(ArbitraryObjectType::Vector)
+                    .boxed()
+            }
             ObjectType::HashTable => todo!("Strategy for HashTable not implemented"),
-            ObjectType::Record => todo!("Strategy for Record not implemented"),
             ObjectType::ByteFn => any::<u8>().prop_map(ArbitraryObjectType::ByteFn).boxed(),
             ObjectType::Subr => todo!("Strategy for Subr not implemented"),
             ObjectType::Buffer => any::<String>().prop_map(ArbitraryObjectType::Buffer).boxed(),
@@ -48,6 +52,17 @@ impl ObjectType {
             ObjectType::Char => any::<char>().prop_map(ArbitraryObjectType::Char).boxed(),
             ObjectType::Function => todo!("Strategy for Function not implemented"),
         }
+    }
+
+    fn cons_strategy() -> (VecStrategy<BoxedStrategy<ArbitraryObjectType>>, BoxedStrategy<bool>) {
+        (
+            prop::collection::vec(Self::any_object_strategy(), 0..10),
+            prop_oneof![
+                1 => Just(true),
+                3 => Just(false),
+            ]
+            .boxed(),
+        )
     }
 
     pub(crate) fn any_object_strategy() -> BoxedStrategy<ArbitraryObjectType> {
@@ -96,7 +111,7 @@ pub(crate) fn combined_strategy(types: &[ObjectType]) -> BoxedStrategy<Arbitrary
 pub(crate) enum ArbitraryObjectType {
     String(String),
     Float(f64),
-    Cons(Vec<ArbitraryObjectType>),
+    Cons((Vec<ArbitraryObjectType>, bool)),
     Symbol(String),
     Integer(i64),
     Boolean(bool),
@@ -135,7 +150,7 @@ impl std::fmt::Display for ArbitraryObjectType {
                         '\t' => write!(f, "\\t")?,
                         '\r' => write!(f, "\\r")?,
                         '\\' => write!(f, "\\\\")?,
-                        '"' => write!(f, "\\\"")?,
+                        '\"' => write!(f, "\\\"")?,
                         c => write!(f, "{c}")?,
                     }
                 }
@@ -146,9 +161,9 @@ impl std::fmt::Display for ArbitraryObjectType {
             }
             ArbitraryObjectType::Cons(list) => {
                 write!(f, "'(")?;
-                for i in 0..list.len() {
-                    write!(f, "{}", list[i])?;
-                    if i < list.len() - 1 {
+                for i in 0..(list.0.len()) {
+                    write!(f, "{}", list.0[i])?;
+                    if i < list.0.len() - 1 {
                         write!(f, " ")?;
                     }
                 }
