@@ -39,9 +39,12 @@ impl ObjectType {
             ObjectType::UnibyteString => {
                 "[a-zA-Z0-9 ]*".prop_map(ArbitraryObjectType::UnibyteString).boxed()
             }
-            ObjectType::Vector | ObjectType::Record => {
-                prop::collection::vec(Self::any_object_strategy(), 0..10)
-                    .prop_map(ArbitraryObjectType::Vector)
+            ObjectType::Vector => prop::collection::vec(Self::any_object_strategy(), 0..10)
+                .prop_map(ArbitraryObjectType::Vector)
+                .boxed(),
+            ObjectType::Record => {
+                (Self::SYMBOL_CHARS, prop::collection::vec(Self::any_object_strategy(), 0..10))
+                    .prop_map(ArbitraryObjectType::Record)
                     .boxed()
             }
             ObjectType::HashTable => todo!("Strategy for HashTable not implemented"),
@@ -119,7 +122,7 @@ pub(crate) enum ArbitraryObjectType {
     UnibyteString(String),
     Vector(Vec<ArbitraryObjectType>),
     HashTable(Vec<(ArbitraryObjectType, ArbitraryObjectType)>),
-    Record(String, Vec<ArbitraryObjectType>),
+    Record((String, Vec<ArbitraryObjectType>)),
     Nil,
     Function(u8),
     ByteFn(u8),
@@ -141,6 +144,7 @@ pub(crate) fn print_args(args: &[Option<ArbitraryObjectType>]) -> String {
 impl std::fmt::Display for ArbitraryObjectType {
     #[expect(clippy::too_many_lines)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::string::ToString;
         match self {
             ArbitraryObjectType::String(s) => {
                 write!(f, "\"")?;
@@ -160,14 +164,14 @@ impl std::fmt::Display for ArbitraryObjectType {
                 write!(f, "{n}")
             }
             ArbitraryObjectType::Cons(list) => {
-                write!(f, "'(")?;
-                for i in 0..(list.0.len()) {
-                    write!(f, "{}", list.0[i])?;
-                    if i < list.0.len() - 1 {
-                        write!(f, " ")?;
-                    }
+                let mut cells: Vec<_> = list.0.iter().map(ToString::to_string).collect();
+                let len = list.0.len();
+                let dot_end = list.1;
+                if dot_end && len >= 2 {
+                    cells.insert(len - 1, ".".to_owned());
                 }
-                write!(f, ")")
+                let string = cells.join(" ");
+                write!(f, "'({string})")
             }
             ArbitraryObjectType::Symbol(s) => {
                 write!(f, "'{s}")
@@ -203,7 +207,9 @@ impl std::fmt::Display for ArbitraryObjectType {
                 write!(f, "nil")
             }
             ArbitraryObjectType::Vector(vec) => {
-                write!(f, "{vec:?}")
+                let cells: Vec<_> = vec.iter().map(ToString::to_string).collect();
+                let string = cells.join(" ");
+                write!(f, "[{string}]")
             }
             ArbitraryObjectType::HashTable(vec) => {
                 write!(f, "#s(hash-table data (")?;
@@ -212,12 +218,10 @@ impl std::fmt::Display for ArbitraryObjectType {
                 }
                 write!(f, "))")
             }
-            ArbitraryObjectType::Record(name, members) => {
-                write!(f, "(record '{name} ")?;
-                for member in members {
-                    write!(f, "{member} ")?;
-                }
-                write!(f, ")")
+            ArbitraryObjectType::Record((name, members)) => {
+                let cells: Vec<_> = members.iter().map(ToString::to_string).collect();
+                let string = cells.join(" ");
+                write!(f, "(record '{name} {string})")
             }
             ArbitraryObjectType::Function(arity) => {
                 write!(f, "(lambda (")?;
