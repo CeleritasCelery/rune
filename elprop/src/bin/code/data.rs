@@ -35,7 +35,9 @@ impl ObjectType {
             ObjectType::Float => any::<f64>().prop_map(ArbitraryObjectType::Float).boxed(),
             ObjectType::Cons => Self::cons_strategy().prop_map(ArbitraryObjectType::Cons).boxed(),
             ObjectType::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryObjectType::Symbol).boxed(),
-            ObjectType::Integer => Self::fixnum_strategy().prop_map(ArbitraryObjectType::Integer).boxed(),
+            ObjectType::Integer => {
+                Self::fixnum_strategy().prop_map(ArbitraryObjectType::Integer).boxed()
+            }
             ObjectType::Boolean => any::<bool>().prop_map(ArbitraryObjectType::Boolean).boxed(),
             ObjectType::Unknown => Self::any_object_strategy(),
             ObjectType::UnibyteString => {
@@ -60,7 +62,9 @@ impl ObjectType {
     }
 
     fn fixnum_strategy() -> BoxedStrategy<i64> {
-        any::<i64>().prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM).boxed()
+        any::<i64>()
+            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM)
+            .boxed()
     }
 
     fn cons_strategy() -> (VecStrategy<BoxedStrategy<ArbitraryObjectType>>, BoxedStrategy<bool>) {
