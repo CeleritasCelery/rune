@@ -57,29 +57,29 @@ fn main() {
             let mut reader = BufReader::new(std::io::stdin());
             println!(";; reading from Emacs");
             let emacs_output =
-                process_eval_result("Emacs", *master_count.borrow(), &mut reader, |_| {});
+                process_eval_result("Emacs", *master_count.borrow(), &mut reader, |text| {
+                    let regex = regex::Regex::new("^\\([a-zA-Z0-9-]*-?error ").unwrap();
+                    regex.is_match(text)
+                });
 
             let mut rune_stdout = rune_stdout.borrow_mut();
             let mut reader = BufReader::new(&mut *rune_stdout);
             println!(";; reading from Rune");
             let rune_output =
-                process_eval_result("Rune", *master_count.borrow(), &mut reader, |x| {
-                    assert!(
-                        !(x.contains("\nError: ") || x.starts_with("Error: ")),
-                        "Rune Error: {x}"
-                    );
+                process_eval_result("Rune", *master_count.borrow(), &mut reader, |text| {
+                    text.starts_with("Error: ")
                 });
             println!(";; done");
 
             *master_count.borrow_mut() += 1;
 
-            if emacs_output == rune_output {
-                Ok(())
-            } else {
-                println!("\"Emacs: '{emacs_output}', Rune: '{rune_output}'\"");
-                Err(TestCaseError::Fail(
-                    format!("Emacs: {emacs_output}, Rune: {rune_output}").into(),
-                ))
+            match (emacs_output, rune_output) {
+                (Ok(e), Ok(r)) if e == r => Ok(()),
+                (Err(_), Err(_)) => Ok(()),
+                (Ok(e) | Err(e), Ok(r)) | (Ok(e), Err(r)) => {
+                    println!("\"Emacs: '{e}', Rune: '{r}'\"");
+                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r}").into()))
+                }
             }
         });
 
@@ -107,19 +107,23 @@ fn process_eval_result(
     name: &str,
     master_count: usize,
     reader: &mut impl BufRead,
-    test_fail: impl Fn(&str),
-) -> String {
+    test_fail: impl Fn(&str) -> bool,
+) -> Result<String, String> {
     let mut line = String::new();
     reader.read_line(&mut line).unwrap();
-    test_fail(&line);
     let count = line.strip_prefix(START_TAG).unwrap().trim().parse::<usize>().unwrap();
     assert_eq!(
         master_count, count,
         "Count from {name} was off. actual {count}, expected {master_count}",
     );
     line.clear();
-    while !line.ends_with(END_TAG) {
+    while !line.contains(END_TAG) {
         reader.read_line(&mut line).unwrap();
     }
-    line.strip_suffix(END_TAG).unwrap().trim().to_string()
+    let text = line.strip_suffix(END_TAG).unwrap().trim().to_string();
+    if test_fail(&text) {
+        Err(text)
+    } else {
+        Ok(text)
+    }
 }

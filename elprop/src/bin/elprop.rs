@@ -62,10 +62,11 @@ fn main() -> ExitCode {
     for output in outputs {
         println!("====================");
         let func = output.function;
+        println!("Testing: {func}");
         match output.status {
             Status::Fail(reason, args) => {
                 passed = false;
-                println!("{func}: Failed");
+                println!("Status: Failed");
 
                 let body = code::data::print_args(&args);
                 println!("Input: ({func} {body})");
@@ -77,6 +78,7 @@ fn main() -> ExitCode {
             }
             Status::Pass => println!("{func}: Passed"),
         }
+        println!();
     }
     if passed {
         println!("All tests passed");

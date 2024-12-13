@@ -997,6 +997,7 @@ mod test {
     #[test]
     fn test_base64_encode_string() {
         assert_lisp("(base64-encode-string \"hello\")", "\"aGVsbG8=\"");
+        // assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
     }
 
     #[test]

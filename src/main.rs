@@ -166,13 +166,7 @@ fn eval_stdin(cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
         root!(obj, cx);
         match interpreter::eval(obj, None, env, cx) {
             Ok(val) => println!(";; ELPROP_START:{count}\n{val}\n;; ELPROP_END\n"),
-            Err(e) => {
-                eprintln!("Error: {e}");
-                if let Ok(e) = e.downcast::<EvalError>() {
-                    e.print_backtrace();
-                }
-                break;
-            }
+            Err(e) => println!(";; ELPROP_START:{count}\nError: {e}\n;; ELPROP_END\n"),
         }
         count += 1;
     }

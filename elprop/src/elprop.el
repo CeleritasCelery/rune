@@ -34,11 +34,15 @@
         runner-count 0)
   (kill-buffer "*elprop-output*"))
 
-(let* ((process (start-process "elprop-process" "*elprop-output*" (getenv "ELPROP_RUNNER"))))
+(let* ((buffer "*elprop-output*")
+       (process (start-process "elprop-process" buffer (getenv "ELPROP_RUNNER"))))
   (set-process-filter process 'elprop-process-filter)
-
   (while (and (null runner-fail)
               (process-live-p process))
     (accept-process-output process)
     (sleep-for 0.05))
+  (if runner-fail
+      (error (format "Test Runner panicked\n%s"
+                     (with-current-buffer buffer
+                       (buffer-substring-no-properties (point-min) (point-max))))))
   (message "done"))
