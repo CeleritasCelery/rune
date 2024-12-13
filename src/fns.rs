@@ -970,51 +970,17 @@ fn disable_debug() -> bool {
     false
 }
 
-// static Lisp_Object
-// base64_encode_string_1 (Lisp_Object string, bool line_break,
-//     bool pad, bool base64url)
-// {
-// ptrdiff_t allength, length, encoded_length;
-// char *encoded;
-// Lisp_Object encoded_string;
-// USE_SAFE_ALLOCA;
-
-// CHECK_STRING (string);
-
-// /* We need to allocate enough room for encoding the text.
-// We need 33 1/3% more space, plus a newline every 76
-// characters, and then we round up. */
-// length = SBYTES (string);
-// allength = length + length/3 + 1;
-// allength += allength / MIME_LINE_LENGTH + 1 + 6;
-
-// /* We need to allocate enough room for decoding the text. */
-// encoded = SAFE_ALLOCA (allength);
-
-// encoded_length = base64_encode_1 (SSDATA (string),
-//             encoded, length, line_break,
-//             pad, base64url,
-//             STRING_MULTIBYTE (string));
-// if (encoded_length > allength)
-// emacs_abort ();
-
-// if (encoded_length < 0)
-// {
-// /* The encoding wasn't possible. */
-// error ("Multibyte character in data for base64 encoding");
-// }
-
-// encoded_string = make_unibyte_string (encoded, encoded_length);
-// SAFE_FREE ();
-
-// return encoded_string;
-// }
+/// Base64-encode STRING and return the result.
+///
+/// Optional second argument NO-LINE-BREAK means do not break long lines
+/// into shorter lines.
 #[defun]
 fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String> {
     if string.is_ascii() {
-        return Ok(base64_encode(string, line_break.is_some(), true, true));
+        Ok(base64_encode(string, line_break.is_some(), true, true))
+    } else {
+        Err(anyhow!("Multibyte character in data for base64 encoding"))
     }
-    Err(anyhow!("xx"))
 }
 
 fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) -> String {
@@ -1027,6 +993,11 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
 #[cfg(test)]
 mod test {
     use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
+
+    #[test]
+    fn test_base64_encode_string() {
+        assert_lisp("(base64-encode-string \"hello\")", "\"aGVsbG8=\"");
+    }
 
     #[test]
     fn test_take() {
