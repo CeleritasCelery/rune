@@ -82,9 +82,9 @@ fn main() -> ExitCode {
     }
     if passed {
         println!("All tests passed");
-        ExitCode::FAILURE
-    } else {
         ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
