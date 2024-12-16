@@ -169,6 +169,7 @@ fn eval_stdin(cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
             Err(e) => println!(";; ELPROP_START:{count}\nError: {e}\n;; ELPROP_END\n"),
         }
         count += 1;
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     Err(())
 }
