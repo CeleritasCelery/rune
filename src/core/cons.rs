@@ -190,6 +190,7 @@ define_unbox!(Cons, &'ob Cons);
 #[cfg(test)]
 mod test {
     use crate::core::gc::Context;
+    use crate::interpreter::assert_lisp;
     use rune_core::macros::list;
 
     use super::super::gc::RootSet;
@@ -224,5 +225,11 @@ mod test {
         let lhs = list![5, 1, 1.5, "foo"; cx];
         assert_eq!(lhs, list![5, 1, 1.5, "foo"; cx]);
         assert_ne!(lhs, list![5, 1, 1.5, "bar"; cx]);
+    }
+
+    #[test]
+    fn display() {
+        assert_lisp("(quote foo)", "foo");
+        assert_lisp("(quote ((quote foo)))", "('foo)");
     }
 }
