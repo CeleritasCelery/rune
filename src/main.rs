@@ -170,6 +170,10 @@ fn eval_stdin(cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
         }
         count += 1;
         std::thread::sleep(std::time::Duration::from_millis(10));
+        // timeout after ~1 minute
+        if count > 6000 {
+            break;
+        }
     }
     Err(())
 }
