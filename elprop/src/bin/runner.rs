@@ -114,7 +114,6 @@ fn main() {
         let output = Output { function: name, count: *func_iter_count.borrow(), status };
         outputs.borrow_mut().push(output);
     }
-    
 
     let args_file = target.join("arguments.json");
     let json = serde_json::to_string(&*arguments.borrow()).expect("Malformed Arguments JSON");
