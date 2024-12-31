@@ -167,7 +167,7 @@ pub(crate) fn symbolp(object: Object) -> bool {
 pub(crate) fn functionp(object: Object) -> bool {
     match object.untag() {
         ObjectType::ByteFn(_) | ObjectType::SubrFn(_) => true,
-        ObjectType::Cons(cons) => cons.car() == sym::CLOSURE,
+        ObjectType::Cons(cons) => cons.car() == sym::CLOSURE || cons.car() == sym::LAMBDA,
         ObjectType::Symbol(sym) => sym.has_func(),
         _ => false,
     }
@@ -519,6 +519,7 @@ unsafe impl Sync for LispError {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::interpreter::assert_lisp;
 
     #[test]
     fn test_ash() {
@@ -527,6 +528,11 @@ mod test {
         assert_eq!(ash(-8, -1), -4);
         assert_eq!(ash(256, -8), 1);
         assert_eq!(ash(-8, 1), -16);
+    }
+
+    #[test]
+    fn test_functionp() {
+        assert_lisp("(functionp '(lambda nil))", "t");
     }
 }
 
