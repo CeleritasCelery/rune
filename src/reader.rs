@@ -248,6 +248,7 @@ impl<'a> Tokenizer<'a> {
                         let new = match chr {
                             'a' => '\u{07}',
                             'b' => '\u{08}',
+                            'd' => '\u{7F}',
                             'e' => '\u{1B}',
                             'f' => '\u{0C}',
                             'n' => '\n',
