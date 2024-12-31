@@ -39,12 +39,16 @@ fn main() {
 
     let rune_stdin = RefCell::new(child.stdin.take().unwrap());
     let rune_stdout = RefCell::new(child.stdout.take().unwrap());
+    let rune_panicked = RefCell::new(false);
     let master_count = RefCell::new(0);
 
     let outputs = RefCell::new(Vec::new());
     for func in config.functions {
         let name = func.name.clone();
         let result = runner.run(&func.strategy(), |input| {
+            if *rune_panicked.borrow() {
+                return Err(TestCaseError::Reject("Rune panicked".into()));
+            }
             let body = code::data::print_args(&input);
             // send to emacs
             println!(";; sending to Emacs");
@@ -52,7 +56,13 @@ fn main() {
             println!("{test_str}");
             // send to rune
             println!(";; sending to rune");
-            writeln!(rune_stdin.borrow_mut(), "{test_str}").unwrap();
+            match writeln!(rune_stdin.borrow_mut(), "{test_str}") {
+                Ok(()) => (),
+                Err(e) => {
+                    *rune_panicked.borrow_mut() = true;
+                    return Err(TestCaseError::Reject(format!("Rune panicked {e}").into()));
+                }
+            }
 
             let mut reader = BufReader::new(std::io::stdin());
             println!(";; reading from Emacs");
@@ -111,6 +121,9 @@ fn process_eval_result(
 ) -> Result<String, String> {
     let mut line = String::new();
     reader.read_line(&mut line).unwrap();
+    if line.contains("thread 'main' panicked") {
+        return Err("Rune panicked".to_owned());
+    }
     let count = line.strip_prefix(START_TAG).unwrap().trim().parse::<usize>().unwrap();
     assert_eq!(
         master_count, count,
