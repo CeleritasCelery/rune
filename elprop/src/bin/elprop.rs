@@ -30,7 +30,7 @@ fn main() -> ExitCode {
         .filter(|x| regex.is_match(&x.name))
         .collect::<Vec<_>>();
 
-    let config = Config { test_count: cli.test_count.unwrap_or(100), functions: functions.clone() };
+    let config = Config { test_count: cli.test_count.unwrap_or(200), functions: functions.clone() };
 
     let json = serde_json::to_string(&config);
     let elprop_target = workspace_root.join("target/elprop");
@@ -46,7 +46,30 @@ fn main() -> ExitCode {
         .env("ELPROP_RUNNER", runner)
         .output()
         .expect("Failed to run emacs");
-    println!("{}", String::from_utf8_lossy(&child.stdout));
+    let output = String::from_utf8_lossy(&child.stdout);
+    // find the start of the text mapbacktrace if it exists in output
+    if let Some(panic_idx) = output.find("thread 'main' panicked") {
+        // get the text between START and END tags
+        let start_text = ";; ELPROP_START";
+        let end_text = ";; ELPROP_END";
+        let start = match output.find(start_text) {
+            Some(i) => i + start_text.len(),
+            None => 0,
+        };
+        let end = output.find(end_text).unwrap_or(output.len());
+        let source = &output[start..end];
+
+        let start_bk = output.find("stack backtrace:").unwrap_or(output.len());
+        let backtrace = &output[panic_idx..start_bk];
+
+        println!("====================");
+        println!("Rune Panicked:");
+        println!("{backtrace}");
+        println!("Failing Input: {source}");
+    } else {
+        println!("{output}");
+    };
+
     let code = child.status.code().unwrap();
     if code != 0 {
         eprintln!("Emacs exited with code: {code}");
