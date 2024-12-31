@@ -257,9 +257,19 @@ impl std::fmt::Display for ArbitraryObjectType {
                 }
                 write!(f, ") nil)")
             }
-            ArbitraryObjectType::Char(chr) => {
-                write!(f, "?{chr}")
-            }
+            ArbitraryObjectType::Char(chr) => match chr {
+                '\n' => write!(f, "?\\n"),
+                '\t' => write!(f, "?\\t"),
+                '\r' => write!(f, "?\\r"),
+                '\u{0B}' => write!(f, "?\\v"),
+                '\u{0C}' => write!(f, "?\\f"),
+                '\u{1B}' => write!(f, "?\\e"),
+                '\u{7F}' => write!(f, "?\\d"),
+                '\u{08}' => write!(f, "?\\b"),
+                '\u{07}' => write!(f, "?\\a"),
+                '(' | ')' | '[' | ']' | '\\' | '"' => write!(f, "?\\{chr}"),
+                chr => write!(f, "?{chr}"),
+            },
         }
     }
 }
