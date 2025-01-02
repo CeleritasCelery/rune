@@ -453,7 +453,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// Read number with specificed radix
     fn read_radix(&mut self, pos: usize, radix: u8) -> Result<Object<'ob>> {
-        if radix < 2 || radix > 36 {
+        if !(2..=36).contains(&radix) {
             return Err(Error::ParseInt(radix, pos));
         }
 
