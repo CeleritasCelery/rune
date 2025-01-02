@@ -453,6 +453,10 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// Read number with specificed radix
     fn read_radix(&mut self, pos: usize, radix: u8) -> Result<Object<'ob>> {
+        if radix < 2 || radix > 36 {
+            return Err(Error::ParseInt(radix, pos));
+        }
+
         match self.tokens.next() {
             Some(Token::Ident(ident)) => match usize::from_str_radix(ident, radix.into()) {
                 Ok(x) => Ok(self.cx.add(x as i64)),
@@ -480,6 +484,27 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Some('b') => self.read_radix(pos, 2),
             Some('o') => self.read_radix(pos, 8),
             Some('x') => self.read_radix(pos, 16),
+            Some(chr) if chr.is_ascii_digit() => {
+                let mut radix = (chr as u8) - b'0';
+                loop {
+                    match self.tokens.read_char() {
+                        Some('r') => break,
+                        Some(chr) if chr.is_ascii_digit() => {
+                            match radix
+                                .checked_mul(10)
+                                .and_then(|r| r.checked_add(chr as u8 - b'0'))
+                            {
+                                Some(r) => radix = r,
+                                // TODO: Better error for radix overflow
+                                None => return Err(Error::UnknownMacroCharacter(chr, pos)),
+                            }
+                        }
+                        Some(chr) => return Err(Error::UnknownMacroCharacter(chr, pos)),
+                        None => return Err(Error::MissingQuotedItem(pos)),
+                    }
+                }
+                self.read_radix(pos, radix)
+            }
             Some(chr) => Err(Error::UnknownMacroCharacter(chr, pos)),
             None => Err(Error::MissingQuotedItem(pos)),
         }
@@ -553,13 +578,22 @@ mod test {
         check_reader!(1, "001", cx);
         check_reader!(1, "#o001", cx);
         check_reader!(8, "#o10", cx);
+        check_reader!(8, "#8r10", cx);
         check_reader!(2385, "#o4521", cx);
+        check_reader!(2385, "#8r4521", cx);
         check_reader!(0b1, "#b001", cx);
         check_reader!(0b10, "#b10", cx);
+        check_reader!(0b10, "#2r10", cx);
+        check_reader!(0b10, "#00000002r10", cx);
         check_reader!(0b101_1101, "#b1011101", cx);
         check_reader!(0x1, "#x001", cx);
         check_reader!(0x10, "#x10", cx);
         check_reader!(0xdead_beef_i64, "#xDeAdBeEf", cx);
+        check_reader!(171, "#12r0123", cx);
+        check_reader!(49360, "#36r1234", cx);
+        assert_error("#37r1234", Error::ParseInt(37, 0), cx);
+        assert_error("#257r1234", Error::UnknownMacroCharacter('7', 0), cx);
+        assert_error("#123456r1234", Error::UnknownMacroCharacter('4', 0), cx);
     }
 
     #[test]
