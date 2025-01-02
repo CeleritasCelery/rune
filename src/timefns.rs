@@ -6,7 +6,7 @@ use crate::core::{
     object::{List, Object, ObjectType},
 };
 use rune_core::macros::list;
-use rune_macros::defun;
+use rune_macros::{defun, elprop};
 use std::time::{Duration, SystemTime};
 
 defvar!(CURRENT_TIME_LIST, true);
@@ -260,6 +260,7 @@ fn decode_time_components<'ob>(
 }
 
 #[defun]
+#[elprop((usize, usize, usize, usize), (usize, usize, usize, usize))]
 fn time_add<'ob>(a: LispTime, b: LispTime, cx: &'ob Context) -> Object<'ob> {
     let c = a.0 + b.0;
     // let c = SystemTime::now()
