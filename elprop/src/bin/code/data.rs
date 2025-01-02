@@ -1,15 +1,17 @@
+use proc_macro2::{TokenStream, TokenTree};
 use prop::collection::VecStrategy;
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
-use syn::ItemFn;
+use syn::{FnArg, ItemFn};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum ObjectType {
     String,
     Float,
     Cons,
     Symbol,
     Integer,
+    PosInteger,
     Boolean,
     Unknown,
     Function,
@@ -22,6 +24,8 @@ pub(crate) enum ObjectType {
     Buffer,
     Nil,
     Char,
+    CustomString(String),
+    CustomList(Vec<ObjectType>),
 }
 
 impl ObjectType {
@@ -37,6 +41,9 @@ impl ObjectType {
             ObjectType::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryObjectType::Symbol).boxed(),
             ObjectType::Integer => {
                 Self::fixnum_strategy().prop_map(ArbitraryObjectType::Integer).boxed()
+            }
+            ObjectType::PosInteger => {
+                Self::pos_fixnum_strategy().prop_map(ArbitraryObjectType::Integer).boxed()
             }
             ObjectType::Boolean => any::<bool>().prop_map(ArbitraryObjectType::Boolean).boxed(),
             ObjectType::Unknown => Self::any_object_strategy(),
@@ -58,12 +65,26 @@ impl ObjectType {
             ObjectType::Nil => Just(ArbitraryObjectType::Nil).boxed(),
             ObjectType::Char => any::<char>().prop_map(ArbitraryObjectType::Char).boxed(),
             ObjectType::Function => todo!("Strategy for Function not implemented"),
+            ObjectType::CustomString(s) => proptest::string::string_regex(&s)
+                .expect("Invalid proptest regex")
+                .prop_map(ArbitraryObjectType::String)
+                .boxed(),
+            ObjectType::CustomList(list) => {
+                let arb_list: Vec<_> = list.iter().map(|x| x.clone().strategy()).collect();
+                (arb_list, Just(false)).prop_map(ArbitraryObjectType::Cons).boxed()
+            }
         }
     }
 
     fn fixnum_strategy() -> BoxedStrategy<i64> {
         any::<i64>()
             .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM)
+            .boxed()
+    }
+
+    fn pos_fixnum_strategy() -> BoxedStrategy<i64> {
+        any::<i64>()
+            .prop_filter("Fixnum", |x| *x >= 0 && *x <= Self::MAX_FIXNUM)
             .boxed()
     }
 
@@ -98,22 +119,27 @@ pub(crate) fn combined_strategy(types: &[ObjectType]) -> BoxedStrategy<Arbitrary
     // Combine all strategies using prop_oneof!
     match types.len() {
         0 => panic!("At least one type must be provided"),
-        1 => types[0].strategy(),
-        2 => prop_oneof![types[0].strategy(), types[1].strategy()].boxed(),
-        3 => prop_oneof![types[0].strategy(), types[1].strategy(), types[2].strategy()].boxed(),
+        1 => types[0].clone().strategy(),
+        2 => prop_oneof![types[0].clone().strategy(), types[1].clone().strategy()].boxed(),
+        3 => prop_oneof![
+            types[0].clone().strategy(),
+            types[1].clone().strategy(),
+            types[2].clone().strategy()
+        ]
+        .boxed(),
         4 => prop_oneof![
-            types[0].strategy(),
-            types[1].strategy(),
-            types[2].strategy(),
-            types[3].strategy()
+            types[0].clone().strategy(),
+            types[1].clone().strategy(),
+            types[2].clone().strategy(),
+            types[3].clone().strategy()
         ]
         .boxed(),
         5 => prop_oneof![
-            types[0].strategy(),
-            types[1].strategy(),
-            types[2].strategy(),
-            types[3].strategy(),
-            types[4].strategy()
+            types[0].clone().strategy(),
+            types[1].clone().strategy(),
+            types[2].clone().strategy(),
+            types[3].clone().strategy(),
+            types[4].clone().strategy()
         ]
         .boxed(),
         n => panic!("Currently supporting up to 5 combined types, got {n}"),
@@ -409,7 +435,47 @@ impl Function {
         }
     }
 
-    #[expect(clippy::too_many_lines)]
+    fn custom_templates(func: &ItemFn) -> Vec<Option<ObjectType>> {
+        for attr in &func.attrs {
+            if let syn::Meta::List(list) = &attr.meta {
+                if list.path.get_ident().unwrap() == "elprop" {
+                    let custom_args = Self::parse_stream(list.tokens.clone());
+                    return custom_args
+                        .into_iter()
+                        .map(|x| match x {
+                            ObjectType::Nil => None,
+                            x => Some(x),
+                        })
+                        .collect();
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    fn parse_stream(ts: TokenStream) -> Vec<ObjectType> {
+        ts.into_iter()
+            .filter(|x| !matches!(x, TokenTree::Punct(_)))
+            .map(|token| match token {
+                TokenTree::Group(group) => {
+                    ObjectType::CustomList(Self::parse_stream(group.stream()))
+                }
+                TokenTree::Ident(ident) => match ident.to_string().as_ref() {
+                    "_" => ObjectType::Nil,
+                    "usize" | "u64" => ObjectType::PosInteger,
+                    "isize" | "i64" => ObjectType::Integer,
+                    x => panic!("Unknown type {x}"),
+                },
+                TokenTree::Literal(literal) => ObjectType::CustomString(
+                    syn::parse_str::<syn::LitStr>(&literal.to_string())
+                        .expect("Invalid Literal {literal:?}")
+                        .value(),
+                ),
+                TokenTree::Punct(_) => unreachable!("Punct in stream"),
+            })
+            .collect()
+    }
+
     pub(crate) fn from_item(item: &ItemFn) -> Result<Self, String> {
         let name = item
             .sig
@@ -422,17 +488,29 @@ impl Function {
             })
             .collect();
 
-        let args = item
-            .sig
+        let args = Function::get_args(item);
+
+        let (ret, fallible) = Self::get_output(item)?;
+        Ok(Function { name, args, ret, fallible })
+    }
+
+    fn get_args(item: &ItemFn) -> Vec<ArgType> {
+        let templates = Self::custom_templates(item);
+
+        item.sig
             .inputs
             .iter()
-            .filter_map(|arg| {
-                let ty = match arg {
-                    syn::FnArg::Receiver(syn::Receiver { ty, .. })
-                    | syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
-                };
-
-                match ty.as_ref() {
+            .map(|x| match x {
+                FnArg::Receiver(syn::Receiver { ty, .. })
+                | FnArg::Typed(syn::PatType { ty, .. }) => ty,
+            })
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                // If a custom template is specified, use it
+                if let Some(Some(template)) = templates.get(i) {
+                    return Some(ArgType::Required(Type::Object(vec![template.clone()])));
+                }
+                match arg.as_ref() {
                     syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
                         let syn::token::Group { span } = group_token;
 
@@ -441,102 +519,45 @@ impl Function {
                             .ok_or_else(|| "Failed to get source text".to_string())
                             .ok()?;
                         let optional = matches!(source_text.as_str(), "Option");
-                        let ty = Function::process_arg(elem).ok()?;
-
-                        match ty {
-                            Type::Object(ref obj) => {
-                                if obj.contains(&ObjectType::Boolean) {
-                                    Some(ArgType::Required(ty))
-                                } else if optional {
-                                    Some(ArgType::Optional(ty))
-                                } else {
-                                    Some(ArgType::Required(ty))
-                                }
-                            }
-                            Type::Nil => {
-                                if optional {
-                                    Some(ArgType::Optional(ty))
-                                } else {
-                                    Some(ArgType::Required(ty))
-                                }
-                            }
-                        }
+                        Self::wrap_arg(optional, elem)
                     }
                     syn::Type::Path(syn::TypePath { path, .. }) => {
                         let segments = &path.segments;
                         let last = segments.last().unwrap().ident.to_string();
-                        let optional = matches!(last.as_str(), "Result" | "Option");
-                        if optional {
+                        if matches!(last.as_str(), "Result" | "Option") {
                             let syn::PathArguments::AngleBracketed(
                                 syn::AngleBracketedGenericArguments { args, .. },
                             ) = &segments.last().unwrap().arguments
                             else {
-                                return None;
+                                unreachable!("Expected angle bracketed arguments");
                             };
-                            let mut type_argument = None;
-                            for arg in args {
-                                match arg {
-                                    syn::GenericArgument::Type(ty) => {
-                                        type_argument = Some(ty);
-                                    }
-                                    _ => continue,
-                                }
-                            }
-
-                            let ty = type_argument?;
-
-                            let ty = Function::process_arg(ty).ok()?;
-
-                            match ty {
-                                Type::Object(ref obj) => {
-                                    if obj.contains(&ObjectType::Boolean) {
-                                        Some(ArgType::Required(ty))
-                                    } else if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                                Type::Nil => {
-                                    if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                            }
+                            let type_argument = args.iter().fold(None, |acc, arg| match arg {
+                                syn::GenericArgument::Type(ty) => Some(ty),
+                                _ => acc,
+                            });
+                            Self::wrap_arg(true, type_argument?)
                         } else {
-                            let ty = Function::process_arg(ty).ok()?;
-
-                            match ty {
-                                Type::Object(ref obj) => {
-                                    if obj.contains(&ObjectType::Boolean) {
-                                        Some(ArgType::Required(ty))
-                                    } else if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                                Type::Nil => {
-                                    if optional {
-                                        Some(ArgType::Optional(ty))
-                                    } else {
-                                        Some(ArgType::Required(ty))
-                                    }
-                                }
-                            }
+                            Self::wrap_arg(false, arg)
                         }
                     }
-                    x => {
-                        let ty = Function::process_arg(x).ok()?;
-                        Some(ArgType::Required(ty))
-                    }
+                    x => Some(ArgType::Required(Function::process_arg(x).ok()?)),
                 }
             })
-            .collect();
+            .collect()
+    }
 
-        let (ret, fallible) = match &item.sig.output {
+    fn wrap_arg(optional: bool, ty: &syn::Type) -> Option<ArgType> {
+        let arg = Function::process_arg(ty).ok()?;
+        match arg {
+            Type::Object(ref obj) if obj.contains(&ObjectType::Boolean) => {
+                Some(ArgType::Required(arg))
+            }
+            x => Some(if optional { ArgType::Optional(x) } else { ArgType::Required(x) }),
+        }
+    }
+
+    fn get_output(item: &ItemFn) -> Result<(Type, bool), String> {
+        Ok(match &item.sig.output {
             syn::ReturnType::Default => (Type::Nil, false),
             syn::ReturnType::Type(_, ty) => match ty.as_ref() {
                 syn::Type::Group(syn::TypeGroup { group_token, elem }) => {
@@ -559,7 +580,7 @@ impl Function {
                                 syn::AngleBracketedGenericArguments { args, .. },
                             ) = &segments.last().unwrap().arguments
                             else {
-                                return Err("Expected angle bracketed arguments".to_string());
+                                unreachable!("Expected angle bracketed arguments");
                             };
                             let mut type_argument = None;
                             for arg in args {
@@ -589,8 +610,6 @@ impl Function {
                     (ty, false)
                 }
             },
-        };
-
-        Ok(Function { name, args, ret, fallible })
+        })
     }
 }

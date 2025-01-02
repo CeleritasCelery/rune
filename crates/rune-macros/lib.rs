@@ -56,3 +56,9 @@ pub fn trace_derive(stream: TokenStream) -> TokenStream {
     let derived = parse_macro_input!(stream as syn::DeriveInput);
     trace::expand(&derived).into()
 }
+
+// dummy macro for elprop
+#[proc_macro_attribute]
+pub fn elprop(_: TokenStream, fn_ts: TokenStream) -> TokenStream {
+    fn_ts
+}

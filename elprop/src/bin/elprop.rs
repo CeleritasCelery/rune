@@ -140,13 +140,16 @@ fn get_fn_signatures(string: &str) -> Vec<Function> {
 
 #[expect(clippy::trivially_copy_pass_by_ref)]
 fn is_defun(func: &&syn::ItemFn) -> bool {
+    use syn::Meta;
+    use syn::MetaList;
     for attr in &func.attrs {
-        if let syn::Meta::Path(path) = &attr.meta {
-            if let Some(ident) = path.get_ident() {
-                if ident == "defun" {
-                    return true;
-                }
+        match &attr.meta {
+            Meta::Path(path) | Meta::List(MetaList { path, .. })
+                if path.get_ident().unwrap() == "defun" =>
+            {
+                return true
             }
+            _ => {}
         }
     }
     false

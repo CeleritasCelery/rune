@@ -19,7 +19,7 @@ use base64::Engine;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{call, list, rebind, root};
-use rune_macros::defun;
+use rune_macros::{defun, elprop};
 
 #[defun]
 fn identity(arg: Object) -> Object {
@@ -975,6 +975,7 @@ fn disable_debug() -> bool {
 /// Optional second argument NO-LINE-BREAK means do not break long lines
 /// into shorter lines.
 #[defun]
+#[elprop("[\x00-\x7F]*", _)]
 fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String> {
     if string.is_ascii() {
         Ok(base64_encode(string, line_break.is_some(), true, true))
