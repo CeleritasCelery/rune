@@ -366,6 +366,9 @@ impl Function {
                     "StringOrSymbol" => {
                         Ok(Type::Object(vec![ObjectType::String, ObjectType::Symbol]))
                     }
+                    "LispTime" => {
+                        Ok(Type::Object(vec![ObjectType::Cons]))
+                    }
                     "Symbol" => Ok(Type::Object(vec![ObjectType::Symbol])),
                     "Number" | "NumberValue" => {
                         Ok(Type::Object(vec![ObjectType::Integer, ObjectType::Float]))

@@ -978,7 +978,16 @@ fn disable_debug() -> bool {
 #[elprop("[\x00-\x7F]*", _)]
 fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String> {
     if string.is_ascii() {
-        Ok(base64_encode(string, line_break.is_some(), true, true))
+        Ok(base64_encode(string, line_break.is_some(), true, false))
+    } else {
+        Err(anyhow!("Multibyte character in data for base64 encoding"))
+    }
+}
+
+#[defun]
+fn base64url_encode_string(string: &str, no_pad: OptionalFlag) -> Result<String> {
+    if string.is_ascii() {
+        Ok(base64_encode(string, false, no_pad.is_none(), true))
     } else {
         Err(anyhow!("Multibyte character in data for base64 encoding"))
     }
@@ -991,6 +1000,36 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
     engine.encode(string)
 }
 
+#[defun]
+fn base64_decode_string(
+    string: &str,
+    base64url: OptionalFlag,
+    ignore_invalid: OptionalFlag,
+) -> Result<Vec<u8>> {
+    let error_msg = "Invalid base64 data";
+    base64_decode(string, base64url.is_some(), ignore_invalid.is_some())
+        .map_err(|_| anyhow!(error_msg))
+}
+
+fn base64_decode(
+    string: &str,
+    base64url: bool,
+    ignore_invalid: bool,
+) -> Result<Vec<u8>, base64::DecodeError> {
+    let config = base64::engine::GeneralPurposeConfig::new()
+        .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent)
+        .with_decode_allow_trailing_bits(true);
+    let alphabets = if base64url { base64::alphabet::URL_SAFE } else { base64::alphabet::STANDARD };
+    let engine = base64::engine::GeneralPurpose::new(&alphabets, config);
+    if ignore_invalid {
+        let santizied_string: String =
+            string.chars().filter(|c| alphabets.as_str().contains(*c)).collect();
+        engine.decode(santizied_string)
+    } else {
+        engine.decode(string)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
@@ -998,7 +1037,31 @@ mod test {
     #[test]
     fn test_base64_encode_string() {
         assert_lisp("(base64-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
+        assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
+    }
+
+    #[test]
+    fn test_base64url_encode_string() {
+        assert_lisp("(base64url-encode-string \" \")", "\"IA==\"");
+        assert_lisp("(base64url-encode-string \"aa>\")", "\"YWE-\"");
+        assert_lisp("(base64url-encode-string \" a>\")", "\"IGE-\"");
+    }
+
+    // Need a way to convert to ByteString instead of String
+    #[test]
+    #[ignore]
+    fn test_base64_decode_string() {
+        assert_lisp("(base64-decode-string \"aa\" nil t)", "\"i\"");
+        // assert_lisp("(base64-decode-string \"0+\" nil t)", r#"\323"#);
+        // assert_lisp("(base64-decode-string \"Wj1Yse54𐩃-N\" t t)", "\"Z=X\261\356x\370\"");
         // assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
+        // assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
+    }
+    #[test]
+    #[ignore]
+    fn test_base64_url_decode_string() {
+        assert_lisp("(base64-decode-string \"Wj1Yse54𐩃-N\" t t)", "\"Z=X\\261\\356x\\370\"");
     }
 
     #[test]
