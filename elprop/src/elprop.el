@@ -18,6 +18,10 @@
       (save-excursion
         (goto-char (point-min))
         (when (search-forward "thread 'main' panicked" nil t)
+          (setq pointer (point))
+          ;; give enough time for a backtrace to be printed
+          (sleep-for 1)
+          (goto-char pointer)
           (search-backward ";; ELPROP_START" nil t)
           (let* ((backtrace (buffer-substring-no-properties
                              (point)

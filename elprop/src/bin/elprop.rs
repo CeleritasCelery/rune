@@ -59,16 +59,20 @@ fn main() -> ExitCode {
         let end = output.find(end_text).unwrap_or(output.len());
         let source = &output[start..end];
 
-        let start_bk = output.find("stack backtrace:").unwrap_or(output.len());
-        let backtrace = &output[panic_idx..start_bk];
+        let backtrace_end = match output[panic_idx..].find(";; ") {
+            Some(i) => i + panic_idx,
+            None => output.len(),
+        };
+        let backtrace = &output[panic_idx..backtrace_end];
 
         println!("====================");
-        println!("Rune Panicked:");
-        println!("{backtrace}");
+        println!("Status: Failed (Rune Panicked)");
         println!("Failing Input: {source}");
-    } else {
-        println!("{output}");
-    };
+        println!("{backtrace}");
+        return ExitCode::FAILURE;
+    }
+
+    println!("{output}");
 
     let code = child.status.code().unwrap();
     if code != 0 {

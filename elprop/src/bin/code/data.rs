@@ -371,7 +371,8 @@ impl Function {
                         Ok(Type::Object(vec![ObjectType::Integer, ObjectType::Float]))
                     }
                     "Object" => Ok(Type::Object(vec![ObjectType::Unknown])),
-                    "usize" | "isize" | "i64" => Ok(Type::Object(vec![ObjectType::Integer])),
+                    "usize" | "u64" => Ok(Type::Object(vec![ObjectType::PosInteger])),
+                    "isize" | "i64" => Ok(Type::Object(vec![ObjectType::Integer])),
                     "str" | "String" | "LispString" => Ok(Type::Object(vec![ObjectType::String])),
                     "bool" => Ok(Type::Object(vec![ObjectType::Boolean])),
                     "f64" => Ok(Type::Object(vec![ObjectType::Float])),
@@ -394,26 +395,7 @@ impl Function {
                     "SubrFn" => Ok(Type::Object(vec![ObjectType::Subr])),
                     "LispBuffer" => Ok(Type::Object(vec![ObjectType::Buffer])),
                     "Rto" | "Rt" | "Gc" => {
-                        let syn::PathArguments::AngleBracketed(
-                            syn::AngleBracketedGenericArguments { args, .. },
-                        ) = &segments.last().unwrap().arguments
-                        else {
-                            return Err("Expected angle bracketed arguments".to_string());
-                        };
-                        let mut type_argument = None;
-                        for arg in args {
-                            match arg {
-                                syn::GenericArgument::Type(ty) => {
-                                    type_argument = Some(ty);
-                                }
-                                _ => continue,
-                            }
-                        }
-
-                        let Some(ty) = type_argument else {
-                            return Err("Expected type argument".to_string());
-                        };
-
+                        let ty = get_generic_arg(segments)?;
                         Function::process_arg(ty)
                     }
                     "Env" | "Context" => {
@@ -525,17 +507,8 @@ impl Function {
                         let segments = &path.segments;
                         let last = segments.last().unwrap().ident.to_string();
                         if matches!(last.as_str(), "Result" | "Option") {
-                            let syn::PathArguments::AngleBracketed(
-                                syn::AngleBracketedGenericArguments { args, .. },
-                            ) = &segments.last().unwrap().arguments
-                            else {
-                                unreachable!("Expected angle bracketed arguments");
-                            };
-                            let type_argument = args.iter().fold(None, |acc, arg| match arg {
-                                syn::GenericArgument::Type(ty) => Some(ty),
-                                _ => acc,
-                            });
-                            Self::wrap_arg(true, type_argument?)
+                            let generic_arg = get_generic_arg(segments).ok()?;
+                            Self::wrap_arg(true, generic_arg)
                         } else {
                             Self::wrap_arg(false, arg)
                         }
@@ -576,26 +549,7 @@ impl Function {
                     let last = segments.last().unwrap().ident.to_string();
                     match last.as_str() {
                         "Result" | "Option" => {
-                            let syn::PathArguments::AngleBracketed(
-                                syn::AngleBracketedGenericArguments { args, .. },
-                            ) = &segments.last().unwrap().arguments
-                            else {
-                                unreachable!("Expected angle bracketed arguments");
-                            };
-                            let mut type_argument = None;
-                            for arg in args {
-                                match arg {
-                                    syn::GenericArgument::Type(ty) => {
-                                        type_argument = Some(ty);
-                                    }
-                                    _ => continue,
-                                }
-                            }
-
-                            let Some(ty) = type_argument else {
-                                return Err("Expected type argument".to_string());
-                            };
-
+                            let ty = get_generic_arg(segments)?;
                             let ty = Function::process_arg(ty)?;
                             (ty, true)
                         }
@@ -612,4 +566,22 @@ impl Function {
             },
         })
     }
+}
+
+fn get_generic_arg<'a>(
+    segments: impl IntoIterator<Item = &'a syn::PathSegment>,
+) -> Result<&'a syn::Type, String> {
+    let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+        ref args, ..
+    }) = segments.into_iter().last().unwrap().arguments
+    else {
+        unreachable!("Expected angle bracketed arguments");
+    };
+
+    args.iter()
+        .fold(None, |acc, arg| match arg {
+            syn::GenericArgument::Type(ty) => Some(ty),
+            _ => acc,
+        })
+        .ok_or_else(|| "Expected type argument".to_string())
 }
