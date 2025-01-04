@@ -52,7 +52,15 @@ impl Debug for LispString {
 
 impl Display for LispString {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(self.inner(), f)
+        let mut output = String::new();
+        for c in self.inner().chars() {
+            match c {
+                '\\' => output.push_str("\\\\"),
+                '"' => output.push_str("\\\""),
+                c => output.push(c),
+            }
+        }
+        Display::fmt(&output, f)
     }
 }
 
