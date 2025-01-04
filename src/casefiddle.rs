@@ -8,9 +8,7 @@ fn capitalize(s: &str) -> String {
 
 #[defun]
 fn upcase(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| c.to_uppercase())
-        .collect::<String>()
+    s.to_uppercase()
         // re-escape string
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
