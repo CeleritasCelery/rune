@@ -100,6 +100,13 @@ impl LispString {
     pub(crate) fn len(&self) -> usize {
         self.chars().count()
     }
+
+    pub(crate) fn clear(&self) {
+        let inner_mut_str = unsafe { &mut *self.0 .0.get() };
+        for byte in unsafe { inner_mut_str.as_bytes_mut().iter_mut() } {
+            *byte = b'\0';
+        }
+    }
 }
 
 impl<'new> CloneIn<'new, &'new Self> for LispString {

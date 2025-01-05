@@ -794,6 +794,12 @@ pub(crate) fn string_version_lessp<'ob>(
     Ok(filevercmp(string1.0.as_bytes(), string2.0.as_bytes()) == std::cmp::Ordering::Less)
 }
 
+#[defun]
+pub(crate) fn clear_string(string: &LispString) -> Result<Object> {
+    string.clear();
+    Ok(NIL)
+}
+
 ///////////////
 // HashTable //
 ///////////////
@@ -1234,5 +1240,14 @@ mod test {
     #[test]
     fn test_copy_alist() {
         assert_lisp("(copy-alist '((1 . 2) (3 . 4) (5 . 6)))", "((1 . 2) (3 . 4) (5 . 6))");
+    }
+
+    #[test]
+    fn test_clear_string() {
+        assert_lisp(
+            "(let ((str \"test string\")) (clear-string str) str)",
+            "\"\0\0\0\0\0\0\0\0\0\0\0\"",
+        );
+        assert_lisp("(let ((str \"\")) (clear-string str) str)", "\"\"");
     }
 }
