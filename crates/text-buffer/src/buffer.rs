@@ -724,6 +724,9 @@ impl Buffer {
         slice
     }
 
+    /// Get a slice from the buffer with the given character bounds. If the slice is split across
+    /// the gap, the two halves are returned separately. If a contiguous slice is needed, use
+    /// [`slice_whole`].
     #[inline]
     pub fn slice(&self, bounds: impl RangeBounds<usize>) -> (&str, &str) {
         let mut range = Self::bounds_to_range(bounds, self.total.chars);
@@ -737,6 +740,15 @@ impl Buffer {
         } else {
             (self.to_str(range), "")
         }
+    }
+
+    /// Get a contiguous slice from the buffer with the given character bounds.
+    #[inline]
+    pub fn slice_whole(&mut self, bounds: impl RangeBounds<usize> + Clone) -> &str {
+        self.move_gap_out_of(bounds.clone());
+        let (slice, empty) = self.slice(bounds);
+        debug_assert!(empty.is_empty());
+        slice
     }
 
     fn assert_char_boundary(&self, pos: usize) {
@@ -976,6 +988,22 @@ mod test {
         assert_eq!(buffer.slice(5..11), ("\u{B5}", " worl"));
         assert_eq!(buffer.slice(4..6), ("o\u{B5}", ""));
         assert_eq!(buffer.slice(..), ("hello\u{B5}", " world"));
+    }
+
+    #[test]
+    fn test_slice_whole() {
+        let mut buffer = Buffer::from("hello world");
+        assert_eq!(buffer.slice(..), ("hello world", ""));
+        buffer.set_cursor(5);
+        buffer.insert("\u{B5}");
+        assert_eq!(buffer.slice_whole(0..0), "");
+        assert_eq!(buffer.slice_whole(..6), "hello\u{B5}");
+        assert_eq!(buffer.slice_whole(6..), " world");
+        assert_eq!(buffer.slice_whole(6..6), "");
+        assert_eq!(buffer.slice_whole(5..11), "\u{B5} worl");
+        assert_eq!(buffer.slice_whole(5..11), "\u{B5} worl");
+        assert_eq!(buffer.slice_whole(4..6), "o\u{B5}");
+        assert_eq!(buffer.slice_whole(..), "hello\u{B5} world");
     }
 
     #[test]
