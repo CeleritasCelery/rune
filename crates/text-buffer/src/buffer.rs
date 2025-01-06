@@ -1,3 +1,8 @@
+//! A gap buffer implementation for text editing.
+//!
+//! Note that character here refers to a [unicode scalar
+//! value](https://www.unicode.org/glossary/#unicode_scalar_value), not a grapheme cluster, ascii
+//! character, codepoint, or byte.
 #![warn(clippy::all, clippy::pedantic)]
 #![expect(clippy::must_use_candidate)]
 #![expect(clippy::missing_panics_doc)]
@@ -220,11 +225,13 @@ impl Buffer {
     const GAP_SIZE: usize = 5;
     const MAX_GAP: usize = 1024 * 8;
 
+    /// Create a new empty text buffer with the default gap size.
     #[must_use]
     pub fn new() -> Self {
         Self::with_gap(Self::GAP_SIZE)
     }
 
+    /// Create a new empty text buffer with the specified gap size.
     #[must_use]
     pub fn with_gap(gap: usize) -> Self {
         Self { new_gap_size: gap, ..Self::default() }
@@ -282,12 +289,14 @@ impl Buffer {
             cmp::max(self.len_bytes() / 20, cmp::min(self.new_gap_size * 2, Self::MAX_GAP));
     }
 
+    /// Insert a character into the buffer at the cursor.
     #[inline]
     pub fn insert_char(&mut self, chr: char) {
         let buf = &mut [0; 4];
         self.insert(chr.encode_utf8(buf));
     }
 
+    /// Insert the text into the buffer at the cursor.
     #[inline]
     pub fn insert(&mut self, slice: &str) {
         if slice.is_empty() {
@@ -311,17 +320,20 @@ impl Buffer {
         }
     }
 
+    /// Delete backwards from the cursor `size` characters.
     #[inline]
     pub fn delete_backwards(&mut self, size: usize) {
         let size = size.min(self.cursor.chars);
         self.delete_range(self.cursor.chars - size, self.cursor.chars);
     }
 
+    /// Delete forwards from the cursor `size` characters.
     #[inline]
     pub fn delete_forwards(&mut self, size: usize) {
         self.delete_range(self.cursor.chars, self.cursor.chars + size);
     }
 
+    /// Delete all text between the two character positions.
     #[inline]
     pub fn delete_range(&mut self, beg: usize, end: usize) {
         if beg == end {
@@ -459,11 +471,13 @@ impl Buffer {
         }
     }
 
+    /// Get the cursor position.
     #[inline]
     pub fn cursor(&self) -> Position {
         Position::new(self.to_abs_pos(self.cursor))
     }
 
+    /// Get the character at `pos`.
     #[inline]
     pub fn char_at(&self, pos: usize) -> Option<char> {
         if pos == self.len_chars() {
@@ -482,6 +496,8 @@ impl Buffer {
         self.to_str(byte..end).chars().next()
     }
 
+    /// Move the gap out of `range`. This is useful when you need to access the
+    /// data in a contiguous manner.
     #[inline]
     pub fn move_gap_out_of(&mut self, range: impl RangeBounds<usize>) {
         if !range.contains(&self.gap_chars)
@@ -569,6 +585,7 @@ impl Buffer {
         }
     }
 
+    /// Set the cursor to the `pos` character.
     #[inline]
     pub fn set_cursor(&mut self, pos: usize) {
         let pos = pos.min(self.total.chars);
@@ -600,17 +617,20 @@ impl Buffer {
         GapMetric { bytes, chars }
     }
 
+    /// Get the length of the buffer in bytes.
     #[inline]
     pub fn len_bytes(&self) -> usize {
         debug_assert_eq!(self.total.bytes + self.gap_len(), self.data.len());
         self.total.bytes
     }
 
+    /// Get the length of the buffer in characters.
     #[inline]
     pub const fn len_chars(&self) -> usize {
         self.total.chars
     }
 
+    /// Return true if the buffer is empty.
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.total.chars == 0
@@ -621,6 +641,7 @@ impl Buffer {
         self.gap_end - self.gap_start
     }
 
+    /// Covert the character position to a byte position.
     #[inline]
     pub fn char_to_byte(&self, pos: usize) -> usize {
         if pos == self.gap_chars {
@@ -663,6 +684,7 @@ impl Buffer {
         }
     }
 
+    /// Convert the byte position to a character position.
     #[inline]
     pub fn byte_to_char(&self, pos: usize) -> usize {
         if pos == self.gap_end {
@@ -713,6 +735,7 @@ impl Buffer {
     }
 
     #[inline]
+    #[doc(hidden)]
     pub fn as_str(&mut self) -> &str {
         self.move_gap_out_of(..);
         let slice = if self.gap_start == 0 {
