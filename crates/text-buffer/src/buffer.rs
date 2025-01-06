@@ -726,7 +726,7 @@ impl Buffer {
 
     /// Get a slice from the buffer with the given character bounds. If the slice is split across
     /// the gap, the two halves are returned separately. If a contiguous slice is needed, use
-    /// [`slice_whole`].
+    /// [`slice_whole`](crate::Buffer::slice_whole).
     #[inline]
     pub fn slice(&self, bounds: impl RangeBounds<usize>) -> (&str, &str) {
         let mut range = Self::bounds_to_range(bounds, self.total.chars);
