@@ -12,6 +12,7 @@ use crate::{
 };
 use get_size2::GetSize;
 use std::{
+    borrow::Cow,
     cmp,
     fmt::{self, Debug, Display},
     ops::{Bound, Deref, Range, RangeBounds},
@@ -747,8 +748,10 @@ impl Buffer {
         slice
     }
 
+    #[expect(clippy::doc_markdown)]
     /// Get a slice from the buffer with the given character bounds. If the slice is split across
-    /// the gap, the two halves are returned separately. If a contiguous slice is needed, use
+    /// the gap, the two halves are returned separately. If a contiguous slice is needed, call
+    /// `](crate::Buffer::slice_[`move_gap_out_of`](crate::Buffer::move_gap_out_of) first or use
     /// [`slice_whole`](crate::Buffer::slice_whole).
     #[inline]
     pub fn slice(&self, bounds: impl RangeBounds<usize>) -> (&str, &str) {
@@ -767,11 +770,13 @@ impl Buffer {
 
     /// Get a contiguous slice from the buffer with the given character bounds.
     #[inline]
-    pub fn slice_whole(&mut self, bounds: impl RangeBounds<usize> + Clone) -> &str {
-        self.move_gap_out_of(bounds.clone());
-        let (slice, empty) = self.slice(bounds);
-        debug_assert!(empty.is_empty());
-        slice
+    pub fn slice_whole(&self, bounds: impl RangeBounds<usize>) -> Cow<'_, str> {
+        let (a, b) = self.slice(bounds);
+        if b.is_empty() {
+            Cow::from(a)
+        } else {
+            Cow::from(a.to_owned() + b)
+        }
     }
 
     fn assert_char_boundary(&self, pos: usize) {
