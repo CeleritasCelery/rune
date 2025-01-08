@@ -11,6 +11,7 @@ pub(crate) enum Type {
     Sequence,
     BufferOrName,
     String,
+    StringOrChar,
     Symbol,
     Float,
     Func,
