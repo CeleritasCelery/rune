@@ -73,6 +73,9 @@ fn main() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_file() {
+            if path.extension().and_then(OsStr::to_str) != Some("rs") {
+                continue;
+            }
             let contents = fs::read_to_string(&path).unwrap();
             for (start, end) in contents.match_indices("\n#[defun") {
                 let non_symbol = |c: char| !(c.is_alphanumeric() || c == '_');
