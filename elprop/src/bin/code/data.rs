@@ -341,39 +341,13 @@ impl Function {
                 let segments = &path.segments;
                 let last = segments.last().unwrap().ident.to_string();
 
-                match last.as_str() {
-                    "StringOrSymbol" => Ok(Type::Multiple(vec![Type::String, Type::Symbol])),
-                    "Symbol" => Ok(Type::Symbol),
-                    "Number" | "NumberValue" => {
-                        Ok(Type::Multiple(vec![Type::Integer, Type::Float]))
-                    }
-                    "Object" => Ok(Type::Unknown),
-                    "usize" | "u64" => Ok(Type::PosInteger),
-                    "isize" | "i64" => Ok(Type::Integer),
-                    "str" | "String" | "LispString" => Ok(Type::String),
-                    "bool" => Ok(Type::Boolean),
-                    "f64" => Ok(Type::Float),
-                    "char" => Ok(Type::Char),
-                    "Function" => Ok(Type::Function),
-                    "Cons" | "List" | "Error" | "TypeError" | "ArgSlice" => Ok(Type::Cons),
-                    "OptionalFlag" => {
-                        Ok(Type::Multiple(vec![Type::Boolean, Type::Nil, Type::Unknown]))
-                    }
-                    "LispVec" | "LispVector" | "Vec" | "RecordBuilder" => Ok(Type::Vector),
-                    "LispHashTable" => Ok(Type::HashTable),
-                    "ByteString" => Ok(Type::UnibyteString),
-                    "Record" => Ok(Type::Record),
-                    "ByteFn" => Ok(Type::ByteFn),
-                    "SubrFn" => Ok(Type::Subr),
-                    "LispBuffer" => Ok(Type::Buffer),
-                    "Rto" | "Rt" | "Gc" => {
-                        let ty = get_generic_arg(segments)?;
-                        Function::process_arg(ty)
-                    }
-                    "Env" | "Context" => {
-                        Err("Environment or Context type not supported".to_string())
-                    }
-                    _ => Err(format!("Unknown type: {last}")),
+                match Self::get_simple_type(&last) {
+                    Some(x) => Ok(x),
+                    None => match last.as_str() {
+                        "Rto" | "Rt" | "Gc" => Self::process_arg(get_generic_arg(segments)?),
+                        s @ ("Env" | "Context") => Err(format!("{s} type not supported")),
+                        s => Err(format!("Unknown type: {s}")),
+                    },
                 }
             }
             syn::Type::Ptr(_) => Err("Ptr not supported".to_string()),
@@ -385,6 +359,31 @@ impl Function {
             syn::Type::Verbatim(_) => Err("Verbatim type not supported".to_string()),
             _ => Err("Unknown type".to_string()),
         }
+    }
+
+    fn get_simple_type(ty: &str) -> Option<Type> {
+        Some(match ty {
+            "StringOrSymbol" => Type::Multiple(vec![Type::String, Type::Symbol]),
+            "Symbol" => Type::Symbol,
+            "Number" | "NumberValue" => Type::Multiple(vec![Type::Integer, Type::Float]),
+            "Object" => Type::Unknown,
+            "usize" | "u64" => Type::PosInteger,
+            "isize" | "i64" => Type::Integer,
+            "str" | "String" | "LispString" => Type::String,
+            "bool" | "OptionalFlag" => Type::Boolean,
+            "f64" => Type::Float,
+            "char" => Type::Char,
+            "Function" => Type::Function,
+            "Cons" | "List" | "Error" | "TypeError" | "ArgSlice" => Type::Cons,
+            "LispVec" | "LispVector" | "Vec" | "RecordBuilder" => Type::Vector,
+            "LispHashTable" => Type::HashTable,
+            "ByteString" => Type::UnibyteString,
+            "Record" => Type::Record,
+            "ByteFn" => Type::ByteFn,
+            "SubrFn" => Type::Subr,
+            "LispBuffer" => Type::Buffer,
+            _ => return None,
+        })
     }
 
     fn custom_templates(func: &ItemFn) -> Vec<Option<Type>> {
@@ -430,21 +429,25 @@ impl Function {
             TokenTree::Group(group) => {
                 Type::CustomList(Self::parse_template_stream(group.stream()))
             }
-            TokenTree::Ident(ident) => match ident.to_string().as_ref() {
-                "_" => Type::Nil,
-                "usize" | "u64" => Type::PosInteger,
-                "isize" | "i64" => Type::Integer,
-                "char" => Type::Char,
-                "String" => Type::String,
-                "Symbol" => Type::Symbol,
-                "bool" => Type::Boolean,
-                x => panic!("Unknown type {x}"),
-            },
-            TokenTree::Literal(literal) => Type::CustomString(
-                syn::parse_str::<syn::LitStr>(&literal.to_string())
+            TokenTree::Ident(ident) => {
+                let s = ident.to_string();
+                match Self::get_simple_type(&s) {
+                    Some(x) => x,
+                    None => match &*s {
+                        "_" => Type::Nil,
+                        s => panic!("Unknown type {s}"),
+                    },
+                }
+            }
+            TokenTree::Literal(literal) => {
+                let string = syn::parse_str::<syn::LitStr>(&literal.to_string())
                     .expect("Invalid Literal")
-                    .value(),
-            ),
+                    .value();
+                if let Err(e) = proptest::string::string_regex(&string) {
+                    panic!("{e}: {string}")
+                }
+                Type::CustomString(string)
+            }
             TokenTree::Punct(p) => {
                 unreachable!("Unexpected punctuation {p}")
             }

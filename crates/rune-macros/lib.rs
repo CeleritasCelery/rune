@@ -60,13 +60,18 @@ pub fn trace_derive(stream: TokenStream) -> TokenStream {
 /// ## `elprop`
 ///
 /// Defines a function template to used for property testing functions. Each element can be a type,
-/// list of types, or a regex matching a string.
+/// list of types, a regex matching a string, or the placeholder '_'.
 ///
 /// ## Examples:
 ///
 /// test the first argument as a integer and the second as a char
 /// ```ignore
 /// #[elprop(i64, char)]
+/// ```
+///
+/// test the second argument as a char. The first argument uses the function types like normal.
+/// ```ignore
+/// #[elprop(_, char)]
 /// ```
 ///
 /// test the first argument as a string starting with 'a'

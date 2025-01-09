@@ -6,6 +6,7 @@ use crate::core::object::Object;
 use crate::core::object::NIL;
 use crate::Env;
 use rune_macros::defun;
+use rune_macros::elprop;
 use text_buffer::Buffer as TextBuffer;
 
 #[defun]
@@ -14,6 +15,8 @@ fn capitalize(s: &str) -> String {
 }
 
 #[defun]
+// skip control characters and characters that give a different answer in unicode 16 (Rust) and 15 (Emacs)
+#[elprop(r"[^\u{0}-\u{1F}\u{17F}\u{10D70}]*")]
 fn upcase(s: &str) -> String {
     s.to_uppercase()
 }
