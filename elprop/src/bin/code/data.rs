@@ -197,7 +197,11 @@ impl std::fmt::Display for ArbitraryObjectType {
                 write!(f, "\"")
             }
             ArbitraryObjectType::Float(n) => {
-                write!(f, "{n}")
+                if n.fract() == 0.0_f64 {
+                    write!(f, "{n:.1}")
+                } else {
+                    write!(f, "{n}")
+                }
             }
             ArbitraryObjectType::Cons(list) => {
                 let mut cells: Vec<_> = list.0.iter().map(ToString::to_string).collect();
@@ -378,7 +382,9 @@ impl Function {
                     "f64" => Ok(Type::Object(vec![ObjectType::Float])),
                     "char" => Ok(Type::Object(vec![ObjectType::Char])),
                     "Function" => Ok(Type::Object(vec![ObjectType::Function])),
-                    "Cons" | "List" | "Error" => Ok(Type::Object(vec![ObjectType::Cons])),
+                    "Cons" | "List" | "Error" | "TypeError" => {
+                        Ok(Type::Object(vec![ObjectType::Cons]))
+                    }
                     "OptionalFlag" => Ok(Type::Object(vec![
                         ObjectType::Boolean,
                         ObjectType::Nil,

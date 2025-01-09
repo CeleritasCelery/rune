@@ -68,7 +68,8 @@ fn main() {
             println!(";; reading from Emacs");
             let emacs_output =
                 process_eval_result("Emacs", *master_count.borrow(), &mut reader, |text| {
-                    let regex = regex::Regex::new("^\\([a-zA-Z0-9-]*-?error ").unwrap();
+                    let regex =
+                        regex::Regex::new("^\\((wrong-[a-zA-Z0-9-]*|[a-zA-Z0-9-]*error) ").unwrap();
                     regex.is_match(text)
                 });
 

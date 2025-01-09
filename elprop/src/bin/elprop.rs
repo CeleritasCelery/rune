@@ -23,7 +23,7 @@ fn main() -> ExitCode {
     let workspace_root = crate_root.parent().unwrap();
     // go to the source directory
     let rust_src = workspace_root.join("src");
-    eprintln!("Generating Functions");
+    eprintln!("Generating Functions...");
     let regex = regex::Regex::new(&cli.pattern).unwrap();
     let functions = get_all_functions(&rust_src)
         .into_iter()
@@ -40,6 +40,7 @@ fn main() -> ExitCode {
     #[allow(unused_variables)]
     let emacs_cmd_file = crate_root.join("src/elprop.el");
     let runner = workspace_root.join("target/debug/runner");
+    eprintln!("Launching Proptest...");
     let lisp_cmd = format!("(load-file \"{}\")", emacs_cmd_file.to_str().unwrap());
     let child = std::process::Command::new("emacs")
         .args(["-Q", "--batch", "--eval", &lisp_cmd])
