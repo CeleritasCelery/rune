@@ -435,6 +435,9 @@ impl Function {
                 "usize" | "u64" => Type::PosInteger,
                 "isize" | "i64" => Type::Integer,
                 "char" => Type::Char,
+                "String" => Type::String,
+                "Symbol" => Type::Symbol,
+                "bool" => Type::Boolean,
                 x => panic!("Unknown type {x}"),
             },
             TokenTree::Literal(literal) => Type::CustomString(
