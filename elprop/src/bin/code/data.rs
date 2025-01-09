@@ -456,7 +456,7 @@ impl Function {
                 },
                 TokenTree::Literal(literal) => ObjectType::CustomString(
                     syn::parse_str::<syn::LitStr>(&literal.to_string())
-                        .expect("Invalid Literal {literal:?}")
+                        .expect("Invalid Literal")
                         .value(),
                 ),
                 TokenTree::Punct(_) => unreachable!("Punct in stream"),

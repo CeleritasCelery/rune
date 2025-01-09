@@ -1,4 +1,3 @@
-#![expect(unstable_name_collisions)]
 use super::{
     super::{
         cons::Cons,
@@ -18,7 +17,6 @@ use crate::core::{
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
-use sptr::Strict;
 use std::marker::PhantomData;
 use std::{fmt, ptr::NonNull};
 
@@ -750,7 +748,7 @@ impl TaggedPtr for i64 {
     fn get_ptr(self) -> *const Self::Ptr {
         // prevent wrapping
         let value = self.clamp(MIN_FIXNUM, MAX_FIXNUM);
-        sptr::invalid(value as usize)
+        core::ptr::without_provenance(value as usize)
     }
 }
 
@@ -1078,7 +1076,7 @@ impl WithLifetime<'_> for i64 {
 
 impl From<usize> for Object<'_> {
     fn from(x: usize) -> Self {
-        let ptr = sptr::invalid(x);
+        let ptr = core::ptr::without_provenance(x);
         unsafe { i64::tag_ptr(ptr).into() }
     }
 }

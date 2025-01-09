@@ -90,6 +90,7 @@ mod tests {
         assert_eq!("PATH\\TO\\FILE\"NAME\"", upcase("path\\to\\file\"name\""));
     }
 
+    #[cfg(not(miri))] // Uses SIMD
     mod upcase_word {
         use crate::core::gc::Context;
         use crate::core::gc::RootSet;

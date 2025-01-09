@@ -1,9 +1,7 @@
-#![expect(unstable_name_collisions)]
 use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::{Block, Context, GcHeap, GcState, Markable, Trace};
 use crate::core::object::{CloneIn, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
-use sptr::Strict;
 use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -102,7 +100,7 @@ impl<'a> Symbol<'a> {
     }
 
     pub(in crate::core) const fn new_builtin(idx: usize) -> Self {
-        let ptr = sptr::invalid(idx * size_of::<SymbolCell>());
+        let ptr = core::ptr::without_provenance(idx * size_of::<SymbolCell>());
         Self { data: ptr, marker: PhantomData }
     }
 

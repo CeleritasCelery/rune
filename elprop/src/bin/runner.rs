@@ -43,6 +43,7 @@ fn main() {
     let master_count = RefCell::new(0);
 
     let outputs = RefCell::new(Vec::new());
+    let regex = regex::Regex::new("^\\((wrong-[a-zA-Z0-9-]*|[a-zA-Z0-9-]*error) ").unwrap();
     for func in config.functions {
         let name = func.name.clone();
         let result = runner.run(&func.strategy(), |input| {
@@ -68,8 +69,6 @@ fn main() {
             println!(";; reading from Emacs");
             let emacs_output =
                 process_eval_result("Emacs", *master_count.borrow(), &mut reader, |text| {
-                    let regex =
-                        regex::Regex::new("^\\((wrong-[a-zA-Z0-9-]*|[a-zA-Z0-9-]*error) ").unwrap();
                     regex.is_match(text)
                 });
 

@@ -9,7 +9,6 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bstr = { workspace = true }
-sptr = { workspace = true }
 fallible-iterator = { workspace = true }
 fallible-streaming-iterator = { workspace = true }
 float-cmp = { workspace = true }

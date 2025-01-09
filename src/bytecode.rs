@@ -1,4 +1,3 @@
-#![expect(unstable_name_collisions)]
 //! The main bytecode interpeter.
 use crate::core::cons::Cons;
 use crate::core::env::{sym, CallFrame, Env};
@@ -12,7 +11,6 @@ use crate::eval::{ErrorType, EvalError, EvalResult};
 use anyhow::{bail, Result};
 use rune_core::macros::{bail_err, rebind, root};
 use rune_macros::{defun, Trace};
-use sptr::Strict;
 
 mod opcode;
 

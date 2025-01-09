@@ -1125,6 +1125,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(not(miri))] // slow
     fn test_string_version_lessp() {
         // String Tests
         // Test Equality
