@@ -1,9 +1,9 @@
-use super::data::ArbitraryObjectType;
+use super::data::ArbitraryType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Status {
-    Fail(String, Vec<Option<ArbitraryObjectType>>),
+    Fail(String, Vec<Option<ArbitraryType>>),
     Abort(String),
     Pass,
 }

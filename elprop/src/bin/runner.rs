@@ -102,7 +102,7 @@ fn main() {
             Err(TestError::Abort(reason)) => Status::Abort(reason.to_string()),
             Ok(()) => Status::Pass,
         };
-        let output = Output { function: func.name.clone(), status };
+        let output = Output { function: name, status };
         outputs.borrow_mut().push(output);
     }
 
