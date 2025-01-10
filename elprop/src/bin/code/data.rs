@@ -363,6 +363,7 @@ impl Function {
 
     fn get_simple_type(ty: &str) -> Option<Type> {
         Some(match ty {
+            "StringOrChar" => Type::Multiple(vec![Type::String, Type::Char]),
             "StringOrSymbol" => Type::Multiple(vec![Type::String, Type::Symbol]),
             "Symbol" => Type::Symbol,
             "Number" | "NumberValue" => Type::Multiple(vec![Type::Integer, Type::Float]),

@@ -759,6 +759,24 @@ pub(crate) fn string_bytes(string: &str) -> usize {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(crate) enum StringOrChar<'ob> {
+    String(&'ob str),
+    Char(i64),
+}
+
+impl<'ob> TryFrom<Object<'ob>> for StringOrChar<'ob> {
+    type Error = TypeError;
+
+    fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
+        match obj.untag() {
+            ObjectType::String(s) => Ok(Self::String(s)),
+            ObjectType::Int(c) if c >= 0 => Ok(Self::Char(c)),
+            _ => Err(TypeError::new(Type::StringOrChar, obj)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct StringOrSymbol<'ob>(&'ob str);
 
 impl<'ob> TryFrom<Object<'ob>> for StringOrSymbol<'ob> {

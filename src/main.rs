@@ -22,6 +22,7 @@ mod fns;
 mod interpreter;
 mod keymap;
 mod library;
+mod lisp;
 mod lread;
 mod print;
 mod reader;

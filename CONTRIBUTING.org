@@ -100,16 +100,10 @@ This is usually a sign that you need to root an object.
 ** casefiddle.c
 Functions to manipulate case
 
-- upcase
-- downcase
-- upcase-initials
 - upcase-region
 - downcase-region
 - capitalize-region
 - upcase-initials-region
-- upcase-word
-- downcase-word
-- capitalize-word
 
 ** character.c
 Functions that operate on characters
