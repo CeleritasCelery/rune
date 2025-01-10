@@ -14,7 +14,7 @@ use text_buffer::Buffer as TextBuffer;
 fn capitalize<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Object<'ob> {
     match string_or_char {
         StringOrChar::String(s) => cx.add(casify_string(s, CaseMode::Capitalize)),
-        StringOrChar::Char(c) => cx.add(upcase_char(c)),
+        StringOrChar::Char(c) => cx.add(casify_char(c, char::to_uppercase)),
     }
 }
 
@@ -22,7 +22,7 @@ fn capitalize<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> 
 fn upcase<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Object<'ob> {
     match string_or_char {
         StringOrChar::String(s) => cx.add(casify_string(s, CaseMode::Upcase)),
-        StringOrChar::Char(c) => cx.add(upcase_char(c)),
+        StringOrChar::Char(c) => cx.add(casify_char(c, char::to_uppercase)),
     }
 }
 
@@ -30,7 +30,7 @@ fn upcase<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Obje
 fn downcase<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Object<'ob> {
     match string_or_char {
         StringOrChar::String(s) => cx.add(casify_string(s, CaseMode::Downcase)),
-        StringOrChar::Char(c) => cx.add(downcase_char(c)),
+        StringOrChar::Char(c) => cx.add(casify_char(c, char::to_lowercase)),
     }
 }
 
@@ -38,7 +38,7 @@ fn downcase<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Ob
 fn upcase_initials<'ob>(string_or_char: StringOrChar<'ob>, cx: &'ob Context<'ob>) -> Object<'ob> {
     match string_or_char {
         StringOrChar::String(s) => cx.add(casify_string(s, CaseMode::UpcaseInitials)),
-        StringOrChar::Char(c) => cx.add(upcase_char(c)),
+        StringOrChar::Char(c) => cx.add(casify_char(c, char::to_uppercase)),
     }
 }
 
@@ -131,46 +131,23 @@ enum CaseMode {
     UpcaseInitials,
 }
 
-fn upcase_char(c: u64) -> u64 {
+fn casify_char<T>(c: u64, f: impl Fn(char) -> T) -> u64
+where
+    T: Iterator<Item = char>,
+{
     // emacs uses an identity function for invalid codepoints
     if c > crate::lisp::CHAR_MODIFIER_MASK {
         return c;
     }
-    let c: u32 = match c.try_into() {
-        Ok(c) => c,
-        Err(_) => return c,
-    };
-    let c: char = match c.try_into() {
-        Ok(c) => c,
-        Err(_) => return c as u64,
-    };
-    let mut upper_c = c.to_uppercase();
-    // if the char capitalizes to multiple characters, don't change case
-    if upper_c.len() > 1 {
-        return c as u64;
+    let Ok(u) = u32::try_from(c) else { return c };
+    let Ok(chr) = char::try_from(u) else { return c };
+    let mut cased = f(chr);
+    let first = cased.next().unwrap();
+    // if the char changes case to multiple characters, don't change case
+    match cased.next() {
+        Some(_) => c,
+        None => first as u64,
     }
-    upper_c.next().expect("char should upcase") as u64
-}
-
-fn downcase_char(c: u64) -> u64 {
-    // see `upcase_char` comment
-    if c > crate::lisp::CHAR_MODIFIER_MASK {
-        return c;
-    }
-    let c: u32 = match c.try_into() {
-        Ok(c) => c,
-        Err(_) => return c,
-    };
-    let c: char = match c.try_into() {
-        Ok(c) => c,
-        Err(_) => return c as u64,
-    };
-    let mut lower_c = c.to_lowercase();
-    // if the char lowercases to multiple characters, don't change case
-    if lower_c.len() > 1 {
-        return c as u64;
-    }
-    lower_c.next().expect("char should downcase") as u64
 }
 
 fn find_forward_word(buf: &TextBuffer) -> Range<usize> {
@@ -211,9 +188,9 @@ mod tests {
     fn test_downcase() {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
-        assert_eq!(downcase("The cat in the hat".into(), cx), cx.add("the cat in the hat"));
-        assert_eq!(downcase('x'.into(), cx), cx.add('x'));
-        assert_eq!(downcase('X'.into(), cx), cx.add('x'));
+        assert_eq!(downcase("The cat in the hat".into(), cx), "the cat in the hat");
+        assert_eq!(downcase('x'.into(), cx), 'x');
+        assert_eq!(downcase('X'.into(), cx), 'x');
     }
 
     #[test]
@@ -221,33 +198,33 @@ mod tests {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         // Emacs Doc Tests
-        assert_eq!(upcase("The cat in the hat".into(), cx), cx.add("THE CAT IN THE HAT"));
-        assert_eq!(upcase("ﬁ".into(), cx), cx.add("FI"));
-        assert_eq!(upcase('ﬁ'.into(), cx), cx.add('ﬁ'));
-        assert_eq!(upcase('x'.into(), cx), cx.add('X'));
-        assert_eq!(upcase('X'.into(), cx), cx.add('X'));
+        assert_eq!(upcase("The cat in the hat".into(), cx), "THE CAT IN THE HAT");
+        assert_eq!(upcase("ﬁ".into(), cx), "FI");
+        assert_eq!(upcase('ﬁ'.into(), cx), 'ﬁ');
+        assert_eq!(upcase('x'.into(), cx), 'X');
+        assert_eq!(upcase('X'.into(), cx), 'X');
 
         // Basic escape characters
-        assert_eq!(upcase("\n".into(), cx), cx.add("\n"));
-        assert_eq!(upcase("\t".into(), cx), cx.add("\t"));
-        assert_eq!(upcase("\r".into(), cx), cx.add("\r"));
+        assert_eq!(upcase("\n".into(), cx), "\n");
+        assert_eq!(upcase("\t".into(), cx), "\t");
+        assert_eq!(upcase("\r".into(), cx), "\r");
 
         // Control characters
-        assert_eq!(upcase("\u{0}".into(), cx), cx.add("\u{0}"));
-        assert_eq!(upcase("\u{1B}".into(), cx), cx.add("\u{1B}"));
-        assert_eq!(upcase("\u{7F}".into(), cx), cx.add("\u{7F}"));
+        assert_eq!(upcase("\u{0}".into(), cx), "\u{0}");
+        assert_eq!(upcase("\u{1B}".into(), cx), "\u{1B}");
+        assert_eq!(upcase("\u{7F}".into(), cx), "\u{7F}");
 
         // Non-ASCII characters
-        assert_eq!(upcase("αβγ".into(), cx), cx.add("ΑΒΓ"));
-        assert_eq!(upcase("åäö".into(), cx), cx.add("ÅÄÖ"));
+        assert_eq!(upcase("αβγ".into(), cx), "ΑΒΓ");
+        assert_eq!(upcase("åäö".into(), cx), "ÅÄÖ");
 
         // Mixed content
-        assert_eq!(upcase("hello\nworld".into(), cx), cx.add("HELLO\nWORLD"));
-        assert_eq!(upcase("foo\tbar".into(), cx), cx.add("FOO\tBAR"));
-        assert_eq!(upcase("path\\to\\file\"name\"".into(), cx), cx.add("PATH\\TO\\FILE\"NAME\""));
+        assert_eq!(upcase("hello\nworld".into(), cx), "HELLO\nWORLD");
+        assert_eq!(upcase("foo\tbar".into(), cx), "FOO\tBAR");
+        assert_eq!(upcase("path\\to\\file\"name\"".into(), cx), "PATH\\TO\\FILE\"NAME\"");
 
         // Invalid code points
-        assert_eq!(upcase(StringOrChar::Char(0xD800), cx), cx.add(0xD800));
+        assert_eq!(upcase(StringOrChar::Char(0xD800), cx), 0xD800);
         assert_eq!(upcase(StringOrChar::Char(u64::MAX), cx), cx.add(u64::MAX));
     }
 
@@ -268,23 +245,23 @@ mod tests {
         // TODO: implement syntax tables so it's known whether a character makes a word or symbol
         // // U+1D100 MUSICAL SYMBOL SINGLE BARLINE (Other-Symbol)
         // // U+0041 LATIN CAPITAL LETTER A
-        // assert_eq!(capitalize(cx.add("𝄀A"), cx), Ok(cx.add("𝄀a")));
+        // assert_eq!(capitalize("𝄀A", cx), Ok("𝄀a"));
         // // U+0024 DOLLAR SIGN (Currency-Symbol)
         // // U+0041 LATIN CAPITAL LETTER A
-        // assert_eq!(capitalize(cx.add("$A"), cx), Ok(cx.add("$a")));
+        // assert_eq!(capitalize("$A", cx), Ok("$a"));
         // // U+002D HYPHEN-MINUS (Dash-Punctuation)
         // // U+0041 LATIN CAPITAL LETTER A
-        // assert_eq!(capitalize(cx.add("-A"), cx), Ok(cx.add("-A")));
+        // assert_eq!(capitalize("-A", cx), Ok("-A"));
         // // U+005E CIRCUMFLEX ACCENT (Modifier-Symbol)
         // // U+0041 LATIN CAPITAL LETTER A
-        // assert_eq!(capitalize(cx.add("^A"), cx), Ok(cx.add("^A")));
+        // assert_eq!(capitalize("^A", cx), Ok("^A"));
         // // U+0FBE TIBETAN KU RU KHA (Other-Symbol)
         // // U+0041 LATIN CAPITAL LETTER A
-        // assert_eq!(capitalize(cx.add("྾A"), cx), Ok(cx.add("྾A")));
+        // assert_eq!(capitalize("྾A", cx), Ok("྾A"));
         // // U+10A50 KHAROSHTHI PUNCTUATION DOT (Other-Punctuation)
         // // U+104B0 OSAGE CAPITAL LETTER A
         // // (becomes) U+104D8 OSAGE SMALL LETTER A
-        // assert_eq!(capitalize(cx.add("𐩐𐒰"), cx), Ok(cx.add("𐩐𐓘")));
+        // assert_eq!(capitalize("𐩐𐒰", cx), Ok("𐩐𐓘"));
     }
 
     #[test]
@@ -293,9 +270,9 @@ mod tests {
         let cx = &Context::new(roots);
 
         // Emacs Doc Tests
-        assert_eq!(upcase_initials("The CAT in the hAt".into(), cx), cx.add("The CAT In The HAt"));
-        assert_eq!(upcase_initials('x'.into(), cx), cx.add('X'));
-        assert_eq!(upcase_initials('X'.into(), cx), cx.add('X'));
+        assert_eq!(upcase_initials("The CAT in the hAt".into(), cx), "The CAT In The HAt");
+        assert_eq!(upcase_initials('x'.into(), cx), 'X');
+        assert_eq!(upcase_initials('X'.into(), cx), 'X');
     }
 
     #[cfg(not(miri))] // Uses SIMD
