@@ -1446,6 +1446,15 @@ impl PartialEq<&str> for Object<'_> {
     }
 }
 
+impl PartialEq<char> for Object<'_> {
+    fn eq(&self, other: &char) -> bool {
+        match self.untag() {
+            ObjectType::Int(x) => *other as i64 == x,
+            _ => false,
+        }
+    }
+}
+
 impl PartialEq<Symbol<'_>> for Object<'_> {
     fn eq(&self, other: &Symbol) -> bool {
         match self.untag() {

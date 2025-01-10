@@ -761,7 +761,7 @@ pub(crate) fn string_bytes(string: &str) -> usize {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum StringOrChar<'ob> {
     String(&'ob str),
-    Char(i64),
+    Char(u64),
 }
 
 impl<'ob> TryFrom<Object<'ob>> for StringOrChar<'ob> {
@@ -770,9 +770,21 @@ impl<'ob> TryFrom<Object<'ob>> for StringOrChar<'ob> {
     fn try_from(obj: Object<'ob>) -> Result<Self, Self::Error> {
         match obj.untag() {
             ObjectType::String(s) => Ok(Self::String(s)),
-            ObjectType::Int(c) if c >= 0 => Ok(Self::Char(c)),
+            ObjectType::Int(c) if c >= 0 => Ok(Self::Char(c as u64)),
             _ => Err(TypeError::new(Type::StringOrChar, obj)),
         }
+    }
+}
+
+impl<'ob> From<&'ob str> for StringOrChar<'ob> {
+    fn from(s: &'ob str) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<char> for StringOrChar<'_> {
+    fn from(s: char) -> Self {
+        Self::Char(s as u64)
     }
 }
 
