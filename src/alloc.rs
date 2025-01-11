@@ -63,8 +63,8 @@ pub(crate) fn make_byte_code<'ob>(
 }
 
 #[defun]
-fn make_vector(length: usize, init: Object) -> Vec<Object> {
-    vec![init; length]
+fn make_vector<'ob>(length: usize, init: Object<'ob>, cx: &'ob Context) -> Object<'ob> {
+    cx.add(vec![init; length])
 }
 
 #[defun]
