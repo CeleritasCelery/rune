@@ -5,7 +5,7 @@ use crate::core::object::{
     ByteFn, ByteString, FnArgs, Gc, IntoObject, LispVec, Object, RecordBuilder, Symbol, NIL,
 };
 use anyhow::{ensure, Result};
-use rune_macros::defun;
+use rune_macros::{defun, elprop};
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], cx: &'ob Context) -> Object<'ob> {
@@ -63,6 +63,7 @@ pub(crate) fn make_byte_code<'ob>(
 }
 
 #[defun]
+#[elprop(u8, _)]
 fn make_vector(length: usize, init: Object) -> Vec<Object> {
     vec![init; length]
 }

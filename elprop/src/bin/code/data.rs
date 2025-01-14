@@ -20,6 +20,7 @@ pub(crate) enum Type {
     HashTable,
     Record,
     ByteFn,
+    Byte,
     Subr,
     Buffer,
     Nil,
@@ -57,6 +58,7 @@ impl Type {
             }
             Type::HashTable => todo!("Strategy for HashTable not implemented"),
             Type::ByteFn => any::<u8>().prop_map(ArbitraryType::ByteFn).boxed(),
+            Type::Byte => any::<u8>().prop_map(ArbitraryType::Byte).boxed(),
             Type::Subr => todo!("Strategy for Subr not implemented"),
             Type::Buffer => any::<String>().prop_map(ArbitraryType::Buffer).boxed(),
             Type::Nil => Just(ArbitraryType::Nil).boxed(),
@@ -160,6 +162,7 @@ pub(crate) enum ArbitraryType {
     Nil,
     Function(u8),
     ByteFn(u8),
+    Byte(u8),
     Char(char),
     Buffer(String),
     Subr(u8),
@@ -267,6 +270,7 @@ impl std::fmt::Display for ArbitraryType {
                 }
                 write!(f, ") nil)")
             }
+            ArbitraryType::Byte(n) => write!(f, "{n}"),
             ArbitraryType::Buffer(name) => {
                 write!(f, "(generate-new-buffer {name})")
             }
@@ -369,6 +373,7 @@ impl Function {
             "Number" | "NumberValue" => Type::Multiple(vec![Type::Integer, Type::Float]),
             "Object" => Type::Unknown,
             "usize" | "u64" => Type::PosInteger,
+            "u8" => Type::Byte,
             "isize" | "i64" => Type::Integer,
             "str" | "String" | "LispString" => Type::String,
             "bool" | "OptionalFlag" => Type::Boolean,

@@ -10,6 +10,7 @@
   (kill-buffer "*elprop-output*"))
 
 (let* ((buffer "*elprop-output*")
+       (process-connection-type nil)
        (process (start-process "elprop-process" buffer (getenv "ELPROP_RUNNER")))
        (runner-count 0)
        (pointer 1))
