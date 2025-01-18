@@ -1,7 +1,7 @@
 use super::super::object::{List, ListType, Object, ObjectType};
 use super::Cons;
 use crate::core::gc::Rto;
-use anyhow::Result;
+use anyhow::{Error, Result};
 
 #[derive(Clone)]
 pub(crate) struct ConsIter<'ob> {
@@ -199,6 +199,60 @@ impl<'ob> Object<'ob> {
     pub(crate) fn as_list(self) -> Result<ElemIter<'ob>> {
         let list: List = self.try_into()?;
         Ok(list.elements())
+    }
+
+    pub(crate) fn into_list(self) -> Result<List<'ob>, crate::core::error::TypeError> {
+        self.try_into()
+    }
+}
+
+use std::result::Result as R;
+
+impl<'ob> TryFrom<Object<'ob>> for R<[Object<'ob>; 1], u16> {
+    type Error = Error;
+
+    fn try_from(value: Object<'ob>) -> R<Self, Self::Error> {
+        let mut value = value.as_list()?;
+        let x = match value.next() {
+            Some(x) => x?,
+            None => return Ok(Err(0)),
+        };
+        match value.next() {
+            Some(_) => Ok(Err(2)),
+            None => Ok(Ok([x])),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for R<[Object<'ob>; 2], u16> {
+    type Error = Error;
+
+    fn try_from(value: Object<'ob>) -> R<Self, Self::Error> {
+        let mut value = value.as_list()?;
+        let x1 = match value.next() {
+            Some(x) => x?,
+            None => return Ok(Err(0)),
+        };
+        let x2 = match value.next() {
+            Some(x) => x?,
+            None => return Ok(Err(1)),
+        };
+        match value.next() {
+            Some(_) => Ok(Err(3)),
+            None => Ok(Ok([x1, x2])),
+        }
+    }
+}
+
+pub(crate) trait IntoArray<'ob, const N: usize> {
+    fn into_array(self) -> R<R<[Object<'ob>; N], u16>, Error>;
+}
+
+impl<'ob, const N: usize, T: TryInto<R<[Object<'ob>; N], u16>, Error = Error>> IntoArray<'ob, N>
+    for T
+{
+    fn into_array(self) -> R<R<[Object<'ob>; N], u16>, Error> {
+        self.try_into()
     }
 }
 

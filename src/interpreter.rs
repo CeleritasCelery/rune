@@ -1,7 +1,7 @@
 //! The basic elisp interpreter.
 use crate::{
     core::{
-        cons::{Cons, ElemStreamIter},
+        cons::{Cons, ElemStreamIter, IntoArray},
         env::{sym, CallFrame, Env},
         error::{Type, TypeError},
         gc::{Context, Rt, Rto, Slot},
@@ -124,13 +124,11 @@ impl Interpreter<'_, '_> {
     }
 
     fn throw<'ob>(&mut self, obj: Object, cx: &'ob Context) -> EvalResult<'ob> {
-        let mut forms = obj.as_list()?;
-        let len = forms.len()? as u16;
-        if len != 2 {
-            bail_err!(LispError::arg_cnt(sym::THROW, 2, len, cx));
-        }
-        let tag = forms.next().unwrap()?;
-        let value = forms.next().unwrap()?;
+        let [tag, value] = match obj.into_array()? {
+            Ok(x) => x,
+            Err(e) => bail_err!(LispError::arg_cnt(sym::THROW, 2, e, cx)),
+        };
+
         // Need to check now that there is a catch, because we may have a
         // condition-case along the unwind path
         if self.env.catch_stack.iter().any(|x| x.bind(cx) == tag) {
@@ -176,10 +174,10 @@ impl Interpreter<'_, '_> {
                 func.set(sym.bind(cx).follow_indirect(cx).unwrap());
             }
             Ok((sym::MACRO, mcro)) => {
-                let mut iter = args.bind(cx).as_list()?.fallible();
+                let iter = args.bind(cx).into_list()?;
                 let mut frame = CallFrame::new(self.env);
-                while let Some(arg) = iter.next()? {
-                    frame.push_arg(arg);
+                for arg in iter {
+                    frame.push_arg(arg?);
                 }
                 root!(mcro, mcro.tag(), cx);
                 let name = sym.bind(cx).name().to_owned();
@@ -208,13 +206,10 @@ impl Interpreter<'_, '_> {
         obj: &Rto<Object<'ob>>,
         cx: &'ob mut Context,
     ) -> EvalResult<'ob> {
-        let mut forms = obj.bind(cx).as_list()?;
-        let len = forms.len()? as u16;
-        if len != 1 {
-            bail_err!(LispError::arg_cnt(sym::FUNCTION, 1, len, cx))
-        }
-
-        let form = forms.next().unwrap()?;
+        let form = match obj.bind(cx).into_array()? {
+            Ok([x]) => x,
+            Err(e) => bail_err!(LispError::arg_cnt(sym::FUNCTION, 1, e, cx)),
+        };
         root!(form, cx); // Polonius
         let Ok((sym::LAMBDA, doc)) = form.bind(cx).as_cons_pair() else {
             return Ok(form.bind(cx));
@@ -452,10 +447,9 @@ impl Interpreter<'_, '_> {
     }
 
     fn quote<'ob>(&self, value: Object<'ob>, cx: &Context) -> EvalResult<'ob> {
-        let mut forms = value.as_list()?;
-        match forms.len()? {
-            1 => Ok(forms.next().unwrap()?),
-            x => Err(LispError::arg_cnt(sym::QUOTE, 1, x as u16, cx).into()),
+        match value.into_array()? {
+            Ok([x]) => Ok(x),
+            Err(e) => Err(LispError::arg_cnt(sym::QUOTE, 1, e, cx).into()),
         }
     }
 

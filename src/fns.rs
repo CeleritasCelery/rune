@@ -587,7 +587,6 @@ pub(crate) fn safe_length(sequence: Object) -> usize {
 
 #[defun]
 pub(crate) fn proper_list_p(object: Object) -> Option<usize> {
-    // TODO: Handle dotted list and circular
     match object.untag() {
         ObjectType::Cons(x) => x.elements().len().ok(),
         _ => None,
