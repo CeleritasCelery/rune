@@ -10,6 +10,7 @@ mod buffer;
 mod bytecode;
 mod casefiddle;
 mod character;
+mod chartab;
 mod data;
 mod dired;
 mod editfns;
