@@ -392,6 +392,7 @@ fn type_of(object: Object) -> Object {
         ObjectType::String(_) | ObjectType::ByteString(_) => sym::STRING.into(),
         ObjectType::SubrFn(_) => sym::SUBR.into(),
         ObjectType::Buffer(_) => sym::BUFFER.into(),
+        ObjectType::CharTable(_) => todo!(),
     }
 }
 

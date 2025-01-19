@@ -11,6 +11,7 @@
 
 mod buffer;
 mod cell;
+mod chartab;
 mod convert;
 mod float;
 mod func;
@@ -22,6 +23,7 @@ mod vector;
 
 pub(crate) use buffer::*;
 pub(super) use cell::*;
+pub(crate) use chartab::*;
 pub(crate) use convert::*;
 pub(crate) use float::*;
 pub(crate) use func::*;
