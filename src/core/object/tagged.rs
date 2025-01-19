@@ -10,9 +10,12 @@ use super::{
     ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
     SubrFn, Symbol, SymbolCell,
 };
-use crate::core::{
-    env::sym,
-    gc::{DropStackElem, GcState, Markable, Trace},
+use crate::{
+    chartab::LispCharTable,
+    core::{
+        env::sym,
+        gc::{DropStackElem, GcState, Markable, Trace},
+    },
 };
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
@@ -522,6 +525,7 @@ mod private {
         SubrFn,
         ByteFn,
         Buffer,
+        CharTable,
     }
 
     /// Trait for tagged pointers. Anything that can be stored and passed around
@@ -628,6 +632,7 @@ impl<'a> TaggedPtr for ObjectType<'a> {
                 Tag::Record => ObjectType::Record(<&Record>::from_obj_ptr(ptr)),
                 Tag::HashTable => ObjectType::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
                 Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
+                Tag::CharTable => ObjectType::CharTable(<&LispCharTable>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -646,6 +651,7 @@ impl<'a> TaggedPtr for ObjectType<'a> {
             ObjectType::ByteFn(x) => TaggedPtr::tag(x).into(),
             ObjectType::SubrFn(x) => TaggedPtr::tag(x).into(),
             ObjectType::Buffer(x) => TaggedPtr::tag(x).into(),
+            ObjectType::CharTable(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -840,6 +846,27 @@ impl TaggedPtr for &LispString {
     }
 }
 
+impl<'ob> TaggedPtr for &LispCharTable<'ob> {
+    type Ptr = LispCharTable<'ob>;
+    const TAG: Tag = Tag::CharTable;
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
+impl<'old, 'new> WithLifetime<'new> for &LispCharTable<'old> {
+    type Out = LispCharTable<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        std::mem::transmute::<LispCharTable<'old>, LispCharTable<'new>>(self)
+    }
+}
+
 impl TaggedPtr for &ByteString {
     type Ptr = ByteString;
     const TAG: Tag = Tag::ByteString;
@@ -1012,6 +1039,7 @@ pub(crate) enum ObjectType<'ob> {
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
+    CharTable(&'ob LispCharTable<'ob>) = Tag::CharTable as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1052,6 +1080,7 @@ impl ObjectType<'_> {
             ObjectType::ByteString(_) => Type::String,
             ObjectType::ByteFn(_) | ObjectType::SubrFn(_) => Type::Func,
             ObjectType::Buffer(_) => Type::Buffer,
+            ObjectType::CharTable(_) => Type::CharTable,
         }
     }
 }
@@ -1336,6 +1365,7 @@ where
             ObjectType::Record(x) => x.clone_in(bk).into(),
             ObjectType::HashTable(x) => x.clone_in(bk).into(),
             ObjectType::Buffer(x) => x.clone_in(bk).into(),
+            ObjectType::CharTable(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
@@ -1356,6 +1386,7 @@ impl<T> Trace for Gc<T> {
             ObjectType::Symbol(x) => x.trace(state),
             ObjectType::ByteFn(x) => x.trace(state),
             ObjectType::Buffer(x) => x.trace(state),
+            ObjectType::CharTable(x) => x.trace(state),
         }
     }
 }
@@ -1393,6 +1424,7 @@ impl Markable for Object<'_> {
                 let (sym, moved) = x.move_value(to_space)?;
                 (sym.as_ptr(), moved)
             }
+            ObjectType::CharTable(x) => cast_pair(x.move_value(to_space)?),
         };
 
         let tag = self.get_tag();
@@ -1595,6 +1627,7 @@ impl ObjectType<'_> {
             ObjectType::SubrFn(x) => D::fmt(x, f),
             ObjectType::Float(x) => D::fmt(x, f),
             ObjectType::Buffer(x) => D::fmt(x, f),
+            ObjectType::CharTable(x) => D::fmt(x, f),
         }
     }
 }
