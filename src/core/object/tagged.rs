@@ -7,15 +7,12 @@ use super::{
     ByteFnPrototype, ByteString, GcString, LispBuffer,
 };
 use super::{
-    ByteFn, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record, RecordBuilder,
-    SubrFn, Symbol, SymbolCell,
+    ByteFn, HashTable, LispCharTable, LispFloat, LispHashTable, LispString, LispVec, Record,
+    RecordBuilder, SubrFn, Symbol, SymbolCell,
 };
-use crate::{
-    chartab::LispCharTable,
-    core::{
-        env::sym,
-        gc::{DropStackElem, GcState, Markable, Trace},
-    },
+use crate::core::{
+    env::sym,
+    gc::{DropStackElem, GcState, Markable, Trace},
 };
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
@@ -295,6 +292,7 @@ object_trait_impls!(LispVec);
 object_trait_impls!(Record);
 object_trait_impls!(LispHashTable);
 object_trait_impls!(LispBuffer);
+object_trait_impls!(LispCharTable);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -846,27 +844,6 @@ impl TaggedPtr for &LispString {
     }
 }
 
-impl<'ob> TaggedPtr for &LispCharTable<'ob> {
-    type Ptr = LispCharTable<'ob>;
-    const TAG: Tag = Tag::CharTable;
-
-    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
-        &*ptr.cast::<Self::Ptr>()
-    }
-
-    fn get_ptr(self) -> *const Self::Ptr {
-        self as *const Self::Ptr
-    }
-}
-
-impl<'old, 'new> WithLifetime<'new> for &LispCharTable<'old> {
-    type Out = LispCharTable<'new>;
-
-    unsafe fn with_lifetime(self) -> Self::Out {
-        std::mem::transmute::<LispCharTable<'old>, LispCharTable<'new>>(self)
-    }
-}
-
 impl TaggedPtr for &ByteString {
     type Ptr = ByteString;
     const TAG: Tag = Tag::ByteString;
@@ -918,6 +895,19 @@ impl TaggedPtr for &LispHashTable {
 impl TaggedPtr for &LispBuffer {
     type Ptr = LispBuffer;
     const TAG: Tag = Tag::Buffer;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
+impl TaggedPtr for &LispCharTable {
+    type Ptr = LispCharTable;
+    const TAG: Tag = Tag::CharTable;
+
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
         &*ptr.cast::<Self::Ptr>()
     }
@@ -1039,7 +1029,7 @@ pub(crate) enum ObjectType<'ob> {
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
-    CharTable(&'ob LispCharTable<'ob>) = Tag::CharTable as u8,
+    CharTable(&'static LispCharTable) = Tag::CharTable as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1060,7 +1050,8 @@ cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          &'ob ByteString,
          &'ob ByteFn,
          &'ob SubrFn,
-         &'ob LispBuffer
+         &'ob LispBuffer,
+         &'ob LispCharTable
 );
 
 impl ObjectType<'_> {
