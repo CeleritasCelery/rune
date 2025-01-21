@@ -14,7 +14,6 @@ use crate::{
 use anyhow::Context as _;
 use anyhow::Result as AnyResult;
 use anyhow::{bail, ensure};
-use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{bail_err, call, error, rebind, root};
 use rune_macros::defun;
@@ -250,14 +249,24 @@ impl Interpreter<'_, '_> {
         quoted: &Rto<Object>,
         cx: &'ob mut Context,
     ) -> Result<Object<'ob>, EvalError> {
-        let ret = |cx| Ok(quoted.bind(cx));
-        // quoted = ((<args..>) (doc_str) ...)
+        let Some((arg_list, doc, body)) = (|| {
+            let mut forms = quoted.bind(cx).as_list().ok()?;
+            let arg_list = forms.next()?.ok()?;
+            let doc = forms.next()?.ok()?;
+            let body = forms.rest().ok()?.map(Into::into).unwrap_or(NIL);
+            match doc.as_cons_pair() {
+                Ok((sym::KW_DOCUMENTATION, ObjectType::Cons(doc))) => {
+                    Some((arg_list, doc, cx.bind(body)))
+                }
+                _ => None,
+            }
+        })() else {
+            return Ok(quoted.bind(cx));
+        };
+        root!(arg_list, cx);
+        root!(body, cx);
+        // ((<args..>) (doc_str) ...)
         let docstring = {
-            let Ok(list) = quoted.bind(cx).as_list() else { return ret(cx) };
-            let Some(doc) = list.fallible().nth(1)? else { return ret(cx) };
-            let Ok((sym::KW_DOCUMENTATION, ObjectType::Cons(doc))) = doc.as_cons_pair() else {
-                return ret(cx);
-            };
             root!(doc_form, doc.car(), cx);
             let docstring = rebind!(self.eval_form(doc_form, cx)?);
             // Handle the special case of oclosure docstrings being a symbol
@@ -268,10 +277,6 @@ impl Interpreter<'_, '_> {
             }
         };
         // ((<args..>) (:documentation <form>) body)
-        let mut forms = quoted.bind(cx).as_list().unwrap();
-        let arg_list = forms.next().unwrap()?;
-        let _old_doc = forms.next().unwrap()?;
-        let body = forms.rest()?.map(|x| x.into()).unwrap_or(NIL);
         Ok(Cons::new(arg_list, Cons::new(docstring, body, cx), cx).into())
     }
 
