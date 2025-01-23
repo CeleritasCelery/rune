@@ -1,18 +1,24 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::NewtypeMarkable;
-use macro_attr_2018::macro_attr;
-use newtype_derive_2018::*;
+use crate::derive_markable;
 use rune_macros::Trace;
 use std::fmt::{Debug, Display};
 
-macro_attr! {
-    /// A wrapper type for floats to work around issues with Eq. Rust only allows
-    /// types to be used in match statements if they derive Eq. Even if you never
-    /// actually use that field in a match. So we need a float wrapper that
-    /// implements that trait.
-    #[derive(PartialEq, NewtypeDeref!, NewtypeMarkable!, Trace)]
-    pub(crate) struct LispFloat(GcHeap<f64>);
+/// A wrapper type for floats to work around issues with Eq. Rust only allows
+/// types to be used in match statements if they derive Eq. Even if you never
+/// actually use that field in a match. So we need a float wrapper that
+/// implements that trait.
+#[derive(PartialEq, Trace)]
+pub(crate) struct LispFloat(GcHeap<f64>);
+
+derive_markable!(LispFloat);
+
+impl std::ops::Deref for LispFloat {
+    type Target = f64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl LispFloat {

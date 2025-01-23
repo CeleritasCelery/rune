@@ -8,11 +8,9 @@ use crate::{
         env::Env,
         gc::{GcHeap, Rt, Slot},
     },
-    NewtypeMarkable,
+    derive_markable,
 };
 use anyhow::{bail, ensure, Result};
-use macro_attr_2018::macro_attr;
-use newtype_derive_2018::*;
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
@@ -28,11 +26,19 @@ pub(crate) struct ByteFnPrototype {
     pub(super) constants: Slot<&'static LispVec>,
 }
 
-macro_attr! {
-    /// A function implemented in lisp. Note that all functions are byte compiled,
-    /// so this contains the byte-code representation of the function.
-    #[derive(PartialEq, Eq, NewtypeDeref!, NewtypeMarkable!, Trace)]
-    pub(crate) struct ByteFn(GcHeap<ByteFnPrototype>);
+/// A function implemented in lisp. Note that all functions are byte compiled,
+/// so this contains the byte-code representation of the function.
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct ByteFn(GcHeap<ByteFnPrototype>);
+
+derive_markable!(ByteFn);
+
+impl std::ops::Deref for ByteFn {
+    type Target = ByteFnPrototype;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 define_unbox!(ByteFn, Func, &'ob ByteFn);

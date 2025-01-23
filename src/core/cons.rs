@@ -1,46 +1,34 @@
+use crate::derive_markable;
+
 use super::gc::{Block, GcHeap, GcState, Trace};
 use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
-use crate::NewtypeMarkable;
 use anyhow::{anyhow, Result};
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display, Write};
 
 mod iter;
-
 pub(crate) use iter::*;
 
-mod sealed {
-    use super::*;
-    #[derive(Eq)]
-    pub(crate) struct ConsInner {
-        pub(super) mutable: bool,
-        pub(super) car: ObjCell,
-        pub(super) cdr: ObjCell,
-    }
-}
-
-pub(in crate::core) use sealed::ConsInner;
-
-#[derive(PartialEq, Eq, Trace)]
+#[derive(Trace)]
 pub(crate) struct Cons(GcHeap<ConsInner>);
 
-NewtypeMarkable!(() pub(crate) struct Cons());
+derive_markable!(Cons);
 
-impl std::ops::Deref for Cons {
-    type Target = GcHeap<ConsInner>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+struct ConsInner {
+    mutable: bool,
+    car: ObjCell,
+    cdr: ObjCell,
 }
 
 // TODO: we need to handle loops in equal
-impl PartialEq for ConsInner {
+impl PartialEq for Cons {
     fn eq(&self, other: &Self) -> bool {
         self.car() == other.car() && self.cdr() == other.cdr()
     }
 }
+
+impl Eq for Cons {}
 
 impl Cons {
     // SAFETY: Cons must always be allocated in the GC heap, it cannot live on
@@ -84,18 +72,18 @@ impl Cons {
     }
 }
 
-impl ConsInner {
+impl Cons {
     pub(crate) fn car(&self) -> Object {
-        self.car.get()
+        self.0.car.get()
     }
 
     pub(crate) fn cdr(&self) -> Object {
-        self.cdr.get()
+        self.0.cdr.get()
     }
 
     pub(crate) fn set_car(&self, new_car: Object) -> Result<()> {
-        if self.mutable {
-            unsafe { self.car.as_mut().set(new_car) }
+        if self.0.mutable {
+            unsafe { self.0.car.as_mut().set(new_car) }
             Ok(())
         } else {
             Err(anyhow!("Attempt to call setcar on immutable cons cell"))
@@ -103,8 +91,8 @@ impl ConsInner {
     }
 
     pub(crate) fn set_cdr(&self, new_cdr: Object) -> Result<()> {
-        if self.mutable {
-            unsafe { self.cdr.as_mut().set(new_cdr) }
+        if self.0.mutable {
+            unsafe { self.0.cdr.as_mut().set(new_cdr) }
             Ok(())
         } else {
             Err(anyhow!("Attempt to call setcdr on immutable cons cell"))

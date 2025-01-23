@@ -137,8 +137,8 @@ impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
 }
 
 #[macro_export]
-macro_rules! NewtypeMarkable {
-    (() $vis:vis struct $name:ident $($tail:tt)+) => {
+macro_rules! derive_markable {
+    ($name:ident) => {
         impl $crate::core::gc::Markable for $name {
             type Value = std::ptr::NonNull<Self>;
 

@@ -5,9 +5,7 @@
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object, WithLifetime};
 use crate::core::env::INTERNED_SYMBOLS;
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::NewtypeMarkable;
-use macro_attr_2018::macro_attr;
-use newtype_derive_2018::{NewtypeDebug, NewtypeDeref, NewtypeDisplay};
+use crate::derive_markable;
 use rune_core::hashmap::{HashSet, IndexMap};
 use rune_macros::Trace;
 use std::cell::RefCell;
@@ -17,9 +15,23 @@ use std::sync::Mutex;
 
 pub(crate) type HashTable<'ob> = IndexMap<Object<'ob>, Object<'ob>>;
 
-macro_attr! {
-    #[derive(PartialEq, Eq, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!, Trace)]
-    pub(crate) struct LispHashTable(GcHeap<HashTableCore<'static>>);
+#[derive(PartialEq, Trace)]
+pub(crate) struct LispHashTable(GcHeap<HashTableCore<'static>>);
+
+impl Eq for LispHashTable {}
+
+derive_markable!(LispHashTable);
+
+impl Debug for LispHashTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
+}
+
+impl Display for LispHashTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.display_walk(f, &mut HashSet::default())
+    }
 }
 
 impl LispHashTable {
@@ -37,7 +49,7 @@ impl LispHashTable {
     }
 }
 
-pub(crate) struct HashTableCore<'ob>(HashTableType<'ob>);
+struct HashTableCore<'ob>(HashTableType<'ob>);
 
 // Hashtables are currently the only data structure that can be shared between
 // threads. This is because it is used for caching in some functions in
@@ -54,45 +66,25 @@ struct HashTableInner<'ob> {
     inner: HashTable<'ob>,
 }
 
-impl<'a> HashTableCore<'a> {
-    pub(in crate::core) unsafe fn new(table: HashTable, constant: bool) -> Self {
-        let table = std::mem::transmute::<HashTable<'_>, HashTable<'a>>(table);
-        let inner = HashTableInner { iter_idx: 0, inner: table };
-        if constant {
-            HashTableCore(HashTableType::Global(Mutex::new(inner)))
-        } else {
-            HashTableCore(HashTableType::Local(RefCell::new(inner)))
-        }
-    }
-
-    fn with<F, T>(&self, mut f: F) -> T
-    where
-        F: FnMut(&mut HashTable<'a>) -> T,
-    {
-        match &self.0 {
-            HashTableType::Local(table) => f(&mut table.borrow_mut().inner),
-            HashTableType::Global(table) => f(&mut table.lock().unwrap().inner),
-        }
-    }
-
+impl LispHashTable {
     pub(crate) fn len(&self) -> usize {
-        self.with(|x| x.len())
+        self.0.with(|x| x.len())
     }
 
     pub(crate) fn get(&self, key: Object) -> Option<Object<'_>> {
-        self.with(|x| x.get(&key).copied())
+        self.0.with(|x| x.get(&key).copied())
     }
 
     pub(crate) fn get_index(&self, index: usize) -> Option<(Object, Object)> {
-        self.with(|x| x.get_index(index).map(|(k, v)| (*k, *v)))
+        self.0.with(|x| x.get_index(index).map(|(k, v)| (*k, *v)))
     }
 
     pub(crate) fn get_index_of(&self, key: Object) -> Option<usize> {
-        self.with(|x| x.get_index_of(&key))
+        self.0.with(|x| x.get_index_of(&key))
     }
 
     pub(crate) fn insert(&self, key: Object, value: Object) {
-        match &self.0 {
+        match &self.0 .0 {
             HashTableType::Local(table) => {
                 let key = unsafe { key.with_lifetime() };
                 let value = unsafe { value.with_lifetime() };
@@ -112,20 +104,42 @@ impl<'a> HashTableCore<'a> {
 
     pub(crate) fn shift_remove(&self, key: Object) {
         let key = unsafe { key.with_lifetime() };
-        self.with(|x| x.shift_remove(&key));
+        self.0.with(|x| x.shift_remove(&key));
     }
 
     pub(crate) fn get_iter_index(&self) -> usize {
-        match &self.0 {
+        match &self.0 .0 {
             HashTableType::Local(table) => table.borrow().iter_idx,
             HashTableType::Global(table) => table.lock().unwrap().iter_idx,
         }
     }
 
     pub(crate) fn set_iter_index(&self, index: usize) {
-        match &self.0 {
+        match &self.0 .0 {
             HashTableType::Local(table) => table.borrow_mut().iter_idx = index,
             HashTableType::Global(table) => table.lock().unwrap().iter_idx = index,
+        }
+    }
+}
+
+impl<'a> HashTableCore<'a> {
+    unsafe fn new(table: HashTable, constant: bool) -> Self {
+        let table = std::mem::transmute::<HashTable<'_>, HashTable<'a>>(table);
+        let inner = HashTableInner { iter_idx: 0, inner: table };
+        if constant {
+            HashTableCore(HashTableType::Global(Mutex::new(inner)))
+        } else {
+            HashTableCore(HashTableType::Local(RefCell::new(inner)))
+        }
+    }
+
+    fn with<F, T>(&self, mut f: F) -> T
+    where
+        F: FnMut(&mut HashTable<'a>) -> T,
+    {
+        match &self.0 {
+            HashTableType::Local(table) => f(&mut table.borrow_mut().inner),
+            HashTableType::Global(table) => f(&mut table.lock().unwrap().inner),
         }
     }
 }
@@ -150,29 +164,16 @@ impl Trace for HashTableCore<'_> {
     }
 }
 
-impl Eq for HashTableCore<'_> {}
 impl PartialEq for HashTableCore<'_> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl Debug for HashTableCore<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.display_walk(f, &mut HashSet::default())
-    }
-}
-
-impl Display for HashTableCore<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.display_walk(f, &mut HashSet::default())
-    }
-}
-
 impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
         let mut table = HashTable::default();
-        self.with(|x| {
+        self.0.with(|x| {
             for (key, value) in x {
                 let new_key = key.clone_in(bk);
                 let new_value = value.clone_in(bk);
@@ -183,20 +184,20 @@ impl<'new> CloneIn<'new, &'new Self> for LispHashTable {
     }
 }
 
-impl HashTableCore<'_> {
+impl LispHashTable {
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter,
         seen: &mut HashSet<*const u8>,
     ) -> fmt::Result {
-        let ptr = (self as *const Self).cast();
+        let ptr = (&*self.0 as *const HashTableCore).cast();
         if seen.contains(&ptr) {
             return write!(f, "#0");
         }
         seen.insert(ptr);
 
         write!(f, "#s(hash-table (")?;
-        self.with(|x| {
+        self.0.with(|x| {
             for (i, (k, v)) in x.iter().enumerate() {
                 if i != 0 {
                     f.write_char(' ')?;

@@ -4,11 +4,9 @@ use crate::{
         error::{Type, TypeError},
         gc::{Block, Context, GcHeap, GcState, Trace},
     },
-    NewtypeMarkable,
+    derive_markable,
 };
 use anyhow::{bail, Result};
-use macro_attr_2018::macro_attr;
-use newtype_derive_2018::*;
 use rune_macros::Trace;
 use std::{
     fmt::Display,
@@ -117,16 +115,16 @@ pub(crate) struct BufferData {
 }
 
 #[derive(Debug)]
-pub(crate) struct LispBufferInner {
+struct LispBufferInner {
     text_buffer: Mutex<Option<BufferData>>,
 }
 
-macro_attr! {
 /// A lisp handle to a buffer. This is a just a reference type and does not give
 /// access to the contents until it is locked and a `OpenBuffer` is returned.
-    #[derive(PartialEq, Eq, Trace, NewtypeDebug!, NewtypeDisplay!, NewtypeDeref!, NewtypeMarkable!)]
-    pub(crate) struct LispBuffer(GcHeap<LispBufferInner>);
-}
+#[derive(PartialEq, Eq, Trace)]
+pub(crate) struct LispBuffer(GcHeap<LispBufferInner>);
+
+derive_markable!(LispBuffer);
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {
@@ -142,7 +140,7 @@ impl LispBuffer {
     }
 
     pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {
-        let guard = self.text_buffer.lock().unwrap();
+        let guard = self.0.text_buffer.lock().unwrap();
         if guard.is_none() {
             bail!("selecting deleted buffer");
         }
@@ -170,14 +168,20 @@ impl PartialEq<LispBuffer> for OpenBuffer<'_> {
 
 impl Eq for LispBufferInner {}
 
-impl Display for LispBufferInner {
+impl Display for LispBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let data = self.text_buffer.lock().unwrap();
+        let data = self.0.text_buffer.lock().unwrap();
         let name = match data.as_ref() {
             Some(buf) => &buf.name,
             None => "deleted buffer",
         };
         write!(f, "#<{name}>")
+    }
+}
+
+impl std::fmt::Debug for LispBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
 

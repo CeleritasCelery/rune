@@ -1,6 +1,5 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{AllocState, Block, GcHeap, GcState, Markable, Trace};
-use newtype_derive_2018::*;
 use std::cell::Cell;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
@@ -217,7 +216,6 @@ impl Debug for ByteString {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::core::gc::{Context, RootSet};
     use rune_core::macros::root;
 
