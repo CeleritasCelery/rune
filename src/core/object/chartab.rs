@@ -10,9 +10,9 @@ use std::collections::HashMap;
 
 #[derive(Debug, Eq)]
 pub struct CharTable<'ob> {
-    parent: Option<Slot<&'ob CharTable<'ob>>>,
-    data: HashMap<usize, Object<'ob>>,
-    init: Option<Object<'ob>>,
+    pub parent: Option<Slot<&'ob CharTable<'ob>>>,
+    pub data: HashMap<usize, Object<'ob>>,
+    pub init: Option<Object<'ob>>,
 }
 
 impl Trace for CharTable<'static> {
