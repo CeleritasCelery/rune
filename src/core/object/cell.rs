@@ -1,5 +1,5 @@
 use super::{Object, WithLifetime};
-use crate::core::gc::{Markable, Trace};
+use crate::core::gc::{GcMoveable, Trace};
 use std::{cell::Cell, fmt};
 
 /// This type represents and immutable view into an Object. The reason we have

@@ -12,7 +12,7 @@ use super::{
 };
 use crate::core::{
     env::sym,
-    gc::{DropStackElem, GcState, Markable, Trace},
+    gc::{DropStackElem, GcMoveable, GcState, Trace},
 };
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
@@ -1404,10 +1404,10 @@ impl<T> Trace for Gc<T> {
     }
 }
 
-impl<T> Markable for Gc<T>
+impl<T> GcMoveable for Gc<T>
 where
     Self: Untag<T> + Copy,
-    T: Markable<Value = T> + TagType<Out = T>,
+    T: GcMoveable<Value = T> + TagType<Out = T>,
 {
     type Value = Self;
 
@@ -1416,7 +1416,7 @@ where
     }
 }
 
-impl Markable for Object<'_> {
+impl GcMoveable for Object<'_> {
     type Value = Self;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
@@ -1445,7 +1445,7 @@ impl Markable for Object<'_> {
     }
 }
 
-impl Markable for Function<'_> {
+impl GcMoveable for Function<'_> {
     type Value = Self;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
@@ -1464,7 +1464,7 @@ impl Markable for Function<'_> {
     }
 }
 
-impl Markable for List<'_> {
+impl GcMoveable for List<'_> {
     type Value = Self;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {

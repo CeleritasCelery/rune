@@ -1,7 +1,7 @@
 use super::{CloneIn, Gc, IntoObject, MutObjCell, ObjCell, Object};
 use crate::{
     core::gc::{Block, GcHeap, GcState, Trace},
-    derive_markable,
+    derive_GcMoveable,
 };
 use anyhow::{anyhow, Result};
 use bumpalo::collections::Vec as GcVec;
@@ -25,7 +25,7 @@ struct LispVecInner {
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct LispVec(GcHeap<LispVecInner>);
 
-derive_markable!(LispVec);
+derive_GcMoveable!(LispVec);
 
 impl Deref for LispVec {
     type Target = [ObjCell];
@@ -148,7 +148,7 @@ pub(crate) struct RecordBuilder<'ob>(pub(crate) GcVec<'ob, Object<'ob>>);
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct Record(GcHeap<LispVecInner>);
 
-derive_markable!(Record);
+derive_GcMoveable!(Record);
 
 impl Deref for Record {
     type Target = [ObjCell];

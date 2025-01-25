@@ -5,7 +5,7 @@
 use super::{CloneIn, Gc, IntoObject, ObjCell, Object, WithLifetime};
 use crate::core::env::INTERNED_SYMBOLS;
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::derive_markable;
+use crate::derive_GcMoveable;
 use rune_core::hashmap::{HashSet, IndexMap};
 use rune_macros::Trace;
 use std::cell::RefCell;
@@ -20,7 +20,7 @@ pub(crate) struct LispHashTable(GcHeap<HashTableCore<'static>>);
 
 impl Eq for LispHashTable {}
 
-derive_markable!(LispHashTable);
+derive_GcMoveable!(LispHashTable);
 
 impl Debug for LispHashTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

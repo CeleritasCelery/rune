@@ -1,6 +1,6 @@
 use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
-use crate::derive_markable;
+use crate::derive_GcMoveable;
 use rune_macros::Trace;
 use std::fmt::{Debug, Display};
 
@@ -11,7 +11,7 @@ use std::fmt::{Debug, Display};
 #[derive(PartialEq, Trace)]
 pub(crate) struct LispFloat(GcHeap<f64>);
 
-derive_markable!(LispFloat);
+derive_GcMoveable!(LispFloat);
 
 impl std::ops::Deref for LispFloat {
     type Target = f64;

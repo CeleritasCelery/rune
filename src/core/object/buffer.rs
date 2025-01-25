@@ -4,7 +4,7 @@ use crate::{
         error::{Type, TypeError},
         gc::{Block, Context, GcHeap, GcState, Trace},
     },
-    derive_markable,
+    derive_GcMoveable,
 };
 use anyhow::{bail, Result};
 use rune_macros::Trace;
@@ -124,7 +124,7 @@ struct LispBufferInner {
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct LispBuffer(GcHeap<LispBufferInner>);
 
-derive_markable!(LispBuffer);
+derive_GcMoveable!(LispBuffer);
 
 impl LispBuffer {
     pub(crate) fn create(name: String, block: &Block<true>) -> &LispBuffer {

@@ -1,5 +1,5 @@
 use super::{CloneIn, IntoObject};
-use crate::core::gc::{AllocState, Block, GcHeap, GcState, Markable, Trace};
+use crate::core::gc::{AllocState, Block, GcHeap, GcMoveable, GcState, Trace};
 use std::cell::Cell;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
@@ -17,7 +17,7 @@ pub(crate) struct LispString(GcHeap<LispStringInner>);
 // Need to allocate a new string and update the cell to point to that.
 struct LispStringInner(Cell<*mut str>);
 
-impl Markable for LispString {
+impl GcMoveable for LispString {
     type Value = std::ptr::NonNull<LispString>;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
@@ -143,7 +143,7 @@ impl Deref for ByteString {
     }
 }
 
-impl Markable for ByteString {
+impl GcMoveable for ByteString {
     type Value = std::ptr::NonNull<ByteString>;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {

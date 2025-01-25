@@ -8,7 +8,7 @@ use crate::{
         env::Env,
         gc::{GcHeap, Rt, Slot},
     },
-    derive_markable,
+    derive_GcMoveable,
 };
 use anyhow::{bail, ensure, Result};
 use rune_macros::Trace;
@@ -31,7 +31,7 @@ pub(crate) struct ByteFnPrototype {
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct ByteFn(GcHeap<ByteFnPrototype>);
 
-derive_markable!(ByteFn);
+derive_GcMoveable!(ByteFn);
 
 impl std::ops::Deref for ByteFn {
     type Target = ByteFnPrototype;

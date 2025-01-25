@@ -1,5 +1,5 @@
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::{Block, Context, GcHeap, GcState, Markable, Trace};
+use crate::core::gc::{Block, Context, GcHeap, GcMoveable, GcState, Trace};
 use crate::core::object::{CloneIn, Function, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use std::cell::Cell;
@@ -116,7 +116,7 @@ impl Trace for Symbol<'_> {
     }
 }
 
-impl<'a> Markable for Symbol<'a> {
+impl<'a> GcMoveable for Symbol<'a> {
     type Value = Symbol<'a>;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {

@@ -1,4 +1,4 @@
-use crate::derive_markable;
+use crate::derive_GcMoveable;
 
 use super::gc::{Block, GcHeap, GcState, Trace};
 use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
@@ -13,7 +13,7 @@ pub(crate) use iter::*;
 #[derive(Trace)]
 pub(crate) struct Cons(GcHeap<ConsInner>);
 
-derive_markable!(Cons);
+derive_GcMoveable!(Cons);
 
 struct ConsInner {
     mutable: bool,

@@ -1,7 +1,7 @@
 use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
 use crate::{
     core::gc::{Block, GcHeap, Slot},
-    derive_markable,
+    derive_GcMoveable,
 };
 use rune_core::hashmap::HashMap;
 use rune_macros::Trace;
@@ -23,7 +23,7 @@ impl<'ob> CharTableInner<'ob> {
 #[derive(PartialEq, Eq, Trace, Debug)]
 pub(crate) struct CharTable(GcHeap<CharTableInner<'static>>);
 
-derive_markable!(CharTable);
+derive_GcMoveable!(CharTable);
 
 impl PartialEq for CharTableInner<'_> {
     fn eq(&self, other: &Self) -> bool {

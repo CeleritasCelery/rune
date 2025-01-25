@@ -120,14 +120,17 @@ pub(in crate::core) enum AllocState {
     Unmoved,
 }
 
-pub(in crate::core) trait Markable {
+/// This trait is defined for types that can be moved by the GC. For types that
+/// don't have any other pointers in them, they can use the implementation of
+/// this trait on `GcHeap`, which will just copy the object.
+pub(in crate::core) trait GcMoveable {
     type Value;
     fn move_value(&self, _to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
         None
     }
 }
 
-impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
+impl<'a, T: GcMoveable<Value = NonNull<T>>> GcMoveable for &'a T {
     type Value = &'a T;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
@@ -137,9 +140,9 @@ impl<'a, T: Markable<Value = NonNull<T>>> Markable for &'a T {
 }
 
 #[macro_export]
-macro_rules! derive_markable {
+macro_rules! derive_GcMoveable {
     ($name:ident) => {
-        impl $crate::core::gc::Markable for $name {
+        impl $crate::core::gc::GcMoveable for $name {
             type Value = std::ptr::NonNull<Self>;
 
             fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
@@ -152,7 +155,7 @@ macro_rules! derive_markable {
     };
 }
 
-impl<T> Markable for GcHeap<T> {
+impl<T> GcMoveable for GcHeap<T> {
     type Value = NonNull<Self>;
 
     fn move_value(&self, to_space: &bumpalo::Bump) -> Option<(Self::Value, bool)> {
