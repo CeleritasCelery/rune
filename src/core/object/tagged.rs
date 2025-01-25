@@ -4,7 +4,7 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, GcString, LispBuffer,
+    ByteFnPrototype, ByteString, CharTable, GcString, LispBuffer,
 };
 use super::{
     ByteFn, HashTable, LispCharTable, LispFloat, LispHashTable, LispString, LispVec, Record,
@@ -502,6 +502,14 @@ impl IntoObject for HashTable<'_> {
             block.lisp_hashtables.borrow_mut().push(ptr);
             <&LispHashTable>::tag_ptr(ptr)
         }
+    }
+}
+
+impl IntoObject for CharTable<'_> {
+    type Out<'ob> = &'ob LispCharTable;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        todo!()
     }
 }
 
@@ -1317,6 +1325,17 @@ impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispBuffer> {
         match value.get_tag() {
             Tag::Buffer => unsafe { Ok(cast_gc(value)) },
             _ => Err(TypeError::new(Type::Buffer, value)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispCharTable> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::CharTable => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::String, value)),
         }
     }
 }

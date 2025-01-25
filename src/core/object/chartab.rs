@@ -39,6 +39,10 @@ impl<'new> CloneIn<'new, &'new Self> for LispCharTable {
 }
 
 impl LispCharTable {
+    pub(in crate::core) unsafe fn new(table: CharTable<'static>, constant: bool) -> Self {
+        Self(GcHeap::new(table, constant))
+    }
+
     pub(super) fn display_walk(
         &self,
         f: &mut fmt::Formatter,
