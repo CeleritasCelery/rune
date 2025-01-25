@@ -1,0 +1,23 @@
+* How does GC work
+
+we start with the roots and trace our way through. Each thing in the root set (which is a stack) is a ~dyn~ object that implements the ~Trace~ interface.
+
+There are some custom types like ~Env~ that implement trace, but most of the things on the root stack will be objects.
+
+When trace is called on an object it depends on the type. for types that don't have any children we stop there. If it something like a vector, we first copy the vector to the new space
+
+Then we call trace on each object inside.
+
+These objects are in a ~ObjCell~.
+
+They will call ~move_value~ on the Object, which will copy just that value to the new heap. If the object has not moved yet, then we copy it to the ~to_space~  and push it on the mark stack. This stack will be traced once all the roots are done. Moving the values is byte-copy that doesn't recurse deeper.
+
+When a normal type is rooted, it is wrapped in a ~Slot~. This can also call ~move_value~. The big difference is that Slot will also call trace on children and then call ~trace_stack~ to finish tracing the objects inside the slot.
+
+If objects are directly rooted, then they will be part of a slot and be moved that way. If they are objects within objects, they will be ~ObjCell~ and will get moved that that way.
+
+There are really two phases here. First we copy the object to the to-space and update the mark bit and forwarding pointer. Then we push the object on the mark stack. When the object is popped from the mark stack we will call trace again, but it will not be a ~Slot~ or ~ObjCell~, so it will not call ~move_value~ again. So the trace implementations for all other types just do the tracing, they don't try and move anything.
+
+The only other unique impl is for ~GcHeap~, which will check the mark bit first. That way we make sure we don't trace anything that has already been checked.
+
+We have two different traits ~Trace~ and ~Markable~. Everything generally implements both, except for ~Slot~ and ~ObjCell~, which only implement trace because they are not heap objects in and of themselves.
