@@ -1618,7 +1618,7 @@ impl ObjectType<'_> {
             ObjectType::SubrFn(x) => D::fmt(x, f),
             ObjectType::Float(x) => D::fmt(x, f),
             ObjectType::Buffer(x) => D::fmt(x, f),
-            ObjectType::CharTable(x) => D::fmt(x, f),
+            ObjectType::CharTable(x) => x.display_walk(f, seen),
         }
     }
 }
