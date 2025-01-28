@@ -509,7 +509,10 @@ impl IntoObject for CharTable<'_> {
     type Out<'ob> = &'ob LispCharTable;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
-        todo!()
+        unsafe {
+            let ptr = block.objects.alloc(LispCharTable::new(self, C));
+            <Self::Out<'_>>::tag_ptr(ptr)
+        }
     }
 }
 
