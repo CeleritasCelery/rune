@@ -3,9 +3,9 @@ use crate::{
     core::gc::{Block, GcHeap, Slot},
     derive_markable,
 };
-use core::fmt;
 use rune_core::hashmap::{HashMap, HashSet};
 use rune_macros::Trace;
+use std::fmt::{self, Write};
 
 #[derive(Debug, Eq, Trace)]
 pub struct CharTable<'ob> {
@@ -58,6 +58,19 @@ impl LispCharTable {
         f: &mut fmt::Formatter,
         seen: &mut HashSet<*const u8>,
     ) -> fmt::Result {
-        todo!()
+        let ptr = (&*self.0 as *const CharTable).cast();
+        if seen.contains(&ptr) {
+            return write!(f, "#0");
+        }
+        seen.insert(ptr);
+
+        f.write_char('[')?;
+        for (i, x) in self.0.data.values().enumerate() {
+            if i != 0 {
+                f.write_char(' ')?;
+            }
+            x.untag().display_walk(f, seen)?;
+        }
+        f.write_char(']')
     }
 }
