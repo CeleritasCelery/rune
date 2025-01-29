@@ -25,7 +25,7 @@ pub(crate) struct LispCharTable(GcHeap<CharTable<'static>>);
 
 derive_markable!(LispCharTable);
 
-impl<'ob> PartialEq for CharTable<'ob> {
+impl PartialEq for CharTable<'_> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
