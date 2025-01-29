@@ -1,4 +1,4 @@
-use super::{CloneIn, Gc, IntoObject, Object};
+use super::{CloneIn, Gc, IntoObject, Object, NIL};
 use crate::{
     core::gc::{Block, GcHeap, Slot},
     derive_markable,
@@ -72,5 +72,16 @@ impl LispCharTable {
             x.untag().display_walk(f, seen)?;
         }
         f.write_char(']')
+    }
+
+    pub fn get(&self, idx: &usize) -> Option<Object> {
+        let x = self.0.data.get(idx);
+        if x.is_some() {
+            x.copied()
+        } else if self.0.init.is_some() {
+            self.0.init
+        } else {
+            Some(NIL)
+        }
     }
 }
