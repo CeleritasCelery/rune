@@ -335,6 +335,9 @@ pub(crate) fn aset<'ob>(
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         }
+        ObjectType::CharTable(_) => {
+            todo!()
+        }
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
@@ -374,6 +377,9 @@ pub(crate) fn aref<'ob>(array: Object<'ob>, idx: usize, cx: &'ob Context) -> Res
             Some(x) => Ok(x),
             None => Err(anyhow!("index {idx} is out of bounds")),
         },
+        ObjectType::CharTable(_) => {
+            todo!()
+        }
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
