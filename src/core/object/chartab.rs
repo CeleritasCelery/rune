@@ -1,11 +1,11 @@
-use super::{CloneIn, Gc, IntoObject, Object, NIL};
+use super::{CloneIn, Gc, IntoObject, Object};
 use crate::{
     core::gc::{Block, GcHeap, Slot},
     derive_markable,
 };
-use rune_core::hashmap::{HashMap, HashSet};
+use rune_core::hashmap::HashMap;
 use rune_macros::Trace;
-use std::fmt::{self, Write};
+use std::fmt;
 
 #[derive(Debug, Eq, Trace)]
 pub struct CharTableInner<'ob> {
@@ -54,28 +54,21 @@ impl CharTable {
         Self(GcHeap::new(table, constant))
     }
 
-    pub(super) fn display_walk(
-        &self,
-        f: &mut fmt::Formatter,
-        seen: &mut HashSet<*const u8>,
-    ) -> fmt::Result {
-        let ptr = (&*self.0 as *const CharTableInner).cast();
-        if seen.contains(&ptr) {
-            return write!(f, "#0");
-        }
-        seen.insert(ptr);
-
-        f.write_char('[')?;
-        for (i, x) in self.0.data.values().enumerate() {
-            if i != 0 {
-                f.write_char(' ')?;
-            }
-            x.untag().display_walk(f, seen)?;
-        }
-        f.write_char(']')
-    }
-
     pub fn get(&self, idx: &usize) -> Option<Object> {
         self.0.data.get(idx).copied().or(self.0.init)
+    }
+}
+
+impl fmt::Display for CharTable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        let mut values = self.0.data.values();
+        if let Some(first) = values.next() {
+            write!(f, "{}", first)?;
+            for x in values {
+                write!(f, " {}", x)?;
+            }
+        }
+        write!(f, "]")
     }
 }
