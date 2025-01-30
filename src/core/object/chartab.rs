@@ -76,13 +76,6 @@ impl CharTable {
     }
 
     pub fn get(&self, idx: &usize) -> Option<Object> {
-        let x = self.0.data.get(idx);
-        if x.is_some() {
-            x.copied()
-        } else if self.0.init.is_some() {
-            self.0.init
-        } else {
-            Some(NIL)
-        }
+        self.0.data.get(idx).copied().or(self.0.init)
     }
 }
