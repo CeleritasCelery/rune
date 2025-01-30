@@ -4,10 +4,10 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, CharTable, GcString, LispBuffer,
+    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBuffer,
 };
 use super::{
-    ByteFn, HashTable, LispCharTable, LispFloat, LispHashTable, LispString, LispVec, Record,
+    ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
     RecordBuilder, SubrFn, Symbol, SymbolCell,
 };
 use crate::core::{
@@ -292,7 +292,7 @@ object_trait_impls!(LispVec);
 object_trait_impls!(Record);
 object_trait_impls!(LispHashTable);
 object_trait_impls!(LispBuffer);
-object_trait_impls!(LispCharTable);
+object_trait_impls!(CharTable);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -505,12 +505,12 @@ impl IntoObject for HashTable<'_> {
     }
 }
 
-impl IntoObject for CharTable<'_> {
-    type Out<'ob> = &'ob LispCharTable;
+impl IntoObject for CharTableInner<'_> {
+    type Out<'ob> = &'ob CharTable;
 
     fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
         unsafe {
-            let ptr = block.objects.alloc(LispCharTable::new(self, C));
+            let ptr = block.objects.alloc(CharTable::new(self, C));
             <Self::Out<'_>>::tag_ptr(ptr)
         }
     }
@@ -641,7 +641,7 @@ impl<'a> TaggedPtr for ObjectType<'a> {
                 Tag::Record => ObjectType::Record(<&Record>::from_obj_ptr(ptr)),
                 Tag::HashTable => ObjectType::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
                 Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
-                Tag::CharTable => ObjectType::CharTable(<&LispCharTable>::from_obj_ptr(ptr)),
+                Tag::CharTable => ObjectType::CharTable(<&CharTable>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -915,8 +915,8 @@ impl TaggedPtr for &LispBuffer {
     }
 }
 
-impl TaggedPtr for &LispCharTable {
-    type Ptr = LispCharTable;
+impl TaggedPtr for &CharTable {
+    type Ptr = CharTable;
     const TAG: Tag = Tag::CharTable;
 
     unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
@@ -1040,7 +1040,7 @@ pub(crate) enum ObjectType<'ob> {
     ByteFn(&'ob ByteFn) = Tag::ByteFn as u8,
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
-    CharTable(&'static LispCharTable) = Tag::CharTable as u8,
+    CharTable(&'static CharTable) = Tag::CharTable as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1062,7 +1062,7 @@ cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          &'ob ByteFn,
          &'ob SubrFn,
          &'ob LispBuffer,
-         &'ob LispCharTable
+         &'ob CharTable
 );
 
 impl ObjectType<'_> {
@@ -1332,7 +1332,7 @@ impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispBuffer> {
     }
 }
 
-impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispCharTable> {
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob CharTable> {
     type Error = TypeError;
 
     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {

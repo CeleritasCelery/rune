@@ -8,30 +8,30 @@ use rune_macros::Trace;
 use std::fmt::{self, Write};
 
 #[derive(Debug, Eq, Trace)]
-pub struct CharTable<'ob> {
-    parent: Option<Slot<&'ob LispCharTable>>,
+pub struct CharTableInner<'ob> {
+    parent: Option<Slot<&'ob CharTable>>,
     data: HashMap<usize, Object<'ob>>,
     init: Option<Object<'ob>>,
 }
 
-impl<'ob> CharTable<'ob> {
+impl<'ob> CharTableInner<'ob> {
     pub fn new(init: Option<Object<'ob>>) -> Self {
-        CharTable { parent: None, data: HashMap::default(), init }
+        CharTableInner { parent: None, data: HashMap::default(), init }
     }
 }
 
 #[derive(PartialEq, Eq, Trace, Debug)]
-pub(crate) struct LispCharTable(GcHeap<CharTable<'static>>);
+pub(crate) struct CharTable(GcHeap<CharTableInner<'static>>);
 
-derive_markable!(LispCharTable);
+derive_markable!(CharTable);
 
-impl PartialEq for CharTable<'_> {
+impl PartialEq for CharTableInner<'_> {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
 
-impl<'new> CloneIn<'new, &'new Self> for LispCharTable {
+impl<'new> CloneIn<'new, &'new Self> for CharTable {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
         let parent = self.0.parent.as_ref().map(|p| Slot::new(p.clone_in(bk).untag()));
 
@@ -42,14 +42,15 @@ impl<'new> CloneIn<'new, &'new Self> for LispCharTable {
         }
 
         let init = self.0.init.map(|i| i.clone_in(bk));
-        CharTable { parent, data, init }.into_obj(bk)
+        CharTableInner { parent, data, init }.into_obj(bk)
     }
 }
 
-impl LispCharTable {
-    pub(in crate::core) unsafe fn new(table: CharTable<'_>, constant: bool) -> Self {
+impl CharTable {
+    pub(in crate::core) unsafe fn new(table: CharTableInner<'_>, constant: bool) -> Self {
         // transmute lifetime to static
-        let table = unsafe { std::mem::transmute::<CharTable<'_>, CharTable<'static>>(table) };
+        let table =
+            unsafe { std::mem::transmute::<CharTableInner<'_>, CharTableInner<'static>>(table) };
         Self(GcHeap::new(table, constant))
     }
 
@@ -58,7 +59,7 @@ impl LispCharTable {
         f: &mut fmt::Formatter,
         seen: &mut HashSet<*const u8>,
     ) -> fmt::Result {
-        let ptr = (&*self.0 as *const CharTable).cast();
+        let ptr = (&*self.0 as *const CharTableInner).cast();
         if seen.contains(&ptr) {
             return write!(f, "#0");
         }
