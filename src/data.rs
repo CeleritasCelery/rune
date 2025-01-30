@@ -399,7 +399,7 @@ fn type_of(object: Object) -> Object {
         ObjectType::String(_) | ObjectType::ByteString(_) => sym::STRING.into(),
         ObjectType::SubrFn(_) => sym::SUBR.into(),
         ObjectType::Buffer(_) => sym::BUFFER.into(),
-        ObjectType::CharTable(_) => todo!(),
+        ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
     }
 }
 
@@ -551,3 +551,4 @@ defsym!(COMPILED_FUNCTION);
 defsym!(HASH_TABLE);
 defsym!(BUFFER);
 defsym!(SUBR);
+defsym!(CHAR_TABLE);
