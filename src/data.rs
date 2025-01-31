@@ -335,6 +335,10 @@ pub(crate) fn aset<'ob>(
                 Err(anyhow!("index {idx} is out of bounds. Length was {len}"))
             }
         }
+        ObjectType::CharTable(table) => {
+            table.set(idx, newlet);
+            Ok(newlet)
+        }
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
@@ -374,6 +378,10 @@ pub(crate) fn aref<'ob>(array: Object<'ob>, idx: usize, cx: &'ob Context) -> Res
             Some(x) => Ok(x),
             None => Err(anyhow!("index {idx} is out of bounds")),
         },
+        ObjectType::CharTable(chartable) => match chartable.get(idx) {
+            Some(x) => Ok(x),
+            None => Ok(NIL),
+        },
         x => Err(TypeError::new(Type::Sequence, x).into()),
     }
 }
@@ -392,6 +400,7 @@ fn type_of(object: Object) -> Object {
         ObjectType::String(_) | ObjectType::ByteString(_) => sym::STRING.into(),
         ObjectType::SubrFn(_) => sym::SUBR.into(),
         ObjectType::Buffer(_) => sym::BUFFER.into(),
+        ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
     }
 }
 
@@ -543,3 +552,4 @@ defsym!(COMPILED_FUNCTION);
 defsym!(HASH_TABLE);
 defsym!(BUFFER);
 defsym!(SUBR);
+defsym!(CHAR_TABLE);
