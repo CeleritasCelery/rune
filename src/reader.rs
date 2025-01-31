@@ -55,23 +55,6 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
-    const fn position(&self) -> usize {
-        match self {
-            Error::MissingQuotedItem(x)
-            | Error::MissingCloseParen(x)
-            | Error::MissingCloseBracket(x)
-            | Error::MissingStringDel(x)
-            | Error::ExtraCloseParen(x)
-            | Error::ExtraCloseBracket(x)
-            | Error::ExtraItemInCdr(x)
-            | Error::UnexpectedChar(_, x)
-            | Error::MalformedUnicdoe(x)
-            | Error::ParseInt(_, x)
-            | Error::UnknownMacroCharacter(_, x) => *x,
-            Error::EmptyStream => 0,
-        }
-    }
-
     fn mut_pos(&mut self) -> Option<&mut usize> {
         match self {
             Error::MissingCloseParen(i)
@@ -110,7 +93,6 @@ enum Token<'a> {
     QuestionMark(usize, char),
     Ident(&'a str),
     String(&'a str),
-    Error(Error),
 }
 
 impl Display for Token<'_> {
@@ -128,7 +110,6 @@ impl Display for Token<'_> {
             Token::QuestionMark(_, chr) => write!(f, "?{chr}"),
             Token::Ident(x) => write!(f, "{x}"),
             Token::String(x) => write!(f, "\"{x}\""),
-            Token::Error(_) => write!(f, "error"),
         }
     }
 }
@@ -162,7 +143,6 @@ impl<'a> Tokenizer<'a> {
                 let end = slice.as_ptr() as usize;
                 end - beg
             }
-            Token::Error(e) => e.position(),
         }
     }
 
@@ -205,12 +185,12 @@ impl<'a> Tokenizer<'a> {
         self.skip_till(valid_char);
     }
 
-    fn get_string(&mut self, open_delim_pos: usize) -> Token<'a> {
+    fn get_string(&mut self, open_delim_pos: usize) -> Result<Token<'a>> {
         let mut skip = false;
         let idx_chr = self.iter.find(|(_, chr)| !escaped(&mut skip, *chr) && *chr == '"');
         match idx_chr {
-            Some((end, '"')) => Token::String(&self.slice[(open_delim_pos + 1)..end]),
-            _ => Token::Error(Error::MissingStringDel(open_delim_pos)),
+            Some((end, '"')) => Ok(Token::String(&self.slice[(open_delim_pos + 1)..end])),
+            _ => Err(Error::MissingStringDel(open_delim_pos)),
         }
     }
 
@@ -228,21 +208,21 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn read_quoted_char(&mut self, idx: usize) -> Token<'a> {
+    fn read_quoted_char(&mut self, idx: usize) -> Result<Token<'a>> {
         match self.iter.next() {
             Some((start, item)) => {
                 if item == '\\' {
                     let Token::Ident(tok) = self.get_symbol(start, item) else { unreachable!() };
                     let Some(chr) = tok.chars().nth(1) else {
-                        return Token::Error(Error::MissingQuotedItem(start));
+                        return Err(Error::MissingQuotedItem(start));
                     };
                     if chr == 'u' || chr == 'x' {
                         match u32::from_str_radix(&tok[2..], 16) {
                             Ok(digits) => match char::from_u32(digits) {
-                                Some(c) => Token::QuestionMark(start, c),
-                                None => Token::Error(Error::MalformedUnicdoe(start)),
+                                Some(c) => Ok(Token::QuestionMark(start, c)),
+                                None => Err(Error::MalformedUnicdoe(start)),
                             },
-                            Err(_) => Token::Error(Error::MalformedUnicdoe(start)),
+                            Err(_) => Err(Error::MalformedUnicdoe(start)),
                         }
                     } else if tok.chars().count() == 2 {
                         let new = match chr {
@@ -258,21 +238,21 @@ impl<'a> Tokenizer<'a> {
                             'v' => '\u{0B}',
                             c => c,
                         };
-                        Token::QuestionMark(start, new)
+                        Ok(Token::QuestionMark(start, new))
                     } else {
                         // TODO implement keycode parsing
-                        Token::QuestionMark(start, '\0')
+                        Ok(Token::QuestionMark(start, '\0'))
                     }
                 } else {
                     match self.iter.peek() {
                         Some((i, chr)) if symbol_char(*chr) && *chr != '?' => {
-                            Token::Error(Error::UnexpectedChar(*chr, *i)) // ?aa
+                            Err(Error::UnexpectedChar(*chr, *i)) // ?aa
                         }
-                        _ => Token::QuestionMark(idx, item), // ?a
+                        _ => Ok(Token::QuestionMark(idx, item)), // ?a
                     }
                 }
             }
-            None => Token::Error(Error::MissingQuotedItem(idx)),
+            None => Err(Error::MissingQuotedItem(idx)),
         }
     }
 
@@ -282,24 +262,24 @@ impl<'a> Tokenizer<'a> {
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token<'a>;
+    type Item = Result<Token<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_till_char();
         let (idx, chr) = self.iter.next()?;
         let token = match chr {
-            '(' => Token::OpenParen(idx),
-            ')' => Token::CloseParen(idx),
-            '[' => Token::OpenBracket(idx),
-            ']' => Token::CloseBracket(idx),
-            '\'' => Token::Quote(idx),
-            ',' => self.get_macro_char(idx),
-            '`' => Token::Backquote(idx),
-            '#' => Token::Sharp(idx),
+            '(' => Ok(Token::OpenParen(idx)),
+            ')' => Ok(Token::CloseParen(idx)),
+            '[' => Ok(Token::OpenBracket(idx)),
+            ']' => Ok(Token::CloseBracket(idx)),
+            '\'' => Ok(Token::Quote(idx)),
+            ',' => Ok(self.get_macro_char(idx)),
+            '`' => Ok(Token::Backquote(idx)),
+            '#' => Ok(Token::Sharp(idx)),
             '?' => self.read_quoted_char(idx),
             '"' => self.get_string(idx),
-            other if symbol_char(other) => self.get_symbol(idx, other),
-            unknown => Token::Error(Error::UnexpectedChar(unknown, idx)),
+            other if symbol_char(other) => Ok(self.get_symbol(idx, other)),
+            unknown => Err(Error::UnexpectedChar(unknown, idx)),
         };
         Some(token)
     }
@@ -400,15 +380,17 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     /// ```
     fn read_cdr(&mut self, delim: usize) -> Result<Option<Object<'ob>>> {
         match self.tokens.next() {
-            Some(Token::CloseParen(_)) => Ok(None),
-            Some(sexp) => {
+            Some(Ok(Token::CloseParen(_))) => Ok(None),
+            Some(Ok(sexp)) => {
                 let obj = self.read_sexp(sexp)?;
                 match self.tokens.next() {
-                    Some(Token::CloseParen(_)) => Ok(Some(obj)),
-                    Some(token) => Err(Error::ExtraItemInCdr(self.tokens.relative_pos(token))),
+                    Some(Ok(Token::CloseParen(_))) => Ok(Some(obj)),
+                    Some(Ok(token)) => Err(Error::ExtraItemInCdr(self.tokens.relative_pos(token))),
+                    Some(Err(e)) => Err(e),
                     None => Err(Error::MissingCloseParen(delim)),
                 }
             }
+            Some(Err(e)) => Err(e),
             None => Err(Error::MissingCloseParen(delim)),
         }
     }
@@ -416,7 +398,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_list(&mut self, delim: usize) -> Result<Object<'ob>> {
         let mut objects = Vec::new();
         while let Some(token) = self.tokens.next() {
-            match token {
+            match token? {
                 Token::CloseParen(_) => return Ok(fns::slice_into_list(&objects, None, self.cx)),
                 Token::Ident(".") => {
                     let cdr = self.read_cdr(delim)?;
@@ -434,7 +416,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_vec(&mut self, delim: usize) -> Result<Object<'ob>> {
         let mut objects = self.cx.vec_new();
         while let Some(token) = self.tokens.next() {
-            match token {
+            match token? {
                 Token::CloseBracket(_) => return Ok(self.cx.add(objects)),
                 tok => objects.push(self.read_sexp(tok)?),
             }
@@ -444,11 +426,13 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 
     /// Quote an item using `symbol`.
     fn quote_item(&mut self, pos: usize, symbol: Symbol) -> Result<Object<'ob>> {
-        let obj: Object = match self.tokens.next() {
-            Some(token) => self.read_sexp(token)?,
-            None => return Err(Error::MissingQuotedItem(pos)),
-        };
-        Ok(list!(symbol, obj; self.cx))
+        match self.tokens.next() {
+            Some(token) => {
+                let obj = self.read_sexp(token?)?;
+                Ok(list!(symbol, obj; self.cx))
+            }
+            None => Err(Error::MissingQuotedItem(pos)),
+        }
     }
 
     /// Read number with specificed radix
@@ -458,7 +442,7 @@ impl<'a, 'ob> Reader<'a, 'ob> {
         }
 
         match self.tokens.next() {
-            Some(Token::Ident(ident)) => match usize::from_str_radix(ident, radix.into()) {
+            Some(Ok(Token::Ident(ident))) => match usize::from_str_radix(ident, radix.into()) {
                 Ok(x) => Ok(self.cx.add(x as i64)),
                 Err(_) => Err(Error::ParseInt(radix, pos)),
             },
@@ -471,12 +455,12 @@ impl<'a, 'ob> Reader<'a, 'ob> {
     fn read_sharp(&mut self, pos: usize) -> Result<Object<'ob>> {
         match self.tokens.read_char() {
             Some('\'') => match self.tokens.next() {
-                Some(Token::OpenParen(i)) => {
+                Some(Ok(Token::OpenParen(i))) => {
                     let list = self.read_list(i)?;
                     Ok(list!(sym::FUNCTION, list; self.cx))
                 }
                 Some(token) => {
-                    let obj = self.read_sexp(token)?;
+                    let obj = self.read_sexp(token?)?;
                     Ok(list!(sym::FUNCTION, obj; self.cx))
                 }
                 None => Err(Error::MissingQuotedItem(pos)),
@@ -524,7 +508,6 @@ impl<'a, 'ob> Reader<'a, 'ob> {
             Token::QuestionMark(_, c) => Ok((c as i64).into()),
             Token::Ident(x) => Ok(parse_symbol(x, self.cx)),
             Token::String(x) => Ok(unescape_string(x, self.cx)),
-            Token::Error(e) => Err(e),
         }
     }
 }
@@ -534,7 +517,8 @@ impl<'a, 'ob> Reader<'a, 'ob> {
 pub(crate) fn read<'ob>(slice: &str, cx: &'ob Context) -> Result<(Object<'ob>, usize)> {
     let mut reader = Reader { tokens: Tokenizer::new(slice), cx };
     match reader.tokens.next() {
-        Some(t) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
+        Some(Ok(t)) => reader.read_sexp(t).map(|x| (x, reader.tokens.cur_pos())),
+        Some(Err(e)) => Err(e),
         None => Err(Error::EmptyStream),
     }
 }
@@ -548,13 +532,13 @@ mod test {
     #[test]
     fn tokens() {
         let mut iter = Tokenizer::new("1 foo (\"bar\" . 1.3)");
-        assert_eq!(iter.next(), Some(Token::Ident("1")));
-        assert_eq!(iter.next(), Some(Token::Ident("foo")));
-        assert_eq!(iter.next(), Some(Token::OpenParen(6)));
-        assert_eq!(iter.next(), Some(Token::String("bar")));
-        assert_eq!(iter.next(), Some(Token::Ident(".")));
-        assert_eq!(iter.next(), Some(Token::Ident("1.3")));
-        assert_eq!(iter.next(), Some(Token::CloseParen(18)));
+        assert_eq!(iter.next(), Some(Ok(Token::Ident("1"))));
+        assert_eq!(iter.next(), Some(Ok(Token::Ident("foo"))));
+        assert_eq!(iter.next(), Some(Ok(Token::OpenParen(6))));
+        assert_eq!(iter.next(), Some(Ok(Token::String("bar"))));
+        assert_eq!(iter.next(), Some(Ok(Token::Ident("."))));
+        assert_eq!(iter.next(), Some(Ok(Token::Ident("1.3"))));
+        assert_eq!(iter.next(), Some(Ok(Token::CloseParen(18))));
         assert_eq!(iter.next(), None);
     }
 
