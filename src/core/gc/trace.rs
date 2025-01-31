@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use super::super::object::RawObj;
 use crate::core::object::{Gc, Object};
 use rune_core::hashmap::{HashMap, HashSet};
@@ -74,6 +76,12 @@ impl<T: Trace> Trace for Vec<T> {
         for x in self {
             x.trace(state);
         }
+    }
+}
+
+impl<T: Trace> Trace for RefCell<T> {
+    fn trace(&self, state: &mut GcState) {
+        self.borrow().trace(state);
     }
 }
 
