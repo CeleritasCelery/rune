@@ -27,7 +27,10 @@ fn main() -> ExitCode {
     let regex = regex::Regex::new(&cli.pattern).unwrap();
     let functions = get_all_functions(&rust_src)
         .into_iter()
-        .filter(|x| regex.is_match(&x.name))
+        .filter(|x| {
+            let rust_name = x.name.replace(['-'], "_");
+            regex.is_match(&x.name) || regex.is_match(&rust_name)
+        })
         .collect::<Vec<_>>();
 
     let config = Config { test_count: cli.test_count.unwrap_or(200), functions: functions.clone() };
@@ -87,6 +90,7 @@ fn main() -> ExitCode {
         serde_json::from_str(&json_string).expect("Unable to deserialize Output json");
 
     let mut passed = true;
+    let count = outputs.len();
     for output in outputs {
         println!("====================");
         let func = output.function;
@@ -108,7 +112,10 @@ fn main() -> ExitCode {
         }
         println!();
     }
-    if passed {
+    if count == 0 {
+        println!("No tests run");
+        ExitCode::SUCCESS
+    } else if passed {
         println!("All tests passed");
         ExitCode::SUCCESS
     } else {
