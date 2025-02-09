@@ -135,7 +135,6 @@ Functions that operate on strings
 - substring
 - clear-string
 - base64-encode-string
-- base64url-encode-string
 - base64-decode-string
 - base64-encode-region
 - base64url-encode-region

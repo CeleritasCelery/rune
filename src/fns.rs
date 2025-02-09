@@ -1019,6 +1019,21 @@ fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String
     }
 }
 
+/// Base64URL-encode STRING and return the result.
+///
+/// Optional second argument NO-PAD means do not add padding char =.
+///
+/// This produces the URL variant of base 64 encoding defined in RFC 4648.
+#[defun]
+#[elprop("[\x00-\x7F]*", _)]
+fn base64url_encode_string(string: &str, no_pad: OptionalFlag) -> Result<String> {
+    if string.is_ascii() {
+        Ok(base64_encode(string, false, no_pad.is_none(), true))
+    } else {
+        Err(anyhow!("Multibyte character in data for base64 encoding"))
+    }
+}
+
 fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) -> String {
     let config = base64::engine::GeneralPurposeConfig::new().with_encode_padding(pad);
     let alphabets = if base64url { base64::alphabet::URL_SAFE } else { base64::alphabet::STANDARD };
@@ -1230,6 +1245,14 @@ mod test {
         // Mixed Tests
         assert_lisp("(string-version-lessp 'less \"less\")", "nil");
         assert_lisp("(string-version-lessp 'less1 \"less10\")", "t");
+    }
+
+    #[test]
+    fn test_base64url_encode_string() {
+        assert_lisp("(base64url-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
+        assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
     }
 
     #[test]
