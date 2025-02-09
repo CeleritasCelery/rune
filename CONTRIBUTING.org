@@ -120,11 +120,6 @@ Functions that operate on characters
 Functions that operate on strings
 
 - string-bytes
-- string-distance
-- string-equal
-- compare-strings
-- string-lessp
-- string-version-lessp
 - string-collate-lessp
 - string-collate-equalp
 - string-make-multibyte
@@ -133,9 +128,6 @@ Functions that operate on strings
 - string-as-multibyte
 - string-to-unibyte
 - substring
-- clear-string
-- base64-encode-string
-- base64url-encode-string
 - base64-decode-string
 - base64-encode-region
 - base64url-encode-region
