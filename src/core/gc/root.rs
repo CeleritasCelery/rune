@@ -18,7 +18,7 @@ use std::{
 };
 
 /// Helper trait to break the dependency between an object and the lifetimes of
-/// it's [traceable](Trace) children. If This trait is implemented, than the
+/// it's [traceable](Trace) children. If This trait is implemented, then the
 /// object can be traced by the garbage collector. Once it becomes rooted, it as
 /// well as all of it's tracable children will be live until it is unrooted.
 /// This essentially makes any lifetimes of a tracable objects meaningless. They

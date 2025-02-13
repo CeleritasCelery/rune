@@ -2,7 +2,7 @@ use crate::intervals::IntervalTree;
 
 use super::gc::{Context, ObjectMap, 
 Rto, Slot};
-use super::object::{LispBuffer, Object, ObjectType, OpenBuffer, Symbol, WithLifetime};
+use super::object::{IntoObject, LispBuffer, Object, ObjectType, OpenBuffer, Symbol, WithLifetime};
 use anyhow::{anyhow, bail, Result};
 use rune_core::hashmap::IndexMap;
 use rune_macros::Trace;
@@ -27,14 +27,13 @@ pub(crate) struct Env<'a> {
     #[no_trace]
     pub(crate) current_buffer: CurrentBuffer<'a>,
     pub(crate) stack: LispStack<'a>,
-    #[no_trace]
-    pub buffer_textprops: IndexMap<Object<'a>, IntervalTree<'a>>,
+    pub buffer_textprops: ObjectMap<Slot<Object<'a>>, IntervalTree<'a>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct CurrentBuffer<'a> {
     buffer: OnceCell<OpenBuffer<'a>>,
-    buf_ref: &'a LispBuffer,
+    pub(crate) buf_ref: &'a LispBuffer,
 }
 
 impl Default for CurrentBuffer<'_> {
@@ -161,19 +160,6 @@ impl<'a> RootedEnv<'a> {
         }
         self.current_buffer.set(buffer);
     }
-
-    #[inline]
-    pub fn get_buffer_textprops<'ob>(&mut self, buffer: &LispBuffer) -> Result<&mut IntervalTree<'a>> {
-        let buffer_name = &buffer.lock()?.name;
-        Ok(self.buffer_textprops_mut(buffer_name.clone()))
-        // self.buffer_textprops.get(buffer_name)
-    }
-
-    #[inline]
-    pub fn buffer_textprops_mut(&mut self, buffer_name: String) -> &mut IntervalTree<'a> {
-        self.buffer_textprops.entry(buffer_name).or_insert(IntervalTree::new())
-    }
-
 
     pub(crate) fn with_buffer<T>(
         &self,
