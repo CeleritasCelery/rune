@@ -1,6 +1,10 @@
-use super::gc::{Context, ObjectMap, Rto, Slot};
-use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
-use anyhow::{anyhow, Result};
+use crate::intervals::IntervalTree;
+
+use super::gc::{Context, ObjectMap, 
+Rto, Slot};
+use super::object::{IntoObject, LispBuffer, Object, ObjectType, OpenBuffer, Symbol, WithLifetime};
+use anyhow::{anyhow, bail, Result};
+use rune_core::hashmap::IndexMap;
 use rune_macros::Trace;
 use std::cell::OnceCell;
 
@@ -23,12 +27,13 @@ pub(crate) struct Env<'a> {
     #[no_trace]
     pub(crate) current_buffer: CurrentBuffer<'a>,
     pub(crate) stack: LispStack<'a>,
+    pub buffer_textprops: ObjectMap<Slot<Object<'a>>, IntervalTree<'a>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct CurrentBuffer<'a> {
     buffer: OnceCell<OpenBuffer<'a>>,
-    buf_ref: &'a LispBuffer,
+    pub(crate) buf_ref: &'a LispBuffer,
 }
 
 impl Default for CurrentBuffer<'_> {
