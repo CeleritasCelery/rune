@@ -25,6 +25,7 @@ pub(crate) enum Type {
     Buffer,
     Nil,
     Char,
+    CharTable,
     CustomString(String),
     Multiple(Vec<Type>),
     CustomList(Vec<Type>),
@@ -63,6 +64,7 @@ impl Type {
             Type::Buffer => any::<String>().prop_map(ArbitraryType::Buffer).boxed(),
             Type::Nil => Just(ArbitraryType::Nil).boxed(),
             Type::Char => any::<char>().prop_map(ArbitraryType::Char).boxed(),
+            Type::CharTable => todo!("Strategy for CharTable not implemented"),
             Type::Function => todo!("Strategy for Function not implemented"),
             Type::Multiple(s) => combined_strategy(&s),
             Type::CustomString(s) => proptest::string::string_regex(&s)
@@ -383,6 +385,7 @@ impl Function {
             "Cons" | "List" | "Error" | "TypeError" | "ArgSlice" => Type::Cons,
             "LispVec" | "LispVector" | "Vec" | "RecordBuilder" => Type::Vector,
             "LispHashTable" => Type::HashTable,
+            "CharTable" | "CharTableInner" => Type::CharTable,
             "ByteString" => Type::UnibyteString,
             "Record" => Type::Record,
             "ByteFn" => Type::ByteFn,
