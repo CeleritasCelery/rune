@@ -1048,6 +1048,7 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
 /// If optional third argument IGNORE-INVALID is non-nil invalid characters are
 /// ignored instead of signaling an error.
 #[defun]
+#[elprop(_, _, false)]
 fn base64_decode_string(
     string: &str,
     base64url: OptionalFlag,
@@ -1082,6 +1083,7 @@ mod test {
     fn test_base64_decode_string() {
         assert_lisp("(base64-decode-string \"aGVsbG8=\")", "\"hello\"");
         assert_lisp("(base64-decode-string \"Zm9vIGJhcg==\")", "\"foo bar\"");
+        assert_lisp("(base64-decode-string \"aA\" t)", "\"h\"");
     }
 
     #[test]
