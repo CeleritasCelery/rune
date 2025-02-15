@@ -1041,9 +1041,48 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
     engine.encode(string)
 }
 
+/// Base64-decode STRING and return the result as a string.
+///
+/// Optional argument BASE64URL determines whether to use the URL variant of
+/// the base 64 encoding, as defined in RFC 4648.
+/// If optional third argument IGNORE-INVALID is non-nil invalid characters are
+/// ignored instead of signaling an error.
+#[defun]
+fn base64_decode_string(
+    string: &str,
+    base64url: OptionalFlag,
+    _ignore_invalid: OptionalFlag,
+) -> Result<String> {
+    if string.is_ascii() {
+        let config = base64::engine::GeneralPurposeConfig::new();
+        let alphabets = if base64url.is_some() {
+            base64::alphabet::URL_SAFE
+        } else {
+            base64::alphabet::STANDARD
+        };
+        let engine = base64::engine::GeneralPurpose::new(&alphabets, config);
+
+        match engine.decode(string) {
+            Ok(vec) => match String::from_utf8(vec) {
+                Ok(result) => Ok(result),
+                Err(_) => Err(anyhow!("Decode error")),
+            },
+            Err(_) => Err(anyhow!("Decode error")),
+        }
+    } else {
+        Err(anyhow!("Multibyte character in data for base64 decoding"))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
+
+    #[test]
+    fn test_base64_decode_string() {
+        assert_lisp("(base64-decode-string \"aGVsbG8=\")", "\"hello\"");
+        assert_lisp("(base64-decode-string \"Zm9vIGJhcg==\")", "\"foo bar\"");
+    }
 
     #[test]
     fn test_base64_encode_string() {
