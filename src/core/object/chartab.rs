@@ -1,6 +1,6 @@
 use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
 use crate::{
-    core::gc::{Block, GcHeap, Slot},
+    core::gc::{Block, GcHeap},
     derive_GcMoveable,
 };
 use rune_core::hashmap::HashMap;
@@ -9,14 +9,14 @@ use std::{cell::RefCell, fmt};
 
 #[derive(Debug, Eq, Trace)]
 pub struct CharTableInner<'ob> {
-    parent: Option<Slot<&'ob CharTable>>,
+    parent: RefCell<Option<&'ob CharTable>>,
     data: RefCell<HashMap<usize, Object<'ob>>>,
     init: Option<Object<'ob>>,
 }
 
 impl<'ob> CharTableInner<'ob> {
     pub fn new(init: Option<Object<'ob>>) -> Self {
-        CharTableInner { parent: None, data: RefCell::new(HashMap::default()), init }
+        CharTableInner { parent: RefCell::new(None), data: RefCell::new(HashMap::default()), init }
     }
 }
 
@@ -33,7 +33,8 @@ impl PartialEq for CharTableInner<'_> {
 
 impl<'new> CloneIn<'new, &'new Self> for CharTable {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> Gc<&'new Self> {
-        let parent = self.0.parent.as_ref().map(|p| Slot::new(p.clone_in(bk).untag()));
+        let parent_clone = self.0.parent.borrow().as_ref().map(|p| p.clone_in(bk).untag());
+        let parent = RefCell::new(parent_clone);
 
         let mut data = HashMap::default();
         for (key, value) in self.0.data.borrow().iter() {
@@ -60,6 +61,11 @@ impl CharTable {
 
     pub fn set(&self, idx: usize, item: Object) {
         unsafe { self.0.data.borrow_mut().insert(idx, item.with_lifetime()) };
+    }
+
+    pub fn set_parent(&self, new: Option<&Self>) {
+        let new_ptr = new.map(|n| unsafe { n.with_lifetime() });
+        *self.0.parent.borrow_mut() = new_ptr;
     }
 }
 
