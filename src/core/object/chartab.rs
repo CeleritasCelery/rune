@@ -1,4 +1,4 @@
-use super::{CloneIn, Gc, IntoObject, Object, WithLifetime};
+use super::{CloneIn, Gc, IntoObject, Object, WithLifetime, NIL};
 use crate::{
     core::gc::{Block, GcHeap, Slot},
     derive_GcMoveable,
@@ -10,13 +10,17 @@ use std::{cell::RefCell, fmt};
 #[derive(Debug, Eq, Trace)]
 pub struct CharTableInner<'ob> {
     parent: RefCell<Option<Slot<&'ob CharTable>>>,
-    data: RefCell<HashMap<usize, Object<'ob>>>,
-    init: Option<Object<'ob>>,
+    data: RefCell<HashMap<usize, Slot<Object<'ob>>>>,
+    init: Slot<Object<'ob>>,
 }
 
 impl<'ob> CharTableInner<'ob> {
     pub fn new(init: Option<Object<'ob>>) -> Self {
-        CharTableInner { parent: RefCell::new(None), data: RefCell::new(HashMap::default()), init }
+        CharTableInner {
+            parent: RefCell::new(None),
+            data: RefCell::new(HashMap::default()),
+            init: Slot::new(init.unwrap_or(NIL)),
+        }
     }
 }
 
@@ -39,11 +43,11 @@ impl<'new> CloneIn<'new, &'new Self> for CharTable {
 
         let mut data = HashMap::default();
         for (key, value) in self.0.data.borrow().iter() {
-            let new_value = value.clone_in(bk);
+            let new_value = Slot::new(value.clone_in(bk));
             data.insert(*key, new_value);
         }
         let data = RefCell::new(data);
-        let init = self.0.init.map(|i| i.clone_in(bk));
+        let init = Slot::new(self.0.init.clone_in(bk));
         CharTableInner { parent, data, init }.into_obj(bk)
     }
 }
@@ -56,12 +60,15 @@ impl CharTable {
         Self(GcHeap::new(table, constant))
     }
 
-    pub fn get(&self, idx: usize) -> Option<Object> {
-        self.0.data.borrow().get(&idx).copied().or(self.0.init)
+    pub fn get(&self, idx: usize) -> Object {
+        match self.0.data.borrow().get(&idx) {
+            Some(x) => **x,
+            None => *self.0.init,
+        }
     }
 
     pub fn set(&self, idx: usize, item: Object) {
-        unsafe { self.0.data.borrow_mut().insert(idx, item.with_lifetime()) };
+        unsafe { self.0.data.borrow_mut().insert(idx, Slot::new(item.with_lifetime())) };
     }
 
     pub fn set_parent(&self, new: Option<&Self>) {
