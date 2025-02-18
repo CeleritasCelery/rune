@@ -13,6 +13,8 @@ pub(crate) enum Type {
     Integer,
     PosInteger,
     Boolean,
+    True,
+    False,
     Unknown,
     Function,
     UnibyteString,
@@ -47,6 +49,8 @@ impl Type {
                 Self::pos_fixnum_strategy().prop_map(ArbitraryType::Integer).boxed()
             }
             Type::Boolean => any::<bool>().prop_map(ArbitraryType::Boolean).boxed(),
+            Type::True => Just(true).prop_map(ArbitraryType::Boolean).boxed(),
+            Type::False => Just(false).prop_map(ArbitraryType::Boolean).boxed(),
             Type::Unknown => Self::any_object_strategy(),
             Type::UnibyteString => "[a-zA-Z0-9 ]*".prop_map(ArbitraryType::UnibyteString).boxed(),
             Type::Vector => prop::collection::vec(Self::any_object_strategy(), 0..10)
@@ -444,6 +448,8 @@ impl Function {
                     Some(x) => x,
                     None => match &*s {
                         "_" => Type::Nil,
+                        "true" => Type::True,
+                        "false" => Type::False,
                         s => panic!("Unknown type {s}"),
                     },
                 }
