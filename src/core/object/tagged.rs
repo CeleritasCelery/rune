@@ -12,7 +12,7 @@ use super::{
 };
 use crate::core::{
     env::sym,
-    gc::{DropStackElem, GcMoveable, GcState, Trace},
+    gc::{DropStackElem, GcMoveable, GcState, Trace, TracePtr},
 };
 use bumpalo::collections::Vec as GcVec;
 use private::{Tag, TaggedPtr};
@@ -928,6 +928,25 @@ impl TaggedPtr for &CharTable {
     }
 }
 
+impl<T> TracePtr for Gc<T> {
+    fn trace_ptr(&self, state: &mut GcState) {
+        match self.as_obj().untag() {
+            ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
+            ObjectType::Float(x) => x.trace(state),
+            ObjectType::String(x) => x.trace(state),
+            ObjectType::ByteString(x) => x.trace(state),
+            ObjectType::Vec(vec) => vec.trace(state),
+            ObjectType::Record(x) => x.trace(state),
+            ObjectType::HashTable(x) => x.trace(state),
+            ObjectType::Cons(x) => x.trace(state),
+            ObjectType::Symbol(x) => x.trace(state),
+            ObjectType::ByteFn(x) => x.trace(state),
+            ObjectType::Buffer(x) => x.trace(state),
+            ObjectType::CharTable(x) => x.trace(state),
+        }
+    }
+}
+
 macro_rules! cast_gc {
     ($supertype:ty => $($subtype:ty),+ $(,)?) => {
         $(
@@ -1382,25 +1401,6 @@ where
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
-    }
-}
-
-impl<T> Trace for Gc<T> {
-    fn trace(&self, state: &mut GcState) {
-        match self.as_obj().untag() {
-            ObjectType::Int(_) | ObjectType::SubrFn(_) => {}
-            ObjectType::Float(x) => x.trace(state),
-            ObjectType::String(x) => x.trace(state),
-            ObjectType::ByteString(x) => x.trace(state),
-            ObjectType::Vec(vec) => vec.trace(state),
-            ObjectType::Record(x) => x.trace(state),
-            ObjectType::HashTable(x) => x.trace(state),
-            ObjectType::Cons(x) => x.trace(state),
-            ObjectType::Symbol(x) => x.trace(state),
-            ObjectType::ByteFn(x) => x.trace(state),
-            ObjectType::Buffer(x) => x.trace(state),
-            ObjectType::CharTable(x) => x.trace(state),
-        }
     }
 }
 

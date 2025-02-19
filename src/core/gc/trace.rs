@@ -4,8 +4,19 @@ use super::super::object::RawObj;
 use crate::core::object::{Gc, Object};
 use rune_core::hashmap::{HashMap, HashSet};
 
+/// A trait for owned types that can be traced by the garbage collector. This should be implemented
+/// by any type that will hold references to GC managed objects.
 pub(crate) trait Trace {
     fn trace(&self, state: &mut GcState);
+}
+
+/// A trait for types that are pointers to GC objects. This is a separate trait from `Trace` because
+/// pointers will need to be updated during garbage collection (with the `GcMoveable` trait). Derive
+/// `Trace` will not handle use `GcMoveable` to move the object to the new space, so the pointer
+/// will not get updated. This trait is used by the `Slot` type to update pointers during garbage
+/// collection.
+pub(crate) trait TracePtr {
+    fn trace_ptr(&self, state: &mut GcState);
 }
 
 pub(crate) struct GcState {
@@ -25,8 +36,14 @@ impl GcState {
     pub fn trace_stack(&mut self) {
         while let Some(raw) = self.stack.pop() {
             let obj = unsafe { Object::from_raw(raw) };
-            obj.trace(self);
+            obj.trace_ptr(self);
         }
+    }
+}
+
+impl<T: Trace> TracePtr for &T {
+    fn trace_ptr(&self, state: &mut GcState) {
+        (*self).trace(state);
     }
 }
 
@@ -40,12 +57,6 @@ impl Trace for u64 {
 
 impl Trace for i64 {
     fn trace(&self, _: &mut GcState) {}
-}
-
-impl<T: Trace> Trace for &T {
-    fn trace(&self, state: &mut GcState) {
-        (*self).trace(state);
-    }
 }
 
 impl<T: Trace, U: Trace> Trace for (T, U) {

@@ -1,6 +1,6 @@
 use super::{
     super::{cons::Cons, object::Object},
-    GcMoveable, GcState,
+    GcMoveable, GcState, TracePtr,
 };
 use super::{Block, Context, RootSet, Trace};
 use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, OptionalFlag, Untag, WithLifetime};
@@ -282,13 +282,13 @@ impl<T> Deref for Slot<T> {
 // the next slot.
 impl<T> Trace for Slot<T>
 where
-    T: Trace + GcMoveable<Value = T>,
+    T: TracePtr + GcMoveable<Value = T>,
 {
     fn trace(&self, state: &mut GcState) {
         if let Some((new, moved)) = self.get().move_value(&state.to_space) {
             unsafe { self.set(new) };
             if moved {
-                self.get().trace(state);
+                self.get().trace_ptr(state);
                 // finish tracing anything connected to this object. This will
                 // help them be co-located in memory.
                 state.trace_stack();

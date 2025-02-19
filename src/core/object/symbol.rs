@@ -1,5 +1,5 @@
 use crate::core::env::sym::BUILTIN_SYMBOLS;
-use crate::core::gc::{Block, Context, GcHeap, GcMoveable, GcState, Trace};
+use crate::core::gc::{Block, Context, GcHeap, GcMoveable, GcState, Trace, TracePtr};
 use crate::core::object::{CloneIn, Function, FunctionType, Gc, IntoObject, TagType, WithLifetime};
 use anyhow::{bail, Result};
 use std::cell::Cell;
@@ -110,8 +110,8 @@ impl<'new> WithLifetime<'new> for Symbol<'_> {
     }
 }
 
-impl Trace for Symbol<'_> {
-    fn trace(&self, state: &mut GcState) {
+impl TracePtr for Symbol<'_> {
+    fn trace_ptr(&self, state: &mut GcState) {
         self.get().trace(state);
     }
 }
