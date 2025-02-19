@@ -1,4 +1,4 @@
-use interval_tree::IntervalTree as Tree;
+use interval_rbtree::IntervalTree as Tree;
 
 use crate::{
     core::{
@@ -49,16 +49,12 @@ impl<'ob> IntervalTree<'ob> {
                     crate::textprops::PropertySetType::Append,
                     false,
                     cx,
-                )
-                .map(|(obj, c)| (Slot::new(obj), c))
+                ).map(|obj| Slot::new(obj)).unwrap()
             })
             .unwrap();
     }
 
-    pub fn find(
-        &self,
-        position: usize,
-    ) -> Option<&interval_tree::Node<Slot<crate::Gc<crate::core::object::ObjectType<'ob>>>>> {
+    pub fn find(&self, position: usize) -> Option<&interval_rbtree::Node<Slot<crate::Gc<crate::core::object::ObjectType<'ob>>>>> {
         self.tree.find(position)
     }
 
