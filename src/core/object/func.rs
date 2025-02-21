@@ -1,6 +1,6 @@
 use super::{
     super::gc::{Block, Context},
-    display_slice, CloneIn, IntoObject, LispVec, ObjCell,
+    CloneIn, IntoObject, LispVec, ObjCell, display_slice,
 };
 use super::{Object, WithLifetime};
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     },
     derive_GcMoveable,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 

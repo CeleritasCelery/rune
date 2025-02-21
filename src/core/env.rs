@@ -1,6 +1,6 @@
 use super::gc::{Context, ObjectMap, Rto, Slot};
 use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rune_macros::Trace;
 use std::cell::OnceCell;
 

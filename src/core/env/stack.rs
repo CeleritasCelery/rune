@@ -1,6 +1,6 @@
 use crate::core::{
     gc::{Context, IntoRoot, Rt, Rto, Slot},
-    object::{ByteFn, Object, WithLifetime, NIL},
+    object::{ByteFn, NIL, Object, WithLifetime},
 };
 use rune_macros::Trace;
 use std::ops::{Deref, DerefMut, Index, IndexMut, RangeBounds, RangeTo};

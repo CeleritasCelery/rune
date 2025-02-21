@@ -1,10 +1,10 @@
 //! Lisp evaluation primitives.
 use crate::core::cons::{Cons, ConsError};
-use crate::core::env::{sym, ArgSlice, CallFrame, Env};
+use crate::core::env::{ArgSlice, CallFrame, Env, sym};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Rt, Rto};
 use crate::core::object::{
-    display_slice, FnArgs, Function, LispString, ObjectType, Symbol, TagType, NIL,
+    FnArgs, Function, LispString, NIL, ObjectType, Symbol, TagType, display_slice,
 };
 use crate::core::{
     gc::Context,
@@ -13,7 +13,7 @@ use crate::core::{
 use crate::data::LispError;
 use crate::fns::{assq, eq};
 use crate::rooted_iter;
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{Result, anyhow, bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{bail_err, call, list, root};

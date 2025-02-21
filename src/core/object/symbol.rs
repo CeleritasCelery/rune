@@ -1,7 +1,7 @@
 use crate::core::env::sym::BUILTIN_SYMBOLS;
 use crate::core::gc::{Block, Context, GcHeap, GcMoveable, GcState, Trace, TracePtr};
 use crate::core::object::{CloneIn, Function, FunctionType, Gc, IntoObject, TagType, WithLifetime};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};

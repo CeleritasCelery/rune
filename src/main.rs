@@ -33,7 +33,7 @@ mod threads;
 mod timefns;
 
 use crate::core::{
-    env::{intern, sym, Env},
+    env::{Env, intern, sym},
     gc::{Context, RootSet, Rt},
     object::{Gc, LispString, NIL},
 };

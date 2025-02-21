@@ -1,14 +1,14 @@
 //! Utilities for variables and values.
 use crate::core::{
     cons::Cons,
-    env::{sym, Env, INTERNED_SYMBOLS},
+    env::{Env, INTERNED_SYMBOLS, sym},
     error::{Type, TypeError},
     gc::{Context, Rt},
     object::{
-        IntoObject, List, ListType, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime, NIL,
+        IntoObject, List, ListType, NIL, Number, Object, ObjectType, SubrFn, Symbol, WithLifetime,
     },
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rune_core::{hashmap::HashSet, macros::list};
 use rune_macros::defun;
 use std::sync::LazyLock;
@@ -301,11 +301,7 @@ fn subr_arity<'ob>(subr: &SubrFn, cx: &'ob Context) -> Object<'ob> {
 fn ash(value: i64, count: i64) -> i64 {
     let shift = if count >= 0 { std::ops::Shl::shl } else { std::ops::Shr::shr };
     let result = shift(value.abs(), count.abs());
-    if value >= 0 {
-        result
-    } else {
-        -result
-    }
+    if value >= 0 { result } else { -result }
 }
 
 #[defun]

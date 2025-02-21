@@ -1,14 +1,14 @@
 //! File I/O.
 use crate::core::{
     cons::Cons,
-    env::{sym, Env},
+    env::{Env, sym},
     error::{Type, TypeError},
     gc::{Context, Rt},
     object::{Number, Object, ObjectType, OptionalFlag},
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use rune_macros::defun;
-use std::path::{Component, Path, MAIN_SEPARATOR};
+use std::path::{Component, MAIN_SEPARATOR, Path};
 
 defvar!(FILE_NAME_HANDLER_ALIST);
 
@@ -56,11 +56,7 @@ fn file_name_as_directory(filename: &str) -> String {
 
 #[defun]
 fn file_directory_p(filename: &str) -> bool {
-    if filename.is_empty() {
-        true
-    } else {
-        Path::new(filename).is_dir()
-    }
+    if filename.is_empty() { true } else { Path::new(filename).is_dir() }
 }
 
 /// Return dirname sans final path separator, unless the string consists entirely of separators.

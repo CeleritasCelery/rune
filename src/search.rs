@@ -3,9 +3,9 @@ use crate::core::{
     cons::Cons,
     env::Env,
     gc::{Context, Rt},
-    object::{List, Object, ObjectType, OptionalFlag, NIL},
+    object::{List, NIL, Object, ObjectType, OptionalFlag},
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use fallible_iterator::FallibleIterator;
 use fancy_regex::Regex;
 use rune_macros::defun;

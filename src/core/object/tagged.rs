@@ -1200,11 +1200,7 @@ impl<'ob> TryFrom<Object<'ob>> for Option<Number<'ob>> {
     type Error = TypeError;
 
     fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
-        if value.is_nil() {
-            Ok(None)
-        } else {
-            value.try_into().map(Some)
-        }
+        if value.is_nil() { Ok(None) } else { value.try_into().map(Some) }
     }
 }
 
@@ -1273,11 +1269,7 @@ impl<'ob> Object<'ob> {
     where
         Object<'ob>: TryInto<T, Error = E>,
     {
-        if value.is_nil() {
-            Ok(None)
-        } else {
-            Ok(Some(value.try_into()?))
-        }
+        if value.is_nil() { Ok(None) } else { Ok(Some(value.try_into()?)) }
     }
 
     pub(crate) fn is_nil(self) -> bool {
@@ -1647,7 +1639,7 @@ impl ObjectType<'_> {
 
 #[cfg(test)]
 mod test {
-    use super::{TagType, MAX_FIXNUM, MIN_FIXNUM};
+    use super::{MAX_FIXNUM, MIN_FIXNUM, TagType};
     use crate::core::gc::{Context, RootSet};
     use rune_core::macros::list;
 

@@ -6,7 +6,7 @@ use crate::{
     },
     derive_GcMoveable,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use rune_macros::Trace;
 use std::{
     fmt::Display,

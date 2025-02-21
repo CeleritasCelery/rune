@@ -91,7 +91,7 @@ impl LispString {
     }
 
     pub(crate) fn inner(&self) -> &str {
-        unsafe { &*self.0 .0.get() }
+        unsafe { &*self.0.0.get() }
     }
 }
 
@@ -101,7 +101,7 @@ impl LispString {
     }
 
     pub(crate) fn clear(&self) {
-        let inner_mut_str = unsafe { &mut *self.0 .0.get() };
+        let inner_mut_str = unsafe { &mut *self.0.0.get() };
         for byte in unsafe { inner_mut_str.as_bytes_mut().iter_mut() } {
             *byte = b'\0';
         }
