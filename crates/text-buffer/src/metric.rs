@@ -1,5 +1,5 @@
 use get_size2::GetSize;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{
     fmt,
     iter::Sum,

@@ -7,8 +7,8 @@
 #![expect(clippy::must_use_candidate)]
 #![expect(clippy::missing_panics_doc)]
 use crate::{
-    metric::{BufferMetrics, Metric},
     Position,
+    metric::{BufferMetrics, Metric},
 };
 use get_size2::GetSize;
 use std::{
