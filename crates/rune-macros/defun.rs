@@ -326,7 +326,7 @@ fn parse_signature(sig: &syn::Signature) -> Result<Vec<ArgType>, Error> {
     for input in &sig.inputs {
         match input {
             syn::FnArg::Receiver(x) => {
-                return Err(Error::new_spanned(x, "Self is not valid in lisp functions"))
+                return Err(Error::new_spanned(x, "Self is not valid in lisp functions"));
             }
             syn::FnArg::Typed(pat_type) => {
                 let ty = pat_type.ty.as_ref().clone();

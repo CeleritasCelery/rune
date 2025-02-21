@@ -15,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 syn = { version = "2.0.15", features = ["full"] }
