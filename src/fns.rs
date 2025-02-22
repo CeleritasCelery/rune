@@ -1278,6 +1278,17 @@ mod test {
     }
 
     #[test]
+    fn test_legnth() {
+        assert_lisp("(length nil)", "0");
+        assert_lisp("(length '(1 2 3))", "3");
+        assert_lisp("(length \"hello\")", "5");
+        assert_lisp("(length [1 2 3])", "3");
+        assert_lisp("(safe-length '(1 . 2))", "1");
+        assert_lisp("(safe-length '(1 2 3 . 4))", "3");
+        assert_lisp("(safe-length 'foo)", "0");
+    }
+
+    #[test]
     fn test_sort() {
         assert_lisp("(sort nil '<)", "nil");
         assert_lisp("(sort '(1) '<)", "(1)");
