@@ -49,12 +49,16 @@ impl<'ob> IntervalTree<'ob> {
                     crate::textprops::PropertySetType::Append,
                     false,
                     cx,
-                ).map(|(obj, c)| (Slot::new(obj), c))
+                )
+                .map(|(obj, c)| (Slot::new(obj), c))
             })
             .unwrap();
     }
 
-    pub fn find(&self, position: usize) -> Option<&interval_tree::Node<Slot<crate::Gc<crate::core::object::ObjectType<'ob>>>>> {
+    pub fn find(
+        &self,
+        position: usize,
+    ) -> Option<&interval_tree::Node<Slot<crate::Gc<crate::core::object::ObjectType<'ob>>>>> {
         self.tree.find(position)
     }
 

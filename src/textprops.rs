@@ -10,8 +10,8 @@ use crate::{
     intervals::IntervalTree,
 };
 use anyhow::{bail, Result};
-use rune_macros::defun;
 use rune_core::macros::list;
+use rune_macros::defun;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -19,6 +19,10 @@ pub enum PropertySetType {
     Replace,
     Prepend,
     Append,
+}
+
+pub fn buffer_textprops(buffer: Object) {
+    
 }
 
 /// Add the properties of PLIST to the interval I, or set
@@ -78,7 +82,7 @@ pub fn add_properties<'ob>(
 fn prop_tree_for_object<'ob>(
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
-    cx: &'ob Context
+    cx: &'ob Context,
 ) -> Result<&'ob mut IntervalTree<'ob>> {
     let obj = if object.is_nil() {
         // let a = env.current_buffer.get().lisp_buffer(cx).into_obj(cx).as_obj_copy();
@@ -86,7 +90,10 @@ fn prop_tree_for_object<'ob>(
     } else {
         object
     };
-    let tree = env.buffer_textprops.get_mut(obj).ok_or(anyhow::anyhow!("no properties for object"))?;
+    let tree = env
+        .buffer_textprops
+        .get_mut(obj)
+        .ok_or(anyhow::anyhow!("no properties for object"))?;
     Ok(tree.bind_mut(cx))
 }
 
@@ -135,7 +142,7 @@ pub fn get_text_property<'ob>(
     prop: Object<'ob>,
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
-    cx: &'ob Context
+    cx: &'ob Context,
 ) -> Result<Object<'ob>> {
     let props = text_properties_at(position, object, env, cx)?;
     // TODO see lookup_char_property, should also lookup
@@ -208,10 +215,13 @@ pub fn put_text_property<'ob>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        buffer::get_buffer_create, core::{
+        buffer::get_buffer_create,
+        core::{
             env::intern,
-            gc::{Context, RootSet}, object::LispBuffer,
-        }, fns::plist_get
+            gc::{Context, RootSet},
+            object::LispBuffer,
+        },
+        fns::plist_get,
     };
     use rune_core::macros::{list, root};
 

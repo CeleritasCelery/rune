@@ -5,6 +5,7 @@ use crate::{
         gc::{Block, Context, GcHeap, GcState, Trace},
     },
     derive_GcMoveable,
+    intervals::IntervalTree,
 };
 use anyhow::{bail, Result};
 use rune_macros::Trace;
@@ -112,6 +113,7 @@ impl DerefMut for OpenBuffer<'_> {
 pub(crate) struct BufferData {
     pub(crate) name: String,
     pub(crate) text: TextBuffer,
+    pub(crate) textprops: IntervalTree<'static>,
 }
 
 #[derive(Debug)]
@@ -133,8 +135,9 @@ impl LispBuffer {
     }
 
     pub(crate) unsafe fn new(name: String, _: &Block<true>) -> LispBuffer {
+        let textprops = IntervalTree::new();
         let new = LispBufferInner {
-            text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })),
+            text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new(), textprops })),
         };
         Self(GcHeap::new(new, true))
     }
