@@ -24,12 +24,12 @@ pub(crate) struct OpenBuffer<'a> {
 }
 
 impl OpenBuffer<'_> {
-    fn get(&self) -> &BufferData {
+    pub(crate) fn get(&self) -> &BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_ref().unwrap()
     }
 
-    fn get_mut(&mut self) -> &mut BufferData {
+    pub(crate) fn get_mut(&mut self) -> &mut BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_mut().unwrap()
     }
@@ -116,6 +116,12 @@ pub(crate) struct BufferData {
     pub(crate) textprops: IntervalTree<'static>,
 }
 
+impl BufferData {
+    pub fn textprops_with_lifetime<'new>(&mut self) -> &mut IntervalTree<'new> {
+        unsafe { std::mem::transmute(&mut self.textprops) }
+    }
+}
+
 #[derive(Debug)]
 struct LispBufferInner {
     text_buffer: Mutex<Option<BufferData>>,
@@ -142,7 +148,7 @@ impl LispBuffer {
         Self(GcHeap::new(new, true))
     }
 
-    pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {
+    pub(crate) fn lock(&self) -> Result<OpenBuffer<'_>> {
         let guard = self.0.text_buffer.lock().unwrap();
         if guard.is_none() {
             bail!("selecting deleted buffer");
@@ -189,8 +195,12 @@ impl std::fmt::Debug for LispBuffer {
 }
 
 impl Trace for LispBufferInner {
-    fn trace(&self, _v: &mut GcState) {
+    fn trace(&self, state: &mut GcState) {
         // Implement once we hold gc data in the buffer
+        let buf = self.text_buffer.lock().unwrap();
+        if let Some(buf) = buf.as_ref() {
+            buf.textprops.trace(state);
+        }
     }
 }
 

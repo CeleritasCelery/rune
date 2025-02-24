@@ -26,7 +26,6 @@ pub(crate) struct Env<'a> {
     #[no_trace]
     pub(crate) current_buffer: CurrentBuffer<'a>,
     pub(crate) stack: LispStack<'a>,
-    pub buffer_textprops: ObjectMap<Slot<Object<'a>>, IntervalTree<'a>>,
 }
 
 #[derive(Debug)]

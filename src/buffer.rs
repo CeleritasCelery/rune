@@ -114,9 +114,6 @@ pub(crate) fn get_buffer_create<'ob>(
                     };
                     buffer_list.insert(name.to_string(), buffer);
                     let buf = cx.add(buffer);
-                    // if env.buffer_textprops.get(buf).is_none() {
-                    //     env.buffer_textprops.insert(buf, crate::intervals::IntervalTree::new());
-                    // }
                     Ok(buf)
                 }
             }

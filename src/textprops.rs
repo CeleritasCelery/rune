@@ -2,16 +2,18 @@ use crate::{
     core::{
         cons::Cons,
         env::Env,
-        gc::{Context, Rt},
-        object::{Gc, IntoObject, ListType, Object, ObjectType, NIL, TRUE},
+        error::{Type, TypeError},
+        gc::{Context, Rt, Slot},
+        object::{Gc, ListType, Object, ObjectType, WithLifetime, NIL},
     },
     editfns::point_max,
     fns::{eq, plist_get},
-    intervals::IntervalTree,
 };
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use rune_core::macros::list;
 use rune_macros::defun;
+
+use crate::core::object::BufferData;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -19,10 +21,6 @@ pub enum PropertySetType {
     Replace,
     Prepend,
     Append,
-}
-
-pub fn buffer_textprops(buffer: Object) {
-    
 }
 
 /// Add the properties of PLIST to the interval I, or set
@@ -76,22 +74,29 @@ pub fn add_properties<'ob>(
 
 /// Get the property interval tree for OBJECT. OBJECT is a buffer or string.
 /// If OBJECT is NIL, return current buffer's interval tree.
-fn prop_tree_for_object<'ob>(
+fn modify_buffer_data<'ob, T>(
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
-    cx: &'ob Context,
-) -> Result<&'ob mut IntervalTree<'ob>> {
-    let obj = if object.is_nil() {
-        // let a = env.current_buffer.get().lisp_buffer(cx).into_obj(cx).as_obj_copy();
-        env.current_buffer.buf_ref.into_obj(cx).as_obj_copy()
+    func: impl FnOnce(&mut BufferData) -> Result<T>,
+) -> Result<T> {
+    if object.is_nil() {
+        let data = env.current_buffer.get_mut();
+        return func(data);
     } else {
-        object
+        let current_buf = env.current_buffer.buf_ref;
+        if let ObjectType::Buffer(b) = object.untag() {
+            if b == current_buf {
+                let data = env.current_buffer.get_mut();
+                return func(data);
+            } else {
+                let mut open_buf = b.lock()?;
+                func(open_buf.get_mut());
+                todo!()
+            }
+        } else {
+            bail!(TypeError::new(Type::BufferOrString, object.untag()))
+        }
     };
-    let tree = env
-        .buffer_textprops
-        .get_mut(obj)
-        .ok_or(anyhow::anyhow!("no properties for object"))?;
-    Ok(tree.bind_mut(cx))
 }
 
 /// Return the list of properties of the character at POSITION in OBJECT.
@@ -112,17 +117,23 @@ pub fn text_properties_at<'ob>(
     position: usize,
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
-    cx: &'ob Context,
 ) -> Result<Object<'ob>> {
-    let tree = prop_tree_for_object(object, env, cx)?;
-    if let Some(prop) = tree.find(position) {
-        // TODO lifetimes don't match; don't know why yet
-        // unsafe {
-        //     return Ok(prop.val.with_lifetime());
-        // }
-        return Ok(prop.val.as_obj());
-    }
-    Ok(NIL)
+    let tree = if eq(object, NIL) {
+        &env.current_buffer.get().textprops
+    } else {
+        let obj = object.untag();
+        match obj {
+            ObjectType::Buffer(buf) => &buf.lock().unwrap().textprops,
+            ObjectType::String(str) => {
+                todo!()
+            }
+            _ => {
+                bail!(TypeError::new(Type::BufferOrString, obj))
+            }
+        }
+    };
+    let a = tree.find(position).ok_or(anyhow!("cannot find property"))?.val.clone();
+    return Ok(*unsafe { a.with_lifetime() });
 }
 
 /// Return the value of POSITION's property PROP, in OBJECT.
@@ -139,9 +150,8 @@ pub fn get_text_property<'ob>(
     prop: Object<'ob>,
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
-    cx: &'ob Context,
 ) -> Result<Object<'ob>> {
-    let props = text_properties_at(position, object, env, cx)?;
+    let props = text_properties_at(position, object, env)?;
     // TODO see lookup_char_property, should also lookup
     // 1. category
     // 2. char_property_alias_alist
@@ -162,52 +172,67 @@ pub fn put_text_property<'ob>(
     property: Object<'ob>,
     value: Object<'ob>,
     object: Object<'ob>,
-    env: &'ob mut Rt<Env>,
+    env: &mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<()> {
-    let tree = prop_tree_for_object(object, env, cx)?;
-    let prop: Object<'ob> = list!(property, value; cx);
-    tree.insert(start, end, crate::core::gc::Slot::new(prop), cx);
-    Ok(())
+    let prop = list!(property, value; cx);
+    let prop = Slot::new(prop);
+    modify_buffer_data(object, env, |data| {
+        let tree = &mut data.textprops_with_lifetime();
+        tree.insert(start, end, prop, cx);
+        Ok(())
+    })
 }
+/// Return the position of next property change.
+/// Scans characters forward from POSITION in OBJECT till it finds
+/// a change in some text property, then returns the position of the change.
+/// If the optional second argument OBJECT is a buffer (or nil, which means
+/// the current buffer), POSITION is a buffer position (integer or marker).
+/// If OBJECT is a string, POSITION is a 0-based index into it.
+/// Return nil if LIMIT is nil or omitted, and the property is constant all
+/// the way to the end of OBJECT; if the value is non-nil, it is a position
+/// greater than POSITION, never equal.
+///
+/// If the optional third argument LIMIT is non-nil, don't search
+/// past position LIMIT; return LIMIT if nothing is found before LIMIT.
+#[defun]
+pub fn next_property_change<'ob>(
+    position: usize,
+    object: Object<'ob>,
+    limit: Option<usize>,
+    env: &'ob mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    let point_max = point_max(env)?;
+    let end = limit.unwrap_or(point_max);
+    // let node = tree.find(position);
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let tree = data.textprops_with_lifetime();
+        let prop = tree.tree.find_intersect_min(position..end);
+        match prop {
+            Some(p) => {
+                let range = p.key;
+                // empty property before interval, so prop changed just at range start
+                if range.start > position {
+                    return Ok(cx.add(position));
+                }
+                if range.end >= end {
+                    return Ok(cx.add(limit));
+                }
 
-// #[defun]
-// pub fn next_property_change<'ob>(
-//     position: usize,
-//     object: Object<'ob>,
-//     limit: Object<'ob>,
-//     env: &'ob mut Rt<Env<'ob>>,
-//     cx: &'ob Context,
-// ) -> Result<Object<'ob>> {
-//     let tree = prop_tree_for_object(object, env, cx)?;
-//     // let point_max = point_max(env)?;
-//     // let node = tree.find(position);
-//     // let nodes = tree.find_intersects(TextRange::new(position, point_max));
-
-//     // If LIMIT is t, return start of next interval--don't
-//     // bother checking further intervals.
-//     // if eq(limit, TRUE) {
-//     //     let pos = if let Some(node) = node {
-//     //         if let Some(n) = node.next() {
-//     //             n.key.end
-//     //         } else {
-//     //             return Ok(NIL);
-//     //         }
-//     //     } else {
-//     //         // we don't have a text property interval around position
-//     //         if let Some(n) =
-//     //             tree.find_intersects(TextRange::new(position, point_max(env)?)).first().copied()
-//     //         {
-//     //             n.key.start
-//     //         } else {
-//     //             return Ok(NIL);
-//     //         }
-//     //     };
-//     //     return Ok(cx.add(pos));
-//     // };
-
-//     todo!()
-// }
+                // range is fully inside region, prop changes at end
+                return Ok(cx.add(range.end));
+            }
+            None => {
+                let result = match limit {
+                    Some(n) => cx.add(n),
+                    None => NIL,
+                };
+                Ok(result)
+            }
+        }
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -216,9 +241,9 @@ mod tests {
         core::{
             env::intern,
             gc::{Context, RootSet},
-            object::LispBuffer,
         },
         fns::plist_get,
+        intervals::IntervalTree,
     };
     use rune_core::macros::{list, root};
 
@@ -255,13 +280,13 @@ mod tests {
             env.buffer_textprops.insert(buf, IntervalTree::new());
         }
         // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
-        let n = text_properties_at(0, buf, env, cx)?;
+        let n = text_properties_at(0, buf, env)?;
         assert!(n.is_nil());
 
         let a = intern(":a", cx);
         let a = cx.add(a);
         put_text_property(0, 1, a, cx.add(3), buf, env, cx)?;
-        let n = text_properties_at(0, buf, env, cx)?;
+        let n = text_properties_at(0, buf, env)?;
         let val = plist_get(n, a)?;
         assert!(eq(val, cx.add(3)));
         Ok(())
