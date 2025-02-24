@@ -551,13 +551,25 @@ impl<T: Clone> Node<T> {
         }
     }
 
-    pub fn find_intersects_min(&self, range: TextRange) -> Option<&Node<T>> {
+    fn find_intersect_min(&self, range: TextRange) -> Option<&Node<T>> {
         let ord = range.strict_order(&self.key);
         match ord {
-            Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersects_min(range)),
+            Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_min(range)),
             Some(Ordering::Equal) => Some(self),
             Some(Ordering::Greater) => None,
-            _ => self.left.as_ref().and_then(|l| l.find_intersects_min(range)).or(Some(self)),
+            _ => self.left.as_ref().and_then(|l| l.find_intersect_min(range)).or(Some(self)),
+        }
+    }
+
+    fn find_intersect_max(&self, range: TextRange) -> Option<&Node<T>> {
+        let ord = range.strict_order(&self.key);
+        match ord {
+            Some(Ordering::Less) => None,
+            Some(Ordering::Equal) => Some(self),
+            Some(Ordering::Greater) => {
+                self.right.as_ref().and_then(|l| l.find_intersect_min(range))
+            }
+            _ => self.right.as_ref().and_then(|l| l.find_intersect_max(range)).or(Some(self)),
         }
     }
 
@@ -860,6 +872,42 @@ impl<T: Clone> IntervalTree<T> {
             r.find_intersects(range.into(), &mut result);
         }
         result
+    }
+
+    /// Finds the node with the minimum key that intersects with the given range.
+    ///
+    /// This function searches for the leftmost node in the tree whose interval
+    /// overlaps with the specified range. It's useful for finding the first
+    /// intersecting interval in sorted order.
+    ///
+    /// # Arguments
+    ///
+    /// * `range` - The range to search for intersections (can be any type that converts to TextRange)
+    ///
+    /// # Returns
+    ///
+    /// An optional reference to the node with the minimum intersecting key, or `None`
+    /// if no intersection is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use interval_tree::{IntervalTree, TextRange};
+    ///
+    /// let mut tree = IntervalTree::new();
+    /// tree.insert(TextRange::new(0, 5), 1, |a, _| a);
+    /// tree.insert(TextRange::new(5, 10), 2, |a, _| a);
+    ///
+    /// let node = tree.find_intersect_min(TextRange::new(3, 7));
+    /// assert_eq!(node.unwrap().key, TextRange::new(0, 5));
+    /// ```
+    pub fn find_intersect_min(&self, range: impl Into<TextRange>) -> Option<&Node<T>> {
+        self.root.as_ref().and_then(|r| r.find_intersect_min(range.into()))
+    }
+
+    /// Like `find_intersect_min`, but finds the maximum key.
+    pub fn find_intersect_max(&self, range: impl Into<TextRange>) -> Option<&Node<T>> {
+        self.root.as_ref().and_then(|r| r.find_intersect_max(range.into()))
     }
 
     /// Return the minimum node in the tree, or `None` if the tree is empty.
@@ -1170,5 +1218,32 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.merge(|a, b| *a == *b);
         assert_eq!(tree.find_intersects(TextRange::new(1, 5)).len(), 1);
+    }
+
+    #[test]
+    fn test_find_intersect_min() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 5), 1, merge);
+        tree.insert(TextRange::new(5, 10), 2, merge);
+        tree.insert(TextRange::new(10, 15), 3, merge);
+
+        // Test exact match
+        assert_eq!(
+            tree.find_intersect_min(TextRange::new(5, 10)).unwrap().key,
+            TextRange::new(5, 10)
+        );
+
+        // Test partial overlap
+        assert_eq!(
+            tree.find_intersect_min(TextRange::new(3, 7)).unwrap().key,
+            TextRange::new(0, 5)
+        );
+
+        // Test no overlap
+        assert!(tree.find_intersect_min(TextRange::new(15, 20)).is_none());
+
+        // Test empty tree
+        let empty_tree: IntervalTree<i32> = IntervalTree::new();
+        assert!(empty_tree.find_intersect_min(TextRange::new(0, 1)).is_none());
     }
 }
