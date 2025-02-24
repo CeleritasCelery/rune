@@ -715,7 +715,7 @@ impl<T: Clone> IntervalTree<T> {
         }
     }
 
-    fn get_node_mut(&mut self, key: impl Into<TextRange>) -> Option<&mut Node<T>> {
+    pub fn get_node_mut(&mut self, key: impl Into<TextRange>) -> Option<&mut Node<T>> {
         match self.root {
             Some(ref mut r) => r.get_node_mut(key.into()),
             None => None,
@@ -868,8 +868,12 @@ impl<T: Clone> IntervalTree<T> {
     /// `range`. The result is a vector of references to the found nodes.
     pub fn find_intersects(&self, range: impl Into<TextRange>) -> Vec<&Node<T>> {
         let mut result = Vec::new();
+        let range = range.into();
+        if range.start == range.end {
+            return result;
+        }
         if let Some(ref r) = self.root {
-            r.find_intersects(range.into(), &mut result);
+            r.find_intersects(range, &mut result);
         }
         result
     }
@@ -957,6 +961,70 @@ impl<T: Clone> IntervalTree<T> {
             r.apply_mut(&mut |n| f(n));
         }
     }
+
+    /// Applies a transformation function to intervals that intersect with the given range,
+    /// splitting intervals as needed to apply the function only to the intersecting portions.
+    ///
+    /// The function `f` takes the current value of an interval and returns:
+    /// - `Some(new_value)` to update the interval's value
+    /// - `None` to remove the interval entirely
+    ///
+    /// If an interval only partially intersects with the range, it will be split into
+    /// non-intersecting and intersecting parts, with `f` only applied to the intersecting part.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - Transformation function to apply to intersecting intervals
+    /// * `range` - The range to check for intersections (can be any type that converts to TextRange)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use interval_tree::{IntervalTree, TextRange};
+    ///
+    /// let mut tree = IntervalTree::new();
+    /// tree.insert(TextRange::new(0, 10), 1, |a, _| a);
+    ///
+    /// // Double values in range 5-15
+    /// tree.apply_with_split(|val| Some(val * 2), TextRange::new(5, 15));
+    ///
+    /// // Remove intervals in range 7-8
+    /// tree.apply_with_split(|_| None, TextRange::new(7, 8));
+    /// ```
+    pub fn apply_with_split<F: Fn(T) -> Option<T>>(&mut self, f: F, range: impl Into<TextRange>) {
+        let merge = |_, _| unreachable!();
+
+        let range = range.into();
+        let Some(start) = self.find_intersect_min(range) else {
+            return;
+        };
+        // re-gain mutable reference, since we don't have interior mutability for now
+        let mut node_ptr = self.get_node_mut(start.key).map(|n| n as *mut Node<T>);
+        while let Some(n_ptr) = node_ptr {
+            let n = safe_mut(n_ptr);
+            node_ptr = n.next_raw();
+            if let Some(overlap) = n.key.intersection(range) {
+                if let Some(left) = TextRange::new_valid(n.key.start, overlap.start) {
+                    n.key.start = left.end;
+                    self.insert(left, n.val.clone(), merge);
+                }
+
+                if let Some(right) = TextRange::new_valid(overlap.end, n.key.end) {
+                    n.key.end = right.start;
+                    self.insert(right, n.val.clone(), merge);
+                }
+
+                let new_val = f(n.val.clone());
+                match new_val {
+                    Some(val) => n.val = val,
+                    None => {
+                        self.delete_exact(n.key);
+                        continue;
+                    }
+                }
+            }
+        }
+    }
 }
 
 // impl debug
@@ -983,11 +1051,15 @@ impl<T: Clone + Debug> Node<T> {
             write_fmt_with_level(f, level, format_args!("left: \n"))?;
             l.print_inner(f, level + 1)?;
             write_fmt_with_level(f, level, format_args!("left end for {:?}\n", self.key))?;
+        } else {
+            write_fmt_with_level(f, level, format_args!("no left child \n"))?;
         }
         if let Some(ref r) = self.right {
             write_fmt_with_level(f, level, format_args!("right: \n"))?;
             r.print_inner(f, level + 1)?;
             write_fmt_with_level(f, level, format_args!("right end for {:?}\n", self.key))?;
+        } else {
+            write_fmt_with_level(f, level, format_args!("no right child \n"))?;
         }
         Ok(())
     }
@@ -1127,15 +1199,59 @@ mod tests {
     }
 
     #[test]
-    fn find_intersect() {
-        let val = 1;
-        let tree = build_tree(val);
-        let re = tree.find_intersects(TextRange::new(2, 4));
-        let k1 = re[0].key;
-        let k2 = re[1].key;
-        assert_eq!(k1, TextRange::new(2, 3));
-        assert_eq!(k2, TextRange::new(3, 4));
-        assert_eq!(re.len(), 2);
+    fn test_find_intersects() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 5), 1, merge);
+        tree.insert(TextRange::new(5, 10), 2, merge);
+        tree.insert(TextRange::new(10, 15), 3, merge);
+        tree.insert(TextRange::new(15, 20), 4, merge);
+
+        // Test exact match
+        let results = tree.find_intersects(TextRange::new(5, 10));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].key, TextRange::new(5, 10));
+        assert_eq!(results[0].val, 2);
+
+        // Test partial overlap at start
+        let results = tree.find_intersects(TextRange::new(3, 7));
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].key, TextRange::new(0, 5));
+        assert_eq!(results[1].key, TextRange::new(5, 10));
+
+        // Test partial overlap at end
+        let results = tree.find_intersects(TextRange::new(12, 18));
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].key, TextRange::new(10, 15));
+        assert_eq!(results[1].key, TextRange::new(15, 20));
+
+        // Test range that spans multiple intervals
+        let results = tree.find_intersects(TextRange::new(8, 17));
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].key, TextRange::new(5, 10));
+        assert_eq!(results[1].key, TextRange::new(10, 15));
+        assert_eq!(results[2].key, TextRange::new(15, 20));
+
+        // Test range that is completely contained within an interval
+        let results = tree.find_intersects(TextRange::new(6, 8));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].key, TextRange::new(5, 10));
+
+        // Test range that doesn't intersect any intervals
+        let results = tree.find_intersects(TextRange::new(25, 30));
+        assert!(results.is_empty());
+
+        // Test empty range
+        let results = tree.find_intersects(TextRange::new(3, 3));
+        assert!(results.is_empty());
+
+        // Test range that starts before first interval and ends after last
+        let results = tree.find_intersects(TextRange::new(0, 25));
+        assert_eq!(results.len(), 4);
+
+        // Test single point intersection
+        let results = tree.find_intersects(TextRange::new(10, 11));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].key, TextRange::new(10, 15));
     }
 
     #[test]
@@ -1218,6 +1334,31 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.merge(|a, b| *a == *b);
         assert_eq!(tree.find_intersects(TextRange::new(1, 5)).len(), 1);
+    }
+
+    #[test]
+    fn test_apply_with_split() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 10), 1, merge);
+
+        // Apply function to partial overlap
+        tree.apply_with_split(|val| Some(val * 2), TextRange::new(5, 15));
+        let nodes = tree.find_intersects(TextRange::new(0, 15));
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes[0].val, 1);
+        assert_eq!(nodes[1].val, 2);
+
+        // Remove an interval
+        tree.apply_with_split(|_| None, TextRange::new(7, 8));
+        let nodes = tree.find_intersects(TextRange::new(0, 15));
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(nodes[1].key, TextRange::new(5, 7));
+        assert_eq!(nodes[1].val, 2); // The removed interval should be back to original value
+
+        // Apply to exact match
+        tree.apply_with_split(|val| Some(val + 1), TextRange::new(2, 4));
+        let node = tree.find_intersects(TextRange::new(2, 4))[0];
+        assert_eq!(node.val, 2);
     }
 
     #[test]

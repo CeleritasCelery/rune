@@ -48,12 +48,22 @@ impl TextRange {
         if start <= end {
             Self { start, end }
         } else {
-            Self { start: end, end: start }
+            panic!("invalid TextRange")
         }
+    }
+
+    /// Creates a new TextRange only if start < end (non-empty interval).
+    /// Returns None if start >= end.
+    pub fn new_valid(start: usize, end: usize) -> Option<Self> {
+        (start < end).then(|| Self { start, end })
     }
 
     pub fn as_range(&self) -> Range<usize> {
         self.start..self.end
+    }
+
+    pub fn empty(&self) -> bool {
+        return self.start >= self.end;
     }
 
     pub fn contains(&self, pos: usize) -> bool {
@@ -110,10 +120,13 @@ impl TextRange {
     pub fn intersects(&self, other: Self) -> bool {
         self.end > other.start && self.start < other.end
     }
-    pub fn intersection_uncheck(&self, other: Self) -> Self {
+
+    fn intersection_uncheck(&self, other: Self) -> Self {
         Self::new(self.start.max(other.start), self.end.min(other.end))
     }
-    pub fn intersection(&self, other: Self) -> Option<Self> {
+
+    pub fn intersection(&self, other: impl Into<Self>) -> Option<Self> {
+        let other = other.into();
         self.intersects(other).then(|| self.intersection_uncheck(other))
     }
 
@@ -121,6 +134,7 @@ impl TextRange {
         self.start += offset;
         self.end += offset;
     }
+
     pub fn move_back(&self, offset: usize) -> Self {
         Self::new(self.start + offset, self.end + offset)
     }
