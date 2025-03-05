@@ -556,7 +556,7 @@ impl<T: Clone> Node<T> {
         match ord {
             Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_min(range)),
             Some(Ordering::Equal) => Some(self),
-            Some(Ordering::Greater) => None,
+            Some(Ordering::Greater) => self.right.as_ref().and_then(|r| r.find_intersect_min(range)),
             _ => self.left.as_ref().and_then(|l| l.find_intersect_min(range)).or(Some(self)),
         }
     }
@@ -564,10 +564,10 @@ impl<T: Clone> Node<T> {
     fn find_intersect_max(&self, range: TextRange) -> Option<&Node<T>> {
         let ord = range.strict_order(&self.key);
         match ord {
-            Some(Ordering::Less) => None,
+            Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_max(range)),
             Some(Ordering::Equal) => Some(self),
             Some(Ordering::Greater) => {
-                self.right.as_ref().and_then(|l| l.find_intersect_min(range))
+                self.right.as_ref().and_then(|l| l.find_intersect_max(range))
             }
             _ => self.right.as_ref().and_then(|l| l.find_intersect_max(range)).or(Some(self)),
         }
@@ -1495,7 +1495,7 @@ mod tests {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 5), 1, merge);
         tree.insert(TextRange::new(5, 10), 2, merge);
-        tree.insert(TextRange::new(10, 15), 3, merge);
+        tree.insert(TextRange::new(14, 18), 3, merge);
 
         // Test exact match
         assert_eq!(
@@ -1509,8 +1509,13 @@ mod tests {
             TextRange::new(0, 5)
         );
 
+        assert_eq!(
+            tree.find_intersect_min(TextRange::new(6, 15)).unwrap().key,
+            TextRange::new(5, 10)
+        );
+
         // Test no overlap
-        assert!(tree.find_intersect_min(TextRange::new(15, 20)).is_none());
+        assert!(tree.find_intersect_min(TextRange::new(19, 23)).is_none());
 
         // Test empty tree
         let empty_tree: IntervalTree<i32> = IntervalTree::new();

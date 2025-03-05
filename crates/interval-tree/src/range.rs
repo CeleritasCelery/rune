@@ -139,3 +139,38 @@ impl TextRange {
         Self::new(self.start + offset, self.end + offset)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cmp::Ordering;
+
+    #[test]
+    fn test_strict_order() {
+        // Test ranges that are completely before
+        let a = TextRange::new(0, 5);
+        let b = TextRange::new(6, 10);
+        assert_eq!(a.strict_order(&b), Some(Ordering::Less));
+        assert_eq!(b.strict_order(&a), Some(Ordering::Greater));
+
+        // Test ranges that are completely after
+        let c = TextRange::new(15, 20);
+        assert_eq!(b.strict_order(&c), Some(Ordering::Less));
+        assert_eq!(c.strict_order(&b), Some(Ordering::Greater));
+
+        // Test overlapping ranges
+        let d = TextRange::new(7, 8);
+        assert_eq!(b.strict_order(&d), None);
+        assert_eq!(d.strict_order(&b), None);
+
+        // Test adjacent ranges
+        let e = TextRange::new(10, 15);
+        assert_eq!(b.strict_order(&e), Some(Ordering::Less));
+        assert_eq!(e.strict_order(&b), Some(Ordering::Greater));
+
+        // Test equal ranges
+        let f = TextRange::new(6, 10);
+        assert_eq!(b.strict_order(&f), None);
+        assert_eq!(f.strict_order(&b), None);
+    }
+}
