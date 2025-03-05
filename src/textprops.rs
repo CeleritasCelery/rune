@@ -212,25 +212,33 @@ pub fn next_property_change<'ob>(
     env: &'ob mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
-    let point_max = point_max(env)?;
-    let end = limit.unwrap_or(point_max);
     // let node = tree.find(position);
     modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let point_max = data.text.len_chars() + 1;
+        let end = limit.unwrap_or(point_max);
         let tree = data.textprops_with_lifetime();
+        // NOTE this can be optimized
+        tree.clean();
+        // println!("{:?}", tree.tree);
         let prop = tree.tree.find_intersect_min(position..end);
+        
         match prop {
             Some(p) => {
                 let range = p.key;
                 // empty property before interval, so prop changed just at range start
-                if range.start > position {
-                    return Ok(cx.add(position));
-                }
-                if range.end >= end {
-                    return Ok(cx.add(limit));
+                if range.start <= position {
+                    // should have range.end > position
+                    if range.end < end {
+                        return Ok(cx.add(range.end));
+                    } else {
+                        return Ok(cx.add(limit));
+                    }
+                } else {
+                    return Ok(cx.add(range.start));
                 }
 
                 // range is fully inside region, prop changes at end
-                return Ok(cx.add(range.end));
+                // return Ok(cx.add(range.end));
             }
             None => {
                 let result = match limit {
@@ -251,6 +259,7 @@ mod tests {
             env::intern,
             gc::{Context, RootSet},
         },
+        editfns::insert,
         fns::plist_get,
         intervals::IntervalTree,
     };
@@ -275,6 +284,57 @@ mod tests {
         assert_eq!(a, 4);
         assert_eq!(b, 2);
         assert_eq!(c, 5);
+    }
+
+    #[test]
+    fn test_next_property_change() -> Result<()> {
+        let roots = &RootSet::default();
+        let mut context = Context::new(roots);
+        let cx = &mut context;
+        root!(env, new(Env), cx);
+
+        let buf = get_buffer_create(cx.add("test"), None, cx)?;
+        if let ObjectType::Buffer(b) = buf.untag() {
+            b.lock()
+                .unwrap()
+                .get_mut()
+                .text
+                .insert("lorem ipsum quia dolor sit amet, consectetur, adipisci velit.");
+        }
+
+        let a = intern(":a", cx);
+        let a = cx.add(a);
+
+        // Add properties at different ranges
+        put_text_property(0, 5, a, cx.add(1), buf, env, cx)?;
+        put_text_property(5, 10, a, cx.add(2), buf, env, cx)?;
+        put_text_property(15, 20, a, cx.add(3), buf, env, cx)?;
+
+        // Test property changes
+        let change = next_property_change(0, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(5)); // Change at end of first range
+
+        let change = next_property_change(5, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(10)); // Change at end of second range
+
+        let change = next_property_change(10, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(15)); // Change at start of third range
+
+        let change = next_property_change(15, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(20)); // Change at end of third range
+
+        // Test with limit
+        let change = next_property_change(0, buf, Some(8), env, cx)?;
+        assert_eq!(change, cx.add(5)); // Change within limit
+
+        let change = next_property_change(5, buf, Some(8), env, cx)?;
+        assert_eq!(change, cx.add(8)); // Limit reached
+
+        // Test no change case
+        let change = next_property_change(20, buf, None, env, cx)?;
+        assert!(change.is_nil()); // No changes after last property
+
+        Ok(())
     }
 
     #[test]
