@@ -437,8 +437,16 @@ impl<T: Clone> Node<T> {
             if key == n.key {
                 let mut result = Node::delete_min(&mut n.right);
                 let r_min = result.as_mut().unwrap();
-                std::mem::swap(&mut n.val, &mut r_min.val);
-                std::mem::swap(&mut n.key, &mut r_min.key);
+                r_min.left = n.left.take();
+                r_min.right = n.right.take();
+                r_min.color = n.color;
+                r_min.is_right_child = n.is_right_child;
+                r_min.parent = n.parent;
+                r_min.n = n.n;
+                let ptr: *mut Node<T> = r_min.as_mut();
+                r_min.left.as_mut().map(|n| n.parent = ptr);
+                r_min.right.as_mut().map(|n| n.parent = ptr);
+                std::mem::swap(r_min, n);
                 result
             } else {
                 Node::delete(&mut n.right, key)
@@ -971,30 +979,28 @@ impl<T: Clone> IntervalTree<T> {
     ) {
         let mut node = start;
 
-        // let next = min.and_then(|n| safe_mut(n).next_raw());
         while let Some(n_raw) = node {
             let n = safe_mut(n_raw);
             let mut next_raw = n.next_raw();
-            let next_key = n.next().map(|n| n.key);
             // delete empty props at first
             if n.key.empty() || empty(&n.val) {
                 self.delete_exact(n.key);
-                node = next_key.and_then(|key| self.get_node_mut(key)).map(|n| n as *mut Node<T>);
+                node = next_raw;
                 continue;
             }
+            // delete empty props after n, which is already guranteed to be non-empty
             while let Some(next_r) = next_raw {
                 let next = safe_mut(next_r);
                 if next.key.empty() || empty(&next.val) {
                     let key = next.key;
-                    let next_key = next.next().map(|n| n.key);
+                    next_raw = next.next_raw();
                     self.delete_exact(key);
-                    next_raw =
-                        next_key.and_then(|key| self.get_node_mut(key)).map(|n| n as *mut Node<T>);
                 } else {
                     break;
                 }
             }
 
+            // try merge n and next. If succeed, find next.next(); if not, advance n to next. Then repeat
             let Some(next_r) = next_raw else { return };
             let next = safe_mut(next_r);
 
@@ -1024,19 +1030,8 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// * `equal` - A closure that takes references to two values and returns `true`
     ///   if they are considered equal, `false` otherwise.
-    pub fn merge<F: Fn(&T, &T) -> bool>(&mut self, equal: F) {
-        if let Some(node_ptr) = self.min_mut() {
-            let mut node = safe_mut(node_ptr);
-            while let Some(next_ptr) = node.next_raw() {
-                let next = safe_mut(next_ptr);
-                if node.key.end == next.key.start && equal(&node.val, &next.val) {
-                    let del = self.delete_exact(next.key).unwrap();
-                    node.key.end = del.key.end;
-                } else {
-                    node = next;
-                }
-            }
-        }
+    pub fn merge<F: Fn(&T, &T) -> bool>(&mut self, eq: F) {
+        self.clean(eq, |_| false)
     }
 
     pub fn apply<F: FnMut(&T)>(&self, f: &mut F) {
@@ -1279,6 +1274,17 @@ mod tests {
     }
 
     #[test]
+    fn delete_ptr() {
+        let val = 1;
+        let mut tree = build_tree(val);
+        let a = 3;
+        let key = TextRange::new(a, a + 1);
+        let n: *mut Node<i32> = tree.get_node_mut(key).unwrap();
+        let mut a = tree.delete_exact(key).unwrap();
+        assert_eq!(n, a.as_mut() as *mut Node<i32>)
+    }
+
+    #[test]
     fn delete_min() {
         let val = 1;
         let mut tree = build_tree(val);
@@ -1459,11 +1465,9 @@ mod tests {
         tree.insert(TextRange::new(15, 20), 0, merge); // Empty value
         tree.insert(TextRange::new(20, 25), 2, merge);
         tree.insert(TextRange::new(25, 30), 2, merge);
-        // tree.print();
 
         // Clean the tree, merging equal values and removing empty ones
         tree.clean(|a, b| a == b, |v| *v == 0);
-        tree.print();
 
         let nodes = tree.find_intersects(TextRange::new(0, 30));
         assert_eq!(nodes.len(), 3);
