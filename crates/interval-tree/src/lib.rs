@@ -919,6 +919,95 @@ impl<T: Clone> IntervalTree<T> {
         self.root.as_ref().map(|n| n.min())
     }
 
+    /// Cleans the interval tree by:
+    /// 1. Removing empty intervals or intervals with empty values
+    /// 2. Merging adjacent intervals with equal values
+    ///
+    /// This function iterates through the tree in order and:
+    /// - Removes any node where the interval is empty or the value is considered empty
+    /// - Merges adjacent nodes when their values are considered equal
+    ///
+    /// # Arguments
+    ///
+    /// * `eq` - A closure that determines if two values should be considered equal
+    /// * `empty` - A closure that determines if a value should be considered empty
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use interval_tree::{IntervalTree, TextRange};
+    ///
+    /// let mut tree = IntervalTree::new();
+    /// tree.insert(TextRange::new(0, 5), 1, |a, _| a);
+    /// tree.insert(TextRange::new(5, 10), 1, |a, _| a);
+    /// tree.insert(TextRange::new(10, 15), 2, |a, _| a);
+    /// tree.insert(TextRange::new(15, 20), 0, |a, _| a); // Empty value
+    ///
+    /// // Clean the tree, merging equal values and removing empty ones
+    /// tree.clean(|a, b| a == b, |v| *v == 0);
+    ///
+    /// assert_eq!(tree.find_intersects(TextRange::new(0, 20)).len(), 2);
+    /// ```
+    pub fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, eq: F, empty: G) {
+        let min = self.min_mut();
+        self.clean_from_node(min, eq, empty);
+    }
+
+    pub fn clean_from<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
+        &mut self,
+        start: impl Into<TextRange>,
+        eq: F,
+        empty: G,
+    ) {
+        let node = self.get_node_mut(start).map(|n| n as *mut Node<T>);
+        self.clean_from_node(node, eq, empty);
+    }
+
+    fn clean_from_node<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
+        &mut self,
+        start: Option<*mut Node<T>>,
+        eq: F,
+        empty: G,
+    ) {
+        let mut node = start;
+
+        // let next = min.and_then(|n| safe_mut(n).next_raw());
+        while let Some(n_raw) = node {
+            let n = safe_mut(n_raw);
+            let mut next_raw = n.next_raw();
+            let next_key = n.next().map(|n| n.key);
+            // delete empty props at first
+            if n.key.empty() || empty(&n.val) {
+                self.delete_exact(n.key);
+                node = next_key.and_then(|key| self.get_node_mut(key)).map(|n| n as *mut Node<T>);
+                continue;
+            }
+            while let Some(next_r) = next_raw {
+                let next = safe_mut(next_r);
+                if next.key.empty() || empty(&next.val) {
+                    let key = next.key;
+                    let next_key = next.next().map(|n| n.key);
+                    self.delete_exact(key);
+                    next_raw =
+                        next_key.and_then(|key| self.get_node_mut(key)).map(|n| n as *mut Node<T>);
+                } else {
+                    break;
+                }
+            }
+
+            let Some(next_r) = next_raw else { return };
+            let next = safe_mut(next_r);
+
+            if n.key.end == next.key.start && eq(&n.val, &next.val) {
+                let new_end = next.key.end;
+                self.delete_exact(next.key);
+                n.key.end = new_end;
+                continue;
+            }
+            node = Some(next_r);
+        }
+    }
+
     fn min_mut(&mut self) -> Option<*mut Node<T>> {
         self.root.as_mut().map(|n| n.min_mut() as *mut Node<T>)
     }
@@ -1359,6 +1448,46 @@ mod tests {
         tree.apply_with_split(|val| Some(val + 1), TextRange::new(2, 4));
         let node = tree.find_intersects(TextRange::new(2, 4))[0];
         assert_eq!(node.val, 2);
+    }
+
+    #[test]
+    fn test_clean() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 5), 1, merge);
+        tree.insert(TextRange::new(5, 10), 1, merge);
+        tree.insert(TextRange::new(10, 15), 2, merge);
+        tree.insert(TextRange::new(15, 20), 0, merge); // Empty value
+        tree.insert(TextRange::new(20, 25), 2, merge);
+        tree.insert(TextRange::new(25, 30), 2, merge);
+        // tree.print();
+
+        // Clean the tree, merging equal values and removing empty ones
+        tree.clean(|a, b| a == b, |v| *v == 0);
+        tree.print();
+
+        let nodes = tree.find_intersects(TextRange::new(0, 30));
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(nodes[0].key, TextRange::new(0, 10));
+        assert_eq!(nodes[2].key, TextRange::new(20, 30));
+    }
+
+    #[test]
+    fn test_clean_empty_tree() {
+        let mut tree: IntervalTree<i32> = IntervalTree::new();
+        tree.clean(|a, b| a == b, |v| *v == 0);
+        assert!(tree.find_intersects(TextRange::new(0, 1)).is_empty());
+    }
+
+    #[test]
+    fn test_clean_with_empty_intervals() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 0), 1, merge); // Empty interval
+        tree.insert(TextRange::new(0, 5), 1, merge);
+        tree.insert(TextRange::new(5, 5), 2, merge); // Empty interval
+
+        tree.clean(|a, b| a == b, |v| *v == 0);
+
+        assert_eq!(tree.find_intersects(TextRange::new(0, 5)).len(), 1);
     }
 
     #[test]
