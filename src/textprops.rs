@@ -72,8 +72,18 @@ pub fn add_properties<'ob>(
     Ok(obj_i)
 }
 
-/// Get the property interval tree for OBJECT. OBJECT is a buffer or string.
-/// If OBJECT is NIL, return current buffer's interval tree.
+/// Helper function to safely modify buffer data.
+///
+/// Takes an object (buffer or nil) and environment, and applies the given function
+/// to the buffer's data. Handles both current buffer and other buffers safely.
+///
+/// # Arguments
+/// * `object` - The buffer object to modify (or nil for current buffer)
+/// * `env` - The environment containing buffer state
+/// * `func` - Function to apply to the buffer's data
+///
+/// # Returns
+/// Result containing the return value from func or an error
 fn modify_buffer_data<'ob, T>(
     object: Object<'ob>,
     env: &'ob mut Rt<Env>,
@@ -81,22 +91,21 @@ fn modify_buffer_data<'ob, T>(
 ) -> Result<T> {
     if object.is_nil() {
         let data = env.current_buffer.get_mut();
-        return func(data);
+        func(data)
     } else {
         let current_buf = env.current_buffer.buf_ref;
         if let ObjectType::Buffer(b) = object.untag() {
             if b == current_buf {
                 let data = env.current_buffer.get_mut();
-                return func(data);
+                func(data)
             } else {
                 let mut open_buf = b.lock()?;
-                func(open_buf.get_mut());
-                todo!()
+                func(open_buf.get_mut())
             }
         } else {
-            bail!(TypeError::new(Type::BufferOrString, object.untag()))
+            Err(anyhow!(TypeError::new(Type::BufferOrString, object.untag())))
         }
-    };
+    }
 }
 
 /// Return the list of properties of the character at POSITION in OBJECT.
@@ -132,8 +141,8 @@ pub fn text_properties_at<'ob>(
             }
         }
     };
-    let a = tree.find(position).ok_or(anyhow!("cannot find property"))?.val.clone();
-    return Ok(*unsafe { a.with_lifetime() });
+    let a = tree.find(position).map(|a| *a.val).unwrap_or(NIL);
+    return Ok(unsafe { a.with_lifetime() });
 }
 
 /// Return the value of POSITION's property PROP, in OBJECT.
@@ -276,9 +285,6 @@ mod tests {
         root!(env, new(Env), cx);
 
         let buf = get_buffer_create(cx.add("test"), None, cx)?;
-        if env.buffer_textprops.get(buf).is_none() {
-            env.buffer_textprops.insert(buf, IntervalTree::new());
-        }
         // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
         let n = text_properties_at(0, buf, env)?;
         assert!(n.is_nil());
