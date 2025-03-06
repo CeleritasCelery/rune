@@ -7,7 +7,7 @@ use crate::{
         object::{Gc, ListType, Object, ObjectType, WithLifetime, NIL},
     },
     editfns::point_max,
-    fns::{eq, plist_get},
+    fns::{eq, plist_get}, intervals::textget,
 };
 use anyhow::{anyhow, bail, Result};
 use rune_core::macros::list;
@@ -225,7 +225,6 @@ pub fn next_property_change<'ob>(
         match prop {
             Some(p) => {
                 let range = p.key;
-                // empty property before interval, so prop changed just at range start
                 if range.start <= position {
                     // should have range.end > position
                     if range.end < end {
@@ -234,6 +233,7 @@ pub fn next_property_change<'ob>(
                         return Ok(cx.add(limit));
                     }
                 } else {
+                    // empty property before interval, so prop changed just at range start
                     return Ok(cx.add(range.start));
                 }
 
@@ -293,7 +293,7 @@ mod tests {
         let cx = &mut context;
         root!(env, new(Env), cx);
 
-        let buf = get_buffer_create(cx.add("test"), None, cx)?;
+        let buf = get_buffer_create(cx.add("test_next_property_change"), None, cx)?;
         if let ObjectType::Buffer(b) = buf.untag() {
             b.lock()
                 .unwrap()
@@ -344,7 +344,7 @@ mod tests {
         let cx = &mut context;
         root!(env, new(Env), cx);
 
-        let buf = get_buffer_create(cx.add("test"), None, cx)?;
+        let buf = get_buffer_create(cx.add("test_text_properties_at"), None, cx)?;
         // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
         let n = text_properties_at(0, buf, env)?;
         assert!(n.is_nil());
@@ -355,6 +355,8 @@ mod tests {
         let n = text_properties_at(0, buf, env)?;
         let val = plist_get(n, a)?;
         assert!(eq(val, cx.add(3)));
+
+        BUFFERS.lock().unwrap().clear();
         Ok(())
     }
 }

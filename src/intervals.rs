@@ -53,8 +53,8 @@ impl<'ob> IntervalTree<'ob> {
         self.tree
             .insert((start, end), val, |a, b| {
                 add_properties(
-                    a.as_obj_copy(),
-                    b.as_obj_copy(),
+                    *a,
+                    *b,
                     crate::textprops::PropertySetType::Append,
                     false,
                     cx,
@@ -107,6 +107,10 @@ impl<'ob> IntervalTree<'ob> {
     pub fn clean(&mut self) {
         self.tree.clean(|a, b| eq(**a, **b), |n| n.is_nil());
     }
+
+    pub(crate) fn iter<'a>(&'a self, start: usize, end: usize) -> IntervalIntersections<'ob, 'a> {
+        IntervalIntersections::new(self, start, end)
+    }
 }
 
 /// Removes all occurrences of `sym` from the property list `props`.
@@ -132,7 +136,10 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
     while let Some(cons) = plist {
         let prop = cons.car();
         if eq(prop, sym) {
-            plist = cddr(cons);
+            plist = cons
+                .cddr()
+                .and_then(|n| n.try_into().ok());
+                // .and_then(|cons: &Cons| cons.cdr().try_into().ok());
         } else {
             break;
         }
@@ -175,14 +182,101 @@ fn set_cdr<'ob>(this: &'ob Cons, other: Object<'ob>) -> Option<&'ob Cons> {
     None
 }
 
-fn cddr(cons: &Cons) -> Option<&Cons> {
-    if let ObjectType::Cons(c) = cons.cdr().untag() {
-        let cdr = c.cdr();
-        if let ObjectType::Cons(c) = cdr.untag() {
-            return Some(c);
+/// Get the value of property `prop` from `plist`,
+/// which is the plist of an interval.
+/// We check for direct properties, for categories with property `prop`,
+/// and for `prop` appearing on the default-text-properties list.
+pub(crate) fn textget<'ob>(plist: Object<'ob>, prop: Object<'ob>) -> Result<Object<'ob>> {
+    lookup_char_property(plist, prop, true)
+}
+
+/// see `lookup_char_property in intervals.c`
+fn lookup_char_property<'ob>(
+    mut plist: Object<'ob>,
+    prop: Object<'ob>,
+    is_textprop: bool,
+) -> Result<Object<'ob>> {
+    if plist.is_nil() {
+        // TODO should return default properties
+        return Ok(NIL);
+    }
+    let ObjectType::Cons(cons) = plist.untag() else {
+        bail!(TypeError::new(Type::Cons, plist))
+    };
+
+    while let ObjectType::Cons(cons) = plist.untag() {
+        let p = cons.car();
+        let val = cons.cadr().ok_or(anyhow::anyhow!(TypeError::new(Type::Cons, prop)))?;
+        if eq(prop, p) {
+            return Ok(val);
+        }
+        match cons.cddr() {
+            Some(obj) => plist = obj,
+            None => break,
         }
     }
-    None
+    Ok(NIL)
+}
+
+/// An iterator that yields all intersections in a given interval range,
+/// including empty gaps between nodes.
+pub(crate) struct IntervalIntersections<'ob, 'tree> {
+    tree: &'tree IntervalTree<'ob>,
+    start: usize,
+    end: usize,
+    current: Option<&'tree Node<Slot<Object<'ob>>>>,
+    next_start: usize,
+}
+
+impl<'ob, 'tree> IntervalIntersections<'ob, 'tree> {
+    pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
+        let current = tree.tree.find_intersect_min(start..end);
+        // let next_start = current.map(|n| n.key.end).unwrap_or(start);
+        let next_start = start;
+        Self { tree, start, end, current, next_start }
+    }
+}
+
+impl<'ob, 'tree> Iterator for IntervalIntersections<'ob, 'tree> {
+    type Item = (std::ops::Range<usize>, Object<'ob>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_start >= self.end {
+            return None;
+        }
+
+        // Handle gap before first node or between nodes
+        if let Some(node) = self.current {
+            if self.next_start < node.key.start {
+                let gap_end = node.key.start.min(self.end);
+                let result = (self.next_start..gap_end, NIL);
+                self.next_start = gap_end;
+                return Some(result);
+            }
+        }
+
+        // Handle current node
+        if let Some(node) = self.current {
+            let intersect_start = node.key.start.max(self.start);
+            let intersect_end = node.key.end.min(self.end);
+
+            if intersect_start < intersect_end {
+                let result = (intersect_start..intersect_end, *node.val);
+                self.next_start = intersect_end;
+                self.current = node.next();
+                return Some(result);
+            }
+        }
+
+        // Handle final gap after last node
+        if self.next_start < self.end {
+            let result = (self.next_start..self.end, NIL);
+            self.next_start = self.end;
+            return Some(result);
+        }
+
+        None
+    }
 }
 
 /// set `this`'s cdr to `other`'s cddr. i.e., skip a pair in an alist
@@ -205,5 +299,77 @@ mod tests {
         let result = remove_sym_from_props(sym.into(), props).unwrap();
         let rs = result.to_string();
         assert_eq!(rs, "(bar 2 baz 4)".to_string());
+    }
+}
+
+#[cfg(test)]
+mod interval_iterator_tests {
+    use super::*;
+    use crate::{intern, RootSet};
+
+    #[test]
+    fn test_empty_tree() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let tree = IntervalTree::new();
+
+        let mut iter = IntervalIntersections::new(&tree, 0, 100);
+        assert_eq!(iter.next(), Some((0..100, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_single_interval() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val = intern("test", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val.into()), &cx);
+
+        let mut iter = IntervalIntersections::new(&tree, 0, 30);
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), Some((10..20, val.into())));
+        assert_eq!(iter.next(), Some((20..30, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_multiple_intervals() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val1 = intern("test1", &cx);
+        let val2 = intern("test2", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val1.into()), &cx);
+        tree.insert(25, 35, Slot::new(val2.into()), &cx);
+
+        let mut iter = IntervalIntersections::new(&tree, 0, 40);
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), Some((10..20, val1.into())));
+        assert_eq!(iter.next(), Some((20..25, NIL)));
+        assert_eq!(iter.next(), Some((25..35, val2.into())));
+        assert_eq!(iter.next(), Some((35..40, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_overlapping_intervals() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val1 = intern("test1", &cx);
+        let val2 = intern("test2", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val1.into()), &cx);
+        tree.insert(20, 30, Slot::new(val1.into()), &cx);
+        tree.insert(30, 40, Slot::new(val2.into()), &cx);
+        // tree.tree.print();
+
+        let mut iter = IntervalIntersections::new(&tree, 0, 50);
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), Some((10..20, val1.into())));
+        assert_eq!(iter.next(), Some((20..30, val1.into())));
+        assert_eq!(iter.next(), Some((30..40, val2.into())));
+        assert_eq!(iter.next(), Some((40..50, NIL)));
+        assert_eq!(iter.next(), None);
     }
 }

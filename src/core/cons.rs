@@ -81,6 +81,20 @@ impl Cons {
         self.0.cdr.get()
     }
 
+    pub(crate) fn cadr(&self) -> Option<Object> {
+        if let ObjectType::Cons(cons) = self.cdr().untag() {
+            return Some(cons.car());
+        }
+        None
+    }
+
+    pub(crate) fn cddr(&self) -> Option<Object> {
+        if let ObjectType::Cons(cons) = self.cdr().untag() {
+            return Some(cons.cdr());
+        }
+        None
+    }
+
     pub(crate) fn set_car(&self, new_car: Object) -> Result<()> {
         if self.0.mutable {
             unsafe { self.0.car.as_mut().set(new_car) }
