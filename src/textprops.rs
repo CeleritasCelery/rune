@@ -251,6 +251,54 @@ pub fn next_property_change<'ob>(
     })
 }
 
+/// Return the position of next property change for a specific property.
+/// Scans characters forward from POSITION till it finds
+/// a change in the PROP property, then returns the position of the change.
+/// If the optional third argument OBJECT is a buffer (or nil, which means
+/// the current buffer), POSITION is a buffer position (integer or marker).
+/// If OBJECT is a string, POSITION is a 0-based index into it.
+/// The property values are compared with `eq'.
+/// Return nil if LIMIT is nil or omitted, and the property is constant all
+/// the way to the end of OBJECT; if the value is non-nil, it is a position
+/// greater than POSITION, never equal.
+///
+/// If the optional fourth argument LIMIT is non-nil, don't search
+/// past position LIMIT; return LIMIT if nothing is found before LIMIT.
+#[defun]
+pub fn next_single_property_change<'ob>(
+    position: usize,
+    prop: Object<'ob>,
+    object: Object<'ob>,
+    limit: Option<usize>,
+    env: &'ob mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let point_max = data.text.len_chars() + 1;
+        let end = limit.unwrap_or(point_max);
+        let tree = data.textprops_with_lifetime();
+        // NOTE this can be optimized
+        tree.clean();
+        let mut iter = tree.iter(position, end);
+
+        let mut val = None;
+        while let Some((interval, props)) = iter.next() {
+
+            let text_prop = textget(props, prop)?;
+            match val {
+                Some(v) => {
+                    if eq(v, text_prop) {
+                        continue;
+                    } else {
+                        return Ok(cx.add(interval.start));
+                    }
+                }
+                None => val = Some(text_prop)
+            }
+        }
+        Ok(cx.add(limit))
+    })
+}
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -334,6 +382,69 @@ mod tests {
         let change = next_property_change(20, buf, None, env, cx)?;
         assert!(change.is_nil()); // No changes after last property
 
+        BUFFERS.lock().unwrap().clear();
+        Ok(())
+    }
+
+    #[test]
+    fn test_next_single_property_change() -> Result<()> {
+        let roots = &RootSet::default();
+        let mut context = Context::new(roots);
+        let cx = &mut context;
+        root!(env, new(Env), cx);
+
+        let buf = get_buffer_create(cx.add("test_next_single_property_change"), None, cx)?;
+        if let ObjectType::Buffer(b) = buf.untag() {
+            b.lock()
+                .unwrap()
+                .get_mut()
+                .text
+                .insert("lorem ipsum quia dolor sit amet, consectetur, adipisci velit.");
+        }
+
+        let a = intern(":a", cx);
+        let a = cx.add(a);
+        let b = intern(":b", cx);
+        let b = cx.add(b);
+
+        // Add properties at different ranges
+        put_text_property(1, 5, a, cx.add(1), buf, env, cx)?;
+        put_text_property(5, 8, a, cx.add(2), buf, env, cx)?;
+        put_text_property(10, 15, b, cx.add(4), buf, env, cx)?;
+        put_text_property(15, 20, a, cx.add(3), buf, env, cx)?;
+
+        // Test property changes for :a
+        let change = next_single_property_change(1, a, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(5)); // Change at end of first range
+
+        let change = next_single_property_change(5, a, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(8)); // Change at end of second range
+
+        let change = next_single_property_change(10, a, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(15)); // Change at start of third range
+
+        let change = next_single_property_change(15, a, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(20)); // Change at end of third range
+
+        // Test with limit
+        let change = next_single_property_change(1, a, buf, Some(8), env, cx)?;
+        assert_eq!(change, cx.add(5)); // Change within limit
+
+        let change = next_single_property_change(5, a, buf, Some(8), env, cx)?;
+        assert_eq!(change, cx.add(8)); // Limit reached
+
+        // Test no change case
+        let change = next_single_property_change(20, a, buf, None, env, cx)?;
+        assert!(change.is_nil()); // No changes after last property
+
+        // Test property changes for :b
+        let change = next_single_property_change(1, b, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(10)); // Change at start of b range
+
+        let change = next_single_property_change(10, b, buf, None, env, cx)?;
+        assert_eq!(change, cx.add(15)); // Change at end of b range
+
+        BUFFERS.lock().unwrap().clear();
         Ok(())
     }
 
