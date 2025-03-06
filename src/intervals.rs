@@ -114,6 +114,10 @@ impl<'ob> IntervalTree<'ob> {
     pub(crate) fn iter<'a>(&'a self, start: usize, end: usize) -> IntervalIntersections<'ob, 'a> {
         IntervalIntersections::new(self, start, end)
     }
+
+    pub(crate) fn iter_reverse<'a>(&'a self, start: usize, end: usize) -> ReverseIntervalIntersections<'ob, 'a> {
+        ReverseIntervalIntersections::new(self, start, end)
+    }
 }
 
 /// Removes all occurrences of `sym` from the property list `props`.
@@ -280,6 +284,66 @@ impl<'ob, 'tree> Iterator for IntervalIntersections<'ob, 'tree> {
     }
 }
 
+/// An iterator that yields all intersections in a given interval range in reverse order,
+/// including empty gaps between nodes.
+pub(crate) struct ReverseIntervalIntersections<'ob, 'tree> {
+    tree: &'tree IntervalTree<'ob>,
+    start: usize,
+    end: usize,
+    current: Option<&'tree Node<Slot<Object<'ob>>>>,
+    next_end: usize,
+}
+
+impl<'ob, 'tree> ReverseIntervalIntersections<'ob, 'tree> {
+    pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
+        let current = tree.tree.find_intersect_max(start..end);
+        let next_end = end;
+        Self { tree, start, end, current, next_end }
+    }
+}
+
+impl<'ob, 'tree> Iterator for ReverseIntervalIntersections<'ob, 'tree> {
+    type Item = (std::ops::Range<usize>, Object<'ob>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_end <= self.start {
+            return None;
+        }
+
+        // Handle gap after last node or between nodes
+        if let Some(node) = self.current {
+            if self.next_end > node.key.end {
+                let gap_start = node.key.end.max(self.start);
+                let result = (gap_start..self.next_end, NIL);
+                self.next_end = gap_start;
+                return Some(result);
+            }
+        }
+
+        // Handle current node
+        if let Some(node) = self.current {
+            let intersect_start = node.key.start.max(self.start);
+            let intersect_end = node.key.end.min(self.end);
+
+            if intersect_start < intersect_end {
+                let result = (intersect_start..intersect_end, *node.val);
+                self.next_end = intersect_start;
+                self.current = node.prev();
+                return Some(result);
+            }
+        }
+
+        // Handle initial gap before first node
+        if self.next_end > self.start {
+            let result = (self.start..self.next_end, NIL);
+            self.next_end = self.start;
+            return Some(result);
+        }
+
+        None
+    }
+}
+
 /// set `this`'s cdr to `other`'s cddr. i.e., skip a pair in an alist
 #[cfg(test)]
 mod tests {
@@ -300,6 +364,77 @@ mod tests {
         let result = remove_sym_from_props(sym.into(), props).unwrap();
         let rs = result.to_string();
         assert_eq!(rs, "(bar 2 baz 4)".to_string());
+    }
+}
+
+#[cfg(test)]
+mod reverse_interval_iterator_tests {
+    use super::*;
+    use crate::{intern, RootSet};
+
+    #[test]
+    fn test_empty_tree() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let tree = IntervalTree::new();
+
+        let mut iter = ReverseIntervalIntersections::new(&tree, 0, 100);
+        assert_eq!(iter.next(), Some((0..100, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_single_interval() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val = intern("test", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val.into()), &cx);
+
+        let mut iter = ReverseIntervalIntersections::new(&tree, 0, 30);
+        assert_eq!(iter.next(), Some((20..30, NIL)));
+        assert_eq!(iter.next(), Some((10..20, val.into())));
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_multiple_intervals() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val1 = intern("test1", &cx);
+        let val2 = intern("test2", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val1.into()), &cx);
+        tree.insert(25, 35, Slot::new(val2.into()), &cx);
+
+        let mut iter = ReverseIntervalIntersections::new(&tree, 0, 40);
+        assert_eq!(iter.next(), Some((35..40, NIL)));
+        assert_eq!(iter.next(), Some((25..35, val2.into())));
+        assert_eq!(iter.next(), Some((20..25, NIL)));
+        assert_eq!(iter.next(), Some((10..20, val1.into())));
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_overlapping_intervals() {
+        let roots = &RootSet::default();
+        let cx = Context::new(roots);
+        let val1 = intern("test1", &cx);
+        let val2 = intern("test2", &cx);
+        let mut tree = IntervalTree::new();
+        tree.insert(10, 20, Slot::new(val1.into()), &cx);
+        tree.insert(20, 30, Slot::new(val1.into()), &cx);
+        tree.insert(30, 40, Slot::new(val2.into()), &cx);
+
+        let mut iter = ReverseIntervalIntersections::new(&tree, 0, 50);
+        assert_eq!(iter.next(), Some((40..50, NIL)));
+        assert_eq!(iter.next(), Some((30..40, val2.into())));
+        assert_eq!(iter.next(), Some((20..30, val1.into())));
+        assert_eq!(iter.next(), Some((10..20, val1.into())));
+        assert_eq!(iter.next(), Some((0..10, NIL)));
+        assert_eq!(iter.next(), None);
     }
 }
 

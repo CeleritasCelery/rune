@@ -165,8 +165,30 @@ pub fn get_text_property<'ob>(
     // 1. category
     // 2. char_property_alias_alist
     // 3.  default_text_properties
-    plist_get(props, prop)
+    textget(props, prop)
 }
+
+#[defun]
+pub fn get_char_property_and_overlay<'ob>(
+    position: usize,
+    prop: Object<'ob>,
+    object: Object<'ob>,
+    env: &'ob mut Rt<Env>,
+) -> Result<Object<'ob>> {
+    todo!()
+}
+
+#[defun]
+pub fn get_char_property<'ob>(
+    position: usize,
+    prop: Object<'ob>,
+    object: Object<'ob>,
+    env: &'ob mut Rt<Env>,
+) -> Result<Object<'ob>> {
+    todo!()
+}
+
+// TODO also missing `next-char-property-change` and 3 other similar functions.
 
 /// Set one property of the text from START to END.
 /// The third and fourth arguments PROPERTY and VALUE
@@ -300,6 +322,115 @@ pub fn next_single_property_change<'ob>(
     })
 }
 
+/// Return the position of previous property change.
+/// Scans characters backwards from POSITION in OBJECT till it finds
+/// a change in some text property, then returns the position of the change.
+/// If the optional second argument OBJECT is a buffer (or nil, which means
+/// the current buffer), POSITION is a buffer position (integer or marker).
+/// If OBJECT is a string, POSITION is a 0-based index into it.
+/// Return nil if LIMIT is nil or omitted, and the property is constant all
+/// the way to the start of OBJECT; if the value is non-nil, it is a position
+/// less than POSITION, never equal.
+///
+/// If the optional third argument LIMIT is non-nil, don't search
+/// back past position LIMIT; return LIMIT if nothing is found until LIMIT.
+#[defun]
+pub fn previous_property_change<'ob>(
+    position: usize,
+    object: Object<'ob>,
+    limit: Option<usize>,
+    env: &'ob mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    // let node = tree.find(position);
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let point_min = 1;
+        let start = limit.unwrap_or(point_min);
+        let end = position;
+        let tree = data.textprops_with_lifetime();
+        // NOTE this can be optimized
+        tree.clean();
+        // println!("{:?}", tree.tree);
+        let prop = tree.tree.find_intersect_max(start..end);
+
+        match prop {
+            Some(p) => {
+                let interval = p.key;
+                if interval.end >= position {
+                    // should have range.start < position
+                    if interval.start > start {
+                        return Ok(cx.add(interval.start));
+                    } else {
+                        return Ok(cx.add(limit));
+                    }
+                } else {
+                    // empty property after interval, so prop changed just at its end
+                    return Ok(cx.add(interval.end));
+                }
+
+                // range is fully inside region, prop changes at end
+                // return Ok(cx.add(range.end));
+            }
+            None => {
+                let result = match limit {
+                    Some(n) => cx.add(n),
+                    None => NIL,
+                };
+                Ok(result)
+            }
+        }
+    })
+}
+
+/// Return the position of next property change for a specific property.
+/// Scans characters forward from POSITION till it finds
+/// a change in the PROP property, then returns the position of the change.
+/// If the optional third argument OBJECT is a buffer (or nil, which means
+/// the current buffer), POSITION is a buffer position (integer or marker).
+/// If OBJECT is a string, POSITION is a 0-based index into it.
+/// The property values are compared with `eq'.
+/// Return nil if LIMIT is nil or omitted, and the property is constant all
+/// the way to the end of OBJECT; if the value is non-nil, it is a position
+/// greater than POSITION, never equal.
+///
+/// If the optional fourth argument LIMIT is non-nil, don't search
+/// past position LIMIT; return LIMIT if nothing is found before LIMIT.
+#[defun]
+pub fn previous_single_property_change<'ob>(
+    position: usize,
+    prop: Object<'ob>,
+    object: Object<'ob>,
+    limit: Option<usize>,
+    env: &'ob mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let point_min = 1;
+        let start = limit.unwrap_or(point_min);
+        let tree = data.textprops_with_lifetime();
+        // NOTE this can be optimized
+        tree.clean();
+        let mut iter = tree.iter_reverse(start, position);
+
+        let mut val = None;
+        while let Some((interval, props)) = iter.next() {
+
+            let text_prop = textget(props, prop)?;
+            match val {
+                Some(v) => {
+                    if eq(v, text_prop) {
+                        continue;
+                    } else {
+                        return Ok(cx.add(interval.start));
+                    }
+                }
+                None => val = Some(text_prop)
+            }
+        }
+        Ok(cx.add(limit))
+    })
+}
+
 /// Completely replace properties of text from START to END.
 /// The third argument PROPERTIES is the new property list.
 /// If the optional fourth argument OBJECT is a buffer (or nil, which means
@@ -321,6 +452,7 @@ pub fn set_text_properties<'ob>(
         Ok(())
     })
 }
+
 /// Remove some properties from text from START to END.
 /// The third argument PROPERTIES is a property list
 /// whose property names specify the properties to remove.
@@ -346,6 +478,12 @@ pub fn remove_text_properties<'ob>(
     })
 }
 
+/// /* Remove some properties from text from START to END.
+/// The third argument LIST-OF-PROPERTIES is a list of property names to remove.
+/// If the optional fourth argument OBJECT is a buffer (or nil, which means
+/// the current buffer), START and END are buffer positions (integers or
+/// markers).  If OBJECT is a string, START and END are 0-based indices into it.
+/// Return t if any property was actually removed, nil otherwise.
 #[defun]
 pub fn remove_list_of_text_properties<'ob>(
     start: usize,
@@ -561,6 +699,50 @@ mod tests {
 
         let change = next_single_property_change(10, b, buf, None, env, cx)?;
         assert_eq!(change, cx.add(15)); // Change at end of b range
+
+        BUFFERS.lock().unwrap().clear();
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_text_properties() -> Result<()> {
+        let roots = &RootSet::default();
+        let mut context = Context::new(roots);
+        let cx = &mut context;
+        root!(env, new(Env), cx);
+
+        let buf = get_buffer_create(cx.add("test_remove_text_properties"), None, cx)?;
+        if let ObjectType::Buffer(b) = buf.untag() {
+            b.lock()
+                .unwrap()
+                .get_mut()
+                .text
+                .insert("test text");
+        }
+
+        let a = intern(":a", cx);
+        let a = cx.add(a);
+        let b = intern(":b", cx);
+        let b = cx.add(b);
+
+        // Add properties
+        put_text_property(1, 5, a, cx.add(1), buf, env, cx)?;
+        put_text_property(5, 10, b, cx.add(2), buf, env, cx)?;
+
+        // Remove property :a
+        remove_text_properties(1, 10, a, buf, env, cx)?;
+
+        // Verify :a was removed
+        let props = text_properties_at(3, buf, env)?;
+        assert!(props.is_nil());
+
+        // Verify :b remains
+        let props = text_properties_at(5, buf, env)?;
+        let val = plist_get(props, b)?;
+        assert_eq!(val, cx.add(2));
+
+        // Try removing non-existent property
+        remove_text_properties(0, 10, a, buf, env, cx)?;
 
         BUFFERS.lock().unwrap().clear();
         Ok(())
