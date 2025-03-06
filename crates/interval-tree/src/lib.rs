@@ -479,42 +479,6 @@ impl<T: Clone> Node<T> {
         None
     }
 
-    pub fn next_mut(&mut self) -> Option<&mut Node<T>> {
-        let mut n: *mut Node<T> = self;
-        if let Some(r) = self.right.as_mut() {
-            n = r.as_mut();
-            while let Some(ref mut l) = safe_mut(n).left {
-                n = l.as_mut();
-            }
-            return Some(safe_mut(n));
-        }
-        while let Some(parent) = (safe_mut(n)).parent_mut() {
-            if !(safe_mut(n)).is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-        None
-    }
-
-    pub fn next_raw_box(node: *mut Node<T>) -> Option<*mut Node<T>> {
-        let mut n = node;
-        if let Some(r) = safe_mut(node).right.as_mut() {
-            n = r.as_mut();
-            while let Some(ref mut l) = safe_mut(n).left {
-                n = l.as_mut();
-            }
-            return Some(n);
-        }
-        while let Some(parent) = (safe_mut(n)).parent_mut() {
-            if !(safe_mut(n)).is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-
-        None
-    }
     pub fn next_raw(&mut self) -> Option<*mut Node<T>> {
         let mut n: *mut Node<T> = self;
         if let Some(r) = self.right.as_mut() {
@@ -530,7 +494,42 @@ impl<T: Clone> Node<T> {
             }
             n = parent;
         }
+        None
+    }
 
+    pub fn prev(&self) -> Option<&Node<T>> {
+        let mut n = self;
+        if let Some(ref l) = self.left {
+            n = l;
+            while let Some(ref r) = n.right {
+                n = r;
+            }
+            return Some(n);
+        }
+        while let Some(parent) = n.parent() {
+            if n.is_right_child {
+                return Some(parent);
+            }
+            n = parent;
+        }
+        None
+    }
+
+    pub fn prev_raw(&mut self) -> Option<*mut Node<T>> {
+        let mut n: *mut Node<T> = self;
+        if let Some(l) = self.left.as_mut() {
+            n = l.as_mut();
+            while let Some(ref mut r) = safe_mut(n).right {
+                n = r.as_mut();
+            }
+            return Some(n);
+        }
+        while let Some(parent) = (safe_mut(n)).parent_mut() {
+            if (safe_mut(n)).is_right_child {
+                return Some(parent);
+            }
+            n = parent;
+        }
         None
     }
 
