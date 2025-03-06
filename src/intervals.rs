@@ -59,12 +59,7 @@ impl<'ob> IntervalTree<'ob> {
             .unwrap();
     }
 
-    pub fn set_properties(
-        &mut self,
-        start: usize,
-        end: usize,
-        properties: Object<'ob>,
-    ) {
+    pub fn set_properties(&mut self, start: usize, end: usize, properties: Object<'ob>) {
         self.tree.insert((start, end), Slot::new(properties), |a, _b| a).unwrap();
     }
 
@@ -83,19 +78,12 @@ impl<'ob> IntervalTree<'ob> {
     /// * `end` - End position of the range (exclusive)
     /// * `list_of_props` - The properties to delete (as an Object containing a list of properties)
     /// * `cx` - The context used for equality testing
-    pub fn delete(
-        &mut self,
-        start: usize,
-        end: usize,
-        list_of_props: Object<'ob>,
-        cx: &'ob Context,
-    ) -> Result<()> {
+    pub fn delete(&mut self, start: usize, end: usize, list_of_props: Object<'ob>) -> Result<()> {
         let props = list_of_props.as_list()?;
         self.tree.apply_with_split(
             |val| {
-                let a = val.untag();
                 let mut props = props.clone();
-                let mut result = val.as_obj();
+                let mut result = *val;
                 while let Some(sym) = props.next() {
                     let sym = sym.ok()?;
                     result = remove_sym_from_props(sym, result).ok()?;
@@ -115,7 +103,11 @@ impl<'ob> IntervalTree<'ob> {
         IntervalIntersections::new(self, start, end)
     }
 
-    pub(crate) fn iter_reverse<'a>(&'a self, start: usize, end: usize) -> ReverseIntervalIntersections<'ob, 'a> {
+    pub(crate) fn iter_reverse<'a>(
+        &'a self,
+        start: usize,
+        end: usize,
+    ) -> ReverseIntervalIntersections<'ob, 'a> {
         ReverseIntervalIntersections::new(self, start, end)
     }
 }
@@ -179,7 +171,7 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
 
 fn set_cdr<'ob>(this: &'ob Cons, other: Object<'ob>) -> Option<&'ob Cons> {
     if let ObjectType::Cons(cons) = other.untag() {
-        if let ObjectType::Cons(c) = cons.cdr().untag() {
+        if let ObjectType::Cons(_c) = cons.cdr().untag() {
             this.set_cdr(cons.cdr()).ok()?;
         }
         return Some(cons);
@@ -199,13 +191,13 @@ pub(crate) fn textget<'ob>(plist: Object<'ob>, prop: Object<'ob>) -> Result<Obje
 fn lookup_char_property<'ob>(
     mut plist: Object<'ob>,
     prop: Object<'ob>,
-    is_textprop: bool,
+    _is_textprop: bool,
 ) -> Result<Object<'ob>> {
     if plist.is_nil() {
         // TODO should return default properties
         return Ok(NIL);
     }
-    let ObjectType::Cons(cons) = plist.untag() else {
+    let ObjectType::Cons(_cons) = plist.untag() else {
         bail!(TypeError::new(Type::Cons, plist))
     };
 
@@ -226,7 +218,6 @@ fn lookup_char_property<'ob>(
 /// An iterator that yields all intersections in a given interval range,
 /// including empty gaps between nodes.
 pub(crate) struct IntervalIntersections<'ob, 'tree> {
-    tree: &'tree IntervalTree<'ob>,
     start: usize,
     end: usize,
     current: Option<&'tree Node<Slot<Object<'ob>>>>,
@@ -238,7 +229,7 @@ impl<'ob, 'tree> IntervalIntersections<'ob, 'tree> {
         let current = tree.tree.find_intersect_min(start..end);
         // let next_start = current.map(|n| n.key.end).unwrap_or(start);
         let next_start = start;
-        Self { tree, start, end, current, next_start }
+        Self { start, end, current, next_start }
     }
 }
 
@@ -287,7 +278,6 @@ impl<'ob, 'tree> Iterator for IntervalIntersections<'ob, 'tree> {
 /// An iterator that yields all intersections in a given interval range in reverse order,
 /// including empty gaps between nodes.
 pub(crate) struct ReverseIntervalIntersections<'ob, 'tree> {
-    tree: &'tree IntervalTree<'ob>,
     start: usize,
     end: usize,
     current: Option<&'tree Node<Slot<Object<'ob>>>>,
@@ -298,7 +288,7 @@ impl<'ob, 'tree> ReverseIntervalIntersections<'ob, 'tree> {
     pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
         let current = tree.tree.find_intersect_max(start..end);
         let next_end = end;
-        Self { tree, start, end, current, next_end }
+        Self { start, end, current, next_end }
     }
 }
 
@@ -374,8 +364,6 @@ mod reverse_interval_iterator_tests {
 
     #[test]
     fn test_empty_tree() {
-        let roots = &RootSet::default();
-        let cx = Context::new(roots);
         let tree = IntervalTree::new();
 
         let mut iter = ReverseIntervalIntersections::new(&tree, 0, 100);
@@ -445,8 +433,6 @@ mod interval_iterator_tests {
 
     #[test]
     fn test_empty_tree() {
-        let roots = &RootSet::default();
-        let cx = Context::new(roots);
         let tree = IntervalTree::new();
 
         let mut iter = IntervalIntersections::new(&tree, 0, 100);

@@ -1,9 +1,6 @@
-use crate::intervals::IntervalTree;
-
 use super::gc::{Context, ObjectMap, Rto, Slot};
-use super::object::{IntoObject, LispBuffer, Object, ObjectType, OpenBuffer, Symbol, WithLifetime};
-use anyhow::{anyhow, bail, Result};
-use rune_core::hashmap::IndexMap;
+use super::object::{LispBuffer, Object, OpenBuffer, Symbol, WithLifetime};
+use anyhow::{anyhow, Result};
 use rune_macros::Trace;
 use std::cell::OnceCell;
 

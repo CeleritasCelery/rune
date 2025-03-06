@@ -563,7 +563,9 @@ impl<T: Clone> Node<T> {
         match ord {
             Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_min(range)),
             Some(Ordering::Equal) => Some(self),
-            Some(Ordering::Greater) => self.right.as_ref().and_then(|r| r.find_intersect_min(range)),
+            Some(Ordering::Greater) => {
+                self.right.as_ref().and_then(|r| r.find_intersect_min(range))
+            }
             _ => self.left.as_ref().and_then(|l| l.find_intersect_min(range)).or(Some(self)),
         }
     }
@@ -686,24 +688,6 @@ impl<T: Clone> IntervalTree<T> {
             Node::insert_at(&mut self.root, key, val, std::ptr::null_mut(), false, &merge_fn);
         result.as_mut().unwrap().color = Color::Black;
         result
-    }
-
-    /// Inserts a new interval with the specified `key` and `val` into the interval tree,
-    /// overriding any existing intervals that intersect with `key`.
-    ///
-    /// If `del_intersects` is `true`, all intervals that intersect with `key` will be deleted.
-    /// Otherwise, only the intersecting parts will be deleted, non-intersecting parts will be
-    /// split and kept unchange.
-    ///
-    /// # Arguments
-    ///
-    /// * `key` - The text range representing the interval to insert.
-    /// * `val` - The value associated with the interval.
-    /// * `del_intersects` - Whether to delete all intersecting intervals or not.
-    fn insert_with_override(&mut self, key: impl Into<TextRange>, val: T, del_intersects: bool) {
-        if del_intersects {
-            self.find_intersects(key);
-        }
     }
 
     /// Finds the node with key `key` in the tree and returns its value if found.

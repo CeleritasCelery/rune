@@ -6,8 +6,8 @@ use crate::{
         gc::{Context, Rt, Slot},
         object::{Gc, ListType, Object, ObjectType, WithLifetime, NIL},
     },
-    editfns::point_max,
-    fns::{eq, plist_get}, intervals::textget,
+    fns::eq,
+    intervals::textget,
 };
 use anyhow::{anyhow, bail, Result};
 use rune_core::macros::list;
@@ -133,7 +133,7 @@ pub fn text_properties_at<'ob>(
         let obj = object.untag();
         match obj {
             ObjectType::Buffer(buf) => &buf.lock().unwrap().textprops,
-            ObjectType::String(str) => {
+            ObjectType::String(_str) => {
                 todo!()
             }
             _ => {
@@ -169,6 +169,7 @@ pub fn get_text_property<'ob>(
 }
 
 #[defun]
+#[allow(unused)]
 pub fn get_char_property_and_overlay<'ob>(
     position: usize,
     prop: Object<'ob>,
@@ -179,6 +180,7 @@ pub fn get_char_property_and_overlay<'ob>(
 }
 
 #[defun]
+#[allow(unused)]
 pub fn get_char_property<'ob>(
     position: usize,
     prop: Object<'ob>,
@@ -243,7 +245,7 @@ pub fn next_property_change<'ob>(
         tree.clean();
         // println!("{:?}", tree.tree);
         let prop = tree.tree.find_intersect_min(position..end);
-        
+
         match prop {
             Some(p) => {
                 let range = p.key;
@@ -305,7 +307,6 @@ pub fn next_single_property_change<'ob>(
 
         let mut val = None;
         while let Some((interval, props)) = iter.next() {
-
             let text_prop = textget(props, prop)?;
             match val {
                 Some(v) => {
@@ -315,7 +316,7 @@ pub fn next_single_property_change<'ob>(
                         return Ok(cx.add(interval.start));
                     }
                 }
-                None => val = Some(text_prop)
+                None => val = Some(text_prop),
             }
         }
         Ok(cx.add(limit))
@@ -414,7 +415,6 @@ pub fn previous_single_property_change<'ob>(
 
         let mut val = None;
         while let Some((interval, props)) = iter.next() {
-
             let text_prop = textget(props, prop)?;
             match val {
                 Some(v) => {
@@ -424,7 +424,7 @@ pub fn previous_single_property_change<'ob>(
                         return Ok(cx.add(interval.start));
                     }
                 }
-                None => val = Some(text_prop)
+                None => val = Some(text_prop),
             }
         }
         Ok(cx.add(limit))
@@ -474,7 +474,7 @@ pub fn remove_text_properties<'ob>(
 ) -> Result<()> {
     modify_buffer_data(object, env, |data| -> Result<()> {
         let tree = data.textprops_with_lifetime();
-        tree.delete(start, end, list![properties; cx], cx)
+        tree.delete(start, end, list![properties; cx])
     })
 }
 
@@ -491,11 +491,10 @@ pub fn remove_list_of_text_properties<'ob>(
     list_of_properties: Object<'ob>,
     object: Object<'ob>,
     env: &mut Rt<Env>,
-    cx: &'ob Context,
 ) -> Result<()> {
     modify_buffer_data(object, env, |data| -> Result<()> {
         let tree = data.textprops_with_lifetime();
-        tree.delete(start, end, list_of_properties, cx)
+        tree.delete(start, end, list_of_properties)
     })
 }
 
@@ -521,7 +520,7 @@ pub fn text_properties_any<'ob>(
         for (interval, props) in iter {
             let val = textget(props, property)?;
             if !eq(val, value) {
-                return Ok(cx.add(interval.start))
+                return Ok(cx.add(interval.start));
             }
         }
         Ok(NIL)
@@ -550,7 +549,7 @@ pub fn text_properties_not_all<'ob>(
         for (interval, props) in iter {
             let val = textget(props, property)?;
             if eq(val, value) {
-                return Ok(cx.add(interval.start))
+                return Ok(cx.add(interval.start));
             }
         }
         Ok(NIL)
@@ -713,11 +712,7 @@ mod tests {
 
         let buf = get_buffer_create(cx.add("test_remove_text_properties"), None, cx)?;
         if let ObjectType::Buffer(b) = buf.untag() {
-            b.lock()
-                .unwrap()
-                .get_mut()
-                .text
-                .insert("test text");
+            b.lock().unwrap().get_mut().text.insert("test text");
         }
 
         let a = intern(":a", cx);
