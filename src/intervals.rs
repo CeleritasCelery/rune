@@ -52,17 +52,20 @@ impl<'ob> IntervalTree<'ob> {
     pub fn insert(&mut self, start: usize, end: usize, val: Slot<Object<'ob>>, cx: &'ob Context) {
         self.tree
             .insert((start, end), val, |a, b| {
-                add_properties(
-                    *a,
-                    *b,
-                    crate::textprops::PropertySetType::Append,
-                    false,
-                    cx,
-                )
-                .map(|obj| Slot::new(obj))
-                .unwrap()
+                add_properties(*a, *b, crate::textprops::PropertySetType::Append, false, cx)
+                    .map(|obj| Slot::new(obj))
+                    .unwrap()
             })
             .unwrap();
+    }
+
+    pub fn set_properties(
+        &mut self,
+        start: usize,
+        end: usize,
+        properties: Object<'ob>,
+    ) {
+        self.tree.insert((start, end), Slot::new(properties), |a, _b| a).unwrap();
     }
 
     pub fn find(&self, position: usize) -> Option<&Node<Slot<Object<'ob>>>> {
@@ -136,10 +139,8 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
     while let Some(cons) = plist {
         let prop = cons.car();
         if eq(prop, sym) {
-            plist = cons
-                .cddr()
-                .and_then(|n| n.try_into().ok());
-                // .and_then(|cons: &Cons| cons.cdr().try_into().ok());
+            plist = cons.cddr().and_then(|n| n.try_into().ok());
+            // .and_then(|cons: &Cons| cons.cdr().try_into().ok());
         } else {
             break;
         }

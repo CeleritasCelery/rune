@@ -299,17 +299,135 @@ pub fn next_single_property_change<'ob>(
         Ok(cx.add(limit))
     })
 }
+
+/// Completely replace properties of text from START to END.
+/// The third argument PROPERTIES is the new property list.
+/// If the optional fourth argument OBJECT is a buffer (or nil, which means
+/// the current buffer), START and END are buffer positions (integers or
+/// markers).  If OBJECT is a string, START and END are 0-based indices into it.
+/// If PROPERTIES is nil, the effect is to remove all properties from
+/// the designated part of OBJECT.
+#[defun]
+pub fn set_text_properties<'ob>(
+    start: usize,
+    end: usize,
+    properties: Object<'ob>,
+    object: Object<'ob>,
+    env: &mut Rt<Env>,
+) -> Result<()> {
+    modify_buffer_data(object, env, |data| -> Result<()> {
+        let tree = data.textprops_with_lifetime();
+        tree.set_properties(start, end, properties);
+        Ok(())
+    })
+}
+/// Remove some properties from text from START to END.
+/// The third argument PROPERTIES is a property list
+/// whose property names specify the properties to remove.
+/// \(The values stored in PROPERTIES are ignored.)
+/// If the optional fourth argument OBJECT is a buffer (or nil, which means
+/// the current buffer), START and END are buffer positions (integers or
+/// markers).  If OBJECT is a string, START and END are 0-based indices into it.
+/// Return t if any property was actually removed, nil otherwise.
+///
+/// Use `set-text-properties' if you want to remove all text properties.
+#[defun]
+pub fn remove_text_properties<'ob>(
+    start: usize,
+    end: usize,
+    properties: Object<'ob>,
+    object: Object<'ob>,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<()> {
+    modify_buffer_data(object, env, |data| -> Result<()> {
+        let tree = data.textprops_with_lifetime();
+        tree.delete(start, end, list![properties; cx], cx)
+    })
+}
+
+#[defun]
+pub fn remove_list_of_text_properties<'ob>(
+    start: usize,
+    end: usize,
+    list_of_properties: Object<'ob>,
+    object: Object<'ob>,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<()> {
+    modify_buffer_data(object, env, |data| -> Result<()> {
+        let tree = data.textprops_with_lifetime();
+        tree.delete(start, end, list_of_properties, cx)
+    })
+}
+
+/// Check text from START to END for property PROPERTY equaling VALUE.
+/// If so, return the position of the first character whose property PROPERTY
+/// is `eq' to VALUE.  Otherwise return nil.
+/// If the optional fifth argument OBJECT is a buffer (or nil, which means
+/// the current buffer), START and END are buffer positions (integers or
+/// markers).  If OBJECT is a string, START and END are 0-based indices into it.
+#[defun]
+pub fn text_properties_any<'ob>(
+    start: usize,
+    end: usize,
+    property: Object<'ob>,
+    value: Object<'ob>,
+    object: Object<'ob>,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let tree = data.textprops_with_lifetime();
+        let iter = tree.iter(start, end);
+        for (interval, props) in iter {
+            let val = textget(props, property)?;
+            if !eq(val, value) {
+                return Ok(cx.add(interval.start))
+            }
+        }
+        Ok(NIL)
+    })
+}
+
+/// Check text from START to END for property PROPERTY not equaling VALUE.
+/// If so, return the position of the first character whose property PROPERTY
+/// is not `eq' to VALUE.  Otherwise, return nil.
+/// If the optional fifth argument OBJECT is a buffer (or nil, which means
+/// the current buffer), START and END are buffer positions (integers or
+/// markers).  If OBJECT is a string, START and END are 0-based indices into it.
+#[defun]
+pub fn text_properties_not_all<'ob>(
+    start: usize,
+    end: usize,
+    property: Object<'ob>,
+    value: Object<'ob>,
+    object: Object<'ob>,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Result<Object<'ob>> {
+    modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
+        let tree = data.textprops_with_lifetime();
+        let iter = tree.iter(start, end);
+        for (interval, props) in iter {
+            let val = textget(props, property)?;
+            if eq(val, value) {
+                return Ok(cx.add(interval.start))
+            }
+        }
+        Ok(NIL)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        buffer::get_buffer_create,
+        buffer::{get_buffer_create, BUFFERS},
         core::{
             env::intern,
             gc::{Context, RootSet},
         },
-        editfns::insert,
         fns::plist_get,
-        intervals::IntervalTree,
     };
     use rune_core::macros::{list, root};
 
