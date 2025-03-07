@@ -5,7 +5,7 @@ use std::{
 };
 
 /// a half-open interval in ℕ, [start, end)
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TextRange {
     pub start: usize,
     pub end: usize,
@@ -14,10 +14,15 @@ pub struct TextRange {
 impl Ord for TextRange {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.start.cmp(&other.start) {
-            Ordering::Less => Ordering::Less,
             Ordering::Equal => self.end.cmp(&other.end),
-            Ordering::Greater => Ordering::Greater,
+            x => x,
         }
+    }
+}
+
+impl PartialOrd for TextRange {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -52,10 +57,10 @@ impl TextRange {
         }
     }
 
-    /// Creates a new TextRange only if start < end (non-empty interval).
+    /// Creates a new `TextRange` only if start < end (non-empty interval).
     /// Returns None if start >= end.
     pub fn new_valid(start: usize, end: usize) -> Option<Self> {
-        (start < end).then(|| Self { start, end })
+        (start < end).then_some(Self { start, end })
     }
 
     pub fn as_range(&self) -> Range<usize> {
@@ -63,7 +68,7 @@ impl TextRange {
     }
 
     pub fn empty(&self) -> bool {
-        return self.start >= self.end;
+        self.start >= self.end
     }
 
     pub fn contains(&self, pos: usize) -> bool {
@@ -146,6 +151,7 @@ mod tests {
     use std::cmp::Ordering;
 
     #[test]
+    #[allow(clippy::many_single_char_names)]
     fn test_strict_order() {
         // Test ranges that are completely before
         let a = TextRange::new(0, 5);

@@ -142,7 +142,7 @@ pub fn text_properties_at<'ob>(
         }
     };
     let a = tree.find(position).map(|a| *a.val).unwrap_or(NIL);
-    return Ok(unsafe { a.with_lifetime() });
+    Ok(unsafe { a.with_lifetime() })
 }
 
 /// Return the value of POSITION's property PROP, in OBJECT.
@@ -236,14 +236,12 @@ pub fn next_property_change<'ob>(
     env: &'ob mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
-    // let node = tree.find(position);
     modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
         let point_max = data.text.len_chars() + 1;
         let end = limit.unwrap_or(point_max);
         let tree = data.textprops_with_lifetime();
         // NOTE this can be optimized
         tree.clean();
-        // println!("{:?}", tree.tree);
         let prop = tree.tree.find_intersect_min(position..end);
 
         match prop {
@@ -251,18 +249,13 @@ pub fn next_property_change<'ob>(
                 let range = p.key;
                 if range.start <= position {
                     // should have range.end > position
-                    if range.end < end {
-                        return Ok(cx.add(range.end));
-                    } else {
-                        return Ok(cx.add(limit));
-                    }
+                    if range.end < end { Ok(cx.add(range.end)) } else { Ok(cx.add(limit)) }
                 } else {
                     // empty property before interval, so prop changed just at range start
-                    return Ok(cx.add(range.start));
+                    Ok(cx.add(range.start))
                 }
 
                 // range is fully inside region, prop changes at end
-                // return Ok(cx.add(range.end));
             }
             None => {
                 let result = match limit {
@@ -303,10 +296,10 @@ pub fn next_single_property_change<'ob>(
         let tree = data.textprops_with_lifetime();
         // NOTE this can be optimized
         tree.clean();
-        let mut iter = tree.iter(position, end);
+        let iter = tree.iter(position, end);
 
         let mut val = None;
-        while let Some((interval, props)) = iter.next() {
+        for (interval, props) in iter {
             let text_prop = textget(props, prop)?;
             match val {
                 Some(v) => {
@@ -343,7 +336,6 @@ pub fn previous_property_change<'ob>(
     env: &'ob mut Rt<Env>,
     cx: &'ob Context,
 ) -> Result<Object<'ob>> {
-    // let node = tree.find(position);
     modify_buffer_data(object, env, |data| -> Result<Object<'ob>> {
         let point_min = 1;
         let start = limit.unwrap_or(point_min);
@@ -351,7 +343,6 @@ pub fn previous_property_change<'ob>(
         let tree = data.textprops_with_lifetime();
         // NOTE this can be optimized
         tree.clean();
-        // println!("{:?}", tree.tree);
         let prop = tree.tree.find_intersect_max(start..end);
 
         match prop {
@@ -360,17 +351,16 @@ pub fn previous_property_change<'ob>(
                 if interval.end >= position {
                     // should have range.start < position
                     if interval.start > start {
-                        return Ok(cx.add(interval.start));
+                        Ok(cx.add(interval.start))
                     } else {
-                        return Ok(cx.add(limit));
+                        Ok(cx.add(limit))
                     }
                 } else {
                     // empty property after interval, so prop changed just at its end
-                    return Ok(cx.add(interval.end));
+                    Ok(cx.add(interval.end))
                 }
 
                 // range is fully inside region, prop changes at end
-                // return Ok(cx.add(range.end));
             }
             None => {
                 let result = match limit {
@@ -411,10 +401,10 @@ pub fn previous_single_property_change<'ob>(
         let tree = data.textprops_with_lifetime();
         // NOTE this can be optimized
         tree.clean();
-        let mut iter = tree.iter_reverse(start, position);
+        let iter = tree.iter_reverse(start, position);
 
         let mut val = None;
-        while let Some((interval, props)) = iter.next() {
+        for (interval, props) in iter {
             let text_prop = textget(props, prop)?;
             match val {
                 Some(v) => {
@@ -575,7 +565,6 @@ mod tests {
         let roots = &RootSet::default();
         let mut context = Context::new(roots);
         let cx = &mut context;
-        // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
         let plist_1 = list![intern(":a", cx), 1, intern(":b", cx), 2; cx];
         let plist_2 = list![intern(":a", cx), 4, intern(":c", cx), 5; cx];
         let plist_1 =
@@ -751,7 +740,6 @@ mod tests {
         root!(env, new(Env), cx);
 
         let buf = get_buffer_create(cx.add("test_text_properties_at"), None, cx)?;
-        // let cons1 = Cons::new("start", Cons::new(7, Cons::new(5, 9, cx), cx), cx);
         let n = text_properties_at(0, buf, env)?;
         assert!(n.is_nil());
 

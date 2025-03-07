@@ -53,7 +53,7 @@ impl<'ob> IntervalTree<'ob> {
         self.tree
             .insert((start, end), val, |a, b| {
                 add_properties(*a, *b, crate::textprops::PropertySetType::Append, false, cx)
-                    .map(|obj| Slot::new(obj))
+                    .map(Slot::new)
                     .unwrap()
             })
             .unwrap();
@@ -82,9 +82,9 @@ impl<'ob> IntervalTree<'ob> {
         let props = list_of_props.as_list()?;
         self.tree.apply_with_split(
             |val| {
-                let mut props = props.clone();
+                let props = props.clone();
                 let mut result = *val;
-                while let Some(sym) = props.next() {
+                for sym in props {
                     let sym = sym.ok()?;
                     result = remove_sym_from_props(sym, result).ok()?;
                 }
@@ -166,7 +166,7 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
         }
     }
 
-    return Ok(result);
+    Ok(result)
 }
 
 fn set_cdr<'ob>(this: &'ob Cons, other: Object<'ob>) -> Option<&'ob Cons> {
@@ -233,7 +233,7 @@ impl<'ob, 'tree> IntervalIntersections<'ob, 'tree> {
     }
 }
 
-impl<'ob, 'tree> Iterator for IntervalIntersections<'ob, 'tree> {
+impl<'ob> Iterator for IntervalIntersections<'ob, '_> {
     type Item = (std::ops::Range<usize>, Object<'ob>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -292,7 +292,7 @@ impl<'ob, 'tree> ReverseIntervalIntersections<'ob, 'tree> {
     }
 }
 
-impl<'ob, 'tree> Iterator for ReverseIntervalIntersections<'ob, 'tree> {
+impl<'ob> Iterator for ReverseIntervalIntersections<'ob, '_> {
     type Item = (std::ops::Range<usize>, Object<'ob>);
 
     fn next(&mut self) -> Option<Self::Item> {

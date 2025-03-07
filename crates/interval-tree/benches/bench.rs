@@ -6,9 +6,9 @@ use rand::{Rng, SeedableRng};
 fn generate_random_intervals(n: usize, rng: &mut StdRng) -> Vec<(TextRange, i64)> {
     let mut intervals = Vec::with_capacity(n);
     for _ in 0..n {
-        let start = rng.gen_range(0..1000);
-        let end = start + rng.gen_range(1..100);
-        let value = rng.gen::<i64>();
+        let start = rng.random_range(0..1000);
+        let end = start + rng.random_range(1..100);
+        let value = rng.random::<i64>();
         intervals.push((TextRange::new(start, end), value));
     }
     intervals
@@ -60,8 +60,8 @@ fn find_intersects_benchmark(c: &mut Criterion) {
     let search_n = 1000;
     let search_ranges: Vec<TextRange> = (0..search_n)
         .map(|_| {
-            let start = rng.gen_range(0..200);
-            let end = start + rng.gen_range(500..700);
+            let start = rng.random_range(0..200);
+            let end = start + rng.random_range(500..700);
             TextRange::new(start, end)
         })
         .collect();

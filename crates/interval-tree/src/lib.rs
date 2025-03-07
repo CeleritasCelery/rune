@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::{Arguments, Debug, Write};
+use std::ptr;
 pub mod range;
 pub use range::TextRange;
 
@@ -39,12 +40,12 @@ pub type MaybeNode<T> = Option<BoxedNode<T>>;
 impl<T: Clone> Node<T> {
     #[inline]
     pub fn red(node: &MaybeNode<T>) -> bool {
-        node.as_ref().map(|n| n.color == Color::Red).unwrap_or(false)
+        node.as_ref().is_some_and(|n| n.color == Color::Red)
     }
 
     #[inline]
     pub fn new(key: TextRange, val: T) -> Self {
-        Self::new_with_parent(key, val, std::ptr::null_mut(), false)
+        Self::new_with_parent(key, val, ptr::null_mut(), false)
     }
 
     #[inline]
@@ -83,7 +84,7 @@ impl<T: Clone> Node<T> {
 
     #[inline]
     pub fn set_parent(&mut self, parent: &mut Node<T>) {
-        self.parent = parent
+        self.parent = parent;
     }
 
     /// perform the following operation, \\ is the red link:
@@ -93,7 +94,7 @@ impl<T: Clone> Node<T> {
     ///        x    =>  n
     ///       / \      / \
     ///      c            c
-    pub fn rotate_left<'a>(node: &'a mut BoxedNode<T>) -> Option<&'a mut BoxedNode<T>> {
+    pub fn rotate_left(node: &mut BoxedNode<T>) -> Option<&mut BoxedNode<T>> {
         let mut x = node.right.take()?;
         let mut c = x.left.take();
         if let Some(ref mut c) = c {
@@ -122,7 +123,7 @@ impl<T: Clone> Node<T> {
     ///    x       =>       n
     ///   / \              / \
     ///      c            c
-    pub fn rotate_right<'a>(node: &'a mut BoxedNode<T>) -> Option<&'a mut BoxedNode<T>> {
+    pub fn rotate_right(node: &mut BoxedNode<T>) -> Option<&mut BoxedNode<T>> {
         let mut x = node.left.take()?;
         let mut c = x.right.take();
         if let Some(ref mut c) = c {
@@ -166,7 +167,7 @@ impl<T: Clone> Node<T> {
         }
     }
 
-    fn min_mut<'a>(&'a mut self) -> &'a mut Node<T> {
+    fn min_mut(&mut self) -> &mut Node<T> {
         if let Some(ref mut l) = self.left {
             l.min_mut()
         } else {
@@ -186,17 +187,17 @@ impl<T: Clone> Node<T> {
 
     fn get_node_mut(&mut self, key: TextRange) -> Option<&mut Node<T>> {
         match key.cmp(&self.key) {
-            std::cmp::Ordering::Equal => Some(self),
-            std::cmp::Ordering::Less => self.left.as_mut().and_then(|n| n.get_node_mut(key)),
-            std::cmp::Ordering::Greater => self.right.as_mut().and_then(|n| n.get_node_mut(key)),
+            Ordering::Equal => Some(self),
+            Ordering::Less => self.left.as_mut().and_then(|n| n.get_node_mut(key)),
+            Ordering::Greater => self.right.as_mut().and_then(|n| n.get_node_mut(key)),
         }
     }
 
     fn get(&self, key: TextRange) -> Option<T> {
         match key.cmp(&self.key) {
-            std::cmp::Ordering::Equal => Some(self.val.clone()),
-            std::cmp::Ordering::Less => self.left.as_ref().and_then(|n| n.get(key)),
-            std::cmp::Ordering::Greater => self.right.as_ref().and_then(|n| n.get(key)),
+            Ordering::Equal => Some(self.val.clone()),
+            Ordering::Less => self.left.as_ref().and_then(|n| n.get(key)),
+            Ordering::Greater => self.right.as_ref().and_then(|n| n.get(key)),
         }
     }
 
@@ -286,7 +287,7 @@ impl<T: Clone> Node<T> {
             Ordering::Greater => {
                 Node::insert_at(&mut node.right, key, val, ptr, true, merge_fn)?;
             }
-        };
+        }
 
         // cond1: r_red && !l_red
         if Node::red(&node.right) && !Node::red(&node.left) {
@@ -444,8 +445,12 @@ impl<T: Clone> Node<T> {
                 r_min.parent = n.parent;
                 r_min.n = n.n;
                 let ptr: *mut Node<T> = r_min.as_mut();
-                r_min.left.as_mut().map(|n| n.parent = ptr);
-                r_min.right.as_mut().map(|n| n.parent = ptr);
+                if let Some(n) = &mut r_min.left {
+                    n.parent = ptr;
+                }
+                if let Some(n) = &mut r_min.right {
+                    n.parent = ptr;
+                }
                 std::mem::swap(r_min, n);
                 result
             } else {
@@ -533,7 +538,7 @@ impl<T: Clone> Node<T> {
         None
     }
 
-    pub fn find_intersects<'a, 'b>(&'a self, range: TextRange, results: &'b mut Vec<&'a Node<T>>) {
+    pub fn find_intersects<'a>(&'a self, range: TextRange, results: &mut Vec<&'a Node<T>>) {
         let ord = range.strict_order(&self.key);
         match ord {
             Some(Ordering::Less) => {
@@ -583,7 +588,7 @@ impl<T: Clone> Node<T> {
     }
 
     /// Recursively applies a function to each node in the tree in order.
-    /// f is mutable and has type FnMut because it may modify its parameters
+    /// f is mutable and has type `FnMut` because it may modify its parameters
     fn apply<F>(&self, f: &mut F)
     where
         F: FnMut(&Node<T>),
@@ -631,7 +636,7 @@ impl<T: Clone> Node<T> {
                 l.advance(position, length);
             }
             if let Some(ref mut r) = self.right {
-                r.advance(position, length)
+                r.advance(position, length);
             }
         }
     }
@@ -674,18 +679,18 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// An optional mutable reference to the newly inserted node, or `None` if the interval is
     /// degenerate.
-    pub fn insert<'a, F: Fn(T, T) -> T>(
-        &'a mut self,
+    pub fn insert<F: Fn(T, T) -> T>(
+        &mut self,
         key: impl Into<TextRange>,
         val: T,
         merge_fn: F,
-    ) -> Option<&'a mut Box<Node<T>>> {
+    ) -> Option<&mut Box<Node<T>>> {
         let key = key.into();
         if key.start == key.end {
             return None;
         }
         let mut result =
-            Node::insert_at(&mut self.root, key, val, std::ptr::null_mut(), false, &merge_fn);
+            Node::insert_at(&mut self.root, key, val, ptr::null_mut(), false, &merge_fn);
         result.as_mut().unwrap().color = Color::Black;
         result
     }
@@ -781,7 +786,7 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// # Arguments
     ///
-    /// * `range` - The range to delete (can be any type that converts to TextRange)
+    /// * `range` - The range to delete (can be any type that converts to `TextRange`)
     /// * `del_extend` - Whether to delete entire intersecting intervals or just the overlapping portions
     ///
     /// # Examples
@@ -877,7 +882,7 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// # Arguments
     ///
-    /// * `range` - The range to search for intersections (can be any type that converts to TextRange)
+    /// * `range` - The range to search for intersections (can be any type that converts to `TextRange`)
     ///
     /// # Returns
     ///
@@ -950,7 +955,7 @@ impl<T: Clone> IntervalTree<T> {
         eq: F,
         empty: G,
     ) {
-        let node = self.get_node_mut(start).map(|n| n as *mut Node<T>);
+        let node = self.get_node_mut(start).map(ptr::from_mut);
         self.clean_from_node(node, eq, empty);
     }
 
@@ -998,7 +1003,7 @@ impl<T: Clone> IntervalTree<T> {
     }
 
     fn min_mut(&mut self) -> Option<*mut Node<T>> {
-        self.root.as_mut().map(|n| n.min_mut() as *mut Node<T>)
+        self.root.as_mut().map(|n| ptr::from_mut(n.min_mut()))
     }
 
     /// Merges adjacent intervals in the tree that have equal properties.
@@ -1014,7 +1019,7 @@ impl<T: Clone> IntervalTree<T> {
     /// * `equal` - A closure that takes references to two values and returns `true`
     ///   if they are considered equal, `false` otherwise.
     pub fn merge<F: Fn(&T, &T) -> bool>(&mut self, eq: F) {
-        self.clean(eq, |_| false)
+        self.clean(eq, |_| false);
     }
 
     pub fn apply<F: FnMut(&T)>(&self, f: &mut F) {
@@ -1042,7 +1047,7 @@ impl<T: Clone> IntervalTree<T> {
     /// # Arguments
     ///
     /// * `f` - Transformation function to apply to intersecting intervals
-    /// * `range` - The range to check for intersections (can be any type that converts to TextRange)
+    /// * `range` - The range to check for intersections (can be any type that converts to `TextRange`)
     ///
     /// # Examples
     ///
@@ -1066,7 +1071,7 @@ impl<T: Clone> IntervalTree<T> {
             return;
         };
         // re-gain mutable reference, since we don't have interior mutability for now
-        let mut node_ptr = self.get_node_mut(start.key).map(|n| n as *mut Node<T>);
+        let mut node_ptr = self.get_node_mut(start.key).map(ptr::from_mut);
         while let Some(n_ptr) = node_ptr {
             let n = safe_mut(n_ptr);
             node_ptr = n.next_raw();
@@ -1086,7 +1091,6 @@ impl<T: Clone> IntervalTree<T> {
                     Some(val) => n.val = val,
                     None => {
                         self.delete_exact(n.key);
-                        continue;
                     }
                 }
             }
@@ -1162,7 +1166,7 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Interval Tree:\n")?;
         if let Some(root) = self.root.as_ref() {
-            root.print_inner(f, 0)?
+            root.print_inner(f, 0)?;
         }
         Ok(())
     }
@@ -1241,7 +1245,7 @@ mod tests {
         assert_eq!(n3.key.start, 9);
         let n4 = n3.left.as_ref().unwrap();
         assert_eq!(n4.key.start, 8);
-        assert!(n3.right.is_none())
+        assert!(n3.right.is_none());
     }
 
     #[test]
@@ -1249,7 +1253,7 @@ mod tests {
         let val = 1;
         let mut tree = build_tree(val);
         // let mut tree = dbg!(tree);
-        for k in vec![8, 4, 5, 7, 3, 6].into_iter() {
+        for k in [8, 4, 5, 7, 3, 6] {
             let i = TextRange::new(k, k + 1);
             let a = tree.delete_exact(i).unwrap();
             assert_eq!(a.key, i);
@@ -1264,7 +1268,7 @@ mod tests {
         let key = TextRange::new(a, a + 1);
         let n: *mut Node<i32> = tree.get_node_mut(key).unwrap();
         let mut a = tree.delete_exact(key).unwrap();
-        assert_eq!(n, a.as_mut() as *mut Node<i32>)
+        assert_eq!(n, ptr::from_mut(&mut *a));
     }
 
     #[test]
@@ -1351,15 +1355,10 @@ mod tests {
         tree.delete_exact(TextRange::new(5, 6));
         let mut n = tree.min().unwrap();
 
-        loop {
-            match n.next() {
-                Some(ne) => {
-                    n = ne;
-                }
-                None => break,
-            }
+        while let Some(ne) = n.next() {
+            n = ne;
         }
-        assert_eq!(n.key.start, 9)
+        assert_eq!(n.key.start, 9);
     }
 
     #[test]
