@@ -1,6 +1,6 @@
 use crate::core::{
     gc::Context,
-    object::{Object, OptionalFlag, NIL, TRUE},
+    object::{NIL, Object, OptionalFlag, TRUE},
 };
 use rune_core::macros::list;
 use rune_macros::defun;
@@ -9,11 +9,7 @@ use std::path::Path;
 #[defun]
 fn file_attributes<'ob>(filename: &str, _id_format: OptionalFlag, cx: &'ob Context) -> Object<'ob> {
     let file = Path::new(filename);
-    if file.exists() {
-        metadata_attributes(file, cx)
-    } else {
-        NIL
-    }
+    if file.exists() { metadata_attributes(file, cx) } else { NIL }
 }
 
 #[cfg(unix)]

@@ -3,7 +3,7 @@ use crate::{
     core::gc::{Block, GcHeap, GcState, Trace},
     derive_GcMoveable,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bumpalo::collections::Vec as GcVec;
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;

@@ -2,9 +2,9 @@
 use crate::core::cons::Cons;
 use crate::core::gc::Context;
 use crate::core::object::{
-    ByteFn, ByteString, FnArgs, Gc, IntoObject, LispVec, Object, RecordBuilder, Symbol, NIL,
+    ByteFn, ByteString, FnArgs, Gc, IntoObject, LispVec, NIL, Object, RecordBuilder, Symbol,
 };
-use anyhow::{ensure, Result};
+use anyhow::{Result, ensure};
 use rune_macros::{defun, elprop};
 
 #[defun]

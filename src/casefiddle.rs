@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use crate::core::{
     gc::Rt,
-    object::{Object, NIL},
+    object::{NIL, Object},
 };
 use crate::fns::StringOrChar;
 use crate::{Context, Env};

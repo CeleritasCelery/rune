@@ -75,7 +75,7 @@ fn derive_enum(orig: &syn::DeriveInput, data_enum: &syn::DataEnum) -> TokenStrea
                 }
             }
             syn::Fields::Named(_) => unreachable!(),
-        };
+        }
     }
 
     let doc_string = format!("Automatically derived from [{orig_name}] via `#[derive(Trace)]`");

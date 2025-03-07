@@ -1,4 +1,4 @@
-use super::{CloneIn, Gc, IntoObject, Object, WithLifetime, NIL};
+use super::{CloneIn, Gc, IntoObject, NIL, Object, WithLifetime};
 use crate::{
     core::gc::{Block, GcHeap, Slot},
     derive_GcMoveable,

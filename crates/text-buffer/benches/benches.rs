@@ -1,6 +1,6 @@
 use crdt_testdata::{TestData, TestPatch};
 use criterion::BenchmarkId as id;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use text_buffer::Buffer;
 
 fn get_test_data(name: &str) -> TestData {

@@ -1,6 +1,6 @@
 //! Time analysis
 use crate::core::{
-    env::{sym, Env},
+    env::{Env, sym},
     gc::{Context, Rt},
     object::Object,
 };

@@ -1,16 +1,16 @@
 //! The main bytecode interpeter.
 use crate::core::cons::Cons;
-use crate::core::env::{sym, CallFrame, Env};
+use crate::core::env::{CallFrame, Env, sym};
 use crate::core::gc::{Context, IntoRoot, Rt, Rto, Slot};
 use crate::core::object::{
-    ByteFn, ByteString, FnArgs, Function, FunctionType, Gc, LispVec, Object, ObjectType, Symbol,
-    WithLifetime, NIL,
+    ByteFn, ByteString, FnArgs, Function, FunctionType, Gc, LispVec, NIL, Object, ObjectType,
+    Symbol, WithLifetime,
 };
 use crate::data::LispError;
 use crate::eval::{ErrorType, EvalError, EvalResult};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use rune_core::macros::{bail_err, rebind, root};
-use rune_macros::{defun, Trace};
+use rune_macros::{Trace, defun};
 
 mod opcode;
 
@@ -1161,7 +1161,9 @@ mod test {
         make_bytecode!(
             bytecode,
             0,
-            [Constant0, Constant1, Constant2, Constant3, Constant4, Constant5, ListN, 6, Return],
+            [
+                Constant0, Constant1, Constant2, Constant3, Constant4, Constant5, ListN, 6, Return
+            ],
             [1, 2, 3, 4, 5, 6],
             cx
         );

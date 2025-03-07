@@ -2,13 +2,13 @@
 use crate::{
     core::{
         cons::{Cons, ElemStreamIter, IntoArray},
-        env::{sym, CallFrame, Env},
+        env::{CallFrame, Env, sym},
         error::{Type, TypeError},
         gc::{Context, Rt, Rto, Slot},
-        object::{Function, Gc, List, ListType, Object, ObjectType, Symbol, TagType, NIL, TRUE},
+        object::{Function, Gc, List, ListType, NIL, Object, ObjectType, Symbol, TRUE, TagType},
     },
     data::LispError,
-    eval::{add_trace, ErrorType, EvalError, EvalResult},
+    eval::{ErrorType, EvalError, EvalResult, add_trace},
     rooted_iter,
 };
 use anyhow::Context as _;
@@ -969,7 +969,11 @@ mod test {
             6,
             cx,
         );
-        check_interpreter("(let ((i 3) (x 0)) (while (progn (setq x (1- x)) (> i 0)) (setq x (+ x i) i (1- i) )) x)", 2, cx);
+        check_interpreter(
+            "(let ((i 3) (x 0)) (while (progn (setq x (1- x)) (> i 0)) (setq x (+ x i) i (1- i) )) x)",
+            2,
+            cx,
+        );
     }
 
     #[test]

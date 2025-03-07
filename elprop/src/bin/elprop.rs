@@ -159,7 +159,7 @@ fn is_defun(func: &&syn::ItemFn) -> bool {
             Meta::Path(path) | Meta::List(MetaList { path, .. })
                 if path.get_ident().unwrap() == "defun" =>
             {
-                return true
+                return true;
             }
             _ => {}
         }

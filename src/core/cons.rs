@@ -1,8 +1,8 @@
 use crate::derive_GcMoveable;
 
 use super::gc::{Block, GcHeap, GcState, Trace};
-use super::object::{CloneIn, Gc, IntoObject, ObjCell, Object, ObjectType, NIL};
-use anyhow::{anyhow, Result};
+use super::object::{CloneIn, Gc, IntoObject, NIL, ObjCell, Object, ObjectType};
+use anyhow::{Result, anyhow};
 use rune_core::hashmap::HashSet;
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display, Write};

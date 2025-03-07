@@ -4,7 +4,7 @@ use crate::core::{
     gc::{Context, Rt},
     object::{Object, ObjectType},
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use rune_macros::defun;
 use std::{fmt::Write as _, io::Write};
 

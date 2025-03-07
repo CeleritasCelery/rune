@@ -79,7 +79,7 @@ impl std::ops::Deref for MutObjCell {
 impl MutObjCell {
     pub(crate) fn set(&self, value: Object) {
         unsafe {
-            self.0 .0.set(value.with_lifetime());
+            self.0.0.set(value.with_lifetime());
         }
     }
 }

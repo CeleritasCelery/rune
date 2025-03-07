@@ -4,7 +4,7 @@
 //!
 //! * [`macro@defun`]: Functions hydrated to emacs lisp.
 //! * [Trace](`macro@Trace`): Implement Trace for a struct.
-use darling::{ast::NestedMeta, Error, FromMeta};
+use darling::{Error, FromMeta, ast::NestedMeta};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 

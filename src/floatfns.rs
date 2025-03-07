@@ -82,11 +82,7 @@ fn acos(arg: Number) -> f64 {
 
 #[defun]
 fn atan(arg: Number, x: Option<f64>) -> f64 {
-    if let Some(x) = x {
-        coerce(arg).atan2(x)
-    } else {
-        coerce(arg).atan()
-    }
+    if let Some(x) = x { coerce(arg).atan2(x) } else { coerce(arg).atan() }
 }
 
 #[defun]

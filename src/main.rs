@@ -1,3 +1,4 @@
+#![allow(unsafe_op_in_unsafe_fn)]
 #[macro_use]
 mod macros;
 #[macro_use]
@@ -34,7 +35,7 @@ mod threads;
 mod timefns;
 
 use crate::core::{
-    env::{intern, sym, Env},
+    env::{Env, intern, sym},
     gc::{Context, RootSet, Rt},
     object::{Gc, LispString, NIL},
 };

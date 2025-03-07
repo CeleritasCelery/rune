@@ -6,7 +6,7 @@ use crate::data::LispError;
 
 use super::{
     super::error::{Type, TypeError},
-    ByteString, CharTable, LispHashTable, LispString, LispVec, OptionalFlag, NIL, TRUE,
+    ByteString, CharTable, LispHashTable, LispString, LispVec, NIL, OptionalFlag, TRUE,
 };
 use super::{Gc, LispFloat, Object, ObjectType, Symbol};
 use anyhow::Context;
@@ -114,11 +114,7 @@ where
 
 impl From<bool> for Object<'_> {
     fn from(b: bool) -> Self {
-        if b {
-            TRUE
-        } else {
-            NIL
-        }
+        if b { TRUE } else { NIL }
     }
 }
 

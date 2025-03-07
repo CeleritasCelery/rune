@@ -1,16 +1,16 @@
 //! Loading elisp from files and strings.
 use crate::core::cons::Cons;
-use crate::core::env::{sym, Env};
+use crate::core::env::{Env, sym};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Context, Rt, Rto};
 use crate::core::object::{
-    Function, Gc, LispString, Object, ObjectType, OptionalFlag, Symbol, TagType, WithLifetime, NIL,
-    TRUE,
+    Function, Gc, LispString, NIL, Object, ObjectType, OptionalFlag, Symbol, TRUE, TagType,
+    WithLifetime,
 };
 use crate::reader;
 use crate::{interpreter, rooted_iter};
-use anyhow::{anyhow, Context as _};
-use anyhow::{bail, ensure, Result};
+use anyhow::{Context as _, anyhow};
+use anyhow::{Result, bail, ensure};
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{call, rebind, root};
 use rune_macros::defun;

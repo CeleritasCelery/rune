@@ -4,11 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static FLAG: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn debug_enabled() -> bool {
-    if cfg!(test) {
-        true
-    } else {
-        FLAG.load(Ordering::Acquire)
-    }
+    if cfg!(test) { true } else { FLAG.load(Ordering::Acquire) }
 }
 
 pub(crate) fn enable_debug() {

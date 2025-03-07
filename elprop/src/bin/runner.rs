@@ -134,9 +134,5 @@ fn process_eval_result(
         reader.read_line(&mut line).unwrap();
     }
     let text = line.strip_suffix(END_TAG).unwrap().trim().to_string();
-    if test_fail(&text) {
-        Err(text)
-    } else {
-        Ok(text)
-    }
+    if test_fail(&text) { Err(text) } else { Ok(text) }
 }

@@ -7,7 +7,7 @@ use crate::{
     derive_GcMoveable,
     intervals::IntervalTree,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use rune_macros::Trace;
 use std::{
     fmt::Display,

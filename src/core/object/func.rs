@@ -1,6 +1,6 @@
 use super::{
     super::gc::{Block, Context},
-    display_slice, CloneIn, IntoObject, LispVec, ObjCell,
+    CloneIn, IntoObject, LispVec, ObjCell, display_slice,
 };
 use super::{Object, WithLifetime};
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     },
     derive_GcMoveable,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use rune_macros::Trace;
 use std::fmt::{self, Debug, Display};
 
@@ -59,11 +59,11 @@ impl ByteFn {
     ) -> ByteFnPrototype {
         let op_codes = op_codes.to_vec().into_boxed_slice();
         #[cfg(miri)]
-        unsafe {
+        {
             // TODO: the opcodes live outside of the heap because we are relying
             // on them having a stable address. Therefore they get leaked. We
             // need to find some way to address this.
-            extern "Rust" {
+            unsafe extern "Rust" {
                 fn miri_static_root(ptr: *const u8);
             }
             let ptr: *const u8 = op_codes.as_ptr();

@@ -4,11 +4,11 @@ use crate::{
         env::{Env, INTERNED_SYMBOLS},
         error::{Type, TypeError},
         gc::{Context, Rt},
-        object::{Gc, LispBuffer, Object, ObjectType, OptionalFlag, NIL},
+        object::{Gc, LispBuffer, NIL, Object, ObjectType, OptionalFlag},
     },
     fns::slice_into_list,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use rune_core::hashmap::HashMap;
 use rune_macros::defun;
 use std::sync::LazyLock;

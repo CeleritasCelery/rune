@@ -84,7 +84,7 @@ impl LispHashTable {
     }
 
     pub(crate) fn insert(&self, key: Object, value: Object) {
-        match &self.0 .0 {
+        match &self.0.0 {
             HashTableType::Local(table) => {
                 let key = unsafe { key.with_lifetime() };
                 let value = unsafe { value.with_lifetime() };
@@ -108,14 +108,14 @@ impl LispHashTable {
     }
 
     pub(crate) fn get_iter_index(&self) -> usize {
-        match &self.0 .0 {
+        match &self.0.0 {
             HashTableType::Local(table) => table.borrow().iter_idx,
             HashTableType::Global(table) => table.lock().unwrap().iter_idx,
         }
     }
 
     pub(crate) fn set_iter_index(&self, index: usize) {
-        match &self.0 .0 {
+        match &self.0.0 {
             HashTableType::Local(table) => table.borrow_mut().iter_idx = index,
             HashTableType::Global(table) => table.lock().unwrap().iter_idx = index,
         }

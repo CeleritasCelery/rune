@@ -697,17 +697,20 @@ where
     pub(crate) fn get<Q: IntoRoot<K>>(&self, k: Q) -> Option<&Rt<V>> {
         use std::ptr::from_ref;
         let inner = unsafe { &*from_ref(self.as_ref()).cast::<IndexMap<K, Rt<V>>>() };
-        inner.get(unsafe { &k.into_root() })
+        let root = unsafe { k.into_root() };
+        inner.get(&root)
     }
 
     pub(crate) fn get_mut<Q: IntoRoot<K>>(&mut self, k: Q) -> Option<&mut Rt<V>> {
         use std::ptr::from_mut;
         let inner = unsafe { &mut *from_mut(self.as_mut()).cast::<IndexMap<K, Rt<V>>>() };
-        inner.get_mut(unsafe { &k.into_root() })
+        let root = unsafe { k.into_root() };
+        inner.get_mut(&root)
     }
 
     pub(crate) fn remove<Q: IntoRoot<K>>(&mut self, k: Q) {
-        self.as_mut().swap_remove(unsafe { &k.into_root() });
+        let root = unsafe { k.into_root() };
+        self.as_mut().swap_remove(&root);
     }
 }
 

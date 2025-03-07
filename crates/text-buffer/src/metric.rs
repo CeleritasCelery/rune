@@ -1,5 +1,5 @@
 use get_size2::GetSize;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{
     fmt,
     iter::Sum,
@@ -766,7 +766,7 @@ impl Node {
                 int.metrics = smallvec![left.metrics(), right.metrics()];
                 int.children = smallvec![left, Box::new(right)];
             }
-        };
+        }
     }
 
     fn append_at_depth(&mut self, other: Self, depth: usize) -> Option<Box<Node>> {
@@ -909,7 +909,7 @@ impl Node {
                 Node::Leaf(leaf) => {
                     assert!(leaf.metrics.len() <= MAX);
                 }
-            };
+            }
         }
     }
 

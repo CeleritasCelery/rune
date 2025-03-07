@@ -2,7 +2,7 @@
 name = "rune"
 version = "0.1.0"
 authors = ["Troy Hinckley"]
-edition = "2021"
+edition = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,7 +16,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 syn = { version = "2.0.15", features = ["full"] }
