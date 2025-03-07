@@ -1,16 +1,16 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use interval_tree::{IntervalTree as Tree, Node};
 
 use crate::{
+    Context,
     core::{
         cons::Cons,
         error::{Type, TypeError},
         gc::{IntoRoot, Slot, Trace},
-        object::{Object, ObjectType, TagType, WithLifetime, NIL},
+        object::{NIL, Object, ObjectType, TagType, WithLifetime},
     },
     fns::eq,
     textprops::add_properties,
-    Context,
 };
 
 #[derive(Debug)]
@@ -340,7 +340,7 @@ mod tests {
     use rune_core::macros::list;
 
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_remove_sym_from_props() {
@@ -360,7 +360,7 @@ mod tests {
 #[cfg(test)]
 mod reverse_interval_iterator_tests {
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_empty_tree() {
@@ -429,7 +429,7 @@ mod reverse_interval_iterator_tests {
 #[cfg(test)]
 mod interval_iterator_tests {
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_empty_tree() {

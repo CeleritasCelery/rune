@@ -4,12 +4,12 @@ use crate::{
         env::Env,
         error::{Type, TypeError},
         gc::{Context, Rt, Slot},
-        object::{Gc, ListType, Object, ObjectType, WithLifetime, NIL},
+        object::{Gc, ListType, NIL, Object, ObjectType, WithLifetime},
     },
     fns::eq,
     intervals::textget,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use rune_core::macros::list;
 use rune_macros::defun;
 
@@ -559,7 +559,7 @@ pub fn text_properties_not_all<'ob>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        buffer::{get_buffer_create, BUFFERS},
+        buffer::{BUFFERS, get_buffer_create},
         core::{
             env::intern,
             gc::{Context, RootSet},
