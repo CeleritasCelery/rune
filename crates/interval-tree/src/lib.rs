@@ -160,19 +160,11 @@ impl<T: Clone> Node<T> {
     }
 
     fn min(&self) -> &Node<T> {
-        if let Some(ref l) = self.left {
-            l.min()
-        } else {
-            self
-        }
+        if let Some(ref l) = self.left { l.min() } else { self }
     }
 
     fn min_mut(&mut self) -> &mut Node<T> {
-        if let Some(ref mut l) = self.left {
-            l.min_mut()
-        } else {
-            self
-        }
+        if let Some(ref mut l) = self.left { l.min_mut() } else { self }
     }
 
     #[inline]
@@ -217,7 +209,7 @@ impl<T: Clone> Node<T> {
             return None;
         }
         match node {
-            Some(ref mut n) => Node::insert_at_inner(n, key, val, merge_fn),
+            Some(n) => Node::insert_at_inner(n, key, val, merge_fn),
             None => {
                 node.replace(Node::new_boxed_with_parent(key, val.clone(), parent, is_right_child));
                 node.as_mut()

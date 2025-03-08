@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use interval_tree::{IntervalTree, TextRange};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

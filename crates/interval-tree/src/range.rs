@@ -50,11 +50,7 @@ impl<T: Into<usize>> From<(T, T)> for TextRange {
 impl TextRange {
     /// caller should check that start < end
     pub fn new(start: usize, end: usize) -> Self {
-        if start <= end {
-            Self { start, end }
-        } else {
-            panic!("invalid TextRange")
-        }
+        if start <= end { Self { start, end } } else { panic!("invalid TextRange") }
     }
 
     /// Creates a new `TextRange` only if start < end (non-empty interval).
