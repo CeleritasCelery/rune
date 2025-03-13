@@ -1,0 +1,108 @@
+* Steps to add a new object type
+** Create file for the new type
+add the file in ~src/core/object~.
+*** define the toplevel type
+This will be the type that is presented when the object is unboxed. This type should always start with a ~GcHeap~ type. The easiest way to do this is to use a tuple type like:
+
+#+begin_src rust
+  pub(crate) struct MyLispObject(GcHeap<MyInnerObject>);
+#+end_src
+
+The inner object can have what ever structure you need.
+
+*** derive required traits
+derive ~GcMoveable~ for the type
+
+#+begin_src rust
+  derive_GcMoveable!(MyLispObject);
+#+end_src
+
+derive ~Trace~, ~PartialEq~, and ~Eq~ for the type
+#+begin_src rust
+  #[derive(Trace, ParitalEq, Eq)]
+  pub(crate) struct MyLispObject(GcHeap<InnerObject>);
+#+end_src
+
+For most cases using the derive form will be enough. However if you type contains other objects (such as a ~Vec~ or ~HashMap~) you might need to implement ~Trace~ manually. See the ~impl~ of ~Trace~ for ~LispVecInner~ in ~src/core/object/vector.rs~ as an example.
+
+*** implement ~CloneIn~
+This method should construct a new object in the new block, and copy over any internal objects. See ~vector.rs~ and ~string.rs~ for examples.
+
+*** handle mutability
+Unless the type is immutable, you will need to make it be interior mutable because we only expose immutable references to the objects. The easiest way to do this is with ~RefCell~. However there are other mechanisms. Look at ~ObjCell~ or ~HashTableCore~ as an example.
+
+*** Add a constructor
+define a ~new~ method to create the type. If this type is derived from a existing Rust type (like ~f64~, ~String~, ~Vec~, etc) then you can take one of those values to initialize it. The other option is to create a builder like ~RecordBuilder~ to create the type.
+
+*** Implement ~fmt::Display~
+define how the type will be displayed to the user.
+
+*** implement other methods
+Any methods should be added to the top level type so that ideally the inner type does not need to be made public.
+
+*** Add tests
+Define some unit tests to handle creating and using the type.
+
+** Add the type in tagged.rs
+
+*** Add to cast_gc! macro
+add the type to the ~cast_gc!~ macro located in the same file for ~ObjectType~.
+
+*** derive object trait impls
+#+begin_src rust
+object_trait_impls!(MyLispObject);
+#+end_src
+
+
+*** Add to the ~Tag~ enum in the ~private~ module
+It doesn't matter what tag value is used so long as 0 remains for symbols.
+
+*** Implement ~TaggedPtr~
+Almost all objects should have the following form when implementing this trait:
+#+begin_src rust
+  impl TaggedPtr for &MyLispObject {
+      type Ptr = MyLispObject;
+      const TAG: Tag = Tag::MyLispObject;
+
+      unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+          &*ptr.cast::<Self::Ptr>()
+      }
+
+      fn get_ptr(self) -> *const Self::Ptr {
+          self as *const Self::Ptr
+      }
+  }
+#+end_src
+
+*** Implement ~IntoObject~
+This is where we will use the constructor we defined before. This trait will take either our base type or a builder and create a new object. Almost all implementation should have the following form:
+#+begin_src rust
+  impl IntoObject for MyLispObjectBuilder<'_> {
+      type Out<'ob> = &'ob MyLispObject;
+
+      fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+          unsafe {
+              let ptr = block.objects.alloc(MyLispObject::new(self, C));
+              <Self::Out<'_>>::tag_ptr(ptr)
+          }
+      }
+  }
+#+end_src
+
+*** Implement ~TryFrom<Object>~
+This will let users cast an ~Object~ into the appropriate type or return a type error. Almost all implementation should have the following form:
+#+begin_src rust
+  impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob MyLispObject> {
+      type Error = TypeError;
+
+      fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+          match value.get_tag() {
+              Tag::MyLispObject => unsafe { Ok(cast_gc(value)) },
+              _ => Err(TypeError::new(Type::LispObject, value)),
+          }
+      }
+  }
+#+end_src
+
+*** Add the type to ~ObjectType~
+This is the main enum that defines all possible types in lisp. Adding it to the object should trigger a bunch of errors showing where this type needs to be added to exhaustive matches. Follow the errors to resolve them.

@@ -8,18 +8,6 @@ This means we will need to not unwind the stack, but instead collect the backtra
 * can we make rooted_iter be generic over any iterators?
 * Change the sort function to use rust sort
 We can use the std::panic::catch_unwind to handle any errors that occur during sorting and propogate them up.
-* Steps to add a new object type
-- define the type and implement ~GcManaged~ for it
-- define in gc/alloc.rs
-- add boxing function
-- define in object
-- add to ~cast_gc!~ macro
-- impl ~IntoObject~
-- impl ~TaggedPtr~
-- implement tryfrom object
-- implement tracing
-- Add to ~OwnedObject~
-- Add to ~ObjectAllocation~
 * GUI steps
 - Display a text widget in window
 - display a buffer in the window
