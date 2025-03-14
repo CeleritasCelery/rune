@@ -5,6 +5,7 @@ use crate::{
         gc::{Block, Context, GcHeap, GcState, Trace},
     },
     derive_GcMoveable,
+    intervals::IntervalTree,
 };
 use anyhow::{Result, bail};
 use rune_macros::Trace;
@@ -23,12 +24,12 @@ pub(crate) struct OpenBuffer<'a> {
 }
 
 impl OpenBuffer<'_> {
-    fn get(&self) -> &BufferData {
+    pub(crate) fn get(&self) -> &BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_ref().unwrap()
     }
 
-    fn get_mut(&mut self) -> &mut BufferData {
+    pub(crate) fn get_mut(&mut self) -> &mut BufferData {
         // buffer can never be none because we check it as part of `lock`.
         self.data.as_mut().unwrap()
     }
@@ -112,6 +113,13 @@ impl DerefMut for OpenBuffer<'_> {
 pub(crate) struct BufferData {
     pub(crate) name: String,
     pub(crate) text: TextBuffer,
+    pub(crate) textprops: IntervalTree<'static>,
+}
+
+impl BufferData {
+    pub fn textprops_with_lifetime<'new>(&mut self) -> &mut IntervalTree<'new> {
+        unsafe { std::mem::transmute(&mut self.textprops) }
+    }
 }
 
 #[derive(Debug)]
@@ -133,13 +141,14 @@ impl LispBuffer {
     }
 
     pub(crate) unsafe fn new(name: String, _: &Block<true>) -> LispBuffer {
+        let textprops = IntervalTree::new();
         let new = LispBufferInner {
-            text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new() })),
+            text_buffer: Mutex::new(Some(BufferData { name, text: TextBuffer::new(), textprops })),
         };
         Self(GcHeap::new(new, true))
     }
 
-    pub(in crate::core) fn lock(&self) -> Result<OpenBuffer<'_>> {
+    pub(crate) fn lock(&self) -> Result<OpenBuffer<'_>> {
         let guard = self.0.text_buffer.lock().unwrap();
         if guard.is_none() {
             bail!("selecting deleted buffer");
@@ -186,8 +195,12 @@ impl std::fmt::Debug for LispBuffer {
 }
 
 impl Trace for LispBufferInner {
-    fn trace(&self, _v: &mut GcState) {
+    fn trace(&self, state: &mut GcState) {
         // Implement once we hold gc data in the buffer
+        let buf = self.text_buffer.lock().unwrap();
+        if let Some(buf) = buf.as_ref() {
+            buf.textprops.trace(state);
+        }
     }
 }
 
