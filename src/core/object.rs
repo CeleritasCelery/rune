@@ -16,6 +16,7 @@ mod convert;
 mod float;
 mod func;
 mod hashtable;
+mod integer;
 mod string;
 mod symbol;
 mod tagged;
