@@ -3,3 +3,4 @@
 /crates/**/target/
 Cargo.lock
 .aider*
+/.direnv
