@@ -55,6 +55,7 @@ rune-core = { workspace = true }
 bumpalo = { version = "3.15.3", features = ["collections"] }
 libc = "0.2.153"
 base64 = "0.22.1"
+num-bigint = "0.4.6"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"
