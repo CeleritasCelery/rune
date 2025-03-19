@@ -394,6 +394,7 @@ fn type_of(object: Object) -> Object {
         ObjectType::SubrFn(_) => sym::SUBR.into(),
         ObjectType::Buffer(_) => sym::BUFFER.into(),
         ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
+        ObjectType::FlexInt(_) => sym::FLEX_INT.into(),
     }
 }
 
@@ -546,3 +547,4 @@ defsym!(HASH_TABLE);
 defsym!(BUFFER);
 defsym!(SUBR);
 defsym!(CHAR_TABLE);
+defsym!(FLEX_INT);
