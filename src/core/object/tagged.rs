@@ -4,7 +4,7 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBuffer,
+    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBuffer, LispInteger,
 };
 use super::{
     ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
@@ -293,6 +293,7 @@ object_trait_impls!(Record);
 object_trait_impls!(LispHashTable);
 object_trait_impls!(LispBuffer);
 object_trait_impls!(CharTable);
+object_trait_impls!(LispInteger);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -516,6 +517,18 @@ impl IntoObject for CharTableInner<'_> {
     }
 }
 
+impl IntoObject for super::FlexInt {
+    type Out<'ob> = &'ob LispInteger;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> super::Gc<Self::Out<'_>> {
+        unsafe {
+            let ptr = block.objects.alloc(LispInteger::new(self, C));
+            block.lisp_integers.borrow_mut().push(ptr);
+            <&LispInteger>::tag_ptr(ptr)
+        }
+    }
+}
+
 mod private {
     use super::{Gc, WithLifetime};
 
@@ -535,6 +548,7 @@ mod private {
         ByteFn,
         Buffer,
         CharTable,
+        FlexInt,
     }
 
     /// Trait for tagged pointers. Anything that can be stored and passed around
@@ -642,6 +656,7 @@ impl<'a> TaggedPtr for ObjectType<'a> {
                 Tag::HashTable => ObjectType::HashTable(<&LispHashTable>::from_obj_ptr(ptr)),
                 Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
                 Tag::CharTable => ObjectType::CharTable(<&CharTable>::from_obj_ptr(ptr)),
+                Tag::FlexInt => ObjectType::FlexInt(<&LispInteger>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -661,6 +676,7 @@ impl<'a> TaggedPtr for ObjectType<'a> {
             ObjectType::SubrFn(x) => TaggedPtr::tag(x).into(),
             ObjectType::Buffer(x) => TaggedPtr::tag(x).into(),
             ObjectType::CharTable(x) => TaggedPtr::tag(x).into(),
+            ObjectType::FlexInt(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -928,6 +944,19 @@ impl TaggedPtr for &CharTable {
     }
 }
 
+impl TaggedPtr for &LispInteger {
+    type Ptr = LispInteger;
+    const TAG: Tag = Tag::FlexInt;
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
 impl<T> TracePtr for Gc<T> {
     fn trace_ptr(&self, state: &mut GcState) {
         match self.as_obj().untag() {
@@ -943,6 +972,7 @@ impl<T> TracePtr for Gc<T> {
             ObjectType::ByteFn(x) => x.trace(state),
             ObjectType::Buffer(x) => x.trace(state),
             ObjectType::CharTable(x) => x.trace(state),
+            ObjectType::FlexInt(x) => x.trace(state),
         }
     }
 }
@@ -1060,6 +1090,7 @@ pub(crate) enum ObjectType<'ob> {
     SubrFn(&'static SubrFn) = Tag::SubrFn as u8,
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
     CharTable(&'static CharTable) = Tag::CharTable as u8,
+    FlexInt(&'ob LispInteger) = Tag::FlexInt as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1081,7 +1112,8 @@ cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          &'ob ByteFn,
          &'ob SubrFn,
          &'ob LispBuffer,
-         &'ob CharTable
+         &'ob CharTable,
+         &'ob LispInteger
 );
 
 impl ObjectType<'_> {
@@ -1102,6 +1134,7 @@ impl ObjectType<'_> {
             ObjectType::ByteFn(_) | ObjectType::SubrFn(_) => Type::Func,
             ObjectType::Buffer(_) => Type::Buffer,
             ObjectType::CharTable(_) => Type::CharTable,
+            ObjectType::FlexInt(_) => Type::FlexInt,
         }
     }
 }
@@ -1354,6 +1387,17 @@ impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob CharTable> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispInteger> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::FlexInt => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::String, value)),
+        }
+    }
+}
+
 impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     type Target = Cons;
 
@@ -1390,6 +1434,7 @@ where
             ObjectType::HashTable(x) => x.clone_in(bk).into(),
             ObjectType::Buffer(x) => x.clone_in(bk).into(),
             ObjectType::CharTable(x) => x.clone_in(bk).into(),
+            ObjectType::FlexInt(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
@@ -1430,6 +1475,7 @@ impl GcMoveable for Object<'_> {
                 (sym.as_ptr(), moved)
             }
             ObjectType::CharTable(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::FlexInt(x) => cast_pair(x.move_value(to_space)?),
         };
 
         let tag = self.get_tag();
@@ -1633,6 +1679,7 @@ impl ObjectType<'_> {
             ObjectType::Float(x) => D::fmt(x, f),
             ObjectType::Buffer(x) => D::fmt(x, f),
             ObjectType::CharTable(x) => D::fmt(x, f),
+            ObjectType::FlexInt(x) => D::fmt(x, f),
         }
     }
 }

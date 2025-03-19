@@ -33,6 +33,7 @@ pub(crate) use string::*;
 pub(crate) use symbol::*;
 pub(crate) use tagged::*;
 pub(crate) use vector::*;
+pub(crate) use integer::*;
 
 use std::fmt::Write as _;
 
