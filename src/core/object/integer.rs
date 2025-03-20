@@ -3,7 +3,7 @@ use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::derive_GcMoveable;
 use num_bigint::BigInt;
 use rune_macros::Trace;
-use std::fmt::{Display};
+use std::fmt::Display;
 
 #[derive(PartialEq, Eq, Trace)]
 pub(crate) struct LispInteger(GcHeap<FlexInt>);
@@ -41,16 +41,12 @@ impl Trace for FlexInt {
 
 impl<'new> CloneIn<'new, &'new Self> for LispInteger {
     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-
-        // super::Gc::<&'new Self> { self.0.clone_in(bk) }
+        match &*self.0 {
+            FlexInt::Fixed(n) => FlexInt::Fixed(*n).into_obj(bk),
+            FlexInt::Big(big_int) => FlexInt::Big(big_int.clone()).into_obj(bk),
+        }
     }
 }
-
-// impl<'new> CloneIn<'new, &'new Self> for FlexInt {
-//     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-//         self.clone_in(bk)
-//     }
-// }
 
 macro_rules! impl_from_small_integer {
     ($($num_type:ty),+) => {
