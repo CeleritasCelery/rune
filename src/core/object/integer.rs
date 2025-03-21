@@ -2,11 +2,14 @@ use super::{CloneIn, IntoObject};
 use crate::core::gc::{Block, GcHeap, GcState, Trace};
 use crate::derive_GcMoveable;
 use num_bigint::BigInt;
-use rune_macros::Trace;
 use std::fmt::Display;
+use std::ops::Deref;
 
-#[derive(PartialEq, Eq, Trace)]
-pub(crate) struct LispInteger(GcHeap<FlexInt>);
+// #[derive(PartialEq, Eq, Trace)]
+// pub(crate) struct LispInteger(GcHeap<FlexInt>);
+
+#[derive(PartialEq, Eq)]
+pub(crate) struct LispBigInt(GcHeap<BigInt>);
 
 /// A wrapper for integer type
 /// The type is represented by primitive but can fallback to bigint on overflow
@@ -18,35 +21,60 @@ pub(crate) enum FlexInt {
     Big(BigInt),
 }
 
-derive_GcMoveable!(LispInteger);
+// derive_GcMoveable!(LispInteger);
+derive_GcMoveable!(LispBigInt);
 
-impl LispInteger {
-    pub fn new(flex_int: FlexInt, constant: bool) -> Self {
-        LispInteger(GcHeap::new(flex_int, constant))
+impl<'new> CloneIn<'new, &'new Self> for LispBigInt {
+    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+        let big_int= self.0.clone();
+        big_int.into_obj(bk)
     }
 }
 
-impl Display for LispInteger {
+// impl<'new> CloneIn<'new, &'new Self> for LispInteger {
+//     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+//         match &*self.0 {
+//             FlexInt::Fixed(n) => FlexInt::Fixed(*n).into_obj(bk),
+//             FlexInt::Big(big_int) => FlexInt::Big(big_int.clone()).into_obj(bk),
+//         }
+//     }
+// }
+
+impl LispBigInt {
+    pub fn new(big_int: BigInt, constant: bool) -> Self {
+        LispBigInt(GcHeap::new(big_int, constant))
+    }
+}
+
+impl Display for LispBigInt {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // let flex_int = **self;
-        write!(f, "")
+        write!(f, "{}", self.0)
     }
 }
 
-impl FlexInt {}
+impl Deref for LispBigInt {
+    type Target = BigInt;
 
-impl Trace for FlexInt {
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Trace for LispBigInt {
     fn trace(&self, _: &mut GcState) {}
 }
 
-impl<'new> CloneIn<'new, &'new Self> for LispInteger {
-    fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
-        match &*self.0 {
-            FlexInt::Fixed(n) => FlexInt::Fixed(*n).into_obj(bk),
-            FlexInt::Big(big_int) => FlexInt::Big(big_int.clone()).into_obj(bk),
-        }
-    }
-}
+// impl FlexInt {}
+
+
+// impl<'new> CloneIn<'new, &'new Self> for LispInteger {
+//     fn clone_in<const C: bool>(&self, bk: &'new Block<C>) -> super::Gc<&'new Self> {
+//         match &*self.0 {
+//             FlexInt::Fixed(n) => FlexInt::Fixed(*n).into_obj(bk),
+//             FlexInt::Big(big_int) => FlexInt::Big(big_int.clone()).into_obj(bk),
+//         }
+//     }
+// }
 
 macro_rules! impl_from_small_integer {
     ($($num_type:ty),+) => {

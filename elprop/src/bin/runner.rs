@@ -82,13 +82,14 @@ fn main() {
             println!(";; done");
 
             *master_count.borrow_mut() += 1;
-
+            
+            let ee = format!("Emacs: {:?} <> Rune: {:?}", emacs_output, rune_output);
             match (emacs_output, rune_output) {
                 (Ok(e), Ok(r)) if e == r => Ok(()),
                 (Err(_), Err(_)) => Ok(()),
                 (Ok(e) | Err(e), Ok(r)) | (Ok(e), Err(r)) => {
                     println!("\"Emacs: '{e}', Rune: '{r}'\"");
-                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r}").into()))
+                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r};;  {}", ee).into()))
                 }
             }
         });
