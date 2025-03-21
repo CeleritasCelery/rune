@@ -2,6 +2,7 @@ mod code;
 use clap::Parser;
 use code::data::{Config, Function};
 use code::output::{Output, Status};
+use proptest::path;
 use std::path::Path;
 use std::process::ExitCode;
 use std::{fs, path::PathBuf};
@@ -125,8 +126,10 @@ fn main() -> ExitCode {
 
 fn get_all_functions(pathbuf: &Path) -> Vec<Function> {
     let mut functions = Vec::new();
+    println!("{:?}", pathbuf);
     for entry in fs::read_dir(pathbuf).unwrap() {
         let path = entry.unwrap().path();
+        println!("{:?}", path);
         if path.extension().is_some_and(|ex| ex == "rs") {
             let contents = fs::read_to_string(&path).unwrap();
             let names = get_fn_signatures(&contents);
