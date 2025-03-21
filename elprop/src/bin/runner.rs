@@ -44,8 +44,11 @@ fn main() {
 
     let outputs = RefCell::new(Vec::new());
     let regex = regex::Regex::new("^\\((wrong-[a-zA-Z0-9-]*|[a-zA-Z0-9-]*error) ").unwrap();
+
     for func in config.functions {
         let name = func.name.clone();
+        let func_iter_count = RefCell::new(0);
+        
         let result = runner.run(&func.strategy(), |input| {
             if *rune_panicked.borrow() {
                 return Err(TestCaseError::Reject("Rune panicked".into()));
@@ -82,14 +85,14 @@ fn main() {
             println!(";; done");
 
             *master_count.borrow_mut() += 1;
-            
-            let ee = format!("Emacs: {:?} <> Rune: {:?}", emacs_output, rune_output);
+            *func_iter_count.borrow_mut() += 1;
+
             match (emacs_output, rune_output) {
                 (Ok(e), Ok(r)) if e == r => Ok(()),
                 (Err(_), Err(_)) => Ok(()),
                 (Ok(e) | Err(e), Ok(r)) | (Ok(e), Err(r)) => {
                     println!("\"Emacs: '{e}', Rune: '{r}'\"");
-                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r};;  {}", ee).into()))
+                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r};;").into()))
                 }
             }
         });
@@ -103,7 +106,7 @@ fn main() {
             Err(TestError::Abort(reason)) => Status::Abort(reason.to_string()),
             Ok(()) => Status::Pass,
         };
-        let output = Output { function: name, status };
+        let output = Output { function: name, count: *func_iter_count.borrow(), status };
         outputs.borrow_mut().push(output);
     }
 
