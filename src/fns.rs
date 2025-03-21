@@ -1074,13 +1074,13 @@ mod test {
     #[test]
     fn test_base64_encode_string() {
         assert_lisp("(base64-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
+        assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
         assert_lisp(
             "(base64-encode-string \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum\")",
             "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0aW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1YXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2ZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRldXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1aSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"",
         );
         // assert_lisp("(base64-encode-string \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum\" t)", "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwg\nc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu\nYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0\naW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1\nYXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2\nZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRl\ndXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1\naSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"");
-        assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
-        assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
     }
 
     #[test]
@@ -1101,9 +1101,12 @@ mod test {
         // assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
     }
     #[test]
-    #[ignore]
     fn test_base64_url_decode_string() {
         assert_lisp("(base64-decode-string \"Wj1Yse54𐩃-N\" t t)", "\"Z=X\\261\\356x\\370\"");
+        assert_lisp("(base64url-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
+        assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
     }
 
     #[test]
@@ -1302,13 +1305,7 @@ mod test {
         assert_lisp("(string-version-lessp 'less1 \"less10\")", "t");
     }
 
-    #[test]
-    fn test_base64url_encode_string() {
-        assert_lisp("(base64url-encode-string \"hello\")", "\"aGVsbG8=\"");
-        assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
-        assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
-        assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
-    }
+
 
     #[test]
     #[cfg(miri)]

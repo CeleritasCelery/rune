@@ -5,6 +5,19 @@ use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use syn::{FnArg, ItemFn};
 
+trait NumBounds: Sized {
+    const MAX: Self;
+    const ZERO: Self;
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) enum PosIntegerType {
+    U16,
+    U32,
+    U64,
+    USIZE,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Type {
     String,
@@ -12,7 +25,7 @@ pub(crate) enum Type {
     Cons,
     Symbol,
     Integer,
-    PosInteger,
+    PosInteger(PosIntegerType),
     Boolean,
     True,
     False,
@@ -47,9 +60,17 @@ impl Type {
             Type::Cons => Self::cons_strategy().prop_map(ArbitraryType::Cons).boxed(),
             Type::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryType::Symbol).boxed(),
             Type::Integer => Self::fixnum_strategy().prop_map(ArbitraryType::Integer).boxed(),
-            Type::PosInteger => {
-                Self::pos_fixnum_strategy().prop_map(ArbitraryType::Integer).boxed()
-            }
+            Type::PosInteger(typ) => match typ {
+                PosIntegerType::U16 => {
+                    Self::pos_fixnum_strategy::<u16>().prop_map(ArbitraryType::Integer).boxed()
+                }
+                PosIntegerType::U32 => {
+                    Self::pos_fixnum_strategy::<u32>().prop_map(ArbitraryType::Integer).boxed()
+                }
+                PosIntegerType::U64 | PosIntegerType::USIZE => {
+                    Self::pos_fixnum_strategy::<u64>().prop_map(ArbitraryType::Integer).boxed()
+                }
+            },
             Type::Boolean => any::<bool>().prop_map(ArbitraryType::Boolean).boxed(),
             Type::True => Just(true).prop_map(ArbitraryType::Boolean).boxed(),
             Type::False => Just(false).prop_map(ArbitraryType::Boolean).boxed(),
@@ -91,9 +112,14 @@ impl Type {
             .boxed()
     }
 
-    fn pos_fixnum_strategy() -> BoxedStrategy<i64> {
-        any::<i64>()
-            .prop_filter("Fixnum", |x| *x >= 0 && *x <= Self::MAX_FIXNUM)
+    fn pos_fixnum_strategy<T>() -> BoxedStrategy<i64>
+    where
+        T: NumBounds + Arbitrary + PartialOrd<T> + TryInto<i64>,
+        <T as Arbitrary>::Strategy: 'static,
+    {
+        any::<T>()
+            .prop_filter("Fixnum", |x| *x >= T::ZERO && *x <= T::MAX)
+            .prop_map(|i| TryInto::<i64>::try_into(i).map_err(|_| "Conversion Failed").unwrap())
             .boxed()
     }
 
@@ -392,7 +418,9 @@ impl Function {
             "Symbol" => Type::Symbol,
             "Number" | "NumberValue" => Type::Multiple(vec![Type::Integer, Type::Float]),
             "Object" => Type::Unknown,
-            "usize" | "u64" => Type::PosInteger,
+            "usize" | "u64" => Type::PosInteger(PosIntegerType::U64),
+            "u16" => Type::PosInteger(PosIntegerType::U16),
+            "u32" => Type::PosInteger(PosIntegerType::U32),
             "u8" => Type::Byte,
             "isize" | "i64" => Type::Integer,
             "str" | "String" | "LispString" => Type::String,
@@ -607,4 +635,20 @@ fn get_generic_arg<'a>(
             _ => acc,
         })
         .ok_or_else(|| "Expected type argument".to_string())
+}
+
+
+impl NumBounds for u16 {
+    const MAX: Self = u16::MAX;
+    const ZERO: Self = 0;
+}
+
+impl NumBounds for u32 {
+    const MAX: Self = u32::MAX;
+    const ZERO: Self = 0;
+}
+
+impl NumBounds for u64 {
+    const MAX: Self = u32::MAX as u64;
+    const ZERO: Self = 0;
 }
