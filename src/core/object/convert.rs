@@ -6,7 +6,7 @@ use crate::data::LispError;
 
 use super::{
     super::error::{Type, TypeError},
-    ByteString, CharTable, LispHashTable, LispString, LispVec, NIL, OptionalFlag, LispInteger, TRUE,
+    ByteString, CharTable, LispHashTable, LispString, LispVec, NIL, OptionalFlag, TRUE,
 };
 use super::{Gc, LispFloat, Object, ObjectType, Symbol};
 use anyhow::Context;
@@ -126,7 +126,6 @@ define_unbox!(ByteString, String, &'ob ByteString);
 define_unbox!(Vec, &'ob LispVec);
 define_unbox!(Symbol, Symbol<'ob>);
 define_unbox!(CharTable, &'ob CharTable);
-define_unbox!(FlexInt, &'ob LispInteger);
 
 impl<'ob, T> From<Option<T>> for Object<'ob>
 where

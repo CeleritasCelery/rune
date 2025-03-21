@@ -1,12 +1,19 @@
 //! Operations on floats.
+use core::num;
+
 use crate::{
-    arith::NumberValue,
+    arith::{self, NumberValue},
     core::{
         cons::Cons,
         gc::Context,
         object::{Number, NumberType, Object},
     },
 };
+use anyhow::Result;
+use anyhow::anyhow;
+use num_bigint::BigInt;
+use num_integer::Integer;
+use num_traits::{ToPrimitive, Zero};
 
 use rune_macros::defun;
 
@@ -15,60 +22,70 @@ fn coerce(arg: Number) -> f64 {
     match arg.untag() {
         NumberType::Int(i) => i as f64,
         NumberType::Float(f) => **f,
+        NumberType::Big(b) => b.to_f64().unwrap(), // TODO: Handle big integers
     }
 }
 
 #[defun]
-fn floor(arg: Number, divisor: Option<Number>) -> i64 {
+fn floor(arg: Number, divisor: Option<Number>) -> Result<NumberValue> {
     let num = match divisor {
-        Some(div) => arg.val() / div.val(),
+        Some(div) => {
+            if div.val().is_zero() {
+                return Err(anyhow!("(arith-error)"));
+            }
+            arith::arith(
+                arg.val(),
+                div.val(),
+                |a, b| a.div_floor(&b),
+                |a, b| (a / b).floor(),
+                |a, b| a.div_floor(&b),
+            )
+        }
         None => arg.val(),
     };
-    match num {
-        NumberValue::Int(i) => i,
-        NumberValue::Float(f) => f.floor() as i64,
-    }
+
+    Ok(num.to_integer())
 }
 
-#[defun]
-fn ceiling(arg: Number) -> i64 {
-    match arg.untag() {
-        NumberType::Int(i) => i,
-        NumberType::Float(f) => f.ceil() as i64,
-    }
-}
+// #[defun]
+// fn ceiling(arg: Number) -> i64 {
+//     match arg.untag() {
+//         NumberType::Int(i) => i,
+//         NumberType::Float(f) => f.ceil() as i64,
+//     }
+// }
 
-#[defun]
-fn fceiling(arg: Number) -> f64 {
-    match arg.untag() {
-        NumberType::Int(i) => i as f64,
-        NumberType::Float(f) => f.ceil(),
-    }
-}
+// #[defun]
+// fn fceiling(arg: Number) -> f64 {
+//     match arg.untag() {
+//         NumberType::Int(i) => i as f64,
+//         NumberType::Float(f) => f.ceil(),
+//     }
+// }
 
-#[defun]
-fn round(arg: Number) -> i64 {
-    match arg.untag() {
-        NumberType::Int(i) => i,
-        NumberType::Float(f) => f.round() as i64,
-    }
-}
+// #[defun]
+// fn round(arg: Number) -> i64 {
+//     match arg.untag() {
+//         NumberType::Int(i) => i,
+//         NumberType::Float(f) => f.round() as i64,
+//     }
+// }
 
-#[defun]
-fn truncate(arg: Number) -> i64 {
-    match arg.untag() {
-        NumberType::Int(i) => i,
-        NumberType::Float(f) => f.trunc() as i64,
-    }
-}
+// #[defun]
+// fn truncate(arg: Number) -> i64 {
+//     match arg.untag() {
+//         NumberType::Int(i) => i,
+//         NumberType::Float(f) => f.trunc() as i64,
+//     }
+// }
 
-#[defun]
-fn float<'ob>(arg: Number<'ob>, cx: &'ob Context) -> Number<'ob> {
-    match arg.untag() {
-        NumberType::Int(i) => cx.add_as(i as f64),
-        NumberType::Float(_) => arg,
-    }
-}
+// #[defun]
+// fn float<'ob>(arg: Number<'ob>, cx: &'ob Context) -> Number<'ob> {
+//     match arg.untag() {
+//         NumberType::Int(i) => cx.add_as(i as f64),
+//         NumberType::Float(_) => arg,
+//     }
+// }
 
 #[defun]
 fn asin(arg: Number) -> f64 {
@@ -100,13 +117,13 @@ fn tan(arg: Number) -> f64 {
     coerce(arg).tan()
 }
 
-#[defun]
-fn isnan(arg: Number) -> bool {
-    match arg.untag() {
-        NumberType::Int(_) => false,
-        NumberType::Float(f) => f.is_nan(),
-    }
-}
+// #[defun]
+// fn isnan(arg: Number) -> bool {
+//     match arg.untag() {
+//         NumberType::Int(_) => false,
+//         NumberType::Float(f) => f.is_nan(),
+//     }
+// }
 
 #[defun]
 fn copysign(x: Number, y: Number) -> f64 {
@@ -145,13 +162,13 @@ fn sqrt(arg: Number) -> f64 {
     coerce(arg).sqrt()
 }
 
-#[defun]
-fn abs(arg: Number) -> NumberValue {
-    match arg.untag() {
-        NumberType::Int(i) => NumberValue::Int(i.abs()),
-        NumberType::Float(f) => NumberValue::Float(f.abs()),
-    }
-}
+// #[defun]
+// fn abs(arg: Number) -> NumberValue {
+//     match arg.untag() {
+//         NumberType::Int(i) => NumberValue::Int(i.abs()),
+//         NumberType::Float(f) => NumberValue::Float(f.abs()),
+//     }
+// }
 
 #[defun]
 fn ldexp(s: Number, e: i64) -> f64 {
@@ -184,4 +201,16 @@ fn frexp<'ob>(x: Number, cx: &'ob Context) -> Object<'ob> {
     let f = coerce(x);
     let (significand, exponent) = frexp_f(f);
     Cons::new(significand, exponent, cx).into()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::interpreter::assert_lisp;
+
+    #[test]
+    fn test_floor() {
+        assert_lisp("(floor 1 -2)", "-1");
+        // assert_lisp("(floor 5994075590485518098614452039918638881146941881234478715467383783598649398185401621312377889848862509948275153705727693548522812899079421120481350627531464566370422590572585528049408418896764645218625131504253704691271381208042307584.0 nil)", "5994075590485518098614452039918638881146941881234478715467383783598649398185401621312377889848862509948275153705727693548522812899079421120481350627531464566370422590572585528049408418896764645218625131504253704691271381208042307584");
+        assert_lisp("(floor 5994075590485518098614452039918638881146941881234478715467383783598649398185401621312377889848862509948275153705727693548522812899079421120481350627531464566370422590572585528049408418896764645218625131504253704691271381208042307584.0 nil)", "5994075590485518098614452039918638881146941881234478715467383783598649398185401621312377889848862509948275153705727693548522812899079421120481350627531464566370422590572585528049408418896764645218625131504253704691271381208042307584");
+    }
 }

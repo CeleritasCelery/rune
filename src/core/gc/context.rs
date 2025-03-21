@@ -2,7 +2,6 @@ use super::GcState;
 use super::Trace;
 use crate::core::object::GcString;
 use crate::core::object::LispHashTable;
-use crate::core::object::LispInteger;
 use crate::core::object::{Gc, IntoObject, Object, UninternedSymbolMap, WithLifetime};
 use bumpalo::collections::Vec as GcVec;
 use std::cell::{Cell, RefCell};
@@ -40,7 +39,7 @@ pub(crate) struct Block<const CONST: bool> {
     // track of the memory and free it only after the table is garbage
     // collected. Kind of a hack.
     pub(in crate::core) lisp_hashtables: RefCell<Vec<*const LispHashTable>>,
-    pub(in crate::core) lisp_integers: RefCell<Vec<*const LispInteger>>,
+    // pub(in crate::core) lisp_integers: RefCell<Vec<*const LispInteger>>,
     pub(in crate::core) uninterned_symbol_map: UninternedSymbolMap,
 }
 
