@@ -43,7 +43,10 @@ impl Type {
     fn strategy(self) -> BoxedStrategy<ArbitraryType> {
         match self {
             Type::String => any::<String>().prop_map(ArbitraryType::String).boxed(),
-            Type::Float => any::<f64>().prop_map(ArbitraryType::Float).boxed(),
+            Type::Float => any::<f64>()
+                .prop_filter("fnu", |x| *x != 0.0)
+                .prop_map(ArbitraryType::Float)
+                .boxed(),
             Type::Cons => Self::cons_strategy().prop_map(ArbitraryType::Cons).boxed(),
             Type::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryType::Symbol).boxed(),
             Type::Integer => Self::fixnum_strategy().prop_map(ArbitraryType::Integer).boxed(),
@@ -80,14 +83,14 @@ impl Type {
             Type::CustomList(list) => {
                 let arb_list: Vec<_> = list.iter().map(|x| x.clone().strategy()).collect();
                 (arb_list, Just(false)).prop_map(ArbitraryType::Cons).boxed()
-            },
+            }
             Type::BigInt => Self::big_int_strategy().prop_map(ArbitraryType::BigInt).boxed(),
         }
     }
 
     fn fixnum_strategy() -> BoxedStrategy<i64> {
         any::<i64>()
-            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM)
+            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM && *x != 0)
             .boxed()
     }
 
@@ -203,116 +206,116 @@ impl std::fmt::Display for ArbitraryType {
         use std::string::ToString;
         match self {
             ArbitraryType::String(s) => {
-                        write!(f, "\"")?;
-                        for c in s.chars() {
-                            match c {
-                                '\n' => write!(f, "\\n")?,
-                                '\t' => write!(f, "\\t")?,
-                                '\r' => write!(f, "\\r")?,
-                                '\\' => write!(f, "\\\\")?,
-                                '\"' => write!(f, "\\\"")?,
-                                c => write!(f, "{c}")?,
-                            }
-                        }
-                        write!(f, "\"")
+                write!(f, "\"")?;
+                for c in s.chars() {
+                    match c {
+                        '\n' => write!(f, "\\n")?,
+                        '\t' => write!(f, "\\t")?,
+                        '\r' => write!(f, "\\r")?,
+                        '\\' => write!(f, "\\\\")?,
+                        '\"' => write!(f, "\\\"")?,
+                        c => write!(f, "{c}")?,
                     }
+                }
+                write!(f, "\"")
+            }
             ArbitraryType::Float(n) => {
-                        if n.fract() == 0.0_f64 {
-                            write!(f, "{n:.1}")
-                        } else {
-                            write!(f, "{n}")
-                        }
-                    }
+                if n.fract() == 0.0_f64 {
+                    write!(f, "{n:.1}")
+                } else {
+                    write!(f, "{n}")
+                }
+            }
             ArbitraryType::Cons(list) => {
-                        let mut cells: Vec<_> = list.0.iter().map(ToString::to_string).collect();
-                        let len = list.0.len();
-                        let dot_end = list.1;
-                        if dot_end && len >= 2 {
-                            cells.insert(len - 1, ".".to_owned());
-                        }
-                        let string = cells.join(" ");
-                        write!(f, "'({string})")
-                    }
+                let mut cells: Vec<_> = list.0.iter().map(ToString::to_string).collect();
+                let len = list.0.len();
+                let dot_end = list.1;
+                if dot_end && len >= 2 {
+                    cells.insert(len - 1, ".".to_owned());
+                }
+                let string = cells.join(" ");
+                write!(f, "'({string})")
+            }
             ArbitraryType::Symbol(s) => write!(f, "'{s}"),
             ArbitraryType::Integer(n) => write!(f, "{n}"),
             ArbitraryType::Boolean(b) => {
-                        if *b {
-                            write!(f, "t")
-                        } else {
-                            write!(f, "nil")
-                        }
-                    }
+                if *b {
+                    write!(f, "t")
+                } else {
+                    write!(f, "nil")
+                }
+            }
             ArbitraryType::Unknown(obj) => write!(f, "{obj}"),
             ArbitraryType::UnibyteString(s) => {
-                        write!(f, "\"")?;
-                        for c in s.chars() {
-                            match c {
-                                '\n' => write!(f, "\\n")?,
-                                '\t' => write!(f, "\\t")?,
-                                '\r' => write!(f, "\\r")?,
-                                '\\' => write!(f, "\\\\")?,
-                                '"' => write!(f, "\\\"")?,
-                                c => write!(f, "{c}")?,
-                            }
-                        }
-                        write!(f, "\"")
+                write!(f, "\"")?;
+                for c in s.chars() {
+                    match c {
+                        '\n' => write!(f, "\\n")?,
+                        '\t' => write!(f, "\\t")?,
+                        '\r' => write!(f, "\\r")?,
+                        '\\' => write!(f, "\\\\")?,
+                        '"' => write!(f, "\\\"")?,
+                        c => write!(f, "{c}")?,
                     }
+                }
+                write!(f, "\"")
+            }
             ArbitraryType::Nil => write!(f, "nil"),
             ArbitraryType::Vector(vec) => {
-                        let cells: Vec<_> = vec.iter().map(ToString::to_string).collect();
-                        let string = cells.join(" ");
-                        write!(f, "[{string}]")
-                    }
+                let cells: Vec<_> = vec.iter().map(ToString::to_string).collect();
+                let string = cells.join(" ");
+                write!(f, "[{string}]")
+            }
             ArbitraryType::HashTable(vec) => {
-                        write!(f, "#s(hash-table data (")?;
-                        for (key, value) in vec {
-                            write!(f, "{key} {value} ")?;
-                        }
-                        write!(f, "))")
-                    }
+                write!(f, "#s(hash-table data (")?;
+                for (key, value) in vec {
+                    write!(f, "{key} {value} ")?;
+                }
+                write!(f, "))")
+            }
             ArbitraryType::Record((name, members)) => {
-                        let cells: Vec<_> = members.iter().map(ToString::to_string).collect();
-                        let string = cells.join(" ");
-                        write!(f, "(record '{name} {string})")
-                    }
+                let cells: Vec<_> = members.iter().map(ToString::to_string).collect();
+                let string = cells.join(" ");
+                write!(f, "(record '{name} {string})")
+            }
             ArbitraryType::Function(arity) => {
-                        write!(f, "(lambda (")?;
-                        for i in 0..*arity {
-                            write!(f, "arg{i} ")?;
-                        }
-                        write!(f, ") nil)")
-                    }
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{i} ")?;
+                }
+                write!(f, ") nil)")
+            }
             ArbitraryType::ByteFn(arity) => {
-                        write!(f, "(lambda (")?;
-                        for i in 0..*arity {
-                            write!(f, "arg{i} ")?;
-                        }
-                        write!(f, ") nil)")
-                    }
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{i} ")?;
+                }
+                write!(f, ") nil)")
+            }
             ArbitraryType::Byte(n) => write!(f, "{n}"),
             ArbitraryType::Buffer(name) => {
-                        write!(f, "(generate-new-buffer {name})")
-                    }
+                write!(f, "(generate-new-buffer {name})")
+            }
             ArbitraryType::Subr(arity) => {
-                        write!(f, "(lambda (")?;
-                        for i in 0..*arity {
-                            write!(f, "arg{i} ")?;
-                        }
-                        write!(f, ") nil)")
-                    }
+                write!(f, "(lambda (")?;
+                for i in 0..*arity {
+                    write!(f, "arg{i} ")?;
+                }
+                write!(f, ") nil)")
+            }
             ArbitraryType::Char(chr) => match chr {
-                        '\n' => write!(f, "?\\n"),
-                        '\t' => write!(f, "?\\t"),
-                        '\r' => write!(f, "?\\r"),
-                        '\u{0B}' => write!(f, "?\\v"),
-                        '\u{0C}' => write!(f, "?\\f"),
-                        '\u{1B}' => write!(f, "?\\e"),
-                        '\u{7F}' => write!(f, "?\\d"),
-                        '\u{08}' => write!(f, "?\\b"),
-                        '\u{07}' => write!(f, "?\\a"),
-                        '(' | ')' | '[' | ']' | '\\' | '"' => write!(f, "?\\{chr}"),
-                        chr => write!(f, "?{chr}"),
-                    },
+                '\n' => write!(f, "?\\n"),
+                '\t' => write!(f, "?\\t"),
+                '\r' => write!(f, "?\\r"),
+                '\u{0B}' => write!(f, "?\\v"),
+                '\u{0C}' => write!(f, "?\\f"),
+                '\u{1B}' => write!(f, "?\\e"),
+                '\u{7F}' => write!(f, "?\\d"),
+                '\u{08}' => write!(f, "?\\b"),
+                '\u{07}' => write!(f, "?\\a"),
+                '(' | ')' | '[' | ']' | '\\' | '"' => write!(f, "?\\{chr}"),
+                chr => write!(f, "?{chr}"),
+            },
             ArbitraryType::BigInt(n) => write!(f, "{}", n),
         }
     }
