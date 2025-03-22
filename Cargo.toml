@@ -61,6 +61,7 @@ interval-tree = { workspace = true }
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
 num-integer = "0.1.46"
+libm = "0.2.11"
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"
