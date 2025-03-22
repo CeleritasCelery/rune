@@ -16,6 +16,7 @@ mod convert;
 mod float;
 mod func;
 mod hashtable;
+mod integer;
 mod string;
 mod symbol;
 mod tagged;
@@ -32,6 +33,7 @@ pub(crate) use string::*;
 pub(crate) use symbol::*;
 pub(crate) use tagged::*;
 pub(crate) use vector::*;
+pub(crate) use integer::*;
 
 use std::fmt::Write as _;
 

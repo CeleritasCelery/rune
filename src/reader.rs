@@ -5,10 +5,12 @@ use crate::core::{
     object::{Object, Symbol},
 };
 use crate::fns;
+use core::num;
+use num_bigint::BigInt;
 use rune_core::macros::list;
-use std::fmt::Display;
 use std::str;
 use std::{fmt, iter::Peekable, str::CharIndices};
+use std::{fmt::Display, str::FromStr};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -309,12 +311,15 @@ fn intern_symbol<'ob>(symbol: &str, cx: &'ob Context) -> Symbol<'ob> {
 /// Parse a symbol from a string. This will either by a true symbol or a number
 /// literal.
 fn parse_symbol<'a>(slice: &str, cx: &'a Context) -> Object<'a> {
-    match slice.parse::<i64>() {
+    if let Ok(num) = slice.parse::<i64>() {
+        return cx.add(num);
+    }
+    if let Ok(num) = BigInt::from_str(slice) {
+        return cx.add(num);
+    }
+    match slice.parse::<f64>() {
         Ok(num) => cx.add(num),
-        Err(_) => match slice.parse::<f64>() {
-            Ok(num) => cx.add(num),
-            Err(_) => cx.add(intern_symbol(slice, cx)),
-        },
+        Err(_) => cx.add(intern_symbol(slice, cx)),
     }
 }
 

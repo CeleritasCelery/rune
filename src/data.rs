@@ -383,7 +383,7 @@ pub(crate) fn aref<'ob>(array: Object<'ob>, idx: usize, cx: &'ob Context) -> Res
 fn type_of(object: Object) -> Object {
     match object.untag() {
         ObjectType::Int(_) => sym::INTEGER.into(),
-        ObjectType::Float(_) => sym::FLOAT.into(),
+        ObjectType::Float(_) => sym::FLOATP.into(),
         ObjectType::Symbol(_) => sym::SYMBOL.into(),
         ObjectType::Cons(_) => sym::CONS.into(),
         ObjectType::Vec(_) => sym::VECTOR.into(),
@@ -394,6 +394,7 @@ fn type_of(object: Object) -> Object {
         ObjectType::SubrFn(_) => sym::SUBR.into(),
         ObjectType::Buffer(_) => sym::BUFFER.into(),
         ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
+        ObjectType::BigInt(_) => sym::BIG_INT.into(),
     }
 }
 
@@ -546,3 +547,4 @@ defsym!(HASH_TABLE);
 defsym!(BUFFER);
 defsym!(SUBR);
 defsym!(CHAR_TABLE);
+defsym!(BIG_INT);

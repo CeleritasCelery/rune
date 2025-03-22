@@ -1,3 +1,4 @@
+use num_bigint::{BigInt, Sign};
 use proc_macro2::{TokenStream, TokenTree};
 use prop::collection::VecStrategy;
 use proptest::prelude::*;
@@ -28,6 +29,7 @@ pub(crate) enum Type {
     Nil,
     Char,
     CharTable,
+    BigInt,
     CustomString(String),
     Multiple(Vec<Type>),
     CustomList(Vec<Type>),
@@ -41,7 +43,10 @@ impl Type {
     fn strategy(self) -> BoxedStrategy<ArbitraryType> {
         match self {
             Type::String => any::<String>().prop_map(ArbitraryType::String).boxed(),
-            Type::Float => any::<f64>().prop_map(ArbitraryType::Float).boxed(),
+            Type::Float => any::<f64>()
+                .prop_filter("fnu", |x| *x != 0.0)
+                .prop_map(ArbitraryType::Float)
+                .boxed(),
             Type::Cons => Self::cons_strategy().prop_map(ArbitraryType::Cons).boxed(),
             Type::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryType::Symbol).boxed(),
             Type::Integer => Self::fixnum_strategy().prop_map(ArbitraryType::Integer).boxed(),
@@ -79,18 +84,28 @@ impl Type {
                 let arb_list: Vec<_> = list.iter().map(|x| x.clone().strategy()).collect();
                 (arb_list, Just(false)).prop_map(ArbitraryType::Cons).boxed()
             }
+            Type::BigInt => Self::big_int_strategy().prop_map(ArbitraryType::BigInt).boxed(),
         }
     }
 
     fn fixnum_strategy() -> BoxedStrategy<i64> {
         any::<i64>()
-            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM)
+            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM && *x != 0)
             .boxed()
     }
 
     fn pos_fixnum_strategy() -> BoxedStrategy<i64> {
         any::<i64>()
             .prop_filter("Fixnum", |x| *x >= 0 && *x <= Self::MAX_FIXNUM)
+            .boxed()
+    }
+
+    fn big_int_strategy() -> BoxedStrategy<BigInt> {
+        (any::<bool>(), any::<Vec<u32>>())
+            .prop_map(|(s, v)| {
+                let sign = if s { Sign::Plus } else { Sign::Minus };
+                BigInt::from_slice(sign, &v)
+            })
             .boxed()
     }
 
@@ -172,6 +187,7 @@ pub(crate) enum ArbitraryType {
     Char(char),
     Buffer(String),
     Subr(u8),
+    BigInt(BigInt),
 }
 
 pub(crate) fn print_args(args: &[Option<ArbitraryType>]) -> String {
@@ -300,6 +316,7 @@ impl std::fmt::Display for ArbitraryType {
                 '(' | ')' | '[' | ']' | '\\' | '"' => write!(f, "?\\{chr}"),
                 chr => write!(f, "?{chr}"),
             },
+            ArbitraryType::BigInt(n) => write!(f, "{}", n),
         }
     }
 }
