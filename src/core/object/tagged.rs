@@ -9,10 +9,10 @@ use super::{
     ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
     RecordBuilder, SubrFn, Symbol, SymbolCell,
 };
-use crate::core::{
+use crate::{arith::{MAX_FIXNUM, MIN_FIXNUM}, core::{
     env::sym,
     gc::{DropStackElem, GcMoveable, GcState, Trace, TracePtr},
-};
+}};
 use bumpalo::collections::Vec as GcVec;
 use num_bigint::BigInt;
 use private::{Tag, TaggedPtr};
@@ -766,9 +766,6 @@ impl<'a> TaggedPtr for NumberType<'a> {
         }
     }
 }
-
-const MAX_FIXNUM: i64 = i64::MAX >> 8;
-const MIN_FIXNUM: i64 = i64::MIN >> 8;
 
 impl TaggedPtr for i64 {
     type Ptr = i64;
