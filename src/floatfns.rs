@@ -1,6 +1,5 @@
 //! Operations on floats.
-use core::num;
-use std::ops::Div;
+use std::ops::{AddAssign, BitAnd, Div, Rem, SubAssign};
 
 use crate::{
     arith::{self, NumberValue},
@@ -113,6 +112,41 @@ fn rounding_driver(
     }
 }
 
+fn round2<T>(num: T, den: T) -> T
+where
+    T: Div<Output = T>
+        + Rem<Output = T>
+        + PartialOrd
+        + num_traits::Zero
+        + num_traits::Signed
+        + BitAnd<Output = T>
+        + AddAssign
+        + SubAssign
+        + Clone,
+{
+    // The C language's division operator gives us the remainder R
+    // corresponding to truncated division, but we want the remainder R1
+    // on the other side of 0 if R1 is closer to 0 than R is; because we
+    // want to round to even, we also want R1 if R and R1 are the same
+    // distance from 0 and if the truncated quotient is odd.
+    let mut q: T = num.clone() / den.clone();
+    let r: T = num.clone() % den.clone();
+    let neg_d = den.clone() < (T::zero());
+    let neg_r = r < T::zero();
+    let abs_r: T = r.abs();
+    let abs_r1: T = den.abs() - abs_r.clone();
+
+    let increment = if (q.clone() & T::one()) == T::one() { T::zero() } else { T::one() };
+    if abs_r1 < abs_r + increment {
+        if neg_d == neg_r {
+            q += T::one();
+        } else {
+            q -= T::one();
+        }
+    }
+    q
+}
+
 #[defun]
 fn floor(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
     rounding_driver(
@@ -152,8 +186,25 @@ fn ceiling(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
 // }
 
 #[defun]
+fn round(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
+    rounding_driver(
+        num.val(),
+        divisor.map(|d| d.val()), //
+        |f| f.round(),
+        |n, d| round2(n, d),
+        |n, d| round2(n, d),
+    )
+}
+
+#[defun]
 fn truncate(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
-    rounding_driver(num.val(), divisor.map(|d| d.val()), |f| f, |n, d| n.div(&d), |n, d| n.div(&d))
+    rounding_driver(
+        num.val(),
+        divisor.map(|d| d.val()), //
+        |f| f,
+        |n, d| n.div(&d),
+        |n, d| n.div(&d),
+    )
 }
 
 // #[defun]
