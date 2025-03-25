@@ -131,7 +131,7 @@ where
     // distance from 0 and if the truncated quotient is odd.
     let mut q: T = num.clone() / den.clone();
     let r: T = num.clone() % den.clone();
-    let neg_d = den.clone() < (T::zero());
+    let neg_d = den < T::zero();
     let neg_r = r < T::zero();
     let abs_r: T = r.abs();
     let abs_r1: T = den.abs() - abs_r.clone();
@@ -169,22 +169,6 @@ fn ceiling(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
     )
 }
 
-// #[defun]
-// fn fceiling(arg: Number) -> f64 {
-//     match arg.untag() {
-//         NumberType::Int(i) => i as f64,
-//         NumberType::Float(f) => f.ceil(),
-//     }
-// }
-
-// #[defun]
-// fn round(arg: Number) -> i64 {
-//     match arg.untag() {
-//         NumberType::Int(i) => i,
-//         NumberType::Float(f) => f.round() as i64,
-//     }
-// }
-
 #[defun]
 fn round(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
     rounding_driver(
@@ -205,6 +189,26 @@ fn truncate(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
         |n, d| n.div(&d),
         |n, d| n.div(&d),
     )
+}
+
+#[defun]
+fn fceiling(num: f64) -> f64 {
+    num.ceil()
+}
+
+#[defun]
+fn ffloor(num: f64) -> f64 {
+    num.floor()
+}
+
+#[defun]
+fn fround(num: f64) -> f64 {
+    num.round()
+}
+
+#[defun]
+fn ftruncate(num: f64) -> f64 {
+    num.trunc()
 }
 
 // #[defun]
@@ -366,5 +370,13 @@ mod test {
     fn test_truncate() {
         assert_lisp("(truncate 6176627708866652160.0 nil)", "6176627708866652160");
         assert_lisp("(truncate 212571529420423104.0 nil)", "212571529420423136");
+    }
+
+    #[test]
+    fn test_fceiling() {
+        assert_lisp(
+            "(fceiling -1006651312978329551916395865983968917966614758832520883145742884326125679634352088752666682707793111637288314506615427139703141977629027368145721731491256415911582338031550464.0)",
+            " -1.0066513129783296e+174",
+        )
     }
 }
