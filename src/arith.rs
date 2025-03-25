@@ -7,6 +7,9 @@ use rune_macros::defun;
 use std::cmp::PartialEq;
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
+pub(crate) const MAX_FIXNUM: i64 = i64::MAX >> 8;
+pub(crate) const MIN_FIXNUM: i64 = i64::MIN >> 8;
+
 /// Similar to the object type [NumberType], but contains a float instead of a
 /// reference to a float. This makes it easier to construct and mutate.
 #[derive(Debug, PartialEq, Clone)]
@@ -42,17 +45,17 @@ impl NumberValue {
     pub fn to_integer(self) -> NumberValue {
         match self {
             NumberValue::Float(x) => {
-                if x.is_finite() && x <= i64::MAX as f64 && x >= i64::MIN as f64 {
-                    let i = x as i64;
-                    println!("Converting float to integer: {} -> {}", x, i);
-                    NumberValue::Int(i)
+                if x.is_finite() && x <= MAX_FIXNUM as f64 && x >= MIN_FIXNUM as f64 {
+                    NumberValue::Int(x as i64)
                 } else {
                     NumberValue::Big(BigInt::from_f64(x).unwrap_or_else(|| BigInt::zero()))
                 }
             }
-            NumberValue::Big(x) => {
-                x.to_i64().map(NumberValue::Int).unwrap_or_else(|| NumberValue::Big(x))
-            }
+            NumberValue::Big(x) => x
+                .to_i64()
+                .filter(|&n| n <= MAX_FIXNUM && n >= MIN_FIXNUM)
+                .map(NumberValue::Int)
+                .unwrap_or_else(|| NumberValue::Big(x)),
             other => other,
         }
     }
