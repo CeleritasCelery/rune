@@ -13,7 +13,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use num_bigint::BigInt;
 use num_integer::Integer;
-use num_traits::{FromPrimitive, ToPrimitive, Zero};
+use num_traits::{FromPrimitive, ToPrimitive, Zero, Signed};
 
 use rune_macros::defun;
 
@@ -147,6 +147,20 @@ where
     q
 }
 
+const LIMBS_LIMIT: usize = 2147483642;
+
+fn checked_pow(base: BigInt, exp: u32) -> Result<BigInt> {
+    // Check base size (number of limbs)
+    let nbase = base.bits() as usize; // Number of bits used by the base
+    let n = nbase * exp as usize; // Approximate number of limbs required for the result
+
+    // Check overflow condition
+    if n > LIMBS_LIMIT {
+        return Err(anyhow!("Overflow error".to_string()));
+    }
+    Ok(base.pow(exp))
+}
+
 #[defun]
 fn floor(num: Number, divisor: Option<Number>) -> Result<NumberValue> {
     rounding_driver(
@@ -211,13 +225,10 @@ fn ftruncate(num: f64) -> f64 {
     num.trunc()
 }
 
-// #[defun]
-// fn float<'ob>(arg: Number<'ob>, cx: &'ob Context) -> Number<'ob> {
-//     match arg.untag() {
-//         NumberType::Int(i) => cx.add_as(i as f64),
-//         NumberType::Float(_) => arg,
-//     }
-// }
+#[defun]
+fn float(arg: Number) -> NumberValue {
+    NumberValue::Float(coerce(arg))
+}
 
 #[defun]
 fn asin(arg: Number) -> f64 {
@@ -249,17 +260,17 @@ fn tan(arg: Number) -> f64 {
     coerce(arg).tan()
 }
 
-// #[defun]
-// fn isnan(arg: Number) -> bool {
-//     match arg.untag() {
-//         NumberType::Int(_) => false,
-//         NumberType::Float(f) => f.is_nan(),
-//     }
-// }
+#[defun]
+fn isnan(arg: Number) -> bool {
+    match arg.untag() {
+        NumberType::Float(f) => f.is_nan(),
+        _ => false,
+    }
+}
 
 #[defun]
-fn copysign(x: Number, y: Number) -> f64 {
-    coerce(x).copysign(coerce(y))
+fn copysign(x: f64, y: f64) -> f64 {
+    x.copysign(y)
 }
 
 #[defun]
@@ -271,13 +282,34 @@ fn exp(arg: Number) -> f64 {
 fn expt(x: Number, y: Number) -> NumberValue {
     // If either is a float, we use the float version
     match (x.untag(), y.untag()) {
-        (NumberType::Int(x), NumberType::Int(y)) => NumberValue::Int(x.pow(y as u32)),
-        _ => {
-            let x = coerce(x);
-            let y = coerce(y);
-            NumberValue::Float(x.powf(y))
+        (NumberType::Float(_), _) | (_, NumberType::Float(_)) => {
+            return NumberValue::Float(coerce(x).powf(coerce(y)));
         }
+        (_, _) => {}
+    };
+
+    // Otherwise, we use the integer version
+    let bx = match x.untag() {
+        NumberType::Int(x) => BigInt::from(x),
+        NumberType::Big(b) => (*b).clone(),
+        NumberType::Float(x) => {
+            return NumberValue::Float(x.powf(coerce(y)));
+        }
+    };
+
+    let by = match y.untag() {
+        NumberType::Int(x) => u32::try_from(x).ok(),
+        NumberType::Big(b) => b.to_u32(),
+        NumberType::Float(y) => {
+            return NumberValue::Float(coerce(x).powf(**y));
+        }
+    };
+
+    if let Some(y) = by {
+        let result = checked_pow(bx, y).unwrap();
+        return NumberValue::Big(result).to_integer();
     }
+    return NumberValue::Float(coerce(x).powf(coerce(y)));
 }
 
 #[defun]
@@ -294,17 +326,17 @@ fn sqrt(arg: Number) -> f64 {
     coerce(arg).sqrt()
 }
 
-// #[defun]
-// fn abs(arg: Number) -> NumberValue {
-//     match arg.untag() {
-//         NumberType::Int(i) => NumberValue::Int(i.abs()),
-//         NumberType::Float(f) => NumberValue::Float(f.abs()),
-//     }
-// }
+#[defun]
+fn abs(arg: Number) -> NumberValue {
+    match arg.untag() {
+        NumberType::Int(i) => NumberValue::Int(i.abs()),
+        NumberType::Float(f) => NumberValue::Float(f.abs()),
+        NumberType::Big(b) => NumberValue::Big(b.abs())
+    }
+}
 
 #[defun]
 fn ldexp(s: Number, e: i64) -> f64 {
-    // TODO: overflow check -> bail!?
     coerce(s) * 2f64.powi(e as i32)
 }
 
@@ -315,24 +347,16 @@ fn logb(arg: Number) -> i64 {
     l2.floor() as i64
 }
 
-// Rust does not have frexp, so we have to implement it ourselves
-// Source: https://stackoverflow.com/questions/55690397/where-is-the-frexp-function-for-f32-in-rust
-fn frexp_f(f: f64) -> (f64, i64) {
-    if f.is_zero() || f.is_infinite() || f.is_nan() {
-        return (f, 0);
-    }
-
-    let lg = f.abs().log2();
-    let x = (lg - lg.floor() - 1.0).exp2();
-    let exp = lg.floor() + 1.0;
-    (f.signum() * x, exp as i64)
-}
-
 #[defun]
 fn frexp<'ob>(x: Number, cx: &'ob Context) -> Object<'ob> {
     let f = coerce(x);
     let (significand, exponent) = frexp_f(f);
     Cons::new(significand, exponent, cx).into()
+}
+
+fn frexp_f(f: f64) -> (f64, i64) {
+    let (x, exp) = libm::frexp(f);
+    (x, exp as i64)
 }
 
 #[cfg(test)]
