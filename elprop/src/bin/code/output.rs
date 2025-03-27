@@ -11,5 +11,6 @@ pub(crate) enum Status {
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Output {
     pub(crate) function: String,
+    pub(crate) count: usize,
     pub(crate) status: Status,
 }

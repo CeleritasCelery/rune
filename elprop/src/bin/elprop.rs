@@ -94,7 +94,7 @@ fn main() -> ExitCode {
     for output in outputs {
         println!("====================");
         let func = output.function;
-        println!("Testing: {func}");
+        println!("Testing: {func} [{}]", output.count);
         match output.status {
             Status::Fail(reason, args) => {
                 passed = false;
