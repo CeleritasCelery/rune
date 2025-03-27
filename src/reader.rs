@@ -5,7 +5,6 @@ use crate::core::{
     object::{Object, Symbol},
 };
 use crate::fns;
-use core::num;
 use num_bigint::BigInt;
 use rune_core::macros::list;
 use std::str;
