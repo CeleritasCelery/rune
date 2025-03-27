@@ -48,7 +48,7 @@ fn main() {
     for func in config.functions {
         let name = func.name.clone();
         let func_iter_count = RefCell::new(0);
-        
+
         let result = runner.run(&func.strategy(), |input| {
             if *rune_panicked.borrow() {
                 return Err(TestCaseError::Reject("Rune panicked".into()));
@@ -92,7 +92,7 @@ fn main() {
                 (Err(_), Err(_)) => Ok(()),
                 (Ok(e) | Err(e), Ok(r)) | (Ok(e), Err(r)) => {
                     println!("\"Emacs: '{e}', Rune: '{r}'\"");
-                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r};;").into()))
+                    Err(TestCaseError::Fail(format!("Emacs: {e}, Rune: {r}").into()))
                 }
             }
         });

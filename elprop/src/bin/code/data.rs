@@ -43,10 +43,7 @@ impl Type {
     fn strategy(self) -> BoxedStrategy<ArbitraryType> {
         match self {
             Type::String => any::<String>().prop_map(ArbitraryType::String).boxed(),
-            Type::Float => any::<f64>()
-                .prop_filter("fnu", |x| *x != 0.0)
-                .prop_map(ArbitraryType::Float)
-                .boxed(),
+            Type::Float => any::<f64>().prop_map(ArbitraryType::Float).boxed(),
             Type::Cons => Self::cons_strategy().prop_map(ArbitraryType::Cons).boxed(),
             Type::Symbol => Self::SYMBOL_CHARS.prop_map(ArbitraryType::Symbol).boxed(),
             Type::Integer => Self::fixnum_strategy().prop_map(ArbitraryType::Integer).boxed(),
@@ -90,7 +87,7 @@ impl Type {
 
     fn fixnum_strategy() -> BoxedStrategy<i64> {
         any::<i64>()
-            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM && *x != 0)
+            .prop_filter("Fixnum", |x| *x >= Self::MIN_FIXNUM && *x <= Self::MAX_FIXNUM)
             .boxed()
     }
 
@@ -316,7 +313,7 @@ impl std::fmt::Display for ArbitraryType {
                 '(' | ')' | '[' | ']' | '\\' | '"' => write!(f, "?\\{chr}"),
                 chr => write!(f, "?{chr}"),
             },
-            ArbitraryType::BigInt(n) => write!(f, "{}", n),
+            ArbitraryType::BigInt(n) => write!(f, "{n}"),
         }
     }
 }

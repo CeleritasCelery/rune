@@ -29,11 +29,11 @@ pub(crate) use convert::*;
 pub(crate) use float::*;
 pub(crate) use func::*;
 pub(crate) use hashtable::*;
+pub(crate) use integer::*;
 pub(crate) use string::*;
 pub(crate) use symbol::*;
 pub(crate) use tagged::*;
 pub(crate) use vector::*;
-pub(crate) use integer::*;
 
 use std::fmt::Write as _;
 

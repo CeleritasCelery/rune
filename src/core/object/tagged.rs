@@ -3,16 +3,20 @@ use super::{
         cons::Cons,
         error::{Type, TypeError},
         gc::Block,
-    }, ByteFnPrototype, ByteString, CharTableInner, GcString, LispBigInt, LispBuffer,
+    },
+    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBigInt, LispBuffer,
 };
 use super::{
     ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
     RecordBuilder, SubrFn, Symbol, SymbolCell,
 };
-use crate::{arith::{MAX_FIXNUM, MIN_FIXNUM}, core::{
-    env::sym,
-    gc::{DropStackElem, GcMoveable, GcState, Trace, TracePtr},
-}};
+use crate::{
+    arith::{MAX_FIXNUM, MIN_FIXNUM},
+    core::{
+        env::sym,
+        gc::{DropStackElem, GcMoveable, GcState, Trace, TracePtr},
+    },
+};
 use bumpalo::collections::Vec as GcVec;
 use num_bigint::BigInt;
 use private::{Tag, TaggedPtr};

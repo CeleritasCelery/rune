@@ -42,18 +42,18 @@ impl IntoObject for NumberValue {
 }
 
 impl NumberValue {
-    pub fn to_integer(self) -> NumberValue {
+    pub fn coerce_integer(self) -> NumberValue {
         match self {
             NumberValue::Float(x) => {
                 if x.is_finite() && x <= MAX_FIXNUM as f64 && x >= MIN_FIXNUM as f64 {
                     NumberValue::Int(x as i64)
                 } else {
-                    NumberValue::Big(BigInt::from_f64(x).unwrap_or_else(|| BigInt::zero()))
+                    NumberValue::Big(BigInt::from_f64(x).unwrap_or_else(BigInt::zero))
                 }
             }
             NumberValue::Big(x) => x
                 .to_i64()
-                .filter(|&n| n <= MAX_FIXNUM && n >= MIN_FIXNUM)
+                .filter(|&n| (MIN_FIXNUM..=MAX_FIXNUM).contains(&n))
                 .map(NumberValue::Int)
                 .unwrap_or_else(|| NumberValue::Big(x)),
             other => other,
@@ -161,7 +161,7 @@ impl PartialEq<f64> for Number<'_> {
             NumberValue::Int(num) => num as f64 == *other,
             NumberValue::Float(num) => num.approx_eq(*other, (f64::EPSILON, 2)),
             NumberValue::Big(num) => {
-                num.to_f64().map_or(false, |n| n.approx_eq(*other, (f64::EPSILON, 2)))
+                num.to_f64().is_some_and(|n| n.approx_eq(*other, (f64::EPSILON, 2)))
             } // TODO: Check behavior when conversion fails
         }
     }
@@ -172,7 +172,7 @@ impl PartialEq<BigInt> for Number<'_> {
         match self.val() {
             NumberValue::Int(num) => BigInt::from(num) == *other,
             NumberValue::Float(num) => {
-                other.to_f64().map_or(false, |n| n.approx_eq(num, (f64::EPSILON, 2)))
+                other.to_f64().is_some_and(|n| n.approx_eq(num, (f64::EPSILON, 2)))
             } // TODO: Check
             NumberValue::Big(num) => num == *other,
         }
@@ -196,7 +196,7 @@ impl PartialOrd for NumberValue {
             },
             NumberValue::Big(lhs) => match other {
                 NumberValue::Int(rhs) => lhs.partial_cmp(&BigInt::from(*rhs)),
-                NumberValue::Float(rhs) => lhs.to_f64().map_or(None, |n| n.partial_cmp(rhs)),
+                NumberValue::Float(rhs) => lhs.to_f64().and_then(|n| n.partial_cmp(rhs)),
                 NumberValue::Big(rhs) => lhs.partial_cmp(rhs),
             },
         }
