@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use interval_tree::{IntervalTree, TextRange};
+use interval_tree::{IntervalTree, RawPointerIterator, StackIterator, TextRange};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -14,6 +14,14 @@ fn generate_random_intervals(n: usize, rng: &mut StdRng) -> Vec<(TextRange, i64)
     intervals
 }
 
+fn build_tree(intervals: &[(TextRange, i64)]) -> IntervalTree<i64> {
+    let mut tree = IntervalTree::new();
+    for (range, value) in intervals {
+        tree.insert(*range, *value, |a, _b| a);
+    }
+    tree
+}
+
 fn insertion_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(42);
     let n = 50000;
@@ -21,10 +29,7 @@ fn insertion_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("insert {n} random intervals"), |b| {
         b.iter(|| {
-            let mut tree = IntervalTree::new();
-            for (range, value) in &intervals {
-                tree.insert(*range, *value, |a, _b| a);
-            }
+            let tree = build_tree(&intervals);
             black_box(tree);
         });
     });
@@ -34,15 +39,12 @@ fn deletion_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(42);
     let n = 10000;
     let intervals = generate_random_intervals(n, &mut rng);
-    env_logger::init();
+
+    let tree = build_tree(&intervals);
 
     c.bench_function(&format!("delete {n} random intervals"), |b| {
         b.iter(|| {
-            let mut tree = IntervalTree::new();
-            // Insert all intervals
-            for (range, value) in &intervals {
-                tree.insert(*range, *value, |a, _b| a);
-            }
+            let mut tree = tree.clone();
             // Delete all intervals
             for (range, _) in &intervals {
                 tree.delete(*range, false);
@@ -66,13 +68,10 @@ fn find_intersects_benchmark(c: &mut Criterion) {
         })
         .collect();
 
+    let tree = build_tree(&intervals);
+
     c.bench_function(&format!("find_intersects of {search_n} times in {n} intervals"), |b| {
         b.iter(|| {
-            let mut tree = IntervalTree::new();
-            // Insert all intervals
-            for (range, value) in &intervals {
-                tree.insert(*range, *value, |a, _b| a);
-            }
             // Search with all large ranges
             for search_range in &search_ranges {
                 let results = tree.find_intersects(*search_range);
@@ -82,5 +81,38 @@ fn find_intersects_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, insertion_benchmark, deletion_benchmark, find_intersects_benchmark);
+fn iterator_benchmark(c: &mut Criterion) {
+    let mut rng = StdRng::seed_from_u64(42);
+    let n = 100000;
+    let intervals = generate_random_intervals(n, &mut rng);
+
+    let tree = build_tree(&intervals);
+
+    let min_node = tree.min();
+    let min_key = min_node.map(|n| n.key);
+
+    c.bench_function(&format!("iterating with stack iterator over {n} intervals"), |b| {
+        b.iter(|| {
+            let mut stack_iter = StackIterator::new(&tree, min_key);
+            while let Some(_n) = stack_iter.next() {}
+            black_box(stack_iter);
+        });
+    });
+
+    c.bench_function(&format!("iterating with raw pointer iterator over {n} intervals"), |b| {
+        b.iter(|| {
+            let mut raw_iter = RawPointerIterator::new(&tree, min_key);
+            while let Some(_n) = raw_iter.next() {}
+            black_box(raw_iter);
+        });
+    });
+}
+
+criterion_group!(
+    benches,
+    insertion_benchmark,
+    deletion_benchmark,
+    find_intersects_benchmark,
+    iterator_benchmark
+);
 criterion_main!(benches);

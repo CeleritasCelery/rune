@@ -177,6 +177,14 @@ impl<T: Clone> Node<T> {
         unsafe { self.parent.as_mut() }
     }
 
+    fn get_node(&self, key: TextRange) -> Option<&Node<T>> {
+        match key.cmp(&self.key) {
+            Ordering::Equal => Some(self),
+            Ordering::Less => self.left.as_ref().and_then(|n| n.get_node(key)),
+            Ordering::Greater => self.right.as_ref().and_then(|n| n.get_node(key)),
+        }
+    }
+
     fn get_node_mut(&mut self, key: TextRange) -> Option<&mut Node<T>> {
         match key.cmp(&self.key) {
             Ordering::Equal => Some(self),
@@ -455,8 +463,26 @@ impl<T: Clone> Node<T> {
     }
 
     /* ------------------------------------------------------------ */
-    /*                        intersection                          */
+    /*                         iteration                            */
     /* ------------------------------------------------------------ */
+
+    fn get_with_stacks<'a>(
+        &'a self,
+        key: TextRange,
+        stack: &mut Vec<&'a Node<T>>,
+    ) -> Option<&'a Node<T>> {
+        match key.cmp(&self.key) {
+            Ordering::Equal => Some(self),
+            Ordering::Less => self.left.as_ref().and_then(|n| {
+                stack.push(self);
+                n.get_with_stacks(key, stack)
+            }),
+            Ordering::Greater => self.right.as_ref().and_then(|n| {
+                stack.push(self);
+                n.get_with_stacks(key, stack)
+            }),
+        }
+    }
 
     pub fn next(&self) -> Option<&Node<T>> {
         let mut n = self;
@@ -529,6 +555,10 @@ impl<T: Clone> Node<T> {
         }
         None
     }
+
+    /* ------------------------------------------------------------ */
+    /*                        intersection                          */
+    /* ------------------------------------------------------------ */
 
     pub fn find_intersects<'a>(&'a self, range: TextRange, results: &mut Vec<&'a Node<T>>) {
         let ord = range.strict_order(&self.key);
@@ -634,7 +664,7 @@ impl<T: Clone> Node<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 /// A interval tree using red-black tree, whereas keys are intervals, and values are
 /// plists in elisp.
 ///
@@ -1161,6 +1191,67 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
             root.print_inner(f, 0)?;
         }
         Ok(())
+    }
+}
+
+pub struct StackIterator<'tree, T: Clone> {
+    stack: Vec<&'tree Node<T>>,
+    current: Option<&'tree Node<T>>,
+}
+
+impl<'tree, T: Clone> StackIterator<'tree, T> {
+    pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>) -> Self {
+        let mut stack = Vec::new();
+        // M a -> M b -> (a -> b -> M b) -> M b
+        let current = tree
+            .root
+            .as_ref()
+            .and_then(|n| key.and_then(|key| n.get_with_stacks(key, &mut stack)));
+        Self { stack, current }
+    }
+}
+
+impl<'tree, T: Clone> Iterator for StackIterator<'tree, T> {
+    type Item = &'tree Node<T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current?;
+        if let Some(r) = &current.right {
+            self.stack.push(current);
+            let mut min_node_of_r = r;
+            while let Some(l) = &min_node_of_r.left {
+                self.stack.push(min_node_of_r);
+                min_node_of_r = l;
+            }
+            self.current = Some(min_node_of_r);
+            return self.current;
+        }
+        while let Some(new_current) = self.stack.pop() {
+            if !current.is_right_child {
+                self.current = Some(new_current);
+                return self.current;
+            }
+        }
+        None
+    }
+}
+
+pub struct RawPointerIterator<'tree, T: Clone> {
+    current: Option<&'tree Node<T>>,
+}
+impl<'tree, T: Clone> RawPointerIterator<'tree, T> {
+    pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>) -> Self {
+        // M a -> M b -> (a -> b -> M b) -> M b
+        let current = tree.root.as_ref().and_then(|n| key.and_then(|key| n.get_node(key)));
+        Self { current }
+    }
+}
+
+impl<'tree, T: Clone> Iterator for RawPointerIterator<'tree, T> {
+    type Item = &'tree Node<T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.current.and_then(|n| n.next());
+        self.current = next;
+        next
     }
 }
 
