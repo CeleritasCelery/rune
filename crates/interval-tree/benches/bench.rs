@@ -1,11 +1,16 @@
 use std::ops::Range;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use interval_tree::{IntervalTree, RawPointerIterator, StackIterator, TextRange};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-fn generate_random_intervals(n: usize, rng: &mut StdRng, start_bound: Range<usize>, len_bound: Range<usize>) -> Vec<(TextRange, i64)> {
+fn generate_random_intervals(
+    n: usize,
+    rng: &mut StdRng,
+    start_bound: Range<usize>,
+    len_bound: Range<usize>,
+) -> Vec<(TextRange, i64)> {
     let mut intervals = Vec::with_capacity(n);
     for _ in 0..n {
         let start = rng.random_range(start_bound.clone());
@@ -125,9 +130,68 @@ fn iterator_benchmark(c: &mut Criterion) {
     });
 }
 
+fn apply_with_split_benchmark(c: &mut Criterion) {
+    let mut rng = StdRng::seed_from_u64(42);
+    let n = 10000;
+
+    // Benchmark applying to small ranges (affecting few intervals)
+    c.bench_function(&format!("apply_with_split small ranges on {n} intervals"), |b| {
+        b.iter(|| {
+            let mut tree = IntervalTree::new();
+            for i in 0..n {
+                let start = i * 10;
+                let end = start + 10;
+                tree.insert(TextRange::new(start, end), i as i64, |a, _b| a);
+            }
+            // Apply to 100 small random ranges
+            for _ in 0..100 {
+                let pos = rng.random_range(0..n * 10);
+                tree.apply_with_split(|val| Some(val + 1), TextRange::new(pos, pos + 5));
+            }
+            black_box(tree);
+        });
+    });
+
+    // Benchmark applying to large ranges (affecting many intervals)
+    c.bench_function(&format!("apply_with_split large ranges on {n} intervals"), |b| {
+        b.iter(|| {
+            let mut tree = IntervalTree::new();
+            for i in 0..n {
+                let start = i * 10;
+                let end = start + 10;
+                tree.insert(TextRange::new(start, end), i as i64, |a, _b| a);
+            }
+            // Apply to 5 large ranges
+            for i in 0..5 {
+                let start = i * 2000;
+                tree.apply_with_split(|val| Some(val * 2), TextRange::new(start, start + 1000));
+            }
+            black_box(tree);
+        });
+    });
+
+    // Benchmark with deletions
+    c.bench_function(&format!("apply_with_split deletions on {n} intervals"), |b| {
+        b.iter(|| {
+            let mut tree = IntervalTree::new();
+            for i in 0..n {
+                let start = i * 10;
+                let end = start + 10;
+                tree.insert(TextRange::new(start, end), i as i64, |a, _b| a);
+            }
+            // Delete 100 small random ranges
+            for _ in 0..100 {
+                let pos = rng.random_range(0..n * 10);
+                tree.apply_with_split(|_| None, TextRange::new(pos, pos + 5));
+            }
+            black_box(tree);
+        });
+    });
+}
+
 fn clean_benchmark(c: &mut Criterion) {
     let n = 10000;
-    
+
     // Build a tree with many adjacent intervals that can be merged
     let mut tree = IntervalTree::new();
     for i in 0..n {
@@ -171,6 +235,7 @@ criterion_group!(
     deletion_benchmark,
     find_intersects_benchmark,
     iterator_benchmark,
-    clean_benchmark
+    clean_benchmark,
+    apply_with_split_benchmark
 );
 criterion_main!(benches);
