@@ -983,6 +983,8 @@ impl<T: Clone> IntervalTree<T> {
         let iter = StackIterator::new(self, start_key);
         
         let mut prev_node: Option<&Node<T>> = None;
+        let mut merge_start: Option<TextRange> = None;
+        
         for node in iter {
             // Check if current node should be deleted
             if node.key.empty() || empty(&node.val) {
@@ -993,23 +995,30 @@ impl<T: Clone> IntervalTree<T> {
             // Check if we can merge with previous node
             if let Some(prev) = prev_node {
                 if prev.key.end == node.key.start && eq(&prev.val, &node.val) {
-                    operations.push(Operation::Merge(prev.key, node.key));
+                    // Start or continue a merge sequence
+                    if merge_start.is_none() {
+                        merge_start = Some(prev.key);
+                    }
+                    operations.push(Operation::Merge(merge_start.unwrap(), node.key));
+                } else {
+                    // Reset merge sequence if nodes don't match
+                    merge_start = None;
                 }
             }
 
             prev_node = Some(node);
         }
 
-        // Apply all operations
-        for op in operations {
+        // Apply all operations in reverse order to avoid invalidating keys
+        for op in operations.into_iter().rev() {
             match op {
                 Operation::Delete(key) => {
                     self.delete_exact(key);
                 }
-                Operation::Merge(prev_key, next_key) => {
-                    if let Some(node) = self.get_node_mut(prev_key) {
-                        node.key.end = next_key.end;
-                        self.delete_exact(next_key);
+                Operation::Merge(start_key, end_key) => {
+                    if let Some(node) = self.get_node_mut(start_key) {
+                        node.key.end = end_key.end;
+                        self.delete_exact(end_key);
                     }
                 }
             }
