@@ -163,10 +163,6 @@ impl<T: Clone> Node<T> {
         if let Some(ref l) = self.left { l.min() } else { self }
     }
 
-    fn min_mut(&mut self) -> &mut Node<T> {
-        if let Some(ref mut l) = self.left { l.min_mut() } else { self }
-    }
-
     #[inline]
     fn parent(&self) -> Option<&Node<T>> {
         unsafe { self.parent.as_ref() }
@@ -954,37 +950,35 @@ impl<T: Clone> IntervalTree<T> {
     /// ```
     pub fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, eq: F, empty: G) {
         // let min = self.min_mut();
-        let min = Some(TextRange::new(0, 1000));
+        let min = self.min().map(|n| n.key);
         self.clean_from_node(min, eq, empty);
     }
 
     pub fn clean_from<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
         &mut self,
-        start: impl Into<TextRange>,
+        start: TextRange,
         eq: F,
         empty: G,
     ) {
-        self.clean_from_node(Some(start.into()), eq, empty);
+        let start_key = self.find_intersect_min(start).map(|n| n.key);
+        self.clean_from_node(start_key, eq, empty);
     }
 
     fn clean_from_node<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
         &mut self,
-        start: Option<TextRange>,
+        start_key: Option<TextRange>,
         eq: F,
         empty: G,
     ) {
         // Get starting key if specified
-        let start_key = start.and_then(|range| {
-            self.find_intersect_min(range).map(|n| n.key)
-        });
 
         // Collect all operations to perform
         let mut operations = Vec::new();
         let iter = StackIterator::new(self, start_key);
-        
+
         let mut prev_node: Option<&Node<T>> = None;
-        let mut merge_start: Option<TextRange> = None;
-        
+        let mut current_merge: Option<(TextRange, Vec<TextRange>)> = None;
+
         for node in iter {
             // Check if current node should be deleted
             if node.key.empty() || empty(&node.val) {
@@ -995,42 +989,47 @@ impl<T: Clone> IntervalTree<T> {
             // Check if we can merge with previous node
             if let Some(prev) = prev_node {
                 if prev.key.end == node.key.start && eq(&prev.val, &node.val) {
-                    // Start or continue a merge sequence
-                    if merge_start.is_none() {
-                        merge_start = Some(prev.key);
+                    // Add to current merge sequence or start new one
+                    match &mut current_merge {
+                        Some((_start_key, keys)) => {
+                            keys.push(node.key);
+                        }
+                        None => {
+                            current_merge = Some((prev.key, vec![node.key]));
+                        }
                     }
-                    operations.push(Operation::Merge(merge_start.unwrap(), node.key));
-                } else {
-                    // Reset merge sequence if nodes don't match
-                    merge_start = None;
+                } else if let Some((start_key, keys)) = current_merge.take() {
+                    // Finalize current merge sequence
+                    operations.push(Operation::Merge(start_key, keys));
                 }
             }
 
             prev_node = Some(node);
         }
 
-        println!("{:?}", operations);
+        // Add any remaining merge sequence
+        if let Some((start_key, keys)) = current_merge {
+            operations.push(Operation::Merge(start_key, keys));
+        }
+
         // Apply all operations in reverse order to avoid invalidating keys
-        for op in operations.into_iter() {
-            println!("{op:?}");
+        for op in operations.into_iter().rev() {
             match op {
                 Operation::Delete(key) => {
                     self.delete_exact(key);
                 }
-                Operation::Merge(start_key, end_key) => {
+                Operation::Merge(start_key, keys) => {
                     if let Some(node) = self.get_node_mut(start_key) {
-                        node.key.end = end_key.end;
-                        println!("keys: {:?} {:?}", start_key, end_key);
-                        let n = self.delete_exact(end_key);
-                        println!("del: {:?}", n.unwrap().key);
+                        // Merge all consecutive keys into one
+                        let last_key = *keys.last().unwrap();
+                        node.key.end = last_key.end;
+                        for key in keys {
+                            self.delete_exact(key);
+                        }
                     }
                 }
             }
         }
-    }
-
-    fn min_mut(&mut self) -> Option<*mut Node<T>> {
-        self.root.as_mut().map(|n| ptr::from_mut(n.min_mut()))
     }
 
     /// Merges adjacent intervals in the tree that have equal properties.
@@ -1202,7 +1201,7 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
 #[derive(Debug)]
 enum Operation {
     Delete(TextRange),
-    Merge(TextRange, TextRange),
+    Merge(TextRange, Vec<TextRange>), // start_key and all consecutive keys to merge
 }
 
 pub struct StackIterator<'tree, T: Clone> {
@@ -1291,7 +1290,7 @@ mod tests {
     fn test_stack_iterator_single_node() {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 1), 1, merge);
-        
+
         let min_key = tree.min().map(|n| n.key);
         let mut iter = StackIterator::new(&tree, min_key);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(0, 1)));
@@ -1304,7 +1303,7 @@ mod tests {
         tree.insert(TextRange::new(2, 3), 2, merge);
         tree.insert(TextRange::new(1, 2), 1, merge);
         tree.insert(TextRange::new(3, 4), 3, merge);
-        
+
         let min_key = tree.min().map(|n| n.key);
         let mut iter = StackIterator::new(&tree, min_key);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
@@ -1329,7 +1328,7 @@ mod tests {
         tree.insert(TextRange::new(3, 4), 3, merge);
         tree.insert(TextRange::new(5, 6), 5, merge);
         tree.insert(TextRange::new(7, 8), 7, merge);
-        
+
         let min_key = tree.min().map(|n| n.key);
         let mut iter = StackIterator::new(&tree, min_key);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
