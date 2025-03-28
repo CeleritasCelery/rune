@@ -1249,11 +1249,72 @@ impl<'tree, T: Clone> Iterator for RawPointerIterator<'tree, T> {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     fn merge<T: Clone + Debug>(a: T, _b: T) -> T {
         a
+    }
+
+    #[test]
+    fn test_stack_iterator_empty_tree() {
+        let tree: IntervalTree<i32> = IntervalTree::new();
+        let mut iter = StackIterator::new(&tree, None);
+        assert_eq!(iter.next().map(|n| n.val), None);
+    }
+
+    #[test]
+    fn test_stack_iterator_single_node() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 1), 1, merge);
+        
+        let min_key = tree.min().map(|n| n.key);
+        let mut iter = StackIterator::new(&tree, min_key);
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(0, 1)));
+        assert_eq!(iter.next().map(|n| n.key), None);
+    }
+
+    #[test]
+    fn test_stack_iterator_multiple_nodes() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(2, 3), 2, merge);
+        tree.insert(TextRange::new(1, 2), 1, merge);
+        tree.insert(TextRange::new(3, 4), 3, merge);
+        
+        let min_key = tree.min().map(|n| n.key);
+        let mut iter = StackIterator::new(&tree, min_key);
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(2, 3)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(3, 4)));
+        assert_eq!(iter.next().map(|n| n.key), None);
+    }
+
+    #[test]
+    fn test_stack_iterator_complex_tree() {
+        let mut tree = IntervalTree::new();
+        // Build this structure:
+        //       4
+        //      / \
+        //     2   6
+        //    / \ / \
+        //   1 3 5 7
+        tree.insert(TextRange::new(4, 5), 4, merge);
+        tree.insert(TextRange::new(2, 3), 2, merge);
+        tree.insert(TextRange::new(6, 7), 6, merge);
+        tree.insert(TextRange::new(1, 2), 1, merge);
+        tree.insert(TextRange::new(3, 4), 3, merge);
+        tree.insert(TextRange::new(5, 6), 5, merge);
+        tree.insert(TextRange::new(7, 8), 7, merge);
+        
+        let min_key = tree.min().map(|n| n.key);
+        let mut iter = StackIterator::new(&tree, min_key);
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(2, 3)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(3, 4)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(4, 5)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(5, 6)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(6, 7)));
+        assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(7, 8)));
+        assert_eq!(iter.next().map(|n| n.key), None);
     }
 
     fn build_tree<T: Clone + Debug>(val: T) -> IntervalTree<T> {
