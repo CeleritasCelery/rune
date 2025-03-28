@@ -953,7 +953,8 @@ impl<T: Clone> IntervalTree<T> {
     /// assert_eq!(tree.find_intersects(TextRange::new(0, 20)).len(), 2);
     /// ```
     pub fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, eq: F, empty: G) {
-        let min = self.min_mut();
+        // let min = self.min_mut();
+        let min = Some(TextRange::new(0, 1000));
         self.clean_from_node(min, eq, empty);
     }
 
@@ -1186,7 +1187,7 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
 }
 
 #[derive(Debug)]
-enum Operation<T> {
+enum Operation {
     Delete(TextRange),
     Merge(TextRange, TextRange),
 }
@@ -1208,19 +1209,6 @@ impl<'tree, T: Clone> StackIterator<'tree, T> {
                 Ordering::Greater => node.right.as_ref(),
                 Ordering::Equal => None,
             });
-        }
-
-        Self { stack }
-    }
-
-    pub fn from_node(node: Option<&'tree Node<T>>) -> Self {
-        let mut stack = Vec::new();
-        let mut current = node;
-        
-        // Build initial stack by traversing leftmost path
-        while let Some(node) = current {
-            stack.push(node);
-            current = node.left.as_ref().map(|n| n.as_ref());
         }
 
         Self { stack }
