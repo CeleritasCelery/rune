@@ -1,4 +1,4 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use interval_tree::{IntervalTree, RawPointerIterator, StackIterator, TextRange};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -118,11 +118,52 @@ fn iterator_benchmark(c: &mut Criterion) {
     });
 }
 
+fn clean_benchmark(c: &mut Criterion) {
+    let n = 10000;
+    
+    // Build a tree with many adjacent intervals that can be merged
+    let mut tree = IntervalTree::new();
+    for i in 0..n {
+        let start = i * 10;
+        let end = start + 10;
+        // Make every other interval have the same value to test merging
+        let value = if i % 5 == 0 { 1 } else { 2 };
+        tree.insert(TextRange::new(start, end), value, |a, _b| a);
+    }
+
+    c.bench_function(&format!("clean {n} intervals with mergeable values"), |b| {
+        b.iter(|| {
+            let mut tree = tree.clone();
+            tree.clean(|a, b| a == b, |_| false);
+            black_box(tree);
+        });
+    });
+
+    // Also benchmark with some empty intervals
+    let mut tree_with_empty = IntervalTree::new();
+    for i in 0..n {
+        let start = i * 10;
+        let end = start + 10;
+        // Make some intervals empty
+        let value = if i % 5 == 0 { 0 } else { 1 };
+        tree_with_empty.insert(TextRange::new(start, end), value, |a, _b| a);
+    }
+
+    c.bench_function(&format!("clean {n} intervals with empty values"), |b| {
+        b.iter(|| {
+            let mut tree = tree_with_empty.clone();
+            tree.clean(|a, b| a == b, |v| *v == 0);
+            black_box(tree);
+        });
+    });
+}
+
 criterion_group!(
     benches,
     insertion_benchmark,
     deletion_benchmark,
     find_intersects_benchmark,
-    iterator_benchmark
+    iterator_benchmark,
+    clean_benchmark
 );
 criterion_main!(benches);
