@@ -1009,8 +1009,10 @@ impl<T: Clone> IntervalTree<T> {
             prev_node = Some(node);
         }
 
+        println!("{:?}", operations);
         // Apply all operations in reverse order to avoid invalidating keys
-        for op in operations.into_iter().rev() {
+        for op in operations.into_iter() {
+            println!("{op:?}");
             match op {
                 Operation::Delete(key) => {
                     self.delete_exact(key);
@@ -1018,7 +1020,9 @@ impl<T: Clone> IntervalTree<T> {
                 Operation::Merge(start_key, end_key) => {
                     if let Some(node) = self.get_node_mut(start_key) {
                         node.key.end = end_key.end;
-                        self.delete_exact(end_key);
+                        println!("keys: {:?} {:?}", start_key, end_key);
+                        let n = self.delete_exact(end_key);
+                        println!("del: {:?}", n.unwrap().key);
                     }
                 }
             }
