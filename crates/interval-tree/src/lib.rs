@@ -963,50 +963,55 @@ impl<T: Clone> IntervalTree<T> {
         eq: F,
         empty: G,
     ) {
-        let node = self.get_node_mut(start).map(ptr::from_mut);
-        self.clean_from_node(node, eq, empty);
+        self.clean_from_node(Some(start.into()), eq, empty);
     }
 
     fn clean_from_node<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
         &mut self,
-        start: Option<*mut Node<T>>,
+        start: Option<TextRange>,
         eq: F,
         empty: G,
     ) {
-        let mut node = start;
+        // Get starting node if specified
+        let start_node = start.and_then(|range| {
+            self.find_intersect_min(range)
+        });
 
-        while let Some(n_raw) = node {
-            let n = safe_mut(n_raw);
-            let mut next_raw = n.next_raw();
-            // delete empty props at first
-            if n.key.empty() || empty(&n.val) {
-                self.delete_exact(n.key);
-                node = next_raw;
+        // Collect all operations to perform
+        let mut operations = Vec::new();
+        let iter = StackIterator::from_node(start_node);
+        
+        let mut prev_node: Option<&Node<T>> = None;
+        for node in iter {
+            // Check if current node should be deleted
+            if node.key.empty() || empty(&node.val) {
+                operations.push(Operation::Delete(node.key));
                 continue;
             }
-            // delete empty props after n, which is already guranteed to be non-empty
-            while let Some(next_r) = next_raw {
-                let next = safe_mut(next_r);
-                if next.key.empty() || empty(&next.val) {
-                    let key = next.key;
-                    next_raw = next.next_raw();
-                    self.delete_exact(key);
-                } else {
-                    break;
+
+            // Check if we can merge with previous node
+            if let Some(prev) = prev_node {
+                if prev.key.end == node.key.start && eq(&prev.val, &node.val) {
+                    operations.push(Operation::Merge(prev.key, node.key));
                 }
             }
 
-            // try merge n and next. If succeed, find next.next(); if not, advance n to next. Then repeat
-            let Some(next_r) = next_raw else { return };
-            let next = safe_mut(next_r);
+            prev_node = Some(node);
+        }
 
-            if n.key.end == next.key.start && eq(&n.val, &next.val) {
-                let new_end = next.key.end;
-                self.delete_exact(next.key);
-                n.key.end = new_end;
-                continue;
+        // Apply all operations
+        for op in operations {
+            match op {
+                Operation::Delete(key) => {
+                    self.delete_exact(key);
+                }
+                Operation::Merge(prev_key, next_key) => {
+                    if let Some(node) = self.get_node_mut(prev_key) {
+                        node.key.end = next_key.end;
+                        self.delete_exact(next_key);
+                    }
+                }
             }
-            node = Some(next_r);
         }
     }
 
@@ -1180,6 +1185,12 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
     }
 }
 
+#[derive(Debug)]
+enum Operation<T> {
+    Delete(TextRange),
+    Merge(TextRange, TextRange),
+}
+
 pub struct StackIterator<'tree, T: Clone> {
     stack: Vec<&'tree Node<T>>,
 }
@@ -1197,6 +1208,19 @@ impl<'tree, T: Clone> StackIterator<'tree, T> {
                 Ordering::Greater => node.right.as_ref(),
                 Ordering::Equal => None,
             });
+        }
+
+        Self { stack }
+    }
+
+    pub fn from_node(node: Option<&'tree Node<T>>) -> Self {
+        let mut stack = Vec::new();
+        let mut current = node;
+        
+        // Build initial stack by traversing leftmost path
+        while let Some(node) = current {
+            stack.push(node);
+            current = node.left.as_ref().map(|n| n.as_ref());
         }
 
         Self { stack }
