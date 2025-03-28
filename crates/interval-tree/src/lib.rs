@@ -466,24 +466,6 @@ impl<T: Clone> Node<T> {
     /*                         iteration                            */
     /* ------------------------------------------------------------ */
 
-    fn get_with_stacks<'a>(
-        &'a self,
-        key: TextRange,
-        stack: &mut Vec<&'a Node<T>>,
-    ) -> Option<&'a Node<T>> {
-        match key.cmp(&self.key) {
-            Ordering::Equal => Some(self),
-            Ordering::Less => self.left.as_ref().and_then(|n| {
-                stack.push(self);
-                n.get_with_stacks(key, stack)
-            }),
-            Ordering::Greater => self.right.as_ref().and_then(|n| {
-                stack.push(self);
-                n.get_with_stacks(key, stack)
-            }),
-        }
-    }
-
     pub fn next(&self) -> Option<&Node<T>> {
         let mut n = self;
         if let Some(ref r) = self.right {
@@ -683,6 +665,10 @@ impl<T: Clone> IntervalTree<T> {
     /// Creates an empty interval tree.
     pub fn new() -> Self {
         Self { root: None }
+    }
+
+    pub fn size(&self) -> usize {
+        self.root.as_ref().map_or(0, |n| n.n)
     }
 
     /// Inserts a new interval with the specified `key` and `val` into the interval tree.
@@ -1196,42 +1182,47 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
 
 pub struct StackIterator<'tree, T: Clone> {
     stack: Vec<&'tree Node<T>>,
-    current: Option<&'tree Node<T>>,
 }
 
 impl<'tree, T: Clone> StackIterator<'tree, T> {
     pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>) -> Self {
         let mut stack = Vec::new();
-        // M a -> M b -> (a -> b -> M b) -> M b
-        let current = tree
-            .root
-            .as_ref()
-            .and_then(|n| key.and_then(|key| n.get_with_stacks(key, &mut stack)));
-        Self { stack, current }
+        let mut current = tree.root.as_ref();
+
+        // Build initial stack by traversing to the starting node
+        while let Some(node) = current {
+            stack.push(node.as_ref());
+            current = key.and_then(|k| match k.cmp(&node.key) {
+                Ordering::Less => node.left.as_ref(),
+                Ordering::Greater => node.right.as_ref(),
+                Ordering::Equal => None,
+            });
+        }
+
+        Self { stack }
     }
 }
 
 impl<'tree, T: Clone> Iterator for StackIterator<'tree, T> {
     type Item = &'tree Node<T>;
+
     fn next(&mut self) -> Option<Self::Item> {
-        let current = self.current?;
-        if let Some(r) = &current.right {
-            self.stack.push(current);
-            let mut min_node_of_r = r;
-            while let Some(l) = &min_node_of_r.left {
-                self.stack.push(min_node_of_r);
-                min_node_of_r = l;
-            }
-            self.current = Some(min_node_of_r);
-            return self.current;
-        }
-        while let Some(new_current) = self.stack.pop() {
-            if !current.is_right_child {
-                self.current = Some(new_current);
-                return self.current;
+        // Pop the next node to visit
+        let node = self.stack.pop()?;
+
+        // Push the right subtree onto the stack
+        if let Some(mut current) = node.right.as_ref() {
+            // Traverse down the leftmost path of the right subtree
+            loop {
+                self.stack.push(current);
+                current = match current.left.as_ref() {
+                    Some(left) => left,
+                    None => break,
+                };
             }
         }
-        None
+
+        Some(node)
     }
 }
 
@@ -1250,8 +1241,9 @@ impl<'tree, T: Clone> Iterator for RawPointerIterator<'tree, T> {
     type Item = &'tree Node<T>;
     fn next(&mut self) -> Option<Self::Item> {
         let next = self.current.and_then(|n| n.next());
+        let current = self.current;
         self.current = next;
-        next
+        current
     }
 }
 

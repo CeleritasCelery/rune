@@ -228,7 +228,8 @@ pub(crate) struct IntervalIntersections<'ob, 'tree> {
 impl<'ob, 'tree> IntervalIntersections<'ob, 'tree> {
     pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
         let current = tree.tree.find_intersect_min(start..end);
-        let iterator = StackIterator::new(&tree.tree, current.map(|n| n.key));
+        let mut iterator = StackIterator::new(&tree.tree, current.map(|n| n.key));
+        iterator.next(); // remove current node
         // let next_start = current.map(|n| n.key.end).unwrap_or(start);
         let next_start = start;
         Self { start, end, current, iterator, next_start }

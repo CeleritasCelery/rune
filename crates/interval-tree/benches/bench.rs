@@ -90,11 +90,17 @@ fn iterator_benchmark(c: &mut Criterion) {
 
     let min_node = tree.min();
     let min_key = min_node.map(|n| n.key);
+    let size = tree.size();
+    println!("{:?}", size);
 
     c.bench_function(&format!("iterating with stack iterator over {n} intervals"), |b| {
         b.iter(|| {
             let mut stack_iter = StackIterator::new(&tree, min_key);
-            while let Some(_n) = stack_iter.next() {}
+            let mut count = 0;
+            while let Some(_n) = stack_iter.next() {
+                count += 1;
+            }
+            assert_eq!(count, size);
             black_box(stack_iter);
         });
     });
@@ -102,7 +108,11 @@ fn iterator_benchmark(c: &mut Criterion) {
     c.bench_function(&format!("iterating with raw pointer iterator over {n} intervals"), |b| {
         b.iter(|| {
             let mut raw_iter = RawPointerIterator::new(&tree, min_key);
-            while let Some(_n) = raw_iter.next() {}
+            let mut count = 0;
+            while let Some(_n) = raw_iter.next() {
+                count += 1;
+            }
+            assert_eq!(count, size);
             black_box(raw_iter);
         });
     });
