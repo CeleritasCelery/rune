@@ -972,14 +972,14 @@ impl<T: Clone> IntervalTree<T> {
         eq: F,
         empty: G,
     ) {
-        // Get starting node if specified
-        let start_node = start.and_then(|range| {
-            self.find_intersect_min(range)
+        // Get starting key if specified
+        let start_key = start.and_then(|range| {
+            self.find_intersect_min(range).map(|n| n.key)
         });
 
         // Collect all operations to perform
         let mut operations = Vec::new();
-        let iter = StackIterator::from_node(start_node);
+        let iter = StackIterator::new(self, start_key);
         
         let mut prev_node: Option<&Node<T>> = None;
         for node in iter {
