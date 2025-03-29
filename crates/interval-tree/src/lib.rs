@@ -817,7 +817,7 @@ impl<T: Clone> IntervalTree<T> {
 
         // Collect all operations to perform
         let mut operations: Vec<Operation<T>> = Vec::new();
-        let iter = StackIterator::new(self, start_key);
+        let iter = StackIterator::new(self, start_key, false);
 
         let mut prev_node: Option<&Node<T>> = None;
         let mut current_merge: Option<(TextRange, Vec<TextRange>)> = None;
@@ -1052,10 +1052,11 @@ enum Operation<T> {
 
 pub struct StackIterator<'tree, T: Clone> {
     stack: Vec<&'tree Node<T>>,
+    reverse_order: bool,
 }
 
 impl<'tree, T: Clone> StackIterator<'tree, T> {
-    pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>) -> Self {
+    pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>, reverse_order: bool) -> Self {
         let mut stack = Vec::new();
         let mut current = tree.root.as_ref();
 
@@ -1069,7 +1070,7 @@ impl<'tree, T: Clone> StackIterator<'tree, T> {
             });
         }
 
-        Self { stack }
+        Self { stack, reverse_order }
     }
 }
 
@@ -1081,12 +1082,15 @@ impl<'tree, T: Clone> Iterator for StackIterator<'tree, T> {
         let node = self.stack.pop()?;
 
         // Push the right subtree onto the stack
-        if let Some(mut current) = node.right.as_ref() {
+        let next_branch = if self.reverse_order { node.left.as_ref() } else { node.right.as_ref() };
+        if let Some(mut current) = next_branch {
             // Traverse down the leftmost path of the right subtree
             loop {
                 self.stack.push(current);
-                current = match current.left.as_ref() {
-                    Some(left) => left,
+                let next_branch =
+                    if self.reverse_order { current.right.as_ref() } else { current.left.as_ref() };
+                current = match next_branch {
+                    Some(n) => n,
                     None => break,
                 };
             }
@@ -1109,7 +1113,7 @@ mod tests {
     #[test]
     fn test_stack_iterator_empty_tree() {
         let tree: IntervalTree<i32> = IntervalTree::new();
-        let mut iter = StackIterator::new(&tree, None);
+        let mut iter = StackIterator::new(&tree, None, false);
         assert_eq!(iter.next().map(|n| n.val), None);
     }
 
@@ -1119,7 +1123,7 @@ mod tests {
         tree.insert(TextRange::new(0, 1), 1, merge);
 
         let min_key = tree.min().map(|n| n.key);
-        let mut iter = StackIterator::new(&tree, min_key);
+        let mut iter = StackIterator::new(&tree, min_key, false);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(0, 1)));
         assert_eq!(iter.next().map(|n| n.key), None);
     }
@@ -1132,7 +1136,7 @@ mod tests {
         tree.insert(TextRange::new(3, 4), 3, merge);
 
         let min_key = tree.min().map(|n| n.key);
-        let mut iter = StackIterator::new(&tree, min_key);
+        let mut iter = StackIterator::new(&tree, min_key, false);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(2, 3)));
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(3, 4)));
@@ -1157,7 +1161,7 @@ mod tests {
         tree.insert(TextRange::new(7, 8), 7, merge);
 
         let min_key = tree.min().map(|n| n.key);
-        let mut iter = StackIterator::new(&tree, min_key);
+        let mut iter = StackIterator::new(&tree, min_key, false);
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(1, 2)));
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(2, 3)));
         assert_eq!(iter.next().map(|n| n.key), Some(TextRange::new(3, 4)));

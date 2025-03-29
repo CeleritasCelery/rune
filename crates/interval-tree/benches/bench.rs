@@ -107,7 +107,7 @@ fn iterator_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("iterating with stack iterator over {size} intervals"), |b| {
         b.iter(|| {
-            let mut stack_iter = StackIterator::new(&tree, min_key);
+            let mut stack_iter = StackIterator::new(&tree, min_key, false);
             let mut count = 0;
             while let Some(_n) = stack_iter.next() {
                 count += 1;
