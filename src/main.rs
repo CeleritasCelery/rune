@@ -20,6 +20,7 @@ mod eval;
 mod fileio;
 mod filelock;
 mod floatfns;
+mod flexint;
 mod fns;
 mod interpreter;
 mod intervals;

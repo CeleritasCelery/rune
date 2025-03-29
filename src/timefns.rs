@@ -1,28 +1,21 @@
 //! Time analysis
 use crate::{
-    arith::{MAX_FIXNUM, MIN_FIXNUM, NumberValue},
-    core::{
+    arith::NumberValue, core::{
         cons::Cons,
-        env::{Env, sym},
-        error::{Type, TypeError},
+        env::{sym, Env},
         gc::{Context, Rt},
-        object::{IntoObject, List, Object, ObjectType},
-    },
-    floatfns::double_integer_scale,
+        object::{IntoObject, Object, ObjectType},
+    }, flexint::FlexInt, floatfns::double_integer_scale
 };
 use anyhow::anyhow;
-use clap::builder::Str;
 use core::f64;
 use libm::scalbn;
-use num_bigint::{BigInt, Sign};
+use num_bigint::BigInt;
 use num_integer::Integer;
-use num_traits::{FromPrimitive, Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 use rune_core::macros::list;
-use rune_macros::{defun, elprop};
-use std::{
-    ops::{Add, Mul, Sub},
-    time::{Duration, SystemTime},
-};
+use rune_macros::defun;
+use std::time::{Duration, SystemTime};
 
 defvar!(CURRENT_TIME_LIST, true);
 
@@ -31,119 +24,6 @@ const TIMESPEC_HZ: i64 = 1_000_000_000;
 const LOG10_TIMESPEC_HZ: u32 = 9;
 const TRILLION: i64 = 1_000_000_000_000;
 const MILLION: i64 = 1_000_000;
-
-// struct TicksHz {
-// }
-
-#[derive(Debug, Clone, PartialEq)]
-enum IntegerType {
-    Int(i64),
-    Big(BigInt),
-}
-
-impl<'ob> From<ObjectType<'ob>> for IntegerType {
-    fn from(obj: ObjectType) -> Self {
-        match obj {
-            ObjectType::Int(x) => IntegerType::Int(x),
-            ObjectType::BigInt(x) => IntegerType::Big((**x).clone()),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl TryFrom<f64> for IntegerType {
-    type Error = anyhow::Error;
-
-    fn try_from(value: f64) -> anyhow::Result<Self> {
-        if value.is_nan() || value.is_infinite() {
-            return Err(anyhow!("Invalid float value"));
-        }
-        let out = match value.to_i64() {
-            Some(i) => IntegerType::Int(i),
-            None => {
-                return BigInt::from_f64(value)
-                    .map(IntegerType::Big)
-                    .ok_or(anyhow!("Invalid float value"));
-            }
-        };
-        Ok(out)
-    }
-}
-
-impl From<IntegerType> for BigInt {
-    fn from(value: IntegerType) -> Self {
-        match value {
-            IntegerType::Int(x) => BigInt::from(x),
-            IntegerType::Big(x) => x,
-        }
-    }
-}
-
-impl From<IntegerType> for NumberValue {
-    fn from(value: IntegerType) -> Self {
-        match value {
-            IntegerType::Int(x) => NumberValue::Int(x),
-            IntegerType::Big(x) => NumberValue::Big(x),
-        }
-    }
-}
-
-impl PartialEq<i64> for IntegerType {
-    fn eq(&self, other: &i64) -> bool {
-        match self {
-            IntegerType::Int(x) => x == other,
-            IntegerType::Big(x) => x == &BigInt::from(*other),
-        }
-    }
-}
-
-impl PartialOrd<i64> for IntegerType {
-    fn partial_cmp(&self, other: &i64) -> Option<std::cmp::Ordering> {
-        match self {
-            IntegerType::Int(x) => x.partial_cmp(other),
-            IntegerType::Big(x) => x.partial_cmp(&BigInt::from(*other)),
-        }
-    }
-}
-
-impl Sub for IntegerType {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (IntegerType::Int(x), IntegerType::Int(y)) => IntegerType::Int(x - y),
-            (IntegerType::Big(x), IntegerType::Big(y)) => IntegerType::Big(x - y),
-            (IntegerType::Int(x), IntegerType::Big(y)) => IntegerType::Big(BigInt::from(x) - y),
-            (IntegerType::Big(x), IntegerType::Int(y)) => IntegerType::Big(x - BigInt::from(y)),
-        }
-    }
-}
-
-impl Add for IntegerType {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (IntegerType::Int(x), IntegerType::Int(y)) => IntegerType::Int(x + y),
-            (IntegerType::Big(x), IntegerType::Big(y)) => IntegerType::Big(x + y),
-            (IntegerType::Int(x), IntegerType::Big(y)) => IntegerType::Big(BigInt::from(x) + y),
-            (IntegerType::Big(x), IntegerType::Int(y)) => IntegerType::Big(x + BigInt::from(y)),
-        }
-    }
-}
-
-impl IntegerType {
-    fn shrink(self) -> IntegerType {
-        match self {
-            IntegerType::Big(x) => x
-                .to_i64()
-                .filter(|&n| (MIN_FIXNUM..=MAX_FIXNUM).contains(&n))
-                .map(IntegerType::Int)
-                .unwrap_or_else(|| IntegerType::Big(x)),
-            _ => self,
-        }
-    }
-}
 
 // Decode a Lisp timestamp SPECIFIED_TIME that represents a time.
 //
@@ -174,15 +54,12 @@ impl IntegerType {
 //      like (A B C 0)
 //    (A B C)
 //      like (A B C 0)
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct LispTime(Duration);
-
 #[derive(Debug, Clone)]
 pub(crate) struct TicksHz {
     /// Clock count as a Lisp integer.
-    ticks: IntegerType,
+    ticks: FlexInt,
     /// Clock frequency (ticks per second) as a positive Lisp integer.
-    hz: IntegerType,
+    hz: FlexInt,
 }
 
 fn make_lisp_time<'ob>(cx: &'ob Context, duration: Duration) -> Object<'ob> {
@@ -242,7 +119,7 @@ impl<'ob> TryFrom<Object<'ob>> for TicksHz {
                 decode_time_components(high.untag(), low.untag(), usec, psec)
             }
             ObjectType::Int(_) | ObjectType::BigInt(_) => {
-                Ok(TicksHz { ticks: IntegerType::from(obj.untag()), hz: IntegerType::Int(1) })
+                Ok(TicksHz { ticks: FlexInt::from(obj.untag()), hz: FlexInt::one() })
             }
             ObjectType::Float(x) => decode_float_time(**x),
             _ => Err(anyhow!("".to_string())),
@@ -323,15 +200,15 @@ impl TicksHz {
                 }
             }
 
-            let hz = IntegerType::Big(ihz);
-            let ticks = IntegerType::Big(iticks);
+            let hz = FlexInt::from(ihz);
+            let ticks = FlexInt::from(iticks);
             (ticks, hz)
         };
         Some(TicksHz { ticks, hz })
     }
 
     pub fn make_lisp_time<'ob>(self, cx: &'ob Context) -> Object<'ob> {
-        if self.hz == 1 {
+        if self.hz.is_one() {
             return NumberValue::from(self.ticks).into_obj(cx);
         }
 
@@ -367,7 +244,7 @@ impl TicksHz {
         let lo = ulo & ((1 << LO_TIME_BITS) - 1);
         //println!("scaled_ticks 5: {lo}, {remainder}");
         let hi = scaled_ticks.div_floor(&BigInt::from(2).pow(LO_TIME_BITS));
-        let hi = IntegerType::Big(hi).shrink();
+        let hi = FlexInt::from(hi);
 
         //println!("scaled_ticks 6: {hi:?}, {lo} {us} {ps}");
 
@@ -392,33 +269,33 @@ impl TryFrom<Duration> for TicksHz {
             .and_then(|ns| TryInto::<i64>::try_into(ns).ok())
             .ok_or(anyhow!("Overflow in duration conversion".to_string()))?;
 
-        Ok(TicksHz { ticks: IntegerType::Int(ns), hz: IntegerType::Int(TIMESPEC_HZ) })
+        Ok(TicksHz { ticks: FlexInt::from(ns), hz: FlexInt::from(TIMESPEC_HZ) })
     }
 }
 
-impl TryFrom<TicksHz> for Duration {
-    type Error = anyhow::Error;
+// impl TryFrom<TicksHz> for Duration {
+//     type Error = anyhow::Error;
 
-    fn try_from(t: TicksHz) -> Result<Self, Self::Error> {
-        if t.hz == TIMESPEC_HZ {
-            let mut s = t.ticks / TIMESPEC_HZ;
-            let mut ns = t.ticks % TIMESPEC_HZ;
-            if ns < 0 {
-                s-=1;
-                ns += TIMESPEC_HZ;
-            }
-            return Ok(Duration::new(s, ns));
-        }
-        else if t.hz == IntegerType::Int(1) {
-            let mut ns = 0;
-        } else {
-            let mut q = t.ticks * IntegerType::Int(TIMESPEC_HZ);
-            q /=  t.hz; 
-            ns = 
-        }
-        todo!()
-    }
-}
+//     fn try_from(t: TicksHz) -> Result<Self, Self::Error> {
+//         if t.hz == TIMESPEC_HZ {
+//             let mut s = t.ticks / TIMESPEC_HZ;
+//             let mut ns = t.ticks % TIMESPEC_HZ;
+//             if ns < 0 {
+//                 s-=1;
+//                 ns += TIMESPEC_HZ;
+//             }
+//             return Ok(Duration::new(s, ns));
+//         }
+//         else if t.hz == FlexInt::one() {
+//             let mut ns = 0;
+//         } else {
+//             let mut q = t.ticks * FlexInt::Int(TIMESPEC_HZ);
+//             q /=  t.hz; 
+//             ns = 
+//         }
+//         todo!()
+//     }
+// }
 
 impl PartialEq for TicksHz {
     fn eq(&self, other: &Self) -> bool {
@@ -454,7 +331,7 @@ impl PartialOrd for TicksHz {
 //         let mut hz = BigInt::from(self.hz);
 //         hz *= BigInt::from(rhs.hz);
 
-//         TicksHz { ticks: IntegerType::Big(ticks).shrink(), hz: IntegerType::Big(hz).shrink() }
+//         TicksHz { ticks: FlexInt::Big(ticks).shrink(), hz: FlexInt::Big(hz).shrink() }
 //     }
 // }
 
@@ -481,7 +358,7 @@ impl PartialOrd for TicksHz {
 /// toward minus infinity.  Signal an error if unsuccessful.
 fn decode_float_time(t: f64) -> anyhow::Result<TicksHz> {
     if t == 0.0 {
-        return Ok(TicksHz { ticks: IntegerType::Int(0), hz: IntegerType::Int(1) });
+        return Ok(TicksHz { ticks: FlexInt::zero(), hz: FlexInt::one() });
     }
 
     let mut scale = double_integer_scale(t);
@@ -505,19 +382,19 @@ fn decode_float_time(t: f64) -> anyhow::Result<TicksHz> {
     // T's frequency or 1, whichever is greater.  Here, “frequency” means
     // 1/precision.  Cache HZ values in flt_radix_power.
     let scaled = scalbn(t, scale as i32);
-    let ticks = IntegerType::try_from(scaled)?;
+    let ticks = FlexInt::try_from(scaled)?;
     if scaled.fract() != 0.0 {
         return Err(anyhow!("Scaled time is not an integer"));
     }
 
     // let hz = f64::RADIX.pow(scale as u32);
     let hz = BigInt::from(f64::RADIX).pow(scale as u32);
-    Ok(TicksHz { ticks, hz: IntegerType::Big(hz).shrink() })
+    Ok(TicksHz { ticks, hz: FlexInt::from(hz) })
 }
 
 fn normalize_components(
-    high: &IntegerType,
-    low: &IntegerType,
+    high: &FlexInt,
+    low: &FlexInt,
     us: i64,
     ps: i64,
 ) -> (BigInt, i64, i64) {
@@ -549,12 +426,12 @@ fn decode_time_components<'ob>(
             None,
             None,
         ) => {
-            let high = IntegerType::from(high);
-            let low = IntegerType::from(low);
+            let high = FlexInt::from(high);
+            let low = FlexInt::from(low);
             let (s, _, _) = normalize_components(&high, &low, 0, 0);
 
             // if low > 0 {
-            return Ok(TicksHz { ticks: IntegerType::Big(s), hz: IntegerType::Int(1) });
+            Ok(TicksHz { ticks: FlexInt::from(s), hz: FlexInt::one() })
             // }
             // return Err(anyhow!("Invalid input".to_string()));
         }
@@ -566,13 +443,13 @@ fn decode_time_components<'ob>(
             Some(ObjectType::Int(us)),
             None,
         ) => {
-            let high = IntegerType::from(high);
-            let low = IntegerType::from(low);
+            let high = FlexInt::from(high);
+            let low = FlexInt::from(low);
 
             let (s, us, _) = normalize_components(&high, &low, us, 0);
             let mut ticks: BigInt = us.into();
             ticks += s * MILLION;
-            return Ok(TicksHz { ticks: IntegerType::Big(ticks), hz: IntegerType::Int(MILLION) });
+            Ok(TicksHz { ticks: FlexInt::from(ticks), hz: FlexInt::from(MILLION) })
         }
 
         // TIMEFORM_HI_LO_US
@@ -582,16 +459,16 @@ fn decode_time_components<'ob>(
             Some(ObjectType::Int(us)),
             Some(ObjectType::Int(ps)),
         ) => {
-            let high = IntegerType::from(high);
-            let low = IntegerType::from(low);
+            let high = FlexInt::from(high);
+            let low = FlexInt::from(low);
 
             let (s, us, ps) = normalize_components(&high, &low, us, ps);
             let mut ticks = BigInt::from(us * MILLION + ps);
             ticks += s * TRILLION;
-            return Ok(TicksHz { ticks: IntegerType::Big(ticks), hz: IntegerType::Int(TRILLION) });
+            Ok(TicksHz { ticks: FlexInt::from(ticks), hz: FlexInt::from(TRILLION) })
         }
         _ => {
-            return Err(anyhow!("Invalid input".to_string()));
+            Err(anyhow!("Invalid input".to_string()))
         }
     }
 
@@ -641,14 +518,19 @@ fn decode_time_components<'ob>(
 }
 
 /* True if the nonzero Lisp integer HZ divides evenly into a trillion.  */
-fn trillion_factor(hz: &IntegerType) -> bool {
-    match hz {
-        IntegerType::Int(hz) => TRILLION % hz == 0,
-        IntegerType::Big(hz) => {
-            // println!("hz: {hz:?}, {:?}", (TRILLION % hz) == BigInt::zero());
-            (TRILLION % hz) == BigInt::zero()
-        }
-    }
+fn trillion_factor(hz: &FlexInt) -> bool {
+    FlexInt::from(TRILLION) % hz == FlexInt::zero() 
+
+    //     // This should never happen, but just in case.
+    //     return false;
+    
+    // match hz {
+    //     FlexInt::Int(hz) => TRILLION % hz == 0,
+    //     FlexInt::Big(hz) => {
+    //         // println!("hz: {hz:?}, {:?}", (TRILLION % hz) == BigInt::zero());
+    //         (TRILLION % hz) == BigInt::zero()
+    //     }
+    // }
 }
 
 #[defun]
@@ -698,57 +580,57 @@ fn time_equal_p(a: TicksHz, b: TicksHz) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{core::gc::RootSet, interpreter::assert_lisp};
+    use crate::interpreter::assert_lisp;
 
-    use super::*;
+    
 
     #[test]
     fn test_time_add() {
-        // assert_lisp(
-        //     "(time-add '(578 6761 15345 28011) '(26781 8219 56413 24174))",
-        //     "(27359 14980 71758 52185) ",
-        // );
-        // assert_lisp(
-        //     "(time-add '(33046 5079 16386 46222) '(18016 34998 64648 3816))", //
-        //     "(51062 40077 81034 50038)",
-        // );
-        // assert_lisp(
-        //     "(time-add '(9167576206 6710658493503858 -31779043297708029 -26662356424297108) '(1751444559472681 -15450799159767784 -1045009584567109 -24549925996544854))",
-        //     "(1751320362585227 53739 442441 158038)",
-        // );
+        assert_lisp(
+            "(time-add '(578 6761 15345 28011) '(26781 8219 56413 24174))",
+            "(27359 14980 71758 52185) ",
+        );
+        assert_lisp(
+            "(time-add '(33046 5079 16386 46222) '(18016 34998 64648 3816))", //
+            "(51062 40077 81034 50038)",
+        );
+        assert_lisp(
+            "(time-add '(9167576206 6710658493503858 -31779043297708029 -26662356424297108) '(1751444559472681 -15450799159767784 -1045009584567109 -24549925996544854))",
+            "(1751320362585227 53739 442441 158038)",
+        );
 
-        // assert_lisp(
-        //     "(time-add '(15202220679034998 19708391187959224 -13388414145485146 -34355959522033431) '(18617299152078542 3993087375474083 -13497200889589807 9243072305767880))",
-        //     "(33819881486565166 31623 37830 734449)",
-        // );
-        // assert_lisp(
-        //     "(time-add '(-9678716954026154 32040421007773903 18973386878378951 9374029063752645) '(9678089278379988 8645004998381716 -17322646841904096 -21270344831773934))",
-        //     "(-6865287633 65071 159086 978711)",
-        // );
+        assert_lisp(
+            "(time-add '(15202220679034998 19708391187959224 -13388414145485146 -34355959522033431) '(18617299152078542 3993087375474083 -13497200889589807 9243072305767880))",
+            "(33819881486565166 31623 37830 734449)",
+        );
+        assert_lisp(
+            "(time-add '(-9678716954026154 32040421007773903 18973386878378951 9374029063752645) '(9678089278379988 8645004998381716 -17322646841904096 -21270344831773934))",
+            "(-6865287633 65071 159086 978711)",
+        );
 
-        // assert_lisp(
-        //     "(time-add '(-32355606475210398 15197760291358211 9976952979818759) '(11450241568845096 -14345038232468488 -15873143985443383))",
-        //     "(-20905351894949246 52701 375376 0)"
-        // );
+        assert_lisp(
+            "(time-add '(-32355606475210398 15197760291358211 9976952979818759) '(11450241568845096 -14345038232468488 -15873143985443383))",
+            "(-20905351894949246 52701 375376 0)"
+        );
 
-        // assert_lisp(
-        //     "(time-add '(16295676417614101 17368090104052081) '(-23668306398921068 7682917901861187))",
-        //     "-483147627446927476044");
+        assert_lisp(
+            "(time-add '(16295676417614101 17368090104052081) '(-23668306398921068 7682917901861187))",
+            "-483147627446927476044");
 
         // assert_lisp(
         //     "(time-add 14216861745549231102481053777920.0 -1017485722238583104829273024661169523243513882041182093510023188693686446790203400370539799296574903079051900245635938385920.0)",
         //     "(-1.0174857222385831e+123)"
         // );
 
-        // assert_lisp(
-        //     "(time-add -0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001965852055000259 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010611187425753776)",
-        //     "(-3978928856008595410489704739030624849591132114652307856791887789998671307017287597626378349269974641968600247031874992336196419439842935157270144975945397573566026872084921444224515383393932307 . 202402253307310618352495346718917307049556649764142118356901358027430339567995346891960383701437124495187077864316811911389808737385793476867013399940738509921517424276566361364466907742093216341239767678472745068562007483424692698618103355649159556340810056512358769552333414615230502532186327508646006263307707741093494784)",
-        // );
+        assert_lisp(
+            "(time-add -0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001965852055000259 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010611187425753776)",
+            "(-3978928856008595410489704739030624849591132114652307856791887789998671307017287597626378349269974641968600247031874992336196419439842935157270144975945397573566026872084921444224515383393932307 . 202402253307310618352495346718917307049556649764142118356901358027430339567995346891960383701437124495187077864316811911389808737385793476867013399940738509921517424276566361364466907742093216341239767678472745068562007483424692698618103355649159556340810056512358769552333414615230502532186327508646006263307707741093494784)",
+        );
 
-        // assert_lisp(
-        //     "(time-add -0.0 1931410850261338.8)", //
-        //     "(29470990757 10586 750000 0)",
-        // );
+        assert_lisp(
+            "(time-add -0.0 1931410850261338.8)", //
+            "(29470990757 10586 750000 0)",
+        );
         assert_lisp(
             "(time-add -0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007508620299460154 -0.000000000000000000000000000000000000000000000000000000000000000000034104408151173395)",
             "(-1872958890210515318531787335350717704559250187681278850651348449560086292515745048455431365 . 54918381281044877719855206392651145738155482401146443275155707673484345467181248416980477125291636439818370491131846864296975903997733150500592226328920457216)",
