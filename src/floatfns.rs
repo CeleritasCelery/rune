@@ -33,7 +33,7 @@ representable as a double.
 Return DBL_MANT_DIG - DBL_MIN_EXP (the maximum possible valid
 scale) if D is zero or tiny.  Return one greater than that if
 D is infinite, and two greater than that if D is a NaN.  */
-fn double_integer_scale(d: f64) -> i64 {
+pub(crate) fn double_integer_scale(d: f64) -> i64 {
     let exponent = frexp_f(d).1 - 1;
 
     if f64::MIN_EXP as i64 - 1 <= exponent && exponent < i64::MAX {
