@@ -1599,6 +1599,24 @@ mod tests {
     }
 
     #[test]
+    fn test_clone() {
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 5), 1, merge);
+        tree.insert(TextRange::new(5, 10), 3, merge);
+        tree.insert(TextRange::new(10, 15), 2, merge);
+        let mut tree_cloned = tree.clone();
+        let n1 = tree.get_node_mut(TextRange::new(0, 5)).unwrap();
+        let n1c = tree_cloned.get_node_mut(TextRange::new(0, 5)).unwrap();
+        assert!(!ptr::eq(n1, n1c));
+        let n2 = tree.get_node_mut(TextRange::new(5, 10)).unwrap();
+        let n2c = tree_cloned.get_node_mut(TextRange::new(5, 10)).unwrap();
+        assert!(!ptr::eq(n2, n2c));
+        let n3 = tree.get_node_mut(TextRange::new(10, 15)).unwrap();
+        let n3c = tree_cloned.get_node_mut(TextRange::new(10, 15)).unwrap();
+        assert!(!ptr::eq(n3, n3c));
+    }
+
+    #[test]
     fn test_clean() {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 5), 1, merge);
