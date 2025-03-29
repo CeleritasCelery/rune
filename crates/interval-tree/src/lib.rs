@@ -973,7 +973,7 @@ impl<T: Clone> IntervalTree<T> {
         // Get starting key if specified
 
         // Collect all operations to perform
-        let mut operations = Vec::new();
+        let mut operations: Vec<Operation<T>> = Vec::new();
         let iter = StackIterator::new(self, start_key);
 
         let mut prev_node: Option<&Node<T>> = None;
@@ -1012,24 +1012,7 @@ impl<T: Clone> IntervalTree<T> {
             operations.push(Operation::Merge(start_key, keys));
         }
 
-        // Apply all operations in reverse order to avoid invalidating keys
-        for op in operations.into_iter().rev() {
-            match op {
-                Operation::Delete(key) => {
-                    self.delete_exact(key);
-                }
-                Operation::Merge(start_key, keys) => {
-                    if let Some(node) = self.get_node_mut(start_key) {
-                        // Merge all consecutive keys into one
-                        let last_key = *keys.last().unwrap();
-                        node.key.end = last_key.end;
-                        for key in keys {
-                            self.delete_exact(key);
-                        }
-                    }
-                }
-            }
-        }
+        self.resolve_ops(operations, &|_, _| unreachable!());
     }
 
     /// Merges adjacent intervals in the tree that have equal properties.
@@ -1090,33 +1073,62 @@ impl<T: Clone> IntervalTree<T> {
     /// tree.apply_with_split(|_| None, TextRange::new(7, 8));
     /// ```
     pub fn apply_with_split<F: Fn(T) -> Option<T>>(&mut self, f: F, range: impl Into<TextRange>) {
-        let merge = |_, _| unreachable!();
-
         let range = range.into();
-        let Some(start) = self.find_intersect_min(range) else {
-            return;
-        };
-        // re-gain mutable reference, since we don't have interior mutability for now
-        let mut node_ptr = self.get_node_mut(start.key).map(ptr::from_mut);
-        while let Some(n_ptr) = node_ptr {
-            let n = safe_mut(n_ptr);
-            node_ptr = n.next_raw();
-            if let Some(overlap) = n.key.intersection(range) {
-                if let Some(left) = TextRange::new_valid(n.key.start, overlap.start) {
-                    n.key.start = left.end;
-                    self.insert(left, n.val.clone(), merge);
+        let merge = |new_val, _old_val| new_val;
+
+        // Collect all operations to perform
+        let mut operations = Vec::new();
+        let intersects = self.find_intersects(range);
+
+        for node in intersects {
+            if let Some(overlap) = node.key.intersection(range) {
+                // Split left if needed
+                if node.key.start < overlap.start {
+                    operations.push(Operation::Insert(
+                        TextRange::new(node.key.start, overlap.start),
+                        node.val.clone(),
+                    ));
                 }
 
-                if let Some(right) = TextRange::new_valid(overlap.end, n.key.end) {
-                    n.key.end = right.start;
-                    self.insert(right, n.val.clone(), merge);
+                // Split right if needed
+                if node.key.end > overlap.end {
+                    operations.push(Operation::Insert(
+                        TextRange::new(overlap.end, node.key.end),
+                        node.val.clone(),
+                    ));
                 }
 
-                let new_val = f(n.val.clone());
-                match new_val {
-                    Some(val) => n.val = val,
-                    None => {
-                        self.delete_exact(n.key);
+                // Apply function to overlapping portion
+                if let Some(new_val) = f(node.val.clone()) {
+                    operations.push(Operation::Insert(overlap, new_val));
+                } else {
+                    operations.push(Operation::Delete(overlap));
+                }
+            }
+        }
+
+        // Apply all operations
+        self.resolve_ops(operations, &merge);
+    }
+
+    fn resolve_ops<F: Fn(T, T) -> T>(&mut self, operations: Vec<Operation<T>>, merge_fn: &F) {
+        for op in operations {
+            match op {
+                Operation::Insert(key, val) => {
+                    self.insert(key, val, merge_fn);
+                }
+                Operation::Delete(key) => {
+                    // self.delete_exact(key);
+                    self.delete(key, false);
+                }
+                Operation::Merge(start_key, keys) => {
+                    if let Some(node) = self.get_node_mut(start_key) {
+                        // Merge all consecutive keys into one
+                        let last_key = *keys.last().unwrap();
+                        node.key.end = last_key.end;
+                        for key in keys {
+                            self.delete_exact(key);
+                        }
                     }
                 }
             }
@@ -1199,9 +1211,10 @@ impl<T: Clone + Debug> Debug for IntervalTree<T> {
 }
 
 #[derive(Debug)]
-enum Operation {
+enum Operation<T> {
     Delete(TextRange),
     Merge(TextRange, Vec<TextRange>), // start_key and all consecutive keys to merge
+    Insert(TextRange, T),
 }
 
 pub struct StackIterator<'tree, T: Clone> {
