@@ -408,6 +408,9 @@ impl<T: Clone> Node<T> {
     }
 
     fn find_intersect_min(&self, range: TextRange) -> Option<&Node<T>> {
+        if range.start == range.end {
+            return None;
+        }
         let ord = range.strict_order(&self.key);
         match ord {
             Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_min(range)),
@@ -420,6 +423,9 @@ impl<T: Clone> Node<T> {
     }
 
     fn find_intersect_max(&self, range: TextRange) -> Option<&Node<T>> {
+        if range.start == range.end {
+            return None;
+        }
         let ord = range.strict_order(&self.key);
         match ord {
             Some(Ordering::Less) => self.left.as_ref().and_then(|l| l.find_intersect_max(range)),
@@ -712,11 +718,16 @@ impl<T: Clone> IntervalTree<T> {
     pub fn find_intersects(&self, range: impl Into<TextRange>) -> Vec<&Node<T>> {
         let mut result = Vec::new();
         let range = range.into();
-        if range.start == range.end {
-            return result;
-        }
-        if let Some(ref r) = self.root {
-            r.find_intersects(range, &mut result);
+        let node = self.find_intersect_min(range);
+        let key = node.map(|n| n.key);
+
+        let iter = StackIterator::new(self, key, false);
+        for n in iter {
+            if n.key.intersects(range) {
+                result.push(n);
+            } else {
+                break;
+            }
         }
         result
     }
@@ -1057,17 +1068,24 @@ pub struct StackIterator<'tree, T: Clone> {
 
 impl<'tree, T: Clone> StackIterator<'tree, T> {
     pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>, reverse_order: bool) -> Self {
+        let Some(key) = key else { return Self { stack: Vec::new(), reverse_order } };
         let mut stack = Vec::new();
         let mut current = tree.root.as_ref();
 
         // Build initial stack by traversing to the starting node
         while let Some(node) = current {
-            stack.push(node.as_ref());
-            current = key.and_then(|k| match k.cmp(&node.key) {
+            let strict_order = key.strict_order(&node.key);
+            let push_to_stack = strict_order.is_none()
+                || (strict_order == Some(Ordering::Less) && !reverse_order)
+                || (strict_order == Some(Ordering::Greater) && reverse_order);
+            if push_to_stack {
+                stack.push(node.as_ref());
+            }
+            current = match key.cmp(&node.key) {
                 Ordering::Less => node.left.as_ref(),
                 Ordering::Greater => node.right.as_ref(),
                 Ordering::Equal => None,
-            });
+            };
         }
 
         Self { stack, reverse_order }
