@@ -86,7 +86,7 @@ fn find_intersects_benchmark(c: &mut Criterion) {
         b.iter(|| {
             // Search with all large ranges
             for search_range in &search_ranges {
-                let results = tree.find_intersects(*search_range);
+                let results = tree.find_intersects(*search_range).collect::<Vec<_>>();
                 black_box(results);
             }
         });

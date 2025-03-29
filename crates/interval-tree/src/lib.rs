@@ -652,18 +652,18 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// // Delete only overlapping portion
     /// tree.delete(TextRange::new(5, 15), false);
-    /// assert_eq!(tree.find_intersects(TextRange::new(0, 10)).len(), 1);
+    /// assert_eq!(tree.find_intersects(TextRange::new(0, 10)).collect::<Vec<_>>().len(), 1);
     ///
     /// let mut tree = IntervalTree::new();
     /// tree.insert(TextRange::new(0, 10), 1, |a, _| a);
     ///
     /// // Delete entire intersecting interval
     /// tree.delete(TextRange::new(5, 15), true);
-    /// assert!(tree.find_intersects(TextRange::new(0, 10)).is_empty());
+    /// assert!(tree.find_intersects(TextRange::new(0, 10)).next().is_none());
     /// ```
     pub fn delete(&mut self, range: impl Into<TextRange>, del_extend: bool) {
         let range: TextRange = range.into();
-        for key in self.find_intersects(range).iter().map(|n| n.key).collect::<Vec<_>>() {
+        for key in self.find_intersects(range).map(|n| n.key).collect::<Vec<_>>() {
             if del_extend {
                 self.delete_exact(key);
                 continue;
@@ -709,27 +709,27 @@ impl<T: Clone> IntervalTree<T> {
     /// contains the position, returns `None`.
     pub fn find(&self, position: usize) -> Option<&Node<T>> {
         let range = TextRange::new(position, position + 1);
-        let res = self.find_intersects(range);
-        res.first().copied()
+        self.find_intersects(range).next()
     }
 
     /// Find all nodes in the tree whose intervals intersect the given
     /// `range`. The result is a vector of references to the found nodes.
-    pub fn find_intersects(&self, range: impl Into<TextRange>) -> Vec<&Node<T>> {
-        let mut result = Vec::new();
+    pub fn find_intersects(&self, range: impl Into<TextRange>) -> impl Iterator<Item = &Node<T>> {
         let range = range.into();
         let node = self.find_intersect_min(range);
         let key = node.map(|n| n.key);
 
-        let iter = StackIterator::new(self, key, false);
-        for n in iter {
-            if n.key.intersects(range) {
-                result.push(n);
-            } else {
-                break;
-            }
-        }
-        result
+        StackIterator::new(self, key, false).take_while(move |n| n.key.intersects(range))
+        // let mut result = Vec::new();
+        // let iter = StackIterator::new(self, key, false);
+        // for n in iter {
+        //     if n.key.intersects(range) {
+        //         result.push(n);
+        //     } else {
+        //         break;
+        //     }
+        // }
+        // result
     }
 
     /// Finds the node with the minimum key that intersects with the given range.
@@ -800,7 +800,7 @@ impl<T: Clone> IntervalTree<T> {
     /// // Clean the tree, merging equal values and removing empty ones
     /// tree.clean(|a, b| a == b, |v| *v == 0);
     ///
-    /// assert_eq!(tree.find_intersects(TextRange::new(0, 20)).len(), 2);
+    /// assert_eq!(tree.find_intersects(TextRange::new(0, 20)).collect::<Vec<_>>().len(), 2);
     /// ```
     pub fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, eq: F, empty: G) {
         // let min = self.min_mut();
@@ -1298,49 +1298,49 @@ mod tests {
         tree.insert(TextRange::new(15, 20), 4, merge);
 
         // Test exact match
-        let results = tree.find_intersects(TextRange::new(5, 10));
+        let results = tree.find_intersects(TextRange::new(5, 10)).collect::<Vec<_>>();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].key, TextRange::new(5, 10));
         assert_eq!(results[0].val, 2);
 
         // Test partial overlap at start
-        let results = tree.find_intersects(TextRange::new(3, 7));
+        let results = tree.find_intersects(TextRange::new(3, 7)).collect::<Vec<_>>();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].key, TextRange::new(0, 5));
         assert_eq!(results[1].key, TextRange::new(5, 10));
 
         // Test partial overlap at end
-        let results = tree.find_intersects(TextRange::new(12, 18));
+        let results = tree.find_intersects(TextRange::new(12, 18)).collect::<Vec<_>>();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].key, TextRange::new(10, 15));
         assert_eq!(results[1].key, TextRange::new(15, 20));
 
         // Test range that spans multiple intervals
-        let results = tree.find_intersects(TextRange::new(8, 17));
+        let results = tree.find_intersects(TextRange::new(8, 17)).collect::<Vec<_>>();
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].key, TextRange::new(5, 10));
         assert_eq!(results[1].key, TextRange::new(10, 15));
         assert_eq!(results[2].key, TextRange::new(15, 20));
 
         // Test range that is completely contained within an interval
-        let results = tree.find_intersects(TextRange::new(6, 8));
+        let results = tree.find_intersects(TextRange::new(6, 8)).collect::<Vec<_>>();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].key, TextRange::new(5, 10));
 
         // Test range that doesn't intersect any intervals
-        let results = tree.find_intersects(TextRange::new(25, 30));
+        let results = tree.find_intersects(TextRange::new(25, 30)).collect::<Vec<_>>();
         assert!(results.is_empty());
 
         // Test empty range
-        let results = tree.find_intersects(TextRange::new(3, 3));
+        let results = tree.find_intersects(TextRange::new(3, 3)).collect::<Vec<_>>();
         assert!(results.is_empty());
 
         // Test range that starts before first interval and ends after last
-        let results = tree.find_intersects(TextRange::new(0, 25));
+        let results = tree.find_intersects(TextRange::new(0, 25)).collect::<Vec<_>>();
         assert_eq!(results.len(), 4);
 
         // Test single point intersection
-        let results = tree.find_intersects(TextRange::new(10, 11));
+        let results = tree.find_intersects(TextRange::new(10, 11)).collect::<Vec<_>>();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].key, TextRange::new(10, 15));
     }
@@ -1363,7 +1363,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(5, 10), 1, merge);
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).len(), 1);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).collect::<Vec<_>>().len(), 1);
     }
 
     #[test]
@@ -1372,7 +1372,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(5, 10), 2, merge);
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).len(), 2);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).collect::<Vec<_>>().len(), 2);
     }
 
     #[test]
@@ -1381,7 +1381,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(10, 15), 1, merge);
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 15)).len(), 2);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 15)).collect::<Vec<_>>().len(), 2);
     }
 
     #[test]
@@ -1391,14 +1391,14 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(10, 15), 1, merge);
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 15)).len(), 1);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 15)).collect::<Vec<_>>().len(), 1);
     }
 
     #[test]
     fn test_handle_empty_tree() {
         let mut tree: IntervalTree<i32> = IntervalTree::new();
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).len(), 0);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 10)).collect::<Vec<_>>().len(), 0);
     }
 
     #[test]
@@ -1406,7 +1406,7 @@ mod tests {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.merge(|a, b| *a == *b);
-        assert_eq!(tree.find_intersects(TextRange::new(1, 5)).len(), 1);
+        assert_eq!(tree.find_intersects(TextRange::new(1, 5)).collect::<Vec<_>>().len(), 1);
     }
 
     #[test]
@@ -1416,21 +1416,21 @@ mod tests {
 
         // Apply function to partial overlap
         tree.apply_with_split(|val| Some(val * 2), TextRange::new(5, 15));
-        let nodes = tree.find_intersects(TextRange::new(0, 15));
+        let nodes = tree.find_intersects(TextRange::new(0, 15)).collect::<Vec<_>>();
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes[0].val, 1);
         assert_eq!(nodes[1].val, 2);
 
         // Remove an interval
         tree.apply_with_split(|_| None, TextRange::new(7, 8));
-        let nodes = tree.find_intersects(TextRange::new(0, 15));
+        let nodes = tree.find_intersects(TextRange::new(0, 15)).collect::<Vec<_>>();
         assert_eq!(nodes.len(), 3);
         assert_eq!(nodes[1].key, TextRange::new(5, 7));
         assert_eq!(nodes[1].val, 2); // The removed interval should be back to original value
 
         // Apply to exact match
         tree.apply_with_split(|val| Some(val + 1), TextRange::new(2, 4));
-        let node = tree.find_intersects(TextRange::new(2, 4))[0];
+        let node = tree.find_intersects(TextRange::new(2, 4)).collect::<Vec<_>>()[0];
         assert_eq!(node.val, 2);
     }
 
@@ -1465,7 +1465,7 @@ mod tests {
         // Clean the tree, merging equal values and removing empty ones
         tree.clean(|a, b| a == b, |v| *v == 0);
 
-        let nodes = tree.find_intersects(TextRange::new(0, 30));
+        let nodes = tree.find_intersects(TextRange::new(0, 30)).collect::<Vec<_>>();
         assert_eq!(nodes.len(), 3);
         assert_eq!(nodes[0].key, TextRange::new(0, 10));
         assert_eq!(nodes[2].key, TextRange::new(20, 30));
@@ -1475,7 +1475,7 @@ mod tests {
     fn test_clean_empty_tree() {
         let mut tree: IntervalTree<i32> = IntervalTree::new();
         tree.clean(|a, b| a == b, |v| *v == 0);
-        assert!(tree.find_intersects(TextRange::new(0, 1)).is_empty());
+        assert!(tree.find_intersects(TextRange::new(0, 1)).next().is_none());
     }
 
     #[test]
@@ -1487,7 +1487,7 @@ mod tests {
 
         tree.clean(|a, b| a == b, |v| *v == 0);
 
-        assert_eq!(tree.find_intersects(TextRange::new(0, 5)).len(), 1);
+        assert_eq!(tree.find_intersects(TextRange::new(0, 5)).collect::<Vec<_>>().len(), 1);
     }
 
     #[test]
