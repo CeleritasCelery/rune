@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use interval_tree::{IntervalTree, RawPointerIterator, StackIterator, TextRange};
+use interval_tree::{IntervalTree, StackIterator, TextRange};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -114,18 +114,6 @@ fn iterator_benchmark(c: &mut Criterion) {
             }
             assert_eq!(count, size);
             black_box(stack_iter);
-        });
-    });
-
-    c.bench_function(&format!("iterating with raw pointer iterator over {size} intervals"), |b| {
-        b.iter(|| {
-            let mut raw_iter = RawPointerIterator::new(&tree, min_key);
-            let mut count = 0;
-            while let Some(_n) = raw_iter.next() {
-                count += 1;
-            }
-            assert_eq!(count, size);
-            black_box(raw_iter);
         });
     });
 }

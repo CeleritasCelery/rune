@@ -1,12 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt::{Arguments, Debug, Write};
-use std::ptr;
 pub mod range;
 pub use range::TextRange;
-
-fn safe_mut<'a, T>(n: *mut T) -> &'a mut T {
-    unsafe { n.as_mut().unwrap() }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Color {
@@ -30,7 +25,6 @@ pub struct Node<T: Clone> {
     left: MaybeNode<T>,
     right: MaybeNode<T>,
     color: Color,
-    parent: *mut Node<T>,
     is_right_child: bool,
     n: usize,
 }
@@ -44,47 +38,13 @@ impl<T: Clone> Node<T> {
     }
 
     #[inline]
-    pub fn new(key: TextRange, val: T) -> Self {
-        Self::new_with_parent(key, val, ptr::null_mut(), false)
+    pub fn new(key: TextRange, val: T, is_right_child: bool) -> Node<T> {
+        Self { key, val, left: None, right: None, color: Color::Red, n: 1, is_right_child }
     }
 
     #[inline]
-    pub fn new_with_parent(
-        key: TextRange,
-        val: T,
-        parent: *mut Node<T>,
-        is_right_child: bool,
-    ) -> Node<T> {
-        Self {
-            key,
-            val,
-            left: None,
-            right: None,
-            color: Color::Red,
-            n: 1,
-            parent,
-            is_right_child,
-        }
-    }
-
-    #[inline]
-    pub fn new_boxed(key: TextRange, val: T) -> BoxedNode<T> {
-        Box::new(Self::new(key, val))
-    }
-
-    #[inline]
-    pub fn new_boxed_with_parent(
-        key: TextRange,
-        val: T,
-        parent: *mut Node<T>,
-        is_right_child: bool,
-    ) -> BoxedNode<T> {
-        Box::new(Self::new_with_parent(key, val, parent, is_right_child))
-    }
-
-    #[inline]
-    pub fn set_parent(&mut self, parent: &mut Node<T>) {
-        self.parent = parent;
+    pub fn new_boxed(key: TextRange, val: T, is_right_child: bool) -> BoxedNode<T> {
+        Box::new(Self::new(key, val, is_right_child))
     }
 
     /// perform the following operation, \\ is the red link:
@@ -98,14 +58,11 @@ impl<T: Clone> Node<T> {
         let mut x = node.right.take()?;
         let mut c = x.left.take();
         if let Some(ref mut c) = c {
-            c.parent = node.as_mut();
             c.is_right_child = true;
         }
         node.right = c;
         x.color = node.color;
-        x.parent = node.parent;
         x.is_right_child = node.is_right_child;
-        node.parent = x.as_mut();
         node.is_right_child = false;
         x.n = node.n;
         node.color = Color::Red;
@@ -127,14 +84,11 @@ impl<T: Clone> Node<T> {
         let mut x = node.left.take()?;
         let mut c = x.right.take();
         if let Some(ref mut c) = c {
-            c.parent = node.as_mut();
             c.is_right_child = false;
         }
         node.left = c;
         x.color = node.color;
-        x.parent = node.parent;
         x.is_right_child = node.is_right_child;
-        node.parent = x.as_mut();
         node.is_right_child = true;
         node.color = Color::Red;
         x.n = node.n;
@@ -163,17 +117,7 @@ impl<T: Clone> Node<T> {
         if let Some(ref l) = self.left { l.min() } else { self }
     }
 
-    #[inline]
-    fn parent(&self) -> Option<&Node<T>> {
-        unsafe { self.parent.as_ref() }
-    }
-
-    #[inline]
-    fn parent_mut(&self) -> Option<&mut Node<T>> {
-        unsafe { self.parent.as_mut() }
-    }
-
-    fn get_node(&self, key: TextRange) -> Option<&Node<T>> {
+    pub fn get_node(&self, key: TextRange) -> Option<&Node<T>> {
         match key.cmp(&self.key) {
             Ordering::Equal => Some(self),
             Ordering::Less => self.left.as_ref().and_then(|n| n.get_node(key)),
@@ -205,7 +149,6 @@ impl<T: Clone> Node<T> {
         node: &'a mut MaybeNode<T>,
         key: TextRange,
         val: T,
-        parent: *mut Node<T>,
         is_right_child: bool,
         merge_fn: &F,
     ) -> Option<&'a mut BoxedNode<T>> {
@@ -215,7 +158,7 @@ impl<T: Clone> Node<T> {
         match node {
             Some(n) => Node::insert_at_inner(n, key, val, merge_fn),
             None => {
-                node.replace(Node::new_boxed_with_parent(key, val.clone(), parent, is_right_child));
+                node.replace(Node::new_boxed(key, val.clone(), is_right_child));
                 node.as_mut()
             }
         }
@@ -229,43 +172,28 @@ impl<T: Clone> Node<T> {
     ) -> Option<&'a mut BoxedNode<T>> {
         let intersect = key.intersects(node.key);
         // TODO too taunting
-        let ptr: *mut Node<T> = node.as_mut();
         if intersect {
             if key.start < node.key.start {
                 let key_left = key.split_at(node.key.start, true);
-                Node::insert_at(&mut node.left, key_left, val.clone(), ptr, false, merge_fn);
+                Node::insert_at(&mut node.left, key_left, val.clone(), false, merge_fn);
 
                 if key.end < node.key.end {
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(
-                        &mut node.right,
-                        key_right,
-                        node.val.clone(),
-                        ptr,
-                        true,
-                        merge_fn,
-                    );
+                    Node::insert_at(&mut node.right, key_right, node.val.clone(), true, merge_fn);
                 } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.right, key_right, val.clone(), ptr, true, merge_fn);
+                    Node::insert_at(&mut node.right, key_right, val.clone(), true, merge_fn);
                 }
             } else {
                 let key_left = node.key.split_at(key.start, true);
-                Node::insert_at(&mut node.left, key_left, node.val.clone(), ptr, false, merge_fn);
+                Node::insert_at(&mut node.left, key_left, node.val.clone(), false, merge_fn);
 
                 if key.end < node.key.end {
                     let key_right = node.key.split_at(key.end, false);
-                    Node::insert_at(
-                        &mut node.right,
-                        key_right,
-                        node.val.clone(),
-                        ptr,
-                        true,
-                        merge_fn,
-                    );
+                    Node::insert_at(&mut node.right, key_right, node.val.clone(), true, merge_fn);
                 } else if key.end > node.key.end {
                     let key_right = key.split_at(node.key.end, false);
-                    Node::insert_at(&mut node.right, key_right, val.clone(), ptr, true, merge_fn);
+                    Node::insert_at(&mut node.right, key_right, val.clone(), true, merge_fn);
                 }
             }
         }
@@ -275,13 +203,13 @@ impl<T: Clone> Node<T> {
         let cmp = key.cmp(&node.key);
         match cmp {
             Ordering::Less => {
-                Node::insert_at(&mut node.left, key, val, ptr, false, merge_fn)?;
+                Node::insert_at(&mut node.left, key, val, false, merge_fn)?;
             }
             Ordering::Equal => {
                 node.val = merge_fn(val, node.val.clone());
             }
             Ordering::Greater => {
-                Node::insert_at(&mut node.right, key, val, ptr, true, merge_fn)?;
+                Node::insert_at(&mut node.right, key, val, true, merge_fn)?;
             }
         }
 
@@ -438,15 +366,7 @@ impl<T: Clone> Node<T> {
                 r_min.right = n.right.take();
                 r_min.color = n.color;
                 r_min.is_right_child = n.is_right_child;
-                r_min.parent = n.parent;
                 r_min.n = n.n;
-                let ptr: *mut Node<T> = r_min.as_mut();
-                if let Some(n) = &mut r_min.left {
-                    n.parent = ptr;
-                }
-                if let Some(n) = &mut r_min.right {
-                    n.parent = ptr;
-                }
                 std::mem::swap(r_min, n);
                 result
             } else {
@@ -456,82 +376,6 @@ impl<T: Clone> Node<T> {
 
         Node::balance(n)?;
         result
-    }
-
-    /* ------------------------------------------------------------ */
-    /*                         iteration                            */
-    /* ------------------------------------------------------------ */
-
-    pub fn next(&self) -> Option<&Node<T>> {
-        let mut n = self;
-        if let Some(ref r) = self.right {
-            n = r;
-            while let Some(ref l) = n.left {
-                n = l;
-            }
-            return Some(n);
-        }
-        while let Some(parent) = n.parent() {
-            if !n.is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-        None
-    }
-
-    pub fn next_raw(&mut self) -> Option<*mut Node<T>> {
-        let mut n: *mut Node<T> = self;
-        if let Some(r) = self.right.as_mut() {
-            n = r.as_mut();
-            while let Some(ref mut l) = safe_mut(n).left {
-                n = l.as_mut();
-            }
-            return Some(n);
-        }
-        while let Some(parent) = (safe_mut(n)).parent_mut() {
-            if !(safe_mut(n)).is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-        None
-    }
-
-    pub fn prev(&self) -> Option<&Node<T>> {
-        let mut n = self;
-        if let Some(ref l) = self.left {
-            n = l;
-            while let Some(ref r) = n.right {
-                n = r;
-            }
-            return Some(n);
-        }
-        while let Some(parent) = n.parent() {
-            if n.is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-        None
-    }
-
-    pub fn prev_raw(&mut self) -> Option<*mut Node<T>> {
-        let mut n: *mut Node<T> = self;
-        if let Some(l) = self.left.as_mut() {
-            n = l.as_mut();
-            while let Some(ref mut r) = safe_mut(n).right {
-                n = r.as_mut();
-            }
-            return Some(n);
-        }
-        while let Some(parent) = (safe_mut(n)).parent_mut() {
-            if (safe_mut(n)).is_right_child {
-                return Some(parent);
-            }
-            n = parent;
-        }
-        None
     }
 
     /* ------------------------------------------------------------ */
@@ -693,8 +537,7 @@ impl<T: Clone> IntervalTree<T> {
         if key.start == key.end {
             return None;
         }
-        let mut result =
-            Node::insert_at(&mut self.root, key, val, ptr::null_mut(), false, &merge_fn);
+        let mut result = Node::insert_at(&mut self.root, key, val, false, &merge_fn);
         result.as_mut().unwrap().color = Color::Black;
         result
     }
@@ -1145,16 +988,6 @@ impl<T: Clone + Debug> Node<T> {
             level,
             format_args!("[key: {:?}, val: {:?}, color: {:?}]\n", self.key, self.val, self.color),
         )?;
-        if let Some(parent) = unsafe { self.parent.as_ref() } {
-            let direction = if self.is_right_child { "right" } else { "left" };
-            write_fmt_with_level(
-                f,
-                level,
-                format_args!("parent({} child): {:?}", direction, parent.key),
-            )?;
-        } else {
-            write_fmt_with_level(f, level, format_args!("parent: not found"))?;
-        }
         f.write_char('\n')?;
         if let Some(ref l) = self.left {
             write_fmt_with_level(f, level, format_args!("left: \n"))?;
@@ -1263,29 +1096,10 @@ impl<'tree, T: Clone> Iterator for StackIterator<'tree, T> {
     }
 }
 
-pub struct RawPointerIterator<'tree, T: Clone> {
-    current: Option<&'tree Node<T>>,
-}
-impl<'tree, T: Clone> RawPointerIterator<'tree, T> {
-    pub fn new(tree: &'tree IntervalTree<T>, key: Option<TextRange>) -> Self {
-        // M a -> M b -> (a -> b -> M b) -> M b
-        let current = tree.root.as_ref().and_then(|n| key.and_then(|key| n.get_node(key)));
-        Self { current }
-    }
-}
-
-impl<'tree, T: Clone> Iterator for RawPointerIterator<'tree, T> {
-    type Item = &'tree Node<T>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = self.current.and_then(|n| n.next());
-        let current = self.current;
-        self.current = next;
-        current
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use super::*;
 
     fn merge<T: Clone + Debug>(a: T, _b: T) -> T {
@@ -1373,14 +1187,14 @@ mod tests {
     #[test]
     fn rotate_left() {
         let val = 1;
-        let mut node1 = Node::new_boxed(TextRange::new(0, 3), val);
+        let mut node1 = Node::new_boxed(TextRange::new(0, 3), val, false);
         node1.color = Color::Black;
-        let mut node2 = Node::new_boxed(TextRange::new(3, 6), val);
-        let mut node3 = Node::new_boxed(TextRange::new(6, 9), val);
+        let mut node2 = Node::new_boxed(TextRange::new(3, 6), val, false);
+        let mut node3 = Node::new_boxed(TextRange::new(6, 9), val, false);
         node3.color = Color::Black;
-        let mut node4 = Node::new_boxed(TextRange::new(9, 12), val);
+        let mut node4 = Node::new_boxed(TextRange::new(9, 12), val, false);
         node4.color = Color::Black;
-        let mut node5 = Node::new_boxed(TextRange::new(12, 15), val);
+        let mut node5 = Node::new_boxed(TextRange::new(12, 15), val, false);
         node5.color = Color::Black;
 
         node2.left = Some(node3);
@@ -1519,19 +1333,6 @@ mod tests {
         tree.get(TextRange::new(7, 13)).unwrap();
         tree.get(TextRange::new(13, 14)).unwrap();
         tree.get(TextRange::new(14, 15)).unwrap();
-    }
-
-    #[test]
-    fn find_next() {
-        let val = 1;
-        let mut tree = build_tree(val);
-        tree.delete_exact(TextRange::new(5, 6));
-        let mut n = tree.min().unwrap();
-
-        while let Some(ne) = n.next() {
-            n = ne;
-        }
-        assert_eq!(n.key.start, 9);
     }
 
     #[test]
