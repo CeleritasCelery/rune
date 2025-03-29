@@ -28,7 +28,7 @@ pub(crate) struct Env<'a> {
 #[derive(Debug)]
 pub(crate) struct CurrentBuffer<'a> {
     buffer: OnceCell<OpenBuffer<'a>>,
-    buf_ref: &'a LispBuffer,
+    pub(crate) buf_ref: &'a LispBuffer,
 }
 
 impl Default for CurrentBuffer<'_> {
