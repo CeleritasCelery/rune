@@ -1,3 +1,5 @@
+use std::vec;
+
 use num_bigint::{BigInt, Sign};
 use proc_macro2::{TokenStream, TokenTree};
 use prop::collection::VecStrategy;
@@ -437,6 +439,13 @@ impl Function {
             "ByteFn" => Type::ByteFn,
             "SubrFn" => Type::Subr,
             "LispBuffer" => Type::Buffer,
+            "TicksHz" => Type::Multiple(
+                vec![
+                    Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer, Type::Integer]),
+                    Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer]),
+                    Type::CustomList(vec![Type::Integer, Type::Integer]),
+                    Type::CustomList(vec![Type::Float]),
+                ]),
             _ => return None,
         })
     }
