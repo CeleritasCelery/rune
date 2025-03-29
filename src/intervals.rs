@@ -1,16 +1,16 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use interval_tree::{IntervalTree as Tree, Node, StackIterator};
 
 use crate::{
+    Context,
     core::{
         cons::Cons,
         error::{Type, TypeError},
         gc::{IntoRoot, Slot, Trace},
-        object::{Object, ObjectType, TagType, WithLifetime, NIL},
+        object::{NIL, Object, ObjectType, TagType, WithLifetime},
     },
     fns::eq,
     textprops::add_properties,
-    Context,
 };
 
 #[derive(Debug)]
@@ -228,7 +228,7 @@ pub(crate) struct IntervalIntersections<'ob, 'tree> {
 impl<'ob, 'tree> IntervalIntersections<'ob, 'tree> {
     pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
         let current = tree.tree.find_intersect_min(start..end);
-        let mut iterator = StackIterator::new(&tree.tree, current.map(|n| n.key));
+        let mut iterator = StackIterator::new(&tree.tree, current.map(|n| n.key), false);
         iterator.next(); // remove current node
         // let next_start = current.map(|n| n.key.end).unwrap_or(start);
         let next_start = start;
@@ -262,9 +262,7 @@ impl<'ob> Iterator for IntervalIntersections<'ob, '_> {
             if intersect_start < intersect_end {
                 let result = (intersect_start..intersect_end, *node.val);
                 self.next_start = intersect_end;
-                // self.current = node.next();
                 self.current = self.iterator.next();
-                println!("{:?}", self.current.as_ref().map(|n| n.key));
                 return Some(result);
             }
         }
@@ -286,14 +284,17 @@ pub(crate) struct ReverseIntervalIntersections<'ob, 'tree> {
     start: usize,
     end: usize,
     current: Option<&'tree Node<Slot<Object<'ob>>>>,
+    iterator: StackIterator<'tree, Slot<Object<'ob>>>,
     next_end: usize,
 }
 
 impl<'ob, 'tree> ReverseIntervalIntersections<'ob, 'tree> {
     pub(crate) fn new(tree: &'tree IntervalTree<'ob>, start: usize, end: usize) -> Self {
         let current = tree.tree.find_intersect_max(start..end);
+        let mut iterator = StackIterator::new(&tree.tree, current.map(|n| n.key), true);
+        iterator.next(); // remove current node
         let next_end = end;
-        Self { start, end, current, next_end }
+        Self { start, end, current, iterator, next_end }
     }
 }
 
@@ -323,7 +324,7 @@ impl<'ob> Iterator for ReverseIntervalIntersections<'ob, '_> {
             if intersect_start < intersect_end {
                 let result = (intersect_start..intersect_end, *node.val);
                 self.next_end = intersect_start;
-                self.current = node.prev();
+                self.current = self.iterator.next();
                 return Some(result);
             }
         }
@@ -345,7 +346,7 @@ mod tests {
     use rune_core::macros::list;
 
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_remove_sym_from_props() {
@@ -365,7 +366,7 @@ mod tests {
 #[cfg(test)]
 mod reverse_interval_iterator_tests {
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_empty_tree() {
@@ -434,7 +435,7 @@ mod reverse_interval_iterator_tests {
 #[cfg(test)]
 mod interval_iterator_tests {
     use super::*;
-    use crate::{intern, RootSet};
+    use crate::{RootSet, intern};
 
     #[test]
     fn test_empty_tree() {
