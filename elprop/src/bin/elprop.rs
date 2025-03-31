@@ -2,6 +2,7 @@ mod code;
 use clap::Parser;
 use code::data::{Config, Function};
 use code::output::{Output, Status};
+use proptest::path;
 use std::path::Path;
 use std::process::ExitCode;
 use std::{fs, path::PathBuf};
@@ -94,7 +95,7 @@ fn main() -> ExitCode {
     for output in outputs {
         println!("====================");
         let func = output.function;
-        println!("Testing: {func}");
+        println!("Testing: {func} [{}]", output.count);
         match output.status {
             Status::Fail(reason, args) => {
                 passed = false;
