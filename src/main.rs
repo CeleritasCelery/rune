@@ -23,6 +23,7 @@ mod floatfns;
 mod flexint;
 mod fns;
 mod interpreter;
+mod intervals;
 mod keymap;
 mod library;
 mod lisp;
@@ -30,6 +31,7 @@ mod lread;
 mod print;
 mod reader;
 mod search;
+mod textprops;
 mod threads;
 mod timefns;
 

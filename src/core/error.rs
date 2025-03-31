@@ -10,6 +10,7 @@ pub(crate) enum Type {
     HashTable,
     Sequence,
     BufferOrName,
+    BufferOrString,
     String,
     StringOrChar,
     Symbol,
