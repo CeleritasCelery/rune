@@ -1,13 +1,25 @@
 //! Time analysis
 use crate::{
-    arith::NumberValue, core::{
-        cons::Cons,
-        env::{sym, Env},
+    Gc,
+    arith::NumberValue,
+    core::{
+        cons::{Cons, ConsError},
+        env::{ArgSlice, Env, sym},
         gc::{Context, Rt},
         object::{IntoObject, Object, ObjectType},
-    }, flexint::FlexInt, floatfns::double_integer_scale
+    },
+    flexint::FlexInt,
+    floatfns::double_integer_scale,
 };
 use anyhow::anyhow;
+use jiff::{
+    SignedDuration, Timestamp,
+    civil::DateTime,
+    fmt,
+    tz::{Offset, TimeZone},
+};
+// use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, TimeZone, Utc};
+// use chrono_tz::Tz;
 use core::f64;
 use libm::scalbn;
 use num_bigint::BigInt;
@@ -21,7 +33,7 @@ defvar!(CURRENT_TIME_LIST, true);
 
 const LO_TIME_BITS: u32 = 16;
 const TIMESPEC_HZ: i64 = 1_000_000_000;
-const LOG10_TIMESPEC_HZ: u32 = 9;
+// const LOG10_TIMESPEC_HZ: u32 = 9;
 const TRILLION: i64 = 1_000_000_000_000;
 const MILLION: i64 = 1_000_000;
 
@@ -273,29 +285,47 @@ impl TryFrom<Duration> for TicksHz {
     }
 }
 
-// impl TryFrom<TicksHz> for Duration {
-//     type Error = anyhow::Error;
+impl TryFrom<TicksHz> for Duration {
+    type Error = anyhow::Error;
 
-//     fn try_from(t: TicksHz) -> Result<Self, Self::Error> {
-//         if t.hz == TIMESPEC_HZ {
-//             let mut s = t.ticks / TIMESPEC_HZ;
-//             let mut ns = t.ticks % TIMESPEC_HZ;
-//             if ns < 0 {
-//                 s-=1;
-//                 ns += TIMESPEC_HZ;
-//             }
-//             return Ok(Duration::new(s, ns));
-//         }
-//         else if t.hz == FlexInt::one() {
-//             let mut ns = 0;
-//         } else {
-//             let mut q = t.ticks * FlexInt::Int(TIMESPEC_HZ);
-//             q /=  t.hz; 
-//             ns = 
-//         }
-//         todo!()
-//     }
-// }
+    fn try_from(t: TicksHz) -> Result<Self, Self::Error> {
+        // if t.hz == TIMESPEC_HZ {
+        //     let mut s = t.ticks / TIMESPEC_HZ;
+        //     let mut ns = t.ticks % TIMESPEC_HZ;
+        //     if ns < 0 {
+        //         s-=1;
+        //         ns += TIMESPEC_HZ;
+        //     }
+        //     return Ok(Duration::new(s, ns));
+        // }
+        // else if t.hz == FlexInt::one() {
+        //     let mut ns = 0;
+        // } else {
+        //     let mut q = t.ticks * FlexInt::Int(TIMESPEC_HZ);
+        //     q /=  t.hz;
+        //     ns =
+        // }
+        // todo!()
+        let timespec_hz = FlexInt::from(TIMESPEC_HZ);
+        let (s, ns) = if t.hz.is_one() {
+            (t.ticks, FlexInt::zero())
+        } else if t.hz == timespec_hz {
+            let s = &t.ticks / &timespec_hz;
+            let ns = &t.ticks % &timespec_hz;
+            (s, ns)
+        } else {
+            let m = t.ticks * FlexInt::from(TIMESPEC_HZ);
+            let s = m.div_floor(&t.hz);
+            let ns = s.mod_floor(&timespec_hz);
+            let s = s.div_floor(&timespec_hz);
+            (s, ns)
+        };
+        match (s.to_u64(), ns.to_u32()) {
+            (Some(secs), Some(nanos)) => Ok(Duration::new(secs, nanos)),
+            _ => Err(anyhow!("Overflow in conversion from TicksHz to Duration")),
+        }
+    }
+}
 
 impl PartialEq for TicksHz {
     fn eq(&self, other: &Self) -> bool {
@@ -392,12 +422,7 @@ fn decode_float_time(t: f64) -> anyhow::Result<TicksHz> {
     Ok(TicksHz { ticks, hz: FlexInt::from(hz) })
 }
 
-fn normalize_components(
-    high: &FlexInt,
-    low: &FlexInt,
-    us: i64,
-    ps: i64,
-) -> (BigInt, i64, i64) {
+fn normalize_components(high: &FlexInt, low: &FlexInt, us: i64, ps: i64) -> (BigInt, i64, i64) {
     // Normalize out-of-range lower-order components by carrying
     // each overflow into the next higher-order component.
     let mut us = us + ps / MILLION - (if ps % MILLION < 0 { 1 } else { 0 });
@@ -467,9 +492,7 @@ fn decode_time_components<'ob>(
             ticks += s * TRILLION;
             Ok(TicksHz { ticks: FlexInt::from(ticks), hz: FlexInt::from(TRILLION) })
         }
-        _ => {
-            Err(anyhow!("Invalid input".to_string()))
-        }
+        _ => Err(anyhow!("Invalid input".to_string())),
     }
 
     // let elements = [high, low, usec, psec]
@@ -519,18 +542,53 @@ fn decode_time_components<'ob>(
 
 /* True if the nonzero Lisp integer HZ divides evenly into a trillion.  */
 fn trillion_factor(hz: &FlexInt) -> bool {
-    FlexInt::from(TRILLION) % hz == FlexInt::zero() 
+    FlexInt::from(TRILLION) % hz == FlexInt::zero()
+}
 
-    //     // This should never happen, but just in case.
-    //     return false;
-    
-    // match hz {
-    //     FlexInt::Int(hz) => TRILLION % hz == 0,
-    //     FlexInt::Big(hz) => {
-    //         // println!("hz: {hz:?}, {:?}", (TRILLION % hz) == BigInt::zero());
-    //         (TRILLION % hz) == BigInt::zero()
-    //     }
-    // }
+fn tzlookup(zone: Option<ObjectType<'_>>) -> anyhow::Result<TimeZone> {
+    if zone.is_none() {
+        // If zone is None, return the current local time offset
+        // return Ok(Local::now().offset().fix());
+        return Ok(TimeZone::system());
+    }
+
+    match zone.unwrap() {
+        ObjectType::Int(0) | ObjectType::Symbol(sym::TRUE) => Ok(TimeZone::UTC),
+        ObjectType::Symbol(sym::WALL) => Ok(TimeZone::system()),
+        ObjectType::String(s) => {
+            let tz = TimeZone::get(s).or_else(|_| TimeZone::posix(s))?;
+            // .map_err(anyhow!("Invalid timezone string: {}", s))?;
+            Ok(tz)
+            // let tz = Tz::from_str(s).map_err(|_| anyhow!("Invalid timezone string: {}", s))?;
+            // let offset = tz.offset_from_utc_datetime(&Utc::now().naive_utc());
+            // Ok(offset.fix())
+        }
+        ObjectType::Int(offset) => Offset::from_seconds(offset as i32)
+            .map(TimeZone::fixed)
+            .map_err(|_| anyhow!("Invalid fixed offset: {}", offset)),
+        ObjectType::Cons(cons) => {
+            let tz = Err(anyhow!("Invalid timezone format"));
+            if let ObjectType::Int(offset) = cons.car().untag() {
+                if let ObjectType::Cons(tail) = cons.cdr().untag() {
+                    if let ObjectType::String(abbr) = tail.car().untag() {
+                        let abs_offset = offset.abs();
+                        let hour = abs_offset / 3600;
+                        let hour_rem = abs_offset % 3600;
+                        let min = hour_rem / 60;
+                        let sec = hour_rem % 60;
+
+                        let sign = if offset < 0 { "" } else { "-" };
+                        let posix_tz =
+                            format!("<{}>{}{:02}:{:02}:{:02}", abbr, sign, hour, min, sec);
+                        let tz = TimeZone::posix(&posix_tz)?;
+                        return Ok(tz);
+                    }
+                }
+            }
+            tz
+        }
+        _ => Err(anyhow!("Invalid timezone format")),
+    }
 }
 
 #[defun]
@@ -558,15 +616,14 @@ fn time_subtract<'ob>(a: TicksHz, b: TicksHz, cx: &'ob Context) -> Object<'ob> {
     c.make_lisp_time(cx)
 }
 
-
 #[defun]
 fn time_less_p(a: TicksHz, b: TicksHz) -> bool {
-    a < b 
+    a < b
 }
 
 #[defun]
 fn time_equal_p(a: TicksHz, b: TicksHz) -> bool {
-    a == b 
+    a == b
 }
 
 // #[defun]
@@ -575,14 +632,197 @@ fn time_equal_p(a: TicksHz, b: TicksHz) -> bool {
 
 // }
 
-// #[defun]
-// fn format_time_string()
+#[defun]
+fn format_time_string(
+    format: &str,
+    time: Option<TicksHz>,
+    zone: Option<ObjectType<'_>>,
+) -> anyhow::Result<String> {
+    let duration = time.map_or_else(
+        || {
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("System time is before the epoch")
+        },
+        |t| Duration::try_from(t).unwrap(),
+    );
+
+    let tz = tzlookup(zone)?;
+    let signed_duration =
+        SignedDuration::new(duration.as_secs() as i64, duration.subsec_nanos() as i32);
+    let timestamp = Timestamp::from_duration(signed_duration)?;
+    let zoned = timestamp.to_zoned(tz);
+
+    let format = format.replace('N', "f");
+    let s = fmt::strtime::format(&format, &zoned)?;
+    Ok(s)
+}
+
+#[defun]
+fn decode_time<'ob>(
+    time: Option<TicksHz>,
+    zone: Option<ObjectType<'ob>>,
+    form: Option<ObjectType<'ob>>,
+    cx: &'ob Context,
+) -> anyhow::Result<Object<'ob>> {
+    let time = match time {
+        Some(t) => t,
+        None => TicksHz::now()?,
+    };
+    let duration = Duration::try_from(time.clone())?;
+
+    let tz = tzlookup(zone)?;
+    let signed_duration =
+        SignedDuration::new(duration.as_secs() as i64, duration.subsec_nanos() as i32);
+    let timestamp = Timestamp::from_duration(signed_duration)?;
+    let zoned = timestamp.to_zoned(tz);
+
+    println!("Decoded time: {time:?} {form:?}");
+    let sec: Object = if time.hz.is_one() || !matches!(form, Some(ObjectType::Symbol(sym::TRUE))) {
+        NumberValue::from(FlexInt::from(zoned.second() as i64)).into_obj(cx)
+    } else {
+        let a = &time.hz * &FlexInt::from(zoned.second() as i64);
+        let b = &time.ticks.mod_floor(&time.hz);
+        let ticks = a + b;
+        Cons::new(NumberValue::from(ticks), NumberValue::from(time.hz), cx).into()
+    };
+
+    // (SEC MINUTE HOUR DAY MONTH YEAR DOW DST UTCOFF).
+    let year = zoned.year();
+    let dow = zoned.weekday().since(jiff::civil::Weekday::Sunday);
+    let dst = sym::NIL; // TODO: Fix me
+    let utcoff = zoned.offset().seconds();
+    let l = list![
+        sec, zoned.minute() as i64, zoned.hour() as i64, zoned.day() as i64, zoned.month() as i64,
+        year as i64, dow as i64, dst,
+        utcoff; cx
+    ];
+
+    Ok(l)
+}
+
+fn extract_int(
+    elements: &mut dyn Iterator<Item = anyhow::Result<Object<'_>, ConsError>>,
+    field_name: &str,
+) -> anyhow::Result<i64> {
+    if let Some(Ok(obj)) = elements.next() {
+        return match obj.untag() {
+            ObjectType::Int(x) => Ok(x),
+            // ObjectType::BigInt(x) => Ok(x.to_i32().unwrap_or(0)),
+            _ => Err(anyhow!("Invalid type for {}: expected Int or BigInt", field_name)),
+        };
+    }
+    Err(anyhow!("Missing value for {}", field_name))
+}
+
+#[allow(clippy::type_complexity)]
+fn process_time_arguments(
+    arguments: &Cons,
+) -> anyhow::Result<(DateTime, Option<bool>, Option<Object<'_>>)> {
+    let mut elements = arguments.elements();
+
+    // Extract the first 6 required elements: sec, min, hour, mday, mon, year
+    let sec = extract_int(&mut elements, "sec")?;
+    let min = extract_int(&mut elements, "min")?;
+    let hour = extract_int(&mut elements, "hour")?;
+    let mday = extract_int(&mut elements, "mday")?;
+    let mon = extract_int(&mut elements, "mon")?;
+    let year = extract_int(&mut elements, "year")?;
+    let _ = elements.next().transpose()?;
+    let _ = elements.next().transpose()?; // TODO
+    let zone = elements.next().transpose()?;
+
+    let dt = DateTime::new(
+        year as i16,
+        mon as i8,
+        mday as i8,
+        hour as i8,
+        min as i8,
+        sec as i8,
+        0, // nanoseconds
+    )?;
+
+    Ok((dt, None, zone))
+}
+
+fn seconds_to_parts(seconds: i64) -> (FlexInt, FlexInt) {
+    let hi = seconds >> LO_TIME_BITS;
+    let lo = seconds & ((1 << LO_TIME_BITS) - 1);
+    (FlexInt::from(hi), FlexInt::from(lo))
+}
+
+#[defun]
+// fn encode_time<'ob>(zone: List, cx: &'ob Context) -> anyhow::Result<()> {
+fn encode_time<'ob>(
+    arguments: ArgSlice,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> anyhow::Result<Object<'ob>> {
+    let arg_slice = env.stack.arg_slice(arguments);
+    let num_args = arg_slice.len();
+
+    let (dt, tz) = if num_args == 1 {
+        // If there's only one argument, it's a cons cell of 6 or more elements.
+        let list = arg_slice.iter().next().unwrap();
+        let list = list.as_cons().bind(cx);
+        let (dt, _, zone) = process_time_arguments(&list)?;
+        let tz = tzlookup(zone.map(|e| e.untag()))?;
+        (dt, tz)
+    } else if num_args < 6 {
+        return Err(anyhow!("Invalid time format: expected at least 6 elements, got {}", num_args));
+    } else {
+        let extract_arg = |element: Option<&Gc<ObjectType>>| {
+            if let Some(element) = element {
+                if let ObjectType::Int(x) = element.untag() {
+                    // Handle the case where the element is an Int
+                    return Ok(x);
+                }
+            }
+            Err(anyhow!("Invalid type for argument"))
+        };
+
+        let args = Rt::bind_slice(arg_slice, cx);
+        let mut iter = args.iter();
+
+        let sec = extract_arg(iter.next())?;
+        let min = extract_arg(iter.next())?;
+        let hour = extract_arg(iter.next())?;
+        let mday = extract_arg(iter.next())?;
+        let mon = extract_arg(iter.next())?;
+        let year = extract_arg(iter.next())?;
+
+        let zone = if 6 < num_args { iter.last().copied() } else { None };
+        let tz = tzlookup(zone.map(|e| e.untag()))?;
+        let dt = DateTime::new(
+            year as i16,
+            mon as i8,
+            mday as i8,
+            hour as i8,
+            min as i8,
+            sec as i8,
+            0, // nanoseconds
+        )?;
+        (dt, tz)
+    };
+
+    let zoned = tz.to_zoned(dt)?;
+    let since_epoch = zoned.timestamp();
+    let epoch_seconds = since_epoch.as_second();
+
+    if let Some(value) = env.vars.get(sym::CURRENT_TIME_LIST) {
+        println!("Symobl {:?}", value);
+
+        if value == &sym::TRUE {
+            let (hi, lo) = seconds_to_parts(epoch_seconds);
+            return Ok(list!(NumberValue::from(hi), NumberValue::from(lo); cx));
+        }
+    }
+    Ok(NumberValue::from(FlexInt::from(epoch_seconds)).into_obj(cx))
+}
 
 #[cfg(test)]
 mod test {
     use crate::interpreter::assert_lisp;
-
-    
 
     #[test]
     fn test_time_add() {
@@ -610,12 +850,13 @@ mod test {
 
         assert_lisp(
             "(time-add '(-32355606475210398 15197760291358211 9976952979818759) '(11450241568845096 -14345038232468488 -15873143985443383))",
-            "(-20905351894949246 52701 375376 0)"
+            "(-20905351894949246 52701 375376 0)",
         );
 
         assert_lisp(
             "(time-add '(16295676417614101 17368090104052081) '(-23668306398921068 7682917901861187))",
-            "-483147627446927476044");
+            "-483147627446927476044",
+        );
 
         // assert_lisp(
         //     "(time-add 14216861745549231102481053777920.0 -1017485722238583104829273024661169523243513882041182093510023188693686446790203400370539799296574903079051900245635938385920.0)",
@@ -638,5 +879,58 @@ mod test {
 
         // (time-add '(33046 5079 16386 46222) '(18016 34998 64648 3816))
         // (3346439309081034050038 . 1000000000000)
+    }
+
+    #[test]
+    fn test_format_time_string() {
+        assert_lisp(
+            r#"(format-time-string "%Y-%m-%d %H:%M:%S" 78796800 nil)"#,
+            "\"1972-06-30 17:00:00\"",
+        );
+
+        let format = "%Y-%m-%d %H:%M:%S.%3N %z";
+        assert_lisp(
+            &format!(r#"(format-time-string "{}" '(1202 22527 999999 999999) t)"#, format),
+            r#""1972-06-30 23:59:59.999 +0000""#,
+        );
+
+        let format = "%Y-%m-%d %H:%M:%S%.3f %z (%Z)";
+        assert_lisp(
+            &format!(r#"(format-time-string "{}" '(1202 22527 999999 999999) t)"#, format),
+            r#""1972-06-30 23:59:59.999 +0000 (UTC)""#,
+        );
+
+        assert_lisp(
+            &format!(
+                r#"(format-time-string "{}" '(1202 22527 999999 999999) '(-28800 "PST"))"#,
+                format
+            ),
+            r#""1972-06-30 15:59:59.999 -0800 (PST)""#,
+            // (59 59 15 30 6 1972 5 nil -28800)
+        );
+
+        assert_lisp(
+            &format!(r#"(format-time-string "{}" '(1202 22527 999999 999999) "IST-5:30")"#, format),
+            r#""1972-07-01 05:29:59.999 +0530 (IST)""#,
+        );
+    }
+
+    #[test]
+    fn test_decode_time() {
+        assert_lisp(
+            r#"(decode-time '(1202 22527 999999 999999) t)"#,
+            "(59 59 23 30 6 1972 5 nil 0)",
+        );
+
+        assert_lisp(
+            r#"(decode-time '(1202 22527 999999 999999) '(-28800 "PST"))"#,
+            "(59 59 15 30 6 1972 5 nil -28800)",
+        );
+    }
+
+    #[test]
+    fn test_encode_time() {
+        // assert_lisp(r#"(encode-time '(59 59 23 30 6 1972 5 nil 0))"#, "(1202 22527)");// Symbol isn't set in tests
+        assert_lisp(r#"(encode-time '(59 59 23 30 6 1972 5 nil 0))"#, "78796799");
     }
 }

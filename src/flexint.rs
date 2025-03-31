@@ -8,8 +8,9 @@ use std::{
 
 use anyhow::anyhow;
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_traits::{
-    CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, ToPrimitive, Zero,
+    CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, Num, One, ToPrimitive, Zero,
 };
 
 use crate::{
@@ -818,6 +819,138 @@ impl One for FlexInt {
     #[inline]
     fn one() -> Self {
         FlexInt::S(1)
+    }
+}
+
+impl Num for FlexInt {
+    type FromStrRadixErr = <BigInt as Num>::FromStrRadixErr;
+
+    fn from_str_radix(s: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        i64::from_str_radix(s, radix)
+            .map(FlexInt::S)
+            .or_else(|_| BigInt::from_str_radix(s, radix).map(FlexInt::shrink))
+    }
+}
+
+impl Integer for FlexInt {
+    fn div_floor(&self, other: &Self) -> Self {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::S(num_integer::Integer::div_floor(a, b)),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::div_floor(&BigInt::from(*a), b)),
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::shrink(BigInt::div_floor(a, &BigInt::from(*b))),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::div_floor(a, b)),
+            },
+        }
+    }
+
+    fn mod_floor(&self, other: &Self) -> Self {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::S(i64::mod_floor(a, b)),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::mod_floor(&BigInt::from(*a), b)),
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::shrink(BigInt::mod_floor(a, &BigInt::from(*b))),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::mod_floor(a, b)),
+            },
+        }
+    }
+
+    fn gcd(&self, other: &Self) -> Self {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::S(i64::gcd(a, b)),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::gcd(&BigInt::from(*a), b)),
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::shrink(BigInt::gcd(a, &BigInt::from(*b))),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::gcd(a, b)),
+            },
+        }
+    }
+
+    fn lcm(&self, other: &Self) -> Self {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::S(num_integer::Integer::div_floor(a, b)),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::div_floor(&BigInt::from(*a), b)),
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => FlexInt::shrink(BigInt::div_floor(a, &BigInt::from(*b))),
+                FlexInt::B(ref b) => FlexInt::shrink(BigInt::div_floor(a, b)),
+            },
+        }
+    }
+
+    fn is_multiple_of(&self, other: &Self) -> bool {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => i64::is_multiple_of(a, b),
+                FlexInt::B(ref b) => BigInt::is_multiple_of(&BigInt::from(*a), b),
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => BigInt::is_multiple_of(a, &BigInt::from(*b)),
+                FlexInt::B(ref b) => BigInt::is_multiple_of(a, b),
+            },
+        }
+    }
+
+    fn is_even(&self) -> bool {
+        match *self {
+            FlexInt::S(ref a) => a.is_even(),
+            FlexInt::B(ref b) => b.is_even(),
+        }
+    }
+
+    fn is_odd(&self) -> bool {
+        match *self {
+            FlexInt::S(ref a) => a.is_even(),
+            FlexInt::B(ref b) => b.is_even(),
+        }
+    }
+
+    fn div_rem(&self, other: &Self) -> (Self, Self) {
+        match *self {
+            FlexInt::S(ref a) => match *other {
+                FlexInt::S(ref b) => {
+                    let (c, d) = i64::div_rem(a, b);
+                    (FlexInt::S(c), FlexInt::S(d))
+                }
+                FlexInt::B(ref b) => {
+                    let (c, d) = BigInt::div_rem(&BigInt::from(*a), b);
+                    (FlexInt::shrink(c), FlexInt::shrink(d))
+                }
+            },
+            FlexInt::B(ref a) => match *other {
+                FlexInt::S(ref b) => {
+                    let (c, d) = BigInt::div_rem(a, &BigInt::from(*b));
+                    (FlexInt::shrink(c), FlexInt::shrink(d))
+                }
+                FlexInt::B(ref b) => {
+                    let (c, d) = BigInt::div_rem(a, b);
+                    (FlexInt::shrink(c), FlexInt::shrink(d))
+                }
+            },
+        }
+    }
+}
+
+impl ToPrimitive for FlexInt {
+    fn to_i64(&self) -> Option<i64> {
+        match self {
+            FlexInt::S(val) => Some(*val),
+            FlexInt::B(val) => val.to_i64(),
+        }
+    }
+
+    fn to_u64(&self) -> Option<u64> {
+        match self {
+            FlexInt::S(val) => val.to_u64(),
+            FlexInt::B(val) => val.to_u64(),
+        }
     }
 }
 
