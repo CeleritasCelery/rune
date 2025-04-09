@@ -1305,8 +1305,6 @@ mod test {
         assert_lisp("(string-version-lessp 'less1 \"less10\")", "t");
     }
 
-
-
     #[test]
     #[cfg(miri)]
     fn test_maphash() {

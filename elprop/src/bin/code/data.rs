@@ -12,6 +12,7 @@ trait NumBounds: Sized {
     const ZERO: Self;
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum PosIntegerType {
     U16,
@@ -439,13 +440,12 @@ impl Function {
             "ByteFn" => Type::ByteFn,
             "SubrFn" => Type::Subr,
             "LispBuffer" => Type::Buffer,
-            "TicksHz" => Type::Multiple(
-                vec![
-                    Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer, Type::Integer]),
-                    Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer]),
-                    Type::CustomList(vec![Type::Integer, Type::Integer]),
-                    Type::CustomList(vec![Type::Float]),
-                ]),
+            "TicksHz" => Type::Multiple(vec![
+                Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer, Type::Integer]),
+                Type::CustomList(vec![Type::Integer, Type::Integer, Type::Integer]),
+                Type::CustomList(vec![Type::Integer, Type::Integer]),
+                Type::CustomList(vec![Type::Float]),
+            ]),
             _ => return None,
         })
     }
@@ -645,7 +645,6 @@ fn get_generic_arg<'a>(
         })
         .ok_or_else(|| "Expected type argument".to_string())
 }
-
 
 impl NumBounds for u16 {
     const MAX: Self = u16::MAX;

@@ -2,7 +2,6 @@ mod code;
 use clap::Parser;
 use code::data::{Config, Function};
 use code::output::{Output, Status};
-use proptest::path;
 use std::path::Path;
 use std::process::ExitCode;
 use std::{fs, path::PathBuf};

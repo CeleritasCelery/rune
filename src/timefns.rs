@@ -268,6 +268,19 @@ impl TicksHz {
         let hz = BigInt::from(self.hz.clone());
         ticks * hz
     }
+
+    pub fn _with_hz(self, hz: FlexInt) -> anyhow::Result<Self> {
+        /* The idea is to return the floor of ((T.ticks * HZ) / T.hz).  */
+        if self.hz == hz {
+            return Ok(self);
+        }
+        if hz < FlexInt::zero() {
+            return Err(anyhow!("Hz must be positive"));
+        }
+        let scaled_ticks = self.ticks * &hz;
+        let ticks = scaled_ticks.div_floor(&self.hz);
+        Ok(TicksHz { ticks, hz })
+    }
 }
 
 impl TryFrom<Duration> for TicksHz {
@@ -818,6 +831,79 @@ fn encode_time<'ob>(
         }
     }
     Ok(NumberValue::from(FlexInt::from(epoch_seconds)).into_obj(cx))
+}
+
+#[defun]
+fn time_convert<'ob>(
+    time: TicksHz,
+    form: Option<ObjectType<'ob>>,
+    cx: &'ob Context,
+) -> anyhow::Result<Object<'ob>> {
+    if let Some(form) = form {
+        match form {
+            ObjectType::Int(i) => Ok(ObjectType::Int(i).into_obj(cx)),
+            ObjectType::Symbol(sym::LIST) => Ok(time.make_lisp_time(cx)),
+            ObjectType::Symbol(sym::TRUE) => {
+                Ok(Cons::new(NumberValue::from(time.ticks), NumberValue::from(time.hz), cx).into())
+            }
+            _ => Err(anyhow!("Invalid form for time conversion")),
+        }
+    } else {
+        Ok(time.make_lisp_time(cx))
+    }
+}
+
+#[defun]
+fn current_time_string(
+    time: Option<TicksHz>,
+    zone: Option<ObjectType<'_>>,
+) -> anyhow::Result<String> {
+    let duration = time.map_or_else(
+        || {
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("System time is before the epoch")
+        },
+        |t| Duration::try_from(t).unwrap(),
+    );
+
+    let tz = tzlookup(zone)?;
+    let signed_duration =
+        SignedDuration::new(duration.as_secs() as i64, duration.subsec_nanos() as i32);
+    let timestamp = Timestamp::from_duration(signed_duration)?;
+    let zoned = timestamp.to_zoned(tz);
+
+    let format = "%a %b %d %H:%M:%S %Y";
+    let s = fmt::strtime::format(format, &zoned)?;
+    Ok(s)
+}
+
+#[defun]
+fn current_time_zone<'ob>(
+    time: Option<TicksHz>,
+    zone: Option<ObjectType<'ob>>,
+    cx: &'ob Context,
+) -> anyhow::Result<Object<'ob>> {
+    let duration = time.map_or_else(
+        || {
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("System time is before the epoch")
+        },
+        |t| Duration::try_from(t).unwrap(),
+    );
+
+    let tz = tzlookup(zone)?;
+    let signed_duration =
+        SignedDuration::new(duration.as_secs() as i64, duration.subsec_nanos() as i32);
+    let timestamp = Timestamp::from_duration(signed_duration)?;
+    let zoned = timestamp.to_zoned(tz.clone());
+
+    // let seconds = tz.to_fixed_offset()?.seconds();
+    let seconds = zoned.offset().seconds();
+    let zone_name = fmt::strtime::format("%Z", &zoned)?;
+
+    Ok(list![seconds, zone_name; cx])
 }
 
 #[cfg(test)]
