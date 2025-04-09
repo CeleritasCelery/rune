@@ -1037,6 +1037,36 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
     engine.encode(string)
 }
 
+#[defun]
+fn base64_decode_string(
+    string: &str,
+    base64url: OptionalFlag,
+    ignore_invalid: OptionalFlag,
+) -> Result<Vec<u8>> {
+    let error_msg = "Invalid base64 data";
+    base64_decode(string, base64url.is_some(), ignore_invalid.is_some())
+        .map_err(|_| anyhow!(error_msg))
+}
+
+fn base64_decode(
+    string: &str,
+    base64url: bool,
+    ignore_invalid: bool,
+) -> Result<Vec<u8>, base64::DecodeError> {
+    let config = base64::engine::GeneralPurposeConfig::new()
+        .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent)
+        .with_decode_allow_trailing_bits(true);
+    let alphabets = if base64url { base64::alphabet::URL_SAFE } else { base64::alphabet::STANDARD };
+    let engine = base64::engine::GeneralPurpose::new(&alphabets, config);
+    if ignore_invalid {
+        let santizied_string: String =
+            string.chars().filter(|c| alphabets.as_str().contains(*c)).collect();
+        engine.decode(santizied_string)
+    } else {
+        engine.decode(string)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
@@ -1044,11 +1074,39 @@ mod test {
     #[test]
     fn test_base64_encode_string() {
         assert_lisp("(base64-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
+        assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
         assert_lisp(
             "(base64-encode-string \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum\")",
             "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0aW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1YXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2ZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRldXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1aSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"",
         );
         // assert_lisp("(base64-encode-string \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum\" t)", "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwg\nc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu\nYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0\naW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1\nYXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2\nZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRl\ndXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1\naSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"");
+    }
+
+    #[test]
+    fn test_base64url_encode_string() {
+        assert_lisp("(base64url-encode-string \" \")", "\"IA==\"");
+        assert_lisp("(base64url-encode-string \"aa>\")", "\"YWE-\"");
+        assert_lisp("(base64url-encode-string \" a>\")", "\"IGE-\"");
+    }
+
+    // Need a way to convert to ByteString instead of String
+    #[test]
+    #[ignore]
+    fn test_base64_decode_string() {
+        assert_lisp("(base64-decode-string \"aa\" nil t)", "\"i\"");
+        // assert_lisp("(base64-decode-string \"0+\" nil t)", r#"\323"#);
+        // assert_lisp("(base64-decode-string \"Wj1Yse54𐩃-N\" t t)", "\"Z=X\261\356x\370\"");
+        // assert_lisp("(base64-encode-string \"aa>\")", "\"YWE+\"");
+        // assert_lisp("(base64-encode-string \" a>\")", "\"IGE+\"");
+    }
+    #[test]
+    fn test_base64_url_decode_string() {
+        assert_lisp("(base64-decode-string \"Wj1Yse54𐩃-N\" t t)", "\"Z=X\\261\\356x\\370\"");
+        assert_lisp("(base64url-encode-string \"hello\")", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
+        assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
+        assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
     }
 
     #[test]
@@ -1245,14 +1303,6 @@ mod test {
         // Mixed Tests
         assert_lisp("(string-version-lessp 'less \"less\")", "nil");
         assert_lisp("(string-version-lessp 'less1 \"less10\")", "t");
-    }
-
-    #[test]
-    fn test_base64url_encode_string() {
-        assert_lisp("(base64url-encode-string \"hello\")", "\"aGVsbG8=\"");
-        assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
-        assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
-        assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
     }
 
     #[test]

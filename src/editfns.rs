@@ -8,6 +8,8 @@ use anyhow::{Result, bail, ensure};
 use rune_macros::defun;
 use std::{fmt::Write as _, io::Write};
 
+defsym!(WALL);
+
 #[defun]
 fn message(format_string: &str, args: &[Object]) -> Result<String> {
     let message = format(format_string, args)?;

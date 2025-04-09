@@ -3,6 +3,7 @@ use code::output::{Output, Status};
 use proptest::prelude::TestCaseError;
 use proptest::test_runner::{Config, TestError, TestRunner};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::Stdio;
 use std::{fs, path::PathBuf};
@@ -42,15 +43,22 @@ fn main() {
     let rune_panicked = RefCell::new(false);
     let master_count = RefCell::new(0);
 
+    let arguments = RefCell::new(HashMap::<String, Vec<String>>::new());
     let outputs = RefCell::new(Vec::new());
     let regex = regex::Regex::new("^\\((wrong-[a-zA-Z0-9-]*|[a-zA-Z0-9-]*error) ").unwrap();
+
     for func in config.functions {
         let name = func.name.clone();
+        arguments.borrow_mut().entry(name.clone()).or_default();
+        let func_iter_count = RefCell::new(0);
+
         let result = runner.run(&func.strategy(), |input| {
             if *rune_panicked.borrow() {
                 return Err(TestCaseError::Reject("Rune panicked".into()));
             }
             let body = code::data::print_args(&input);
+            arguments.borrow_mut().entry(name.clone()).and_modify(|v| v.push(body.clone()));
+
             // send to emacs
             println!(";; sending to Emacs");
             let test_str = format!(";; ELPROP_START\n({name} {body})\n;; ELPROP_END");
@@ -82,6 +90,7 @@ fn main() {
             println!(";; done");
 
             *master_count.borrow_mut() += 1;
+            *func_iter_count.borrow_mut() += 1;
 
             match (emacs_output, rune_output) {
                 (Ok(e), Ok(r)) if e == r => Ok(()),
@@ -102,9 +111,13 @@ fn main() {
             Err(TestError::Abort(reason)) => Status::Abort(reason.to_string()),
             Ok(()) => Status::Pass,
         };
-        let output = Output { function: name, status };
+        let output = Output { function: name, count: *func_iter_count.borrow(), status };
         outputs.borrow_mut().push(output);
     }
+
+    let args_file = target.join("arguments.json");
+    let json = serde_json::to_string(&*arguments.borrow()).expect("Malformed Arguments JSON");
+    fs::write(args_file, json).unwrap();
 
     let _ = child.kill();
     let json = serde_json::to_string(&*outputs.borrow()).expect("Malformed Output JSON");

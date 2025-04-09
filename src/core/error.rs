@@ -20,6 +20,7 @@ pub(crate) enum Type {
     List,
     Buffer,
     CharTable,
+    BigInt,
 }
 
 /// Error provided if object was the wrong type
