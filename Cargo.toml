@@ -11,6 +11,7 @@ members = [
   "crates/text-buffer",
   "crates/rune-macros",
   "crates/rune-core",
+  "crates/interval-tree",
   "elprop",
 ]
 
@@ -34,6 +35,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 rune-core = { version = "0.1.0", path = "crates/rune-core" }
 rune-macros = { version = "0.1.0", path = "crates/rune-macros" }
+interval-tree ={ version = "0.1.0", path = "crates/interval-tree" }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -59,6 +61,7 @@ num-bigint = "0.4.6"
 num-traits = "0.2.19"
 num-integer = "0.1.46"
 libm = "0.2.11"
+interval-tree = { workspace = true }
 
 # [dev-dependencies]
 # backtrace-on-stack-overflow = "0.3.0"
@@ -115,3 +118,6 @@ or_fun_call = "warn"
 similar_names = "allow"
 single_match_else = "allow"
 unused_self = "allow"
+comparison_chain = "allow"
+return_self_not_must_use = "allow"
+must_use_candidate = "allow"

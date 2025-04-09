@@ -113,7 +113,8 @@ pub(crate) fn get_buffer_create<'ob>(
                         unsafe { &*(buffer as *const LispBuffer) }
                     };
                     buffer_list.insert(name.to_string(), buffer);
-                    Ok(cx.add(buffer))
+                    let buf = cx.add(buffer);
+                    Ok(buf)
                 }
             }
         }
