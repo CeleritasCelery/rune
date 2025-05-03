@@ -4,6 +4,8 @@
 (load "cconv")
 (load "warnings") ;; should be autoloaded
 (load "bytecomp")
+(defvar source-directory nil)
+(load "ert")
 
 ;; check bytecodes
 
