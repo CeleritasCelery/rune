@@ -1,5 +1,6 @@
 * Rune
 *R* ust *UN* der *E* macs
+[[https://emacsconf.org/2024/talks/rust/][video introduction]]
 
 [[https://rune-rs.netlify.app/rune/][Docs]]
 
