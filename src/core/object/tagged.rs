@@ -21,6 +21,7 @@ use bumpalo::collections::Vec as GcVec;
 use num_bigint::BigInt;
 use private::{Tag, TaggedPtr};
 use rune_core::hashmap::HashSet;
+use rune_macros::enum_methods;
 use std::marker::PhantomData;
 use std::{fmt, ptr::NonNull};
 
@@ -1004,6 +1005,7 @@ macro_rules! cast_gc {
 
 // Number
 #[derive(Copy, Clone)]
+#[enum_methods(Number)]
 #[repr(u8)]
 /// The enum form of [Number] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum NumberType<'ob> {
@@ -1026,6 +1028,7 @@ impl<'old, 'new> WithLifetime<'new> for NumberType<'old> {
 
 // List
 #[derive(Copy, Clone)]
+#[enum_methods(List)]
 #[repr(u8)]
 /// The enum form of [List] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum ListType<'ob> {
@@ -1054,6 +1057,7 @@ impl<'old, 'new> WithLifetime<'new> for ListType<'old> {
 
 // Function
 #[derive(Copy, Clone, Debug)]
+#[enum_methods(Function)]
 #[repr(u8)]
 /// The enum form of [Function] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum FunctionType<'ob> {
@@ -1078,6 +1082,7 @@ impl<'old, 'new> WithLifetime<'new> for FunctionType<'old> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
+#[enum_methods(Object)]
 #[repr(u8)]
 /// The enum form of [Object] to take advantage of ergonomics of enums in Rust.
 pub(crate) enum ObjectType<'ob> {

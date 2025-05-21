@@ -10,6 +10,7 @@ use syn::parse_macro_input;
 
 mod defun;
 mod trace;
+mod variantly;
 
 /// ## `#[defun]`
 ///
@@ -92,4 +93,19 @@ pub fn trace_derive(stream: TokenStream) -> TokenStream {
 pub fn elprop(_: TokenStream, fn_ts: TokenStream) -> TokenStream {
     // The handling of this macro is in elprop
     fn_ts
+}
+
+/// The generated methods assume that `TargetType` provides an appropriate `untag()` method
+/// (and `untag_mut()` if mutable access methods are used) that allows access to the
+/// underlying enum (`MyEnum` in the example).
+///
+/// For methods that construct a new instance of `TargetType` (like `and_then`, `or_else`),
+/// it's assumed that the enum variant (e.g., `MyEnum::Tuple(...)`) can be converted into
+/// `TargetType` via `.into()`. This means `TargetType` must implement `From<MyEnum>`.
+#[proc_macro_attribute]
+pub fn enum_methods(attr: TokenStream, item: TokenStream) -> TokenStream {
+    match variantly::variantly_attribute_macro_impl(attr.into(), item.into()) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.into_compile_error(),
+    }
 }
