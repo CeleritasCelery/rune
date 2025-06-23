@@ -88,7 +88,7 @@ fn regexp_quote(string: &str) -> String {
     quoted
 }
 
-fn lisp_regex_to_rust(regexp: &str) -> String {
+pub(crate) fn lisp_regex_to_rust(regexp: &str) -> String {
     let mut norm_regex = String::new();
     let mut chars = regexp.char_indices();
     while let Some((idx, ch)) = chars.next() {
