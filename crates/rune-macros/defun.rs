@@ -293,12 +293,11 @@ fn check_invariants(args: &[ArgType], sig: &syn::Signature) -> Result<(), Error>
     }
 
     for (arg, ty) in sig.inputs.iter().zip(args.iter()) {
-        if matches!(ty, ArgType::Rt(_)) {
-            if let syn::FnArg::Typed(ty) = arg {
-                if !matches!(ty.ty.as_ref(), syn::Type::Reference(_)) {
-                    return Err(Error::new_spanned(arg, "Can't take Rt by value"));
-                }
-            }
+        if matches!(ty, ArgType::Rt(_))
+            && let syn::FnArg::Typed(ty) = arg
+            && !matches!(ty.ty.as_ref(), syn::Type::Reference(_))
+        {
+            return Err(Error::new_spanned(arg, "Can't take Rt by value"));
         }
     }
 
@@ -309,14 +308,14 @@ fn check_invariants(args: &[ArgType], sig: &syn::Signature) -> Result<(), Error>
 
     let first_opt = args.iter().position(|x| matches!(x, ArgType::Option));
     let last_required = args.iter().rposition(|x| x.is_required_arg()).unwrap_or_default();
-    if let Some(first_optional) = first_opt {
-        if last_required > first_optional {
-            let arg = sig.inputs.iter().nth(last_required).unwrap();
-            return Err(Error::new_spanned(
-                arg,
-                "Required argument is after the first optional argument",
-            ));
-        }
+    if let Some(first_optional) = first_opt
+        && last_required > first_optional
+    {
+        let arg = sig.inputs.iter().nth(last_required).unwrap();
+        return Err(Error::new_spanned(
+            arg,
+            "Required argument is after the first optional argument",
+        ));
     }
     Ok(())
 }

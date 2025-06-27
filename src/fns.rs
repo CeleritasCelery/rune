@@ -305,10 +305,10 @@ pub(crate) fn append<'ob>(
 #[defun]
 pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
     for elem in alist {
-        if let ObjectType::Cons(cons) = elem?.untag() {
-            if eq(key, cons.car()) {
-                return Ok(cons.into());
-            }
+        if let Some(cons) = elem?.cons()
+            && eq(key, cons.car())
+        {
+            return Ok(cons.into());
         }
     }
     Ok(NIL)
@@ -317,10 +317,10 @@ pub(crate) fn assq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob
 #[defun]
 fn rassq<'ob>(key: Object<'ob>, alist: List<'ob>) -> Result<Object<'ob>> {
     for elem in alist {
-        if let ObjectType::Cons(cons) = elem?.untag() {
-            if eq(key, cons.cdr()) {
-                return Ok(cons.into());
-            }
+        if let Some(cons) = elem?.cons()
+            && eq(key, cons.cdr())
+        {
+            return Ok(cons.into());
         }
     }
     Ok(NIL)
@@ -354,10 +354,10 @@ pub(crate) fn assoc<'ob>(
             let alist = alist.bind(cx);
             let key = key.bind(cx);
             for elem in alist {
-                if let ObjectType::Cons(cons) = elem?.untag() {
-                    if equal(key, cons.car()) {
-                        return Ok(cons.into());
-                    }
+                if let Some(cons) = elem?.cons()
+                    && equal(key, cons.car())
+                {
+                    return Ok(cons.into());
                 }
             }
         }
@@ -824,7 +824,7 @@ pub(crate) fn string_version_lessp<'ob>(
 }
 
 #[defun]
-pub(crate) fn clear_string(string: &LispString) -> Result<Object> {
+pub(crate) fn clear_string(string: &LispString) -> Result<Object<'_>> {
     string.clear();
     Ok(NIL)
 }

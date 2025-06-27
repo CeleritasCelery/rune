@@ -37,10 +37,10 @@ impl<'ob> Iterator for ConsIter<'ob> {
 
         // Floyds cycle detection algorithm
         self.fast = advance(advance(self.fast));
-        if let (Some(Ok(slow)), Some(fast)) = (self.cons, self.fast) {
-            if std::ptr::eq(slow, fast) {
-                self.cons = Some(Err(ConsError::CircularList));
-            }
+        if let (Some(Ok(slow)), Some(fast)) = (self.cons, self.fast)
+            && std::ptr::eq(slow, fast)
+        {
+            self.cons = Some(Err(ConsError::CircularList));
         }
         Some(Ok(cons))
     }
@@ -153,11 +153,11 @@ impl ElemStreamIter<'_> {
 }
 
 impl Cons {
-    pub(crate) fn elements(&self) -> ElemIter {
+    pub(crate) fn elements(&self) -> ElemIter<'_> {
         ElemIter(self.conses())
     }
 
-    pub(crate) fn conses(&self) -> ConsIter {
+    pub(crate) fn conses(&self) -> ConsIter<'_> {
         ConsIter::new(Some(self))
     }
 }
@@ -312,19 +312,25 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let cons = list![1; cx];
-        cons.as_cons().set_cdr(cons).unwrap();
+        cons.unwrap_cons().set_cdr(cons).unwrap();
         let mut iter = cons.as_list().unwrap();
         assert!(iter.next().unwrap().is_ok());
         assert!(iter.next().unwrap().is_err());
 
         let cons = list![1, 2, 3; cx];
-        cons.as_cons().cdr().as_cons().cdr().as_cons().set_cdr(cons).unwrap();
+        cons.unwrap_cons()
+            .cdr()
+            .unwrap_cons()
+            .cdr()
+            .unwrap_cons()
+            .set_cdr(cons)
+            .unwrap();
         let iter = cons.as_list().unwrap();
         assert!(iter.fallible().nth(3).is_err());
 
         let cons = list![1, 2, 3, 4; cx];
-        let middle = cons.as_cons().cdr().as_cons().cdr();
-        middle.as_cons().cdr().as_cons().set_cdr(middle).unwrap();
+        let middle = cons.unwrap_cons().cdr().unwrap_cons().cdr();
+        middle.unwrap_cons().cdr().unwrap_cons().set_cdr(middle).unwrap();
         let iter = cons.as_list().unwrap();
         assert!(iter.fallible().nth(3).is_err());
     }

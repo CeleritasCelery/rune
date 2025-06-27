@@ -50,7 +50,7 @@ impl LispVec {
         Self(GcHeap::new(LispVecInner::new(ptr, constant), constant))
     }
 
-    pub(crate) fn to_vec(&self) -> Vec<Object> {
+    pub(crate) fn to_vec(&self) -> Vec<Object<'_>> {
         // SAFETY: ObjCell and GcObj have the same representation.
         let obj_slice = unsafe { &*(addr_of!(*self.0.inner.get()) as *const [Object]) };
         obj_slice.to_vec()

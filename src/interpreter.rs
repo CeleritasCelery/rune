@@ -105,13 +105,13 @@ impl Interpreter<'_, '_> {
         let result = match self.implicit_progn(forms, cx) {
             Ok(x) => Ok(rebind!(x, cx)),
             Err(e) => {
-                if let ErrorType::Throw(id) = e.error {
-                    if let Some((throw_tag, data)) = self.env.get_exception(id) {
-                        let catch_tag = self.env.catch_stack.last().unwrap();
-                        // TODO: Remove binds
-                        if catch_tag == throw_tag {
-                            return Ok(data.bind(cx));
-                        }
+                if let ErrorType::Throw(id) = e.error
+                    && let Some((throw_tag, data)) = self.env.get_exception(id)
+                {
+                    let catch_tag = self.env.catch_stack.last().unwrap();
+                    // TODO: Remove binds
+                    if catch_tag == throw_tag {
+                        return Ok(data.bind(cx));
                     }
                 }
                 Err(e)
@@ -226,15 +226,14 @@ impl Interpreter<'_, '_> {
         // This function will trim the environment down to only what is actually
         // captured in the closure
         if let Some(closure_fn) = self.env.vars.get(sym::INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION)
+            && closure_fn.bind(cx) != sym::NIL
         {
-            if closure_fn.bind(cx) != sym::NIL {
-                let closure_fn: Result<&Rto<Function>, _> = closure_fn.try_as();
-                if let Ok(closure_fn) = closure_fn {
-                    let lambda = Object::from(Cons::new(sym::LAMBDA, body, cx));
-                    let closure_fn: Function = closure_fn.bind(cx);
-                    root!(closure_fn, cx);
-                    return call!(closure_fn, lambda, env; self.env, cx);
-                }
+            let closure_fn: Result<&Rto<Function>, _> = closure_fn.try_as();
+            if let Ok(closure_fn) = closure_fn {
+                let lambda = Object::from(Cons::new(sym::LAMBDA, body, cx));
+                let closure_fn: Function = closure_fn.bind(cx);
+                root!(closure_fn, cx);
+                return call!(closure_fn, lambda, env; self.env, cx);
             }
         }
         // If the closure capture function is not defined, use the whole environment
@@ -738,7 +737,7 @@ fn bind_variables<'a>(
     Ok(vars)
 }
 
-fn parse_closure_env(obj: Object) -> AnyResult<Vec<&Cons>> {
+fn parse_closure_env(obj: Object<'_>) -> AnyResult<Vec<&Cons>> {
     let forms = obj.as_list()?;
     let mut env = Vec::new();
     for form in forms {

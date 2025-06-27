@@ -325,10 +325,10 @@ pub(crate) fn macroexpand<'ob>(
 }
 
 fn get_macro_func<'ob>(name: Symbol, cx: &'ob Context) -> Option<Function<'ob>> {
-    if let Some(callable) = name.follow_indirect(cx) {
-        if let Ok((sym::MACRO, cdr)) = callable.as_cons_pair() {
-            return Some(cdr.tag());
-        }
+    if let Some(callable) = name.follow_indirect(cx)
+        && let Ok((sym::MACRO, cdr)) = callable.as_cons_pair()
+    {
+        return Some(cdr.tag());
     }
     None
 }

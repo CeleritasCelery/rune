@@ -75,7 +75,7 @@ impl LispHashTable {
         self.0.with(|x| x.get(&key).copied())
     }
 
-    pub(crate) fn get_index(&self, index: usize) -> Option<(Object, Object)> {
+    pub(crate) fn get_index(&self, index: usize) -> Option<(Object<'_>, Object<'_>)> {
         self.0.with(|x| x.get_index(index).map(|(k, v)| (*k, *v)))
     }
 

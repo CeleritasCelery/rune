@@ -189,10 +189,10 @@ fn derive_struct(orig: &syn::DeriveInput, data_struct: &syn::DataStruct) -> Toke
 
 fn get_repr(attrs: &[syn::Attribute]) -> TokenStream {
     for attr in attrs {
-        if let syn::Meta::List(list) = &attr.meta {
-            if list.path.is_ident("repr") {
-                return quote! {#attr};
-            }
+        if let syn::Meta::List(list) = &attr.meta
+            && list.path.is_ident("repr")
+        {
+            return quote! {#attr};
         }
     }
     quote! {}
@@ -200,10 +200,10 @@ fn get_repr(attrs: &[syn::Attribute]) -> TokenStream {
 
 fn no_trace(attrs: &[syn::Attribute]) -> bool {
     for attr in attrs {
-        if let syn::Meta::Path(path) = &attr.meta {
-            if path.is_ident("no_trace") {
-                return true;
-            }
+        if let syn::Meta::Path(path) = &attr.meta
+            && path.is_ident("no_trace")
+        {
+            return true;
         }
     }
     false

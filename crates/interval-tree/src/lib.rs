@@ -228,12 +228,13 @@ impl<T: Clone> Node<T> {
         }
 
         // cond3: l_red && r_red
-        if let (Some(l), Some(r)) = (&mut node.left, &mut node.right) {
-            if l.color == Color::Red && r.color == Color::Red {
-                l.color = Color::Black;
-                r.color = Color::Black;
-                node.color = Color::Red;
-            }
+        if let (Some(l), Some(r)) = (&mut node.left, &mut node.right)
+            && l.color == Color::Red
+            && r.color == Color::Red
+        {
+            l.color = Color::Black;
+            r.color = Color::Black;
+            node.color = Color::Red;
         }
         // update node's size
         node.n = node.n();
@@ -268,12 +269,12 @@ impl<T: Clone> Node<T> {
     fn move_red_left(node: &mut BoxedNode<T>) -> Option<()> {
         Node::flip_colors(node);
         // h.right.left == Red
-        if let Some(ref mut nr) = node.right.as_mut() {
-            if Node::red(&nr.left) {
-                Node::rotate_right(nr)?;
-                Node::rotate_left(node)?;
-                Node::flip_colors(node);
-            }
+        if let Some(ref mut nr) = node.right.as_mut()
+            && Node::red(&nr.left)
+        {
+            Node::rotate_right(nr)?;
+            Node::rotate_left(node)?;
+            Node::flip_colors(node);
         }
         Some(())
     }
@@ -334,10 +335,11 @@ impl<T: Clone> Node<T> {
         let n = node.as_mut()?;
         let result = if key < n.key {
             // n.left != red && n.left.left != red
-            if let Some(ref mut l) = n.left {
-                if l.color == Color::Black && !Node::red(&l.left) {
-                    Node::move_red_left(n).unwrap();
-                }
+            if let Some(ref mut l) = n.left
+                && l.color == Color::Black
+                && !Node::red(&l.left)
+            {
+                Node::move_red_left(n).unwrap();
             }
             Node::delete(&mut n.left, key)
         } else {

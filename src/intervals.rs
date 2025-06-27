@@ -244,13 +244,13 @@ impl<'ob> Iterator for IntervalIntersections<'ob, '_> {
         }
 
         // Handle gap before first node or between nodes
-        if let Some(node) = self.current {
-            if self.next_start < node.key.start {
-                let gap_end = node.key.start.min(self.end);
-                let result = (self.next_start..gap_end, NIL);
-                self.next_start = gap_end;
-                return Some(result);
-            }
+        if let Some(node) = self.current
+            && self.next_start < node.key.start
+        {
+            let gap_end = node.key.start.min(self.end);
+            let result = (self.next_start..gap_end, NIL);
+            self.next_start = gap_end;
+            return Some(result);
         }
 
         // Handle current node
@@ -306,13 +306,13 @@ impl<'ob> Iterator for ReverseIntervalIntersections<'ob, '_> {
         }
 
         // Handle gap after last node or between nodes
-        if let Some(node) = self.current {
-            if self.next_end > node.key.end {
-                let gap_start = node.key.end.max(self.start);
-                let result = (gap_start..self.next_end, NIL);
-                self.next_end = gap_start;
-                return Some(result);
-            }
+        if let Some(node) = self.current
+            && self.next_end > node.key.end
+        {
+            let gap_start = node.key.end.max(self.start);
+            let result = (gap_start..self.next_end, NIL);
+            self.next_end = gap_start;
+            return Some(result);
         }
 
         // Handle current node

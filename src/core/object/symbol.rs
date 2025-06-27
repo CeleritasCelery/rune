@@ -310,7 +310,7 @@ impl SymbolCell {
         }
     }
 
-    fn get(&self) -> Option<Function> {
+    fn get(&self) -> Option<Function<'_>> {
         if let Some(func) = &self.0.func {
             let ptr = func.load(Ordering::Acquire);
             // nil is represented as zero (null pointer).

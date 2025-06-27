@@ -1585,13 +1585,6 @@ impl PartialEq<bool> for Object<'_> {
     }
 }
 
-#[cfg(test)]
-impl<'ob> Object<'ob> {
-    pub(crate) fn as_cons(self) -> &'ob Cons {
-        self.try_into().unwrap()
-    }
-}
-
 impl<'ob> Object<'ob> {
     /// Convience method to easily match against cons cells that are the start
     /// of a list of values.
@@ -1714,10 +1707,10 @@ mod test {
         let roots = &RootSet::default();
         let cx = &Context::new(roots);
         let cons = list![1; cx];
-        cons.as_cons().set_cdr(cons).unwrap();
+        cons.unwrap_cons().set_cdr(cons).unwrap();
         assert_eq!(format!("{cons}"), "(1 . #0)");
 
-        cons.as_cons().set_car(cons).unwrap();
+        cons.unwrap_cons().set_car(cons).unwrap();
         assert_eq!(format!("{cons}"), "(#0 . #0)");
     }
 }

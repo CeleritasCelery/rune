@@ -73,22 +73,22 @@ impl Cons {
 }
 
 impl Cons {
-    pub(crate) fn car(&self) -> Object {
+    pub(crate) fn car(&self) -> Object<'_> {
         self.0.car.get()
     }
 
-    pub(crate) fn cdr(&self) -> Object {
+    pub(crate) fn cdr(&self) -> Object<'_> {
         self.0.cdr.get()
     }
 
-    pub(crate) fn cadr(&self) -> Option<Object> {
+    pub(crate) fn cadr(&self) -> Option<Object<'_>> {
         if let ObjectType::Cons(cons) = self.cdr().untag() {
             return Some(cons.car());
         }
         None
     }
 
-    pub(crate) fn cddr(&self) -> Option<Object> {
+    pub(crate) fn cddr(&self) -> Option<Object<'_>> {
         if let ObjectType::Cons(cons) = self.cdr().untag() {
             return Some(cons.cdr());
         }

@@ -21,7 +21,7 @@ impl SymbolMapCore {
         }
     }
 
-    fn get(&self, name: &str) -> Option<Symbol> {
+    fn get(&self, name: &str) -> Option<Symbol<'_>> {
         self.map.get(name).map(|x| unsafe { x.with_lifetime() })
     }
 
@@ -72,7 +72,7 @@ impl SymbolMap {
         LispBuffer::create(name.to_owned(), &self.block)
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<Symbol> {
+    pub(crate) fn get(&self, name: &str) -> Option<Symbol<'_>> {
         self.map.get(name)
     }
 }

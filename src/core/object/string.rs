@@ -201,7 +201,7 @@ impl Display for ByteString {
             if byte.is_ascii() {
                 write!(f, "{}", *byte as char)?;
             } else {
-                write!(f, "\\{:03o}", byte)?;
+                write!(f, "\\{byte:03o}")?;
             }
         }
         Ok(())

@@ -60,7 +60,7 @@ impl CharTable {
         Self(GcHeap::new(table, constant))
     }
 
-    pub fn get(&self, idx: usize) -> Object {
+    pub fn get(&self, idx: usize) -> Object<'_> {
         match self.0.data.borrow().get(&idx) {
             Some(x) => **x,
             None => *self.0.init,
@@ -87,9 +87,9 @@ impl fmt::Display for CharTable {
 
         let mut iter = entries.into_iter();
         if let Some((_, first)) = iter.next() {
-            write!(f, "{}", first)?;
+            write!(f, "{first}")?;
             for (_, value) in iter {
-                write!(f, " {}", value)?;
+                write!(f, " {value}")?;
             }
         }
         write!(f, "]")

@@ -36,8 +36,8 @@ impl GcHeader {
 impl fmt::Debug for GcHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.get_header() {
-            Ok(header) => write!(f, "GcHeader {{ header: {:?} }}", header),
-            Err(ptr) => write!(f, "GcHeader {{ fwd_ptr: {:?} }}", ptr),
+            Ok(header) => write!(f, "GcHeader {{ header: {header:?} }}"),
+            Err(ptr) => write!(f, "GcHeader {{ fwd_ptr: {ptr:?} }}"),
         }
     }
 }

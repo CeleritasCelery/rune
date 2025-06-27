@@ -204,7 +204,7 @@ where
     T: Deref<Target = str>,
 {
     fn eq(&self, other: &T) -> bool {
-        PartialEq::eq(self, Deref::deref(other))
+        PartialEq::eq(self, &**other)
     }
 }
 
