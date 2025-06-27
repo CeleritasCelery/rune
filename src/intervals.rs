@@ -148,10 +148,9 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
     while let Some(cons) = plist {
         println!("{cons:?}");
         let cdr = cons.cdr();
-        if let ObjectType::Cons(cdr) = cdr.untag() {
-            // let sym = cdr.car();
+        if let Some(cdr) = cdr.cons() {
             let cddr = cdr.cdr();
-            if let ObjectType::Cons(this) = cddr.untag() {
+            if let Some(this) = cddr.cons() {
                 // if the second pair(p2)'s key is `sym`, remove it and put its cons(p3)
                 // right after p1.
                 // if not, then advance p1 to p2, then continue the loop
@@ -170,8 +169,8 @@ fn remove_sym_from_props<'ob>(sym: Object<'ob>, props: Object<'ob>) -> Result<Ob
 }
 
 fn set_cdr<'ob>(this: &'ob Cons, other: Object<'ob>) -> Option<&'ob Cons> {
-    if let ObjectType::Cons(cons) = other.untag() {
-        if let ObjectType::Cons(_c) = cons.cdr().untag() {
+    if let Some(cons) = other.cons() {
+        if let Some(_c) = cons.cdr().cons() {
             this.set_cdr(cons.cdr()).ok()?;
         }
         return Some(cons);

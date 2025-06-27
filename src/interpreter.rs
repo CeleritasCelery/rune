@@ -34,7 +34,7 @@ pub(crate) fn eval<'ob>(
     root!(vars, new(Vec<Slot<&Cons>>), cx);
     if let Some(ObjectType::Cons(cons)) = lexical.map(|x| x.untag(cx)) {
         for var in cons.elements() {
-            if let ObjectType::Cons(binding) = var?.untag() {
+            if let Some(binding) = var?.cons() {
                 vars.push(binding);
             }
         }
@@ -271,7 +271,6 @@ impl Interpreter<'_, '_> {
             let docstring = rebind!(self.eval_form(doc_form, cx)?);
             // Handle the special case of oclosure docstrings being a symbol
             match docstring.untag() {
-                ObjectType::NIL => docstring,
                 ObjectType::Symbol(sym) => cx.add(sym.name()),
                 _ => docstring,
             }

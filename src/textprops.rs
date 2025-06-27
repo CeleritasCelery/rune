@@ -94,7 +94,7 @@ fn modify_buffer_data<'ob, T>(
         func(data)
     } else {
         let current_buf = env.current_buffer.buf_ref;
-        if let ObjectType::Buffer(b) = object.untag() {
+        if let Some(b) = object.buffer() {
             if b == current_buf {
                 let data = env.current_buffer.get_mut();
                 func(data)
@@ -586,7 +586,7 @@ mod tests {
         root!(env, new(Env), cx);
 
         let buf = get_buffer_create(cx.add("test_next_property_change"), None, cx)?;
-        if let ObjectType::Buffer(b) = buf.untag() {
+        if let Some(b) = buf.buffer() {
             b.lock()
                 .unwrap()
                 .get_mut()

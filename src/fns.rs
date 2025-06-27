@@ -261,7 +261,7 @@ pub(crate) fn nconc<'ob>(lists: &[List<'ob>]) -> Result<Object<'ob>> {
 }
 
 fn join<'ob>(list: &mut Vec<Object<'ob>>, seq: List<'ob>) -> Result<()> {
-    if let ListType::Cons(cons) = seq.untag() {
+    if let Some(cons) = seq.cons() {
         for elt in cons {
             list.push(elt?);
         }
@@ -340,7 +340,7 @@ pub(crate) fn assoc<'ob>(
             root!(func, cx);
             rooted_iter!(iter, alist, cx);
             while let Some(elem) = iter.next()? {
-                if let ObjectType::Cons(cons) = elem.bind(cx).untag() {
+                if let Some(cons) = elem.bind(cx).cons() {
                     let val = cons.car();
                     root!(cons, cx);
                     let result = call!(func, key, val; env, cx)?;
@@ -604,7 +604,7 @@ pub(crate) fn nthcdr(n: usize, list: List) -> Result<Object> {
     let mut tail = list.as_obj_copy();
     for _ in 0..n {
         tail = cons.cdr();
-        if let ObjectType::Cons(next) = tail.untag() {
+        if let Some(next) = tail.cons() {
             cons = next;
         } else {
             break;

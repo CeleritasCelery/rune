@@ -160,7 +160,7 @@ pub(crate) fn nlistp(object: Object) -> bool {
 
 #[defun]
 pub(crate) fn symbolp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Symbol(_))
+    object.is_symbol()
 }
 
 #[defun]
@@ -175,12 +175,12 @@ pub(crate) fn functionp(object: Object) -> bool {
 
 #[defun]
 pub(crate) fn subrp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::SubrFn(_))
+    object.is_subr_fn()
 }
 
 #[defun]
 pub(crate) fn stringp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::String(_))
+    object.is_string()
 }
 
 #[defun]
@@ -196,17 +196,17 @@ pub(crate) fn markerp(_: Object) -> bool {
 
 #[defun]
 pub(crate) fn vectorp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Vec(_))
+    object.is_vec()
 }
 
 #[defun]
 pub(crate) fn recordp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Record(_))
+    object.is_record()
 }
 
 #[defun]
 pub(crate) fn consp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Cons(_))
+    object.is_cons()
 }
 
 #[defun]
@@ -219,22 +219,22 @@ pub(crate) fn keywordp(object: Object) -> bool {
 
 #[defun]
 pub(crate) fn integerp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Int(_))
+    object.is_int()
 }
 
 #[defun]
 pub(crate) fn floatp(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::Float(_))
+    object.is_float()
 }
 
 #[defun]
 pub(crate) fn atom(object: Object) -> bool {
-    !consp(object)
+    object.is_not_cons()
 }
 
 #[defun]
 fn byte_code_function_p(object: Object) -> bool {
-    matches!(object.untag(), ObjectType::ByteFn(_))
+    object.is_byte_fn()
 }
 
 #[defun]
@@ -250,6 +250,7 @@ fn bufferp(_object: Object) -> bool {
 
 #[defun]
 pub(crate) fn multibyte_string_p(object: Object) -> bool {
+    // TODO: handle multi-line strings
     matches!(object.untag(), ObjectType::String(_))
 }
 
