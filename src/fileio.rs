@@ -1,16 +1,21 @@
 //! File I/O.
-use crate::core::{
-    cons::Cons,
-    env::{Env, sym},
-    error::{Type, TypeError},
-    gc::{Context, Rt},
-    object::{Number, Object, ObjectType, OptionalFlag},
+use crate::{
+    core::{
+        cons::Cons,
+        env::{Env, sym},
+        error::{Type, TypeError},
+        gc::{Context, Rt},
+        object::{Number, Object, ObjectType, OptionalFlag, Symbol},
+    },
+    data::symbol_value,
+    lisp::maybe_quit,
+    search::lisp_regex_to_rust,
+    sym::{FILE_NAME_HANDLER_ALIST, INHIBIT_FILE_NAME_HANDLERS, NIL},
 };
 use anyhow::{Result, bail, ensure};
+use fancy_regex::Regex;
 use rune_macros::defun;
 use std::path::{Component, MAIN_SEPARATOR, Path};
-
-defvar!(FILE_NAME_HANDLER_ALIST);
 
 #[defun]
 pub(crate) fn expand_file_name(
@@ -131,9 +136,59 @@ fn directory_name_p(name: &str) -> bool {
     name.ends_with(MAIN_SEPARATOR)
 }
 
+defvar!(FILE_NAME_HANDLER_ALIST);
+defvar!(INHIBIT_FILE_NAME_HANDLERS);
+defsym!(INHIBIT_FILE_NAME_OPERATION);
+
+/// Return FILENAME's handler function for OPERATION, if it has one.
+/// Otherwise, return nil.
+/// A file name is handled if one of the regular expressions in
+/// `file-name-handler-alist' matches it.
+///
+/// If OPERATION equals `inhibit-file-name-operation', then ignore
+/// any handlers that are members of `inhibit-file-name-handlers',
+/// but still do run any other handlers.  This lets handlers
+/// use the standard functions without calling themselves recursively.
 #[defun]
-fn find_file_name_handler(_filename: &str, _operation: Object) {
-    // TODO: implement file-name-handler-alist
+fn find_file_name_handler<'ob>(
+    filename: &str,
+    operation: Symbol,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Symbol<'ob> {
+    find_file_name_handler_internal(filename, operation, env, cx).unwrap_or(NIL)
+}
+
+fn find_file_name_handler_internal<'ob>(
+    filename: &str,
+    operation: Symbol,
+    env: &mut Rt<Env>,
+    cx: &'ob Context,
+) -> Option<Symbol<'ob>> {
+    let file_name_handler_alist = symbol_value(FILE_NAME_HANDLER_ALIST, env, cx)?.as_list().ok()?;
+    let inhibit_file_name_handlers =
+        symbol_value(INHIBIT_FILE_NAME_HANDLERS, env, cx).and_then(|sym| sym.as_list().ok());
+
+    file_name_handler_alist
+        .filter_map(|elem| {
+            let cons = elem.ok()?.cons()?;
+            let regexp = cons.car().string()?;
+            let re = Regex::new(&lisp_regex_to_rust(regexp))
+                .unwrap_or_else(|err| panic!("Invalid regexp '{}': {}", regexp, err));
+            if re.is_match(filename).ok()? {
+                let handler = cons.cdr().symbol()?;
+                if operation != sym::INHIBIT_FILE_NAME_OPERATION
+                    || !inhibit_file_name_handlers
+                        .clone()
+                        .is_some_and(|mut ifnh| ifnh.any(|h| h.is_ok_and(|h| h == handler)))
+                {
+                    return Some(handler);
+                }
+            }
+            maybe_quit();
+            None
+        })
+        .next()
 }
 
 #[defun]
@@ -248,3 +303,86 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 // TODO: file-name-sans-versions
 // TODO: find-file-name-handler: https://www.gnu.org/software/emacs/manual/html_node/elisp/Magic-File-Names.html
 //   required by file-name-extension  & file-name-sans-extension library & file-relative-name functions (among others)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
+    use rune_core::macros::{list, root};
+
+    #[test]
+    fn test_find_file_name_handler_matching() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, new(Env), cx);
+
+        let handler = Symbol::new_uninterned("matching-handler", cx);
+        let not_matching_handler = Symbol::new_uninterned("not-matching-handler", cx);
+        let file_name_handler_alist = list![
+            Cons::new(r"test\.txt", handler, cx),
+            Cons::new("NEVER-MATCH", not_matching_handler, cx);
+            cx
+        ];
+        set(FILE_NAME_HANDLER_ALIST, file_name_handler_alist, env).unwrap();
+
+        let test_txt_handler = find_file_name_handler("test.txt", NIL, env, cx);
+        assert_eq!(test_txt_handler, handler);
+        let not_matching_handler = find_file_name_handler("not-matching.el", NIL, env, cx);
+        assert_eq!(not_matching_handler, NIL);
+    }
+
+    #[test]
+    fn test_find_file_name_handler_inhibit_handlers() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, new(Env), cx);
+
+        let handler = Symbol::new_uninterned("matching-handler", cx);
+        let inhibit_handler = Symbol::new_uninterned("inhibit-handler", cx);
+        let file_name_handler_alist = list![
+            Cons::new(r"test\.txt", inhibit_handler, cx),
+            Cons::new(r"test\.txt", handler, cx);
+            cx
+        ];
+        set(FILE_NAME_HANDLER_ALIST, file_name_handler_alist, env).unwrap();
+        set(INHIBIT_FILE_NAME_HANDLERS, list![inhibit_handler; cx], env).unwrap();
+
+        let result = find_file_name_handler("test.txt", NIL, env, cx);
+        assert_eq!(result, inhibit_handler);
+
+        let result = find_file_name_handler("test.txt", sym::INHIBIT_FILE_NAME_OPERATION, env, cx);
+        assert_eq!(result, handler);
+    }
+
+    #[test]
+    fn test_find_file_name_handler_no_panic() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let handler = Symbol::new_uninterned("handler", cx);
+        root!(env, new(Env), cx);
+
+        set(FILE_NAME_HANDLER_ALIST, list![Cons::new(NIL, handler, cx); cx], env).unwrap();
+        find_file_name_handler("example", NIL, env, cx);
+
+        set(FILE_NAME_HANDLER_ALIST, list![Cons::new(".*", NIL , cx); cx], env).unwrap();
+        find_file_name_handler("example", NIL, env, cx);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid regexp '\\\\(incorrect-regexp': Parsing error at position 17: Opening parenthesis without closing parenthesis"
+    )]
+    fn test_find_file_name_handler_panic_on_invalid_regex() {
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        let handler = Symbol::new_uninterned("handler", cx);
+        root!(env, new(Env), cx);
+
+        set(
+            FILE_NAME_HANDLER_ALIST,
+            list![Cons::new(r#"\(incorrect-regexp"#, handler, cx); cx],
+            env,
+        )
+        .unwrap();
+        find_file_name_handler("example", NIL, env, cx);
+    }
+}
