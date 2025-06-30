@@ -305,6 +305,8 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 //   required by file-name-extension  & file-name-sans-extension library & file-relative-name functions (among others)
 #[cfg(test)]
 mod tests {
+    use std::{thread::sleep, time};
+
     use super::*;
     use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
     use rune_core::macros::{list, root};
@@ -384,5 +386,39 @@ mod tests {
         )
         .unwrap();
         find_file_name_handler("example", NIL, env, cx);
+    }
+
+    #[test]
+    fn test_expand_file_name() {
+        // Start emacs --fg-daemon=rune-test
+        let socket_name = "rune-test";
+        let fg_daemon_arg = format!("--fg-daemon={socket_name}");
+        let mut daemon = std::process::Command::new("emacs")
+            .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
+            .spawn()
+            .expect("Failed to run emacs");
+
+        // TODO: Wait for emacs startup properly by expecting certain output with 1-2 seconds timeout
+        sleep(time::Duration::from_secs(2));
+
+        // Start emacsclient --socket-name=rune-test --eval ...
+        let client = std::process::Command::new("emacsclient")
+            .args(["--socket-name", &socket_name])
+            .args(["--eval", "(+ 40 2)"])
+            .output()
+            .expect("Failed to run emacsclient");
+        if client.status.code().unwrap() != 0 {
+            let client_output = String::from_utf8_lossy(&client.stderr);
+            eprintln!("{}", &client_output);
+            let client_output = String::from_utf8_lossy(&client.stdout);
+            eprintln!("{}", &client_output);
+        }
+        let output = String::from_utf8_lossy(&client.stdout);
+        let output = output.strip_suffix("\n").unwrap();
+
+        daemon.kill().unwrap();
+
+        // Compare the output with rune's implementation
+        assert_eq!(output, "42");
     }
 }
