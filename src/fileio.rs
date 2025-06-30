@@ -174,7 +174,7 @@ fn find_file_name_handler_internal<'ob>(
             let cons = elem.ok()?.cons()?;
             let regexp = cons.car().string()?;
             let re = Regex::new(&lisp_regex_to_rust(regexp))
-                .unwrap_or_else(|err| panic!("Invalid regexp '{}': {}", regexp, err));
+                .unwrap_or_else(|err| panic!("Invalid regexp '{regexp}': {err}"));
             if re.is_match(filename).ok()? {
                 let handler = cons.cdr().symbol()?;
                 if operation != sym::INHIBIT_FILE_NAME_OPERATION
@@ -306,7 +306,12 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
+    use crate::{
+        assert_elprop,
+        core::{env::sym, gc::RootSet},
+        data::set,
+        sym::INHIBIT_FILE_NAME_HANDLERS,
+    };
     use rune_core::macros::{list, root};
 
     #[test]
@@ -384,5 +389,11 @@ mod tests {
         )
         .unwrap();
         find_file_name_handler("example", NIL, env, cx);
+    }
+
+    #[test]
+    #[ignore = "TODO: Handle ~ in expand-file-name"]
+    fn test_expand_file_name() {
+        assert_elprop![r#"(expand-file-name "~/test.txt" "/")"#];
     }
 }
