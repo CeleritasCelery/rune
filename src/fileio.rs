@@ -305,7 +305,7 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 //   required by file-name-extension  & file-name-sans-extension library & file-relative-name functions (among others)
 #[cfg(test)]
 mod tests {
-    use std::{thread::sleep, time};
+    use std::{process::Stdio, thread::sleep, time};
 
     use super::*;
     use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
@@ -395,25 +395,33 @@ mod tests {
         let fg_daemon_arg = format!("--fg-daemon={socket_name}");
         let mut daemon = std::process::Command::new("emacs")
             .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to run emacs");
-
-        // TODO: Wait for emacs startup properly by expecting certain output with 1-2 seconds timeout
-        sleep(time::Duration::from_secs(2));
+        let mut emacs_started = false;
+        while !emacs_started {
+            sleep(time::Duration::from_millis(50));
+            emacs_started = std::process::Command::new("emacsclient")
+                .args(["--socket-name", &socket_name])
+                .args(["--eval", "(version)"])
+                .output()
+                .is_ok_and(|output| output.status.code().is_some_and(|c| c == 0));
+        }
 
         // Start emacsclient --socket-name=rune-test --eval ...
-        let client = std::process::Command::new("emacsclient")
+        let elprop_eval = std::process::Command::new("emacsclient")
             .args(["--socket-name", &socket_name])
             .args(["--eval", "(+ 40 2)"])
             .output()
             .expect("Failed to run emacsclient");
-        if client.status.code().unwrap() != 0 {
-            let client_output = String::from_utf8_lossy(&client.stderr);
+        if dbg!(elprop_eval.status.code().unwrap()) != 0 {
+            let client_output = String::from_utf8_lossy(&elprop_eval.stderr);
             eprintln!("{}", &client_output);
-            let client_output = String::from_utf8_lossy(&client.stdout);
+            let client_output = String::from_utf8_lossy(&elprop_eval.stdout);
             eprintln!("{}", &client_output);
         }
-        let output = String::from_utf8_lossy(&client.stdout);
+        let output = String::from_utf8_lossy(&elprop_eval.stdout);
         let output = output.strip_suffix("\n").unwrap();
 
         daemon.kill().unwrap();
