@@ -305,7 +305,11 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 //   required by file-name-extension  & file-name-sans-extension library & file-relative-name functions (among others)
 #[cfg(test)]
 mod tests {
-    use std::{process::Stdio, thread::sleep, time};
+    use std::{
+        process::{Child, Stdio},
+        thread::sleep,
+        time,
+    };
 
     use super::*;
     use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
@@ -388,45 +392,87 @@ mod tests {
         find_file_name_handler("example", NIL, env, cx);
     }
 
+    struct InferiorEmacs {
+        pub socket_name: String,
+        emacs_started: bool,
+        daemon: Option<Child>,
+    }
+
+    impl Default for InferiorEmacs {
+        fn default() -> Self {
+            Self { socket_name: String::from("rune-test"), emacs_started: false, daemon: None }
+        }
+    }
+
+    impl InferiorEmacs {
+        fn new() -> Self {
+            InferiorEmacs { socket_name: String::from("rune-test"), ..InferiorEmacs::default() }
+        }
+
+        fn start_daemon(&mut self) -> Result<()> {
+            if self.emacs_started {
+                return Ok(());
+            }
+
+            let fg_daemon_arg = format!("--fg-daemon={}", &self.socket_name);
+            self.daemon = Some(
+                std::process::Command::new("emacs")
+                    .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()?,
+            );
+
+            let mut max_retries = 20;
+            while !self.emacs_started {
+                max_retries -= 1;
+                if max_retries == 0 {
+                    bail!("Cannot start Emacs daemon");
+                }
+
+                sleep(time::Duration::from_millis(50));
+                self.emacs_started = std::process::Command::new("emacsclient")
+                    .args(["--socket-name", &self.socket_name])
+                    .args(["--eval", "(version)"])
+                    .output()
+                    .is_ok_and(|output| output.status.code().is_some_and(|c| c == 0));
+            }
+
+            Ok(())
+        }
+
+        fn eval(&mut self, lisp: &str) -> Result<String> {
+            if !self.emacs_started {
+                bail!("Emacs daemon wasn't started");
+            }
+            let emacs_client = std::process::Command::new("emacsclient")
+                .args(["--socket-name", &self.socket_name])
+                .args(["--eval", lisp])
+                .output()
+                .expect("Failed to run emacsclient");
+            if emacs_client.status.code().unwrap() != 0 {
+                let client_output = String::from_utf8_lossy(&emacs_client.stderr);
+                eprintln!("{}", &client_output);
+                let client_output = String::from_utf8_lossy(&emacs_client.stdout);
+                eprintln!("{}", &client_output);
+            }
+            let output = String::from_utf8_lossy(&emacs_client.stdout);
+            Ok(output.trim_end_matches("\n").to_string())
+        }
+    }
+
     #[test]
     fn test_expand_file_name() {
-        // Start emacs --fg-daemon=rune-test
-        let socket_name = "rune-test";
-        let fg_daemon_arg = format!("--fg-daemon={socket_name}");
-        let mut daemon = std::process::Command::new("emacs")
-            .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("Failed to run emacs");
-        let mut emacs_started = false;
-        while !emacs_started {
-            sleep(time::Duration::from_millis(50));
-            emacs_started = std::process::Command::new("emacsclient")
-                .args(["--socket-name", &socket_name])
-                .args(["--eval", "(version)"])
-                .output()
-                .is_ok_and(|output| output.status.code().is_some_and(|c| c == 0));
-        }
+        let roots = &RootSet::default();
+        let cx = &mut Context::new(roots);
+        root!(env, new(Env), cx);
 
-        // Start emacsclient --socket-name=rune-test --eval ...
-        let elprop_eval = std::process::Command::new("emacsclient")
-            .args(["--socket-name", &socket_name])
-            .args(["--eval", "(+ 40 2)"])
-            .output()
-            .expect("Failed to run emacsclient");
-        if dbg!(elprop_eval.status.code().unwrap()) != 0 {
-            let client_output = String::from_utf8_lossy(&elprop_eval.stderr);
-            eprintln!("{}", &client_output);
-            let client_output = String::from_utf8_lossy(&elprop_eval.stdout);
-            eprintln!("{}", &client_output);
-        }
-        let output = String::from_utf8_lossy(&elprop_eval.stdout);
-        let output = output.strip_suffix("\n").unwrap();
-
-        daemon.kill().unwrap();
-
-        // Compare the output with rune's implementation
-        assert_eq!(output, "42");
+        let mut inf_emacs = InferiorEmacs::new();
+        inf_emacs.start_daemon().unwrap();
+        // let emacs_result = inf_emacs.eval("(+ 40 2)").unwrap();
+        // assert_eq!(emacs_result, "42");
+        let emacs_result = inf_emacs.eval("(expand-file-name \"~/test.txt\") \"/tmp\"").unwrap();
+        let rune_result = expand_file_name("~/test.txt", Some("/tmp"), env, cx).unwrap();
+        assert_eq!(rune_result, emacs_result);
     }
 }
