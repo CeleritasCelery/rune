@@ -312,7 +312,12 @@ mod tests {
     };
 
     use super::*;
-    use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
+    use crate::{
+        core::{env::sym, gc::RootSet},
+        data::set,
+        interpreter::eval,
+        sym::INHIBIT_FILE_NAME_HANDLERS,
+    };
     use rune_core::macros::{list, root};
 
     #[test]
@@ -461,18 +466,36 @@ mod tests {
         }
     }
 
+    macro_rules! assert_elprop {
+        ($form:expr) => {{
+            let mut inf_emacs = InferiorEmacs::new();
+            inf_emacs.start_daemon().unwrap();
+            let emacs_result = inf_emacs.eval($form).unwrap();
+
+            let roots = &crate::core::gc::RootSet::default();
+            let cx = &mut Context::new(roots);
+            sym::init_symbols();
+            root!(env, new(Env), cx);
+            let rune_result = {
+                let obj = crate::reader::read($form, cx).unwrap().0;
+                root!(obj, cx);
+                match eval(obj, None, env, cx) {
+                    Ok(val) => format!("{val}"),
+                    Err(e) => format!("Error: {e}"),
+                }
+            };
+            if !(rune_result == emacs_result) {
+                panic!(
+                    r#"assertion `Rune vs Emacs` failed:
+  Rune: {rune_result}
+ Emacs: {emacs_result}"#
+                )
+            }
+        };};
+    }
+
     #[test]
     fn test_expand_file_name() {
-        let roots = &RootSet::default();
-        let cx = &mut Context::new(roots);
-        root!(env, new(Env), cx);
-
-        let mut inf_emacs = InferiorEmacs::new();
-        inf_emacs.start_daemon().unwrap();
-        // let emacs_result = inf_emacs.eval("(+ 40 2)").unwrap();
-        // assert_eq!(emacs_result, "42");
-        let emacs_result = inf_emacs.eval("(expand-file-name \"~/test.txt\") \"/tmp\"").unwrap();
-        let rune_result = expand_file_name("~/test.txt", Some("/tmp"), env, cx).unwrap();
-        assert_eq!(rune_result, emacs_result);
+        assert_elprop![r#"(expand-file-name "~/test.txt" "/")"#];
     }
 }
