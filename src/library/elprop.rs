@@ -76,17 +76,18 @@ impl InferiorEmacs {
 
 #[macro_export]
 macro_rules! assert_elprop {
-    ($form:expr) => {{
+    ($($form:tt)*) => {{
+        let lisp_form = format!($($form)*);
         let mut inf_emacs = crate::library::elprop::InferiorEmacs::new();
         inf_emacs.start_daemon().unwrap();
-        let emacs_result = inf_emacs.eval($form).unwrap();
+        let emacs_result = inf_emacs.eval(&lisp_form).unwrap();
 
         let roots = &crate::core::gc::RootSet::default();
         let cx = &mut crate::core::gc::Context::new(roots);
         crate::core::env::sym::init_symbols();
         rune_core::macros::root!(env, new(Env), cx);
         let rune_result = {
-            let obj = crate::reader::read($form, cx).unwrap().0;
+            let obj = crate::reader::read(&lisp_form, cx).unwrap().0;
             rune_core::macros::root!(obj, cx);
             match crate::interpreter::eval(obj, None, env, cx) {
                 Ok(val) => format!("{val}"),
