@@ -63,8 +63,8 @@ num-integer = "0.1.46"
 libm = "0.2.11"
 interval-tree = { workspace = true }
 
-# [dev-dependencies]
-# backtrace-on-stack-overflow = "0.3.0"
+[dev-dependencies]
+proptest = "1.7.0"
 
 [build-dependencies]
 syn = { workspace = true }
