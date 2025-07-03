@@ -82,12 +82,12 @@ macro_rules! assert_elprop {
         let emacs_result = inf_emacs.eval($form).unwrap();
 
         let roots = &crate::core::gc::RootSet::default();
-        let cx = &mut Context::new(roots);
-        sym::init_symbols();
-        root!(env, new(Env), cx);
+        let cx = &mut crate::core::gc::Context::new(roots);
+        crate::core::env::sym::init_symbols();
+        rune_core::macros::root!(env, new(Env), cx);
         let rune_result = {
             let obj = crate::reader::read($form, cx).unwrap().0;
-            root!(obj, cx);
+            rune_core::macros::root!(obj, cx);
             match crate::interpreter::eval(obj, None, env, cx) {
                 Ok(val) => format!("{val}"),
                 Err(e) => format!("Error: {e}"),
