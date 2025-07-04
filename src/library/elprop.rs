@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::{
     cell::RefCell,
+    env,
     process::{Child, Stdio},
     thread, time,
 };
@@ -113,15 +114,27 @@ fn unquote_argument(quoted_lisp: &str) -> String {
     result
 }
 
+#[cfg(target_os = "linux")]
+fn socket_dir() -> String {
+    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap();
+    format!("{xdg_runtime_dir}/emacs")
+}
+
+#[cfg(target_os = "macos")]
+fn socket_dir() -> String {
+    let uid = users::get_current_uid();
+    let tmpdir = env::var("TMPDIR").or::<String>(Ok("/tmp".to_string())).unwrap();
+    format!("{}/emacs{}", tmpdir, uid)
+}
+
 pub fn eval(lisp: &str) -> Result<String> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
         if !inf_emacs.emacs_started {
             bail!("Emacs daemon wasn't started");
         }
 
-        let uid = users::get_current_uid();
-        let socket_path = format!("/run/user/{}/emacs/{}", uid, inf_emacs.socket_name);
-        let mut stream = UnixStream::connect(&socket_path).unwrap();
+        let socket_path = format!("{}/{}", socket_dir(), inf_emacs.socket_name);
+        let mut stream = UnixStream::connect(&dbg!(socket_path)).unwrap();
 
         let mut request_payload = Vec::new();
         let lisp = quote_argumet(lisp);
