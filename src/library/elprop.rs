@@ -7,7 +7,6 @@ use std::{
     process::{Child, Stdio},
     thread, time,
 };
-use users;
 
 mod strategies;
 pub(crate) use strategies::*;
@@ -99,7 +98,9 @@ fn unquote_argument(quoted_lisp: &str) -> String {
     let mut iter = quoted_lisp.chars();
     while let Some(c) = iter.next() {
         if c == '&' {
-            let c = iter.next().expect(&format!("Malformed message from Emacs: {}", &quoted_lisp));
+            let c = iter
+                .next()
+                .unwrap_or_else(|| panic!("Malformed message from Emacs: {}", &quoted_lisp));
             result.push(match c {
                 '_' => ' ',
                 'n' => '\n',
@@ -179,17 +180,17 @@ impl Message {
 macro_rules! assert_elprop {
     ($($form:tt)*) => {{
         let lisp_form = format!($($form)*);
-        crate::library::elprop::start_emacs().unwrap();
-        let emacs_result = crate::library::elprop::eval(&lisp_form).unwrap();
+        $crate::library::elprop::start_emacs().unwrap();
+        let emacs_result = $crate::library::elprop::eval(&lisp_form).unwrap();
 
-        let roots = &crate::core::gc::RootSet::default();
-        let cx = &mut crate::core::gc::Context::new(roots);
-        crate::core::env::sym::init_symbols();
-        rune_core::macros::root!(env, init(crate::core::env::Env::default()), cx);
+        let roots = &$crate::core::gc::RootSet::default();
+        let cx = &mut $crate::core::gc::Context::new(roots);
+        $crate::core::env::sym::init_symbols();
+        rune_core::macros::root!(env, init($crate::core::env::Env::default()), cx);
         let rune_result = {
-            let obj = crate::reader::read(&lisp_form, cx).unwrap().0;
+            let obj = $crate::reader::read(&lisp_form, cx).unwrap().0;
             rune_core::macros::root!(obj, cx);
-            match crate::interpreter::eval(obj, None, env, cx) {
+            match $crate::interpreter::eval(obj, None, env, cx) {
                 Ok(val) => format!("{val}"),
                 Err(e) => format!("Error: {e}"),
             }
@@ -210,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let _ = start_emacs().unwrap();
+        start_emacs().unwrap();
         let result = eval("(+ 40 2)").unwrap();
         assert_eq!("42", result);
         assert_elprop!["(make-vector 250 ?a)"];

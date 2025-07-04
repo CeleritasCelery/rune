@@ -3,7 +3,7 @@ use num_bigint::{BigInt, Sign};
 use prop::collection::VecStrategy;
 use proptest::prelude::*;
 
-const SYMBOL_CHARS: &'static str = "[a-zA-Z][a-zA-Z0-9-]*";
+const SYMBOL_CHARS: &str = "[a-zA-Z][a-zA-Z0-9-]*";
 const MAX_FIXNUM: i64 = i64::MAX >> 8;
 const MIN_FIXNUM: i64 = i64::MIN >> 8;
 
@@ -153,7 +153,7 @@ pub(crate) enum ArbitraryType {
 }
 
 pub(crate) fn arb_custom_string(string: &str) -> BoxedStrategy<ArbitraryType> {
-    proptest::string::string_regex(&string)
+    proptest::string::string_regex(string)
         .expect("Invalid proptest regex")
         .prop_map(ArbitraryType::String)
         .boxed()
