@@ -104,6 +104,7 @@ mod test {
     use crate::{
         assert_elprop,
         core::{env::intern, gc::RootSet, object::ObjectType},
+        library::elprop::arb_byte,
     };
 
     use super::*;
@@ -130,8 +131,8 @@ mod test {
 
     #[test]
     fn test_make_vector() {
-        proptest!(|(size in 0..10)| {
-            assert_elprop!["(make-vector {} 42)", size];
+        proptest!(|(size in arb_byte())| {
+            assert_elprop!["(make-vector {} ?A)", size];
         })
     }
 }
