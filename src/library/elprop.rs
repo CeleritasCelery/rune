@@ -1,9 +1,13 @@
 use anyhow::{Result, bail};
+use fancy_regex::Regex;
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
 use std::{
     cell::RefCell,
     process::{Child, Stdio},
     thread, time,
 };
+use users;
 
 mod strategies;
 pub(crate) use strategies::*;
@@ -64,22 +68,111 @@ pub fn start_emacs() -> Result<()> {
     })
 }
 
+// In STR, insert a & before each &, each space, each newline, and any
+// initial -.  Change spaces to underscores, too, so that the return
+// value never contains a space.
+//
+// Does not change the string.  Outputs the result to S.
+fn quote_argumet(lisp: &str) -> String {
+    lisp.char_indices().fold(String::new(), |mut result, (i, c)| {
+        let mut qc = String::new();
+        if i == 0 && c == '-' {
+            qc.push_str("&-");
+        } else if c == ' ' {
+            qc.push_str("&_");
+        } else if c == '\n' {
+            qc.push_str("&n");
+        } else if c == '&' {
+            qc.push_str("&&");
+        } else {
+            qc.push(c);
+        }
+        result.push_str(&qc);
+        result
+    })
+}
+
+// The inverse of quote_argument.  Remove quoting in string STR by
+// modifying the addressed string in place.  Return STR.
+fn unquote_argument(quoted_lisp: &str) -> String {
+    let mut result = String::new();
+    let mut iter = quoted_lisp.chars();
+    while let Some(c) = iter.next() {
+        if c == '&' {
+            let c = iter.next().expect(&format!("Malformed message from Emacs: {}", &quoted_lisp));
+            result.push(match c {
+                '_' => ' ',
+                'n' => '\n',
+                _ => c,
+            })
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 pub fn eval(lisp: &str) -> Result<String> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
         if !inf_emacs.emacs_started {
             bail!("Emacs daemon wasn't started");
         }
-        let emacs_client = std::process::Command::new("emacsclient")
-            .args(["--socket-name", &inf_emacs.socket_name])
-            .args(["--eval", lisp])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect("Failed to run emacsclient");
-        let output = String::from_utf8_lossy(&emacs_client.stdout);
-        // I think emacsclient wraps the output by 80 columns, so we have to undo this
-        Ok(output.replace("\n   ", "").trim_end_matches("\n").to_string())
+
+        let uid = users::get_current_uid();
+        let socket_path = format!("/run/user/{}/emacs/{}", uid, inf_emacs.socket_name);
+        let mut stream = UnixStream::connect(&socket_path).unwrap();
+
+        let mut request_payload = Vec::new();
+        let lisp = quote_argumet(lisp);
+        request_payload.extend_from_slice(format!("-eval {}\n", lisp).as_bytes());
+        stream.write_all(&request_payload)?;
+        stream.flush()?;
+
+        let mut buf = Vec::<u8>::new();
+        let _ = stream.read_to_end(&mut buf)?;
+        let response = &String::from_utf8_lossy(&buf);
+
+        let messages = response
+            .split('\n')
+            .filter(|s| !s.is_empty())
+            .map(|s| Message::from(&unquote_argument(s)))
+            .filter(|m| m.kind == MessageKind::Print);
+        let full_response = messages.map(|m| m.body).collect::<String>();
+        Ok(full_response)
     })
+}
+
+#[derive(Debug, PartialEq)]
+enum MessageKind {
+    EmacsPid,
+    Print,
+}
+
+#[derive(Debug)]
+struct Message {
+    kind: MessageKind,
+    body: String,
+}
+
+impl Message {
+    pub fn from(s: &str) -> Self {
+        let kind_re = Regex::new("^-([^ ]+) ").unwrap();
+        let raw_kind = kind_re.captures(s).unwrap().unwrap().get(1).unwrap().as_str();
+        let kind = match raw_kind {
+            "emacs-pid" => MessageKind::EmacsPid,
+            "print" | "print-nonl" => MessageKind::Print,
+            _ => panic!("Unknown message kind: {}", raw_kind),
+        };
+        let body = kind_re
+            .split(s)
+            .last()
+            .unwrap()
+            .unwrap()
+            .replace("\n   ", "")
+            .trim_end_matches("\n")
+            .to_string();
+        Message { kind, body }
+    }
 }
 
 #[macro_export]
@@ -109,4 +202,17 @@ macro_rules! assert_elprop {
             )
         }
     };};
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_eval() {
+        let _ = start_emacs().unwrap();
+        let result = eval("(+ 40 2)").unwrap();
+        assert_eq!("42", result);
+        assert_elprop!["(make-vector 250 ?a)"];
+    }
 }
