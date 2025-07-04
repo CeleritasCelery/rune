@@ -174,7 +174,7 @@ fn find_file_name_handler_internal<'ob>(
             let cons = elem.ok()?.cons()?;
             let regexp = cons.car().string()?;
             let re = Regex::new(&lisp_regex_to_rust(regexp))
-                .unwrap_or_else(|err| panic!("Invalid regexp '{}': {}", regexp, err));
+                .unwrap_or_else(|err| panic!("Invalid regexp '{regexp}': {err}"));
             if re.is_match(filename).ok()? {
                 let handler = cons.cdr().symbol()?;
                 if operation != sym::INHIBIT_FILE_NAME_OPERATION
