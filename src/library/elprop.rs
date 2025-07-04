@@ -125,7 +125,7 @@ pub fn eval(lisp: &str) -> Result<String> {
 
         let mut request_payload = Vec::new();
         let lisp = quote_argumet(lisp);
-        request_payload.extend_from_slice(format!("-eval {}\n", lisp).as_bytes());
+        request_payload.extend_from_slice(format!("-eval {lisp}\n").as_bytes());
         stream.write_all(&request_payload)?;
         stream.flush()?;
 
@@ -162,7 +162,7 @@ impl Message {
         let kind = match raw_kind {
             "emacs-pid" => MessageKind::EmacsPid,
             "print" | "print-nonl" => MessageKind::Print,
-            _ => panic!("Unknown message kind: {}", raw_kind),
+            _ => panic!("Unknown message kind: {raw_kind}"),
         };
         let body = kind_re
             .split(s)
