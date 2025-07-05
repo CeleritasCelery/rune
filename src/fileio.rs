@@ -306,7 +306,12 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{core::gc::RootSet, data::set, sym::INHIBIT_FILE_NAME_HANDLERS};
+    use crate::{
+        assert_elprop,
+        core::{env::sym, gc::RootSet},
+        data::set,
+        sym::INHIBIT_FILE_NAME_HANDLERS,
+    };
     use rune_core::macros::{list, root};
 
     #[test]
@@ -384,5 +389,11 @@ mod tests {
         )
         .unwrap();
         find_file_name_handler("example", NIL, env, cx);
+    }
+
+    #[test]
+    #[ignore = "TODO: Handle ~ in expand-file-name"]
+    fn test_expand_file_name() {
+        assert_elprop![r#"(expand-file-name "~/test.txt" "/")"#];
     }
 }
