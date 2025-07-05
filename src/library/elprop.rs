@@ -127,15 +127,45 @@ fn socket_dir() -> String {
     format!("{}/emacs{}", tmpdir, uid)
 }
 
+#[cfg(target_os = "windows")]
+fn socket_dir() -> String {
+    let appdata = env::var("APPDATA").unwrap();
+    format!("{appdata}\\emacs\\server")
+}
+
+#[cfg(target_family = "unix")]
+fn build_stream(socket_name: &str) -> UnixStream {
+    let socket_path = format!("{}/{}", socket_dir(), socket_name);
+    UnixStream::connect(&socket_path).unwrap()
+}
+
+#[cfg(target_os = "windows")]
+fn build_stream(socket_name: &str) -> TcpStream {
+    let server_file_path = format!("{}/{}", socket_dir(), socket_name);
+
+    // The server file might not be immediately available after start.
+    // We'll retry a few times to read it.
+    let server_info = (0..20)
+        .find_map(|_| {
+            thread::sleep(time::Duration::from_millis(50));
+            std::fs::read_to_string(&server_file_path).ok()
+        })
+        .ok_or_else(|| panic!("Could not read emacs server file: {}", server_file_path))?;
+
+    let addr = server_info
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| panic!("Malformed emacs server file content: {}", server_info))?;
+    std::net::TcpStream::connect(addr).unwrap()
+}
+
 pub fn eval(lisp: &str) -> Result<String> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
         if !inf_emacs.emacs_started {
             bail!("Emacs daemon wasn't started");
         }
 
-        let socket_path = format!("{}/{}", socket_dir(), inf_emacs.socket_name);
-        let mut stream = UnixStream::connect(&dbg!(socket_path)).unwrap();
-
+        let mut stream = build_stream(&inf_emacs.socket_name);
         let mut request_payload = Vec::new();
         let lisp = quote_argumet(lisp);
         request_payload.extend_from_slice(format!("-eval {lisp}\n").as_bytes());
