@@ -54,7 +54,19 @@ pub fn start_emacs() -> Result<()> {
         while !inf_emacs.emacs_started {
             max_retries -= 1;
             if max_retries == 0 {
-                bail!("Cannot start Emacs daemon");
+                let mut emacs_output = String::new();
+                let mut buf = String::new();
+                if let Some(daemon) = inf_emacs.daemon.take() {
+                    if let Some(mut stderr) = daemon.stderr {
+                        let _ = stderr.read_to_string(&mut buf);
+                    }
+                    emacs_output.push_str(&buf);
+                    if let Some(mut stdout) = daemon.stdout {
+                        let _ = stdout.read_to_string(&mut buf);
+                    }
+                    emacs_output.push_str(&buf);
+                    bail!("Cannot start Emacs daemon. Emacs output:\n{emacs_output}");
+                }
             }
 
             thread::sleep(time::Duration::from_millis(50));
