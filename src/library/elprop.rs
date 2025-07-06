@@ -1,6 +1,9 @@
 use anyhow::{Result, bail};
 use fancy_regex::Regex;
 use std::io::{Read, Write};
+#[cfg(target_os = "windows")]
+use std::net::TcpStream;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::{
     cell::RefCell,
@@ -150,12 +153,12 @@ fn build_stream(socket_name: &str) -> TcpStream {
             thread::sleep(time::Duration::from_millis(50));
             std::fs::read_to_string(&server_file_path).ok()
         })
-        .ok_or_else(|| panic!("Could not read emacs server file: {}", server_file_path))?;
+        .unwrap_or_else(|| panic!("Could not read emacs server file: {server_file_path}"));
 
     let addr = server_info
         .split_whitespace()
         .next()
-        .ok_or_else(|| panic!("Malformed emacs server file content: {}", server_info))?;
+        .unwrap_or_else(|| panic!("Malformed emacs server file content: {server_info}"));
     std::net::TcpStream::connect(addr).unwrap()
 }
 
