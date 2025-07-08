@@ -5,6 +5,8 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::{
     cell::RefCell,
     env,
@@ -14,6 +16,9 @@ use std::{
 
 mod strategies;
 pub(crate) use strategies::*;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 thread_local! {
     static INFERIOR_EMACS: RefCell<InferiorEmacs> = RefCell::new(InferiorEmacs::default());
@@ -35,6 +40,46 @@ impl Default for InferiorEmacs {
     }
 }
 
+#[cfg(target_os = "windows")]
+impl Drop for InferiorEmacs {
+    fn drop(&mut self) {
+        self.maybe_stop_daemon();
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl InferiorEmacs {
+    pub fn maybe_stop_daemon(&mut self) -> Option<Child> {
+        if let Some(daemon) = self.daemon.take() {
+            if (self.emacs_started) {
+                std::process::Command::new("taskkill")
+                    .args(["/F", "/T", "/PID", &daemon.id().to_string()])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .status()
+                    .expect("Cannot run taskkill to kill Emacs daemon");
+                self.emacs_started = false;
+            }
+            return Some(daemon);
+        }
+        None
+    }
+}
+
+#[cfg(unix)]
+impl InferiorEmacs {
+    pub fn maybe_stop_daemon(&mut self) {
+        if let Some(daemon) = self.daemon.take() {
+            if (self.emacs_started) {
+                daemon.kill().expect("Emacs couldn't be killed");
+            }
+            return Some(daemon);
+        }
+        None
+    }
+}
+
 pub fn start_emacs() -> Result<()> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
         if inf_emacs.emacs_started {
@@ -47,36 +92,51 @@ pub fn start_emacs() -> Result<()> {
                 .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .spawn()?,
+                .spawn()
+                .unwrap(),
         );
 
-        let mut max_retries = 20;
+        let mut max_retries = 3;
         while !inf_emacs.emacs_started {
-            max_retries -= 1;
-            if max_retries == 0 {
-                let mut emacs_output = String::new();
-                let mut buf = String::new();
-                if let Some(daemon) = inf_emacs.daemon.take() {
-                    if let Some(mut stderr) = daemon.stderr {
-                        let _ = stderr.read_to_string(&mut buf);
-                    }
-                    emacs_output.push_str(&buf);
-                    if let Some(mut stdout) = daemon.stdout {
-                        let _ = stdout.read_to_string(&mut buf);
-                    }
-                    emacs_output.push_str(&buf);
-                    bail!("Cannot start Emacs daemon. Emacs output:\n{emacs_output}");
-                }
-            }
-
             thread::sleep(time::Duration::from_millis(50));
-            inf_emacs.emacs_started = std::process::Command::new("emacsclient")
+            #[cfg(unix)]
+            let emacsclient = std::process::Command::new("emacsclient")
                 .args(["--socket-name", &inf_emacs.socket_name])
                 .args(["--eval", "(version)"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .output()
+                .output();
+            #[cfg(target_os = "windows")]
+            let emacsclient = std::process::Command::new("emacsclient")
+                .args(["--server-file", &inf_emacs.socket_name])
+                .args(["--eval", "(version)"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output();
+            inf_emacs.emacs_started = emacsclient
+                .as_ref()
                 .is_ok_and(|output| output.status.code().is_some_and(|c| c == 0));
+            max_retries -= 1;
+            if max_retries == 0 && !inf_emacs.emacs_started {
+                let emacsclient = emacsclient.expect("Cannot start emacsclient");
+                let emacsclient_stderr = String::from_utf8_lossy(&emacsclient.stderr);
+                let emacsclient_stdout = String::from_utf8_lossy(&emacsclient.stdout);
+                let mut emacs_stderr = String::new();
+                let mut emacs_stdout = String::new();
+                if let Some(mut daemon) = inf_emacs.maybe_stop_daemon() {
+                    daemon.stdout.take().map(|mut s| {
+                        let mut buf = Vec::<u8>::new();
+                        let _ = s.read_to_end(&mut buf);
+                        emacs_stdout.push_str(&String::from_utf8_lossy(&buf));
+                    });
+                    daemon.stderr.take().map(|mut s| {
+                        let mut buf = Vec::<u8>::new();
+                        let _ = s.read_to_end(&mut buf);
+                        emacs_stderr.push_str(&String::from_utf8_lossy(&buf));
+                    });
+                }
+                bail!("Cannot start emacsclient!\n== stderr:\n {emacsclient_stderr}\n== stdout:\n {emacsclient_stdout}\n\nEmacs daemon output:\n {emacs_stderr}\n{emacs_stdout}");
+            }
         }
 
         Ok(())
@@ -145,7 +205,7 @@ fn socket_dir() -> String {
 #[cfg(target_os = "windows")]
 fn socket_dir() -> String {
     let appdata = env::var("APPDATA").unwrap();
-    format!("{appdata}\\emacs\\server")
+    format!("{appdata}\\.emacs.d\\server")
 }
 
 #[cfg(target_family = "unix")]
@@ -156,7 +216,7 @@ fn build_stream(socket_name: &str) -> UnixStream {
 
 #[cfg(target_os = "windows")]
 fn build_stream(socket_name: &str) -> TcpStream {
-    let server_file_path = format!("{}/{}", socket_dir(), socket_name);
+    let server_file_path = format!("{}\\{}", socket_dir(), socket_name);
 
     // The server file might not be immediately available after start.
     // We'll retry a few times to read it.
@@ -195,7 +255,7 @@ pub fn eval(lisp: &str) -> Result<String> {
             .split('\n')
             .filter(|s| !s.is_empty())
             .map(|s| Message::from(&unquote_argument(s)))
-            .filter(|m| m.kind == MessageKind::Print);
+            .filter(|m| m.kind == MessageKind::Print || m.kind == MessageKind::Error);
         let full_response = messages.map(|m| m.body).collect::<String>();
         Ok(full_response)
     })
@@ -205,6 +265,7 @@ pub fn eval(lisp: &str) -> Result<String> {
 enum MessageKind {
     EmacsPid,
     Print,
+    Error,
 }
 
 #[derive(Debug)]
@@ -220,6 +281,7 @@ impl Message {
         let kind = match raw_kind {
             "emacs-pid" => MessageKind::EmacsPid,
             "print" | "print-nonl" => MessageKind::Print,
+            "error" => MessageKind::Error,
             _ => panic!("Unknown message kind: {raw_kind}"),
         };
         let body = kind_re
