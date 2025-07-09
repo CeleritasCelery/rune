@@ -149,9 +149,9 @@ impl InferiorEmacs {
 
 #[cfg(unix)]
 impl InferiorEmacs {
-    pub fn maybe_stop_daemon(&mut self) {
-        if let Some(daemon) = self.daemon.take() {
-            if (self.emacs_started) {
+    pub fn maybe_stop_daemon(&mut self) -> Option<Child> {
+        if let Some(mut daemon) = self.daemon.take() {
+            if self.emacs_started {
                 daemon.kill().expect("Emacs couldn't be killed");
             }
             return Some(daemon);
@@ -161,19 +161,19 @@ impl InferiorEmacs {
 
     pub fn connect_to_emacs(&mut self) -> Result<()> {
         let socket_path = format!("{}/{}", self.socket_dir(), self.socket_name);
-        self.stream = UnixStream::connect(&socket_path).context("Cannot connect to Emacs")?;
+        self.stream = Some(UnixStream::connect(&socket_path).context("Cannot connect to Emacs")?);
         self.emacs_started = true;
         Ok(())
     }
 
-    #[cfg(linux)]
-    fn socket_dir() -> String {
+    #[cfg(target_os = "linux")]
+    fn socket_dir(&self) -> String {
         let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap();
         format!("{xdg_runtime_dir}/emacs")
     }
 
     #[cfg(macos)]
-    fn socket_dir() -> String {
+    fn socket_dir(&self) -> String {
         let uid = users::get_current_uid();
         let tmpdir = env::var("TMPDIR").or::<String>(Ok("/tmp".to_string())).unwrap();
         format!("{}/emacs{}", tmpdir, uid)
