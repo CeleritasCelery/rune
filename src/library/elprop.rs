@@ -172,7 +172,7 @@ impl InferiorEmacs {
         format!("{xdg_runtime_dir}/emacs")
     }
 
-    #[cfg(macos)]
+    #[cfg(target_os = "macos")]
     fn socket_dir(&self) -> String {
         let uid = users::get_current_uid();
         let tmpdir = env::var("TMPDIR").or::<String>(Ok("/tmp".to_string())).unwrap();
