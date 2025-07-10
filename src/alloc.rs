@@ -130,9 +130,10 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_make_vector() {
         proptest!(|(size in arb_byte())| {
             assert_elprop!["(make-vector {} ?A)", size];
-        })
+        });
     }
 }

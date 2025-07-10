@@ -391,6 +391,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_eval() {
         start_emacs().unwrap();
         let result = eval("(+ 40 2)").unwrap();
