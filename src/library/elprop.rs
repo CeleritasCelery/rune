@@ -28,6 +28,7 @@ struct InferiorEmacs {
     stream: Option<UnixStream>,
     #[cfg(target_os = "windows")]
     stream: Option<TcpStream>,
+    #[cfg(target_os = "windows")]
     auth_string: Option<String>,
 }
 
@@ -38,6 +39,7 @@ impl Default for InferiorEmacs {
             emacs_started: false,
             daemon: None,
             stream: None,
+            #[cfg(target_os = "windows")]
             auth_string: None,
         }
     }
@@ -57,7 +59,7 @@ impl InferiorEmacs {
         #[cfg(target_os = "windows")]
         if let Some(ref auth_string) = self.auth_string {
             request_payload
-                .extend_from_slice(format!("-auth {} -current-frame", auth_string).as_bytes());
+                .extend_from_slice(format!("-auth {auth_string} -current-frame").as_bytes());
         } else {
             bail!("Cannot send message to Emacs because auth_string is not set");
         }
@@ -211,16 +213,16 @@ pub fn start_emacs() -> Result<()> {
                 let mut stderr = String::new();
                 let mut stdout = String::new();
                 if let Some(mut daemon) = inf_emacs.maybe_stop_daemon() {
-                    daemon.stdout.take().map(|mut s| {
+                    if let Some(mut s) = daemon.stdout.take() {
                         let mut buf = Vec::<u8>::new();
                         let _ = s.read_to_end(&mut buf);
                         stdout.push_str(&String::from_utf8_lossy(&buf));
-                    });
-                    daemon.stderr.take().map(|mut s| {
+                    };
+                    if let Some(mut s) = daemon.stderr.take() {
                         let mut buf = Vec::<u8>::new();
                         let _ = s.read_to_end(&mut buf);
                         stderr.push_str(&String::from_utf8_lossy(&buf));
-                    });
+                    };
                 }
                 return connect_result.context(format!(
                     "Cannot start Emacs!\nEmacs daemon output:\n {stderr}\n{stdout}"
@@ -348,7 +350,7 @@ impl std::fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "kind: {}, body: ", self.kind)?;
         if let Some(ref body) = self.body {
-            write!(f, "{}", body)
+            write!(f, "{body}")
         } else {
             write!(f, "N/A")
         }
