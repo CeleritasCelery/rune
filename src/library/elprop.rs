@@ -22,7 +22,6 @@ thread_local! {
 
 struct InferiorEmacs {
     pub socket_name: String,
-    emacs_started: bool,
     daemon: Option<Child>,
     #[cfg(unix)]
     stream: Option<UnixStream>,
@@ -36,7 +35,6 @@ impl Default for InferiorEmacs {
     fn default() -> Self {
         Self {
             socket_name: format!("rune-proptest-{:?}", thread::current().id()),
-            emacs_started: false,
             daemon: None,
             stream: None,
             #[cfg(target_os = "windows")]
@@ -100,20 +98,24 @@ impl InferiorEmacs {
             bail!("Cannot receive messages because stream wasn't established");
         }
     }
+
+    pub fn is_ready(&self) -> bool {
+        self.stream.is_some()
+    }
 }
 
 #[cfg(target_os = "windows")]
 impl InferiorEmacs {
     pub fn maybe_stop_daemon(&mut self) -> Option<Child> {
         if let Some(daemon) = self.daemon.take() {
-            if self.emacs_started {
+            if self.is_ready() {
                 std::process::Command::new("taskkill")
                     .args(["/F", "/T", "/PID", &daemon.id().to_string()])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .status()
                     .expect("Cannot run taskkill to kill Emacs daemon");
-                self.emacs_started = false;
+                self.stream.take();
             }
             return Some(daemon);
         }
@@ -144,7 +146,6 @@ impl InferiorEmacs {
             .with_context(malformed_ctx)?;
         self.auth_string = Some(server_file_lines.next().with_context(malformed_ctx)?.to_string());
         self.stream = Some(std::net::TcpStream::connect(addr).context("Cannot connect to Emacs")?);
-        self.emacs_started = true;
         Ok(())
     }
 
@@ -158,7 +159,7 @@ impl InferiorEmacs {
 impl InferiorEmacs {
     pub fn maybe_stop_daemon(&mut self) -> Option<Child> {
         if let Some(mut daemon) = self.daemon.take() {
-            if self.emacs_started {
+            if self.is_ready() {
                 daemon.kill().expect("Emacs couldn't be killed");
             }
             return Some(daemon);
@@ -169,7 +170,6 @@ impl InferiorEmacs {
     pub fn connect_to_emacs(&mut self) -> Result<()> {
         let socket_path = format!("{}/{}", self.socket_dir(), self.socket_name);
         self.stream = Some(UnixStream::connect(&socket_path).context("Cannot connect to Emacs")?);
-        self.emacs_started = true;
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl InferiorEmacs {
 
 pub fn start_emacs() -> Result<()> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
-        if inf_emacs.emacs_started {
+        if inf_emacs.is_ready() {
             return Ok(());
         }
 
@@ -203,7 +203,7 @@ pub fn start_emacs() -> Result<()> {
         );
 
         let mut max_retries = 3;
-        while !inf_emacs.emacs_started {
+        while !inf_emacs.is_ready() {
             thread::sleep(time::Duration::from_millis(50));
             max_retries -= 1;
             let connect_result = inf_emacs.connect_to_emacs();
@@ -282,7 +282,7 @@ fn unquote_argument(quoted_lisp: &str) -> String {
 
 pub fn eval(lisp: &str) -> Result<String> {
     INFERIOR_EMACS.with_borrow_mut(|inf_emacs| {
-        if !inf_emacs.emacs_started {
+        if !inf_emacs.is_ready() {
             bail!("Emacs daemon wasn't started");
         }
 
