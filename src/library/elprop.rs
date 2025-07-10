@@ -1,15 +1,13 @@
 use anyhow::{Context, Result, bail};
 use fancy_regex::Regex;
+use std::io::Read;
 #[cfg(target_os = "windows")]
 use std::net::TcpStream;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 use std::{
     cell::RefCell,
     env,
-    io::Read,
     io::Write,
     process::{Child, Stdio},
     thread, time,
@@ -17,9 +15,6 @@ use std::{
 
 mod strategies;
 pub(crate) use strategies::*;
-
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 thread_local! {
     static INFERIOR_EMACS: RefCell<InferiorEmacs> = RefCell::new(InferiorEmacs::default());
@@ -33,6 +28,7 @@ struct InferiorEmacs {
     stream: Option<UnixStream>,
     #[cfg(target_os = "windows")]
     stream: Option<TcpStream>,
+    auth_string: Option<String>,
 }
 
 impl Default for InferiorEmacs {
@@ -42,6 +38,7 @@ impl Default for InferiorEmacs {
             emacs_started: false,
             daemon: None,
             stream: None,
+            auth_string: None,
         }
     }
 }
@@ -54,17 +51,29 @@ impl Drop for InferiorEmacs {
 }
 
 impl InferiorEmacs {
-    pub fn send_message(&mut self, msg: Message) -> Result<()> {
-        if msg.kind != MessageKind::Auth && msg.kind != MessageKind::Eval {
-            bail!("Cannot send message of kind: {}", msg.kind);
+    pub fn send(&mut self, messages: Vec<Message>) -> Result<()> {
+        let mut request_payload = vec![];
+
+        #[cfg(target_os = "windows")]
+        if let Some(ref auth_string) = self.auth_string {
+            request_payload
+                .extend_from_slice(format!("-auth {} -current-frame", auth_string).as_bytes());
+        } else {
+            bail!("Cannot send message to Emacs because auth_string is not set");
         }
 
-        let mut request_payload = Vec::new();
-        let payload = match msg.kind {
-            MessageKind::Auth => format!("{} ", msg.body),
-            _ => format!("{}\n", quote_argumet(&msg.body)),
-        };
-        request_payload.extend_from_slice(format!("-{} {}", msg.kind, payload).as_bytes());
+        #[cfg(unix)]
+        request_payload.extend_from_slice("-current-frame".as_bytes());
+
+        for msg in messages {
+            let mut msg_str = String::new();
+            msg_str.push_str(&format!(" -{}", msg.kind));
+            if let Some(ref body) = msg.body {
+                msg_str.push_str(&format!(" {}", quote_argumet(body)));
+            }
+            request_payload.extend_from_slice(msg_str.as_bytes());
+        }
+        request_payload.extend_from_slice("\n".as_bytes());
         if let Some(ref mut stream) = self.stream {
             stream.write_all(&request_payload).context("Cannot write to Emacs socket")?;
             stream.flush().context("Cannot flush Emacs socket")?;
@@ -100,7 +109,6 @@ impl InferiorEmacs {
                     .args(["/F", "/T", "/PID", &daemon.id().to_string()])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
-                    .creation_flags(CREATE_NO_WINDOW)
                     .status()
                     .expect("Cannot run taskkill to kill Emacs daemon");
                 self.emacs_started = false;
@@ -132,11 +140,8 @@ impl InferiorEmacs {
             .split(" ")
             .next()
             .with_context(malformed_ctx)?;
-        let auth_string = server_file_lines.next().with_context(malformed_ctx)?;
-
+        self.auth_string = Some(server_file_lines.next().with_context(malformed_ctx)?.to_string());
         self.stream = Some(std::net::TcpStream::connect(addr).context("Cannot connect to Emacs")?);
-        self.send_message(Message { kind: MessageKind::Auth, body: auth_string.to_string() })
-            .context("Cannot send `-auth` message to Emacs")?;
         self.emacs_started = true;
         Ok(())
     }
@@ -192,8 +197,7 @@ pub fn start_emacs() -> Result<()> {
                 .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .spawn()
-                .unwrap(),
+                .spawn()?,
         );
 
         let mut max_retries = 3;
@@ -202,19 +206,7 @@ pub fn start_emacs() -> Result<()> {
             max_retries -= 1;
             let connect_result = inf_emacs.connect_to_emacs();
             if connect_result.is_ok() {
-                inf_emacs.send_message(Message {
-                    kind: MessageKind::Eval,
-                    body: "(version)".to_string(),
-                })?;
-                let messages = inf_emacs.recv_messages()?;
-                let emacs_version = &messages
-                    .iter()
-                    .filter(|m| m.kind == MessageKind::Print)
-                    .next()
-                    .context("Cannot receive a response from Emacs for (version)")?
-                    .body;
-                dbg!(emacs_version);
-                break;
+                return Ok(());
             } else if max_retries == 0 {
                 let mut stderr = String::new();
                 let mut stdout = String::new();
@@ -236,7 +228,7 @@ pub fn start_emacs() -> Result<()> {
             }
         }
 
-        Ok(())
+        unreachable!();
     })
 }
 
@@ -293,10 +285,12 @@ pub fn eval(lisp: &str) -> Result<String> {
         }
 
         inf_emacs.connect_to_emacs()?;
-        inf_emacs.send_message(Message { kind: MessageKind::Eval, body: lisp.to_string() })?;
+        inf_emacs.send(vec![Message { kind: MessageKind::Eval, body: Some(lisp.to_string()) }])?;
         let messages = inf_emacs.recv_messages()?;
         let full_response = messages.iter().fold(String::new(), |mut full_response, message| {
-            full_response.push_str(&message.body);
+            if let Some(ref body) = message.body {
+                full_response.push_str(body);
+            }
             full_response
         });
         Ok(full_response)
@@ -308,7 +302,6 @@ enum MessageKind {
     EmacsPid,
     Print,
     Error,
-    Auth,
     Eval,
 }
 
@@ -318,7 +311,6 @@ impl std::fmt::Display for MessageKind {
             MessageKind::EmacsPid => write!(f, "emacs-pid"),
             MessageKind::Print => write!(f, "print"),
             MessageKind::Error => write!(f, "error"),
-            MessageKind::Auth => write!(f, "auth"),
             MessageKind::Eval => write!(f, "eval"),
         }
     }
@@ -327,7 +319,7 @@ impl std::fmt::Display for MessageKind {
 #[derive(Debug)]
 struct Message {
     kind: MessageKind,
-    body: String,
+    body: Option<String>,
 }
 
 impl Message {
@@ -348,13 +340,18 @@ impl Message {
             .replace("\n   ", "")
             .trim_end_matches("\n")
             .to_string();
-        Message { kind, body }
+        Message { kind, body: Some(body) }
     }
 }
 
 impl std::fmt::Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "kind: {}, body: {}", self.kind, self.body)
+        write!(f, "kind: {}, body: ", self.kind)?;
+        if let Some(ref body) = self.body {
+            write!(f, "{}", body)
+        } else {
+            write!(f, "N/A")
+        }
     }
 }
 
