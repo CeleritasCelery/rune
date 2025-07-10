@@ -1,6 +1,8 @@
+#[cfg(unix)]
+use crate::core::object::TRUE;
 use crate::core::{
     gc::Context,
-    object::{NIL, Object, OptionalFlag, TRUE},
+    object::{NIL, Object, OptionalFlag},
 };
 #[cfg(unix)]
 use rune_core::macros::list;
