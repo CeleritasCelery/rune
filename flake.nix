@@ -21,14 +21,14 @@
         name = "rune";
         pkgs = import nixpkgs { inherit system; };
         fenixPkgs = fenix.packages.${system};
-        rustToolchain = fenixPkgs.complete.withComponents [
-          "cargo"
-          "rustc"
-          "rust-src"
-          "rust-std"
-          "rustfmt"
-          "clippy"
-          "miri"
+        rustToolchain = fenixPkgs.combine [
+          fenixPkgs.stable.cargo
+          fenixPkgs.stable.rustc
+          fenixPkgs.stable.rust-src
+          fenixPkgs.stable.rust-std
+          fenixPkgs.stable.rustfmt
+          fenixPkgs.stable.clippy
+          fenixPkgs.complete.miri
         ];
       in
       {

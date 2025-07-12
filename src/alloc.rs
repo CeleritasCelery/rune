@@ -5,7 +5,7 @@ use crate::core::object::{
     ByteFn, ByteString, FnArgs, Gc, IntoObject, LispVec, NIL, Object, RecordBuilder, Symbol,
 };
 use anyhow::{Result, ensure};
-use rune_macros::{defun, elprop};
+use rune_macros::defun;
 
 #[defun]
 pub(crate) fn list<'ob>(objects: &[Object<'ob>], cx: &'ob Context) -> Object<'ob> {
@@ -63,7 +63,6 @@ pub(crate) fn make_byte_code<'ob>(
 }
 
 #[defun]
-#[elprop(u8, _)]
 fn make_vector(length: usize, init: Object) -> Vec<Object> {
     vec![init; length]
 }
@@ -99,9 +98,14 @@ fn garbage_collect(cx: &mut Context) -> bool {
 
 #[cfg(test)]
 mod test {
+    use proptest::prelude::*;
     use rune_core::macros::root;
 
-    use crate::core::{env::intern, gc::RootSet, object::ObjectType};
+    use crate::{
+        assert_elprop,
+        core::{env::intern, gc::RootSet, object::ObjectType},
+        library::elprop::arb_byte,
+    };
 
     use super::*;
 
@@ -123,5 +127,13 @@ mod test {
         assert_eq!(record.len(), 3);
         assert_eq!(record[1].get(), "slot1");
         assert_eq!(record[2].get(), "slot2");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_make_vector() {
+        proptest!(|(size in arb_byte())| {
+            assert_elprop!["(make-vector {} ?A)", size];
+        });
     }
 }

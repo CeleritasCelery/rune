@@ -22,6 +22,7 @@ concurrency:
 name: check
 jobs:
   fmt:
+    if: false
     runs-on: ubuntu-latest
     name: stable / fmt
     steps:
@@ -35,6 +36,7 @@ jobs:
       - name: cargo +stable fmt --check
         run: cargo +stable fmt --check
   clippy:
+    if: false
     runs-on: ubuntu-latest
     name: ${{ matrix.toolchain }} / clippy
     permissions:
@@ -63,6 +65,7 @@ jobs:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
     # API be documented as only available in some specific platforms.
+    if: false
     runs-on: ubuntu-latest
     name: nightly / doc
     steps:

@@ -19,7 +19,7 @@ use base64::Engine;
 use fallible_iterator::FallibleIterator;
 use fallible_streaming_iterator::FallibleStreamingIterator;
 use rune_core::macros::{call, list, rebind, root};
-use rune_macros::{defun, elprop};
+use rune_macros::defun;
 
 #[defun]
 fn identity(arg: Object) -> Object {
@@ -1006,7 +1006,6 @@ fn disable_debug() -> bool {
 /// Optional second argument NO-LINE-BREAK means do not break long lines
 /// into shorter lines.
 #[defun]
-#[elprop("[\x00-\x7F]*", _)]
 fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String> {
     if string.is_ascii() {
         Ok(base64_encode(string, line_break.is_some(), true, false))
@@ -1021,7 +1020,6 @@ fn base64_encode_string(string: &str, line_break: OptionalFlag) -> Result<String
 ///
 /// This produces the URL variant of base 64 encoding defined in RFC 4648.
 #[defun]
-#[elprop("[\x00-\x7F]*", _)]
 fn base64url_encode_string(string: &str, no_pad: OptionalFlag) -> Result<String> {
     if string.is_ascii() {
         Ok(base64_encode(string, false, no_pad.is_none(), true))
@@ -1039,7 +1037,11 @@ fn base64_encode(string: &str, _line_break: bool, pad: bool, base64url: bool) ->
 
 #[cfg(test)]
 mod test {
-    use crate::{fns::levenshtein_distance, interpreter::assert_lisp};
+    use crate::{
+        assert_elprop, fns::levenshtein_distance, interpreter::assert_lisp,
+        library::elprop::arb_custom_string,
+    };
+    use proptest::prelude::*;
 
     #[test]
     fn test_base64_encode_string() {
@@ -1049,6 +1051,14 @@ mod test {
             "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0aW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1YXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2ZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRldXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1aSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"",
         );
         // assert_lisp("(base64-encode-string \"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum\" t)", "\"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwg\nc2VkIGRvIGVpdXNtb2QgdGVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu\nYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0gdmVuaWFtLCBxdWlzIG5vc3RydWQgZXhlcmNpdGF0\naW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZWEgY29tbW9kbyBjb25zZXF1\nYXQuIER1aXMgYXV0ZSBpcnVyZSBkb2xvciBpbiByZXByZWhlbmRlcml0IGluIHZvbHVwdGF0ZSB2\nZWxpdCBlc3NlIGNpbGx1bSBkb2xvcmUgZXUgZnVnaWF0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRl\ndXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1\naSBvZmZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVt\"");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_base64_encode_string_prop() {
+        proptest! {|(string in arb_custom_string("[\x00-\x7F]*"))| {
+            assert_elprop![r#"(base64-encode-string {} t)"#, string];
+        }};
     }
 
     #[test]
@@ -1253,6 +1263,14 @@ mod test {
         assert_lisp("(base64url-encode-string \"hello\" nil)", "\"aGVsbG8=\"");
         assert_lisp("(base64url-encode-string \"hello\" t)", "\"aGVsbG8\"");
         assert_lisp("(base64url-encode-string \"hello\" 0)", "\"aGVsbG8\"");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_base64url_encode_string_prop() {
+        proptest! {|(string in arb_custom_string("[\x00-\x7F]*"))| {
+            assert_elprop![r#"(base64url-encode-string {} t)"#, string];
+        }};
     }
 
     #[test]

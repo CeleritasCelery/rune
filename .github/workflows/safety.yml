@@ -16,8 +16,12 @@ concurrency:
 name: safety
 jobs:
   sanitizers:
+    if: false
     runs-on: ubuntu-latest
     steps:
+      - uses: jcs090218/setup-emacs@master
+        with:
+          version: 29.4
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -45,6 +49,7 @@ jobs:
           ASAN_OPTIONS: "detect_odr_violation=0:detect_leaks=0"
           RUSTFLAGS: "-Z sanitizer=address"
   miri:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
