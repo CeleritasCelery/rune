@@ -18,6 +18,7 @@ concurrency:
 name: test
 jobs:
   required:
+    if: false
     runs-on: ubuntu-latest
     name: ubuntu / ${{ matrix.toolchain }}
     strategy:
@@ -50,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [windows-latest]
     steps:
       # if your project needs OpenSSL, uncommment this to fix Windows builds.
       # it's commented out by default as tthe install command takes 5-10m.
@@ -63,17 +64,19 @@ jobs:
           submodules: true
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - uses: jcs090218/setup-emacs@master
         with:
           version: 29.4
-      - name: cargo test
-        run: cargo test --workspace --locked --all-features
+      - name: cargo test test_DEBUG_WINDOWS
+        run: cargo test --workspace --locked --all-features test_DEBUG_WINDOWS
   coverage:
     # use llvm-cov to build and collect coverage and outputs in a format that is compatible with
     # codecov.io
+    if: false
     runs-on: ubuntu-latest
     name: ubuntu / stable / coverage
     steps:

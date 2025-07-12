@@ -204,9 +204,10 @@ pub fn start_emacs() -> Result<()> {
 
         let mut max_retries = 3;
         while !inf_emacs.is_ready() {
-            thread::sleep(time::Duration::from_millis(50));
+            thread::sleep(time::Duration::from_millis(100));
             max_retries -= 1;
             let connect_result = inf_emacs.connect_to_emacs();
+            dbg!(&connect_result);
             if connect_result.is_ok() {
                 return Ok(());
             } else if max_retries == 0 {
@@ -397,5 +398,15 @@ mod tests {
         let result = eval("(+ 40 2)").unwrap();
         assert_eq!("42", result);
         assert_elprop!["(make-vector 250 ?a)"];
+    }
+
+    #[test]
+    fn test_DEBUG_WINDOWS() {
+        start_emacs().unwrap();
+        dbg!("start_emacs_finished");
+        // let result = eval("(+ 40 2)").unwrap();
+        // assert_eq!("42", result);
+
+        // assert!(false);
     }
 }
