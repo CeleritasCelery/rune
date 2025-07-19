@@ -11,8 +11,7 @@ members = [
   "crates/text-buffer",
   "crates/rune-macros",
   "crates/rune-core",
-  "crates/interval-tree",
-  "elprop",
+  "crates/interval-tree"
 ]
 
 [workspace.package]
