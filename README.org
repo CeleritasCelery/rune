@@ -92,6 +92,22 @@ Rune includes the `assert_elprop!` macro, which enables property testing against
        }
      #+end_src
 
+** How to run Windows tests on Linux with Wine
+
+1. Define WINEPREFIX: ~export WINEPREFIX=$PWD/.wine~
+2. Add ~x86_64-pc-windows-gnu~ to rust toolchain: ~rustup target add x86_64-pc-windows-gnu~
+3. Setup the wineprefix: `./scripts/setup-wineprefix`. This script will install Emacs inside the prefix as well
+
+Now you can run the tests on Windows like that: ~cargo test --target x86_64-pc-windows-gnu~. In case you use Nix enviroment you should skip 1 and 2 points.
+
+Also, you can tell ~eglot~ to check the code marked with ~#[cfg(windows)]~. Just add the following to .dir-locals.el and restart ~eglot~:
+
+#+begin_src elisp
+((nil
+       . ((eglot-workspace-configuration
+           . (:rust-analyzer (:cargo (:target "x86_64-pc-windows-gnu")))))))
+#+end_src
+
 ** Blog posts
 - [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in Rust. It serves as in intro to this project.
 - [[https://coredumped.dev/2022/04/11/implementing-a-safe-garbage-collector-in-rust/][implementing a safe garbage collector]] :: An overview of the garbage collector used in this project and how Rust enables safe GC abstractions.
