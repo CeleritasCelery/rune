@@ -170,8 +170,8 @@ fn eval_stdin(cx: &mut Context, env: &mut Rt<Env>) -> Result<(), ()> {
 
         root!(obj, cx);
         match interpreter::eval(obj, None, env, cx) {
-            Ok(val) => println!(";; ELPROP_START:{count}\n{val}\n;; ELPROP_END\n"),
-            Err(e) => println!(";; ELPROP_START:{count}\nError: {e}\n;; ELPROP_END\n"),
+            Ok(val) => println!("{val}\n"),
+            Err(e) => println!("Error: {e}\n"),
         }
         count += 1;
         std::thread::sleep(std::time::Duration::from_millis(10));

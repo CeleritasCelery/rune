@@ -1,7 +1,10 @@
+#[cfg(unix)]
+use crate::core::object::TRUE;
 use crate::core::{
     gc::Context,
-    object::{NIL, Object, OptionalFlag, TRUE},
+    object::{NIL, Object, OptionalFlag},
 };
+#[cfg(unix)]
 use rune_core::macros::list;
 use rune_macros::defun;
 use std::path::Path;
@@ -48,12 +51,12 @@ fn metadata_attributes<'ob>(file: &Path, cx: &'ob Context) -> Object<'ob> {
 }
 
 #[cfg(windows)]
-fn metadata_attributes<'ob>(file: &Path, cx: &'ob Context) -> Object<'ob> {
-    use std::os::windows::fs::MetadataExt;
-    let metadata = &file.metadata().unwrap();
+fn metadata_attributes<'ob>(_file: &Path, _cx: &'ob Context) -> Object<'ob> {
+    // use std::os::windows::fs::MetadataExt;
+    // let metadata = &file.metadata().unwrap();
 
     //  0. t for directory, string (name linked to) for symbolic link, or nil.
-    let file_type = get_file_type(file, cx);
+    // let file_type = get_file_type(file, cx);
     // TODO: implement the rest of the attributes
     //  1. Number of hardlinks to file.
     //  2. File uid as a string or (if ID-FORMAT is integer or a string value
@@ -73,6 +76,7 @@ fn metadata_attributes<'ob>(file: &Path, cx: &'ob Context) -> Object<'ob> {
     panic!("file-attributes are not yet implemented for non-unix systems");
 }
 
+#[cfg(unix)]
 fn get_file_type<'ob>(file: &Path, cx: &'ob Context) -> Object<'ob> {
     if file.is_dir() {
         TRUE

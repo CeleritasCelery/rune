@@ -71,7 +71,26 @@ Then we would translate the types to their Rust equivalent. If the correct type 
 To load a new elisp file, run ~cargo run --release -- --load <file>~.  Files that are not bootstrapped are not yet included in this repo, but are part of [[https://github.com/emacs-mirror/emacs][Emacs]]. Once the file is bootstrapped it can be added to the [[file:lisp/][lisp directory]].
 
 *** Property testing
-Rune comes with a "elisp property tester" (elprop) located at ~elprop/elrop~. Run the utility with a regex matching the names of Rune functions to test against the Emacs implementation. The tool will generate random inputs and send them to both rune and Emacs and report if the outputs are ever different. If you implement a new function or modify one, run elprop on it to ensure it behaves like Emacs. Cases that it finds make good unit tests.
+
+Rune includes the `assert_elprop!` macro, which enables property testing against GNU Emacs. This macro works by sending the same Lisp form to both Rune and Emacs and then comparing their results. It can also be used in conjunction with the `proptest` crate.
+
+**** Examples:
+
+     #+begin_src rust
+       #[test]
+       fn test_addition() {
+           // Verify that (+ 40 2) evaluates to 42 for both Rune and Emacs
+           assert_elprop!["(+ 40 2)"];
+       }
+
+       // Verify that make-vector works for any arbitrary byte
+       proptest! {
+           #[test]
+           fn test_make_vector_consistency(size in arb_byte()) {
+               assert_elprop!["(make-vector {} ?A)", size];
+           }
+       }
+     #+end_src
 
 ** Blog posts
 - [[https://coredumped.dev/2021/10/21/building-an-emacs-lisp-vm-in-rust/][tagged pointers in Rust]] :: My initial approach to creating tagged pointers in Rust. It serves as in intro to this project.

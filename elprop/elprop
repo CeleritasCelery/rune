@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-cd "$(dirname "$0")"
-
-cargo build --workspace
-cargo run -- "$@"

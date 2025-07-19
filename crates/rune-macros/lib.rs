@@ -58,43 +58,6 @@ pub fn trace_derive(stream: TokenStream) -> TokenStream {
     trace::expand(&derived).into()
 }
 
-/// ## `elprop`
-///
-/// Defines a function template to used for property testing functions. Each element can be a type,
-/// list of types, a regex matching a string, or the placeholder '_'.
-///
-/// ## Examples:
-///
-/// test the first argument as a integer and the second as a char
-/// ```ignore
-/// #[elprop(i64, char)]
-/// ```
-///
-/// test the second argument as a char. The first argument uses the function types like normal.
-/// ```ignore
-/// #[elprop(_, char)]
-/// ```
-///
-/// test the first argument as a string starting with 'a'
-/// ```ignore
-/// #[elprop("^a.*")]
-/// ```
-///
-/// test the first argument as a list of 2 elements of char
-/// ```ignore
-/// #[elprop((char, char))]
-/// ```
-///
-/// test the first argument as either a string or a char
-/// ```ignore
-/// #[elprop(String | char)]
-/// ```
-#[proc_macro_attribute]
-pub fn elprop(_: TokenStream, fn_ts: TokenStream) -> TokenStream {
-    // The handling of this macro is in elprop
-    fn_ts
-}
-
 /// The generated methods assume that `TargetType` provides an appropriate `untag()` method
 /// (and `untag_mut()` if mutable access methods are used) that allows access to the
 /// underlying enum (`MyEnum` in the example).
