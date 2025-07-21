@@ -29,6 +29,12 @@
           fenixPkgs.stable.rustfmt
           fenixPkgs.stable.clippy
           fenixPkgs.complete.miri
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.cargo
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.rustc
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.rust-src
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.rust-std
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.rustfmt
+          fenixPkgs.targets.x86_64-pc-windows-gnu.stable.clippy
         ];
       in
       {

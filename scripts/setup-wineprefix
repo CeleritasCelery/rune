@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e -x
+
+EMACS_DOWNLOAD_URL="https://mirror.bahnhof.net/pub/gnu/emacs/windows/emacs-29/emacs-29.4.zip"
+WINE_C_DRIVE="${WINEPREFIX}/drive_c"
+
+if [ -z "$WINEPREFIX" ]; then
+    echo "Error: WINEPREFIX must be defined"
+    exit 1;
+fi
+rm -rf $WINEPREFIX
+
+wine reg add "HKEY_CURRENT_USER\Environment" /v Path /t REG_SZ /d "C:\emacs\bin" /f
+
+wget --show-progress -O "${WINE_C_DRIVE}/emacs.zip" "${EMACS_DOWNLOAD_URL}"
+unzip "${WINE_C_DRIVE}/emacs.zip" -d "${WINE_C_DRIVE}/emacs/"
