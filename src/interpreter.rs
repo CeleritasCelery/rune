@@ -440,7 +440,7 @@ impl Interpreter<'_, '_> {
 
     fn var_set(&mut self, name: Symbol, new_value: Object, cx: &Context) -> AnyResult<()> {
         let mut iter = self.vars.iter().rev();
-        match iter.find(|cons| (cons.car(cx) == name)) {
+        match iter.find(|cons| cons.car(cx) == name) {
             Some(value) => {
                 value.bind(cx).set_cdr(new_value).expect("variables should never be immutable");
                 Ok(())

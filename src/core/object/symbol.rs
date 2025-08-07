@@ -81,7 +81,7 @@ impl<'a> Symbol<'a> {
 
     pub(in crate::core) unsafe fn from_ptr(ptr: *const SymbolCell) -> Self {
         let base = BUILTIN_SYMBOLS.as_ptr().addr();
-        let ptr = ptr.map_addr(|x| (x.wrapping_sub(base)));
+        let ptr = ptr.map_addr(|x| x.wrapping_sub(base));
         Self { data: ptr.cast::<u8>(), marker: PhantomData }
     }
 

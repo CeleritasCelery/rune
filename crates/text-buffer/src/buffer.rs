@@ -99,7 +99,7 @@ impl Iterator for MetricBuilder<'_> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.slice.len() - self.start;
-        let extra = usize::from(len % METRIC_SIZE != 0);
+        let extra = usize::from(!len.is_multiple_of(METRIC_SIZE));
         let size = len / METRIC_SIZE;
         (size + extra, None)
     }
