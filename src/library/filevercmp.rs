@@ -2,7 +2,7 @@ use std::cmp::{Ord, Ordering};
 
 /// Return the length of a prefix of S that corresponds to the suffix
 /// defined by this extended regular expression in the C locale:
-///   (\.[A-Za-z~][A-Za-z0-9~]*)*$
+///   (\.\[A-Za-z~\]\[A-Za-z0-9~\]*)*$
 /// Use the longest suffix matching this regular expression,
 /// except do not use all of S as a suffix if S is nonempty.
 /// If *LEN is -1, S is a string; set *LEN to S's length.
@@ -138,7 +138,7 @@ fn verrevcmp(s1: &[u8], s2: &[u8]) -> i32 {
 /// Before comparing two strings where both begin with non-".",
 /// or where both begin with "." but neither is "." or "..",
 /// suffixes matching the C-locale extended regular expression
-/// (\.[A-Za-z~][A-Za-z0-9~]*)*$ are removed and the strings compared
+/// (\.\[A-Za-z~\]\[A-Za-z0-9~\]*)*$ are removed and the strings compared
 /// without them, using version sort without special priority;
 /// if they do not compare equal, this comparison result is used and
 /// the suffixes are effectively ignored.  Otherwise, the entire
