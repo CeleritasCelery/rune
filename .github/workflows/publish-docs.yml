@@ -13,7 +13,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: cargo doc
         run: cargo doc --no-deps --all-features --workspace
-        en:
+        env:
           RUSTDOCFLAGS: -D warnings
       - name: Deploy to Netlify
         uses: nwtgck/actions-netlify@v3.0
