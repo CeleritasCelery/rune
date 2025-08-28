@@ -22,6 +22,8 @@ pub(crate) struct Env<'a> {
     pub(crate) match_data: Slot<Object<'a>>,
     #[no_trace]
     pub(crate) current_buffer: CurrentBuffer<'a>,
+    #[no_trace]
+    pub(crate) selected_frame: Option<Slot<Object<'a>>>,
     pub(crate) stack: LispStack<'a>,
 }
 

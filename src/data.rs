@@ -396,6 +396,8 @@ fn type_of(object: Object) -> Object {
         ObjectType::Buffer(_) => sym::BUFFER.into(),
         ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
         ObjectType::BigInt(_) => sym::BIG_INT.into(),
+        ObjectType::Frame(_) => sym::FRAME.into(),
+        ObjectType::Window(_) => sym::WINDOW.into(),
     }
 }
 
@@ -549,3 +551,5 @@ defsym!(BUFFER);
 defsym!(SUBR);
 defsym!(CHAR_TABLE);
 defsym!(BIG_INT);
+defsym!(FRAME);
+defsym!(WINDOW);
