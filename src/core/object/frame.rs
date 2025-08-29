@@ -3,8 +3,8 @@ use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 
 use render::viewmodel::{TextBuffer, WindowContent};
-use rune_gui::render::frame_layout::FrameLayout;
-use rune_gui::render::FaceMap;
+use render::frame_layout::FrameLayout;
+use render::FaceMap;
 use rune_macros::Trace;
 
 use crate::core::env::intern;
