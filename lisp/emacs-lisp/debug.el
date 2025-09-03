@@ -28,7 +28,8 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'backtrace)
+;; RUNE-BOOTSTRAP
+;; (require 'backtrace)
 
 (defgroup debugger nil
   "Debuggers and related commands for Emacs."
@@ -238,7 +239,9 @@ the debugger will not be entered."
 		    (backtrace-debug 5 t)))
                 (with-current-buffer debugger-buffer
                   (unless (derived-mode-p 'debugger-mode)
-	            (debugger-mode))
+	            ;; RUNE-BOOTSTRAP
+                    ;; (debugger-mode)
+                    )
 	          (debugger-setup-buffer debugger-args)
 	          (when non-interactive-frame
 		    ;; If the backtrace is long, save the beginning
@@ -309,7 +312,9 @@ the debugger will not be entered."
 	      (with-current-buffer debugger-buffer
 	        (if debugger-previous-state
                     (debugger--restore-buffer-state debugger-previous-state)
-                  (backtrace-mode))))
+                  ;; RUNE-BOOTSTRAP
+                  ;; (backtrace-mode)
+                  )))
 	    (with-timeout-unsuspend debugger-with-timeout-suspend)
 	    (set-match-data debugger-outer-match-data)))
         (setq debug-on-next-call debugger-step-after-exit)
@@ -556,78 +561,81 @@ The environment used is the one when entering the activation frame at point."
   'backtrace-toggle-locals "28.1")
 
 
-(defvar-keymap debugger-mode-map
-  :full t
-  :parent backtrace-mode-map
-  "b" #'debugger-frame
-  "c" #'debugger-continue
-  "j" #'debugger-jump
-  "r" #'debugger-return-value
-  "u" #'debugger-frame-clear
-  "d" #'debugger-step-through
-  "l" #'debugger-list-functions
-  "q" #'debugger-quit
-  "e" #'debugger-eval-expression
-  "R" #'debugger-record-expression
+;; RUNE-BOOTSTRAP
+;; (defvar-keymap debugger-mode-map
+;;   :full t
+;;   :parent backtrace-mode-map
+;;   "b" #'debugger-frame
+;;   "c" #'debugger-continue
+;;   "j" #'debugger-jump
+;;   "r" #'debugger-return-value
+;;   "u" #'debugger-frame-clear
+;;   "d" #'debugger-step-through
+;;   "l" #'debugger-list-functions
+;;   "q" #'debugger-quit
+;;   "e" #'debugger-eval-expression
+;;   "R" #'debugger-record-expression
 
-  "<mouse-2>" #'push-button
+;;   "<mouse-2>" #'push-button
 
-  :menu
-  '("Debugger"
-    ["Step through" debugger-step-through
-     :help "Proceed, stepping through subexpressions of this expression"]
-    ["Continue" debugger-continue
-     :help "Continue, evaluating this expression without stopping"]
-    ["Jump" debugger-jump
-     :help "Continue to exit from this frame, with all debug-on-entry suspended"]
-    ["Eval Expression..." debugger-eval-expression
-     :help "Eval an expression, in an environment like that outside the debugger"]
-    ["Display and Record Expression" debugger-record-expression
-     :help "Display a variable's value and record it in `*Backtrace-record*' buffer"]
-    ["Return value..." debugger-return-value
-     :help "Continue, specifying value to return."]
-    "--"
-    ["Debug frame" debugger-frame
-     :help "Request entry to debugger when this frame exits"]
-    ["Cancel debug frame" debugger-frame-clear
-     :help "Do not enter debugger when this frame exits"]
-    ["List debug on entry functions" debugger-list-functions
-     :help "Display a list of all the functions now set to debug on entry"]
-    "--"
-    ["Next Line" next-line
-     :help "Move cursor down"]
-    ["Help for Symbol" backtrace-help-follow-symbol
-     :help "Show help for symbol at point"]
-    ["Describe Debugger Mode" describe-mode
-     :help "Display documentation for debugger-mode"]
-    "--"
-    ["Quit" debugger-quit
-     :help "Quit debugging and return to top level"]))
+;;   :menu
+;;   '("Debugger"
+;;     ["Step through" debugger-step-through
+;;      :help "Proceed, stepping through subexpressions of this expression"]
+;;     ["Continue" debugger-continue
+;;      :help "Continue, evaluating this expression without stopping"]
+;;     ["Jump" debugger-jump
+;;      :help "Continue to exit from this frame, with all debug-on-entry suspended"]
+;;     ["Eval Expression..." debugger-eval-expression
+;;      :help "Eval an expression, in an environment like that outside the debugger"]
+;;     ["Display and Record Expression" debugger-record-expression
+;;      :help "Display a variable's value and record it in `*Backtrace-record*' buffer"]
+;;     ["Return value..." debugger-return-value
+;;      :help "Continue, specifying value to return."]
+;;     "--"
+;;     ["Debug frame" debugger-frame
+;;      :help "Request entry to debugger when this frame exits"]
+;;     ["Cancel debug frame" debugger-frame-clear
+;;      :help "Do not enter debugger when this frame exits"]
+;;     ["List debug on entry functions" debugger-list-functions
+;;      :help "Display a list of all the functions now set to debug on entry"]
+;;     "--"
+;;     ["Next Line" next-line
+;;      :help "Move cursor down"]
+;;     ["Help for Symbol" backtrace-help-follow-symbol
+;;      :help "Show help for symbol at point"]
+;;     ["Describe Debugger Mode" describe-mode
+;;      :help "Display documentation for debugger-mode"]
+;;     "--"
+;;     ["Quit" debugger-quit
+;;      :help "Quit debugging and return to top level"]))
 
-(put 'debugger-mode 'mode-class 'special)
+;; RUNE-BOOTSTRAP
+;; (put 'debugger-mode 'mode-class 'special)
 
-(define-derived-mode debugger-mode backtrace-mode "Debugger"
-  "Mode for debugging Emacs Lisp using a backtrace.
-\\<debugger-mode-map>
-A frame marked with `*' in the backtrace means that exiting that
-frame will enter the debugger.  You can flag frames to enter the
-debugger when frame is exited with \\[debugger-frame], and remove
-the flag with \\[debugger-frame-clear].
+;; RUNE-BOOTSTRAP
+;; (define-derived-mode debugger-mode backtrace-mode "Debugger"
+;;   "Mode for debugging Emacs Lisp using a backtrace.
+;; \\<debugger-mode-map>
+;; A frame marked with `*' in the backtrace means that exiting that
+;; frame will enter the debugger.  You can flag frames to enter the
+;; debugger when frame is exited with \\[debugger-frame], and remove
+;; the flag with \\[debugger-frame-clear].
 
-When in debugger invoked due to exiting a frame which was flagged
-with a `*', you can use the \\[debugger-return-value] command to
-override the value being returned from that frame when the debugger
-exits.
+;; When in debugger invoked due to exiting a frame which was flagged
+;; with a `*', you can use the \\[debugger-return-value] command to
+;; override the value being returned from that frame when the debugger
+;; exits.
 
-Use \\[debug-on-entry] and \\[cancel-debug-on-entry] to control
-which functions will enter the debugger when called.
+;; Use \\[debug-on-entry] and \\[cancel-debug-on-entry] to control
+;; which functions will enter the debugger when called.
 
-Complete list of commands:
-\\{debugger-mode-map}"
-  (add-hook 'kill-buffer-hook
-            (lambda () (if (> (recursion-depth) 0) (top-level)))
-            nil t)
-  (use-local-map debugger-mode-map))
+;; Complete list of commands:
+;; \\{debugger-mode-map}"
+;;   (add-hook 'kill-buffer-hook
+;;             (lambda () (if (> (recursion-depth) 0) (top-level)))
+;;             nil t)
+;;   (use-local-map debugger-mode-map))
 
 (defcustom debugger-record-buffer "*Debugger-record*"
   "Buffer name for expression values, for \\[debugger-record-expression]."
