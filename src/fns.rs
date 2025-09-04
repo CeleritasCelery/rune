@@ -589,6 +589,7 @@ pub(crate) fn safe_length(sequence: Object) -> usize {
 pub(crate) fn proper_list_p(object: Object) -> Option<usize> {
     match object.untag() {
         ObjectType::Cons(x) => x.elements().len().ok(),
+        ObjectType::NIL => Some(0),
         _ => None,
     }
 }
