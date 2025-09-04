@@ -55,7 +55,8 @@
 
 (require 'cl-lib)
 (require 'debug)
-(require 'backtrace)
+;; RUNE-BOOTSTRAP
+;; (require 'backtrace)
 (require 'ewoc)
 (require 'find-func)
 (require 'pp)
@@ -104,16 +105,20 @@ mode.  Any other value will be temporarily bound to
 `backtrace-line-length' when producing stack traces in batch
 mode.")
 
-(defface ert-test-result-expected '((((class color) (background light))
-                                     :background "green1")
-                                    (((class color) (background dark))
-                                     :background "green3"))
+;; RUNE-BOOTSTRAP
+(defconst ;; defface
+  ert-test-result-expected '((((class color) (background light))
+                              :background "green1")
+                             (((class color) (background dark))
+                              :background "green3"))
   "Face used for expected results in the ERT results buffer.")
 
-(defface ert-test-result-unexpected '((((class color) (background light))
-                                       :background "red1")
-                                      (((class color) (background dark))
-                                       :background "red3"))
+;; RUNE-BOOTSTRAP
+(defconst ;; defface
+  ert-test-result-unexpected '((((class color) (background light))
+                                :background "red1")
+                               (((class color) (background dark))
+                                :background "red3"))
   "Face used for unexpected results in the ERT results buffer.")
 
 ;;; Defining and locating tests.
@@ -2336,79 +2341,86 @@ SELECTOR works as described in `ert-select-tests'."
 ;;; Simple view mode for auxiliary information like stack traces or
 ;;; messages.  Mainly binds "q" for quit.
 
-(define-derived-mode ert-simple-view-mode special-mode "ERT-View"
-  "Major mode for viewing auxiliary information in ERT.")
+;; RUNE-BOOTSTRAP
+;; (define-derived-mode ert-simple-view-mode special-mode "ERT-View"
+;;   "Major mode for viewing auxiliary information in ERT.")
 
 ;;; Commands and button actions for the results buffer.
 
-(define-derived-mode ert-results-mode special-mode "ERT-Results"
-  "Major mode for viewing results of ERT test runs."
-  :interactive nil
-  (setq-local revert-buffer-function
-              (lambda (&rest _) (ert-results-rerun-all-tests))))
+;; RUNE-BOOTSTRAP
+;; (define-derived-mode ert-results-mode special-mode "ERT-Results"
+;;   "Major mode for viewing results of ERT test runs."
+;;   :interactive nil
+;;   (setq-local revert-buffer-function
+;;               (lambda (&rest _) (ert-results-rerun-all-tests))))
 
-(cl-loop for (key binding) in
-         '( ;; Stuff that's not in the menu.
-           ("\t" forward-button)
-           ([backtab] backward-button)
-           ("j" ert-results-jump-between-summary-and-result)
-           ("L" ert-results-toggle-printer-limits-for-test-at-point)
-           ("n" ert-results-next-test)
-           ("p" ert-results-previous-test)
-           ;; Stuff that is in the menu.
-           ("R" ert-results-rerun-all-tests)
-           ("r" ert-results-rerun-test-at-point)
-           ("d" ert-results-rerun-test-at-point-debugging-errors)
-           ("." ert-results-find-test-at-point-other-window)
-           ("b" ert-results-pop-to-backtrace-for-test-at-point)
-           ("m" ert-results-pop-to-messages-for-test-at-point)
-           ("l" ert-results-pop-to-should-forms-for-test-at-point)
-           ("h" ert-results-describe-test-at-point)
-           ("D" ert-delete-test)
-           ("T" ert-results-pop-to-timings)
-           )
-         do
-         (define-key ert-results-mode-map key binding))
+;; RUNE-BOOTSTRAP
+;; (cl-loop for (key binding) in
+;;          '( ;; Stuff that's not in the menu.
+;;            ("\t" forward-button)
+;;            ([backtab] backward-button)
+;;            ("j" ert-results-jump-between-summary-and-result)
+;;            ("L" ert-results-toggle-printer-limits-for-test-at-point)
+;;            ("n" ert-results-next-test)
+;;            ("p" ert-results-previous-test)
+;;            ;; Stuff that is in the menu.
+;;            ("R" ert-results-rerun-all-tests)
+;;            ("r" ert-results-rerun-test-at-point)
+;;            ("d" ert-results-rerun-test-at-point-debugging-errors)
+;;            ("." ert-results-find-test-at-point-other-window)
+;;            ("b" ert-results-pop-to-backtrace-for-test-at-point)
+;;            ("m" ert-results-pop-to-messages-for-test-at-point)
+;;            ("l" ert-results-pop-to-should-forms-for-test-at-point)
+;;            ("h" ert-results-describe-test-at-point)
+;;            ("D" ert-delete-test)
+;;            ("T" ert-results-pop-to-timings)
+;;            )
+;;          do
+;;          (define-key ert-results-mode-map key binding))
 
-(easy-menu-define ert-results-mode-menu ert-results-mode-map
-  "Menu for `ert-results-mode'."
-  '("ERT Results"
-    ["Re-run all tests" ert-results-rerun-all-tests]
-    "--"
-    ;; FIXME?  Why are there (at least) 3 different ways to decide if
-    ;; there is a test at point?
-    ["Re-run test" ert-results-rerun-test-at-point
-     :active (car (ert--results-test-at-point-allow-redefinition))]
-    ["Debug test" ert-results-rerun-test-at-point-debugging-errors
-     :active (car (ert--results-test-at-point-allow-redefinition))]
-    ["Show test definition" ert-results-find-test-at-point-other-window
-     :active (ert-test-at-point)]
-    "--"
-    ["Show backtrace" ert-results-pop-to-backtrace-for-test-at-point
-     :active (ert--results-test-at-point-no-redefinition)]
-    ["Show messages" ert-results-pop-to-messages-for-test-at-point
-     :active (ert--results-test-at-point-no-redefinition)]
-    ["Show `should' forms" ert-results-pop-to-should-forms-for-test-at-point
-     :active (ert--results-test-at-point-no-redefinition)]
-    ["Describe test" ert-results-describe-test-at-point
-     :active (ert--results-test-at-point-no-redefinition)]
-    "--"
-    ["Delete test" ert-delete-test]
-    "--"
-    ["Show execution time of each test" ert-results-pop-to-timings]
-    ))
+;; RUNE-BOOTSTRAP
+;; (easy-menu-define ert-results-mode-menu ert-results-mode-map
+;;   "Menu for `ert-results-mode'."
+;;   '("ERT Results"
+;;     ["Re-run all tests" ert-results-rerun-all-tests]
+;;     "--"
+;;     ;; FIXME?  Why are there (at least) 3 different ways to decide if
+;;     ;; there is a test at point?
+;;     ["Re-run test" ert-results-rerun-test-at-point
+;;      :active (car (ert--results-test-at-point-allow-redefinition))]
+;;     ["Debug test" ert-results-rerun-test-at-point-debugging-errors
+;;      :active (car (ert--results-test-at-point-allow-redefinition))]
+;;     ["Show test definition" ert-results-find-test-at-point-other-window
+;;      :active (ert-test-at-point)]
+;;     "--"
+;;     ["Show backtrace" ert-results-pop-to-backtrace-for-test-at-point
+;;      :active (ert--results-test-at-point-no-redefinition)]
+;;     ["Show messages" ert-results-pop-to-messages-for-test-at-point
+;;      :active (ert--results-test-at-point-no-redefinition)]
+;;     ["Show `should' forms" ert-results-pop-to-should-forms-for-test-at-point
+;;      :active (ert--results-test-at-point-no-redefinition)]
+;;     ["Describe test" ert-results-describe-test-at-point
+;;      :active (ert--results-test-at-point-no-redefinition)]
+;;     "--"
+;;     ["Delete test" ert-delete-test]
+;;     "--"
+;;     ["Show execution time of each test" ert-results-pop-to-timings]
+;;     ))
 
-(define-button-type 'ert--results-progress-bar-button
-  'action #'ert--results-progress-bar-button-action
-  'help-echo "mouse-2, RET: Reveal test result")
+;; RUNE-BOOTSTRAP
+;; (define-button-type 'ert--results-progress-bar-button
+;;   'action #'ert--results-progress-bar-button-action
+;;   'help-echo "mouse-2, RET: Reveal test result")
 
-(define-button-type 'ert--test-name-button
-  'action #'ert--test-name-button-action
-  'help-echo "mouse-2, RET: Find test definition")
+;; RUNE-BOOTSTRAP
+;; (define-button-type 'ert--test-name-button
+;;   'action #'ert--test-name-button-action
+;;   'help-echo "mouse-2, RET: Find test definition")
 
-(define-button-type 'ert--results-expand-collapse-button
-  'action #'ert--results-expand-collapse-button-action
-  'help-echo "mouse-2, RET: Expand/collapse test result")
+;; RUNE-BOOTSTRAP
+;; (define-button-type 'ert--results-expand-collapse-button
+;;   'action #'ert--results-expand-collapse-button-action
+;;   'help-echo "mouse-2, RET: Expand/collapse test result")
 
 (defun ert--results-test-node-or-null-at-point ()
   "If point is on a valid ewoc node, return it; return nil otherwise.
@@ -2864,23 +2876,29 @@ To be used in the ERT results buffer."
 
 ;;; Actions on load/unload.
 
-(require 'help-mode)
-(add-to-list 'describe-symbol-backends
-             `("ERT test" ,#'ert-test-boundp
-               ,(lambda (s _b _f) (ert-describe-test s))))
+;; RUNE-BOOTSTRAP
+;; (require 'help-mode)
+;; RUNE-BOOTSTRAP
+;; (add-to-list 'describe-symbol-backends
+;;              `("ERT test" ,#'ert-test-boundp
+;;                ,(lambda (s _b _f) (ert-describe-test s))))
 
 (add-to-list 'find-function-regexp-alist '(ert--test . ert--find-test-regexp))
-(add-to-list 'minor-mode-alist '(ert--current-run-stats
-                                 (:eval
-                                  (ert--tests-running-mode-line-indicator))))
-(add-hook 'emacs-lisp-mode-hook #'ert--activate-font-lock-keywords)
+;; RUNE-BOOTSTRAP
+;; (add-to-list 'minor-mode-alist '(ert--current-run-stats
+;;                                  (:eval
+;;                                   (ert--tests-running-mode-line-indicator))))
+;; RUNE-BOOTSTRAP
+;; (add-hook 'emacs-lisp-mode-hook #'ert--activate-font-lock-keywords)
 
 (defun ert--unload-function ()
   "Unload function to undo the side-effects of loading ert.el."
   (ert--remove-from-list 'find-function-regexp-alist 'ert-deftest :key #'car)
-  (ert--remove-from-list 'minor-mode-alist 'ert--current-run-stats :key #'car)
-  (ert--remove-from-list 'emacs-lisp-mode-hook
-                         'ert--activate-font-lock-keywords)
+  ;; RUNE-BOOTSTRAP
+  ;; (ert--remove-from-list 'minor-mode-alist 'ert--current-run-stats :key #'car)
+  ;; RUNE-BOOTSTRAP
+  ;; (ert--remove-from-list 'emacs-lisp-mode-hook
+  ;;                        'ert--activate-font-lock-keywords)
   nil)
 
 (defun ert-test-erts-file (file &optional transform)
