@@ -86,10 +86,12 @@ MAP can be an alist, plist, hash-table, or array."
   "Return non-nil if LIST is the start of a nonempty plist map."
   (and (consp list) (atom (car list))))
 
+;; RUNE-BOOTSTRAP
 (defconst map--plist-has-predicate
-  (condition-case nil
-      (with-no-warnings (plist-get () nil #'eq) t)
-    (wrong-number-of-arguments))
+  nil
+  ;; (condition-case nil
+  ;;     (with-no-warnings (plist-get () nil #'eq) t)
+  ;;   (wrong-number-of-arguments))
   "Non-nil means `plist-get' & co. accept a predicate in Emacs 29+.
 Note that support for this predicate in map.el is patchy and
 deprecated.")
