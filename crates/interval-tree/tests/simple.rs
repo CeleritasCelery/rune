@@ -1,6 +1,6 @@
 use interval_tree::TextRange;
 
-/// Simple reference implementation for testing against IntervalTree
+/// Simple reference implementation for testing against `IntervalTree`
 /// Uses a Vec<Option<T>> where each index represents a position
 /// This makes it trivial to understand and verify behavior
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,7 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
         }
     }
 
-    /// Insert an interval with a value, using merge_fn to combine with existing values
+    /// Insert an interval with a value, using `merge_fn` to combine with existing values
     pub(crate) fn insert<F: Fn(T, T) -> T>(&mut self, range: TextRange, val: T, merge_fn: F) {
         if range.start >= range.end {
             return; // Empty intervals not allowed
@@ -45,7 +45,7 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
 
     /// Get the value at a specific position
     pub(crate) fn get(&self, pos: usize) -> Option<T> {
-        self.data.get(pos).and_then(|opt| opt.clone())
+        self.data.get(pos).and_then(Clone::clone)
     }
 
     /// Find all positions that intersect with the given range and have values
@@ -97,8 +97,8 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
     }
 
     /// Delete values in a range
-    /// If del_extend is true, removes entire intervals that intersect
-    /// If del_extend is false, only removes the intersecting portions
+    /// If `del_extend` is true, removes entire intervals that intersect
+    /// If `del_extend` is false, only removes the intersecting portions
     pub(crate) fn delete(&mut self, range: TextRange, del_extend: bool) {
         if range.start >= range.end {
             return;
@@ -129,9 +129,8 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
         let mut new_data = vec![None; self.data.len() + length];
 
         // Copy elements before insertion point unchanged
-        for pos in 0..position.min(self.data.len()) {
-            new_data[pos] = self.data[pos].clone();
-        }
+        let min_pos = position.min(self.data.len());
+        new_data[..min_pos].clone_from_slice(&self.data[..min_pos]);
 
         // Copy elements at/after insertion point, shifted by length
         for pos in position..self.data.len() {
@@ -152,10 +151,10 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
     pub(crate) fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, _eq: F, empty: G) {
         // Remove empty values
         for val in &mut self.data {
-            if let Some(v) = val {
-                if empty(v) {
-                    *val = None;
-                }
+            if let Some(v) = val
+                && empty(v)
+            {
+                *val = None;
             }
         }
 

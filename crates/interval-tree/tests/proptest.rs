@@ -116,24 +116,21 @@ fn compare_find_intersects(
     assert_eq!(
         tree_results.len(),
         simple_results.len(),
-        "Different number of intersects for range {:?}. Tree: {:?}, Simple: {:?}",
-        range,
-        tree_results,
-        simple_results
+        "Different number of intersects for range {range:?}. Tree: {tree_results:?}, Simple: {simple_results:?}"
     );
 
     for ((tree_range, tree_val), (simple_range, simple_val)) in
         tree_results.iter().zip(&simple_results)
     {
         assert_eq!(tree_range, simple_range, "Different ranges");
-        assert_eq!(tree_val, simple_val, "Different values for range {:?}", tree_range);
+        assert_eq!(tree_val, simple_val, "Different values for range {tree_range:?}");
     }
 }
 
 fn compare_get(tree: &IntervalTree<i32>, simple: &SimpleIntervalMap<i32>, pos: usize) {
     let tree_val = tree.find(pos).map(|n| n.val);
     let simple_val = simple.find(pos);
-    assert_eq!(tree_val, simple_val, "Different values at position {}", pos);
+    assert_eq!(tree_val, simple_val, "Different values at position {pos}");
 }
 
 fn compare_size(tree: &IntervalTree<i32>, simple: &SimpleIntervalMap<i32>) {
@@ -233,8 +230,8 @@ proptest! {
         let merge_fn = |new: i32, old: i32| new.wrapping_add(old);
 
         // Insert overlapping intervals
-        insert_both(&mut tree, &mut simple, range1, insert1.value, &merge_fn);
-        insert_both(&mut tree, &mut simple, range2, insert2.value, &merge_fn);
+        insert_both(&mut tree, &mut simple, range1, insert1.value, merge_fn);
+        insert_both(&mut tree, &mut simple, range2, insert2.value, merge_fn);
 
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));

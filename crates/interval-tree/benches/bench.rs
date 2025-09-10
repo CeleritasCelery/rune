@@ -95,7 +95,7 @@ fn find_intersects_benchmark(c: &mut Criterion) {
 
 fn iterator_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(42);
-    let n = 100000;
+    let n = 100_000;
     let intervals = generate_random_intervals(n, &mut rng, 0..10000, 1..100);
 
     let tree = build_tree(&intervals);
@@ -103,13 +103,13 @@ fn iterator_benchmark(c: &mut Criterion) {
     let min_node = tree.min();
     let min_key = min_node.map(|n| n.key);
     let size = tree.size();
-    println!("{:?}", size);
+    println!("{size:?}");
 
     c.bench_function(&format!("iterating with stack iterator over {size} intervals"), |b| {
         b.iter(|| {
             let mut stack_iter = StackIterator::new(&tree, min_key, false);
             let mut count = 0;
-            while let Some(_n) = stack_iter.next() {
+            for _n in stack_iter.by_ref() {
                 count += 1;
             }
             assert_eq!(count, size);
@@ -204,7 +204,7 @@ fn clean_benchmark(c: &mut Criterion) {
         let start = i * 10;
         let end = start + 10;
         // Make some intervals empty
-        let value = if i % 5 == 0 { 0 } else { 1 };
+        let value = i32::from(i % 5 != 0);
         tree_with_empty.insert(TextRange::new(start, end), value, |a, _b| a);
     }
 
