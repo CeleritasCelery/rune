@@ -13,6 +13,8 @@ rand = "0.9"
 
 [dev-dependencies]
 criterion = "0.4"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 
 [[bench]]
 name = "bench"
