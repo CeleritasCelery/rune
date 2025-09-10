@@ -66,15 +66,15 @@ fn insert_both(
     tree: &mut IntervalTree<Vec<i32>>,
     simple: &mut SimpleIntervalMap<Vec<i32>>,
     range: TextRange,
-    value: Vec<i32>,
+    value: i32,
 ) {
     let merge_fn = |mut new: Vec<i32>, mut old: Vec<i32>| {
-        new.append(&mut old);
-        new.sort_unstable();
-        new
+        old.append(&mut new);
+        old.sort_unstable();
+        old
     };
-    tree.insert(range, value.clone(), &merge_fn);
-    simple.insert(range, value, merge_fn);
+    tree.insert(range, vec![value], &merge_fn);
+    simple.insert(range, vec![value], merge_fn);
 }
 
 fn delete_both(
@@ -176,7 +176,7 @@ proptest! {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
 
-        insert_both(&mut tree, &mut simple, range, vec![insert.value]);
+        insert_both(&mut tree, &mut simple, range, insert.value);
 
         // Check that both have the same content
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
@@ -199,7 +199,7 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then delete
-        insert_both(&mut tree, &mut simple, insert_range, vec![insert.value]);
+        insert_both(&mut tree, &mut simple, insert_range, insert.value);
         delete_both(&mut tree, &mut simple, delete_range, delete.del_extend);
 
         // Verify consistency
@@ -221,7 +221,7 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then advance
-        insert_both(&mut tree, &mut simple, range, vec![insert.value]);
+        insert_both(&mut tree, &mut simple, range, insert.value);
         advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
 
         // Verify consistency
@@ -245,8 +245,8 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert overlapping intervals
-        insert_both(&mut tree, &mut simple, range1, vec![insert1.value]);
-        insert_both(&mut tree, &mut simple, range2, vec![insert2.value]);
+        insert_both(&mut tree, &mut simple, range1, insert1.value);
+        insert_both(&mut tree, &mut simple, range2, insert2.value);
 
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
@@ -274,7 +274,7 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then apply transformation
-        insert_both(&mut tree, &mut simple, insert_range, vec![insert.value]);
+        insert_both(&mut tree, &mut simple, insert_range, insert.value);
 
         let multiply_by = apply.multiply_by;
         apply_with_split_both(
@@ -309,7 +309,7 @@ proptest! {
                 Operation::Insert(insert) => {
                     let range = make_range(insert.start, insert.end);
                     if range.start != range.end {
-                        insert_both(&mut tree, &mut simple, range, vec![insert.value]);
+                        insert_both(&mut tree, &mut simple, range, insert.value);
                     }
                 }
                 Operation::Delete(delete) => {
@@ -376,7 +376,7 @@ proptest! {
         for insert in inserts {
             let range = make_range(insert.start, insert.end);
             if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, vec![insert.value]);
+                insert_both(&mut tree, &mut simple, range, insert.value);
             }
         }
 
@@ -404,7 +404,7 @@ proptest! {
         for insert in inserts {
             let range = make_range(insert.start, insert.end);
             if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, vec![insert.value]);
+                insert_both(&mut tree, &mut simple, range, insert.value);
             }
         }
 
