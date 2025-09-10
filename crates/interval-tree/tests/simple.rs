@@ -54,51 +54,14 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
             return Vec::new();
         }
 
-        let mut result = Vec::new();
-        let mut current_start: Option<usize> = None;
-        let mut current_val: Option<T> = None;
+        // First, find all intervals in the data and then filter for intersections
+        let all_intervals = self.to_ranges();
 
-        let end_pos = range.end.min(self.data.len());
-
-        // Scan through the range looking for consecutive positions with the same value
-        for pos in range.start..end_pos {
-            if let Some(val) = &self.data[pos] {
-                match (&current_start, &current_val) {
-                    (Some(_start), Some(prev_val)) if prev_val == val => {
-                        // Continue current interval
-                    }
-                    (Some(start), Some(prev_val)) => {
-                        // End previous interval, start new one
-                        result.push((TextRange::new(*start, pos), prev_val.clone()));
-                        current_start = Some(pos);
-                        current_val = Some(val.clone());
-                    }
-                    (None, None) => {
-                        // Start first interval
-                        current_start = Some(pos);
-                        current_val = Some(val.clone());
-                    }
-                    _ => unreachable!(),
-                }
-            } else if let (Some(start), Some(val)) = (&current_start, &current_val) {
-                // End current interval due to gap
-                result.push((TextRange::new(*start, pos), val.clone()));
-                current_start = None;
-                current_val = None;
-            }
-        }
-
-        // Close final interval if needed
-        if let (Some(start), Some(val)) = (&current_start, &current_val) {
-            // Find the actual end of the interval, not just the search boundary
-            let mut end = end_pos;
-            while end < self.data.len() && self.data[end].as_ref() == Some(val) {
-                end += 1;
-            }
-            result.push((TextRange::new(*start, end), val.clone()));
-        }
-
-        result
+        // Return only intervals that intersect with the query range
+        all_intervals
+            .into_iter()
+            .filter(|(interval_range, _)| interval_range.intersects(range))
+            .collect()
     }
 
     /// Delete values in a range
@@ -267,9 +230,10 @@ mod tests {
 
         let intersects = map.find_intersects(TextRange::new(2, 6));
         assert_eq!(intersects.len(), 2);
-        assert_eq!(intersects[0].0, TextRange::new(2, 3));
+        // Should return full intervals that intersect, not just intersecting portions
+        assert_eq!(intersects[0].0, TextRange::new(0, 3));
         assert_eq!(intersects[0].1, 1);
-        assert_eq!(intersects[1].0, TextRange::new(5, 6));
+        assert_eq!(intersects[1].0, TextRange::new(5, 8));
         assert_eq!(intersects[1].1, 2);
     }
 
