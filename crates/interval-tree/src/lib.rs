@@ -470,8 +470,7 @@ impl<T: Clone> Node<T> {
     }
 
     pub fn advance(&mut self, position: usize, length: usize) {
-        let cmp = self.key.start > position;
-        if cmp {
+        if position <= self.key.start {
             if let Some(ref mut l) = self.left {
                 l.advance(position, length);
             }
@@ -1354,7 +1353,8 @@ mod tests {
         tree.advance(7, 5);
         // let mut tree = dbg!(tree);
         tree.get(TextRange::new(6, 7)).unwrap();
-        tree.get(TextRange::new(7, 13)).unwrap();
+        assert!(tree.get(TextRange::new(7, 12)).is_none());
+        tree.get(TextRange::new(12, 13)).unwrap();
         tree.get(TextRange::new(13, 14)).unwrap();
         tree.get(TextRange::new(14, 15)).unwrap();
     }
