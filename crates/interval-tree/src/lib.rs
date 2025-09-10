@@ -469,10 +469,15 @@ impl<T: Clone> Node<T> {
         }
     }
 
-    pub fn advance(&mut self, position: usize, length: usize) {
+    pub fn advance(
+        &mut self,
+        position: usize,
+        length: usize,
+        split_intervals: &mut Vec<(TextRange, T)>,
+    ) {
         if position <= self.key.start {
             if let Some(ref mut l) = self.left {
-                l.advance(position, length);
+                l.advance(position, length, split_intervals);
             }
             self.key.advance(length);
             if let Some(ref mut r) = self.right {
@@ -480,14 +485,24 @@ impl<T: Clone> Node<T> {
             }
         } else {
             if self.key.end > position {
-                // position is inside this interval
-                self.key.end += length;
+                // position is inside this interval - we need to split it
+                // Keep the first part [start, position) in this node
+                // The second part [position, end) needs to be moved to [position + length, end + length)
+                let original_end = self.key.end;
+                self.key.end = position;
+
+                // Create the second part of the split interval and collect it for later insertion
+                if position < original_end {
+                    let second_part_range =
+                        TextRange::new(position + length, original_end + length);
+                    split_intervals.push((second_part_range, self.val.clone()));
+                }
             }
             if let Some(ref mut l) = self.left {
-                l.advance(position, length);
+                l.advance(position, length, split_intervals);
             }
             if let Some(ref mut r) = self.right {
-                r.advance(position, length);
+                r.advance(position, length, split_intervals);
             }
         }
     }
@@ -701,8 +716,16 @@ impl<T: Clone> IntervalTree<T> {
     /// `position`. This is typically used to implement operations that insert
     /// or delete text in a buffer.
     pub fn advance(&mut self, position: usize, length: usize) {
+        // Collect intervals that need to be split during advance
+        let mut split_intervals = Vec::new();
+
         if let Some(ref mut node) = self.root {
-            node.advance(position, length);
+            node.advance(position, length, &mut split_intervals);
+        }
+
+        // Insert any split intervals back into the tree
+        for (range, val) in split_intervals {
+            self.insert(range, val, |new, _old| new); // No merging needed for splits
         }
     }
 
@@ -1348,15 +1371,23 @@ mod tests {
 
     #[test]
     fn advance() {
-        let val = 1;
-        let mut tree = build_tree(val);
+        let merge = |a, b| a + b;
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 10), 1, merge);
         tree.advance(7, 5);
-        // let mut tree = dbg!(tree);
-        tree.get(TextRange::new(6, 7)).unwrap();
-        assert!(tree.get(TextRange::new(7, 12)).is_none());
-        tree.get(TextRange::new(12, 13)).unwrap();
-        tree.get(TextRange::new(13, 14)).unwrap();
-        tree.get(TextRange::new(14, 15)).unwrap();
+        assert_eq!(tree.get(TextRange::new(0, 7)), Some(1));
+        assert_eq!(tree.get(TextRange::new(7, 12)), None);
+        assert_eq!(tree.get(TextRange::new(12, 15)), Some(1));
+
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(0, 7), 1, merge);
+        tree.insert(TextRange::new(3, 5), 2, merge);
+        tree.advance(4, 2);
+        assert_eq!(tree.get(TextRange::new(0, 3)), Some(1));
+        assert_eq!(tree.get(TextRange::new(3, 4)), Some(3));
+        assert_eq!(tree.get(TextRange::new(4, 6)), None);
+        assert_eq!(tree.get(TextRange::new(6, 7)), Some(3));
+        assert_eq!(tree.get(TextRange::new(7, 9)), Some(1));
     }
 
     #[test]
