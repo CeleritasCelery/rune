@@ -65,29 +65,15 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
     }
 
     /// Delete values in a range
-    /// If `del_extend` is true, removes entire intervals that intersect
-    /// If `del_extend` is false, only removes the intersecting portions
-    pub(crate) fn delete(&mut self, range: TextRange, del_extend: bool) {
+    /// Only removes the intersecting portions of intervals
+    pub(crate) fn delete(&mut self, range: TextRange) {
         if range.start >= range.end {
             return;
         }
 
-        if del_extend {
-            // Find all intervals that intersect and remove them entirely
-            let intersecting_intervals = self.find_intersects(range);
-            for (interval_range, _) in intersecting_intervals {
-                for pos in interval_range.start..interval_range.end.min(self.data.len()) {
-                    if pos < self.data.len() {
-                        self.data[pos] = None;
-                    }
-                }
-            }
-        } else {
-            // Only remove positions within the specified range
-            let end_pos = range.end.min(self.data.len());
-            for pos in range.start..end_pos {
-                self.data[pos] = None;
-            }
+        let end_pos = range.end.min(self.data.len());
+        for pos in range.start..end_pos {
+            self.data[pos] = None;
         }
     }
 
@@ -242,7 +228,7 @@ mod tests {
         let mut map = SimpleIntervalMap::new();
         map.insert(TextRange::new(0, 5), 1, |new, _| new);
 
-        map.delete(TextRange::new(2, 4), false);
+        map.delete(TextRange::new(2, 4));
 
         assert_eq!(map.get(1), Some(1));
         assert_eq!(map.get(2), None);

@@ -667,15 +667,12 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
 
     /// Deletes intervals from the tree that intersect with the given range.
     ///
-    /// The behavior depends on the `del_extend` parameter:
-    /// - If `true`, deletes all intervals that intersect with the range
-    /// - If `false`, only deletes the intersecting portions of intervals, preserving
-    ///   non-intersecting parts by splitting them into new intervals
+    /// Only deletes the intersecting portions of intervals, preserving
+    /// non-intersecting parts by splitting them into new intervals.
     ///
     /// # Arguments
     ///
     /// * `range` - The range to delete (can be any type that converts to `TextRange`)
-    /// * `del_extend` - Whether to delete entire intersecting intervals or just the overlapping portions
     ///
     /// # Examples
     ///
@@ -686,24 +683,12 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
     /// tree.insert(TextRange::new(0, 10), 1, |a, _| a);
     ///
     /// // Delete only overlapping portion
-    /// tree.delete(TextRange::new(5, 15), false);
+    /// tree.delete(TextRange::new(5, 15));
     /// assert_eq!(tree.find_intersects(TextRange::new(0, 10)).collect::<Vec<_>>().len(), 1);
-    ///
-    /// let mut tree = IntervalTree::new();
-    /// tree.insert(TextRange::new(0, 10), 1, |a, _| a);
-    ///
-    /// // Delete entire intersecting interval
-    /// tree.delete(TextRange::new(5, 15), true);
-    /// assert!(tree.find_intersects(TextRange::new(0, 10)).next().is_none());
     /// ```
-    fn delete_no_merge(&mut self, range: impl Into<TextRange>, del_extend: bool) {
+    fn delete_no_merge(&mut self, range: impl Into<TextRange>) {
         let range: TextRange = range.into();
         for key in self.find_intersects(range).map(|n| n.key).collect::<Vec<_>>() {
-            if del_extend {
-                self.delete_exact(key);
-                continue;
-            }
-            // key right-intersect with range
             // if key is a subset of range, delete it
             if key.start >= range.start && key.end <= range.end {
                 self.delete_exact(key);
@@ -734,8 +719,8 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
         }
     }
 
-    pub fn delete(&mut self, range: impl Into<TextRange>, del_extend: bool) {
-        self.delete_no_merge(range, del_extend);
+    pub fn delete(&mut self, range: impl Into<TextRange>) {
+        self.delete_no_merge(range);
 
         // Automatically merge adjacent intervals with the same values
         self.merge(|a, b| a == b);
@@ -1051,7 +1036,7 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
                 }
                 Operation::Delete(key) => {
                     // self.delete_exact(key);
-                    self.delete_no_merge(key, false);
+                    self.delete_no_merge(key);
                 }
                 Operation::Merge(start_key, keys) => {
                     if let Some(node) = self.get_node_mut(start_key) {
@@ -1686,9 +1671,9 @@ mod tests {
             new
         });
 
-        // Delete a portion in the middle (partial delete, not del_extend)
+        // Delete a portion in the middle (partial delete)
         // This should split the interval into [0, 30) and [80, 100)
-        tree.delete(TextRange::new(30, 80), false);
+        tree.delete(TextRange::new(30, 80));
 
         // Verify the result
         let results: Vec<_> = tree

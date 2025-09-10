@@ -58,7 +58,7 @@ fn deletion_benchmark(c: &mut Criterion) {
             let mut tree = tree.clone();
             // Delete all intervals
             for (range, _) in &intervals {
-                tree.delete(*range, false);
+                tree.delete(*range);
             }
             black_box(tree);
         });
