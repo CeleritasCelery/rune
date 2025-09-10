@@ -90,7 +90,14 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
 
         // Close final interval if needed
         if let (Some(start), Some(val)) = (&current_start, &current_val) {
-            result.push((TextRange::new(*start, end_pos), val.clone()));
+            // Find the actual end of the interval, not just the search boundary
+            let mut actual_end = end_pos;
+            while actual_end < self.data.len()
+                && self.data.get(actual_end).is_some_and(|opt| opt.as_ref() == Some(val))
+            {
+                actual_end += 1;
+            }
+            result.push((TextRange::new(*start, actual_end), val.clone()));
         }
 
         result

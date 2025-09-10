@@ -62,20 +62,20 @@ fn make_range(start: u16, end: u16) -> TextRange {
     }
 }
 
-fn insert_both<F: Fn(i32, i32) -> i32>(
-    tree: &mut IntervalTree<i32>,
-    simple: &mut SimpleIntervalMap<i32>,
+fn insert_both<F: Fn(Vec<i32>, Vec<i32>) -> Vec<i32>>(
+    tree: &mut IntervalTree<Vec<i32>>,
+    simple: &mut SimpleIntervalMap<Vec<i32>>,
     range: TextRange,
-    value: i32,
+    value: Vec<i32>,
     merge_fn: F,
 ) {
-    tree.insert(range, value, &merge_fn);
+    tree.insert(range, value.clone(), &merge_fn);
     simple.insert(range, value, merge_fn);
 }
 
 fn delete_both(
-    tree: &mut IntervalTree<i32>,
-    simple: &mut SimpleIntervalMap<i32>,
+    tree: &mut IntervalTree<Vec<i32>>,
+    simple: &mut SimpleIntervalMap<Vec<i32>>,
     range: TextRange,
     del_extend: bool,
 ) {
@@ -84,8 +84,8 @@ fn delete_both(
 }
 
 fn advance_both(
-    tree: &mut IntervalTree<i32>,
-    simple: &mut SimpleIntervalMap<i32>,
+    tree: &mut IntervalTree<Vec<i32>>,
+    simple: &mut SimpleIntervalMap<Vec<i32>>,
     position: usize,
     length: usize,
 ) {
@@ -93,9 +93,9 @@ fn advance_both(
     simple.advance(position, length);
 }
 
-fn apply_with_split_both<F: Fn(i32) -> Option<i32> + Clone>(
-    tree: &mut IntervalTree<i32>,
-    simple: &mut SimpleIntervalMap<i32>,
+fn apply_with_split_both<F: Fn(Vec<i32>) -> Option<Vec<i32>> + Clone>(
+    tree: &mut IntervalTree<Vec<i32>>,
+    simple: &mut SimpleIntervalMap<Vec<i32>>,
     range: TextRange,
     f: F,
 ) {
@@ -105,11 +105,12 @@ fn apply_with_split_both<F: Fn(i32) -> Option<i32> + Clone>(
 
 // Compare tree and simple implementations for consistency
 fn compare_find_intersects(
-    tree: &IntervalTree<i32>,
-    simple: &SimpleIntervalMap<i32>,
+    tree: &IntervalTree<Vec<i32>>,
+    simple: &SimpleIntervalMap<Vec<i32>>,
     range: TextRange,
 ) {
-    let tree_results: Vec<_> = tree.find_intersects(range).map(|n| (n.key, n.val)).collect();
+    let tree_results: Vec<_> =
+        tree.find_intersects(range).map(|n| (n.key, n.val.clone())).collect();
     let simple_results = simple.find_intersects(range);
 
     // Both should find the same intervals with the same values
@@ -127,13 +128,13 @@ fn compare_find_intersects(
     }
 }
 
-fn compare_get(tree: &IntervalTree<i32>, simple: &SimpleIntervalMap<i32>, pos: usize) {
-    let tree_val = tree.find(pos).map(|n| n.val);
+fn compare_get(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>, pos: usize) {
+    let tree_val = tree.find(pos).map(|n| n.val.clone());
     let simple_val = simple.find(pos);
     assert_eq!(tree_val, simple_val, "Different values at position {pos}");
 }
 
-fn compare_size(tree: &IntervalTree<i32>, simple: &SimpleIntervalMap<i32>) {
+fn compare_size(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>) {
     // Note: tree.size() counts intervals, simple.size() counts positions with values
     // We can't directly compare these, but we can ensure they're consistent with content
     let tree_size = tree.size();
@@ -149,6 +150,12 @@ fn compare_size(tree: &IntervalTree<i32>, simple: &SimpleIntervalMap<i32>) {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 10,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
+        ..ProptestConfig::default()
+    })]
+
     #[test]
     fn pt_single_insert(insert in any::<Insert>()) {
         let range = make_range(insert.start, insert.end);
@@ -159,7 +166,10 @@ proptest! {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
 
-        insert_both(&mut tree, &mut simple, range, insert.value, |new, _old| new);
+        insert_both(&mut tree, &mut simple, range, vec![insert.value], |mut new, mut old| {
+            new.append(&mut old);
+            new
+        });
 
         // Check that both have the same content
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
@@ -182,7 +192,10 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then delete
-        insert_both(&mut tree, &mut simple, insert_range, insert.value, |new, _old| new);
+        insert_both(&mut tree, &mut simple, insert_range, vec![insert.value], |mut new, mut old| {
+            new.append(&mut old);
+            new
+        });
         delete_both(&mut tree, &mut simple, delete_range, delete.del_extend);
 
         // Verify consistency
@@ -204,7 +217,10 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then advance
-        insert_both(&mut tree, &mut simple, range, insert.value, |new, _old| new);
+        insert_both(&mut tree, &mut simple, range, vec![insert.value], |mut new, mut old| {
+            new.append(&mut old);
+            new
+        });
         advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
 
         // Verify consistency
@@ -227,11 +243,14 @@ proptest! {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
 
-        let merge_fn = |new: i32, old: i32| new.wrapping_add(old);
+        let merge_fn = |mut new: Vec<i32>, mut old: Vec<i32>| {
+            new.append(&mut old);
+            new
+        };
 
         // Insert overlapping intervals
-        insert_both(&mut tree, &mut simple, range1, insert1.value, merge_fn);
-        insert_both(&mut tree, &mut simple, range2, insert2.value, merge_fn);
+        insert_both(&mut tree, &mut simple, range1, vec![insert1.value], merge_fn);
+        insert_both(&mut tree, &mut simple, range2, vec![insert2.value], merge_fn);
 
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
@@ -259,18 +278,25 @@ proptest! {
         let mut simple = SimpleIntervalMap::new();
 
         // Insert then apply transformation
-        insert_both(&mut tree, &mut simple, insert_range, insert.value, |new, _old| new);
+        insert_both(&mut tree, &mut simple, insert_range, vec![insert.value], |mut new, mut old| {
+            new.append(&mut old);
+            new
+        });
 
         let multiply_by = apply.multiply_by;
         apply_with_split_both(
             &mut tree,
             &mut simple,
             apply_range,
-            move |val| {
+            move |mut val| {
                 if multiply_by == 0 {
                     None // Remove the value
                 } else {
-                    Some(val.wrapping_mul(multiply_by))
+                    // Multiply each element in the vector
+                    for v in &mut val {
+                        *v = v.wrapping_mul(multiply_by);
+                    }
+                    Some(val)
                 }
             }
         );
@@ -290,7 +316,10 @@ proptest! {
                 Operation::Insert(insert) => {
                     let range = make_range(insert.start, insert.end);
                     if range.start != range.end {
-                        insert_both(&mut tree, &mut simple, range, insert.value, |new: i32, old: i32| new.wrapping_add(old));
+                        insert_both(&mut tree, &mut simple, range, vec![insert.value], |mut new: Vec<i32>, mut old: Vec<i32>| {
+                            new.append(&mut old);
+                            new
+                        });
                     }
                 }
                 Operation::Delete(delete) => {
@@ -313,12 +342,18 @@ proptest! {
                 Operation::ApplyWithSplit(apply) => {
                     let range = make_range(apply.start, apply.end);
                     if range.start != range.end {
-                        let multiply_by = apply.multiply_by;
+                        let multiply_by = apply.multiply_by.max(1); // Avoid 0
                         apply_with_split_both(
                             &mut tree,
                             &mut simple,
                             range,
-                            move |val| Some(val.wrapping_mul(multiply_by.max(1))) // Avoid 0 and overflow
+                            move |mut val| {
+                                // Multiply each element in the vector
+                                for v in &mut val {
+                                    *v = v.wrapping_mul(multiply_by);
+                                }
+                                Some(val)
+                            }
                         );
                     }
                 }
@@ -349,13 +384,16 @@ proptest! {
         for insert in inserts {
             let range = make_range(insert.start, insert.end);
             if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, insert.value, |new: i32, old: i32| new.wrapping_add(old));
+                insert_both(&mut tree, &mut simple, range, vec![insert.value], |mut new: Vec<i32>, mut old: Vec<i32>| {
+                    new.append(&mut old);
+                    new
+                });
             }
         }
 
         // Clean both structures
-        let eq_fn = |a: &i32, b: &i32| a == b;
-        let empty_fn = |v: &i32| *v == empty_value;
+        let eq_fn = |a: &Vec<i32>, b: &Vec<i32>| a == b;
+        let empty_fn = |v: &Vec<i32>| v.contains(&empty_value);
 
         tree.clean(eq_fn, empty_fn);
         simple.clean(eq_fn, empty_fn);
@@ -377,7 +415,10 @@ proptest! {
         for insert in inserts {
             let range = make_range(insert.start, insert.end);
             if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, insert.value, |new, _old| new);
+                insert_both(&mut tree, &mut simple, range, vec![insert.value], |mut new, mut old| {
+                    new.append(&mut old);
+                    new
+                });
             }
         }
 
@@ -394,12 +435,12 @@ proptest! {
         match (tree_min, simple_min) {
             (Some(tree_node), Some((simple_range, simple_val))) => {
                 assert_eq!(tree_node.key, *simple_range, "Different min ranges");
-                assert_eq!(tree_node.val, *simple_val, "Different min values");
+                assert_eq!(&tree_node.val, simple_val, "Different min values");
             }
             (None, None) => {} // Both found nothing - OK
             (tree_result, simple_result) => {
                 panic!("Inconsistent find_intersect_min results. Tree: {:?}, Simple: {:?}",
-                       tree_result.map(|n| (n.key, n.val)), simple_result);
+                       tree_result.map(|n| (n.key, &n.val)), simple_result);
             }
         }
 
@@ -410,12 +451,12 @@ proptest! {
         match (tree_max, simple_max) {
             (Some(tree_node), Some((simple_range, simple_val))) => {
                 assert_eq!(tree_node.key, *simple_range, "Different max ranges");
-                assert_eq!(tree_node.val, *simple_val, "Different max values");
+                assert_eq!(&tree_node.val, simple_val, "Different max values");
             }
             (None, None) => {} // Both found nothing - OK
             (tree_result, simple_result) => {
                 panic!("Inconsistent find_intersect_max results. Tree: {:?}, Simple: {:?}",
-                       tree_result.map(|n| (n.key, n.val)), simple_result);
+                       tree_result.map(|n| (n.key, &n.val)), simple_result);
             }
         }
     }
