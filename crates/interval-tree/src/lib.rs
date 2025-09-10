@@ -688,27 +688,30 @@ impl<T: Clone> IntervalTree<T> {
             // if key is a subset of range, delete it
             if key.start >= range.start && key.end <= range.end {
                 self.delete_exact(key);
+                continue; // Skip further processing for this key
             }
 
             // if key is not a subset of range but its start is within range,
             // split it into two parts, and delete the part that is within range
             if key.start < range.start {
-                let n = self.get_node_mut(key).unwrap();
-                n.key.end = range.start;
-                if key.end > range.end {
-                    let val = n.val.clone();
-                    let f = |_, _| unreachable!(); // f will not be invoked anyway
-                    self.insert(TextRange::new(range.start, key.end), val, f);
+                if let Some(n) = self.get_node_mut(key) {
+                    n.key.end = range.start;
+                    if key.end > range.end {
+                        let val = n.val.clone();
+                        let f = |_, _| unreachable!(); // f will not be invoked anyway
+                        self.insert(TextRange::new(range.end, key.end), val, f);
+                    }
                 }
+                continue; // Skip further processing for this key since we've handled it
             }
 
             // if key is not a subset of range but its end is within range,
             // split it into two parts, and delete the part that is within range
-            if key.end > range.end {
-                let n = self.get_node_mut(key).unwrap();
+            if key.end > range.end
+                && let Some(n) = self.get_node_mut(key)
+            {
                 n.key.start = range.end;
             }
-            // unreachable!()
         }
     }
 
@@ -1553,5 +1556,36 @@ mod tests {
         // Test empty tree
         let empty_tree: IntervalTree<i32> = IntervalTree::new();
         assert!(empty_tree.find_intersect_min(TextRange::new(0, 1)).is_none());
+    }
+
+    #[test]
+    fn test_delete_partial_interval_regression() {
+        // Regression test for delete method bug where get_node_mut would fail
+        // with unwrap() on None when trying to access nodes after they were modified
+
+        let mut tree = IntervalTree::new();
+
+        // Insert a large interval
+        tree.insert(TextRange::new(0, 100), vec![42], |mut new, mut old| {
+            new.append(&mut old);
+            new
+        });
+
+        // Delete a portion in the middle (partial delete, not del_extend)
+        // This should split the interval into [0, 30) and [80, 100)
+        tree.delete(TextRange::new(30, 80), false);
+
+        // Verify the result
+        let results: Vec<_> = tree
+            .find_intersects(TextRange::new(0, 100))
+            .map(|n| (n.key, n.val.clone()))
+            .collect();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0], (TextRange::new(0, 30), vec![42]));
+        assert_eq!(results[1], (TextRange::new(80, 100), vec![42]));
+
+        // Ensure the deleted middle portion is gone
+        assert!(tree.find_intersects(TextRange::new(40, 70)).next().is_none());
     }
 }
