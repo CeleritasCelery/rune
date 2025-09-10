@@ -149,9 +149,15 @@ fn compare_size(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i3
     }
 }
 
+fn assert_canonical(tree: &IntervalTree<Vec<i32>>) {
+    assert!(
+        tree.is_canonical(),
+        "Tree is not in canonical form - adjacent intervals with equal values were not merged"
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 10,
         failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
         ..ProptestConfig::default()
     })]
@@ -361,10 +367,12 @@ proptest! {
 
             // After each operation, verify consistency
             compare_size(&tree, &simple);
+            assert_canonical(&tree);
         }
 
         // Final comprehensive check
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+        assert_canonical(&tree);
 
         // Test some random position lookups
         for pos in [0, 100, 1000, MAX_POS / 2, MAX_POS - 1] {

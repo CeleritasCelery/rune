@@ -523,7 +523,7 @@ pub struct IntervalTree<T: Clone> {
     root: MaybeNode<T>,
 }
 
-impl<T: Clone> IntervalTree<T> {
+impl<T: Clone + PartialEq> IntervalTree<T> {
     /// Creates an empty interval tree.
     pub fn new() -> Self {
         Self { root: None }
@@ -549,7 +549,7 @@ impl<T: Clone> IntervalTree<T> {
     ///
     /// An optional mutable reference to the newly inserted node, or `None` if the interval is
     /// degenerate.
-    pub fn insert<F: Fn(T, T) -> T>(
+    fn insert_no_merge<F: Fn(T, T) -> T>(
         &mut self,
         key: impl Into<TextRange>,
         val: T,
@@ -562,6 +562,25 @@ impl<T: Clone> IntervalTree<T> {
         let mut result = Node::insert_at(&mut self.root, key, val, false, &merge_fn);
         result.as_mut().unwrap().color = Color::Black;
         result
+    }
+
+    pub fn insert<F: Fn(T, T) -> T>(
+        &mut self,
+        key: impl Into<TextRange>,
+        val: T,
+        merge_fn: F,
+    ) -> Option<&mut Node<T>> {
+        let key = key.into();
+        if key.start == key.end {
+            return None;
+        }
+        self.insert_no_merge(key, val, merge_fn);
+
+        // Automatically merge adjacent intervals with the same values
+        self.merge(|a, b| a == b);
+
+        // Return mutable reference to the inserted node by finding it again
+        self.get_node_mut(key)
     }
 
     /// Finds the node with key `key` in the tree and returns its value if found.
@@ -677,7 +696,7 @@ impl<T: Clone> IntervalTree<T> {
     /// tree.delete(TextRange::new(5, 15), true);
     /// assert!(tree.find_intersects(TextRange::new(0, 10)).next().is_none());
     /// ```
-    pub fn delete(&mut self, range: impl Into<TextRange>, del_extend: bool) {
+    fn delete_no_merge(&mut self, range: impl Into<TextRange>, del_extend: bool) {
         let range: TextRange = range.into();
         for key in self.find_intersects(range).map(|n| n.key).collect::<Vec<_>>() {
             if del_extend {
@@ -699,7 +718,7 @@ impl<T: Clone> IntervalTree<T> {
                     if key.end > range.end {
                         let val = n.val.clone();
                         let f = |_, _| unreachable!(); // f will not be invoked anyway
-                        self.insert(TextRange::new(range.end, key.end), val, f);
+                        self.insert_no_merge(TextRange::new(range.end, key.end), val, f);
                     }
                 }
                 continue; // Skip further processing for this key since we've handled it
@@ -715,6 +734,13 @@ impl<T: Clone> IntervalTree<T> {
         }
     }
 
+    pub fn delete(&mut self, range: impl Into<TextRange>, del_extend: bool) {
+        self.delete_no_merge(range, del_extend);
+
+        // Automatically merge adjacent intervals with the same values
+        self.merge(|a, b| a == b);
+    }
+
     /// Advances all intervals in the tree by `length`, starting at
     /// `position`. This is typically used to implement operations that insert
     /// or delete text in a buffer.
@@ -728,8 +754,11 @@ impl<T: Clone> IntervalTree<T> {
 
         // Insert any split intervals back into the tree
         for (range, val) in split_intervals {
-            self.insert(range, val, |new, _old| new); // No merging needed for splits
+            self.insert_no_merge(range, val, |new, _old| new); // No merging needed for splits
         }
+
+        // Automatically merge adjacent intervals with the same values
+        self.merge(|a, b| a == b);
     }
 
     /// Find the node whose interval contains the given `position`. If no interval
@@ -833,6 +862,25 @@ impl<T: Clone> IntervalTree<T> {
         // let min = self.min_mut();
         let min = self.min().map(|n| n.key);
         self.clean_from_node(min, eq, empty);
+    }
+
+    /// Check if the tree is in canonical form (all adjacent intervals with equal values are merged)
+    pub fn is_canonical(&self) -> bool {
+        let intervals: Vec<_> = self.find_intersects(TextRange::new(0, usize::MAX)).collect();
+
+        // Check that no two adjacent intervals have the same value
+        for window in intervals.windows(2) {
+            let current = &window[0];
+            let next = &window[1];
+
+            // If intervals are adjacent (current.end == next.start) and have equal values,
+            // the tree is not in canonical form
+            if current.key.end == next.key.start && current.val == next.val {
+                return false;
+            }
+        }
+
+        true
     }
 
     pub fn clean_from<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(
@@ -990,17 +1038,20 @@ impl<T: Clone> IntervalTree<T> {
 
         // Apply all operations
         self.resolve_ops(operations, &merge);
+
+        // Automatically merge adjacent intervals with the same values
+        self.merge(|a, b| a == b);
     }
 
     fn resolve_ops<F: Fn(T, T) -> T>(&mut self, operations: Vec<Operation<T>>, merge_fn: &F) {
         for op in operations {
             match op {
                 Operation::Insert(key, val) => {
-                    self.insert(key, val, merge_fn);
+                    self.insert_no_merge(key, val, merge_fn);
                 }
                 Operation::Delete(key) => {
                     // self.delete_exact(key);
-                    self.delete(key, false);
+                    self.delete_no_merge(key, false);
                 }
                 Operation::Merge(start_key, keys) => {
                     if let Some(node) = self.get_node_mut(start_key) {
@@ -1155,6 +1206,45 @@ mod tests {
         a
     }
 
+    /// Helper function to assert that a tree is in canonical form after operations
+    fn assert_canonical<T: Clone + PartialEq>(tree: &IntervalTree<T>) {
+        assert!(
+            tree.is_canonical(),
+            "Tree is not in canonical form - adjacent intervals with equal values were not merged"
+        );
+    }
+
+    #[test]
+    fn test_is_canonical() {
+        // Test canonical form - single merged interval
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(1, 3), 1, merge);
+        tree.insert(TextRange::new(3, 5), 1, merge);
+        assert!(tree.is_canonical());
+
+        // Test non-canonical form - adjacent intervals with same value
+        let mut tree_non_canonical = IntervalTree::new();
+        tree_non_canonical.insert_no_merge(TextRange::new(1, 3), 1, merge);
+        tree_non_canonical.insert_no_merge(TextRange::new(3, 5), 1, merge);
+        assert!(!tree_non_canonical.is_canonical());
+
+        // Test canonical form - adjacent intervals with different values
+        let mut tree_diff_values = IntervalTree::new();
+        tree_diff_values.insert(TextRange::new(1, 3), 1, merge);
+        tree_diff_values.insert(TextRange::new(3, 5), 2, merge);
+        assert!(tree_diff_values.is_canonical());
+
+        // Test canonical form - non-adjacent intervals with same value
+        let mut tree_non_adjacent = IntervalTree::new();
+        tree_non_adjacent.insert(TextRange::new(1, 3), 1, merge);
+        tree_non_adjacent.insert(TextRange::new(5, 7), 1, merge);
+        assert!(tree_non_adjacent.is_canonical());
+
+        // Test empty tree
+        let empty_tree: IntervalTree<i32> = IntervalTree::new();
+        assert!(empty_tree.is_canonical());
+    }
+
     #[test]
     fn test_stack_iterator_empty_tree() {
         let tree: IntervalTree<i32> = IntervalTree::new();
@@ -1166,6 +1256,7 @@ mod tests {
     fn test_stack_iterator_single_node() {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 1), 1, merge);
+        assert_canonical(&tree);
 
         let min_key = tree.min().map(|n| n.key);
         let mut iter = StackIterator::new(&tree, min_key, false);
@@ -1217,7 +1308,7 @@ mod tests {
         assert_eq!(iter.next().map(|n| n.key), None);
     }
 
-    fn build_tree<T: Clone + Debug>(val: T) -> IntervalTree<T> {
+    fn build_tree<T: Clone + Debug + PartialEq>(val: T) -> IntervalTree<T> {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 1), val.clone(), merge);
         tree.insert(TextRange::new(1, 2), val.clone(), merge);
@@ -1229,6 +1320,22 @@ mod tests {
         tree.insert(TextRange::new(7, 8), val.clone(), merge);
         tree.insert(TextRange::new(8, 9), val.clone(), merge);
         tree.insert(TextRange::new(9, 10), val.clone(), merge);
+        tree.print();
+        tree
+    }
+
+    fn build_tree_no_merge<T: Clone + Debug + PartialEq>(val: T) -> IntervalTree<T> {
+        let mut tree = IntervalTree::new();
+        tree.insert_no_merge(TextRange::new(0, 1), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(1, 2), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(2, 3), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(3, 4), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(4, 5), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(5, 6), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(6, 7), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(7, 8), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(8, 9), val.clone(), merge);
+        tree.insert_no_merge(TextRange::new(9, 10), val.clone(), merge);
         tree.print();
         tree
     }
@@ -1270,7 +1377,7 @@ mod tests {
     #[test]
     fn insert() {
         let val = 1;
-        let tree = build_tree(val);
+        let tree = build_tree_no_merge(val);
         let root = tree.root.as_ref().unwrap();
         assert_eq!(root.key.start, 3);
         let n1 = root.left.as_ref().unwrap();
@@ -1287,7 +1394,7 @@ mod tests {
     #[test]
     fn delete() {
         let val = 1;
-        let mut tree = build_tree(val);
+        let mut tree = build_tree_no_merge(val);
         // let mut tree = dbg!(tree);
         for k in [8, 4, 5, 7, 3, 6] {
             let i = TextRange::new(k, k + 1);
@@ -1299,7 +1406,7 @@ mod tests {
     #[test]
     fn delete_ptr() {
         let val = 1;
-        let mut tree = build_tree(val);
+        let mut tree = build_tree_no_merge(val);
         let a = 3;
         let key = TextRange::new(a, a + 1);
         let n: *mut Node<i32> = tree.get_node_mut(key).unwrap();
@@ -1378,6 +1485,7 @@ mod tests {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(0, 10), 1, merge);
         tree.advance(7, 5);
+        assert_canonical(&tree);
         assert_eq!(tree.get(TextRange::new(0, 7)), Some(1));
         assert_eq!(tree.get(TextRange::new(7, 12)), None);
         assert_eq!(tree.get(TextRange::new(12, 15)), Some(1));
@@ -1386,6 +1494,7 @@ mod tests {
         tree.insert(TextRange::new(0, 7), 1, merge);
         tree.insert(TextRange::new(3, 5), 2, merge);
         tree.advance(4, 2);
+        assert_canonical(&tree);
         assert_eq!(tree.get(TextRange::new(0, 3)), Some(1));
         assert_eq!(tree.get(TextRange::new(3, 4)), Some(3));
         assert_eq!(tree.get(TextRange::new(4, 6)), None);
@@ -1399,6 +1508,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(5, 10), 1, merge);
         tree.merge(|a, b| *a == *b);
+        assert_canonical(&tree);
         assert_eq!(tree.find_intersects(TextRange::new(1, 10)).collect::<Vec<_>>().len(), 1);
     }
 
@@ -1408,6 +1518,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(5, 10), 2, merge);
         tree.merge(|a, b| *a == *b);
+        assert_canonical(&tree);
         assert_eq!(tree.find_intersects(TextRange::new(1, 10)).collect::<Vec<_>>().len(), 2);
     }
 
@@ -1417,6 +1528,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(10, 15), 1, merge);
         tree.merge(|a, b| *a == *b);
+        assert_canonical(&tree);
         assert_eq!(tree.find_intersects(TextRange::new(1, 15)).collect::<Vec<_>>().len(), 2);
     }
 
@@ -1427,6 +1539,7 @@ mod tests {
         tree.insert(TextRange::new(1, 5), 1, merge);
         tree.insert(TextRange::new(10, 15), 1, merge);
         tree.merge(|a, b| *a == *b);
+        assert_canonical(&tree);
         assert_eq!(tree.find_intersects(TextRange::new(1, 15)).collect::<Vec<_>>().len(), 1);
     }
 
@@ -1452,6 +1565,7 @@ mod tests {
 
         // Apply function to partial overlap
         tree.apply_with_split(|val| Some(val * 2), TextRange::new(5, 15));
+        assert_canonical(&tree);
         let nodes = tree.find_intersects(TextRange::new(0, 15)).collect::<Vec<_>>();
         assert_eq!(nodes.len(), 2);
         assert_eq!(nodes[0].val, 1);
@@ -1459,6 +1573,7 @@ mod tests {
 
         // Remove an interval
         tree.apply_with_split(|_| None, TextRange::new(7, 8));
+        assert_canonical(&tree);
         let nodes = tree.find_intersects(TextRange::new(0, 15)).collect::<Vec<_>>();
         assert_eq!(nodes.len(), 3);
         assert_eq!(nodes[1].key, TextRange::new(5, 7));
