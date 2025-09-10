@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3e8a0b2c4a904f87948d3597a9fc597f7c0f81f6ff959d790c4ed2e31852b313 # shrinks to insert = Insert { start: 35063, end: 0, value: 0 }, advance = Advance { position: 1, length: 1 }
+cc 16723b21673eabde6d18e7048e3aac6881113033b846e6f7087cd0306f6bcb82 # shrinks to inserts = [Insert { start: 17418, end: 0, value: 0 }], query = FindIntersects { start: 0, end: 1 }
+cc 0f59966266fefb669687cb3ce8cc2b41b6c58265dda0dd802e3923306a57df39 # shrinks to insert = Insert { start: 24279, end: 0, value: 0 }, delete = Delete { start: 1, end: 2, del_extend: false }
+cc 85ebace4232ca36ad6db6785c2bf2816bfc3b7cc912ada62bfb12813613dc561 # shrinks to operations = [Insert(Insert { start: 0, end: 23470, value: 0 }), Insert(Insert { start: 23471, end: 0, value: 0 })]
+cc 3d0dcc02c0614bdf6be07338226ab2e4cdf919cbb495f460f43dc5757675c5c2 # shrinks to insert = Insert { start: 9954, end: 0, value: 68900 }, delete = Delete { start: 12274, end: 9953, del_extend: true }
+cc 0ba729bce4618ea43127ab25d9cd971fb805f864ab999cd82ba9149d0eae8ea7 # shrinks to operations = [Insert(Insert { start: 0, end: 21979, value: -893253080 }), ApplyWithSplit(ApplyWithSplit { start: 34929, end: 21314, multiply_by: -1768332887 })]
+cc 9397786270b5e7b3cf12502417e01ed019f8f5c6ca63e57ba638d2d188c399d2 # shrinks to operations = [Insert(Insert { start: 45414, end: 41398, value: 0 }), Insert(Insert { start: 0, end: 5363, value: 0 }), Insert(Insert { start: 1, end: 2, value: 0 }), Delete(Delete { start: 1, end: 41399, del_extend: true })]
