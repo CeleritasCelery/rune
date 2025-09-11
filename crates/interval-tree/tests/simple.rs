@@ -101,23 +101,6 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
         self.get(position)
     }
 
-    /// Clean the map by merging adjacent positions with equal values and removing empty values
-    pub(crate) fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, _eq: F, empty: G) {
-        // Remove empty values
-        for val in &mut self.data {
-            if let Some(v) = val
-                && empty(v)
-            {
-                *val = None;
-            }
-        }
-
-        // Note: Since this is a simple reference implementation and the real IntervalTree
-        // maintains non-overlapping intervals, the "merging" here doesn't change the
-        // fundamental structure. The cleaning is mainly about removing empty values.
-        // The IntervalTree's clean operation is more complex due to its tree structure.
-    }
-
     /// Apply a transformation to all positions that intersect with range
     pub(crate) fn apply_with_split<F: Fn(T) -> Option<T>>(&mut self, f: F, range: TextRange) {
         if range.start >= range.end {

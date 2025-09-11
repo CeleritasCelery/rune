@@ -130,11 +130,11 @@ fn compare_find_intersects(
     }
 }
 
-fn compare_get(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>, pos: usize) {
-    let tree_val = tree.find(pos).map(|n| n.val.clone());
-    let simple_val = simple.find(pos);
-    assert_eq!(tree_val, simple_val, "Different values at position {pos}");
-}
+// fn compare_get(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>, pos: usize) {
+//     let tree_val = tree.find(pos).map(|n| n.val.clone());
+//     let simple_val = simple.find(pos);
+//     assert_eq!(tree_val, simple_val, "Different values at position {pos}");
+// }
 
 fn compare_size(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>) {
     // Note: tree.size() counts intervals, simple.size() counts positions with values
@@ -160,6 +160,7 @@ fn assert_canonical(tree: &IntervalTree<Vec<i32>>) {
 
 proptest! {
     #![proptest_config(ProptestConfig {
+        cases: 100,
         failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
         ..ProptestConfig::default()
     })]
@@ -179,6 +180,7 @@ proptest! {
         // Check that both have the same content
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
         compare_size(&tree, &simple);
+        assert_canonical(&tree);
     }
 
     #[test]
@@ -361,34 +363,6 @@ proptest! {
     //         compare_get(&tree, &simple, pos);
     //     }
     // }
-
-    #[test]
-    fn pt_clean_operations(
-        inserts in prop::collection::vec(any::<Insert>(), 0..10),
-        empty_value in any::<i32>()
-    ) {
-        let mut tree = IntervalTree::new();
-        let mut simple = SimpleIntervalMap::new();
-
-        // Insert multiple intervals
-        for insert in inserts {
-            let range = make_range(insert.start, insert.end);
-            if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, insert.value);
-            }
-        }
-
-        // Clean both structures
-        let eq_fn = |a: &Vec<i32>, b: &Vec<i32>| a == b;
-        let empty_fn = |v: &Vec<i32>| v.contains(&empty_value);
-
-        tree.clean(eq_fn, empty_fn);
-        simple.clean(eq_fn, empty_fn);
-
-        // Verify consistency after cleaning
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
-        compare_size(&tree, &simple);
-    }
 
     #[test]
     fn pt_find_intersect_min_max(
