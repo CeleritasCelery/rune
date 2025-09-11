@@ -205,6 +205,7 @@ proptest! {
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
         compare_size(&tree, &simple);
+        assert_canonical(&tree);
     }
 
     #[test]
@@ -227,6 +228,7 @@ proptest! {
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
         compare_size(&tree, &simple);
+        assert_canonical(&tree);
     }
 
     #[test]
@@ -256,6 +258,8 @@ proptest! {
             compare_find_intersects(&tree, &simple, range1);
             compare_find_intersects(&tree, &simple, range2);
         }
+
+        assert_canonical(&tree);
     }
 
     #[test]
@@ -297,6 +301,7 @@ proptest! {
         // Verify consistency
         compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
         compare_size(&tree, &simple);
+        assert_canonical(&tree);
     }
 
     // #[test]
@@ -417,5 +422,6 @@ proptest! {
                        tree_result.map(|n| (n.key, &n.val)), simple_result);
             }
         }
+        assert_canonical(&tree);
     }
 }
