@@ -4,9 +4,46 @@ use interval_tree::TextRange;
 /// Uses a Vec<Option<T>> where each index represents a position
 /// This makes it trivial to understand and verify behavior
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct SimpleIntervalMap<T: Clone> {
+pub(crate) struct SimpleIntervalMap<T> {
     /// Vector where index = position, value = Some(T) if position has a value
     data: Vec<Option<T>>,
+}
+
+pub(crate) struct RefMapIterator<'a, T> {
+    pos: usize,
+    map: &'a SimpleIntervalMap<T>,
+}
+
+impl<'a, T> RefMapIterator<'a, T> {
+    pub(crate) fn new(map: &'a SimpleIntervalMap<T>) -> Self {
+        Self { pos: 0, map }
+    }
+}
+
+impl<'a, T: PartialEq> Iterator for RefMapIterator<'a, T> {
+    type Item = (TextRange, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let empty_len = self.map.data[self.pos..].iter().take_while(|x| x.is_none()).count();
+        let start = self.pos + empty_len;
+        if let Some(val) = self.map.data.get(start) {
+            let len = self.map.data[start..].iter().take_while(|x| *x == val).count();
+            assert!(len >= 1);
+            self.pos = start + len;
+            Some((TextRange::new(start, start + len), val.as_ref().unwrap()))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T: PartialEq> IntoIterator for &'a SimpleIntervalMap<T> {
+    type Item = (TextRange, &'a T);
+    type IntoIter = RefMapIterator<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        RefMapIterator::new(self)
+    }
 }
 
 #[allow(dead_code)]
@@ -46,22 +83,6 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
     /// Get the value at a specific position
     pub(crate) fn get(&self, pos: usize) -> Option<T> {
         self.data.get(pos).and_then(Clone::clone)
-    }
-
-    /// Find all positions that intersect with the given range and have values
-    pub(crate) fn find_intersects(&self, range: TextRange) -> Vec<(TextRange, T)> {
-        if range.start >= range.end {
-            return Vec::new();
-        }
-
-        // First, find all intervals in the data and then filter for intersections
-        let all_intervals = self.to_ranges();
-
-        // Return only intervals that intersect with the query range
-        all_intervals
-            .into_iter()
-            .filter(|(interval_range, _)| interval_range.intersects(range))
-            .collect()
     }
 
     /// Delete values in a range
@@ -128,40 +149,6 @@ impl<T: Clone + PartialEq> SimpleIntervalMap<T> {
             .filter_map(|(pos, opt)| opt.as_ref().map(|_| pos))
             .collect()
     }
-
-    /// Convert to a compact representation showing ranges and their values
-    pub(crate) fn to_ranges(&self) -> Vec<(TextRange, T)> {
-        let positions = self.positions();
-        if positions.is_empty() {
-            return Vec::new();
-        }
-
-        let mut result = Vec::new();
-        let mut current_start = positions[0];
-        let mut current_val = self.data[positions[0]].as_ref().unwrap().clone();
-
-        for i in 1..positions.len() {
-            let pos = positions[i];
-            let val = self.data[pos].as_ref().unwrap();
-
-            // Check if this position continues the current range
-            if pos == positions[i - 1] + 1 && val == &current_val {
-                // Continue current range
-            } else {
-                // End current range and start new one
-                let end_pos = positions[i - 1] + 1;
-                result.push((TextRange::new(current_start, end_pos), current_val.clone()));
-                current_start = pos;
-                current_val = val.clone();
-            }
-        }
-
-        // Add final range
-        let final_end = positions.last().unwrap() + 1;
-        result.push((TextRange::new(current_start, final_end), current_val));
-
-        result
-    }
 }
 
 #[cfg(test)]
@@ -189,21 +176,6 @@ mod tests {
         assert_eq!(map.get(1), Some(5));
         assert_eq!(map.get(2), Some(8)); // 3 + 5
         assert_eq!(map.get(3), Some(3));
-    }
-
-    #[test]
-    fn test_simple_find_intersects() {
-        let mut map = SimpleIntervalMap::new();
-        map.insert(TextRange::new(0, 3), 1, |new, _| new);
-        map.insert(TextRange::new(5, 8), 2, |new, _| new);
-
-        let intersects = map.find_intersects(TextRange::new(2, 6));
-        assert_eq!(intersects.len(), 2);
-        // Should return full intervals that intersect, not just intersecting portions
-        assert_eq!(intersects[0].0, TextRange::new(0, 3));
-        assert_eq!(intersects[0].1, 1);
-        assert_eq!(intersects[1].0, TextRange::new(5, 8));
-        assert_eq!(intersects[1].1, 2);
     }
 
     #[test]
@@ -239,17 +211,16 @@ mod tests {
     }
 
     #[test]
-    fn test_to_ranges() {
+    fn test_iter() {
         let mut map = SimpleIntervalMap::new();
-        map.insert(TextRange::new(0, 3), 1, |new, _| new);
-        map.insert(TextRange::new(5, 7), 2, |new, _| new);
-        map.insert(TextRange::new(10, 12), 1, |new, _| new);
+        map.insert(TextRange::new(0, 100), 0, |x, _| x);
+        map.insert(TextRange::new(1, 2), 1, |x, _| x);
 
-        let ranges = map.to_ranges();
-        assert_eq!(ranges.len(), 3);
-        assert_eq!(ranges[0], (TextRange::new(0, 3), 1));
-        assert_eq!(ranges[1], (TextRange::new(5, 7), 2));
-        assert_eq!(ranges[2], (TextRange::new(10, 12), 1));
+        let mut iter = map.into_iter();
+
+        assert_eq!(iter.next().unwrap(), (TextRange::new(0, 1), &0));
+        assert_eq!(iter.next().unwrap(), (TextRange::new(1, 2), &1));
+        assert_eq!(iter.next().unwrap(), (TextRange::new(2, 100), &0));
     }
 
     #[test]

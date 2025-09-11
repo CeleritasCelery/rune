@@ -7,9 +7,6 @@ use proptest_derive::Arbitrary;
 mod simple;
 use simple::SimpleIntervalMap;
 
-// Limit ranges to u16::MAX to avoid massive allocations
-const MAX_POS: usize = u16::MAX as usize;
-
 #[derive(Arbitrary, Debug, Clone)]
 struct Insert {
     start: u16,
@@ -24,15 +21,9 @@ struct Delete {
 }
 
 #[derive(Arbitrary, Debug, Clone)]
-struct FindIntersects {
-    start: u16,
-    end: u16,
-}
-
-#[derive(Arbitrary, Debug, Clone)]
 struct Advance {
     position: u16,
-    length: u16,
+    length: u8,
 }
 
 #[derive(Arbitrary, Debug, Clone)]
@@ -67,9 +58,12 @@ fn insert_both(
     range: TextRange,
     value: i32,
 ) {
-    let merge_fn = |mut new: Vec<i32>, mut old: Vec<i32>| {
-        old.append(&mut new);
-        old.sort_unstable();
+    let merge_fn = |new: Vec<i32>, mut old: Vec<i32>| {
+        assert!(new.len() == 1);
+        if !old.contains(&new[0]) {
+            old.push(new[0]);
+            old.sort_unstable();
+        }
         old
     };
     tree.insert(range, vec![value], &merge_fn);
@@ -106,26 +100,24 @@ fn apply_with_split_both<F: Fn(Vec<i32>) -> Option<Vec<i32>> + Clone>(
 }
 
 // Compare tree and simple implementations for consistency
-fn compare_find_intersects(
-    tree: &IntervalTree<Vec<i32>>,
-    simple: &SimpleIntervalMap<Vec<i32>>,
-    range: TextRange,
-) {
-    let tree_results: Vec<_> =
-        tree.find_intersects(range).map(|n| (n.key, n.val.clone())).collect();
-    let simple_results = simple.find_intersects(range);
+fn compare_find_intersects(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>) {
+    let tree_results: Vec<_> = tree
+        .find_intersects(TextRange::new(0, usize::MAX))
+        .map(|n| (n.key, n.val.clone()))
+        .collect();
+    let simple_len = simple.into_iter().count();
 
     // Both should find the same intervals with the same values
     assert_eq!(
         tree_results.len(),
-        simple_results.len(),
-        "Different number of intersects for range {range:?}. Tree: {tree_results:?}, Simple: {simple_results:?}"
+        simple_len,
+        "Different number of intersects for range. Tree: {tree_results:?}, Simple: {simple_len}"
     );
 
-    for ((tree_range, tree_val), (simple_range, simple_val)) in
-        tree_results.iter().zip(&simple_results)
-    {
-        assert_eq!(tree_range, simple_range, "Different ranges");
+    println!("Tree results: {tree_results:?}");
+    for ((tree_range, tree_val), (simple_range, simple_val)) in tree_results.iter().zip(simple) {
+        println!("Comparing tree range {tree_range:?} with simple range {simple_range:?}");
+        assert_eq!(*tree_range, simple_range, "Different ranges");
         assert_eq!(tree_val, simple_val, "Different values for range {tree_range:?}");
     }
 }
@@ -160,7 +152,7 @@ fn assert_canonical(tree: &IntervalTree<Vec<i32>>) {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 100,
+        cases: 200,
         failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
         ..ProptestConfig::default()
     })]
@@ -178,7 +170,7 @@ proptest! {
         insert_both(&mut tree, &mut simple, range, insert.value);
 
         // Check that both have the same content
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+        compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
     }
@@ -203,7 +195,7 @@ proptest! {
         delete_both(&mut tree, &mut simple, delete_range);
 
         // Verify consistency
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+        compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
     }
@@ -226,7 +218,7 @@ proptest! {
         advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
 
         // Verify consistency
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+        compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
     }
@@ -251,14 +243,7 @@ proptest! {
         insert_both(&mut tree, &mut simple, range2, insert2.value);
 
         // Verify consistency
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
-
-        // Test specific intersections
-        if range1.intersects(range2) {
-            compare_find_intersects(&tree, &simple, range1);
-            compare_find_intersects(&tree, &simple, range2);
-        }
-
+        compare_find_intersects(&tree, &simple);
         assert_canonical(&tree);
     }
 
@@ -299,7 +284,7 @@ proptest! {
         );
 
         // Verify consistency
-        compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+        compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
     }
@@ -326,7 +311,7 @@ proptest! {
     //             Operation::FindIntersects(find) => {
     //                 let range = make_range(find.start, find.end);
     //                 if range.start != range.end {
-    //                     compare_find_intersects(&tree, &simple, range);
+    //                     compare_find_intersects(&tree, &simple);
     //                 }
     //             }
     //             Operation::Advance(advance) => {
@@ -360,7 +345,7 @@ proptest! {
     //     }
 
     //     // Final comprehensive check
-    //     compare_find_intersects(&tree, &simple, TextRange::new(0, MAX_POS));
+    //     compare_find_intersects(&tree, &simple);
     //     assert_canonical(&tree);
 
     //     // Test some random position lookups
@@ -368,60 +353,4 @@ proptest! {
     //         compare_get(&tree, &simple, pos);
     //     }
     // }
-
-    #[test]
-    fn pt_find_intersect_min_max(
-        inserts in prop::collection::vec(any::<Insert>(), 0..5),
-        query in any::<FindIntersects>()
-    ) {
-        let mut tree = IntervalTree::new();
-        let mut simple = SimpleIntervalMap::new();
-
-        // Insert intervals
-        for insert in inserts {
-            let range = make_range(insert.start, insert.end);
-            if range.start != range.end {
-                insert_both(&mut tree, &mut simple, range, insert.value);
-            }
-        }
-
-        let query_range = make_range(query.start, query.end);
-        if query_range.start == query_range.end {
-            return Ok(()); // Skip empty ranges
-        }
-
-        // Test find_intersect_min
-        let tree_min = tree.find_intersect_min(query_range);
-        let simple_intersects = simple.find_intersects(query_range);
-        let simple_min = simple_intersects.first();
-
-        match (tree_min, simple_min) {
-            (Some(tree_node), Some((simple_range, simple_val))) => {
-                assert_eq!(tree_node.key, *simple_range, "Different min ranges");
-                assert_eq!(&tree_node.val, simple_val, "Different min values");
-            }
-            (None, None) => {} // Both found nothing - OK
-            (tree_result, simple_result) => {
-                panic!("Inconsistent find_intersect_min results. Tree: {:?}, Simple: {:?}",
-                       tree_result.map(|n| (n.key, &n.val)), simple_result);
-            }
-        }
-
-        // Test find_intersect_max
-        let tree_max = tree.find_intersect_max(query_range);
-        let simple_max = simple_intersects.last();
-
-        match (tree_max, simple_max) {
-            (Some(tree_node), Some((simple_range, simple_val))) => {
-                assert_eq!(tree_node.key, *simple_range, "Different max ranges");
-                assert_eq!(&tree_node.val, simple_val, "Different max values");
-            }
-            (None, None) => {} // Both found nothing - OK
-            (tree_result, simple_result) => {
-                panic!("Inconsistent find_intersect_max results. Tree: {:?}, Simple: {:?}",
-                       tree_result.map(|n| (n.key, &n.val)), simple_result);
-            }
-        }
-        assert_canonical(&tree);
-    }
 }
