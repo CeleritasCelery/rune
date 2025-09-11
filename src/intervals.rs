@@ -50,13 +50,11 @@ impl<'ob> IntervalTree<'ob> {
     /// If the interval overlaps with existing intervals, their properties will be merged
     /// using `add_properties`. The resulting object will be stored in the tree.
     pub fn insert(&mut self, start: usize, end: usize, val: Slot<Object<'ob>>, cx: &'ob Context) {
-        self.tree
-            .insert((start, end), val, |a, b| {
-                add_properties(*a, *b, crate::textprops::PropertySetType::Append, false, cx)
-                    .map(Slot::new)
-                    .unwrap()
-            })
-            .unwrap();
+        self.tree.insert((start, end), val, |a, b| {
+            add_properties(*a, *b, crate::textprops::PropertySetType::Append, false, cx)
+                .map(Slot::new)
+                .unwrap()
+        });
     }
 
     pub fn set_properties(&mut self, start: usize, end: usize, properties: Object<'ob>) {
@@ -424,8 +422,7 @@ mod reverse_interval_iterator_tests {
         let mut iter = ReverseIntervalIntersections::new(&tree, 0, 50);
         assert_eq!(iter.next(), Some((40..50, NIL)));
         assert_eq!(iter.next(), Some((30..40, val2.into())));
-        assert_eq!(iter.next(), Some((20..30, val1.into())));
-        assert_eq!(iter.next(), Some((10..20, val1.into())));
+        assert_eq!(iter.next(), Some((10..30, val1.into())));
         assert_eq!(iter.next(), Some((0..10, NIL)));
         assert_eq!(iter.next(), None);
     }
@@ -493,8 +490,7 @@ mod interval_iterator_tests {
 
         let mut iter = IntervalIntersections::new(&tree, 0, 50);
         assert_eq!(iter.next(), Some((0..10, NIL)));
-        assert_eq!(iter.next(), Some((10..20, val1.into())));
-        assert_eq!(iter.next(), Some((20..30, val1.into())));
+        assert_eq!(iter.next(), Some((10..30, val1.into())));
         assert_eq!(iter.next(), Some((30..40, val2.into())));
         assert_eq!(iter.next(), Some((40..50, NIL)));
         assert_eq!(iter.next(), None);

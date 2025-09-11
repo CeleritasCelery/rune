@@ -761,16 +761,6 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
         let key = node.map(|n| n.key);
 
         StackIterator::new(self, key, false).take_while(move |n| n.key.intersects(range))
-        // let mut result = Vec::new();
-        // let iter = StackIterator::new(self, key, false);
-        // for n in iter {
-        //     if n.key.intersects(range) {
-        //         result.push(n);
-        //     } else {
-        //         break;
-        //     }
-        // }
-        // result
     }
 
     /// Finds the node with the minimum key that intersects with the given range.
