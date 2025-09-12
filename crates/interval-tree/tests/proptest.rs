@@ -9,40 +9,39 @@ use simple::SimpleIntervalMap;
 
 #[derive(Arbitrary, Debug, Clone)]
 struct Insert {
-    start: u16,
-    end: u16,
+    start: u8,
+    end: u8,
     value: i32,
 }
 
 #[derive(Arbitrary, Debug, Clone)]
 struct Delete {
-    start: u16,
-    end: u16,
+    start: u8,
+    end: u8,
 }
 
 #[derive(Arbitrary, Debug, Clone)]
 struct Advance {
-    position: u16,
+    position: u8,
     length: u8,
 }
 
 #[derive(Arbitrary, Debug, Clone)]
 struct ApplyWithSplit {
-    start: u16,
-    end: u16,
+    start: u8,
+    end: u8,
     multiply_by: i32,
 }
 
-// #[derive(Arbitrary, Debug, Clone)]
-// enum Operation {
-//     Insert(Insert),
-//     Delete(Delete),
-//     FindIntersects(FindIntersects),
-//     Advance(Advance),
-//     ApplyWithSplit(ApplyWithSplit),
-// }
+#[derive(Arbitrary, Debug, Clone)]
+enum Operation {
+    Insert(Insert),
+    Delete(Delete),
+    Advance(Advance),
+    ApplyWithSplit(ApplyWithSplit),
+}
 
-fn make_range(start: u16, end: u16) -> TextRange {
+fn make_range(start: u8, end: u8) -> TextRange {
     let start = start as usize;
     let end = end as usize;
     if start > end {
@@ -114,19 +113,11 @@ fn compare_find_intersects(tree: &IntervalTree<Vec<i32>>, simple: &SimpleInterva
         "Different number of intersects for range. Tree: {tree_results:?}, Simple: {simple_len}"
     );
 
-    println!("Tree results: {tree_results:?}");
     for ((tree_range, tree_val), (simple_range, simple_val)) in tree_results.iter().zip(simple) {
-        println!("Comparing tree range {tree_range:?} with simple range {simple_range:?}");
         assert_eq!(*tree_range, simple_range, "Different ranges");
         assert_eq!(tree_val, simple_val, "Different values for range {tree_range:?}");
     }
 }
-
-// fn compare_get(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>, pos: usize) {
-//     let tree_val = tree.find(pos).map(|n| n.val.clone());
-//     let simple_val = simple.find(pos);
-//     assert_eq!(tree_val, simple_val, "Different values at position {pos}");
-// }
 
 fn compare_size(tree: &IntervalTree<Vec<i32>>, simple: &SimpleIntervalMap<Vec<i32>>) {
     // Note: tree.size() counts intervals, simple.size() counts positions with values
@@ -296,68 +287,60 @@ proptest! {
         assert_canonical(&tree);
     }
 
-    // #[test]
-    // fn pt_combo_operations(operations in prop::collection::vec(any::<Operation>(), 0..20)) {
-    //     let mut tree = IntervalTree::new();
-    //     let mut simple = SimpleIntervalMap::new();
+    #[test]
+    fn pt_combo_operations(operations in prop::collection::vec(any::<Operation>(), 0..20)) {
+        let mut tree = IntervalTree::new();
+        let mut simple = SimpleIntervalMap::new();
 
-    //     for op in operations {
-    //         match op {
-    //             Operation::Insert(insert) => {
-    //                 let range = make_range(insert.start, insert.end);
-    //                 if range.start != range.end {
-    //                     insert_both(&mut tree, &mut simple, range, insert.value);
-    //                 }
-    //             }
-    //             Operation::Delete(delete) => {
-    //                 let range = make_range(delete.start, delete.end);
-    //                 if range.start != range.end {
-    //                     delete_both(&mut tree, &mut simple, range);
-    //                 }
-    //             }
-    //             Operation::FindIntersects(find) => {
-    //                 let range = make_range(find.start, find.end);
-    //                 if range.start != range.end {
-    //                     compare_find_intersects(&tree, &simple);
-    //                 }
-    //             }
-    //             Operation::Advance(advance) => {
-    //                 if advance.length > 0 {
-    //                     advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
-    //                 }
-    //             }
-    //             Operation::ApplyWithSplit(apply) => {
-    //                 let range = make_range(apply.start, apply.end);
-    //                 if range.start != range.end {
-    //                     let multiply_by = apply.multiply_by.max(1); // Avoid 0
-    //                     apply_with_split_both(
-    //                         &mut tree,
-    //                         &mut simple,
-    //                         range,
-    //                         move |mut val| {
-    //                             // Multiply each element in the vector
-    //                             for v in &mut val {
-    //                                 *v = v.wrapping_mul(multiply_by);
-    //                             }
-    //                             Some(val)
-    //                         }
-    //                     );
-    //                 }
-    //             }
-    //         }
+        for op in operations {
+            match op {
+                Operation::Insert(insert) => {
+                    let range = make_range(insert.start, insert.end);
+                    if range.start != range.end {
+                        insert_both(&mut tree, &mut simple, range, insert.value);
+                    }
+                }
+                Operation::Delete(delete) => {
+                    let range = make_range(delete.start, delete.end);
+                    if range.start != range.end {
+                        delete_both(&mut tree, &mut simple, range);
+                    }
+                }
+                Operation::Advance(advance) => {
+                    if advance.length > 0 {
+                        advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
+                    }
+                }
+                Operation::ApplyWithSplit(apply) => {
+                    let range = make_range(apply.start, apply.end);
+                    if range.start != range.end {
+                        let multiply_by = apply.multiply_by.max(1); // Avoid 0
+                        apply_with_split_both(
+                            &mut tree,
+                            &mut simple,
+                            range,
+                            move |mut val| {
+                                // Multiply each element in the vector
+                                for v in &mut val {
+                                    *v = v.wrapping_mul(multiply_by);
+                                }
+                                Some(val)
+                            }
+                        );
+                    }
+                }
+            }
 
-    //         // After each operation, verify consistency
-    //         compare_size(&tree, &simple);
-    //         assert_canonical(&tree);
-    //     }
+            // After each operation, verify consistency
+            tree.merge(|a, b| a == b);
+            compare_size(&tree, &simple);
+            assert_canonical(&tree);
+        }
 
-    //     // Final comprehensive check
-    //     compare_find_intersects(&tree, &simple);
-    //     assert_canonical(&tree);
-
-    //     // Test some random position lookups
-    //     for pos in [0, 100, 1000, MAX_POS / 2, MAX_POS - 1] {
-    //         compare_get(&tree, &simple, pos);
-    //     }
-    // }
+        // Final comprehensive check
+        tree.merge(|a, b| a == b);
+        compare_find_intersects(&tree, &simple);
+        compare_find_intersects(&tree, &simple);
+        assert_canonical(&tree);
+    }
 }

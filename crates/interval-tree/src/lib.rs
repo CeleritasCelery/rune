@@ -307,6 +307,7 @@ impl<T: Clone> Node<T> {
         }
         let result = Node::delete_min(&mut n.left);
         Node::balance(n)?;
+        n.n = n.n(); // Update node count after deletion
         result
     }
 
@@ -328,6 +329,7 @@ impl<T: Clone> Node<T> {
         }
         let result = Node::delete_max(&mut n.right);
         Node::balance(n)?;
+        n.n = n.n(); // Update node count after deletion
         result
     }
 
@@ -347,8 +349,14 @@ impl<T: Clone> Node<T> {
                 Node::rotate_right(n).unwrap();
             }
             if key == n.key && n.right.is_none() {
-                return node.take();
-                // return None;
+                // If the node to delete has no right child, replace it with its left subtree
+                // instead of dropping the entire subtree.
+                let mut removed = node.take();
+                if let Some(ref mut removed_node) = removed {
+                    let left_subtree = removed_node.left.take();
+                    *node = left_subtree;
+                }
+                return removed;
             }
 
             let cond = if let Some(ref r) = n.right {
@@ -377,6 +385,7 @@ impl<T: Clone> Node<T> {
         };
 
         Node::balance(n)?;
+        n.n = n.n(); // Update node count after deletion
         result
     }
 
@@ -1653,5 +1662,22 @@ mod tests {
 
         // Ensure the deleted middle portion is gone
         assert!(tree.find_intersects(TextRange::new(40, 70)).next().is_none());
+    }
+
+    #[test]
+    fn test_delete_exact_preserves_left_subtree() {
+        // Ensure deleting a node with no right child preserves its left subtree
+        // Build a tree where the node [69,70) has a left subtree and no right child
+        let mut tree = IntervalTree::new();
+        tree.insert(TextRange::new(69, 70), 1, merge);
+        tree.insert(TextRange::new(0, 1), 1, merge);
+
+        assert_eq!(tree.size(), 2);
+
+        // Delete the node with no right child; its left child should remain
+        tree.delete_exact(TextRange::new(69, 70));
+
+        assert_eq!(tree.size(), 1);
+        assert_eq!(tree.get(TextRange::new(0, 1)), Some(1));
     }
 }
