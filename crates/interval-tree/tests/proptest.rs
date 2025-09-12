@@ -158,17 +158,20 @@ proptest! {
     })]
 
     #[test]
-    fn pt_single_insert(insert in any::<Insert>()) {
-        let range = make_range(insert.start, insert.end);
-        if range.start == range.end {
-            return Ok(()); // Skip empty ranges
-        }
-
+    fn pt_insert(inserts in prop::collection::vec(any::<Insert>(), 0..5)) {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
+        for insert in inserts {
+            let range = make_range(insert.start, insert.end);
+            if range.start == range.end {
+                continue;
+            }
 
-        insert_both(&mut tree, &mut simple, range, insert.value);
+            insert_both(&mut tree, &mut simple, range, insert.value);
 
+        }
+
+        tree.merge(|a, b| a == b);
         // Check that both have the same content
         compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
@@ -195,6 +198,7 @@ proptest! {
         delete_both(&mut tree, &mut simple, delete_range);
 
         // Verify consistency
+        tree.merge(|a, b| a == b);
         compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
@@ -218,6 +222,7 @@ proptest! {
         advance_both(&mut tree, &mut simple, advance.position as usize, advance.length as usize);
 
         // Verify consistency
+        tree.merge(|a, b| a == b);
         compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);
@@ -243,6 +248,7 @@ proptest! {
         insert_both(&mut tree, &mut simple, range2, insert2.value);
 
         // Verify consistency
+        tree.merge(|a, b| a == b);
         compare_find_intersects(&tree, &simple);
         assert_canonical(&tree);
     }
@@ -284,6 +290,7 @@ proptest! {
         );
 
         // Verify consistency
+        tree.merge(|a, b| a == b);
         compare_find_intersects(&tree, &simple);
         compare_size(&tree, &simple);
         assert_canonical(&tree);

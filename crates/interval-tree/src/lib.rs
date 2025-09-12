@@ -549,7 +549,7 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
     ///
     /// An optional mutable reference to the newly inserted node, or `None` if the interval is
     /// degenerate.
-    fn insert_no_merge<F: Fn(T, T) -> T>(
+    pub fn insert<F: Fn(T, T) -> T>(
         &mut self,
         key: impl Into<TextRange>,
         val: T,
@@ -562,25 +562,6 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
         let mut result = Node::insert_at(&mut self.root, key, val, false, &merge_fn);
         result.as_mut().unwrap().color = Color::Black;
         result
-    }
-
-    pub fn insert<F: Fn(T, T) -> T>(
-        &mut self,
-        key: impl Into<TextRange>,
-        val: T,
-        merge_fn: F,
-    ) -> Option<&mut Node<T>> {
-        let key = key.into();
-        if key.start == key.end {
-            return None;
-        }
-        self.insert_no_merge(key, val, merge_fn);
-
-        // Automatically merge adjacent intervals with the same values
-        self.merge(|a, b| a == b);
-
-        // Return mutable reference to the inserted node by finding it again
-        self.get_node_mut(key)
     }
 
     /// Finds the node with key `key` in the tree and returns its value if found.
@@ -686,7 +667,7 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
     /// tree.delete(TextRange::new(5, 15));
     /// assert_eq!(tree.find_intersects(TextRange::new(0, 10)).collect::<Vec<_>>().len(), 1);
     /// ```
-    fn delete_no_merge(&mut self, range: impl Into<TextRange>) {
+    pub fn delete(&mut self, range: impl Into<TextRange>) {
         let range: TextRange = range.into();
         for key in self.find_intersects(range).map(|n| n.key).collect::<Vec<_>>() {
             // if key is a subset of range, delete it
@@ -703,7 +684,7 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
                     if key.end > range.end {
                         let val = n.val.clone();
                         let f = |_, _| unreachable!(); // f will not be invoked anyway
-                        self.insert_no_merge(TextRange::new(range.end, key.end), val, f);
+                        self.insert(TextRange::new(range.end, key.end), val, f);
                     }
                 }
                 continue; // Skip further processing for this key since we've handled it
@@ -719,13 +700,6 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
         }
     }
 
-    pub fn delete(&mut self, range: impl Into<TextRange>) {
-        self.delete_no_merge(range);
-
-        // Automatically merge adjacent intervals with the same values
-        self.merge(|a, b| a == b);
-    }
-
     /// Advances all intervals in the tree by `length`, starting at
     /// `position`. This is typically used to implement operations that insert
     /// or delete text in a buffer.
@@ -739,7 +713,7 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
 
         // Insert any split intervals back into the tree
         for (range, val) in split_intervals {
-            self.insert_no_merge(range, val, |new, _old| new); // No merging needed for splits
+            self.insert(range, val, |new, _old| new); // No merging needed for splits
         }
 
         // Automatically merge adjacent intervals with the same values
@@ -1022,11 +996,10 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
         for op in operations {
             match op {
                 Operation::Insert(key, val) => {
-                    self.insert_no_merge(key, val, merge_fn);
+                    self.insert(key, val, merge_fn);
                 }
                 Operation::Delete(key) => {
-                    // self.delete_exact(key);
-                    self.delete_no_merge(key);
+                    self.delete(key);
                 }
                 Operation::Merge(start_key, keys) => {
                     if let Some(node) = self.get_node_mut(start_key) {
@@ -1195,24 +1168,27 @@ mod tests {
         let mut tree = IntervalTree::new();
         tree.insert(TextRange::new(1, 3), 1, merge);
         tree.insert(TextRange::new(3, 5), 1, merge);
+        tree.merge(|a, b| a == b);
         assert!(tree.is_canonical());
 
         // Test non-canonical form - adjacent intervals with same value
         let mut tree_non_canonical = IntervalTree::new();
-        tree_non_canonical.insert_no_merge(TextRange::new(1, 3), 1, merge);
-        tree_non_canonical.insert_no_merge(TextRange::new(3, 5), 1, merge);
+        tree_non_canonical.insert(TextRange::new(1, 3), 1, merge);
+        tree_non_canonical.insert(TextRange::new(3, 5), 1, merge);
         assert!(!tree_non_canonical.is_canonical());
 
         // Test canonical form - adjacent intervals with different values
         let mut tree_diff_values = IntervalTree::new();
         tree_diff_values.insert(TextRange::new(1, 3), 1, merge);
         tree_diff_values.insert(TextRange::new(3, 5), 2, merge);
+        tree.merge(|a, b| a == b);
         assert!(tree_diff_values.is_canonical());
 
         // Test canonical form - non-adjacent intervals with same value
         let mut tree_non_adjacent = IntervalTree::new();
         tree_non_adjacent.insert(TextRange::new(1, 3), 1, merge);
         tree_non_adjacent.insert(TextRange::new(5, 7), 1, merge);
+        tree.merge(|a, b| a == b);
         assert!(tree_non_adjacent.is_canonical());
 
         // Test empty tree
@@ -1301,16 +1277,16 @@ mod tests {
 
     fn build_tree_no_merge<T: Clone + Debug + PartialEq>(val: T) -> IntervalTree<T> {
         let mut tree = IntervalTree::new();
-        tree.insert_no_merge(TextRange::new(0, 1), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(1, 2), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(2, 3), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(3, 4), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(4, 5), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(5, 6), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(6, 7), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(7, 8), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(8, 9), val.clone(), merge);
-        tree.insert_no_merge(TextRange::new(9, 10), val.clone(), merge);
+        tree.insert(TextRange::new(0, 1), val.clone(), merge);
+        tree.insert(TextRange::new(1, 2), val.clone(), merge);
+        tree.insert(TextRange::new(2, 3), val.clone(), merge);
+        tree.insert(TextRange::new(3, 4), val.clone(), merge);
+        tree.insert(TextRange::new(4, 5), val.clone(), merge);
+        tree.insert(TextRange::new(5, 6), val.clone(), merge);
+        tree.insert(TextRange::new(6, 7), val.clone(), merge);
+        tree.insert(TextRange::new(7, 8), val.clone(), merge);
+        tree.insert(TextRange::new(8, 9), val.clone(), merge);
+        tree.insert(TextRange::new(9, 10), val.clone(), merge);
         tree.print();
         tree
     }
