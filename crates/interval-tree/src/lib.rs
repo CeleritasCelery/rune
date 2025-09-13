@@ -300,15 +300,18 @@ impl<T: Clone> Node<T> {
                 if l.color == Color::Black && !Node::red(&l.left) {
                     Node::move_red_left(n)?;
                 }
+                let result = Node::delete_min(&mut n.left);
+                Node::balance(n)?;
+                n.n = n.n(); // Update node count after deletion
+                result
             }
             None => {
-                return node.take();
+                // Replace this node with its right subtree and return the removed node
+                let mut removed = node.take()?;
+                *node = removed.right.take();
+                Some(removed)
             }
         }
-        let result = Node::delete_min(&mut n.left);
-        Node::balance(n)?;
-        n.n = n.n(); // Update node count after deletion
-        result
     }
 
     fn delete_max(node: &mut MaybeNode<T>) -> MaybeNode<T> {
@@ -322,15 +325,18 @@ impl<T: Clone> Node<T> {
                 if r.color == Color::Black && !Node::red(&r.left) {
                     Node::move_red_right(n)?;
                 }
+                let result = Node::delete_max(&mut n.right);
+                Node::balance(n)?;
+                n.n = n.n(); // Update node count after deletion
+                result
             }
             None => {
-                return node.take();
+                // Replace this node with its left subtree and return the removed node
+                let mut removed = node.take()?;
+                *node = removed.left.take();
+                Some(removed)
             }
         }
-        let result = Node::delete_max(&mut n.right);
-        Node::balance(n)?;
-        n.n = n.n(); // Update node count after deletion
-        result
     }
 
     fn delete(node: &mut MaybeNode<T>, key: TextRange) -> MaybeNode<T> {
@@ -1679,5 +1685,37 @@ mod tests {
 
         assert_eq!(tree.size(), 1);
         assert_eq!(tree.get(TextRange::new(0, 1)), Some(1));
+    }
+
+    #[test]
+    fn test_delete_subtree() {
+        // Reproduce the minimal failing input from proptest
+        let mut tree = IntervalTree::new();
+        let merge_vec = |new: Vec<i32>, mut old: Vec<i32>| {
+            // proptest uses a merge that dedups and sorts
+            if !old.contains(&new[0]) {
+                old.push(new[0]);
+                old.sort_unstable();
+            }
+            old
+        };
+
+        tree.insert(TextRange::new(0, 10), vec![0], &merge_vec);
+        tree.insert(TextRange::new(40, 60), vec![0], &merge_vec);
+        tree.insert(TextRange::new(41, 203), vec![-1], &merge_vec);
+        tree.delete(TextRange::new(1, 41));
+
+        let results: Vec<_> = tree
+            .find_intersects(TextRange::new(0, usize::MAX))
+            .map(|n| (n.key, n.val.clone()))
+            .collect();
+        assert_eq!(
+            results,
+            vec![
+                (TextRange::new(0, 1), vec![0]),
+                (TextRange::new(41, 60), vec![-1, 0]),
+                (TextRange::new(60, 203), vec![-1])
+            ]
+        );
     }
 }
