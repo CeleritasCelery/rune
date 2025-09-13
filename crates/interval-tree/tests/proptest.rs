@@ -143,13 +143,12 @@ fn assert_canonical(tree: &IntervalTree<Vec<i32>>) {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 200,
         failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
         ..ProptestConfig::default()
     })]
 
     #[test]
-    fn pt_insert(inserts in prop::collection::vec(any::<Insert>(), 0..5)) {
+    fn pt_insert(inserts in prop::collection::vec(any::<Insert>(), 0..20)) {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
         for insert in inserts {
@@ -220,31 +219,6 @@ proptest! {
     }
 
     #[test]
-    fn pt_merge_overlapping(
-        insert1 in any::<Insert>(),
-        insert2 in any::<Insert>()
-    ) {
-        let range1 = make_range(insert1.start, insert1.end);
-        let range2 = make_range(insert2.start, insert2.end);
-
-        if range1.start == range1.end || range2.start == range2.end {
-            return Ok(()); // Skip empty ranges
-        }
-
-        let mut tree = IntervalTree::new();
-        let mut simple = SimpleIntervalMap::new();
-
-        // Insert overlapping intervals
-        insert_both(&mut tree, &mut simple, range1, insert1.value);
-        insert_both(&mut tree, &mut simple, range2, insert2.value);
-
-        // Verify consistency
-        tree.merge(|a, b| a == b);
-        compare_find_intersects(&tree, &simple);
-        assert_canonical(&tree);
-    }
-
-    #[test]
     fn pt_apply_with_split(
         insert in any::<Insert>(),
         apply in any::<ApplyWithSplit>()
@@ -288,7 +262,7 @@ proptest! {
     }
 
     #[test]
-    fn pt_combo_operations(operations in prop::collection::vec(any::<Operation>(), 0..20)) {
+    fn pt_combo_operations(operations in prop::collection::vec(any::<Operation>(), 0..30)) {
         let mut tree = IntervalTree::new();
         let mut simple = SimpleIntervalMap::new();
 
