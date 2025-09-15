@@ -4,7 +4,7 @@ use crate::core::env::{ArgSlice, CallFrame, Env, sym};
 use crate::core::error::{Type, TypeError};
 use crate::core::gc::{Rt, Rto};
 use crate::core::object::{
-    FnArgs, Function, LispString, NIL, ObjectType, Symbol, TagType, display_slice,
+    FnArgs, Function, LispString, NIL, ObjectType, Symbol, TagType, WithLifetime, display_slice,
 };
 use crate::core::{
     gc::Context,
@@ -130,6 +130,14 @@ impl From<std::convert::Infallible> for EvalError {
 }
 
 pub(crate) type EvalResult<'ob> = Result<Object<'ob>, EvalError>;
+
+impl<'new> WithLifetime<'new> for EvalResult<'_> {
+    type Out = EvalResult<'new>;
+
+    unsafe fn with_lifetime(self) -> Self::Out {
+        self.map(|x| x.with_lifetime())
+    }
+}
 
 #[defun]
 pub(crate) fn apply<'ob>(

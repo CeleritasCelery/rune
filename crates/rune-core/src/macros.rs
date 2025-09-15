@@ -99,6 +99,10 @@ macro_rules! __rebind {
     ($($path:ident).*($($arg:expr),+)$($x:tt)?) => {{
         rebind!($($path).*($($arg),+)$($x)?, $crate::macros::last!($($arg),+))
     }};
+    // rebind!(func(x, cx))
+    ($($path:ident).*($($arg:expr),+)) => {{
+        rebind!($($path).*($($arg),+), $crate::macros::last!($($arg),+))
+    }};
     // rebind!(func(x, cx).unwrap())
     ($($path:ident).*($($arg:expr),+).unwrap()) => {{
         rebind!($($path).*($($arg),+).unwrap(), $crate::macros::last!($($arg),+))

@@ -613,9 +613,9 @@ impl Interpreter<'_, '_> {
     ) -> EvalResult<'ob> {
         let buffer = self.env.current_buffer.get().lisp_buffer(cx);
         root!(buffer, cx);
-        let result = rebind!(self.eval_progn(form, cx)?);
+        let result = rebind!(self.eval_progn(form, cx));
         self.env.set_buffer(buffer.bind(cx));
-        Ok(result)
+        result
     }
 
     fn condition_case<'ob>(&mut self, form: &Rto<Object>, cx: &'ob mut Context) -> EvalResult<'ob> {
