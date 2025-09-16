@@ -238,6 +238,9 @@ impl<T: Clone> Node<T> {
         }
         // update node's size
         node.n = node.n();
+
+        // Recompute size
+        node.n = node.n();
         Some(node)
     }
 
@@ -823,9 +826,39 @@ impl<T: Clone + PartialEq> IntervalTree<T> {
     /// assert_eq!(tree.find_intersects(TextRange::new(0, 20)).collect::<Vec<_>>().len(), 2);
     /// ```
     pub fn clean<F: Fn(&T, &T) -> bool, G: Fn(&T) -> bool>(&mut self, eq: F, empty: G) {
-        // let min = self.min_mut();
-        let min = self.min().map(|n| n.key);
-        self.clean_from_node(min, eq, empty);
+        // Gather all intervals in order
+        let intervals: Vec<_> = self.find_intersects(TextRange::new(0, usize::MAX)).collect();
+
+        let mut operations: Vec<Operation<T>> = Vec::new();
+        let mut pending_merge: Option<(TextRange, Vec<TextRange>)> = None;
+        let mut prev: Option<&Node<T>> = None;
+
+        for node in intervals {
+            // Queue deletions for empty nodes
+            if node.key.empty() || empty(&node.val) {
+                operations.push(Operation::Delete(node.key));
+                continue;
+            }
+
+            if let Some(p) = prev {
+                if p.key.end == node.key.start && eq(&p.val, &node.val) {
+                    // extend current merge chain
+                    match &mut pending_merge {
+                        Some((_start, keys)) => keys.push(node.key),
+                        None => pending_merge = Some((p.key, vec![node.key])),
+                    }
+                } else if let Some((start_key, keys)) = pending_merge.take() {
+                    operations.push(Operation::Merge(start_key, keys));
+                }
+            }
+            prev = Some(node);
+        }
+
+        if let Some((start_key, keys)) = pending_merge.take() {
+            operations.push(Operation::Merge(start_key, keys));
+        }
+
+        self.resolve_ops(operations, &|_, _| unreachable!());
     }
 
     /// Check if the tree is in canonical form (all adjacent intervals with equal values are merged)

@@ -55,6 +55,8 @@ impl<'ob> IntervalTree<'ob> {
                 .map(Slot::new)
                 .unwrap()
         });
+        // Ensure canonical form after insertion so adjacent equal intervals are merged
+        self.clean();
     }
 
     pub fn set_properties(&mut self, start: usize, end: usize, properties: Object<'ob>) {
@@ -486,7 +488,8 @@ mod interval_iterator_tests {
         tree.insert(10, 20, Slot::new(val1.into()), &cx);
         tree.insert(20, 30, Slot::new(val1.into()), &cx);
         tree.insert(30, 40, Slot::new(val2.into()), &cx);
-        // tree.tree.print();
+        // merge the tree
+        tree.clean();
 
         let mut iter = IntervalIntersections::new(&tree, 0, 50);
         assert_eq!(iter.next(), Some((0..10, NIL)));
