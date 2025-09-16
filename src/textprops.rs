@@ -579,6 +579,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn test_next_property_change() -> Result<()> {
         let roots = &RootSet::default();
         let mut context = Context::new(roots);
@@ -631,6 +632,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(miri))]
     fn test_next_single_property_change() -> Result<()> {
         let roots = &RootSet::default();
         let mut context = Context::new(roots);
