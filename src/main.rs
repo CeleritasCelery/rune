@@ -33,6 +33,10 @@ mod search;
 mod textprops;
 mod threads;
 mod timefns;
+mod frame;
+mod window;
+mod cmds;
+mod faces;
 
 use crate::core::{
     env::{Env, intern, sym},

@@ -11,7 +11,8 @@ members = [
   "crates/text-buffer",
   "crates/rune-macros",
   "crates/rune-core",
-  "crates/interval-tree"
+  "crates/interval-tree",
+  "crates/render"
 ]
 
 [workspace.package]
@@ -36,6 +37,7 @@ text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 rune-core = { version = "0.1.0", path = "crates/rune-core" }
 rune-macros = { version = "0.1.0", path = "crates/rune-macros" }
 interval-tree ={ version = "0.1.0", path = "crates/interval-tree" }
+render ={ version = "0.1.0", path = "crates/render" }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -62,6 +64,7 @@ num-traits = "0.2.19"
 num-integer = "0.1.46"
 libm = "0.2.11"
 interval-tree = { workspace = true }
+render = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

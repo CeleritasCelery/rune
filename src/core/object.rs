@@ -21,6 +21,8 @@ mod string;
 mod symbol;
 mod tagged;
 mod vector;
+mod frame;
+mod window;
 
 pub(crate) use buffer::*;
 pub(super) use cell::*;
@@ -34,6 +36,8 @@ pub(crate) use string::*;
 pub(crate) use symbol::*;
 pub(crate) use tagged::*;
 pub(crate) use vector::*;
+pub(crate) use frame::*;
+pub(crate) use window::*;
 
 use std::fmt::Write as _;
 
