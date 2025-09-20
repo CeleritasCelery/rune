@@ -439,8 +439,9 @@ as an integer unless JUNK-ALLOWED is non-nil."
 
 ;; Random numbers.
 
-(defun cl--random-time ()
-  (car (time-convert nil t)))
+;; RUNE-BOOTSTRAP
+;; (defun cl--random-time ()
+;;   (car (time-convert nil t)))
 
 ;;;###autoload (autoload 'cl-random-state-p "cl-extra")
 (cl-defstruct (cl--random-state
@@ -450,7 +451,8 @@ as an integer unless JUNK-ALLOWED is non-nil."
                (:constructor cl--make-random-state (vec)))
   (i -1) (j 30) vec)
 
-(defvar cl--random-state (cl--make-random-state (cl--random-time)))
+;; RUNE-BOOTSTRAP
+;; (defvar cl--random-state (cl--make-random-state (cl--random-time)))
 
 ;;;###autoload
 (defun cl-random (lim &optional state)
@@ -478,14 +480,15 @@ Optional second arg STATE is a random-state object."
 	      (if (< (setq n (logand n mask)) lim) n (cl-random lim state))))
 	(* (/ n '8388608e0) lim)))))
 
-;;;###autoload
-(defun cl-make-random-state (&optional state)
-  "Return a copy of random-state STATE, or of the internal state if omitted.
-If STATE is t, return a new state object seeded from the time of day."
-  (unless state (setq state cl--random-state))
-  (if (cl-random-state-p state)
-      (copy-sequence state)
-    (cl--make-random-state (if (integerp state) state (cl--random-time)))))
+;; RUNE-BOOTSTRAP
+;; ;;;###autoload
+;; (defun cl-make-random-state (&optional state)
+;;   "Return a copy of random-state STATE, or of the internal state if omitted.
+;; If STATE is t, return a new state object seeded from the time of day."
+;;   (unless state (setq state cl--random-state))
+;;   (if (cl-random-state-p state)
+;;       (copy-sequence state)
+;;     (cl--make-random-state (if (integerp state) state (cl--random-time)))))
 
 ;; Implementation limits.
 
@@ -705,30 +708,36 @@ PROPLIST is a list of the sort returned by `symbol-plist'.
 ;;; Integration into the online help system.
 
 (eval-when-compile (require 'cl-macs))  ;Explicitly, for cl--find-class.
-(require 'help-mode)
+;; RUNE-BOOTSTRAP
+;; (require 'help-mode)
 
 ;; FIXME: We could go crazy and add another entry so describe-symbol can be
 ;; used with the slot names of CL structs (and/or EIEIO objects).
-(add-to-list 'describe-symbol-backends
-             `(nil ,#'cl-find-class ,(lambda (s _b _f) (cl-describe-type s))))
+;; RUNE-BOOTSTRAP
+;; (add-to-list 'describe-symbol-backends
+;;              `(nil ,#'cl-find-class ,(lambda (s _b _f) (cl-describe-type s))))
 
-(defconst cl--typedef-regexp
-  (concat "(" (regexp-opt '("defclass" "defstruct" "cl-defstruct"
-                            "cl-deftype" "deftype"))
-          "[ \t\r\n]+%s[ \t\r\n]+"))
-(with-eval-after-load 'find-func
-  (defvar find-function-regexp-alist)
-  (add-to-list 'find-function-regexp-alist
-               '(define-type . cl--typedef-regexp)))
+;; RUNE-BOOTSTRAP
+;; (defconst cl--typedef-regexp
+;;   (concat "(" (regexp-opt '("defclass" "defstruct" "cl-defstruct"
+;;                             "cl-deftype" "deftype"))
+;;           "[ \t\r\n]+%s[ \t\r\n]+"))
+;; RUNE-BOOTSTRAP
+;; (with-eval-after-load 'find-func
+;;   (defvar find-function-regexp-alist)
+;;   (add-to-list 'find-function-regexp-alist
+;;                '(define-type . cl--typedef-regexp)))
 
-(define-button-type 'cl-help-type
-  :supertype 'help-function-def
-  'help-function #'cl-describe-type
-  'help-echo (purecopy "mouse-2, RET: describe this type"))
+;; RUNE-BOOTSTRAP
+;; (define-button-type 'cl-help-type
+;;   :supertype 'help-function-def
+;;   'help-function #'cl-describe-type
+;;   'help-echo (purecopy "mouse-2, RET: describe this type"))
 
-(define-button-type 'cl-type-definition
-  :supertype 'help-function-def
-  'help-echo (purecopy "mouse-2, RET: find type definition"))
+;; RUNE-BOOTSTRAP
+;; (define-button-type 'cl-type-definition
+;;   :supertype 'help-function-def
+;;   'help-echo (purecopy "mouse-2, RET: find type definition"))
 
 (declare-function help-fns-short-filename "help-fns" (filename))
 
