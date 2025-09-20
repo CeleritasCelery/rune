@@ -10,7 +10,7 @@ use crate::{
             ListType, NIL, Object, ObjectType, OptionalFlag, Symbol, WithLifetime,
         },
     },
-    data::aref,
+    data::{aref, LispError},
     library::filevercmp::filevercmp,
     rooted_iter,
 };
@@ -564,7 +564,7 @@ pub(crate) fn vconcat<'ob>(sequences: &[Object], cx: &'ob Context) -> Result<Gc<
 }
 
 #[defun]
-pub(crate) fn length(sequence: Object) -> Result<usize> {
+pub(crate) fn length<'ob>(sequence: Object<'ob>, cx: &'ob Context) -> Result<usize> {
     let size = match sequence.untag() {
         ObjectType::Cons(x) => x.elements().len()?,
         ObjectType::Vec(x) => x.len(),
@@ -572,7 +572,7 @@ pub(crate) fn length(sequence: Object) -> Result<usize> {
         ObjectType::ByteString(x) => x.len(),
         ObjectType::ByteFn(x) => x.len(),
         ObjectType::NIL => 0,
-        obj => bail!(TypeError::new(Type::Sequence, obj)),
+        _ => bail!(LispError::wrong_type(sym::SEQUENCEP, cx)),
     };
     Ok(size)
 }

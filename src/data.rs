@@ -496,6 +496,7 @@ impl std::fmt::Display for LispError {
 }
 
 defsym!(WRONG_NUMBER_OF_ARGUMENTS);
+defsym!(WRONG_TYPE_ARGUMENT);
 impl LispError {
     pub(crate) fn new(message: &Cons) -> Self {
         Self { message: unsafe { message.with_lifetime() } }
@@ -514,6 +515,15 @@ impl LispError {
         let func = func.into_obj(cx);
         let list = list![sym::WRONG_NUMBER_OF_ARGUMENTS, func, expected, actual; cx];
         Self::new(list.try_into().unwrap())
+    }
+
+    pub(crate) fn wrong_type<'ob, T>(
+       func: impl IntoObject<Out<'ob> = T>,
+       cx: &'ob Context,
+    ) -> Self {
+       let func = func.into_obj(cx);
+       let list = list![sym::WRONG_TYPE_ARGUMENT, func; cx];
+       Self::new(list.try_into().unwrap())
     }
 }
 
