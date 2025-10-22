@@ -19,7 +19,7 @@ str_indices = "0.4.3"
 [dev-dependencies]
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
-criterion = {version = "0.5.1", features = ["html_reports"]}
+criterion = {version = "0.7.0", features = ["html_reports"]}
 crdt-testdata = { path = "reference-tests/crdt-testdata" }
 
 [[bench]]
