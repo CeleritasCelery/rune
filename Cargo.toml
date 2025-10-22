@@ -41,7 +41,7 @@ interval-tree ={ version = "0.1.0", path = "crates/interval-tree" }
 anyhow = { workspace = true }
 bytecount = "0.6.3"
 clap = { workspace = true }
-fancy-regex = "0.14.0"
+fancy-regex = "0.16.2"
 float-cmp = { workspace = true }
 hostname = "0.4.0"
 memoffset = { workspace = true }
