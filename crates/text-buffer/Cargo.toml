@@ -12,7 +12,7 @@ categories = ["text-editors"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-get-size2 = {version = "0.1.2", features = ["derive"]}
+get-size2 = {version = "0.7.0", features = ["derive"]}
 smallvec = {version = "^1.11", features = ["union"]}
 str_indices = "0.4.3"
 
