@@ -1,0 +1,12 @@
+[package]
+name = "render"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { "workspace" = true }
+thiserror = "2"
+masonry = { path = "../../../../xilem/masonry" }
+peniko = "0.4"
+fxhash = "0.2.1"
+taffy = "0.8.3"

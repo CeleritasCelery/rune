@@ -4,7 +4,7 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBigInt, LispBuffer,
+    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBigInt, LispBuffer, LispFrame, LispWindow
 };
 use super::{
     ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
@@ -299,6 +299,8 @@ object_trait_impls!(LispHashTable);
 object_trait_impls!(LispBuffer);
 object_trait_impls!(CharTable);
 object_trait_impls!(LispBigInt);
+object_trait_impls!(LispFrame);
+object_trait_impls!(LispWindow);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -554,6 +556,8 @@ mod private {
         Buffer,
         CharTable,
         BigInt,
+        Frame,
+        Window,
     }
 
     /// Trait for tagged pointers. Anything that can be stored and passed around
@@ -662,6 +666,8 @@ impl<'a> TaggedPtr for ObjectType<'a> {
                 Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
                 Tag::CharTable => ObjectType::CharTable(<&CharTable>::from_obj_ptr(ptr)),
                 Tag::BigInt => ObjectType::BigInt(<&LispBigInt>::from_obj_ptr(ptr)),
+                Tag::Frame => ObjectType::Frame(<&LispFrame>::from_obj_ptr(ptr)),
+                Tag::Window => ObjectType::Window(<&LispWindow>::from_obj_ptr(ptr)),
             }
         }
     }
@@ -682,6 +688,8 @@ impl<'a> TaggedPtr for ObjectType<'a> {
             ObjectType::Buffer(x) => TaggedPtr::tag(x).into(),
             ObjectType::CharTable(x) => TaggedPtr::tag(x).into(),
             ObjectType::BigInt(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Frame(x) => TaggedPtr::tag(x).into(),
+            ObjectType::Window(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -961,6 +969,30 @@ impl TaggedPtr for &LispBigInt {
     }
 }
 
+impl TaggedPtr for &LispFrame {
+    type Ptr = LispFrame;
+    const TAG: Tag = Tag::Frame;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
+impl TaggedPtr for &LispWindow {
+    type Ptr = LispWindow;
+    const TAG: Tag = Tag::Window;
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
 impl<T> TracePtr for Gc<T> {
     fn trace_ptr(&self, state: &mut GcState) {
         match self.as_obj().untag() {
@@ -977,6 +1009,8 @@ impl<T> TracePtr for Gc<T> {
             ObjectType::Buffer(x) => x.trace(state),
             ObjectType::CharTable(x) => x.trace(state),
             ObjectType::BigInt(x) => x.trace(state),
+            ObjectType::Frame(x) => x.trace(state),
+            ObjectType::Window(x) => x.trace(state),
         }
     }
 }
@@ -1100,6 +1134,8 @@ pub(crate) enum ObjectType<'ob> {
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
     CharTable(&'static CharTable) = Tag::CharTable as u8,
     BigInt(&'ob LispBigInt) = Tag::BigInt as u8,
+    Frame(&'ob LispFrame) = Tag::Frame as u8,
+    Window(&'ob LispWindow) = Tag::Window as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1122,7 +1158,9 @@ cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          &'ob SubrFn,
          &'ob LispBuffer,
          &'ob CharTable,
-         &'ob LispBigInt
+         &'ob LispBigInt,
+         &'ob LispFrame,
+         &'ob LispWindow,
 );
 
 impl ObjectType<'_> {
@@ -1144,6 +1182,8 @@ impl ObjectType<'_> {
             ObjectType::Buffer(_) => Type::Buffer,
             ObjectType::CharTable(_) => Type::CharTable,
             ObjectType::BigInt(_) => Type::BigInt,
+            ObjectType::Frame(_) => Type::Frame,
+            ObjectType::Window(_) => Type::Window,
         }
     }
 }
@@ -1407,6 +1447,28 @@ impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispBigInt> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispFrame> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::Frame => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::Frame, value)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispWindow> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::Window => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::Window, value)),
+        }
+    }
+}
+
 impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     type Target = Cons;
 
@@ -1444,6 +1506,8 @@ where
             ObjectType::Buffer(x) => x.clone_in(bk).into(),
             ObjectType::CharTable(x) => x.clone_in(bk).into(),
             ObjectType::BigInt(x) => x.clone_in(bk).into(),
+            ObjectType::Frame(x) => x.clone_in(bk).into(),
+            ObjectType::Window(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
@@ -1485,6 +1549,8 @@ impl GcMoveable for Object<'_> {
             }
             ObjectType::CharTable(x) => cast_pair(x.move_value(to_space)?),
             ObjectType::BigInt(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Frame(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::Window(x) => cast_pair(x.move_value(to_space)?),
         };
 
         let tag = self.get_tag();
@@ -1682,6 +1748,8 @@ impl ObjectType<'_> {
             ObjectType::Buffer(x) => D::fmt(x, f),
             ObjectType::CharTable(x) => D::fmt(x, f),
             ObjectType::BigInt(x) => D::fmt(x, f),
+            ObjectType::Frame(x) => D::fmt(x, f),
+            ObjectType::Window(x) => D::fmt(x, f),
         }
     }
 }
