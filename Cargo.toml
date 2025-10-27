@@ -30,7 +30,7 @@ bstr = "1.3.0"
 float-cmp = "0.10.0"
 clap = { version = "4.5.4", features = ["derive"] }
 proptest = "1.7.0"
-proptest-derive = "0.6.0"
+proptest-derive = "0.7.0"
 
 text-buffer = { version = "0.1.0", path = "crates/text-buffer" }
 rune-core = { version = "0.1.0", path = "crates/rune-core" }
