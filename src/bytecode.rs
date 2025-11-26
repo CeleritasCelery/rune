@@ -495,7 +495,7 @@ impl<'ob> RootedVM<'_, '_, '_> {
                 }
                 op::Length => {
                     let top = self.env.stack.top();
-                    top.set(fns::length(top.bind(cx))? as i64);
+                    top.set(fns::length(top.bind(cx), cx)? as i64);
                 }
                 op::Aref => {
                     let idx = self.env.stack.pop(cx);

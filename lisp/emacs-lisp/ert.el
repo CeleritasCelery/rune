@@ -836,14 +836,20 @@ This can be useful after reducing the value of `message-log-max'."
     ;;                   -XFIXNAT (Vmessage_log_max) - 1, false);
     ;;     del_range_both (BEG, BEG_BYTE, PT, PT_BYTE, false);
     ;;   }
-    (when (natnump message-log-max)
-      (let ((begin (point-min))
-            (end (save-excursion
-                   (goto-char (point-max))
-                   (forward-line (- message-log-max))
-                   (point)))
-            (inhibit-read-only t))
-        (delete-region begin end)))))
+
+    ;; RUNE-BOOTSTRAP
+    ;; this is to keep the last `message-log-max` lines. we don't
+    ;; have `forward-line` and friends yet
+    ;;
+    ;; (when (natnump message-log-max)
+    ;;   (let ((begin (point-min))
+    ;;         (end (save-excursion
+    ;;                (goto-char (point-max))
+    ;;                (forward-line (- message-log-max))
+    ;;                (point)))
+    ;;         (inhibit-read-only t))
+    ;;     (delete-region begin end)))
+    (delete-region 1 (point-max))))
 
 (defvar ert--running-tests nil
   "List of tests that are currently in execution.
@@ -1248,10 +1254,12 @@ SELECTOR is the selector that was used to select TESTS."
       (setf (aref (ert--stats-test-end-times stats) pos) (current-time))
       (let ((result (ert-test-most-recent-result test)))
         (setf (ert-test-result-duration result)
-              (float-time
-               (time-subtract
-                (aref (ert--stats-test-end-times stats) pos)
-                (aref (ert--stats-test-start-times stats) pos))))
+              ;; RUNE-BOOTSTRAP
+              ;; (float-time
+              ;;  (time-subtract
+              ;;   (aref (ert--stats-test-end-times stats) pos)
+              ;;   (aref (ert--stats-test-start-times stats) pos)))
+              0.0)
         (ert--stats-set-test-and-result stats pos test result)
         (funcall listener 'test-ended stats test result))
       (setf (ert--stats-current-test stats) nil))))
@@ -1265,7 +1273,8 @@ SELECTOR is the selector that was used to select TESTS."
     (let ((abortedp t))
       (unwind-protect
           (let ((ert--current-run-stats stats))
-            (force-mode-line-update)
+            ;; RUNE-BOOTSTRAP
+            ;; (force-mode-line-update)
             (unwind-protect
 		(cl-loop for test in tests do
 			 (ert-run-or-rerun-test stats test listener)
@@ -1278,7 +1287,9 @@ SELECTOR is the selector that was used to select TESTS."
               (setf (ert--stats-aborted-p stats) abortedp)
               (setf (ert--stats-end-time stats) (current-time))
               (funcall listener 'run-ended stats abortedp)))
-        (force-mode-line-update))
+        ;; RUNE-BOOTSTRAP
+        ;; (force-mode-line-update)
+        )
       stats)))
 
 (defun ert--stats-test-pos (stats test)
@@ -1291,7 +1302,10 @@ SELECTOR is the selector that was used to select TESTS."
 
 (defun ert--format-time-iso8601 (time)
   "Format TIME in the variant of ISO 8601 used for timestamps in ERT."
-  (format-time-string "%Y-%m-%d %T%z" time))
+  ;; RUNE-BOOTSTRAP
+  ;; (format-time-string "%Y-%m-%d %T%z" time)
+  (format "%s" time)
+  )
 
 (defun ert-char-for-test-result (result expectedp)
   "Return a character that represents the test result RESULT.
@@ -1432,10 +1446,12 @@ Returns the stats object."
                          ""
                        (format ", %s skipped" skipped))
                      (ert--format-time-iso8601 (ert--stats-end-time stats))
-                     (float-time
-                      (time-subtract
-                       (ert--stats-end-time stats)
-                       (ert--stats-start-time stats)))
+                     ;; RUNE-BOOTSTRAP
+                     ;; (float-time
+                     ;;  (time-subtract
+                     ;;   (ert--stats-end-time stats)
+                     ;;   (ert--stats-start-time stats)))
+                     0.0
                      (if (zerop expected-failures)
                          ""
                        (format "\n%s expected failures" expected-failures)))
@@ -1448,7 +1464,9 @@ Returns the stats object."
                                   (ert-string-for-test-result result nil)
                                   (ert-test-name test)
                                   (if (cl-plusp
-                                       (length (getenv "EMACS_TEST_VERBOSE")))
+                                       ;; RUNE-BOOTSTRAP
+                                       ;; (length (getenv "EMACS_TEST_VERBOSE"))
+                                       0)
                                       (ert-reason-for-test-result result)
                                     ""))))
               (message "%s" ""))
@@ -1461,11 +1479,14 @@ Returns the stats object."
                                   (ert-string-for-test-result result nil)
                                   (ert-test-name test)
                                   (if (cl-plusp
-                                       (length (getenv "EMACS_TEST_VERBOSE")))
+                                       ;; RUNE-BOOTSTRAP
+                                       ;; (length (getenv "EMACS_TEST_VERBOSE"))
+                                       0)
                                       (ert-reason-for-test-result result)
                                     ""))))
               (message "%s" ""))
-            (when (getenv "EMACS_TEST_JUNIT_REPORT")
+            ;; RUNE-BOOTSTRAP
+            (when nil ;; (getenv "EMACS_TEST_JUNIT_REPORT")
               (ert-write-junit-test-report stats)))))
        (test-started)
        (test-ended
@@ -1589,20 +1610,24 @@ test packages depend on each other, it might be helpful.")
                       (if (ert--stats-aborted-p stats) 1 0)
                       (ert-stats-completed-unexpected stats)
                       (ert-stats-skipped stats)
-                      (float-time
-                       (time-subtract
-                        (ert--stats-end-time stats)
-                        (ert--stats-start-time stats)))))
+                      ;; RUNE-BOOTSTRAP
+                      ;; (float-time
+                      ;;  (time-subtract
+                      ;;   (ert--stats-end-time stats)
+                      ;;   (ert--stats-start-time stats)))
+                      0.0))
       (insert (format "  <testsuite id=\"0\" name=\"%s\" tests=\"%s\" errors=\"%s\" failures=\"%s\" skipped=\"%s\" time=\"%s\" timestamp=\"%s\">\n"
                       (file-name-nondirectory test-report)
                       (ert-stats-total stats)
                       (if (ert--stats-aborted-p stats) 1 0)
                       (ert-stats-completed-unexpected stats)
                       (ert-stats-skipped stats)
-                      (float-time
-                       (time-subtract
-                        (ert--stats-end-time stats)
-                        (ert--stats-start-time stats)))
+                      ;; RUNE-BOOTSTRAP
+                      ;; (float-time
+                      ;;  (time-subtract
+                      ;;   (ert--stats-end-time stats)
+                      ;;   (ert--stats-start-time stats)))
+                      0.0
                       (ert--format-time-iso8601 (ert--stats-end-time stats))))
       ;; If the test has aborted, `ert--stats-selector' might return
       ;; huge junk.  Skip this.
@@ -2085,10 +2110,12 @@ determines how frequently the progress display is updated.")
   "Update EWOC and the mode line to show data from STATS."
   ;; TODO(ohler): investigate using `make-progress-reporter'.
   (ert--results-update-ewoc-hf ewoc stats)
-  (force-mode-line-update)
-  (redisplay t)
-  (setf (ert--stats-next-redisplay stats)
-	(float-time (time-add nil ert-test-run-redisplay-interval-secs))))
+  ;; RUNE-BOOTSTRAP
+  ;; (force-mode-line-update)
+  ;; (redisplay t)
+  ;; (setf (ert--stats-next-redisplay stats)
+  ;;       (float-time (time-add nil ert-test-run-redisplay-interval-secs)))
+  )
 
 (defun ert--results-update-stats-display-maybe (ewoc stats)
   "Call `ert--results-update-stats-display' if not called recently.
@@ -2799,8 +2826,10 @@ To be used in the ERT results buffer."
                                                stats)
                         for end-time across (ert--stats-test-end-times stats)
                         collect (list test
-                                      (float-time (time-subtract
-                                                   end-time start-time))))))
+                                      ;; RUNE-BOOTSTRAP
+                                      ;; (float-time (time-subtract
+                                      ;;              end-time start-time))
+                                      0.0))))
     (setq data (sort data (lambda (a b)
                             (> (cl-second a) (cl-second b)))))
     (pop-to-buffer buffer)

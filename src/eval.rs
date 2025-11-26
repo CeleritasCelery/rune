@@ -513,5 +513,7 @@ defsym!(ERROR);
 defsym!(DEBUG);
 defsym!(VOID_VARIABLE);
 
+defsym!(SEQUENCEP);
+
 defvar!(DEBUG_ON_ERROR, false);
 defvar!(INTERNAL_MAKE_INTERPRETED_CLOSURE_FUNCTION);
