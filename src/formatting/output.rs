@@ -1,14 +1,8 @@
-//! Various ways to output formatting data.
-
-use core::cell::Cell;
 use core::ffi::*;
 use core::fmt;
 use core::str::from_utf8;
 
-#[cfg(feature = "std")]
-pub use yes_std::*;
-
-use crate::{Argument, DoubleFormat, Flags, Specifier};
+use super::{Argument, DoubleFormat, Flags, Specifier};
 
 struct DummyWriter(usize);
 
@@ -231,20 +225,16 @@ macro_rules! define_unumeric {
 ///   implemented and will cause an error if encountered.
 /// - precision is ignored for integral types, instead of specifying the
 ///   minimum number of digits.
-pub fn fmt_write(w: &mut impl fmt::Write) -> impl FnMut(Argument) -> c_int + '_ {
+pub fn fmt_write(argm: Argument, w: &mut impl fmt::Write) -> c_int {
     use fmt::Write;
-    move |Argument {
-              flags,
-              mut width,
-              precision,
-              specifier,
-          }| {
+    let Argument { flags, mut width, precision, specifier } = argm;
+    {
         let mut w = WriteCounter(w, 0);
         let w = &mut w;
         let res = match specifier {
             Specifier::Percent => w.write_char('%'),
             Specifier::Bytes(data) => write_str(w, flags, width, precision, data),
-            Specifier::String(data) => write_str(w, flags, width, precision, data.to_bytes()),
+            Specifier::String(data) => write_str(w, flags, width, precision, data.as_bytes()),
             Specifier::Hex(data) => {
                 define_unumeric!(w, data, flags, width, precision.unwrap_or(0), "x")
             }
@@ -281,6 +271,7 @@ pub fn fmt_write(w: &mut impl fmt::Write) -> impl FnMut(Argument) -> c_int + '_ 
                     write!(w, "{:>width$}", data as u8 as char, width = width as usize)
                 }
             }
+            /* NOTE not doing these for now
             Specifier::Pointer(data) => {
                 if flags.contains(Flags::LEFT_ALIGN) {
                     write!(w, "{:<width$p}", data, width = width as usize)
@@ -291,6 +282,7 @@ pub fn fmt_write(w: &mut impl fmt::Write) -> impl FnMut(Argument) -> c_int + '_ 
                 }
             }
             Specifier::WriteBytesWritten(_, _) => Err(Default::default()),
+            */
         };
         match res {
             Ok(_) => w.1 as c_int,
