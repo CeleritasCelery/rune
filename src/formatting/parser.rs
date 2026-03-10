@@ -1,7 +1,12 @@
 use core::ffi::*;
+use either::Either;
 
 
 use super::{Flags, SignedInt, UnsignedInt};
+
+pub enum PendingAction {
+    ReadFromArg,
+}
 
 fn next_char(sub: &str) -> Option<&str> {
     sub.get(1..)
@@ -26,20 +31,20 @@ pub fn parse_flags(mut sub: &str) -> (Flags, &str) {
 }
 
 /// Parse the [Width field](https://en.wikipedia.org/wiki/Printf_format_string#Width_field).
-unsafe fn parse_width<'a>(mut sub: &'a [u8], args: &mut VaList) -> (c_int, &'a [u8]) {
+pub fn parse_width<'a>(mut sub: &str) -> (Either<PendingAction, c_int>, &str) {
     let mut width: c_int = 0;
-    if sub.first() == Some(&b'*') {
-        return (unsafe { args.arg() }, next_char(sub));
+    if sub.as_bytes().get(0) == Some(&b'*') {
+        return (Either::Left(PendingAction::ReadFromArg), next_char(sub).unwrap());
     }
-    while let Some(&ch) = sub.first() {
+    while let Some(&ch) = sub.as_bytes().get(0) {
         match ch {
             // https://rust-malaysia.github.io/code/2020/07/11/faster-integer-parsing.html#the-bytes-solution
             b'0'..=b'9' => width = width * 10 + (ch & 0x0f) as c_int,
             _ => break,
         }
-        sub = next_char(sub);
+        sub = next_char(sub).unwrap();
     }
-    (width, sub)
+    (Either::Right(width), sub)
 }
 
 /// Parse the [Precision field](https://en.wikipedia.org/wiki/Printf_format_string#Precision_field).
