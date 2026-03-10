@@ -59,7 +59,7 @@ pub fn parse_precision<'a>(sub: &str) -> (Option<Either<PendingAction, c_int>>, 
 }
 
 #[derive(Debug, Copy, Clone)]
-enum Length {
+pub enum Length {
     Int,
     /// `hh`
     Char,
@@ -101,18 +101,18 @@ impl Length {
 }
 
 /// Parse the [Length field](https://en.wikipedia.org/wiki/Printf_format_string#Length_field).
-fn parse_length(sub: &[u8]) -> (Length, &[u8]) {
-    match sub.first().copied() {
-        Some(b'h') => match sub.get(1).copied() {
-            Some(b'h') => (Length::Char, sub.get(2..).unwrap_or(&[])),
-            _ => (Length::Short, next_char(sub)),
+pub fn parse_length(sub: &str) -> (Length, &str) {
+    match sub.as_bytes().get(0).copied() {
+        Some(b'h') => match sub.as_bytes().get(1).copied() {
+            Some(b'h') => (Length::Char, sub.get(2..).unwrap()),
+            _ => (Length::Short, next_char(sub).unwrap()),
         },
-        Some(b'l') => match sub.get(1).copied() {
-            Some(b'l') => (Length::LongLong, sub.get(2..).unwrap_or(&[])),
-            _ => (Length::Long, next_char(sub)),
+        Some(b'l') => match sub.as_bytes().get(1).copied() {
+            Some(b'l') => (Length::LongLong, sub.get(2..).unwrap()),
+            _ => (Length::Long, next_char(sub).unwrap()),
         },
-        Some(b'z') => (Length::Usize, next_char(sub)),
-        Some(b't') => (Length::Isize, next_char(sub)),
+        Some(b'z') => (Length::Usize, next_char(sub).unwrap()),
+        Some(b't') => (Length::Isize, next_char(sub).unwrap()),
         _ => (Length::Int, sub),
     }
 }
