@@ -1,6 +1,7 @@
 use core::ffi::*;
 use either::Either;
 
+use crate::core::object::Object;
 
 use super::{Flags, SignedInt, UnsignedInt};
 
@@ -76,26 +77,27 @@ pub enum Length {
 }
 
 impl Length {
-    unsafe fn parse_signed(self, args: &mut VaList) -> SignedInt {
+    pub fn parse_signed(self, arg: Option<&Object>) -> SignedInt {
         match self {
-            Length::Int => SignedInt::Int(unsafe { args.arg() }),
-            Length::Char => SignedInt::Char(unsafe { args.arg::<c_int>() } as c_schar),
-            Length::Short => SignedInt::Short(unsafe { args.arg::<c_int>() } as c_short),
-            Length::Long => SignedInt::Long(unsafe { args.arg() }),
-            Length::LongLong => SignedInt::LongLong(unsafe { args.arg() }),
+            Length::Int => SignedInt::Int(arg.unwrap().unwrap_int() as c_int),
+            Length::Char => SignedInt::Char(arg.unwrap().unwrap_int() as c_schar),
+            Length::Short => SignedInt::Short(arg.unwrap().unwrap_int() as c_short),
+            Length::Long => SignedInt::Long(arg.unwrap().unwrap_int() as c_long),
+            Length::LongLong => SignedInt::LongLong(arg.unwrap().unwrap_int() as c_longlong),
             // for some reason, these exist as different options, yet produce the same output
-            Length::Usize | Length::Isize => SignedInt::Isize(unsafe { args.arg() }),
+            Length::Usize | Length::Isize => SignedInt::Isize(arg.unwrap().unwrap_int() as isize),
         }
     }
-    unsafe fn parse_unsigned(self, args: &mut VaList) -> UnsignedInt {
+
+    pub fn parse_unsigned(self, arg: Option<&Object>) -> UnsignedInt {
         match self {
-            Length::Int => UnsignedInt::Int(unsafe { args.arg() }),
-            Length::Char => UnsignedInt::Char(unsafe { args.arg::<c_uint>() } as c_uchar),
-            Length::Short => UnsignedInt::Short(unsafe { args.arg::<c_uint>() } as c_ushort),
-            Length::Long => UnsignedInt::Long(unsafe { args.arg() }),
-            Length::LongLong => UnsignedInt::LongLong(unsafe { args.arg() }),
+            Length::Int => UnsignedInt::Int(arg.unwrap().unwrap_int() as c_uint),
+            Length::Char => UnsignedInt::Char(arg.unwrap().unwrap_int() as c_uchar),
+            Length::Short => UnsignedInt::Short(arg.unwrap().unwrap_int() as c_ushort),
+            Length::Long => UnsignedInt::Long(arg.unwrap().unwrap_int() as c_ulong),
+            Length::LongLong => UnsignedInt::LongLong(arg.unwrap().unwrap_int() as c_ulonglong),
             // for some reason, these exist as different options, yet produce the same output
-            Length::Usize | Length::Isize => UnsignedInt::Isize(unsafe { args.arg() }),
+            Length::Usize | Length::Isize => UnsignedInt::Isize(arg.unwrap().unwrap_int() as usize),
         }
     }
 }
