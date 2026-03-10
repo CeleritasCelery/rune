@@ -16,6 +16,7 @@ mod character;
 mod chartab;
 mod data;
 mod dired;
+mod formatting;
 mod editfns;
 mod emacs;
 mod eval;
