@@ -1,9 +1,5 @@
 use core::{ffi::*, fmt};
 
-pub mod output;
-mod parser;
-use argument::*;
-pub use parser::format;
 pub mod argument {
     use super::*;
 
@@ -123,6 +119,7 @@ pub mod argument {
         Isize(isize),
     }
 
+    /* NOTE doesn't look like this is ever used...
     impl From<SignedInt> for i64 {
         fn from(num: SignedInt) -> Self {
             // Some casts are only needed on some platforms.
@@ -137,6 +134,7 @@ pub mod argument {
             }
         }
     }
+    */
 
     impl SignedInt {
         pub fn is_sign_negative(self) -> bool {
@@ -175,6 +173,7 @@ pub mod argument {
         Isize(usize),
     }
 
+    /* NOTE doesn't look like this is ever used...
     impl From<UnsignedInt> for u64 {
         fn from(num: UnsignedInt) -> Self {
             // Some casts are only needed on some platforms.
@@ -189,6 +188,7 @@ pub mod argument {
             }
         }
     }
+    */
 
     impl fmt::Display for UnsignedInt {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -283,13 +283,14 @@ pub mod argument {
         /// The same as [`Bytes`][Specifier::Bytes] but guaranteed to be
         /// null-terminated. This can be used for optimizations, where if you
         /// need to null terminate a string to print it, you can skip that step.
-        String(&'a CStr),
+        String(&'a str),
         /// `c`
         Char(c_char),
         /// `x`
         Hex(UnsignedInt),
         /// `X`
         UpperHex(UnsignedInt),
+        /* NOTE not doing these
         /// `p`
         Pointer(*const ()),
         /// `n`
@@ -300,5 +301,6 @@ pub mod argument {
         /// of `printf` is allowed to be user-specified. This shouldn't ever
         /// happen, but poorly-written software may do so.
         WriteBytesWritten(c_int, *const c_int),
+        */
     }
 }
