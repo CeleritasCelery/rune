@@ -1,15 +1,16 @@
 use core::ffi::*;
 
-use crate::{Argument, DoubleFormat, Flags, SignedInt, Specifier, UnsignedInt};
 
-fn next_char(sub: &[u8]) -> &[u8] {
-    sub.get(1..).unwrap_or(&[])
+use super::{Flags, SignedInt, UnsignedInt};
+
+fn next_char(sub: &str) -> Option<&str> {
+    sub.get(1..)
 }
 
 /// Parse the [Flags field](https://en.wikipedia.org/wiki/Printf_format_string#Flags_field).
-fn parse_flags(mut sub: &[u8]) -> (Flags, &[u8]) {
+pub fn parse_flags(mut sub: &str) -> (Flags, &str) {
     let mut flags: Flags = Flags::empty();
-    while let Some(&ch) = sub.first() {
+    while let Some(&ch) = sub.as_bytes().get(0) {
         flags.insert(match ch {
             b'-' => Flags::LEFT_ALIGN,
             b'+' => Flags::PREPEND_PLUS,
@@ -19,7 +20,7 @@ fn parse_flags(mut sub: &[u8]) -> (Flags, &[u8]) {
             b'#' => Flags::ALTERNATE_FORM,
             _ => break,
         });
-        sub = next_char(sub)
+        sub = next_char(sub).unwrap()
     }
     (flags, sub)
 }
