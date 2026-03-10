@@ -48,10 +48,10 @@ pub fn parse_width<'a>(mut sub: &str) -> (Either<PendingAction, c_int>, &str) {
 }
 
 /// Parse the [Precision field](https://en.wikipedia.org/wiki/Printf_format_string#Precision_field).
-unsafe fn parse_precision<'a>(sub: &'a [u8], args: &mut VaList) -> (Option<c_int>, &'a [u8]) {
-    match sub.first() {
+pub fn parse_precision<'a>(sub: &str) -> (Option<Either<PendingAction, c_int>>, &str) {
+    match sub.as_bytes().get(0) {
         Some(&b'.') => {
-            let (prec, sub) = unsafe { parse_width(next_char(sub), args) };
+            let (prec, sub) = parse_width(next_char(sub).unwrap());
             (Some(prec), sub)
         }
         _ => (None, sub),
