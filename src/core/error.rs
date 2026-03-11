@@ -21,6 +21,8 @@ pub(crate) enum Type {
     Buffer,
     CharTable,
     BigInt,
+    ChannelSender,
+    ChannelReceiver,
 }
 
 /// Error provided if object was the wrong type

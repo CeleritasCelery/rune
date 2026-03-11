@@ -9,11 +9,32 @@ This means we will need to not unwind the stack, but instead collect the backtra
 * Change the sort function to use rust sort
 We can use the std::panic::catch_unwind to handle any errors that occur during sorting and propogate them up.
 * GUI steps
+To decouple user interfaces (UI) from the virtual machine (VM) we will have a single "display" thread (DT) that will be responsible for:
+- keeping the state of live buffers in the VM to report to the UI clients
+- forwarding key/mouse events from UI clients to the VM
+** Add Messages for the display protocol
+- Add a ~rune-ui-protocol~ crate
+- ~enum BufferUpdate~ is the notification from VM to the DT when there are relevant updates
+  + ~Snapshot~
+  + ~Delta~ (unimplemented at first)
+  + ~BufferRenamed~
+- ~BufferUpdate~ is _not_ a GC type, we want to stop caring about GC as soon as the updates leave the VM. This is why the ~Delta~ approach is important for performance. Text Properties will have to be converted at serialization-time to an owned type.
+** Setup messaging from VM to DT
+- Add a global that contains data shared between all VM threads and DT
+- Send snapshots in elisp functions that change buffer content
+** Implement DT
+- Spawn the thread at the start of ~rune~
+- Implement the transport layer and messages in ~rune-ui-protocol~. We mostly take inspiration from Xi, with the main difference that UIs only send events to DT
+  + UI->DT: keyboard and mouse events
+  + DT->UI: only full buffer snapshots to begin with
+** Terminal Proof of Concept
+The proof of concept will allow to both show the design is working end-to-end, and set a performance baseline
 - Display a text widget in window
 - display a buffer in the window
 - custom widget the get's a slice of the buffer
 - allow buffer to be edited
-- new UI thread
+** Migrate from snapshots to delta mechanism
+This is expected to give the necessary performance boost to bring latency down, but also a big change. Having the "old" snapshot implementation allows to build proptests to make sure the algorithms are working well there.
 * Adding the GC
 The new GC will be generational, copying collector based on immix. We need to break this up into as many small steps as possible. The hard thing is that all parts of this seem to rely on one another. The easiest stand alone thing might be to make a semi-space copying collector for the whole heap. This means we don't have to worry about free-lists or immix or generational barriers. And then when we create the generation older immix heap we can work on copying to that.
 ** GcHeap

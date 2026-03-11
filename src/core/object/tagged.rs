@@ -4,7 +4,8 @@ use super::{
         error::{Type, TypeError},
         gc::Block,
     },
-    ByteFnPrototype, ByteString, CharTableInner, GcString, LispBigInt, LispBuffer,
+    ByteFnPrototype, ByteString, ChannelReceiver, ChannelSender, CharTableInner, GcString,
+    LispBigInt, LispBuffer,
 };
 use super::{
     ByteFn, CharTable, HashTable, LispFloat, LispHashTable, LispString, LispVec, Record,
@@ -177,13 +178,15 @@ unsafe fn cast_gc<U, V>(e: Gc<U>) -> Gc<V> {
 
 impl<'a, T: 'a + Copy> From<Gc<T>> for ObjectType<'a> {
     fn from(x: Gc<T>) -> Self {
-        Gc::new(x.ptr).untag()
+        let gc: Gc<ObjectType<'a>> = Gc::new(x.ptr);
+        gc.untag()
     }
 }
 
 impl<'a, T: 'a + Copy> From<&Gc<T>> for ObjectType<'a> {
     fn from(x: &Gc<T>) -> Self {
-        Gc::new(x.ptr).untag()
+        let gc: Gc<ObjectType<'a>> = Gc::new(x.ptr);
+        gc.untag()
     }
 }
 
@@ -299,6 +302,8 @@ object_trait_impls!(LispHashTable);
 object_trait_impls!(LispBuffer);
 object_trait_impls!(CharTable);
 object_trait_impls!(LispBigInt);
+object_trait_impls!(ChannelSender);
+object_trait_impls!(ChannelReceiver);
 
 /// Trait for types that can be managed by the GC. This trait is implemented for
 /// as many types as possible, even for types that are already Gc managed, Like
@@ -534,6 +539,24 @@ impl IntoObject for BigInt {
     }
 }
 
+impl IntoObject for ChannelSender {
+    type Out<'ob> = &'ob ChannelSender;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        let ptr = block.objects.alloc(self);
+        unsafe { <&ChannelSender>::tag_ptr(ptr) }
+    }
+}
+
+impl IntoObject for ChannelReceiver {
+    type Out<'ob> = &'ob ChannelReceiver;
+
+    fn into_obj<const C: bool>(self, block: &Block<C>) -> Gc<Self::Out<'_>> {
+        let ptr = block.objects.alloc(self);
+        unsafe { <&ChannelReceiver>::tag_ptr(ptr) }
+    }
+}
+
 mod private {
     use super::{Gc, WithLifetime};
 
@@ -554,6 +577,8 @@ mod private {
         Buffer,
         CharTable,
         BigInt,
+        ChannelSender,
+        ChannelReceiver,
     }
 
     /// Trait for tagged pointers. Anything that can be stored and passed around
@@ -662,6 +687,12 @@ impl<'a> TaggedPtr for ObjectType<'a> {
                 Tag::Buffer => ObjectType::Buffer(<&LispBuffer>::from_obj_ptr(ptr)),
                 Tag::CharTable => ObjectType::CharTable(<&CharTable>::from_obj_ptr(ptr)),
                 Tag::BigInt => ObjectType::BigInt(<&LispBigInt>::from_obj_ptr(ptr)),
+                Tag::ChannelSender => {
+                    ObjectType::ChannelSender(<&ChannelSender>::from_obj_ptr(ptr))
+                }
+                Tag::ChannelReceiver => {
+                    ObjectType::ChannelReceiver(<&ChannelReceiver>::from_obj_ptr(ptr))
+                }
             }
         }
     }
@@ -682,6 +713,8 @@ impl<'a> TaggedPtr for ObjectType<'a> {
             ObjectType::Buffer(x) => TaggedPtr::tag(x).into(),
             ObjectType::CharTable(x) => TaggedPtr::tag(x).into(),
             ObjectType::BigInt(x) => TaggedPtr::tag(x).into(),
+            ObjectType::ChannelSender(x) => TaggedPtr::tag(x).into(),
+            ObjectType::ChannelReceiver(x) => TaggedPtr::tag(x).into(),
         }
     }
 }
@@ -961,6 +994,32 @@ impl TaggedPtr for &LispBigInt {
     }
 }
 
+impl TaggedPtr for &ChannelSender {
+    type Ptr = ChannelSender;
+    const TAG: Tag = Tag::ChannelSender;
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
+impl TaggedPtr for &ChannelReceiver {
+    type Ptr = ChannelReceiver;
+    const TAG: Tag = Tag::ChannelReceiver;
+
+    unsafe fn from_obj_ptr(ptr: *const u8) -> Self {
+        &*ptr.cast::<Self::Ptr>()
+    }
+
+    fn get_ptr(self) -> *const Self::Ptr {
+        self as *const Self::Ptr
+    }
+}
+
 impl<T> TracePtr for Gc<T> {
     fn trace_ptr(&self, state: &mut GcState) {
         match self.as_obj().untag() {
@@ -977,6 +1036,8 @@ impl<T> TracePtr for Gc<T> {
             ObjectType::Buffer(x) => x.trace(state),
             ObjectType::CharTable(x) => x.trace(state),
             ObjectType::BigInt(x) => x.trace(state),
+            ObjectType::ChannelSender(x) => x.0.trace(state),
+            ObjectType::ChannelReceiver(x) => x.0.trace(state),
         }
     }
 }
@@ -1100,6 +1161,8 @@ pub(crate) enum ObjectType<'ob> {
     Buffer(&'static LispBuffer) = Tag::Buffer as u8,
     CharTable(&'static CharTable) = Tag::CharTable as u8,
     BigInt(&'ob LispBigInt) = Tag::BigInt as u8,
+    ChannelSender(&'ob ChannelSender) = Tag::ChannelSender as u8,
+    ChannelReceiver(&'ob ChannelReceiver) = Tag::ChannelReceiver as u8,
 }
 
 /// The Object defintion that contains all other possible lisp objects. This
@@ -1122,7 +1185,9 @@ cast_gc!(ObjectType<'ob> => NumberType<'ob>,
          &'ob SubrFn,
          &'ob LispBuffer,
          &'ob CharTable,
-         &'ob LispBigInt
+         &'ob LispBigInt,
+         &'ob ChannelSender,
+         &'ob ChannelReceiver
 );
 
 impl ObjectType<'_> {
@@ -1144,6 +1209,8 @@ impl ObjectType<'_> {
             ObjectType::Buffer(_) => Type::Buffer,
             ObjectType::CharTable(_) => Type::CharTable,
             ObjectType::BigInt(_) => Type::BigInt,
+            ObjectType::ChannelSender(_) => Type::ChannelSender,
+            ObjectType::ChannelReceiver(_) => Type::ChannelReceiver,
         }
     }
 }
@@ -1407,6 +1474,44 @@ impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob LispBigInt> {
     }
 }
 
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob ChannelSender> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::ChannelSender => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::ChannelSender, value)),
+        }
+    }
+}
+
+impl<'ob> TryFrom<Object<'ob>> for Gc<&'ob ChannelReceiver> {
+    type Error = TypeError;
+
+    fn try_from(value: Object<'ob>) -> Result<Self, Self::Error> {
+        match value.get_tag() {
+            Tag::ChannelReceiver => unsafe { Ok(cast_gc(value)) },
+            _ => Err(TypeError::new(Type::ChannelReceiver, value)),
+        }
+    }
+}
+
+impl<'ob> std::ops::Deref for Gc<&'ob ChannelSender> {
+    type Target = ChannelSender;
+
+    fn deref(&self) -> &'ob Self::Target {
+        self.untag()
+    }
+}
+
+impl<'ob> std::ops::Deref for Gc<&'ob ChannelReceiver> {
+    type Target = ChannelReceiver;
+
+    fn deref(&self) -> &'ob Self::Target {
+        self.untag()
+    }
+}
+
 impl<'ob> std::ops::Deref for Gc<&'ob Cons> {
     type Target = Cons;
 
@@ -1444,6 +1549,8 @@ where
             ObjectType::Buffer(x) => x.clone_in(bk).into(),
             ObjectType::CharTable(x) => x.clone_in(bk).into(),
             ObjectType::BigInt(x) => x.clone_in(bk).into(),
+            ObjectType::ChannelSender(x) => x.clone_in(bk).into(),
+            ObjectType::ChannelReceiver(x) => x.clone_in(bk).into(),
         };
         let Ok(x) = Gc::<U>::try_from(obj) else { unreachable!() };
         x
@@ -1485,6 +1592,8 @@ impl GcMoveable for Object<'_> {
             }
             ObjectType::CharTable(x) => cast_pair(x.move_value(to_space)?),
             ObjectType::BigInt(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::ChannelSender(x) => cast_pair(x.move_value(to_space)?),
+            ObjectType::ChannelReceiver(x) => cast_pair(x.move_value(to_space)?),
         };
 
         let tag = self.get_tag();
@@ -1682,6 +1791,8 @@ impl ObjectType<'_> {
             ObjectType::Buffer(x) => D::fmt(x, f),
             ObjectType::CharTable(x) => D::fmt(x, f),
             ObjectType::BigInt(x) => D::fmt(x, f),
+            ObjectType::ChannelSender(x) => D::fmt(x, f),
+            ObjectType::ChannelReceiver(x) => D::fmt(x, f),
         }
     }
 }

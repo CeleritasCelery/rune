@@ -2,7 +2,7 @@ use super::{
     super::{cons::Cons, object::Object},
     GcMoveable, GcState, TracePtr,
 };
-use super::{Block, Context, RootSet, Trace};
+use super::{Block, Context, RootSet, ThreadSafeRootSet, Trace};
 use crate::core::object::{Gc, GcPtr, IntoObject, ObjectType, OptionalFlag, Untag, WithLifetime};
 use rune_core::hashmap::IndexMap;
 use std::hash::{Hash, Hasher};
@@ -151,6 +151,80 @@ impl<'rt, T: Trace> __StackRoot<'rt, T> {
 impl<T> Drop for __StackRoot<'_, T> {
     fn drop(&mut self) {
         self.root_set.roots.borrow_mut().pop();
+    }
+}
+
+/// Represents an object T rooted on the Heap. Unlike [`__StackRoot`], this type
+/// owns its data via a `Box` and can live beyond a single stack frame. When
+/// dropped, it searches and removes itself from the root set (rather than just
+/// popping like StackRoot).
+///
+/// This is used for rooting objects that need to live in heap-allocated
+/// collections like channels, where stack-based rooting is not possible.
+#[doc(hidden)]
+pub(crate) struct __HeapRoot<T: Trace> {
+    data: Box<Rt<T>>,
+    root_ptr: *const dyn Trace,
+    root_set: &'static ThreadSafeRootSet,
+}
+
+impl<T: Trace> __HeapRoot<T> {
+    pub(crate) fn new(value: T, root_set: &'static ThreadSafeRootSet) -> Self {
+        let mut boxed = Box::new(Rt { inner: value, _aliasable: PhantomPinned });
+        let dyn_ptr = &mut boxed.inner as &mut T as &mut dyn Trace as *mut dyn Trace;
+        // Transmute to dissociate the `dyn Trace` from the T, similar to __StackRoot
+        // The pointer is safe to keep because `Rt` is pinned
+        let dyn_ptr = unsafe { std::mem::transmute::<*mut dyn Trace, *mut dyn Trace>(dyn_ptr) };
+
+        root_set.roots.lock().unwrap().push(dyn_ptr);
+
+        Self { data: boxed, root_ptr: dyn_ptr, root_set }
+    }
+}
+
+impl<T: Trace> Deref for __HeapRoot<T> {
+    type Target = Rt<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<T: Trace> DerefMut for __HeapRoot<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
+
+impl<T: Trace> Drop for __HeapRoot<T> {
+    fn drop(&mut self) {
+        // Search and remove our root_ptr from the roots vector
+        let mut roots = self.root_set.roots.lock().unwrap();
+        if let Some(pos) = roots.iter().position(|&ptr| std::ptr::addr_eq(ptr, self.root_ptr)) {
+            roots.swap_remove(pos);
+        }
+    }
+}
+
+// SAFETY: __HeapRoot<T> is Send/Sync because:
+// 1. It owns its data via Box<Rt<T>>, which is heap-allocated and can move between threads
+// 2. The root_ptr is a raw pointer to data inside self.data, so it moves with the HeapRoot
+// 3. The ThreadSafeRootSet synchronizes all modifications to the root set
+// 4. The root_ptr is only dereferenced during GC, which is synchronized by the owner's mutex
+// 5. T: Trace ensures the contained data can be safely traced during GC
+
+unsafe impl<T: Trace> Send for __HeapRoot<T> {}
+unsafe impl<T: Trace> Sync for __HeapRoot<T> {}
+
+impl<T: Trace + Debug> Debug for __HeapRoot<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: Trace + Display> Display for __HeapRoot<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&**self, f)
     }
 }
 
@@ -396,6 +470,15 @@ impl<T> Rt<Slot<T>> {
         T: WithLifetime<'ob> + Copy,
     {
         self.inner().get().with_lifetime()
+    }
+
+    /// Get a copy of the inner value without requiring a Context.
+    /// This is useful when you need to access the value but don't have a Context available.
+    pub(crate) fn get_inner(&self) -> T
+    where
+        T: Copy,
+    {
+        *self.inner().get()
     }
 
     pub(crate) fn bind_slice<'brw, 'ob, U>(

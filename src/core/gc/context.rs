@@ -16,6 +16,23 @@ pub(crate) struct RootSet {
     pub(super) roots: RefCell<Vec<*const dyn Trace>>,
 }
 
+/// Thread-safe version of RootSet that uses Mutex instead of RefCell.
+/// This is specifically designed for multi-threaded scenarios like ChannelManager
+/// where roots need to be managed across thread boundaries.
+///
+/// Note: Send/Sync safety is guaranteed by HeapRoot, which ensures the raw pointers
+/// only point to data it owns in HeapRoot::data.
+#[derive(Debug)]
+pub(crate) struct ThreadSafeRootSet {
+    pub(super) roots: std::sync::Mutex<Vec<*const dyn Trace>>,
+}
+
+impl Default for ThreadSafeRootSet {
+    fn default() -> Self {
+        Self { roots: std::sync::Mutex::new(Vec::new()) }
+    }
+}
+
 #[expect(dead_code)]
 // These types are only stored here so they can be dropped
 pub(in crate::core) enum DropStackElem {
@@ -138,8 +155,8 @@ impl<const CONST: bool> Block<CONST> {
 }
 
 impl<'ob, 'rt> Context<'rt> {
-    const MIN_GC_BYTES: usize = 2000;
-    const GC_GROWTH_FACTOR: usize = 12; // divide by 10
+    pub(crate) const MIN_GC_BYTES: usize = 2000;
+    pub(crate) const GC_GROWTH_FACTOR: usize = 12; // divide by 10
     pub(crate) fn new(roots: &'rt RootSet) -> Self {
         Self { block: Block::new_local(), root_set: roots, next_limit: Self::MIN_GC_BYTES }
     }
@@ -194,6 +211,56 @@ impl<'ob, 'rt> Context<'rt> {
 
         self.block.objects = state.to_space;
     }
+}
+
+/// Perform garbage collection on a block with a root set without requiring a Context.
+/// This is useful for scenarios like ChannelManager where we need to GC a shared block
+/// from any thread without conflicting with thread-local Context singleton checks.
+///
+/// # Safety
+/// Caller must ensure:
+/// 1. Exclusive access to the block (no concurrent reads/writes)
+/// 2. The root_set accurately represents all live references to objects in the block
+/// 3. The block's drop_stack and lisp_hashtables are properly maintained
+/// 4. No active Context exists that references this block or root_set
+pub(crate) unsafe fn collect_garbage_raw(
+    block: &mut Block<false>,
+    root_set: &ThreadSafeRootSet,
+    force: bool,
+    next_limit: &mut usize,
+) {
+    let bytes = block.objects.allocated_bytes();
+    if cfg!(not(test)) && !force && bytes < *next_limit {
+        return;
+    }
+
+    let mut state = GcState::new();
+    for x in root_set.roots.lock().unwrap().iter() {
+        // SAFETY: The contract of root structs will ensure that it removes
+        // itself from this list before it drops.
+        unsafe {
+            (**x).trace(&mut state);
+        }
+    }
+
+    state.trace_stack();
+
+    *next_limit = (state.to_space.allocated_bytes() * Context::GC_GROWTH_FACTOR) / 10;
+    block.drop_stack.borrow_mut().clear();
+    // Find all hashtables that have not been moved (i.e. They are no longer
+    // accessible) and drop them. Otherwise, update the object pointer.
+    block.lisp_hashtables.borrow_mut().retain_mut(|ptr| {
+        let table = unsafe { &**ptr };
+        if let Some(fwd) = table.forwarding_ptr() {
+            *ptr = fwd.as_ptr().cast::<LispHashTable>();
+            true
+        } else {
+            unsafe { std::ptr::drop_in_place(*ptr as *mut LispHashTable) };
+            false
+        }
+    });
+
+    block.objects = state.to_space;
 }
 
 impl Deref for Context<'_> {

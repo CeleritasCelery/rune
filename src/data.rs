@@ -396,6 +396,8 @@ fn type_of(object: Object) -> Object {
         ObjectType::Buffer(_) => sym::BUFFER.into(),
         ObjectType::CharTable(_) => sym::CHAR_TABLE.into(),
         ObjectType::BigInt(_) => sym::BIG_INT.into(),
+        ObjectType::ChannelSender(_) => sym::CHANNEL_SENDER.into(),
+        ObjectType::ChannelReceiver(_) => sym::CHANNEL_RECEIVER.into(),
     }
 }
 
@@ -549,3 +551,10 @@ defsym!(BUFFER);
 defsym!(SUBR);
 defsym!(CHAR_TABLE);
 defsym!(BIG_INT);
+defsym!(CHANNEL_SENDER);
+defsym!(CHANNEL_RECEIVER);
+defsym!(CHANNEL_CLOSED);
+defsym!(CHANNEL_FULL);
+defsym!(CHANNEL_EMPTY);
+defsym!(CHANNEL_TIMEOUT);
+defsym!(THREAD_ERRORED);

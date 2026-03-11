@@ -400,11 +400,11 @@ mod test {
         let cx = &Context::new(roots);
         assert_eq!(
             max(cx.add_as(1.0), &[cx.add_as(2.1), cx.add_as(1.1), cx.add_as(1.0)]),
-            cx.add_as(2.1).val()
+            NumberValue::Float(2.1)
         );
         assert_eq!(
             min(cx.add_as(1.1), &[cx.add_as(1.0), cx.add_as(2.1), cx.add_as(1.0)]),
-            cx.add_as(1.0).val()
+            NumberValue::Float(1.0)
         );
     }
 

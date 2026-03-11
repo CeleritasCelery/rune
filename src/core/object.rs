@@ -11,6 +11,7 @@
 
 mod buffer;
 mod cell;
+pub(in crate::core) mod channel;
 mod chartab;
 mod convert;
 mod float;
@@ -24,6 +25,7 @@ mod vector;
 
 pub(crate) use buffer::*;
 pub(super) use cell::*;
+pub(crate) use channel::*;
 pub(crate) use chartab::*;
 pub(crate) use convert::*;
 pub(crate) use float::*;
