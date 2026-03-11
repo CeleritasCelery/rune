@@ -689,8 +689,7 @@ pub(crate) fn compare_strings<'ob>(
     // TODO: check if byte strings are supported
     let s2 = string2.chars().skip(start2 as usize).take((end2 - start2) as usize);
 
-    let mut leading = 1;
-    for (c1, c2) in s1.zip(s2) {
+    for ((c1, c2), leading) in s1.zip(s2).zip(1..) {
         let (c1, c2) = if ignore_case.is_some() {
             //TODO: use case-table to determine the uppercase of a character
             (c1.to_uppercase().next().unwrap(), c2.to_uppercase().next().unwrap())
@@ -703,7 +702,6 @@ pub(crate) fn compare_strings<'ob>(
             std::cmp::Ordering::Greater => return Ok(leading.into()),
             std::cmp::Ordering::Equal => {}
         }
-        leading += 1;
     }
 
     Ok(true.into())
