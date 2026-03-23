@@ -16,6 +16,7 @@ mod character;
 mod chartab;
 mod data;
 mod dired;
+mod dump;
 mod editfns;
 mod emacs;
 mod eval;
@@ -57,6 +58,8 @@ struct Args {
     no_bootstrap: bool,
     #[arg(long)]
     eval_stdin: bool,
+    #[arg(long)]
+    dump: bool,
 }
 
 fn main() -> Result<(), ()> {
@@ -73,6 +76,13 @@ fn main() -> Result<(), ()> {
 
     if args.eval_stdin {
         return eval_stdin(cx, env);
+    }
+
+    if args.dump {
+        let path = std::path::Path::new("rune.pdmp");
+        eprintln!("Dumping heap to {}", path.display());
+        dump::dump_to_file(path, env, cx).map_err(|e| eprintln!("Dump failed: {e}"))?;
+        eprintln!("Dump complete");
     }
 
     if !args.no_bootstrap {
