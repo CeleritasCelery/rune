@@ -1,14 +1,13 @@
-///! Heap dump module for rune.
-///! After a successful bootstrap in which elisp code is converted to bytecode,
-///! the VM heap memory can be serialized to a rune.pdmp file, and
-///! subsequent runs can avoid bootstrapping and just load rune.pdmp instead.
-///!
-///! The idea is based on emacs' portable dumper (pdump) which replaced the older unexec.
-///! However, this pdmp format is a somewhat human-readable text format and makes no attempt to
-///! have any compatibility with unexec or pdump.
-///! https://lwn.net/Articles/707619/
-///! https://github.com/emacs-mirror/emacs/blob/master/src/pdumper.h
-
+//! Heap dump module for rune.
+//! After a successful bootstrap in which elisp code is converted to bytecode,
+//! the VM heap memory can be serialized to a rune.pdmp file, and
+//! subsequent runs can avoid bootstrapping and just load rune.pdmp instead.
+//!
+//! The idea is based on emacs' portable dumper (pdump) which replaced the older unexec.
+//! However, this pdmp format is a somewhat human-readable text format and makes no attempt to
+//! have any compatibility with unexec or pdump.
+//! https://lwn.net/Articles/707619/
+//! https://github.com/emacs-mirror/emacs/blob/master/src/pdumper.h
 use crate::core::{
     env::{Env, INTERNED_SYMBOLS},
     gc::{Context, Rt},
@@ -27,8 +26,34 @@ enum DumpedObject {
     Nil,
     Int(i64),
     Float(f64),
-    Cons { car: ObjId, cdr: ObjId },
-    Unimplemented,
+    String(std::string::String),
+    ByteString(Vec<u8>),
+    Symbol {
+        name: std::string::String,
+        interned: bool,
+    },
+    Cons {
+        car: ObjId,
+        cdr: ObjId,
+    },
+    Vec(Vec<ObjId>),
+    ByteFn {
+        args: u64,
+        depth: usize,
+        codes: Vec<u8>,
+        consts: Vec<ObjId>,
+    },
+    /// SubrFn contains a Rust fn pointer which can't be serialized.
+    /// We store only the name during serialization; the loader will
+    /// recover the function pointer by name lookup.
+    Subr(std::string::String),
+    Record(Vec<ObjId>),
+    HashTable(Vec<(ObjId, ObjId)>),
+    Buffer,
+    CharTable,
+    BigInt(std::string::String),
+    ChannelSender,
+    ChannelReceiver,
 }
 
 /// An entry in the symbol table section: name -> (symbol object id, optional function object id)
@@ -58,20 +83,70 @@ impl Display for DumpedObject {
             Self::Nil => write!(f, "nil"),
             Self::Int(x) => write!(f, "int {x}"),
             Self::Float(x) => write!(f, "float {x}"),
+            Self::String(s) => write!(f, "string \"{}\"", escape_str(s)),
+            Self::ByteString(bytes) => {
+                write!(f, "bytestring #")?;
+                for b in bytes {
+                    write!(f, "{b:02x}")?;
+                }
+                Ok(())
+            }
+            Self::Symbol { name, interned } => {
+                write!(f, "symbol \"{}\" interned={interned}", escape_str(name))
+            }
             Self::Cons { car, cdr } => write!(f, "cons car=@{car} cdr=@{cdr}"),
-            Self::Unimplemented  => write!(f, "unimplemented"),
+            Self::Vec(elems) => {
+                write!(f, "vec [")?;
+                fmt_id_list(f, elems)?;
+                write!(f, "]")
+            }
+            Self::ByteFn { args, depth, codes, consts } => {
+                write!(f, "bytefn args={args} depth={depth} codes=#")?;
+                for b in codes {
+                    write!(f, "{b:02x}")?;
+                }
+                write!(f, " consts=[")?;
+                fmt_id_list(f, consts)?;
+                write!(f, "]")
+            }
+            Self::Subr(name) => write!(f, "subr \"{}\"", escape_str(name)),
+            Self::Record(elems) => {
+                write!(f, "record [")?;
+                fmt_id_list(f, elems)?;
+                write!(f, "]")
+            }
+            Self::HashTable(entries) => {
+                write!(f, "hashtable [")?;
+                for (i, (k, v)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{k}:{v}")?;
+                }
+                write!(f, "]")
+            }
+            Self::Buffer => write!(f, "buffer <opaque>"),
+            Self::CharTable => write!(f, "chartable <opaque>"),
+            Self::BigInt(s) => write!(f, "bigint {s}"),
+            Self::ChannelSender => write!(f, "channel-sender <opaque>"),
+            Self::ChannelReceiver => write!(f, "channel-receiver <opaque>"),
         }
     }
 }
 
+fn fmt_id_list(f: &mut fmt::Formatter<'_>, ids: &[ObjId]) -> fmt::Result {
+    for (i, id) in ids.iter().enumerate() {
+        if i > 0 {
+            write!(f, " ")?;
+        }
+        write!(f, "@{id}")?;
+    }
+    Ok(())
+}
+
 impl DumpState {
     fn new() -> Self {
-        Self {
-            seen: HashMap::new(),
-            objects: Vec::new(),
-            symbols: Vec::new(),
-            env: Vec::new(),
-        }
+        Self { seen: HashMap::new(), objects: Vec::new(), symbols: Vec::new(), env: Vec::new() }
     }
 
     /// Serialize an object and return its id. If already visited (cycle or
@@ -101,14 +176,49 @@ impl DumpState {
 
         let dumped = match obj.untag() {
             ObjectType::Int(x) => DumpedObject::Int(x),
+            ObjectType::Float(x) => DumpedObject::Float(**x),
+            ObjectType::String(s) => DumpedObject::String(s.inner().to_owned()),
+            ObjectType::ByteString(s) => DumpedObject::ByteString(s.to_vec()),
+            ObjectType::Symbol(sym) => {
+                DumpedObject::Symbol { name: sym.name().to_owned(), interned: sym.interned() }
+            }
             ObjectType::Cons(cons) => {
                 let car = self.dump_object(cons.car());
                 let cdr = self.dump_object(cons.cdr());
                 DumpedObject::Cons { car, cdr }
             }
-            _ => {
-                DumpedObject::Nil
+            ObjectType::Vec(vec) => {
+                let elems = vec.iter().map(|cell| self.dump_object(cell.get())).collect();
+                DumpedObject::Vec(elems)
             }
+            ObjectType::ByteFn(bf) => {
+                // Bytecode is trivially serializable; the constants
+                // vector contains arbitrary Objects so we recurse into each.
+                let consts = bf.consts().iter().map(|c| self.dump_object(*c)).collect();
+                DumpedObject::ByteFn {
+                    args: bf.args.into_arg_spec(),
+                    depth: bf.depth,
+                    codes: bf.codes().to_vec(),
+                    consts,
+                }
+            }
+            ObjectType::SubrFn(subr) => DumpedObject::Subr(subr.name.to_owned()),
+            ObjectType::HashTable(ht) => {
+                let entries: Vec<(ObjId, ObjId)> = (0..ht.len())
+                    .filter_map(|i| ht.get_index(i))
+                    .map(|(k, v)| (self.dump_object(k), self.dump_object(v)))
+                    .collect();
+                DumpedObject::HashTable(entries)
+            }
+            ObjectType::Record(rec) => {
+                let elems = rec.iter().map(|cell| self.dump_object(cell.get())).collect();
+                DumpedObject::Record(elems)
+            }
+            ObjectType::Buffer(_) => DumpedObject::Buffer,
+            ObjectType::CharTable(_) => DumpedObject::CharTable,
+            ObjectType::BigInt(n) => DumpedObject::BigInt(n.to_string()),
+            ObjectType::ChannelSender(_) => DumpedObject::ChannelSender,
+            ObjectType::ChannelReceiver(_) => DumpedObject::ChannelReceiver,
         };
 
         // Overwrite the Nil placeholder with the real object
@@ -134,11 +244,7 @@ impl DumpState {
             } else {
                 None
             };
-            self.symbols.push(DumpedSymbol {
-                name: name.to_owned(),
-                sym_id,
-                func_id,
-            });
+            self.symbols.push(DumpedSymbol { name: name.to_owned(), sym_id, func_id });
         }
     }
 
@@ -202,11 +308,7 @@ fn escape_str(s: &str) -> std::string::String {
     out
 }
 
-pub(crate) fn dump_to_file(
-    path: &Path,
-    env: &Rt<Env>,
-    cx: &Context,
-) -> Result<(), std::io::Error> {
+pub(crate) fn dump_to_file(path: &Path, env: &Rt<Env>, cx: &Context) -> Result<(), std::io::Error> {
     let mut state = DumpState::new();
     state.dump_symbols(cx);
     state.dump_env(env, cx);
