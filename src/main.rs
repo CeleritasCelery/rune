@@ -60,6 +60,8 @@ struct Args {
     eval_stdin: bool,
     #[arg(long)]
     dump: bool,
+    #[arg(long, value_name = "FILE")]
+    load_dump: Option<String>,
 }
 
 fn main() -> Result<(), ()> {
@@ -78,15 +80,26 @@ fn main() -> Result<(), ()> {
         return eval_stdin(cx, env);
     }
 
+    // Load from heap dump if specified
+    if let Some(ref dump_path) = args.load_dump {
+        if args.dump {
+            eprintln!("error: cannot provide both --dump and --load-dump");
+            return Err(());
+        }
+
+        let path = std::path::Path::new(dump_path);
+        eprintln!("Loading dump from {}", path.display());
+        dump::load_dump(path, env, cx).map_err(|e| eprintln!("Load failed: {e}"))?;
+        eprintln!("Load complete");
+    } else if !args.no_bootstrap {
+        bootstrap(env, cx)?;
+    }
+
     if args.dump {
         let path = std::path::Path::new("rune.pdmp");
         eprintln!("Dumping heap to {}", path.display());
         dump::dump_to_file(path, env, cx).map_err(|e| eprintln!("Dump failed: {e}"))?;
         eprintln!("Dump complete");
-    }
-
-    if !args.no_bootstrap {
-        bootstrap(env, cx)?;
     }
 
     for file in args.load {

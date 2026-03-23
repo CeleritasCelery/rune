@@ -87,6 +87,12 @@ impl ByteFnPrototype {
         unsafe { std::mem::transmute::<&'ob [ObjCell], &'ob [Object<'ob>]>(&self.constants) }
     }
 
+    /// Mutable view of the constants vector. Used by the pdump loader
+    /// to patch placeholder values after allocation.
+    pub(crate) fn consts_mut(&self) -> anyhow::Result<&[super::MutObjCell]> {
+        self.constants.try_mut()
+    }
+
     pub(crate) fn index<'ob>(&self, index: usize, cx: &'ob Context) -> Option<Object<'ob>> {
         match index {
             0 => Some((self.args.into_arg_spec() as i64).into()),
