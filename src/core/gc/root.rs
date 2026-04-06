@@ -795,6 +795,10 @@ where
         let root = unsafe { k.into_root() };
         self.as_mut().swap_remove(&root);
     }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.as_ref().iter()
+    }
 }
 
 impl<K, V> Trace for ObjectMap<K, V>

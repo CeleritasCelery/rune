@@ -202,7 +202,8 @@ pub(in crate::core) static BUILTIN_SYMBOLS: [SymbolCell; {symbol_len}] = [
 
     // all SubrFn
     let subr_len = all_defun.len();
-    writeln!(f, "static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",).unwrap();
+    writeln!(f, "pub(crate) static SUBR_DEFS: [&crate::core::object::SubrFn; {subr_len}] = [",)
+        .unwrap();
     for (subr_name, _, _) in &all_defun {
         writeln!(f, "    &{subr_name},",).unwrap();
     }

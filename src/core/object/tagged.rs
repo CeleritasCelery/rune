@@ -33,6 +33,12 @@ pub(crate) struct RawObj {
 
 unsafe impl Send for RawObj {}
 
+impl RawObj {
+    pub(crate) fn addr(self) -> usize {
+        self.ptr as usize
+    }
+}
+
 impl Default for RawObj {
     fn default() -> Self {
         Self { ptr: NIL.ptr }
