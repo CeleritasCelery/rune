@@ -488,11 +488,12 @@ See `map-into' for all supported values of TYPE."
   "Convert MAP into an alist."
   (map-pairs map))
 
-(cl-defmethod map-into (map (_type (eql plist)))
-  "Convert MAP into a plist."
-  (let (plist)
-    (map-do (lambda (k v) (setq plist `(,v ,k ,@plist))) map)
-    (nreverse plist)))
+;; RUNE-BOOTSTRAP
+;; (cl-defmethod map-into (map (_type (eql plist)))
+;;   "Convert MAP into a plist."
+;;   (let (plist)
+;;     (map-do (lambda (k v) (setq plist `(,v ,k ,@plist))) map)
+;;     (nreverse plist)))
 
 (cl-defgeneric map-put! (map key value &optional testfn)
   "Associate KEY with VALUE in MAP.

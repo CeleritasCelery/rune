@@ -146,6 +146,12 @@ fn system_name() -> String {
         .expect("Failed to convert OsString to String")
 }
 
+#[defun]
+fn buffer_substring<'ob>(_start: Object<'ob>, _end: Object<'ob>, env: &Rt<Env>) -> Result<String> {
+    //TODO implement actual substring and not entire buffer contents...
+    Ok(env.current_buffer.get().text.to_string())
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::object::NIL;
