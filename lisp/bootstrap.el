@@ -6,6 +6,7 @@
 (load "bytecomp")
 (defvar source-directory nil)
 (load "ert")
+(load "bindings")
 
 ;; check bytecodes
 
