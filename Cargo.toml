@@ -18,7 +18,7 @@ members = [
 edition = "2024"
 
 [workspace.dependencies]
-syn = { version = "2.0.15", features = ["full"] }
+syn = { version = "3.0.2", features = ["full"] }
 quote = "1.0.26"
 anyhow = "1.0.69"
 fallible-iterator = "0.3.0"
