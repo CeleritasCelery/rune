@@ -305,6 +305,12 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
     Ok(path)
 }
 
+#[cfg(unix)]
+#[defun]
+fn unix_sync() {
+    unsafe { libc::sync() }
+}
+
 // TODO: file-relative-name -- requires knowing the current buffer's default directory
 // TODO: file-name-sans-versions
 // TODO: find-file-name-handler: https://www.gnu.org/software/emacs/manual/html_node/elisp/Magic-File-Names.html
