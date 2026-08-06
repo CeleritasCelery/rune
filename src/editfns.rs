@@ -146,6 +146,31 @@ fn system_name() -> String {
         .expect("Failed to convert OsString to String")
 }
 
+#[defun]
+fn user_uid() -> usize {
+    unsafe { libc::geteuid() as usize }
+}
+
+#[defun]
+fn user_real_uid() -> usize {
+    unsafe { libc::getuid() as usize }
+}
+
+#[defun]
+fn group_gid() -> usize {
+    unsafe { libc::getegid() as usize }
+}
+
+#[defun]
+fn group_real_gid() -> usize {
+    unsafe { libc::getgid() as usize }
+}
+
+#[defun]
+fn emacs_pid() -> usize {
+    unsafe { libc::getpid() as usize }
+}
+
 #[cfg(test)]
 mod test {
     use crate::core::object::NIL;
