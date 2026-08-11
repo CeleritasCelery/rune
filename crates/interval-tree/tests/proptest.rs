@@ -58,7 +58,7 @@ fn insert_both(
     value: i32,
 ) {
     let merge_fn = |new: Vec<i32>, mut old: Vec<i32>| {
-        assert!(new.len() == 1);
+        assert_eq!(new.len(), 1);
         if !old.contains(&new[0]) {
             old.push(new[0]);
             old.sort_unstable();

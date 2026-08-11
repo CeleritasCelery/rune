@@ -6,8 +6,8 @@
 //! The idea is based on emacs' portable dumper (pdump) which replaced the older unexec.
 //! However, this pdmp format is a somewhat human-readable text format and makes no attempt to
 //! have any compatibility with unexec or pdump.
-//! https://lwn.net/Articles/707619/
-//! https://github.com/emacs-mirror/emacs/blob/master/src/pdumper.h
+//! <https://lwn.net/Articles/707619/>
+//! <https://github.com/emacs-mirror/emacs/blob/master/src/pdumper.h>
 use crate::core::{
     env::{Env, INTERNED_SYMBOLS},
     gc::{Context, Rt},
