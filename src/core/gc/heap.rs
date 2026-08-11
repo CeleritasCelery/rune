@@ -224,6 +224,6 @@ impl<T> DerefMut for GcHeap<T> {
 
 impl<T: fmt::Display> fmt::Display for GcHeap<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.data)
+        write!(f, "{}", self.data)
     }
 }

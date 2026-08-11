@@ -475,7 +475,7 @@ impl Node {
         let len = self.metrics();
         assert!(pos.bytes <= len.bytes);
         if self.len() == 0 {
-            assert!(pos.bytes == 0);
+            assert_eq!(pos.bytes, 0);
             let Node::Leaf(leaf) = self else { unreachable!() };
             leaf.metrics.push(data);
             return;

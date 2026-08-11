@@ -54,7 +54,7 @@ impl InferiorEmacs {
             return Ok(());
         }
 
-        let fg_daemon_arg = format!("--fg-daemon={}", &self.socket_name);
+        let fg_daemon_arg = format!("--fg-daemon={}", self.socket_name);
         self.daemon = Some(
             std::process::Command::new("emacs")
                 .args(["-Q", &fg_daemon_arg, "--eval", "(setq debug-on-error t)"])
@@ -204,7 +204,7 @@ impl InferiorEmacs {
             if c == '&' {
                 let c = iter
                     .next()
-                    .with_context(|| panic!("Malformed message from Emacs: {}", &quoted_lisp))?;
+                    .with_context(|| panic!("Malformed message from Emacs: {}", quoted_lisp))?;
                 result.push(match c {
                     '_' => ' ',
                     'n' => '\n',

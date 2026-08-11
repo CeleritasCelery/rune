@@ -167,7 +167,7 @@ fn compare_used_names(a: &VariantParsed, b: &VariantParsed) -> Result<()> {
         let message = format!(
             "`{}` cannot be coerced into a unique & idiomatic snake_case function name as it would collide with the `{}` variant of the same Enum. \
             use the following attribute on this or the conflicting variant to resolve: `#[variantly(rename = \"some_other_name\")]`",
-            &a.ident, &b.ident
+            a.ident, b.ident
         );
         Err(syn::Error::new(a.ident.span(), message).into())
     } else {

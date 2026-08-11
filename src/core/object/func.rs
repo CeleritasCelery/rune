@@ -210,7 +210,7 @@ impl<'new> WithLifetime<'new> for &SubrFn {
 
 impl Display for SubrFn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#<subr {}>", &self.name)
+        write!(f, "#<subr {}>", self.name)
     }
 }
 
@@ -221,7 +221,6 @@ impl Debug for SubrFn {
 }
 
 impl PartialEq for SubrFn {
-    #[expect(clippy::fn_to_numeric_cast_any)]
     fn eq(&self, other: &Self) -> bool {
         let lhs = self.subr as *const BuiltInFn;
         let rhs = other.subr as *const BuiltInFn;
