@@ -44,6 +44,21 @@ impl Drop for InferiorEmacs {
     }
 }
 
+fn read_output(daemon: &mut Child) -> String {
+    let mut output = String::new();
+    if let Some(mut stderr) = daemon.stderr.take() {
+        let mut buf = Vec::<u8>::new();
+        let _ = stderr.read_to_end(&mut buf);
+        output.push_str(&String::from_utf8_lossy(&buf));
+    }
+    if let Some(mut stdout) = daemon.stdout.take() {
+        let mut buf = Vec::<u8>::new();
+        let _ = stdout.read_to_end(&mut buf);
+        output.push_str(&String::from_utf8_lossy(&buf));
+    }
+    output
+}
+
 impl InferiorEmacs {
     pub(crate) fn is_ready(&self) -> bool {
         self.stream.is_some()
@@ -63,34 +78,30 @@ impl InferiorEmacs {
                 .spawn()?,
         );
 
-        let mut max_retries = 30;
-        while !self.is_ready() {
+        // Every test thread starts its own daemon, so a machine running several
+        // of them at once can take a while to write out the server file.
+        let deadline = time::Instant::now() + time::Duration::from_secs(60);
+        loop {
             thread::sleep(time::Duration::from_millis(100));
-            max_retries -= 1;
+
+            let daemon = self.daemon.as_mut().expect("daemon was just spawned");
+            if let Some(status) = daemon.try_wait()? {
+                let output = read_output(&mut self.daemon.take().expect("daemon was just spawned"));
+                bail!(
+                    "Emacs daemon exited with {status} before its server was ready!\nEmacs daemon output:\n{output}"
+                );
+            }
+
             let connect_result = self.connect_to_emacs();
             if connect_result.is_ok() {
                 return Ok(());
-            } else if max_retries == 0 {
-                let mut stderr = String::new();
-                let mut stdout = String::new();
-                let mut daemon = self.maybe_stop_daemon()?;
-                if let Some(mut s) = daemon.stdout.take() {
-                    let mut buf = Vec::<u8>::new();
-                    let _ = s.read_to_end(&mut buf);
-                    stdout.push_str(&String::from_utf8_lossy(&buf));
-                };
-                if let Some(mut s) = daemon.stderr.take() {
-                    let mut buf = Vec::<u8>::new();
-                    let _ = s.read_to_end(&mut buf);
-                    stderr.push_str(&String::from_utf8_lossy(&buf));
-                };
-                return connect_result.context(format!(
-                    "Cannot start Emacs!\nEmacs daemon output:\n {stderr}\n{stdout}"
-                ));
+            }
+            if time::Instant::now() >= deadline {
+                let output = read_output(&mut self.maybe_stop_daemon()?);
+                return connect_result
+                    .context(format!("Cannot start Emacs!\nEmacs daemon output:\n{output}"));
             }
         }
-
-        unreachable!();
     }
 
     pub(crate) fn eval(&mut self, lisp: &str) -> Result<String> {
