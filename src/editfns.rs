@@ -148,27 +148,69 @@ fn system_name() -> String {
 
 #[defun]
 fn user_uid() -> usize {
-    unsafe { libc::geteuid() as usize }
+    ids::effective_uid()
 }
 
 #[defun]
 fn user_real_uid() -> usize {
-    unsafe { libc::getuid() as usize }
+    ids::real_uid()
 }
 
 #[defun]
 fn group_gid() -> usize {
-    unsafe { libc::getegid() as usize }
+    ids::effective_gid()
 }
 
 #[defun]
 fn group_real_gid() -> usize {
-    unsafe { libc::getgid() as usize }
+    ids::real_gid()
+}
+
+#[cfg(unix)]
+mod ids {
+    pub(super) fn effective_uid() -> usize {
+        unsafe { libc::geteuid() as usize }
+    }
+
+    pub(super) fn real_uid() -> usize {
+        unsafe { libc::getuid() as usize }
+    }
+
+    pub(super) fn effective_gid() -> usize {
+        unsafe { libc::getegid() as usize }
+    }
+
+    pub(super) fn real_gid() -> usize {
+        unsafe { libc::getgid() as usize }
+    }
+}
+
+#[cfg(not(unix))]
+mod ids {
+    /// Windows accounts have no POSIX ids. Emacs falls back to this value when it
+    /// can't derive one from the account SID, so report the same thing.
+    const UNKNOWN_ID: usize = 123;
+
+    pub(super) fn effective_uid() -> usize {
+        UNKNOWN_ID
+    }
+
+    pub(super) fn real_uid() -> usize {
+        UNKNOWN_ID
+    }
+
+    pub(super) fn effective_gid() -> usize {
+        UNKNOWN_ID
+    }
+
+    pub(super) fn real_gid() -> usize {
+        UNKNOWN_ID
+    }
 }
 
 #[defun]
 fn emacs_pid() -> usize {
-    unsafe { libc::getpid() as usize }
+    std::process::id() as usize
 }
 
 #[cfg(test)]

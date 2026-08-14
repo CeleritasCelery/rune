@@ -305,11 +305,20 @@ fn file_name_concat(directory: &str, rest_components: &[Object]) -> Result<Strin
     Ok(path)
 }
 
-#[cfg(unix)]
 #[defun]
 fn unix_sync() {
+    sync_filesystems();
+}
+
+#[cfg(unix)]
+fn sync_filesystems() {
     unsafe { libc::sync() }
 }
+
+/// Windows has no system wide equivalent of `sync(2)`; buffers can only be
+/// flushed per open handle, which we have no way to enumerate here.
+#[cfg(not(unix))]
+fn sync_filesystems() {}
 
 // TODO: file-relative-name -- requires knowing the current buffer's default directory
 // TODO: file-name-sans-versions
